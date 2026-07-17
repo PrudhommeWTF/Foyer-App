@@ -1,0 +1,223 @@
+/* ============================================================
+   Foyer — global design system
+   Tokens & primitives from the design handoff (hi-fi).
+   ============================================================ */
+
+:root {
+  /* Brand (identical in light/dark) */
+  --primary: #E56B4E;
+  --primary-dark: #D9553A;
+  --primary-darker: #C6492F;
+  --primary-hover: #C9542F;
+  --sage: #7A9B76;
+  --sage-dark: #5F7E5C;
+  --blue: #4E93B8;
+  --honey: #F0B24B;
+  --violet: #9B6FA8;
+  --pink: #C77DA5;
+
+  /* Semantic (light theme defaults) */
+  --bg: #FBF4EA;
+  --surface: #ffffff;
+  --soft: #FBF4EA;
+  --soft2: #F5EEE2;
+  --ink: #3A302A;
+  --ink2: #8A7E74;
+  --ink3: #B7ABA0;
+  --line: #EFE3D2;
+  --line2: #E0D4C5;
+
+  /* Radii */
+  --r-chip: 12px;
+  --r-input: 13px;
+  --r-card: 20px;
+  --r-card-lg: 22px;
+  --r-modal: 24px;
+
+  /* Shadows */
+  --sh-card: 0 12px 28px -20px rgba(90, 60, 40, .5);
+  --sh-float: 0 6px 16px -14px rgba(90, 60, 40, .6);
+  --sh-primary: 0 12px 22px -10px rgba(229, 107, 78, .6);
+  --sh-modal: 0 40px 80px -20px rgba(0, 0, 0, .5);
+  --sh-tabbar: 0 -8px 24px -18px rgba(30, 24, 20, .4);
+
+  /* Fonts */
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-body: 'Nunito', system-ui, sans-serif;
+  --font-script: 'Caveat', cursive;
+}
+
+:root.dark {
+  --bg: #201A17;
+  --surface: #2C2521;
+  --soft: #332B26;
+  --soft2: #3B322C;
+  --ink: #F3E9DD;
+  --ink2: #B7A99B;
+  --ink3: #867868;
+  --line: #3C332D;
+  --line2: #4A3F37;
+  --sh-card: 0 12px 28px -20px rgba(0, 0, 0, .55);
+  --sh-modal: 0 40px 80px -20px rgba(0, 0, 0, .7);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-hover); }
+
+input, textarea, select, button { font-family: var(--font-body); }
+
+/* Custom scrollbars */
+.fscroll { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+.fscroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.fscroll::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 8px; }
+.fscroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Animations */
+@keyframes fpop { 0% { transform: scale(.96); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes ffade { 0% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes fslide { 0% { transform: translateX(100%); } 100% { transform: translateX(0); } }
+@keyframes ftoastL { 0% { transform: translateY(16px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+
+/* ============================================================
+   Reusable primitives
+   ============================================================ */
+
+.f-display { font-family: var(--font-display); }
+.f-script { font-family: var(--font-script); }
+
+.screen-enter { animation: ffade .3s ease; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  border: none; cursor: pointer; font-family: var(--font-body); font-weight: 800;
+  border-radius: var(--r-input); padding: 13px 18px; font-size: 14.5px;
+  transition: filter .15s ease, transform .05s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: var(--sh-primary); }
+.btn-primary:hover { filter: brightness(1.04); }
+.btn-sage { background: linear-gradient(135deg, #7A9B76, #5F7E5C); color: #fff; box-shadow: 0 12px 22px -12px rgba(95, 126, 92, .6); }
+.btn-soft { background: var(--soft2); color: var(--ink2); }
+.btn-soft:hover { filter: brightness(.97); }
+.btn-ghost { background: transparent; color: var(--ink2); }
+.btn-block { width: 100%; }
+.btn-danger { background: var(--primary); color: #fff; }
+
+/* Icon button */
+.icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; flex: none; border: none; cursor: pointer;
+  border-radius: var(--r-chip); background: var(--soft2); color: var(--ink2);
+  transition: filter .15s ease;
+}
+.icon-btn:hover { filter: brightness(.97); }
+.icon-btn.sm { width: 34px; height: 34px; border-radius: 10px; }
+
+/* Inputs */
+.field-label {
+  font-size: 12px; font-weight: 800; color: var(--ink2);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; display: block;
+}
+.input {
+  width: 100%; border: 2px solid var(--line); background: var(--surface);
+  border-radius: var(--r-input); padding: 13px 16px; font-size: 15px; font-weight: 600;
+  color: var(--ink); outline: none; transition: border-color .15s ease;
+}
+.input:focus { border-color: var(--primary); }
+.input::placeholder { color: var(--ink3); }
+textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
+
+/* Cards */
+.card {
+  background: var(--surface); border-radius: var(--r-card-lg);
+  padding: 22px; box-shadow: var(--sh-card);
+}
+.card-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--ink); }
+
+/* Chips */
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  border: none; font-family: var(--font-body);
+  padding: 9px 15px; border-radius: var(--r-chip); font-size: 13px; font-weight: 800;
+  background: var(--surface); color: var(--ink2); box-shadow: var(--sh-float);
+}
+
+/* Segmented picker (settings, forms) */
+.seg { display: inline-flex; gap: 3px; background: var(--soft); border-radius: var(--r-chip); padding: 4px; flex-wrap: wrap; }
+.seg > button {
+  border: none; cursor: pointer; padding: 8px 13px; border-radius: 9px;
+  font-size: 12.5px; font-weight: 800; background: transparent; color: var(--ink2);
+  transition: all .12s ease;
+}
+.seg > button.active { background: var(--primary); color: #fff; }
+
+/* Section overline */
+.overline {
+  font-size: 11px; font-weight: 800; color: var(--ink3);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+
+/* Screen headers */
+.screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
+.screen-head h1 { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--ink); text-wrap: pretty; }
+.screen-sub { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--ink2); margin-top: 4px; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 60; background: rgba(30, 24, 20, .5);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-card {
+  background: var(--surface); border-radius: var(--r-modal); width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto; box-shadow: var(--sh-modal); animation: fpop .25s ease;
+  padding: 26px;
+}
+.modal-title { font-family: var(--font-display); font-size: 21px; font-weight: 700; color: var(--ink); }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 80;
+  background: #3A302A; color: #fff; font-weight: 800; font-size: 14px;
+  padding: 14px 20px; border-radius: var(--r-chip); box-shadow: 0 20px 40px -16px rgba(0, 0, 0, .5);
+  animation: ftoastL .3s ease;
+}
+
+/* Checkbox tick */
+.tick {
+  width: 20px; height: 20px; flex: none; border-radius: 6px; border: 2px solid var(--line2);
+  background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: all .12s ease;
+}
+.tick.on { background: var(--sage); border-color: var(--sage); }
+
+/* Avatar */
+.avatar {
+  border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; flex: none;
+}
+
+/* Colour swatch selectors */
+.swatch-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: none; }
+
+/* Utility */
+.spacer { flex: 1; }
+.muted { color: var(--ink2); }
+.row { display: flex; align-items: center; gap: 10px; }
+
+@media (max-width: 860px) {
+  .screen-head h1 { font-size: 24px; }
+}

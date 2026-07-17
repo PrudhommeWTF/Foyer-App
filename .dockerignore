@@ -1,0 +1,14 @@
+**/node_modules
+frontend/dist
+backend/dist
+backend/public
+backend/data
+data
+.git
+.github
+docs/design-reference.dc.html
+*.md
+.angular
+frontend/.angular
+**/*.log
+.env
