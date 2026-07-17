@@ -38,6 +38,7 @@ responsive (bureau + mobile avec barre d'onglets).
 Foyer-App/
 ├── frontend/        # Application Angular 21 (standalone components, signals)
 ├── backend/         # API Express + TypeScript + SQLite (better-sqlite3)
+├── deploy/lxc/      # Installeur natif LXC Proxmox (systemd) + création du conteneur
 ├── Dockerfile       # Image unique : l'API sert /api ET l'app compilée
 └── docker-compose.yml
 ```
@@ -91,6 +92,27 @@ redémarrages et les mises à jour de l'image.
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort, changez le mot
 > de passe admin, puis passez `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS
 > (reverse-proxy type Caddy / Traefik / Nginx).
+
+## 📦 Déploiement LXC Proxmox (natif, sans Docker)
+
+Installation légère dans un conteneur Debian/Ubuntu (Node.js + build + service **systemd**),
+idéale sur Proxmox VE. Tout-en-un depuis l'hôte Proxmox (en root) :
+
+```bash
+git clone https://github.com/PrudhommeWTF/Foyer-App.git
+cd Foyer-App
+bash deploy/lxc/proxmox-create.sh          # crée le LXC Debian 12 + installe Foyer
+```
+
+Ou dans un LXC déjà existant :
+
+```bash
+bash deploy/lxc/install.sh                 # depuis une copie du dépôt dans le conteneur
+```
+
+Exploitation : `systemctl status foyer`, `journalctl -u foyer -f`, mise à jour via
+`bash deploy/lxc/update.sh`. Détails, options et bonnes pratiques dans
+[`deploy/README.md`](deploy/README.md).
 
 ## 🧑‍💻 Développement
 
