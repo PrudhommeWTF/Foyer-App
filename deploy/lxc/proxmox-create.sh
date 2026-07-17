@@ -5,7 +5,7 @@
 #
 # À lancer EN ROOT sur l'hôte Proxmox (PVE). Exemple :
 #   bash deploy/lxc/proxmox-create.sh
-#   CTID=131 HOSTNAME=foyer CORES=2 RAM=2048 DISK=8 bash deploy/lxc/proxmox-create.sh
+#   CTID=131 CT_HOSTNAME=foyer CORES=2 RAM=2048 DISK=8 STORAGE=local-zfs bash deploy/lxc/proxmox-create.sh
 #
 # Par défaut, le script pousse la copie LOCALE du dépôt dans le conteneur
 # (fonctionne même si le dépôt est privé). Pour cloner depuis Git à la place,
@@ -13,25 +13,25 @@
 #
 # Variables (optionnelles) :
 #   CTID        ID du conteneur (défaut: prochain ID libre)
-#   HOSTNAME    nom d'hôte (défaut: foyer)
+#   CT_HOSTNAME  nom d'hôte du conteneur (défaut: foyer)
 #   CORES/RAM/DISK   ressources (défaut: 2 vCPU / 2048 Mo / 8 Go)
 #   BRIDGE      pont réseau (défaut: vmbr0)          NET  ip=dhcp|ip=CIDR,gw=…
-#   STORAGE     stockage rootfs (défaut: local-lvm)
-#   TEMPLATE_STORAGE  stockage des templates (défaut: local)
+#   STORAGE     stockage rootfs (défaut: auto-détecté, type rootdir)
+#   TEMPLATE_STORAGE  stockage des templates (défaut: auto-détecté, type vztmpl)
 #   PASSWORD    mot de passe root du conteneur (défaut: généré)
 #   LOCAL_SRC   copie locale du dépôt à déployer (défaut: racine de ce dépôt)
 #   FOYER_REPO / FOYER_BRANCH   si LOCAL_SRC vide → clone Git
 # ============================================================
 set -euo pipefail
 
-HOSTNAME_CT="${HOSTNAME:-foyer}"
+# NB: on n'utilise PAS $HOSTNAME comme variable d'entrée — elle est déjà définie
+# par le shell sur l'hôte (nom du PVE). On utilise CT_HOSTNAME.
+CT_HOSTNAME="${CT_HOSTNAME:-foyer}"
 CORES="${CORES:-2}"
 RAM="${RAM:-2048}"
 DISK="${DISK:-8}"
 BRIDGE="${BRIDGE:-vmbr0}"
 NET="${NET:-name=eth0,bridge=${BRIDGE},ip=dhcp}"
-STORAGE="${STORAGE:-local-lvm}"
-TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-local}"
 PASSWORD="${PASSWORD:-$(head -c 16 /dev/urandom | base64 | tr -d '/+=' | head -c 16)}"
 FOYER_BRANCH="${FOYER_BRANCH:-main}"
 
@@ -39,6 +39,24 @@ log() { echo -e "\e[1;32m[foyer]\e[0m $*"; }
 err() { echo -e "\e[1;31m[foyer]\e[0m $*" >&2; }
 
 command -v pct >/dev/null || { err "pct introuvable — lancez ce script sur l'hôte Proxmox VE."; exit 1; }
+
+# Premier stockage actif supportant un type de contenu donné (rootdir, vztmpl…).
+detect_storage() {
+  pvesm status -content "$1" 2>/dev/null | awk 'NR>1 && $3=="active"{print $1; exit}'
+}
+
+# Stockage du rootfs du conteneur : override STORAGE, sinon auto-détection.
+STORAGE="${STORAGE:-$(detect_storage rootdir)}"
+if [[ -z "${STORAGE}" ]]; then
+  err "Aucun stockage compatible conteneur (content 'rootdir') trouvé. Stockages disponibles :"
+  pvesm status 2>/dev/null | sed 's/^/    /' >&2
+  err "Relancez en précisant le stockage, ex. :  STORAGE=local-zfs bash deploy/lxc/proxmox-create.sh"
+  exit 1
+fi
+# Stockage des templates (content 'vztmpl') : override TEMPLATE_STORAGE, sinon auto.
+TEMPLATE_STORAGE="${TEMPLATE_STORAGE:-$(detect_storage vztmpl)}"
+: "${TEMPLATE_STORAGE:=local}"
+log "Stockage rootfs : ${STORAGE} · templates : ${TEMPLATE_STORAGE}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd || true)"
@@ -57,9 +75,9 @@ if ! pveam list "${TEMPLATE_STORAGE}" 2>/dev/null | grep -q "${TEMPLATE}"; then
 fi
 
 # --- Création du conteneur -----------------------------------------------
-log "Création du conteneur LXC ${CTID} (${HOSTNAME_CT})…"
+log "Création du conteneur LXC ${CTID} (${CT_HOSTNAME})…"
 pct create "${CTID}" "${TEMPLATE_STORAGE}:vztmpl/${TEMPLATE}" \
-  --hostname "${HOSTNAME_CT}" \
+  --hostname "${CT_HOSTNAME}" \
   --cores "${CORES}" --memory "${RAM}" --swap "${RAM}" \
   --rootfs "${STORAGE}:${DISK}" \
   --net0 "${NET}" \
@@ -94,6 +112,6 @@ else
 fi
 
 IP="$(pct exec "${CTID}" -- hostname -I 2>/dev/null | awk '{print $1}')"
-log "✅ Terminé. Conteneur ${CTID} (${HOSTNAME_CT})."
+log "✅ Terminé. Conteneur ${CTID} (${CT_HOSTNAME})."
 log "   → http://${IP:-<IP>}:8099"
 log "   Mot de passe root du conteneur : ${PASSWORD}"

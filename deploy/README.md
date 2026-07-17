@@ -22,8 +22,10 @@ Sur l'hôte **Proxmox VE** (en root), depuis une copie de ce dépôt :
 ```bash
 bash deploy/lxc/proxmox-create.sh
 # ou en personnalisant :
-CTID=131 HOSTNAME=foyer CORES=2 RAM=2048 DISK=8 STORAGE=local-lvm \
+CTID=131 CT_HOSTNAME=foyer CORES=2 RAM=2048 DISK=8 \
   bash deploy/lxc/proxmox-create.sh
+# le stockage est auto-détecté ; forcez-le au besoin avec STORAGE=<nom>
+# (ex. STORAGE=local-zfs). Liste des stockages : `pvesm status`.
 ```
 
 Le script crée un conteneur Debian 12 non privilégié, y envoie le code (copie locale — donc
