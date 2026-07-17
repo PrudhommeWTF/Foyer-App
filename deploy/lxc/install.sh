@@ -31,6 +31,9 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-foyer}"
 ENV_FILE="/etc/foyer/foyer.env"
 SERVICE_USER="foyer"
 
+# Build Angular non-interactif : ne pas demander le partage de données d'usage.
+export NG_CLI_ANALYTICS=false
+
 log() { echo -e "\e[1;32m[foyer]\e[0m $*"; }
 err() { echo -e "\e[1;31m[foyer]\e[0m $*" >&2; }
 

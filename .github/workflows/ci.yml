@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
 
+env:
+  NG_CLI_ANALYTICS: "false"
+
 jobs:
   build:
     runs-on: ubuntu-latest
