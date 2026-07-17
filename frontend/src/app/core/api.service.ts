@@ -4,6 +4,12 @@ import { HouseholdState } from './models';
 export interface AuthUser { email: string; name: string; memberId: string | null; }
 export interface LoginResult { token: string; user: AuthUser; }
 
+export interface SetupPayload {
+  household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark' };
+  admin: { name: string; role: string; color: string; email: string; password: string };
+  members: { name: string; role: string; color: string }[];
+}
+
 const TOKEN_KEY = 'foyer.token';
 
 /**
@@ -30,6 +36,14 @@ export class ApiService {
       throw new Error(msg);
     }
     return (res.status === 204 ? undefined : await res.json()) as T;
+  }
+
+  setupStatus(): Promise<{ needsSetup: boolean; allowSignup: boolean }> {
+    return this.req('setup/status');
+  }
+
+  setup(payload: SetupPayload): Promise<LoginResult> {
+    return this.req<LoginResult>('setup', { method: 'POST', body: JSON.stringify(payload) });
   }
 
   login(email: string, password: string): Promise<LoginResult> {
