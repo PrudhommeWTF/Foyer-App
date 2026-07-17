@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Builds
+frontend/dist/
+backend/dist/
+backend/public/
+
+# Runtime data (SQLite)
+backend/data/
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Env & secrets
+.env
+*.local
+
+# Angular / tooling caches
+.angular/
+frontend/.angular/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db

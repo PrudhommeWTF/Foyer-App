@@ -1,0 +1,23 @@
+# Foyer — self-hosted, single container.
+# Usage:  docker compose up -d   →   http://localhost:8099
+services:
+  foyer:
+    build: .
+    # Or use the prebuilt image published by CI:
+    # image: ghcr.io/prudhommewtf/foyer-app:latest
+    container_name: foyer
+    restart: unless-stopped
+    ports:
+      - "8099:8099"
+    volumes:
+      - foyer-data:/data
+    environment:
+      # CHANGE THESE before exposing publicly!
+      FOYER_JWT_SECRET: "change-me-to-a-long-random-string"
+      FOYER_ADMIN_EMAIL: "camille.martin@email.fr"
+      FOYER_ADMIN_PASSWORD: "foyer"
+      # Set to "false" to close registrations once your household is created:
+      FOYER_ALLOW_SIGNUP: "true"
+
+volumes:
+  foyer-data:

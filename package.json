@@ -1,0 +1,17 @@
+{
+  "name": "foyer-app",
+  "version": "1.0.0",
+  "description": "Foyer — application de gestion familiale auto-hébergée (Angular + Node/SQLite), prête pour Home Assistant.",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend start",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "docker:build": "docker build -t foyer-app .",
+    "docker:up": "docker compose up -d --build"
+  }
+}
