@@ -1,4 +1,3 @@
-import './config';
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';

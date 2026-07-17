@@ -6,7 +6,7 @@
 tâches, messagerie, contacts, documents, budget, planning des repas, carnet de recettes,
 emplois du temps et gestion du foyer — le tout dans une interface chaleureuse, claire ou sombre.
 
-Angular 21 · Node/Express · SQLite · Docker · Add-on Home Assistant (ingress)
+Angular 21 · Node/Express · SQLite · Docker
 
 </div>
 
@@ -38,22 +38,19 @@ responsive (bureau + mobile avec barre d'onglets).
 Foyer-App/
 ├── frontend/        # Application Angular 21 (standalone components, signals)
 ├── backend/         # API Express + TypeScript + SQLite (better-sqlite3)
-├── homeassistant/   # Add-on Home Assistant (ingress) + dépôt d'add-ons
 ├── Dockerfile       # Image unique : l'API sert /api ET l'app compilée
 └── docker-compose.yml
 ```
 
 - Le **backend** stocke l'état du foyer comme un document JSON versionné en **SQLite**
   (`GET/PUT /api/state`), avec authentification **JWT** (mots de passe **bcrypt**).
-  Un seul conteneur, idéal pour l'auto-hébergement et Home Assistant.
+  Un seul conteneur, idéal pour l'auto-hébergement.
 - Le **frontend** est une SPA. Toute la logique métier (dérivés budget, récurrence agenda,
   génération de courses…) est portée fidèlement depuis la maquette de design.
-- L'app utilise un `base href` **relatif**, donc un seul build fonctionne en autonome,
-  derrière un reverse-proxy, ou derrière l'**ingress** Home Assistant.
+- L'app utilise un `base href` **relatif** : un seul build fonctionne servi à la racine
+  ou derrière un reverse-proxy sur un sous-chemin.
 
-## 🚀 Démarrage rapide (self-hosted)
-
-### Docker Compose (recommandé)
+## 🚀 Démarrage rapide (Docker Compose)
 
 ```bash
 git clone https://github.com/PrudhommeWTF/Foyer-App.git
@@ -65,7 +62,10 @@ docker compose up -d --build
 ➡️ Ouvrez **http://localhost:8099**. Connexion par défaut :
 `camille.martin@email.fr` / `foyer` (à changer immédiatement).
 
-### Image préconstruite
+### Image préconstruite (sans build)
+
+Une image multi-arch (`amd64`, `arm64`) est publiée par la CI. Décommentez la ligne
+`image:` dans `docker-compose.yml`, ou lancez directement :
 
 ```bash
 docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
@@ -85,44 +85,12 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `FOYER_ADMIN_PASSWORD` | Mot de passe du compte initial | `foyer` |
 | `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription (`true`/`false`) | `true` |
 
+La base SQLite vit dans le volume `foyer-data` (`/data`) et **persiste** entre les
+redémarrages et les mises à jour de l'image.
+
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort, changez le mot
 > de passe admin, puis passez `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS
-> (reverse-proxy type Caddy/Traefik/Nginx).
-
-## 🏡 Intégration Home Assistant
-
-Deux approches, selon votre installation :
-
-### A. Add-on Home Assistant (recommandé — apparaît dans la barre latérale)
-
-Sur Home Assistant OS / Supervised :
-
-1. **Paramètres → Modules complémentaires → Boutique → ⋮ → Dépôts**
-2. Ajoutez `https://github.com/PrudhommeWTF/Foyer-App`
-3. Installez **Foyer**, configurez `jwt_secret`/identifiants, démarrez, activez la barre latérale.
-
-Grâce à l'**ingress**, Foyer s'affiche directement dans l'interface HA, sans ouvrir de port,
-et ses données persistent dans `/data`. Voir [`homeassistant/foyer/README.md`](homeassistant/foyer/README.md).
-
-### B. Panneau iframe (toute installation HA, app hébergée à part)
-
-Si vous hébergez déjà Foyer (Docker), ajoutez-le à la barre latérale via `configuration.yaml` :
-
-```yaml
-panel_iframe:
-  foyer:
-    title: "Foyer"
-    icon: mdi:home-heart
-    url: "http://IP_DU_SERVEUR:8099"
-    require_admin: false
-```
-
-### C. À propos de HACS
-
-HACS gère les *intégrations*, *plugins Lovelace* et *thèmes* — pas les applications web
-complètes ni les add-ons. Une app plein-écran comme Foyer s'intègre donc à HA via
-**l'add-on** (méthode A, distribué par ce dépôt via le mécanisme de *dépôt personnalisé*) ou
-via un **panneau iframe** (méthode B). C'est l'équivalent « facilité » côté Home Assistant.
+> (reverse-proxy type Caddy / Traefik / Nginx).
 
 ## 🧑‍💻 Développement
 

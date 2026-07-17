@@ -16,8 +16,8 @@ import {
 const PORT = parseInt(process.env.PORT || '8099', 10);
 const JWT_SECRET = process.env.FOYER_JWT_SECRET || 'foyer-dev-secret-change-me';
 const ALLOW_SIGNUP = (process.env.FOYER_ALLOW_SIGNUP || 'true') !== 'false';
-// Home Assistant ingress serves the app under a dynamic base path; the frontend
-// uses relative URLs so a single build works both standalone and behind ingress.
+// The frontend uses a relative base href, so a single build works served at the
+// root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
 
 bootstrap();

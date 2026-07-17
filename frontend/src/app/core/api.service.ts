@@ -8,7 +8,7 @@ const TOKEN_KEY = 'foyer.token';
 
 /**
  * Thin API client. Base URL is anchored on the document base href so a single
- * build works standalone, behind a reverse proxy, and behind Home Assistant ingress.
+ * build works served at the root or behind a reverse proxy on a sub-path.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
