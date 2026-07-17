@@ -112,9 +112,12 @@ PORT=${PORT}
 FOYER_DATA_DIR=${DATA_DIR}
 FOYER_STATIC_DIR=${APP_DIR}/backend/public
 FOYER_JWT_SECRET=${JWT}
+FOYER_ALLOW_SIGNUP=true
+# Au 1er démarrage, l'assistant de configuration crée le foyer + le compte admin.
+# Passez à "true" pour précharger le jeu de démo (compte ci-dessous) à la place.
+FOYER_SEED_DEMO=${SEED_DEMO:-false}
 FOYER_ADMIN_EMAIL=${ADMIN_EMAIL}
 FOYER_ADMIN_PASSWORD=${ADMIN_PASSWORD}
-FOYER_ALLOW_SIGNUP=true
 EOF
   chmod 600 "${ENV_FILE}"
 else
@@ -160,7 +163,11 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if systemctl is-active --quiet foyer; then
   log "✅ Foyer est démarré."
   log "   → http://${IP:-<IP_DU_LXC>}:${PORT}"
-  log "   Compte initial : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD} (à changer)"
+  if [[ "${SEED_DEMO:-false}" =~ ^(1|true|yes|on)$ ]]; then
+    log "   Données de démo activées · compte : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}"
+  else
+    log "   Ouvrez l'URL : l'assistant de configuration crée votre foyer au 1er démarrage."
+  fi
   log "   Config : ${ENV_FILE} · Logs : journalctl -u foyer -f"
 else
   err "Le service n'a pas démarré. Voir : journalctl -u foyer -e"
