@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
-import { ApiService } from './api.service';
+import { ApiService, SetupPayload } from './api.service';
 import { HouseholdState, Member } from './models';
 import { UiState, initialUi, IngrRow } from './ui-state';
 import { contactIni, dstr, fileTypeOf, occursOn, parseAmt, uid, weekDates } from './helpers';
@@ -14,6 +14,8 @@ export class FoyerStore {
 
   readonly ready = signal(false);
   readonly authed = signal(false);
+  readonly needsSetup = signal(false);
+  readonly allowSignup = signal(true);
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
 
@@ -35,6 +37,19 @@ export class FoyerStore {
 
   // ---- lifecycle / auth -------------------------------------------------
   async init(): Promise<void> {
+    // First run? The setup wizard must create the household + admin account.
+    try {
+      const status = await this.api.setupStatus();
+      this.allowSignup.set(status.allowSignup);
+      if (status.needsSetup) {
+        this.needsSetup.set(true);
+        this.api.token = null;
+        this.ready.set(true);
+        return;
+      }
+    } catch {
+      /* status unreachable — fall through to normal auth handling */
+    }
     if (this.api.token) {
       try {
         await this.loadState();
@@ -44,6 +59,22 @@ export class FoyerStore {
       }
     }
     this.ready.set(true);
+  }
+
+  async completeSetup(payload: SetupPayload): Promise<boolean> {
+    this.authError.set('');
+    try {
+      const res = await this.api.setup(payload);
+      this.api.token = res.token;
+      await this.loadState();
+      this.needsSetup.set(false);
+      this.authed.set(true);
+      this.toast('Votre foyer est créé 🎉');
+      return true;
+    } catch (e) {
+      this.authError.set((e as Error).message);
+      return false;
+    }
   }
 
   private async loadState(): Promise<void> {

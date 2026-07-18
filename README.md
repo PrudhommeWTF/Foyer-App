@@ -56,12 +56,13 @@ Foyer-App/
 ```bash
 git clone https://github.com/PrudhommeWTF/Foyer-App.git
 cd Foyer-App
-# éditez docker-compose.yml pour changer FOYER_JWT_SECRET / identifiants
+# éditez docker-compose.yml pour définir FOYER_JWT_SECRET
 docker compose up -d --build
 ```
 
-➡️ Ouvrez **http://localhost:8099**. Connexion par défaut :
-`camille.martin@email.fr` / `foyer` (à changer immédiatement).
+➡️ Ouvrez **http://localhost:8099**. **Au premier démarrage**, l'assistant de
+configuration s'ouvre : il crée votre foyer, votre compte administrateur (email +
+mot de passe), les membres et vos préférences. Voir [Premier démarrage](#-premier-démarrage--onboarding).
 
 ### Image préconstruite (sans build)
 
@@ -71,7 +72,6 @@ Une image multi-arch (`amd64`, `arm64`) est publiée par la CI. Décommentez la 
 ```bash
 docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
   -e FOYER_JWT_SECRET="une-chaine-aleatoire-longue" \
-  -e FOYER_ADMIN_PASSWORD="votre-mot-de-passe" \
   ghcr.io/prudhommewtf/foyer-app:latest
 ```
 
@@ -82,12 +82,30 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `PORT` | Port d'écoute | `8099` |
 | `FOYER_DATA_DIR` | Dossier de la base SQLite | `./data` (ou `/data` en conteneur) |
 | `FOYER_JWT_SECRET` | Secret de signature des sessions — **à définir** | `foyer-dev-secret-change-me` |
-| `FOYER_ADMIN_EMAIL` | Email du compte initial | `camille.martin@email.fr` |
-| `FOYER_ADMIN_PASSWORD` | Mot de passe du compte initial | `foyer` |
-| `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription (`true`/`false`) | `true` |
+| `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`) | `true` |
+| `FOYER_SEED_DEMO` | Précharger les **données de démo** + un compte démo au lieu de l'onboarding | `false` |
+| `FOYER_ADMIN_EMAIL` / `FOYER_ADMIN_PASSWORD` | Identifiants du compte démo — **uniquement si `FOYER_SEED_DEMO=true`** | `camille.martin@email.fr` / `foyer` |
 
 La base SQLite vit dans le volume `foyer-data` (`/data`) et **persiste** entre les
 redémarrages et les mises à jour de l'image.
+
+## 🚀 Premier démarrage / onboarding
+
+Au tout premier lancement (base de données vide), Foyer affiche un **assistant de
+configuration** en 6 étapes :
+
+1. **Bienvenue** · 2. **Nom du foyer** · 3. **Votre profil** (prénom, rôle, couleur, **email +
+mot de passe** de l'administrateur) · 4. **Membres** du foyer · 5. **Préférences**
+(début de semaine, devise, thème clair/sombre) · 6. **Récapitulatif**.
+
+À la validation, le compte administrateur et le foyer sont créés, et vous entrez
+directement dans l'application. Les écrans démarrent vierges (prêts à être remplis),
+avec quelques réglages par défaut (rayons de courses, une liste de courses, une liste
+de tâches, des catégories de budget).
+
+> Pour découvrir l'app avec un **jeu de données de démonstration** au lieu de l'onboarding,
+> démarrez avec `FOYER_SEED_DEMO=true` (compte démo `camille.martin@email.fr` / `foyer`).
+> Une base déjà configurée n'est jamais réinitialisée.
 
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort, changez le mot
 > de passe admin, puis passez `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS

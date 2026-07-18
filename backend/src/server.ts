@@ -6,12 +6,15 @@ import fs from 'fs';
 import path from 'path';
 import {
   bootstrap,
+  countUsers,
+  createAdmin,
   createUser,
   findUserByEmail,
   getHousehold,
   resetHousehold,
   saveHousehold,
 } from './db';
+import { buildInitialState } from './seed';
 
 const PORT = parseInt(process.env.PORT || '8099', 10);
 const JWT_SECRET = process.env.FOYER_JWT_SECRET || 'foyer-dev-secret-change-me';
@@ -52,6 +55,33 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
 const api = express.Router();
 
 api.get('/health', (_req, res) => res.json({ ok: true }));
+
+// ---- First-run setup (onboarding) ----
+api.get('/setup/status', (_req, res) => {
+  res.json({ needsSetup: countUsers() === 0, allowSignup: ALLOW_SIGNUP });
+});
+
+api.post('/setup', (req: Request, res: Response) => {
+  if (countUsers() > 0) {
+    res.status(409).json({ error: 'La configuration a déjà été effectuée' });
+    return;
+  }
+  const { household, admin, members } = req.body || {};
+  if (!household?.name?.trim()) { res.status(400).json({ error: 'Le nom du foyer est requis' }); return; }
+  if (!admin?.name?.trim()) { res.status(400).json({ error: 'Votre prénom est requis' }); return; }
+  if (!admin?.email?.trim() || !admin?.password) { res.status(400).json({ error: 'Email et mot de passe requis' }); return; }
+  if (String(admin.password).length < 6) { res.status(400).json({ error: 'Le mot de passe doit faire au moins 6 caractères' }); return; }
+  if (findUserByEmail(String(admin.email))) { res.status(409).json({ error: 'Un compte existe déjà avec cet email' }); return; }
+
+  const state = buildInitialState({
+    household: { name: household.name, weekStart: household.weekStart, currency: household.currency, theme: household.theme },
+    admin: { name: admin.name, role: admin.role, color: admin.color, email: admin.email },
+    members: Array.isArray(members) ? members : [],
+  });
+  const user = createAdmin(String(admin.email), String(admin.password), String(admin.name).trim(), state.members[0].id);
+  saveHousehold(state);
+  res.status(201).json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
+});
 
 api.post('/auth/login', (req: Request, res: Response) => {
   const { email, password } = req.body || {};

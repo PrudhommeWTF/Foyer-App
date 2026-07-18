@@ -12,12 +12,17 @@ services:
     volumes:
       - foyer-data:/data
     environment:
-      # CHANGE THESE before exposing publicly!
+      # CHANGE THIS before exposing publicly!
       FOYER_JWT_SECRET: "change-me-to-a-long-random-string"
-      FOYER_ADMIN_EMAIL: "camille.martin@email.fr"
-      FOYER_ADMIN_PASSWORD: "foyer"
-      # Set to "false" to close registrations once your household is created:
+      # First launch shows the setup wizard (creates household + admin account).
+      # Close registrations once your household is created:
       FOYER_ALLOW_SIGNUP: "true"
+      # Set to "true" to preload the demo dataset instead of the onboarding wizard
+      # (demo account camille.martin@email.fr / foyer). Leave "false" for real use.
+      FOYER_SEED_DEMO: "false"
+      # Only used when FOYER_SEED_DEMO is "true":
+      # FOYER_ADMIN_EMAIL: "camille.martin@email.fr"
+      # FOYER_ADMIN_PASSWORD: "foyer"
 
 volumes:
   foyer-data:

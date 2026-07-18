@@ -29,24 +29,41 @@ db.exec(`
   );
 `);
 
-/** Seed the single household document and a demo admin user on first boot. */
+export function countUsers(): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+}
+
+/**
+ * First-boot behaviour.
+ * By default a fresh database stays EMPTY so the first-run onboarding wizard can
+ * create the household, the admin account and the members. Set FOYER_SEED_DEMO=true
+ * to instead pre-load the demo dataset + a demo admin (quick trial / old behaviour).
+ * Existing databases (that already have users) are never touched.
+ */
 export function bootstrap(): void {
-  const row = db.prepare('SELECT COUNT(*) AS n FROM household').get() as { n: number };
-  if (row.n === 0) {
+  const seedDemo = /^(1|true|yes|on)$/i.test(process.env.FOYER_SEED_DEMO || '');
+  if (!seedDemo) return;
+
+  const hh = db.prepare('SELECT COUNT(*) AS n FROM household').get() as { n: number };
+  if (hh.n === 0) {
     db.prepare('INSERT INTO household (id, state, version) VALUES (1, ?, 1)').run(JSON.stringify(SEED_STATE));
   }
-
-  const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number };
-  if (userCount.n === 0) {
+  if (countUsers() === 0) {
     const email = (process.env.FOYER_ADMIN_EMAIL || 'camille.martin@email.fr').toLowerCase();
     const password = process.env.FOYER_ADMIN_PASSWORD || 'foyer';
     const hash = bcrypt.hashSync(password, 10);
-    db.prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)').run(
-      email, hash, 'Camille', 'cam',
-    );
+    db.prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)').run(email, hash, 'Camille', 'cam');
     // eslint-disable-next-line no-console
-    console.log(`[foyer] Compte initial créé : ${email} / ${password} (à changer via FOYER_ADMIN_*)`);
+    console.log(`[foyer] (démo) Compte initial : ${email} / ${password}`);
   }
+}
+
+export function createAdmin(email: string, password: string, name: string, memberId: string): UserRow {
+  const hash = bcrypt.hashSync(password, 10);
+  const info = db
+    .prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)')
+    .run(email.toLowerCase(), hash, name, memberId);
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRow;
 }
 
 export interface UserRow {
