@@ -5,7 +5,7 @@ import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { contactIni, uid } from '../core/helpers';
 
-interface ObMember { id: string; name: string; role: string; color: string; ini: string; }
+interface ObMember { id: string; name: string; role: string; color: string; ini: string; email: string; password: string; }
 
 const PALETTE = ['#E56B4E', '#4E93B8', '#9B6FA8', '#6E9E5F', '#F0B24B', '#C77DA5'];
 const STEP_LABELS = ['Bienvenue', 'Nom du foyer', 'Votre profil', 'Membres', 'Préférences', 'Terminé'];
@@ -114,7 +114,7 @@ const INTRO = [
               @case (3) {
                 <div class="fade">
                   <h2 class="f-display">Ajoutez votre famille</h2>
-                  <p class="sub">Ajoutez les autres membres du foyer. Vous pourrez en inviter d'autres plus tard.</p>
+                  <p class="sub">Ajoutez les membres du foyer. Donnez-leur un <b>email + mot de passe</b> pour qu'ils puissent se connecter (facultatif — laissez vide pour un simple profil).</p>
                   <div class="mlist">
                     <div class="mrow you">
                       <f-avatar [ini]="ini()" [color]="color()" [size]="42" />
@@ -124,16 +124,23 @@ const INTRO = [
                     @for (m of members(); track m.id) {
                       <div class="mrow">
                         <f-avatar [ini]="m.ini" [color]="m.color" [size]="42" />
-                        <div class="mrow-info"><div class="mrow-name">{{ m.name }}</div><div class="mrow-role">{{ m.role }}</div></div>
+                        <div class="mrow-info">
+                          <div class="mrow-name">{{ m.name }}</div>
+                          <div class="mrow-role">{{ m.role }}@if (m.email) { <span class="acct"><f-icon name="check" [size]="11" color="#5F7E5C" [width]="3" /> compte</span> }</div>
+                        </div>
                         <button class="mrm" (click)="removeMember(m.id)"><f-icon name="x" [size]="16" color="#C6492F" [width]="2.2" /></button>
                       </div>
                     }
                   </div>
                   <div class="addbox">
                     <label class="field-label">Nouveau membre</label>
+                    <div class="two" style="margin-bottom:11px">
+                      <input class="input soft" [ngModel]="mName()" (ngModelChange)="mName.set($event)" placeholder="Prénom" />
+                      <input class="input soft" [ngModel]="mRole()" (ngModelChange)="mRole.set($event)" placeholder="Rôle / âge" />
+                    </div>
                     <div class="two" style="margin-bottom:13px">
-                      <input class="input soft" [ngModel]="mName()" (ngModelChange)="mName.set($event)" (keydown.enter)="addMember()" placeholder="Prénom" />
-                      <input class="input soft" [ngModel]="mRole()" (ngModelChange)="mRole.set($event)" (keydown.enter)="addMember()" placeholder="Rôle / âge" />
+                      <input class="input soft" type="email" [ngModel]="mEmail()" (ngModelChange)="mEmail.set($event)" placeholder="Email de connexion (facultatif)" />
+                      <input class="input soft" type="password" [ngModel]="mPassword()" (ngModelChange)="mPassword.set($event)" (keydown.enter)="addMember()" placeholder="Mot de passe (facultatif)" />
                     </div>
                     <div class="addrow">
                       <div class="swatches sm">
@@ -259,6 +266,8 @@ const INTRO = [
     .mrow-info { flex: 1; min-width: 0; }
     .mrow-name { font-size: 15px; font-weight: 800; color: var(--ink); }
     .mrow-role { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .acct { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; background: #EDF2EB; color: #5F7E5C; font-size: 10.5px; font-weight: 800; }
+    :host-context(:root.dark) .acct { background: rgba(122,155,118,.22); }
     .badge-admin { padding: 4px 10px; border-radius: 20px; background: #FCE9E3; font-size: 11px; font-weight: 800; color: #E56B4E; }
     .mrm { width: 34px; height: 34px; border: none; border-radius: 10px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .mrm:hover { background: #FCE4DE; }
@@ -307,6 +316,8 @@ export class OnboardingComponent {
   members = signal<ObMember[]>([]);
   mName = signal('');
   mRole = signal('');
+  mEmail = signal('');
+  mPassword = signal('');
   mColor = signal('#4E93B8');
   weekStart = signal('Lundi');
   currency = signal('Euro (€)');
@@ -317,7 +328,7 @@ export class OnboardingComponent {
   progress = computed(() => Math.round((this.step() / 5) * 100));
   nextLabel = computed(() => (this.step() === 0 ? 'Commencer' : this.step() >= 5 ? 'Terminer' : 'Continuer'));
   suggestions = computed(() => ['Famille ' + (this.name().trim() || 'Martin'), 'Chez nous', 'La Maisonnée', 'Le Nid']);
-  allMembers = computed<ObMember[]>(() => [{ id: 'me', name: this.name(), role: this.role(), color: this.color(), ini: this.ini() }, ...this.members()].slice(0, 6));
+  allMembers = computed<ObMember[]>(() => [{ id: 'me', name: this.name(), role: this.role(), color: this.color(), ini: this.ini(), email: '', password: '' }, ...this.members()].slice(0, 6));
 
   setTheme(t: 'light' | 'dark'): void {
     this.theme.set(t);
@@ -327,8 +338,19 @@ export class OnboardingComponent {
   addMember(): void {
     const name = this.mName().trim();
     if (!name) { this.store.toast('Donne un prénom'); return; }
-    this.members.update((list) => [...list, { id: uid('ob'), name, role: this.mRole().trim() || 'Membre', color: this.mColor(), ini: contactIni(name) }]);
-    this.mName.set(''); this.mRole.set(''); this.mColor.set('#4E93B8');
+    const email = this.mEmail().trim();
+    const password = this.mPassword();
+    if ((!!email) !== (!!password)) { this.store.toast('Renseigne email ET mot de passe, ou aucun des deux'); return; }
+    if (email && !/^\S+@\S+\.\S+$/.test(email)) { this.store.toast('Email du membre invalide'); return; }
+    if (password && password.length < 6) { this.store.toast('Mot de passe du membre : 6 caractères minimum'); return; }
+    if (email && this.emailTaken(email)) { this.store.toast('Cet email est déjà utilisé'); return; }
+    this.members.update((list) => [...list, { id: uid('ob'), name, role: this.mRole().trim() || 'Membre', color: this.mColor(), ini: contactIni(name), email, password }]);
+    this.mName.set(''); this.mRole.set(''); this.mEmail.set(''); this.mPassword.set(''); this.mColor.set('#4E93B8');
+  }
+
+  private emailTaken(email: string): boolean {
+    const e = email.toLowerCase();
+    return this.email().trim().toLowerCase() === e || this.members().some((m) => m.email.toLowerCase() === e);
   }
   removeMember(id: string): void { this.members.update((l) => l.filter((m) => m.id !== id)); }
 
@@ -354,7 +376,7 @@ export class OnboardingComponent {
     const ok = await this.store.completeSetup({
       household: { name: this.famName().trim(), weekStart: this.weekStart(), currency: this.currency(), theme: this.theme() },
       admin: { name: this.name().trim(), role: this.role().trim(), color: this.color(), email: this.email().trim(), password: this.password() },
-      members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color })),
+      members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color, email: m.email || undefined, password: m.password || undefined })),
     });
     this.busy.set(false);
     if (!ok) this.store.toast(this.store.authError() || 'Échec de la configuration');

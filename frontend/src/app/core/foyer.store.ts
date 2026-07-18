@@ -19,6 +19,11 @@ export class FoyerStore {
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
 
+  // Current user & member login accounts (admin-managed).
+  readonly isAdmin = signal(false);
+  readonly currentMemberId = signal<string | null>(null);
+  readonly accounts = signal<Record<string, string>>({}); // memberId → login email
+
   /** Non-null data accessor for use inside authed views. */
   readonly data = computed(() => this._data());
   readonly narrow = signal(false);
@@ -82,7 +87,23 @@ export class FoyerStore {
     this._data.set(this.normalise(state));
     const p = state.profile;
     this.patch({ pfName: p.name, pfRole: p.role, pfEmail: p.email, pfPhone: p.phone, pfColor: p.color, famNameField: state.familyName });
+    try {
+      const me = await this.api.me();
+      this.currentMemberId.set(me.memberId);
+      this.isAdmin.set(me.admin);
+    } catch { /* ignore */ }
+    await this.refreshAccounts();
   }
+
+  async refreshAccounts(): Promise<void> {
+    try {
+      const { accounts } = await this.api.memberAccounts();
+      this.accounts.set(Object.fromEntries(accounts.map((a) => [a.memberId, a.email])));
+    } catch { /* ignore */ }
+  }
+
+  memberHasAccount(memberId: string): boolean { return !!this.accounts()[memberId]; }
+  memberAccountEmail(memberId: string): string { return this.accounts()[memberId] || ''; }
 
   /** Guard against older/partial state documents missing newer keys. */
   private normalise(s: HouseholdState): HouseholdState {
@@ -126,6 +147,59 @@ export class FoyerStore {
     this.authed.set(false);
     this._data.set(null);
     this.ui.set(initialUi());
+    this.isAdmin.set(false);
+    this.currentMemberId.set(null);
+    this.accounts.set({});
+  }
+
+  // ---- member login accounts --------------------------------------------
+  async openAccount(memberId: string): Promise<void> {
+    // Ensure the member exists server-side before managing its account.
+    await this.flush();
+    await this.refreshAccounts();
+    this.patch({ accountFor: memberId, acEmail: this.memberAccountEmail(memberId), acPassword: '', acBusy: false });
+  }
+  closeAccount(): void { this.patch({ accountFor: null, acBusy: false }); }
+
+  async saveAccount(): Promise<void> {
+    const s = this.ui();
+    const memberId = s.accountFor;
+    if (!memberId || s.acBusy) return;
+    const email = s.acEmail.trim();
+    const password = s.acPassword;
+    const exists = this.memberHasAccount(memberId);
+    if (!exists) {
+      if (!/^\S+@\S+\.\S+$/.test(email)) { this.toast('Email invalide'); return; }
+      if (password.length < 6) { this.toast('Mot de passe : 6 caractères minimum'); return; }
+    } else if (password && password.length < 6) {
+      this.toast('Mot de passe : 6 caractères minimum'); return;
+    }
+    this.patch({ acBusy: true });
+    try {
+      if (!exists) await this.api.createMemberAccount(memberId, email, password);
+      else await this.api.updateMemberAccount(memberId, email || undefined, password || undefined);
+      await this.refreshAccounts();
+      this.patch({ accountFor: null, acBusy: false });
+      this.toast(exists ? 'Accès mis à jour' : 'Accès créé');
+    } catch (e) {
+      this.patch({ acBusy: false });
+      this.toast((e as Error).message);
+    }
+  }
+
+  async removeAccount(): Promise<void> {
+    const memberId = this.ui().accountFor;
+    if (!memberId) return;
+    this.patch({ acBusy: true });
+    try {
+      await this.api.deleteMemberAccount(memberId);
+      await this.refreshAccounts();
+      this.patch({ accountFor: null, acBusy: false });
+      this.toast('Accès retiré');
+    } catch (e) {
+      this.patch({ acBusy: false });
+      this.toast((e as Error).message);
+    }
   }
 
   // ---- state plumbing ---------------------------------------------------
@@ -510,9 +584,13 @@ export class FoyerStore {
   }
   confirmMemberDel(): void {
     const id = this.ui().memberDelId; if (!id) return;
+    const hadAccount = this.memberHasAccount(id);
     this.mutate((d) => { d.members = d.members.filter((m) => m.id !== id); });
     const sc = this.ui().schedChild === id ? (this._data()?.members[0]?.id || 'cam') : this.ui().schedChild;
     this.patch({ memberDelId: null, schedChild: sc });
+    if (hadAccount) {
+      this.flush().then(() => this.api.deleteMemberAccount(id)).then(() => this.refreshAccounts()).catch(() => { /* ignore */ });
+    }
     this.toast('Membre retiré');
   }
   openProfile(): void { const p = this._data()?.profile; this.patch({ profileOpen: true, pfTab: 'infos', pfName: p?.name || '', pfRole: p?.role || '', pfEmail: p?.email || '', pfPhone: p?.phone || '', pfColor: p?.color || '#E56B4E' }); }

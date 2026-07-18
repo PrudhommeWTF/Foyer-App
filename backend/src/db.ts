@@ -58,12 +58,34 @@ export function bootstrap(): void {
   }
 }
 
-export function createAdmin(email: string, password: string, name: string, memberId: string): UserRow {
+export function createUserWithMember(email: string, password: string, name: string, memberId: string): UserRow {
   const hash = bcrypt.hashSync(password, 10);
   const info = db
     .prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)')
     .run(email.toLowerCase(), hash, name, memberId);
   return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRow;
+}
+
+export function getUserById(id: number): UserRow | undefined {
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow | undefined;
+}
+
+export function getUserByMemberId(memberId: string): UserRow | undefined {
+  return db.prepare('SELECT * FROM users WHERE member_id = ?').get(memberId) as UserRow | undefined;
+}
+
+/** memberId → login email, for every member that has an account. */
+export function listMemberAccounts(): { memberId: string; email: string }[] {
+  return db.prepare("SELECT member_id AS memberId, email FROM users WHERE member_id IS NOT NULL").all() as { memberId: string; email: string }[];
+}
+
+export function updateUserCredentials(id: number, email?: string, password?: string): void {
+  if (email !== undefined) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.toLowerCase(), id);
+  if (password !== undefined) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id);
+}
+
+export function deleteUser(id: number): void {
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
 }
 
 export interface UserRow {

@@ -7,7 +7,7 @@ export interface LoginResult { token: string; user: AuthUser; }
 export interface SetupPayload {
   household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark' };
   admin: { name: string; role: string; color: string; email: string; password: string };
-  members: { name: string; role: string; color: string }[];
+  members: { name: string; role: string; color: string; email?: string; password?: string }[];
 }
 
 const TOKEN_KEY = 'foyer.token';
@@ -52,6 +52,26 @@ export class ApiService {
 
   register(email: string, password: string, name: string): Promise<LoginResult> {
     return this.req<LoginResult>('auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
+  }
+
+  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean }> {
+    return this.req('me');
+  }
+
+  memberAccounts(): Promise<{ accounts: { memberId: string; email: string }[] }> {
+    return this.req('members/accounts');
+  }
+
+  createMemberAccount(memberId: string, email: string, password: string): Promise<{ memberId: string; email: string }> {
+    return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'POST', body: JSON.stringify({ email, password }) });
+  }
+
+  updateMemberAccount(memberId: string, email?: string, password?: string): Promise<{ memberId: string; email: string }> {
+    return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'PUT', body: JSON.stringify({ email, password }) });
+  }
+
+  deleteMemberAccount(memberId: string): Promise<{ ok: boolean }> {
+    return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'DELETE' });
   }
 
   getState(): Promise<{ state: HouseholdState; version: number }> {

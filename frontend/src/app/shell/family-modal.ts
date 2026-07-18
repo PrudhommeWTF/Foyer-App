@@ -26,11 +26,39 @@ import { contactIni } from '../core/helpers';
           @for (m of d().members; track m.id) {
             <div class="member">
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="40" />
-              <div class="minfo"><div class="mname">{{ m.name }} @if (m.admin) { <span class="admin">admin</span> }</div><div class="mrole">{{ m.role }}</div></div>
+              <div class="minfo">
+                <div class="mname">{{ m.name }} @if (m.admin) { <span class="admin">admin</span> }</div>
+                <div class="mrole">{{ m.role }}@if (store.memberHasAccount(m.id)) { <span class="acct" [title]="store.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }</div>
+              </div>
+              @if (store.isAdmin()) {
+                <button class="icon-btn sm" title="Gérer l'accès" (click)="store.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="store.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>
+              }
               <button class="icon-btn sm" (click)="store.editMember(m.id)"><f-icon name="edit" [size]="16" /></button>
               <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })"><f-icon name="trash" [size]="16" color="var(--primary)" /></button>
             </div>
           }
+        </div>
+      </f-modal>
+    }
+
+    @if (store.ui().accountFor) {
+      <f-modal [title]="accEmail() ? 'Gérer l’accès' : 'Créer un accès'" (close)="store.closeAccount()">
+        <p class="confirm" style="margin-bottom:18px">
+          {{ accEmail()
+            ? ('Ce membre peut se connecter. Modifiez l’email ou définissez un nouveau mot de passe.')
+            : ('Donnez un email et un mot de passe à ' + accMemberName() + ' pour lui permettre de se connecter.') }}
+        </p>
+        <label class="field-label">Email de connexion</label>
+        <input class="input" type="email" [ngModel]="store.ui().acEmail" (ngModelChange)="store.patch({ acEmail: $event })" placeholder="membre@email.fr" style="margin-bottom:14px" />
+        <label class="field-label">{{ accEmail() ? 'Nouveau mot de passe' : 'Mot de passe' }}</label>
+        <input class="input" type="password" [ngModel]="store.ui().acPassword" (ngModelChange)="store.patch({ acPassword: $event })" [placeholder]="accEmail() ? 'Laisser vide pour ne pas changer' : '6 caractères minimum'" style="margin-bottom:18px" />
+        <div class="acc-foot">
+          @if (accEmail()) {
+            <button class="btn btn-ghost" (click)="store.removeAccount()" [disabled]="store.ui().acBusy">Retirer l'accès</button>
+          } @else { <div class="spacer"></div> }
+          <div class="spacer"></div>
+          <button class="btn btn-soft" (click)="store.closeAccount()">Annuler</button>
+          <button class="btn btn-primary" (click)="store.saveAccount()" [disabled]="store.ui().acBusy">{{ accEmail() ? 'Enregistrer' : 'Créer l’accès' }}</button>
         </div>
       </f-modal>
     }
@@ -86,6 +114,9 @@ import { contactIni } from '../core/helpers';
     .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .2s ease; }
     .switch.on .knob { left: 23px; }
     .confirm { font-size: 14px; font-weight: 600; color: var(--ink2); margin-bottom: 20px; line-height: 1.5; }
+    .acct { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; background: #EDF2EB; color: #5F7E5C; font-size: 10.5px; font-weight: 800; }
+    :host-context(:root.dark) .acct { background: rgba(122,155,118,.22); }
+    .acc-foot { display: flex; align-items: center; gap: 10px; }
   `],
 })
 export class FamilyModalComponent {
@@ -93,4 +124,6 @@ export class FamilyModalComponent {
   palette = PALETTE;
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   ini(): string { return contactIni(this.store.ui().mfName || '?'); }
+  accEmail(): string { const id = this.store.ui().accountFor; return id ? this.store.memberAccountEmail(id) : ''; }
+  accMemberName(): string { const id = this.store.ui().accountFor; return this.d().members.find((m) => m.id === id)?.name || 'ce membre'; }
 }

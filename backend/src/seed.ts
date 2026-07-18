@@ -198,10 +198,19 @@ function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+export interface OnboardingMember {
+  id?: string;
+  name: string;
+  role?: string;
+  color?: string;
+  /** Optional login email — when set (with a password), an account is created for the member. */
+  email?: string;
+}
+
 export interface OnboardingInput {
   household: { name: string; weekStart?: string; currency?: string; theme?: 'light' | 'dark' };
   admin: { name: string; role?: string; color?: string; email: string };
-  members?: { name: string; role?: string; color?: string }[];
+  members?: OnboardingMember[];
 }
 
 /**
@@ -224,12 +233,13 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
   const others = (input.members || [])
     .filter((m) => (m.name || '').trim())
     .map((m, i) => ({
-      id: 'm' + (i + 1),
+      id: m.id || 'm' + (i + 1),
       name: m.name.trim(),
       role: (m.role || '').trim() || 'Membre',
       color: m.color || '#4E93B8',
       ini: initials(m.name),
       admin: false,
+      ...((m.email || '').trim() ? { email: (m.email || '').trim() } : {}),
     }));
 
   return {

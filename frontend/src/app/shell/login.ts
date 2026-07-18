@@ -40,13 +40,8 @@ interface DemoMember { ini: string; name: string; color: string; }
             <div class="brand-badge sm"><f-icon name="home" [size]="24" color="#fff" [width]="2.2" /></div>
             <div class="brand-name" style="color:var(--ink)">Foyer</div>
           </div>
-          <div class="title f-display">{{ mode() === 'login' ? 'Bon retour 👋' : 'Créer votre foyer' }}</div>
-          <div class="subtitle">{{ mode() === 'login' ? 'Connectez-vous à votre espace famille' : 'Quelques secondes suffisent' }}</div>
-
-          @if (mode() === 'register') {
-            <label class="field-label">Prénom</label>
-            <input class="input" [(ngModel)]="name" placeholder="Camille" style="margin-bottom:18px" />
-          }
+          <div class="title f-display">Bon retour 👋</div>
+          <div class="subtitle">Connectez-vous à votre espace famille</div>
 
           <label class="field-label">Email</label>
           <input class="input" [(ngModel)]="email" (keydown.enter)="submit()" placeholder="camille.martin@email.fr" style="margin-bottom:18px" />
@@ -61,26 +56,18 @@ interface DemoMember { ini: string; name: string; color: string; }
             </button>
           </div>
 
-          @if (mode() === 'login') {
-            <label class="remember" (click)="remember.set(!remember())">
-              <span class="tick" [class.on]="remember()">@if (remember()) { <f-icon name="check" [size]="12" color="#fff" [width]="3.4" /> }</span>
-              <span>Rester connecté</span>
-            </label>
-          } @else { <div style="height:22px"></div> }
+          <label class="remember" (click)="remember.set(!remember())">
+            <span class="tick" [class.on]="remember()">@if (remember()) { <f-icon name="check" [size]="12" color="#fff" [width]="3.4" /> }</span>
+            <span>Rester connecté</span>
+          </label>
 
           @if (error()) { <div class="err">{{ error() }}</div> }
 
           <button class="btn btn-primary btn-block" style="padding:15px" (click)="submit()" [disabled]="busy()">
-            {{ busy() ? 'Connexion…' : (mode() === 'login' ? 'Se connecter' : 'Créer mon foyer') }}
+            {{ busy() ? 'Connexion…' : 'Se connecter' }}
           </button>
 
-          <div class="switch">
-            @if (mode() === 'login') {
-              Pas encore de foyer ? <span (click)="mode.set('register')">Créer un compte</span>
-            } @else {
-              Déjà un compte ? <span (click)="mode.set('login')">Se connecter</span>
-            }
-          </div>
+          <div class="note">Votre foyer est géré par son administrateur. Demandez-lui vos identifiants pour vous connecter.</div>
         </div>
       </div>
     </div>
@@ -111,8 +98,7 @@ interface DemoMember { ini: string; name: string; color: string; }
     .eye { position: absolute; top: 0; right: 0; height: 100%; width: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; }
     .remember { display: flex; align-items: center; gap: 9px; cursor: pointer; margin: 0 0 22px; font-size: 13.5px; font-weight: 700; color: var(--ink2); }
     .err { background: #FCE9E3; color: #C6492F; font-weight: 700; font-size: 13.5px; padding: 11px 14px; border-radius: 12px; margin-bottom: 14px; }
-    .switch { text-align: center; font-size: 13.5px; font-weight: 700; color: var(--ink2); margin-top: 22px; }
-    .switch span { color: var(--primary); font-weight: 800; cursor: pointer; }
+    .note { text-align: center; font-size: 12.5px; font-weight: 600; color: var(--ink3); margin-top: 22px; line-height: 1.5; }
     @media (max-width: 860px) {
       .art { display: none; }
       .panel { width: 100%; }
@@ -122,10 +108,8 @@ interface DemoMember { ini: string; name: string; color: string; }
 })
 export class LoginComponent {
   store = inject(FoyerStore);
-  mode = signal<'login' | 'register'>('login');
-  email = 'camille.martin@email.fr';
+  email = '';
   pwd = '';
-  name = '';
   show = signal(false);
   remember = signal(true);
   busy = signal(false);
@@ -141,8 +125,7 @@ export class LoginComponent {
   async submit(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
-    if (this.mode() === 'login') await this.store.login(this.email.trim(), this.pwd);
-    else await this.store.register(this.email.trim(), this.pwd, this.name.trim());
+    await this.store.login(this.email.trim(), this.pwd);
     this.busy.set(false);
   }
 }
