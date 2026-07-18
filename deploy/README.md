@@ -67,6 +67,18 @@ nano /etc/foyer/foyer.env       # config (puis: systemctl restart foyer)
 bash deploy/lxc/update.sh       # mise à jour (rebuild + restart)
 ```
 
+### Désinstallation
+
+```bash
+bash deploy/lxc/uninstall.sh                  # retire service, code, config, utilisateur
+KEEP_DATA=true bash deploy/lxc/uninstall.sh   # conserve la base SQLite (/var/lib/foyer)
+PURGE_NODE=true bash deploy/lxc/uninstall.sh  # retire aussi Node.js + le dépôt NodeSource
+```
+
+> ⚠️ `install.sh` doit être lancé **dans un conteneur**, pas sur l'hôte Proxmox : il refuse
+> désormais de s'exécuter sur un hôte PVE (contournement explicite : `ALLOW_HOST=1`). Si vous
+> l'avez lancé par erreur sur l'hôte, `uninstall.sh` (avec `PURGE_NODE=true`) nettoie tout.
+
 ### Réglages
 
 | Variable | Rôle | Défaut |
