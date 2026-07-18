@@ -58,7 +58,7 @@ export function bootstrap(): void {
   }
 }
 
-export function createAdmin(email: string, password: string, name: string, memberId: string): UserRow {
+export function createUserWithMember(email: string, password: string, name: string, memberId: string): UserRow {
   const hash = bcrypt.hashSync(password, 10);
   const info = db
     .prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)')

@@ -7,7 +7,7 @@ export interface LoginResult { token: string; user: AuthUser; }
 export interface SetupPayload {
   household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark' };
   admin: { name: string; role: string; color: string; email: string; password: string };
-  members: { name: string; role: string; color: string }[];
+  members: { name: string; role: string; color: string; email?: string; password?: string }[];
 }
 
 const TOKEN_KEY = 'foyer.token';

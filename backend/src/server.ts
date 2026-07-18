@@ -7,14 +7,16 @@ import path from 'path';
 import {
   bootstrap,
   countUsers,
-  createAdmin,
   createUser,
+  createUserWithMember,
   findUserByEmail,
   getHousehold,
   resetHousehold,
   saveHousehold,
 } from './db';
 import { buildInitialState } from './seed';
+
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
 const PORT = parseInt(process.env.PORT || '8099', 10);
 const JWT_SECRET = process.env.FOYER_JWT_SECRET || 'foyer-dev-secret-change-me';
@@ -69,18 +71,47 @@ api.post('/setup', (req: Request, res: Response) => {
   const { household, admin, members } = req.body || {};
   if (!household?.name?.trim()) { res.status(400).json({ error: 'Le nom du foyer est requis' }); return; }
   if (!admin?.name?.trim()) { res.status(400).json({ error: 'Votre prénom est requis' }); return; }
-  if (!admin?.email?.trim() || !admin?.password) { res.status(400).json({ error: 'Email et mot de passe requis' }); return; }
-  if (String(admin.password).length < 6) { res.status(400).json({ error: 'Le mot de passe doit faire au moins 6 caractères' }); return; }
-  if (findUserByEmail(String(admin.email))) { res.status(409).json({ error: 'Un compte existe déjà avec cet email' }); return; }
+  if (!admin?.email?.trim() || !EMAIL_RE.test(String(admin.email).trim())) { res.status(400).json({ error: 'Email administrateur invalide' }); return; }
+  if (String(admin.password || '').length < 6) { res.status(400).json({ error: 'Le mot de passe doit faire au moins 6 caractères' }); return; }
+
+  // Normalise members (drop nameless entries) and validate optional per-member credentials.
+  const rawMembers = Array.isArray(members) ? members : [];
+  const normMembers = rawMembers
+    .filter((m: { name?: string }) => (m?.name || '').trim())
+    .map((m: { name: string; role?: string; color?: string; email?: string; password?: string }, i: number) => ({
+      id: 'm' + (i + 1),
+      name: String(m.name).trim(),
+      role: (m.role || '').trim(),
+      color: m.color || '#4E93B8',
+      email: (m.email || '').trim(),
+      password: m.password || '',
+    }));
+
+  for (const m of normMembers) {
+    const hasEmail = !!m.email;
+    const hasPwd = !!m.password;
+    if (hasEmail !== hasPwd) { res.status(400).json({ error: `Membre « ${m.name} » : renseignez email ET mot de passe, ou aucun des deux` }); return; }
+    if (hasEmail && !EMAIL_RE.test(m.email)) { res.status(400).json({ error: `Email invalide pour « ${m.name} »` }); return; }
+    if (hasPwd && m.password.length < 6) { res.status(400).json({ error: `Mot de passe de « ${m.name} » : 6 caractères minimum` }); return; }
+  }
+
+  // Every login email must be unique (across admin + members) and not already taken.
+  const logins = [String(admin.email).trim(), ...normMembers.filter((m) => m.email).map((m) => m.email)].map((e) => e.toLowerCase());
+  if (new Set(logins).size !== logins.length) { res.status(400).json({ error: 'Deux comptes utilisent le même email' }); return; }
+  for (const e of logins) { if (findUserByEmail(e)) { res.status(409).json({ error: `Un compte existe déjà avec l'email ${e}` }); return; } }
 
   const state = buildInitialState({
     household: { name: household.name, weekStart: household.weekStart, currency: household.currency, theme: household.theme },
     admin: { name: admin.name, role: admin.role, color: admin.color, email: admin.email },
-    members: Array.isArray(members) ? members : [],
+    members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, email: m.email || undefined })),
   });
-  const user = createAdmin(String(admin.email), String(admin.password), String(admin.name).trim(), state.members[0].id);
+
+  const adminUser = createUserWithMember(String(admin.email), String(admin.password), String(admin.name).trim(), state.members[0].id);
+  for (const m of normMembers) {
+    if (m.email && m.password) createUserWithMember(m.email, m.password, m.name, m.id);
+  }
   saveHousehold(state);
-  res.status(201).json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
+  res.status(201).json({ token: sign(adminUser), user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
 });
 
 api.post('/auth/login', (req: Request, res: Response) => {
