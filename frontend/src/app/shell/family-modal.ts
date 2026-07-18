@@ -72,6 +72,8 @@ import { contactIni } from '../core/helpers';
         <input class="input" [ngModel]="store.ui().mfName" (ngModelChange)="store.patch({ mfName: $event })" placeholder="Prénom" style="margin-bottom:14px" />
         <label class="field-label">Rôle</label>
         <input class="input" [ngModel]="store.ui().mfRole" (ngModelChange)="store.patch({ mfRole: $event })" placeholder="Maman, Papa, 12 ans…" style="margin-bottom:14px" />
+        <label class="field-label">Date de naissance</label>
+        <input class="input" type="date" [ngModel]="store.ui().mfBirthday" (ngModelChange)="store.patch({ mfBirthday: $event })" style="margin-bottom:14px" />
         <label class="field-label">Email</label>
         <input class="input" [ngModel]="store.ui().mfEmail" (ngModelChange)="store.patch({ mfEmail: $event })" placeholder="email@exemple.fr" style="margin-bottom:14px" />
         <label class="field-label">Couleur</label>

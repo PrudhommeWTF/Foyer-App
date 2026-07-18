@@ -90,6 +90,8 @@ import { contactIni } from '../core/helpers';
             <input class="input" [ngModel]="store.ui().coEmail" (ngModelChange)="store.patch({ coEmail: $event })" placeholder="email@exemple.fr" />
           </div>
         </div>
+        <div class="field-label">Date de naissance (option.)</div>
+        <input class="input" type="date" [ngModel]="store.ui().coBirthday" (ngModelChange)="store.patch({ coBirthday: $event })" style="margin-bottom:14px" />
 
         <div class="field-label">Catégorie</div>
         <div class="cat-opts">

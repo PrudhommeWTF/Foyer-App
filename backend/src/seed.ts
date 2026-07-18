@@ -1,13 +1,14 @@
 // Seed household state — mirrors the demo data from the design handoff prototype.
 // Only DATA fields are persisted; ephemeral UI/form/selection state lives in the frontend.
+import { HouseholdState } from './models';
 
-export const SEED_STATE = {
+export const SEED_STATE: HouseholdState = {
   familyName: 'Famille Martin',
   members: [
-    { id: 'cam', name: 'Camille', role: 'Maman', color: '#E56B4E', ini: 'C', admin: true },
-    { id: 'tho', name: 'Thomas', role: 'Papa', color: '#4E93B8', ini: 'T', admin: true },
-    { id: 'lea', name: 'Léa', role: '12 ans', color: '#9B6FA8', ini: 'L', admin: false },
-    { id: 'noa', name: 'Noah', role: '8 ans', color: '#6E9E5F', ini: 'N', admin: false },
+    { id: 'cam', name: 'Camille', role: 'Maman', color: '#E56B4E', ini: 'C', admin: true, birthday: '1988-04-12' },
+    { id: 'tho', name: 'Thomas', role: 'Papa', color: '#4E93B8', ini: 'T', admin: true, birthday: '1986-09-03' },
+    { id: 'lea', name: 'Léa', role: '12 ans', color: '#9B6FA8', ini: 'L', admin: false, birthday: '2013-11-21' },
+    { id: 'noa', name: 'Noah', role: '8 ans', color: '#6E9E5F', ini: 'N', admin: false, birthday: '2017-06-30' },
   ],
   events: [
     { id: 'e1', date: '2026-07-16', time: '08:00', title: 'Dépose Noah à l’école', who: 'tho', recur: 'weekday', end: null },
@@ -70,7 +71,7 @@ export const SEED_STATE = {
   contacts: [
     { id: 'ct1', name: 'Dr. Lefèvre', role: 'Pédiatre', phone: '01 42 88 12 03', email: 'cabinet.lefevre@sante.fr', cat: 'Santé', color: '#C77DA5', urgent: false },
     { id: 'ct2', name: 'École Jean Moulin', role: 'Primaire de Noah', phone: '01 45 21 76 40', email: 'contact@ecole-jm.fr', cat: 'École', color: '#4E93B8', urgent: false },
-    { id: 'ct3', name: 'Sophie', role: 'Nounou', phone: '06 12 45 78 90', email: 'sophie.nounou@gmail.com', cat: 'Famille', color: '#E56B4E', urgent: false },
+    { id: 'ct3', name: 'Sophie', role: 'Nounou', phone: '06 12 45 78 90', email: 'sophie.nounou@gmail.com', cat: 'Famille', color: '#E56B4E', urgent: false, birthday: '1979-02-14' },
     { id: 'ct4', name: 'Pharmacie du Centre', role: 'De garde', phone: '01 43 55 09 88', email: '', cat: 'Santé', color: '#7A9B76', urgent: true },
     { id: 'ct5', name: 'Papi & Mamie', role: 'Grands-parents', phone: '02 38 44 12 65', email: '', cat: 'Famille', color: '#F0B24B', urgent: false },
     { id: 'ct6', name: 'Plomberie Durand', role: 'Dépannage 24/7', phone: '06 88 34 21 09', email: '', cat: 'Maison', color: '#8A7E74', urgent: true },
@@ -129,7 +130,7 @@ export const SEED_STATE = {
     '2026-07-17-soir': { text: 'Pizza maison' },
     '2026-07-18-soir': { rid: 'r4' },
     '2026-07-19-soir': { text: 'Rôti & purée' },
-  } as Record<string, { rid?: string; text?: string }>,
+  },
   recipes: [
     {
       id: 'r1', name: 'Gratin de courgettes', time: '40 min', level: 'Facile', color: '#7A9B76', photo: null,
@@ -187,7 +188,7 @@ export const SEED_STATE = {
   },
 };
 
-export type HouseholdState = typeof SEED_STATE;
+export type { HouseholdState } from './models';
 
 // ---- First-run onboarding -------------------------------------------------
 
@@ -203,13 +204,14 @@ export interface OnboardingMember {
   name: string;
   role?: string;
   color?: string;
+  birthday?: string | null;
   /** Optional login email — when set (with a password), an account is created for the member. */
   email?: string;
 }
 
 export interface OnboardingInput {
-  household: { name: string; weekStart?: string; currency?: string; theme?: 'light' | 'dark' };
-  admin: { name: string; role?: string; color?: string; email: string };
+  household: { name: string; weekStart?: string; currency?: string; theme?: 'light' | 'dark'; academie?: string };
+  admin: { name: string; role?: string; color?: string; email: string; birthday?: string | null };
   members?: OnboardingMember[];
 }
 
@@ -221,7 +223,7 @@ export interface OnboardingInput {
  */
 export function buildInitialState(input: OnboardingInput): HouseholdState {
   const adminId = 'me';
-  const admin = {
+  const admin: HouseholdState['members'][number] = {
     id: adminId,
     name: input.admin.name.trim(),
     role: (input.admin.role || '').trim() || 'Parent',
@@ -229,8 +231,9 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     ini: initials(input.admin.name),
     admin: true,
     email: input.admin.email.trim(),
+    birthday: input.admin.birthday || null,
   };
-  const others = (input.members || [])
+  const others: HouseholdState['members'] = (input.members || [])
     .filter((m) => (m.name || '').trim())
     .map((m, i) => ({
       id: m.id || 'm' + (i + 1),
@@ -239,6 +242,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
       color: m.color || '#4E93B8',
       ini: initials(m.name),
       admin: false,
+      birthday: m.birthday || null,
       ...((m.email || '').trim() ? { email: (m.email || '').trim() } : {}),
     }));
 
@@ -271,7 +275,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     recipes: [],
     sched: [],
     notifs: [],
-    profile: { name: admin.name, role: admin.role, email: admin.email, phone: '', color: admin.color, memberId: adminId },
+    profile: { name: admin.name, role: admin.role, email: admin.email || '', phone: '', color: admin.color, memberId: adminId },
     settings: {
       lang: 'Français',
       tz: 'Europe/Paris (GMT+1)',
@@ -282,6 +286,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
       prefNotifs: true,
       prefWeekly: true,
       prefShared: false,
+      academie: input.household.academie || '',
     },
   };
 }

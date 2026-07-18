@@ -17,9 +17,9 @@ Angular 21 · Node/Express · SQLite · Docker
 | Module | Description |
 |---|---|
 | 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, budget, courses, messages. |
-| 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, événements multi-jours, couleur par membre. |
+| 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts). Partage par **flux ICS** (Google/Apple Agenda). |
 | 🛒 **Courses** | Multi-listes, rayons, articles cochables, génération depuis le planning repas. |
-| ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances. |
+| ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
@@ -110,6 +110,19 @@ de tâches, des catégories de budget).
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort, changez le mot
 > de passe admin, puis passez `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS
 > (reverse-proxy type Caddy / Traefik / Nginx).
+
+## 📅 Calendrier avancé
+
+- **Vacances scolaires** : choisissez l'**académie** du foyer dans *Paramètres → Général*.
+  Les dates officielles sont récupérées auprès de `data.education.gouv.fr` (mises en cache).
+  ⚠️ Nécessite un **accès Internet sortant** depuis le serveur ; sans accès, cette couche
+  reste simplement vide (aucune erreur bloquante). Les **jours fériés** (France métropolitaine)
+  sont calculés localement, sans réseau.
+- **Anniversaires** : renseignez la date de naissance des membres (onboarding / gestion de la
+  famille) et des contacts pour les voir apparaître chaque année dans le calendrier.
+- **Partage ICS** : *Paramètres → Partage du calendrier* fournit une URL `…/api/calendar/feed.ics?token=…`
+  (jeton secret) à ajouter dans Google Agenda, Apple Calendrier, etc. — événements du foyer, en
+  lecture seule. Un administrateur peut régénérer le lien (invalide l'ancien).
 
 ## 📦 Déploiement LXC Proxmox (natif, sans Docker)
 

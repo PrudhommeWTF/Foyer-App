@@ -2,8 +2,11 @@ import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload } from './api.service';
 import { HouseholdState, Member } from './models';
 import { UiState, initialUi, IngrRow } from './ui-state';
-import { contactIni, dstr, fileTypeOf, occursOn, parseAmt, uid, weekDates } from './helpers';
-import { LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { ageOn, contactIni, dstr, fileTypeOf, frenchHolidays, isBirthdayOn, occursOn, parseAmt, uid, weekDates } from './helpers';
+import { CAL_KINDS, LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+
+export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
+export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
 
 type SaveState = 'idle' | 'saving' | 'error';
 
@@ -23,6 +26,10 @@ export class FoyerStore {
   readonly isAdmin = signal(false);
   readonly currentMemberId = signal<string | null>(null);
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
+
+  // Calendar overlays
+  readonly schoolHolidays = signal<SchoolHoliday[]>([]);
+  readonly icsToken = signal<string>('');
 
   /** The household member for the currently authenticated user (NOT the shared profile). */
   readonly me = computed(() => {
@@ -103,6 +110,36 @@ export class FoyerStore {
       this.isAdmin.set(me.admin);
     } catch { /* ignore */ }
     await this.refreshAccounts();
+    this.loadSchoolHolidays();
+    this.loadIcs();
+  }
+
+  // ---- calendar overlays -----------------------------------------------
+  async loadSchoolHolidays(): Promise<void> {
+    const ac = this._data()?.settings.academie || '';
+    if (!ac) { this.schoolHolidays.set([]); return; }
+    try { const r = await this.api.schoolHolidays(ac); this.schoolHolidays.set(r.holidays || []); }
+    catch { this.schoolHolidays.set([]); }
+  }
+  async loadIcs(): Promise<void> { try { const r = await this.api.icsInfo(); this.icsToken.set(r.token); } catch { /* ignore */ } }
+  async regenerateIcs(): Promise<void> {
+    try { const r = await this.api.icsRegenerate(); this.icsToken.set(r.token); this.toast('Nouveau lien de calendrier généré'); }
+    catch (e) { this.toast((e as Error).message); }
+  }
+  icsUrl(): string { const t = this.icsToken(); return t ? new URL('api/calendar/feed.ics?token=' + t, document.baseURI).href : ''; }
+
+  /** Derived (non-event) calendar items for a day: holidays, school holidays, birthdays, planned tasks. */
+  dayExtras(ds: string): DayExtra[] {
+    const d = this._data();
+    if (!d) return [];
+    const out: DayExtra[] = [];
+    const h = frenchHolidays(parseInt(ds.slice(0, 4), 10)).find((x) => x.date === ds);
+    if (h) out.push({ kind: 'holiday', label: h.name, color: CAL_KINDS['holiday'].color });
+    for (const sh of this.schoolHolidays()) { if (ds >= sh.start && ds <= sh.end) { out.push({ kind: 'school', label: sh.name, color: CAL_KINDS['school'].color }); break; } }
+    for (const m of d.members) { if (isBirthdayOn(m.birthday, ds)) { const a = ageOn(m.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + m.name, color: m.color, sub: a != null ? a + ' ans' : undefined }); } }
+    for (const c of d.contacts) { if (isBirthdayOn(c.birthday, ds)) { const a = ageOn(c.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + c.name, color: CAL_KINDS['birthday'].color, sub: a != null ? a + ' ans' : undefined }); } }
+    for (const t of d.tasks) { if (t.planned === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : undefined }); }
+    return out;
   }
 
   async refreshAccounts(): Promise<void> {
@@ -160,6 +197,8 @@ export class FoyerStore {
     this.isAdmin.set(false);
     this.currentMemberId.set(null);
     this.accounts.set({});
+    this.schoolHolidays.set([]);
+    this.icsToken.set('');
   }
 
   // ---- member login accounts --------------------------------------------
@@ -375,13 +414,14 @@ export class FoyerStore {
     this.mutate((d) => { d.tasks.unshift({ id: uid('t'), text: t, who: this.members()[0]?.id || 'cam', due: "Aujourd'hui", done: false, listId: lid, prio: 'med' }); });
     this.patch({ newTask: '' });
   }
-  openTask(): void { this.patch({ showTask: true, taskEditId: null, tTitle: '', tWho: this.members()[0]?.id || 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: this.activeTaskListId() }); }
-  editTaskItem(id: string): void { const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return; this.patch({ showTask: true, taskEditId: id, tTitle: t.text, tWho: t.who, tDue: t.due, tPrio: t.prio || 'med', tListId: t.listId }); }
+  openTask(): void { this.patch({ showTask: true, taskEditId: null, tTitle: '', tWho: this.members()[0]?.id || 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: this.activeTaskListId(), tPlanned: '' }); }
+  editTaskItem(id: string): void { const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return; this.patch({ showTask: true, taskEditId: id, tTitle: t.text, tWho: t.who, tDue: t.due, tPrio: t.prio || 'med', tListId: t.listId, tPlanned: t.planned || '' }); }
   saveTask(): void {
     const s = this.ui(); const t = s.tTitle.trim(); if (!t) { this.toast('Donne un intitulé à la tâche'); return; }
+    const planned = s.tPlanned || null;
     this.mutate((d) => {
-      if (s.taskEditId) { const i = d.tasks.findIndex((x) => x.id === s.taskEditId); if (i >= 0) d.tasks[i] = { ...d.tasks[i], text: t, who: s.tWho, due: s.tDue, prio: s.tPrio, listId: s.tListId }; }
-      else d.tasks.unshift({ id: uid('t'), text: t, who: s.tWho, due: s.tDue, done: false, prio: s.tPrio, listId: s.tListId });
+      if (s.taskEditId) { const i = d.tasks.findIndex((x) => x.id === s.taskEditId); if (i >= 0) d.tasks[i] = { ...d.tasks[i], text: t, who: s.tWho, due: s.tDue, prio: s.tPrio, listId: s.tListId, planned }; }
+      else d.tasks.unshift({ id: uid('t'), text: t, who: s.tWho, due: s.tDue, done: false, prio: s.tPrio, listId: s.tListId, planned });
     });
     this.toast(s.taskEditId ? 'Tâche modifiée' : 'Tâche ajoutée');
     this.patch({ showTask: false, taskEditId: null });
@@ -412,11 +452,11 @@ export class FoyerStore {
   }
 
   // ---- contacts ---------------------------------------------------------
-  newContact(): void { this.patch({ contactForm: true, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false }); }
-  editContact(id: string): void { const c = this._data()?.contacts.find((x) => x.id === id); if (!c) return; this.patch({ contactForm: true, coEditId: id, coName: c.name, coRole: c.role, coPhone: c.phone, coEmail: c.email || '', coCat: c.cat, coColor: c.color, coUrgent: !!c.urgent }); }
+  newContact(): void { this.patch({ contactForm: true, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '' }); }
+  editContact(id: string): void { const c = this._data()?.contacts.find((x) => x.id === id); if (!c) return; this.patch({ contactForm: true, coEditId: id, coName: c.name, coRole: c.role, coPhone: c.phone, coEmail: c.email || '', coCat: c.cat, coColor: c.color, coUrgent: !!c.urgent, coBirthday: c.birthday || '' }); }
   saveContact(): void {
     const s = this.ui(); const name = s.coName.trim(); if (!name) { this.toast('Donne un nom'); return; } const phone = s.coPhone.trim(); if (!phone) { this.toast('Indique un téléphone'); return; }
-    const data = { name, role: s.coRole.trim(), phone, email: s.coEmail.trim(), cat: s.coCat as any, color: s.coColor, urgent: s.coUrgent };
+    const data = { name, role: s.coRole.trim(), phone, email: s.coEmail.trim(), cat: s.coCat as any, color: s.coColor, urgent: s.coUrgent, birthday: s.coBirthday || null };
     this.mutate((d) => {
       if (s.coEditId) { const i = d.contacts.findIndex((c) => c.id === s.coEditId); if (i >= 0) d.contacts[i] = { ...d.contacts[i], ...data }; }
       else d.contacts.push({ id: uid('ct'), ...data });
@@ -580,11 +620,11 @@ export class FoyerStore {
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '' }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '' }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });
@@ -626,7 +666,10 @@ export class FoyerStore {
   openNotif(id: string, screen?: string): void { this.mutate((d) => { const n = d.notifs.find((x) => x.id === id); if (n) n.read = true; }); this.patch({ notifOpen: false, screen: screen || this.ui().screen }); }
 
   // ---- settings ---------------------------------------------------------
-  setSetting<K extends keyof HouseholdState['settings']>(key: K, val: HouseholdState['settings'][K]): void { this.mutate((d) => { (d.settings as any)[key] = val; }); }
+  setSetting<K extends keyof HouseholdState['settings']>(key: K, val: HouseholdState['settings'][K]): void {
+    this.mutate((d) => { (d.settings as any)[key] = val; });
+    if (key === 'academie') this.loadSchoolHolidays();
+  }
   async resetDemo(): Promise<void> {
     try { const { state } = await this.api.resetState(); this._data.set(this.normalise(state)); this.toast('Données de démonstration réinitialisées'); }
     catch { this.toast('Échec de la réinitialisation'); }

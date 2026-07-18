@@ -5,7 +5,7 @@ import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { contactIni, uid } from '../core/helpers';
 
-interface ObMember { id: string; name: string; role: string; color: string; ini: string; email: string; password: string; }
+interface ObMember { id: string; name: string; role: string; color: string; ini: string; email: string; password: string; birthday: string; }
 
 const PALETTE = ['#E56B4E', '#4E93B8', '#9B6FA8', '#6E9E5F', '#F0B24B', '#C77DA5'];
 const STEP_LABELS = ['Bienvenue', 'Nom du foyer', 'Votre profil', 'Membres', 'Préférences', 'Terminé'];
@@ -102,6 +102,8 @@ const INTRO = [
                     <div><label class="field-label">Email</label><input class="input" type="email" [ngModel]="email()" (ngModelChange)="email.set($event)" placeholder="camille@email.fr" /></div>
                     <div><label class="field-label">Mot de passe</label><input class="input" type="password" [ngModel]="password()" (ngModelChange)="password.set($event)" placeholder="6 caractères min." /></div>
                   </div>
+                  <label class="field-label" style="margin-top:16px">Date de naissance (option.)</label>
+                  <input class="input" type="date" [ngModel]="birthday()" (ngModelChange)="birthday.set($event)" />
                   <label class="field-label" style="margin-top:18px">Couleur</label>
                   <div class="swatches">
                     @for (c of palette; track c) {
@@ -138,10 +140,11 @@ const INTRO = [
                       <input class="input soft" [ngModel]="mName()" (ngModelChange)="mName.set($event)" placeholder="Prénom" />
                       <input class="input soft" [ngModel]="mRole()" (ngModelChange)="mRole.set($event)" placeholder="Rôle / âge" />
                     </div>
-                    <div class="two" style="margin-bottom:13px">
+                    <div class="two" style="margin-bottom:11px">
                       <input class="input soft" type="email" [ngModel]="mEmail()" (ngModelChange)="mEmail.set($event)" placeholder="Email de connexion (facultatif)" />
                       <input class="input soft" type="password" [ngModel]="mPassword()" (ngModelChange)="mPassword.set($event)" (keydown.enter)="addMember()" placeholder="Mot de passe (facultatif)" />
                     </div>
+                    <input class="input soft" type="date" [ngModel]="mBirthday()" (ngModelChange)="mBirthday.set($event)" title="Date de naissance" style="margin-bottom:13px" />
                     <div class="addrow">
                       <div class="swatches sm">
                         @for (c of palette; track c) {
@@ -312,12 +315,14 @@ export class OnboardingComponent {
   role = signal('');
   email = signal('');
   password = signal('');
+  birthday = signal('');
   color = signal('#E56B4E');
   members = signal<ObMember[]>([]);
   mName = signal('');
   mRole = signal('');
   mEmail = signal('');
   mPassword = signal('');
+  mBirthday = signal('');
   mColor = signal('#4E93B8');
   weekStart = signal('Lundi');
   currency = signal('Euro (€)');
@@ -328,7 +333,7 @@ export class OnboardingComponent {
   progress = computed(() => Math.round((this.step() / 5) * 100));
   nextLabel = computed(() => (this.step() === 0 ? 'Commencer' : this.step() >= 5 ? 'Terminer' : 'Continuer'));
   suggestions = computed(() => ['Famille ' + (this.name().trim() || 'Martin'), 'Chez nous', 'La Maisonnée', 'Le Nid']);
-  allMembers = computed<ObMember[]>(() => [{ id: 'me', name: this.name(), role: this.role(), color: this.color(), ini: this.ini(), email: '', password: '' }, ...this.members()].slice(0, 6));
+  allMembers = computed<ObMember[]>(() => [{ id: 'me', name: this.name(), role: this.role(), color: this.color(), ini: this.ini(), email: '', password: '', birthday: '' }, ...this.members()].slice(0, 6));
 
   setTheme(t: 'light' | 'dark'): void {
     this.theme.set(t);
@@ -344,8 +349,8 @@ export class OnboardingComponent {
     if (email && !/^\S+@\S+\.\S+$/.test(email)) { this.store.toast('Email du membre invalide'); return; }
     if (password && password.length < 6) { this.store.toast('Mot de passe du membre : 6 caractères minimum'); return; }
     if (email && this.emailTaken(email)) { this.store.toast('Cet email est déjà utilisé'); return; }
-    this.members.update((list) => [...list, { id: uid('ob'), name, role: this.mRole().trim() || 'Membre', color: this.mColor(), ini: contactIni(name), email, password }]);
-    this.mName.set(''); this.mRole.set(''); this.mEmail.set(''); this.mPassword.set(''); this.mColor.set('#4E93B8');
+    this.members.update((list) => [...list, { id: uid('ob'), name, role: this.mRole().trim() || 'Membre', color: this.mColor(), ini: contactIni(name), email, password, birthday: this.mBirthday() }]);
+    this.mName.set(''); this.mRole.set(''); this.mEmail.set(''); this.mPassword.set(''); this.mBirthday.set(''); this.mColor.set('#4E93B8');
   }
 
   private emailTaken(email: string): boolean {
@@ -375,8 +380,8 @@ export class OnboardingComponent {
     this.busy.set(true);
     const ok = await this.store.completeSetup({
       household: { name: this.famName().trim(), weekStart: this.weekStart(), currency: this.currency(), theme: this.theme() },
-      admin: { name: this.name().trim(), role: this.role().trim(), color: this.color(), email: this.email().trim(), password: this.password() },
-      members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color, email: m.email || undefined, password: m.password || undefined })),
+      admin: { name: this.name().trim(), role: this.role().trim(), color: this.color(), email: this.email().trim(), password: this.password(), birthday: this.birthday() || undefined },
+      members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color, birthday: m.birthday || undefined, email: m.email || undefined, password: m.password || undefined })),
     });
     this.busy.set(false);
     if (!ok) this.store.toast(this.store.authError() || 'Échec de la configuration');

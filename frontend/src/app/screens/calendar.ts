@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FoyerStore } from '../core/foyer.store';
+import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
-import { TODAY, DOW, RECUR_LABELS } from '../core/constants';
+import { TODAY, DOW, RECUR_LABELS, CAL_KINDS } from '../core/constants';
 import { cap, parseDay, dstr } from '../core/helpers';
 import { Recur } from '../core/models';
 
 interface Chip { title: string; bg: string; fg: string; }
-interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[]; more: number; }
+interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[]; extras: DayExtra[]; more: number; }
 
 @Component({
   selector: 'screen-calendar',
@@ -52,6 +52,12 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                   @for (chip of c.chips; track $index) {
                     <div class="chip-ev" [style.background]="chip.bg" [style.color]="chip.fg">{{ chip.title }}</div>
                   }
+                  @for (ex of c.extras; track $index) {
+                    <div class="chip-ex" [style.border-left]="'3px solid ' + ex.color">
+                      <span class="ex-dot" [style.background]="ex.color"></span>
+                      <span class="ex-lbl">{{ ex.label }}</span>
+                    </div>
+                  }
                   @if (c.more) { <span class="more">+{{ c.more }} autre</span> }
                 </div>
               }
@@ -78,7 +84,16 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                         </div>
                       </div>
                     } @empty {
-                      <div class="col-empty" (click)="addAt(col.key)">Libre</div>
+                      @if (!col.extras.length) {
+                        <div class="col-empty" (click)="addAt(col.key)">Libre</div>
+                      }
+                    }
+                    @for (ex of col.extras; track $index) {
+                      <div class="col-ex" [style.border-left]="'3px solid ' + ex.color">
+                        <span class="ex-dot" [style.background]="ex.color"></span>
+                        <span class="ex-lbl">{{ ex.label }}</span>
+                        @if (ex.sub) { <span class="ex-sub">{{ ex.sub }}</span> }
+                      </div>
                     }
                     <button class="col-add" (click)="addAt(col.key)"><f-icon name="plus" [size]="16" color="var(--ink3)" /></button>
                   </div>
@@ -91,6 +106,11 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
         <!-- ===== agenda side panel ===== -->
         <div class="side">
           <button class="btn btn-primary btn-block add-ev" (click)="store.openEvent()"><f-icon name="plus" [size]="18" color="#fff" /> Ajouter un événement</button>
+          <div class="legend">
+            @for (lk of legendKinds; track lk.k) {
+              <span class="lg-item"><span class="ex-dot" [style.background]="lk.color"></span>{{ lk.label }}</span>
+            }
+          </div>
           <div class="side-title f-display">{{ selLabel() }}</div>
           @for (e of selEvents(); track e.id) {
             <div class="side-ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)" (click)="store.editEvent(e.id)">
@@ -110,7 +130,20 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
               </div>
             </div>
           } @empty {
-            <div class="side-empty">Aucun événement ce jour</div>
+            @if (!selExtras().length) {
+              <div class="side-empty">Aucun événement ce jour</div>
+            }
+          }
+          @if (selExtras().length) {
+            <div class="side-extras">
+              @for (ex of selExtras(); track $index) {
+                <div class="side-ex" [style.border-left]="'4px solid ' + ex.color">
+                  <span class="ex-dot" [style.background]="ex.color"></span>
+                  <span class="sx-lbl">{{ ex.label }}</span>
+                  @if (ex.sub) { <span class="sx-sub">{{ ex.sub }}</span> }
+                </div>
+              }
+            </div>
           }
         </div>
       </div>
@@ -226,6 +259,21 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
     .se-who span:last-child { font-size: 13px; font-weight: 700; color: var(--ink2); }
     .side-empty { background: var(--surface); border-radius: 18px; padding: 28px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 14px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
 
+    /* ===== informational overlay items (holidays, school, birthdays, tasks) ===== */
+    .ex-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .ex-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip-ex { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 5px; background: var(--surface); font-size: 10px; font-weight: 800; color: var(--ink2); white-space: nowrap; overflow: hidden; }
+    .col-ex { display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 10px; padding: 6px 9px; font-size: 12px; font-weight: 800; color: var(--ink2); }
+    .col-ex .ex-sub { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--ink3); flex: none; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 2px 2px 4px; }
+    .lg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: var(--ink3); }
+    @media (max-width: 520px) { .legend { display: none; } }
+    .side-extras { display: flex; flex-direction: column; gap: 8px; }
+    .side-ex { display: flex; align-items: center; gap: 9px; background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 20px -18px rgba(90,60,40,.6); }
+    .side-ex .ex-dot { width: 10px; height: 10px; }
+    .sx-lbl { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sx-sub { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--ink3); flex: none; }
+
     .fl { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
     .dp { background: var(--soft); border: 2px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 8px; }
     .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -286,6 +334,7 @@ export class CalendarScreen {
         num: d.getDate(),
         inMonth: d.getMonth() === month,
         chips: evs.slice(0, 2).map((e) => ({ title: e.title, bg: this.store.tint(this.store.memberColor(e.who)), fg: this.store.memberColor(e.who) })),
+        extras: this.store.dayExtras(key).slice(0, 2),
         more: evs.length > 2 ? evs.length - 2 : 0,
       });
     }
@@ -304,13 +353,16 @@ export class CalendarScreen {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), isToday: key === TODAY, isSel: key === selDay });
+      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), extras: this.store.dayExtras(key), isToday: key === TODAY, isSel: key === selDay });
     }
     return out;
   });
 
   selEvents = computed(() => this.store.eventsForDay(this.store.ui().selDay));
+  selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
   selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })));
+
+  legendKinds = ['holiday', 'school', 'birthday', 'task'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label }));
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
   dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })));

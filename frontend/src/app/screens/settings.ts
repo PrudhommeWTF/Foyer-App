@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
+import { ACADEMIES } from '../core/constants';
 
 @Component({
   selector: 'screen-settings',
@@ -66,6 +67,15 @@ import { IconComponent } from '../core/icon';
               </div>
             </div>
           </div>
+
+          <div class="field-label" style="margin-top:16px">Académie (vacances scolaires)</div>
+          <select class="input" [ngModel]="d().settings.academie || ''" (ngModelChange)="store.setSetting('academie', $event)">
+            <option value="">Non définie</option>
+            @for (a of academies; track a.name) {
+              <option [value]="a.name">{{ a.name }} — zone {{ a.zone }}</option>
+            }
+          </select>
+          <div class="hint">Affiche les vacances scolaires de votre zone dans le calendrier.</div>
         </div>
 
         <!-- Column 2 — Membres du foyer -->
@@ -165,6 +175,27 @@ import { IconComponent } from '../core/icon';
             <div class="version">Foyer · v1.0.0</div>
           </div>
 
+          <div class="card">
+            <div class="sec-head">
+              <div class="sec-ic" style="background:#E5F0F4">
+                <f-icon name="calendar" [size]="18" color="#4E93B8" [width]="2" />
+              </div>
+              <span class="sec-title">Partage du calendrier</span>
+            </div>
+            <div class="hint" style="margin-bottom:10px">Abonnez Google Agenda, Apple Calendrier… à ce lien (événements du foyer, lecture seule).</div>
+            @if (store.icsUrl()) {
+              <div class="ics-url">{{ store.icsUrl() }}</div>
+              <div class="ics-actions">
+                <button class="btn btn-soft grow" (click)="copyIcs()"><f-icon name="copy" [size]="16" [width]="2" /> {{ copied() ? 'Copié !' : 'Copier le lien' }}</button>
+                @if (store.isAdmin()) {
+                  <button class="btn btn-ghost" (click)="store.regenerateIcs()" title="Invalide l'ancien lien"><f-icon name="refresh" [size]="16" color="var(--primary)" [width]="2" /></button>
+                }
+              </div>
+            } @else {
+              <div class="hint">Lien indisponible.</div>
+            }
+          </div>
+
           <button class="btn btn-primary btn-block" (click)="store.logout()">
             <f-icon name="logout" [size]="18" color="#fff" [width]="2.2" /> Se déconnecter
           </button>
@@ -223,11 +254,18 @@ import { IconComponent } from '../core/icon';
     .data-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 15px; border-radius: 13px; background: var(--soft); border: none; cursor: pointer; margin-bottom: 10px; font-size: 14px; font-weight: 800; color: var(--ink); }
     .data-row .danger { color: var(--primary); }
     .version { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
+    .hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; line-height: 1.5; }
+    select.input { width: 100%; cursor: pointer; }
+    .ics-url { font-size: 11.5px; font-weight: 700; color: var(--ink2); background: var(--soft); border-radius: 11px; padding: 11px 13px; word-break: break-all; margin-bottom: 10px; }
+    .ics-actions { display: flex; gap: 8px; }
+    .ics-actions .grow { flex: 1; }
   `],
 })
 export class SettingsScreen {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  academies = ACADEMIES;
+  copied = signal(false);
 
   langOpts = ['Français', 'English', 'Español', 'Deutsch'];
   tzOpts = ['Europe/Paris (GMT+1)', 'Europe/London (GMT)', 'America/New_York (GMT-5)'];
@@ -243,5 +281,11 @@ export class SettingsScreen {
 
   constructor() {
     this.store.patch({ famNameField: this.d().familyName });
+    this.store.loadIcs();
+  }
+
+  async copyIcs(): Promise<void> {
+    try { await navigator.clipboard.writeText(this.store.icsUrl()); this.copied.set(true); setTimeout(() => this.copied.set(false), 1800); }
+    catch { this.store.toast('Copie impossible — sélectionnez le lien manuellement'); }
   }
 }
