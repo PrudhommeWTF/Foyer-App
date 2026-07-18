@@ -92,6 +92,10 @@ export const ICONS: Record<string, string> = {
   flame: 'M12 3c1 4 5 5 5 9a5 5 0 0 1-10 0c0-2 2-3 2-5 1 1 2 1 3 1z',
   lock: 'M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5zM12 15v2',
   key: 'M14 7a4 4 0 1 0-3.7 5.4L9 14H7v2H5v2H3v-2.6l6.6-6.6A4 4 0 0 1 14 7zM15 8h.01',
+  cake: 'M4 21h16M5 21v-7h14v7M4 14a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2M12 12V8M9 5.5a1 1 0 1 0 3 0c0-1-1.5-2.5-1.5-2.5S9 4.5 9 5.5zM15 5.5a1 1 0 1 0 0 .01',
+  palm: 'M12 22V9M12 9c-3-3-8-2-9 1 3-1 6 0 9 2M12 9c3-3 8-2 9 1-3-1-6 0-9 2M12 9c0-4 3-6 6-6-1 3-3 5-6 6',
+  link: 'M9 15l6-6M8 12H6a3 3 0 0 1 0-6h3M16 12h2a3 3 0 0 1 0 6h-3',
+  copy: 'M9 9h10v10H9zM5 15H4V4h11v1',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];
@@ -138,6 +142,30 @@ export function grad(c: string): string {
 
 export const RECUR_LABELS: Record<string, string> = {
   none: '', daily: 'Chaque jour', weekday: 'En semaine', weekly: 'Chaque semaine', monthly: 'Chaque mois',
+};
+
+// French academies (for school-holiday zones). `zone` is informational; the
+// backend queries the official dataset by academy name.
+export interface Academie { name: string; zone: string; }
+export const ACADEMIES: Academie[] = [
+  { name: 'Aix-Marseille', zone: 'B' }, { name: 'Amiens', zone: 'B' }, { name: 'Besançon', zone: 'A' },
+  { name: 'Bordeaux', zone: 'A' }, { name: 'Clermont-Ferrand', zone: 'A' }, { name: 'Corse', zone: 'Corse' },
+  { name: 'Créteil', zone: 'C' }, { name: 'Dijon', zone: 'A' }, { name: 'Grenoble', zone: 'A' },
+  { name: 'Lille', zone: 'B' }, { name: 'Limoges', zone: 'A' }, { name: 'Lyon', zone: 'A' },
+  { name: 'Montpellier', zone: 'C' }, { name: 'Nancy-Metz', zone: 'B' }, { name: 'Nantes', zone: 'B' },
+  { name: 'Nice', zone: 'B' }, { name: 'Normandie', zone: 'B' }, { name: 'Orléans-Tours', zone: 'B' },
+  { name: 'Paris', zone: 'C' }, { name: 'Poitiers', zone: 'A' }, { name: 'Reims', zone: 'B' },
+  { name: 'Rennes', zone: 'B' }, { name: 'Strasbourg', zone: 'B' }, { name: 'Toulouse', zone: 'C' },
+  { name: 'Versailles', zone: 'C' },
+];
+
+// Calendar overlay item kinds → colour.
+export const CAL_KINDS: Record<string, { color: string; label: string }> = {
+  event: { color: '#E56B4E', label: 'Événement' },
+  task: { color: '#9B6FA8', label: 'Tâche' },
+  holiday: { color: '#4E93B8', label: 'Jour férié' },
+  school: { color: '#F0B24B', label: 'Vacances scolaires' },
+  birthday: { color: '#C77DA5', label: 'Anniversaire' },
 };
 
 export const SCREEN_TITLES: Record<string, string> = {

@@ -2,6 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -12,11 +13,16 @@ import {
   deleteUser,
   findUserByEmail,
   getHousehold,
+  getIcsToken,
+  getSchoolHolidaysCache,
+  getStateByIcsToken,
   getUserById,
   getUserByMemberId,
   listMemberAccounts,
   resetHousehold,
   saveHousehold,
+  setIcsToken,
+  setSchoolHolidaysCache,
   updateUserCredentials,
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
@@ -98,11 +104,12 @@ api.post('/setup', (req: Request, res: Response) => {
   const rawMembers = Array.isArray(members) ? members : [];
   const normMembers = rawMembers
     .filter((m: { name?: string }) => (m?.name || '').trim())
-    .map((m: { name: string; role?: string; color?: string; email?: string; password?: string }, i: number) => ({
+    .map((m: { name: string; role?: string; color?: string; email?: string; password?: string; birthday?: string | null }, i: number) => ({
       id: 'm' + (i + 1),
       name: String(m.name).trim(),
       role: (m.role || '').trim(),
       color: m.color || '#4E93B8',
+      birthday: m.birthday || null,
       email: (m.email || '').trim(),
       password: m.password || '',
     }));
@@ -121,9 +128,9 @@ api.post('/setup', (req: Request, res: Response) => {
   for (const e of logins) { if (findUserByEmail(e)) { res.status(409).json({ error: `Un compte existe déjà avec l'email ${e}` }); return; } }
 
   const state = buildInitialState({
-    household: { name: household.name, weekStart: household.weekStart, currency: household.currency, theme: household.theme },
-    admin: { name: admin.name, role: admin.role, color: admin.color, email: admin.email },
-    members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, email: m.email || undefined })),
+    household: { name: household.name, weekStart: household.weekStart, currency: household.currency, theme: household.theme, academie: household.academie },
+    admin: { name: admin.name, role: admin.role, color: admin.color, email: admin.email, birthday: admin.birthday || null },
+    members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, birthday: m.birthday, email: m.email || undefined })),
   });
 
   const adminUser = createUserWithMember(String(admin.email), String(admin.password), String(admin.name).trim(), state.members[0].id);
@@ -242,6 +249,115 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
   if (req.user && user.id === req.user.id) { res.status(400).json({ error: 'Vous ne pouvez pas retirer votre propre accès' }); return; }
   deleteUser(user.id);
   res.json({ ok: true });
+});
+
+// ---- School holidays (official FR data, cached) ----
+interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
+const HOLIDAYS_TTL = 7 * 24 * 3600 * 1000;
+
+async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
+  const where = encodeURIComponent(`location="${academie}"`);
+  const url = `https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=${where}&limit=100&order_by=start_date`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = (await res.json()) as { results?: Record<string, string>[] };
+  const seen = new Set<string>();
+  const out: SchoolHoliday[] = [];
+  for (const r of json.results || []) {
+    const pop = (r['population'] || '').toLowerCase();
+    if (pop && pop !== '-' && !pop.includes('lève') && !pop.includes('eleve')) continue; // pupils / unspecified only
+    const name = r['description'] || 'Vacances';
+    const start = (r['start_date'] || '').slice(0, 10);
+    const end = (r['end_date'] || '').slice(0, 10);
+    if (!start || !end) continue;
+    const key = name + start + end;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, start, end, zone: r['zones'] || '' });
+  }
+  return out;
+}
+
+api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) => {
+  const academie = String(req.query['academie'] || '').trim();
+  if (!academie) { res.json({ holidays: [], academie: '' }); return; }
+  const cache = getSchoolHolidaysCache(academie);
+  if (cache && Date.now() - cache.fetchedAt < HOLIDAYS_TTL) { res.json({ holidays: cache.data, academie, cached: true }); return; }
+  try {
+    const holidays = await fetchSchoolHolidays(academie);
+    setSchoolHolidaysCache(academie, holidays, Date.now());
+    res.json({ holidays, academie });
+  } catch {
+    if (cache) { res.json({ holidays: cache.data, academie, stale: true }); return; }
+    res.json({ holidays: [], academie, error: 'Service de vacances scolaires indisponible' });
+  }
+});
+
+// ---- ICS calendar feed (events only) ----
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+const icsDate = (ds: string): string => ds.replace(/-/g, '');
+function icsAddDay(ds: string): string {
+  const d = new Date(ds + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}`;
+}
+const icsEsc = (s: string): string => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+function icsRrule(recur: string): string {
+  switch (recur) {
+    case 'daily': return 'FREQ=DAILY';
+    case 'weekday': return 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR';
+    case 'weekly': return 'FREQ=WEEKLY';
+    case 'monthly': return 'FREQ=MONTHLY';
+    default: return '';
+  }
+}
+function buildIcs(state: HouseholdState): string {
+  const dtstamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '').slice(0, 15) + 'Z';
+  const mname = (id: string): string => state.members.find((m) => m.id === id)?.name || '';
+  const L: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Foyer//Calendrier//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${icsEsc(state.familyName)}`];
+  for (const ev of state.events) {
+    const allDay = !ev.time || ev.time === '—';
+    L.push('BEGIN:VEVENT', `UID:${ev.id}@foyer`, `DTSTAMP:${dtstamp}`);
+    if (allDay) {
+      L.push(`DTSTART;VALUE=DATE:${icsDate(ev.date)}`);
+      L.push(`DTEND;VALUE=DATE:${icsAddDay(ev.end && ev.end !== ev.date ? ev.end : ev.date)}`);
+    } else {
+      const [hh, mm] = ev.time.split(':');
+      L.push(`DTSTART:${icsDate(ev.date)}T${pad2(+hh)}${pad2(+mm)}00`);
+      if (ev.end && ev.end !== ev.date) L.push(`DTEND:${icsDate(ev.end)}T${pad2(+hh)}${pad2(+mm)}00`);
+      else L.push(`DTEND:${icsDate(ev.date)}T${pad2(Math.min(+hh + 1, 23))}${pad2(+mm)}00`);
+    }
+    const rr = icsRrule(ev.recur);
+    if (rr) L.push(`RRULE:${rr}`);
+    L.push(`SUMMARY:${icsEsc(ev.title)}`);
+    const who = mname(ev.who);
+    if (who) L.push(`DESCRIPTION:${icsEsc(who)}`);
+    L.push('END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
+  return L.join('\r\n') + '\r\n';
+}
+
+api.get('/calendar/ics', auth, (_req, res) => {
+  let token = getIcsToken();
+  if (!token) { token = crypto.randomBytes(18).toString('hex'); setIcsToken(token); }
+  res.json({ token });
+});
+
+api.post('/calendar/ics/regenerate', auth, requireAdmin, (_req, res) => {
+  const token = crypto.randomBytes(18).toString('hex');
+  setIcsToken(token);
+  res.json({ token });
+});
+
+// Public — consumed by external calendar apps (Google/Apple), so no auth; the token is the secret.
+api.get('/calendar/feed.ics', (req: Request, res: Response) => {
+  const token = String(req.query['token'] || '');
+  const state = getStateByIcsToken(token) as HouseholdState | null;
+  if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline; filename="foyer.ics"');
+  res.send(buildIcs(state));
 });
 
 app.use('/api', api);

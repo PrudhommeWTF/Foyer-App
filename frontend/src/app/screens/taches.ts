@@ -151,6 +151,13 @@ import { Prio, TaskItem, TaskList } from '../core/models';
           }
         </div>
 
+        <div class="field-label mt">Date de planification (option.)</div>
+        <div class="plan-row">
+          <input class="input" type="date" [ngModel]="store.ui().tPlanned" (ngModelChange)="store.patch({ tPlanned: $event })" />
+          @if (store.ui().tPlanned) { <button class="btn btn-soft" (click)="store.patch({ tPlanned: '' })">Effacer</button> }
+        </div>
+        <div class="plan-hint">Une date planifiée fait apparaître la tâche dans le calendrier.</div>
+
         <div class="actions">
           @if (store.ui().taskEditId) {
             <button class="btn btn-soft del" (click)="store.delTask()"><f-icon name="trash" [size]="18" color="var(--primary)" [width]="2.2" /></button>
@@ -246,6 +253,9 @@ import { Prio, TaskItem, TaskList } from '../core/models';
     .empty { color: var(--ink3); font-weight: 700; font-size: 13.5px; padding: 16px 0; }
 
     .field-label.mt { margin-top: 18px; }
+    .plan-row { display: flex; gap: 10px; align-items: center; }
+    .plan-row .input { flex: 1; }
+    .plan-hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
     .seg-wrap { display: flex; flex-wrap: wrap; gap: 9px; }
     .lchip { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--soft); color: var(--ink); border: 2px solid var(--line2); }
     .lchip.active { background: var(--surface); }

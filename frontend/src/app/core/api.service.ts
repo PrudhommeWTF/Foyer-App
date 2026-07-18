@@ -5,9 +5,9 @@ export interface AuthUser { email: string; name: string; memberId: string | null
 export interface LoginResult { token: string; user: AuthUser; }
 
 export interface SetupPayload {
-  household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark' };
-  admin: { name: string; role: string; color: string; email: string; password: string };
-  members: { name: string; role: string; color: string; email?: string; password?: string }[];
+  household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark'; academie?: string };
+  admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
+  members: { name: string; role: string; color: string; email?: string; password?: string; birthday?: string }[];
 }
 
 const TOKEN_KEY = 'foyer.token';
@@ -73,6 +73,12 @@ export class ApiService {
   deleteMemberAccount(memberId: string): Promise<{ ok: boolean }> {
     return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'DELETE' });
   }
+
+  schoolHolidays(academie: string): Promise<{ holidays: { name: string; start: string; end: string; zone: string }[]; academie: string; error?: string }> {
+    return this.req('calendar/school-holidays?academie=' + encodeURIComponent(academie));
+  }
+  icsInfo(): Promise<{ token: string }> { return this.req('calendar/ics'); }
+  icsRegenerate(): Promise<{ token: string }> { return this.req('calendar/ics/regenerate', { method: 'POST' }); }
 
   getState(): Promise<{ state: HouseholdState; version: number }> {
     return this.req('state');

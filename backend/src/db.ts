@@ -27,7 +27,15 @@ db.exec(`
     version INTEGER NOT NULL DEFAULT 1,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS school_holidays_cache (
+    academie TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+  );
 `);
+
+// Migration: ICS calendar-sharing token (ignored if the column already exists).
+try { db.exec('ALTER TABLE household ADD COLUMN ics_token TEXT'); } catch { /* already present */ }
 
 export function countUsers(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
@@ -130,4 +138,29 @@ export function saveHousehold(state: unknown): { version: number } {
 
 export function resetHousehold(): { version: number } {
   return saveHousehold(SEED_STATE);
+}
+
+// ---- ICS calendar sharing ----
+export function getIcsToken(): string | null {
+  const row = db.prepare('SELECT ics_token FROM household WHERE id = 1').get() as { ics_token: string | null } | undefined;
+  return row?.ics_token || null;
+}
+export function setIcsToken(token: string): void {
+  const info = db.prepare('UPDATE household SET ics_token = ? WHERE id = 1').run(token);
+  if (info.changes === 0) db.prepare('INSERT INTO household (id, state, version, ics_token) VALUES (1, ?, 1, ?)').run(JSON.stringify(SEED_STATE), token);
+}
+export function getStateByIcsToken(token: string): unknown | null {
+  if (!token) return null;
+  const row = db.prepare('SELECT state FROM household WHERE ics_token = ?').get(token) as { state: string } | undefined;
+  return row ? JSON.parse(row.state) : null;
+}
+
+// ---- School-holidays cache ----
+export function getSchoolHolidaysCache(academie: string): { data: unknown; fetchedAt: number } | null {
+  const row = db.prepare('SELECT data, fetched_at AS fetchedAt FROM school_holidays_cache WHERE academie = ?').get(academie) as { data: string; fetchedAt: number } | undefined;
+  return row ? { data: JSON.parse(row.data), fetchedAt: row.fetchedAt } : null;
+}
+export function setSchoolHolidaysCache(academie: string, data: unknown, fetchedAt: number): void {
+  db.prepare('INSERT INTO school_holidays_cache (academie, data, fetched_at) VALUES (?, ?, ?) ON CONFLICT(academie) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at')
+    .run(academie, JSON.stringify(data), fetchedAt);
 }

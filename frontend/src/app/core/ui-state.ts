@@ -40,7 +40,7 @@ export interface UiState {
 
   // task modal
   showTask: boolean; taskEditId: string | null;
-  tTitle: string; tWho: string; tDue: string; tPrio: Prio; tListId: string;
+  tTitle: string; tWho: string; tDue: string; tPrio: Prio; tListId: string; tPlanned: string;
   newTask: string;
   // task lists
   activeList: string; listForm: boolean; listEditId: string | null;
@@ -52,7 +52,7 @@ export interface UiState {
   // contacts
   contactSearch: string; contactCat: string;
   contactForm: boolean; coEditId: string | null;
-  coName: string; coRole: string; coPhone: string; coEmail: string; coCat: string; coColor: string; coUrgent: boolean;
+  coName: string; coRole: string; coPhone: string; coEmail: string; coCat: string; coColor: string; coUrgent: boolean; coBirthday: string;
   contactDelId: string | null;
 
   // documents
@@ -74,7 +74,7 @@ export interface UiState {
 
   // family & profile
   familyOpen: boolean; famNameField: string;
-  memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; memberDelId: string | null;
+  memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfBirthday: string; memberDelId: string | null;
   profileOpen: boolean; pfTab: 'infos' | 'prefs';
   pfName: string; pfRole: string; pfEmail: string; pfPhone: string; pfColor: string;
 
@@ -92,11 +92,11 @@ export function initialUi(): UiState {
     showShop: false, shEditId: null, shTitle: '', shQty: '', shCat: 'Fruits & légumes', shListId: 'cl1', newShop: '',
     activeShopList: 'cl1', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aisleDelId: null,
-    showTask: false, taskEditId: null, tTitle: '', tWho: 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: 'l1', newTask: '',
+    showTask: false, taskEditId: null, tTitle: '', tWho: 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: 'l1', tPlanned: '', newTask: '',
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', listDelId: null,
     newMsg: '',
     contactSearch: '', contactCat: 'Tous',
-    contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, contactDelId: null,
+    contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     docFolder: null, docSearch: '',
     folderForm: false, foEditId: null, foName: '', foColor: '#E56B4E', folderDelId: null,
     fileForm: false, fiEditId: null, fiName: '', fiFolderId: null, fiType: 'PDF', fiData: null, fileDelId: null,
@@ -106,7 +106,7 @@ export function initialUi(): UiState {
     fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhoto: null, fIngr: [], fSteps: [],
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
-    memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, memberDelId: null,
+    memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
     profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfPhone: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };
