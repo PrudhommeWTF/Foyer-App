@@ -13,7 +13,7 @@ import { TODAY } from '../core/constants';
     <div class="screen-enter">
       <div class="screen-head">
         <div>
-          <div class="hello f-script">Bonjour {{ d().profile.name }}</div>
+          <div class="hello f-script">Bonjour {{ store.me()?.name }}</div>
           <div class="screen-sub">Jeudi 16 juillet · {{ today().length }} événements, {{ openTasks() }} tâches et le dîner vous attendent</div>
         </div>
         <button class="btn btn-sage" (click)="store.generateList()"><f-icon name="bolt" [size]="20" color="#fff" /> Courses rapides depuis les repas</button>

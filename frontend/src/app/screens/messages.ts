@@ -51,7 +51,7 @@ export class MessagesScreen implements AfterViewChecked {
   @ViewChild('thread') thread?: ElementRef<HTMLElement>;
   private lastCount = 0;
 
-  isMe(who: string): boolean { return who === this.d().profile.memberId; }
+  isMe(who: string): boolean { return who === (this.store.me()?.id ?? this.d().profile.memberId); }
 
   ngAfterViewChecked(): void {
     const n = this.d().msgs.length;

@@ -34,10 +34,10 @@ import { NAV_GROUPS } from './nav';
 
       <div class="foot">
         <button class="profile" (click)="store.openProfile()">
-          <f-avatar [ini]="d().profile.name.charAt(0)" [color]="d().profile.color" [size]="38" />
+          <f-avatar [ini]="store.me()?.ini || '?'" [color]="store.me()?.color || '#8A7E74'" [size]="38" />
           <div class="pinfo">
-            <div class="pname">{{ d().profile.name }}</div>
-            <div class="prole">{{ d().profile.role }} · admin</div>
+            <div class="pname">{{ store.me()?.name }}</div>
+            <div class="prole">{{ store.me()?.role }}@if (store.me()?.admin) { · admin }</div>
           </div>
         </button>
         <button class="icon-btn" (click)="store.toggleDark()" title="Changer de thème">
