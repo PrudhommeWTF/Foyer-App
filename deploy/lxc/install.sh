@@ -39,6 +39,15 @@ err() { echo -e "\e[1;31m[foyer]\e[0m $*" >&2; }
 
 if [[ "${EUID}" -ne 0 ]]; then err "Ce script doit être lancé en root."; exit 1; fi
 
+# --- Garde-fou : refuser l'exécution sur un hôte Proxmox VE ---------------
+# Ce script installe Foyer DANS un conteneur, pas sur l'hyperviseur.
+if [[ -z "${ALLOW_HOST:-}" ]] && { command -v pct >/dev/null 2>&1 || [[ -d /etc/pve ]]; }; then
+  err "Vous semblez être sur l'hôte Proxmox VE, pas dans un conteneur."
+  err "→ Créez un LXC avec :  bash deploy/lxc/proxmox-create.sh"
+  err "  (ou, si vous êtes bien dans un conteneur, forcez avec :  ALLOW_HOST=1 bash deploy/lxc/install.sh )"
+  exit 1
+fi
+
 # --- Source : checkout local auto-détecté, sinon clone --------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." 2>/dev/null && pwd || true)"
