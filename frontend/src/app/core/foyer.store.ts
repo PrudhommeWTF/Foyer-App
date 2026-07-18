@@ -24,6 +24,17 @@ export class FoyerStore {
   readonly currentMemberId = signal<string | null>(null);
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
 
+  /** The household member for the currently authenticated user (NOT the shared profile). */
+  readonly me = computed(() => {
+    const d = this._data();
+    if (!d) return null;
+    const id = this.currentMemberId();
+    return (id ? d.members.find((m) => m.id === id) : undefined)
+      || d.members.find((m) => m.id === d.profile.memberId)
+      || d.members[0]
+      || null;
+  });
+
   /** Non-null data accessor for use inside authed views. */
   readonly data = computed(() => this._data());
   readonly narrow = signal(false);
@@ -85,8 +96,7 @@ export class FoyerStore {
   private async loadState(): Promise<void> {
     const { state } = await this.api.getState();
     this._data.set(this.normalise(state));
-    const p = state.profile;
-    this.patch({ pfName: p.name, pfRole: p.role, pfEmail: p.email, pfPhone: p.phone, pfColor: p.color, famNameField: state.familyName });
+    this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
       this.currentMemberId.set(me.memberId);
@@ -394,7 +404,7 @@ export class FoyerStore {
   // ---- messages ---------------------------------------------------------
   sendMsg(): void {
     const t = this.ui().newMsg.trim(); if (!t) return;
-    const me = this._data()?.profile.memberId || this.members()[0]?.id || 'cam';
+    const me = this.currentMemberId() || this._data()?.profile.memberId || this.members()[0]?.id || 'cam';
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     this.mutate((d) => { d.msgs.push({ who: me, text: t, time }); });
@@ -593,10 +603,19 @@ export class FoyerStore {
     }
     this.toast('Membre retiré');
   }
-  openProfile(): void { const p = this._data()?.profile; this.patch({ profileOpen: true, pfTab: 'infos', pfName: p?.name || '', pfRole: p?.role || '', pfEmail: p?.email || '', pfPhone: p?.phone || '', pfColor: p?.color || '#E56B4E' }); }
+  openProfile(): void {
+    const m = this.me();
+    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfPhone: '', pfColor: m?.color || '#E56B4E' });
+  }
   saveProfile(): void {
     const s = this.ui(); if (!s.pfName.trim()) { this.toast('Le prénom est requis'); return; }
-    this.mutate((d) => { d.profile = { ...d.profile, name: s.pfName.trim(), role: s.pfRole.trim(), email: s.pfEmail.trim(), phone: s.pfPhone.trim(), color: s.pfColor }; const mi = d.members.findIndex((m) => m.id === d.profile.memberId); if (mi >= 0) { d.members[mi] = { ...d.members[mi], name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor, ini: contactIni(s.pfName.trim()) }; } });
+    const id = this.me()?.id;
+    this.mutate((d) => {
+      const mi = d.members.findIndex((m) => m.id === id);
+      if (mi >= 0) d.members[mi] = { ...d.members[mi], name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor, ini: contactIni(s.pfName.trim()) };
+      // Keep the stored admin profile in sync only when the admin edits their own member.
+      if (id === d.profile.memberId) d.profile = { ...d.profile, name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor };
+    });
     this.patch({ profileOpen: false });
     this.toast('Profil mis à jour');
   }

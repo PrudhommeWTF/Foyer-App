@@ -27,10 +27,10 @@ import { contactIni } from '../core/helpers';
           <input class="input" [ngModel]="store.ui().pfName" (ngModelChange)="store.patch({ pfName: $event })" style="margin-bottom:14px" />
           <label class="field-label">Rôle</label>
           <input class="input" [ngModel]="store.ui().pfRole" (ngModelChange)="store.patch({ pfRole: $event })" style="margin-bottom:14px" />
-          <label class="field-label">Email</label>
-          <input class="input" [ngModel]="store.ui().pfEmail" (ngModelChange)="store.patch({ pfEmail: $event })" style="margin-bottom:14px" />
-          <label class="field-label">Téléphone</label>
-          <input class="input" [ngModel]="store.ui().pfPhone" (ngModelChange)="store.patch({ pfPhone: $event })" style="margin-bottom:14px" />
+          @if (store.ui().pfEmail) {
+            <label class="field-label">Email de connexion</label>
+            <div class="readonly">{{ store.ui().pfEmail }}<span class="hint">géré par l’administrateur</span></div>
+          }
           <label class="field-label">Couleur d’identité</label>
           <div class="swatch-row" style="margin-bottom:8px">
             @for (c of palette; track c) {
@@ -57,6 +57,8 @@ import { contactIni } from '../core/helpers';
     .tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
     .tabs button { border: none; background: none; cursor: pointer; padding: 0 0 12px; font-size: 14px; font-weight: 800; color: var(--ink3); border-bottom: 2px solid transparent; margin-bottom: -1px; }
     .tabs button.active { color: var(--ink); border-color: var(--primary); }
+    .readonly { border: 2px solid var(--line); background: var(--soft); border-radius: var(--r-input); padding: 13px 16px; font-size: 15px; font-weight: 700; color: var(--ink2); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .hint { font-size: 11px; font-weight: 700; color: var(--ink3); }
     .prefs { display: flex; flex-direction: column; gap: 16px; }
     .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 14px; font-weight: 800; color: var(--ink); }
     .switch { width: 46px; height: 26px; border-radius: 20px; background: var(--line2); position: relative; transition: background .2s ease; flex: none; }
