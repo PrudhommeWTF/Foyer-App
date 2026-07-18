@@ -9,12 +9,17 @@ import {
   countUsers,
   createUser,
   createUserWithMember,
+  deleteUser,
   findUserByEmail,
   getHousehold,
+  getUserById,
+  getUserByMemberId,
+  listMemberAccounts,
   resetHousehold,
   saveHousehold,
+  updateUserCredentials,
 } from './db';
-import { buildInitialState } from './seed';
+import { buildInitialState, HouseholdState } from './seed';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
@@ -52,6 +57,21 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
   } catch {
     res.status(401).json({ error: 'Session expirée' });
   }
+}
+
+/** The household member linked to the authenticated user (or null). */
+function currentMember(req: AuthedRequest): HouseholdState['members'][number] | null {
+  if (!req.user) return null;
+  const u = getUserById(req.user.id);
+  if (!u || !u.member_id) return null;
+  const state = getHousehold().state as HouseholdState;
+  return state.members.find((m) => m.id === u.member_id) || null;
+}
+
+function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): void {
+  const m = currentMember(req);
+  if (!m || !m.admin) { res.status(403).json({ error: 'Action réservée à un administrateur du foyer' }); return; }
+  next();
 }
 
 const api = express.Router();
@@ -163,6 +183,65 @@ api.put('/state', auth, (req: Request, res: Response) => {
 api.post('/state/reset', auth, (_req, res) => {
   const result = resetHousehold();
   res.json({ ...getHousehold(), ...result });
+});
+
+// ---- Current user ----
+api.get('/me', auth, (req: AuthedRequest, res: Response) => {
+  const u = req.user ? getUserById(req.user.id) : undefined;
+  if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  const m = currentMember(req);
+  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin });
+});
+
+// ---- Member login accounts (admin-managed) ----
+api.get('/members/accounts', auth, (_req, res) => {
+  res.json({ accounts: listMemberAccounts() });
+});
+
+api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Response) => {
+  const memberId = req.params.memberId;
+  const state = getHousehold().state as HouseholdState;
+  const member = state.members.find((m) => m.id === memberId);
+  if (!member) { res.status(404).json({ error: 'Membre introuvable (enregistrez-le d’abord)' }); return; }
+  if (getUserByMemberId(memberId)) { res.status(409).json({ error: 'Ce membre a déjà un accès' }); return; }
+  const email = String(req.body?.email || '').trim();
+  const password = String(req.body?.password || '');
+  if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
+  if (password.length < 6) { res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' }); return; }
+  if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
+  createUserWithMember(email, password, member.name, memberId);
+  res.status(201).json({ memberId, email: email.toLowerCase() });
+});
+
+api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Response) => {
+  const memberId = req.params.memberId;
+  const user = getUserByMemberId(memberId);
+  if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
+  const rawEmail = req.body?.email;
+  const rawPassword = req.body?.password;
+  let email: string | undefined;
+  let password: string | undefined;
+  if (rawEmail !== undefined && String(rawEmail).trim() !== user.email) {
+    email = String(rawEmail).trim();
+    if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
+    if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
+  }
+  if (rawPassword !== undefined && String(rawPassword) !== '') {
+    password = String(rawPassword);
+    if (password.length < 6) { res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' }); return; }
+  }
+  if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
+  updateUserCredentials(user.id, email, password);
+  res.json({ memberId, email: (email ?? user.email).toLowerCase() });
+});
+
+api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
+  const memberId = req.params.memberId;
+  const user = getUserByMemberId(memberId);
+  if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
+  if (req.user && user.id === req.user.id) { res.status(400).json({ error: 'Vous ne pouvez pas retirer votre propre accès' }); return; }
+  deleteUser(user.id);
+  res.json({ ok: true });
 });
 
 app.use('/api', api);

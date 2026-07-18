@@ -90,6 +90,8 @@ export const ICONS: Record<string, string> = {
   refresh: 'M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2M18 4v5h-5M6 20v-5h5',
   urgent: 'M12 3a9 9 0 1 0 .01 0M12 8v5M12 16v.5',
   flame: 'M12 3c1 4 5 5 5 9a5 5 0 0 1-10 0c0-2 2-3 2-5 1 1 2 1 3 1z',
+  lock: 'M6 11V8a6 6 0 0 1 12 0v3M5 11h14v10H5zM12 15v2',
+  key: 'M14 7a4 4 0 1 0-3.7 5.4L9 14H7v2H5v2H3v-2.6l6.6-6.6A4 4 0 0 1 14 7zM15 8h.01',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];

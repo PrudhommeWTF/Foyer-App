@@ -77,6 +77,9 @@ export interface UiState {
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; memberDelId: string | null;
   profileOpen: boolean; pfTab: 'infos' | 'prefs';
   pfName: string; pfRole: string; pfEmail: string; pfPhone: string; pfColor: string;
+
+  // member login account management
+  accountFor: string | null; acEmail: string; acPassword: string; acBusy: boolean;
 }
 
 export function initialUi(): UiState {
@@ -105,5 +108,6 @@ export function initialUi(): UiState {
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, memberDelId: null,
     profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfPhone: '', pfColor: '#E56B4E',
+    accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };
 }

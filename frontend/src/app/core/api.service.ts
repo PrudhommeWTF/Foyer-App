@@ -54,6 +54,26 @@ export class ApiService {
     return this.req<LoginResult>('auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
   }
 
+  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean }> {
+    return this.req('me');
+  }
+
+  memberAccounts(): Promise<{ accounts: { memberId: string; email: string }[] }> {
+    return this.req('members/accounts');
+  }
+
+  createMemberAccount(memberId: string, email: string, password: string): Promise<{ memberId: string; email: string }> {
+    return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'POST', body: JSON.stringify({ email, password }) });
+  }
+
+  updateMemberAccount(memberId: string, email?: string, password?: string): Promise<{ memberId: string; email: string }> {
+    return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'PUT', body: JSON.stringify({ email, password }) });
+  }
+
+  deleteMemberAccount(memberId: string): Promise<{ ok: boolean }> {
+    return this.req(`members/${encodeURIComponent(memberId)}/account`, { method: 'DELETE' });
+  }
+
   getState(): Promise<{ state: HouseholdState; version: number }> {
     return this.req('state');
   }
