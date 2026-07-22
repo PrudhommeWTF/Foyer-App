@@ -16,12 +16,18 @@ import { contactIni } from '../core/helpers';
     @if (store.ui().familyOpen) {
       <f-modal title="Gestion de la famille" (close)="store.patch({ familyOpen: false })">
         <label class="field-label">Nom du foyer</label>
-        <div class="row" style="margin-bottom:20px">
-          <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
-          <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
-        </div>
+        @if (store.isAdmin()) {
+          <div class="row" style="margin-bottom:20px">
+            <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
+            <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
+          </div>
+        } @else {
+          <div class="input readonly" style="margin-bottom:20px">{{ d().familyName }}</div>
+        }
         <div class="between"><div class="overline">Membres · {{ d().members.length }}</div>
-          <button class="btn btn-soft" (click)="store.newMember()"><f-icon name="userPlus" [size]="17" /> Inviter</button></div>
+          @if (store.isAdmin()) {
+            <button class="btn btn-soft" (click)="store.newMember()"><f-icon name="userPlus" [size]="17" /> Inviter</button>
+          }</div>
         <div class="members">
           @for (m of d().members; track m.id) {
             <div class="member">
@@ -32,9 +38,9 @@ import { contactIni } from '../core/helpers';
               </div>
               @if (store.isAdmin()) {
                 <button class="icon-btn sm" title="Gérer l'accès" (click)="store.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="store.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>
+                <button class="icon-btn sm" (click)="store.editMember(m.id)"><f-icon name="edit" [size]="16" /></button>
+                <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })"><f-icon name="trash" [size]="16" color="var(--primary)" /></button>
               }
-              <button class="icon-btn sm" (click)="store.editMember(m.id)"><f-icon name="edit" [size]="16" /></button>
-              <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })"><f-icon name="trash" [size]="16" color="var(--primary)" /></button>
             </div>
           }
         </div>
@@ -119,6 +125,7 @@ import { contactIni } from '../core/helpers';
     .acct { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; background: #EDF2EB; color: #5F7E5C; font-size: 10.5px; font-weight: 800; }
     :host-context(:root.dark) .acct { background: rgba(122,155,118,.22); }
     .acc-foot { display: flex; align-items: center; gap: 10px; }
+    .input.readonly { display: flex; align-items: center; color: var(--ink2); font-weight: 700; background: var(--soft); }
   `],
 })
 export class FamilyModalComponent {

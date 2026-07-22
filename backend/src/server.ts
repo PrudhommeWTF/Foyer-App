@@ -1,5 +1,7 @@
 import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -72,7 +74,35 @@ async function fetchLatestRelease(): Promise<{ tag: string; name: string; body: 
 }
 
 const PORT = parseInt(process.env.PORT || '8099', 10);
-const JWT_SECRET = process.env.FOYER_JWT_SECRET || 'foyer-dev-secret-change-me';
+
+/**
+ * The JWT secret protects every session token — a weak or well-known value lets
+ * anyone forge an admin session. Known defaults and short secrets are rejected.
+ * In production we refuse to boot; in development we fall back to an ephemeral
+ * random secret (sessions reset on restart) and warn loudly.
+ */
+const WEAK_SECRETS = new Set(['foyer-dev-secret-change-me', 'change-me-to-a-long-random-string']);
+function resolveJwtSecret(): string {
+  const provided = process.env.FOYER_JWT_SECRET || '';
+  const weak = !provided || provided.length < 16 || WEAK_SECRETS.has(provided);
+  if (!weak) return provided;
+  const isProd = process.env.NODE_ENV === 'production';
+  if (isProd) {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[foyer] ERREUR : FOYER_JWT_SECRET manquant ou trop faible.\n' +
+      '        Définissez une chaîne aléatoire d’au moins 16 caractères, par ex. :\n' +
+      '          FOYER_JWT_SECRET="' + crypto.randomBytes(32).toString('hex') + '"\n' +
+      '        Refus de démarrer pour ne pas exposer des sessions falsifiables.',
+    );
+    process.exit(1);
+  }
+  const ephemeral = crypto.randomBytes(32).toString('hex');
+  // eslint-disable-next-line no-console
+  console.warn('[foyer] ⚠ FOYER_JWT_SECRET absent/faible — secret aléatoire éphémère utilisé (les sessions seront invalidées au redémarrage). Définissez FOYER_JWT_SECRET en production.');
+  return ephemeral;
+}
+const JWT_SECRET = resolveJwtSecret();
 const ALLOW_SIGNUP = (process.env.FOYER_ALLOW_SIGNUP || 'true') !== 'false';
 // The frontend uses a relative base href, so a single build works served at the
 // root or behind a reverse proxy on a sub-path.
@@ -81,15 +111,55 @@ const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'p
 bootstrap();
 
 const app = express();
-app.use(cors());
+
+// Behind a reverse proxy (Caddy/Traefik/Nginx, Proxmox ingress…): trust the first
+// hop so client IPs (rate-limiting) and protocol are read from X-Forwarded-* headers.
+app.set('trust proxy', 1);
+
+// Security headers. The frontend is a self-hosted SPA that inlines styles and loads
+// Google fonts; images come as data:/blob: URLs. upgrade-insecure-requests is disabled
+// so plain-HTTP LAN installs (e.g. http://10.x:8099) keep working.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      'img-src': ["'self'", 'data:', 'blob:'],
+      'connect-src': ["'self'"],
+      'upgrade-insecure-requests': null,
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// CORS: same-origin by default (the API serves its own SPA). Extra origins can be
+// allow-listed via FOYER_CORS_ORIGINS (comma-separated) for split deployments.
+const corsOrigins = (process.env.FOYER_CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+app.use(cors({
+  origin: corsOrigins.length ? corsOrigins : false, // false → no cross-origin; same-origin requests are unaffected
+  credentials: true,
+}));
+
 app.use(express.json({ limit: '15mb' })); // documents/photos are stored as data URLs
 
+// Throttle credential endpoints to blunt brute-force / account-enumeration attempts.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de tentatives, réessayez dans quelques minutes.' },
+});
+
 interface AuthedRequest extends Request {
-  user?: { id: number; email: string };
+  user?: { id: number; email: string; tv: number };
 }
 
-function sign(user: { id: number; email: string }): string {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+function sign(user: { id: number; email: string; token_version: number }): string {
+  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: '30d' });
 }
 
 function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
@@ -99,12 +169,22 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
     res.status(401).json({ error: 'Non authentifié' });
     return;
   }
+  let payload: { id: number; email: string; tv?: number };
   try {
-    req.user = jwt.verify(token, JWT_SECRET) as { id: number; email: string };
-    next();
+    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number };
   } catch {
     res.status(401).json({ error: 'Session expirée' });
+    return;
   }
+  // Reject tokens whose user no longer exists or whose version has been bumped
+  // (password change / account removal revokes all outstanding sessions).
+  const user = getUserById(payload.id);
+  if (!user || (payload.tv ?? 0) !== user.token_version) {
+    res.status(401).json({ error: 'Session révoquée' });
+    return;
+  }
+  req.user = { id: user.id, email: user.email, tv: user.token_version };
+  next();
 }
 
 /** The household member linked to the authenticated user (or null). */
@@ -131,7 +211,7 @@ api.get('/setup/status', (_req, res) => {
   res.json({ needsSetup: countUsers() === 0, allowSignup: ALLOW_SIGNUP });
 });
 
-api.post('/setup', (req: Request, res: Response) => {
+api.post('/setup', authLimiter, (req: Request, res: Response) => {
   if (countUsers() > 0) {
     res.status(409).json({ error: 'La configuration a déjà été effectuée' });
     return;
@@ -183,7 +263,7 @@ api.post('/setup', (req: Request, res: Response) => {
   res.status(201).json({ token: sign(adminUser), user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
 });
 
-api.post('/auth/login', (req: Request, res: Response) => {
+api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     res.status(400).json({ error: 'Email et mot de passe requis' });
@@ -197,7 +277,7 @@ api.post('/auth/login', (req: Request, res: Response) => {
   res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
 });
 
-api.post('/auth/register', (req: Request, res: Response) => {
+api.post('/auth/register', authLimiter, (req: Request, res: Response) => {
   if (!ALLOW_SIGNUP) {
     res.status(403).json({ error: 'Les inscriptions sont désactivées' });
     return;
@@ -219,12 +299,44 @@ api.get('/state', auth, (_req, res) => {
   res.json(getHousehold());
 });
 
-api.put('/state', auth, (req: Request, res: Response) => {
-  const state = req.body?.state;
+api.put('/state', auth, (req: AuthedRequest, res: Response) => {
+  const state = req.body?.state as HouseholdState | undefined;
   if (state == null || typeof state !== 'object') {
     res.status(400).json({ error: 'État invalide' });
     return;
   }
+
+  // Non-admins may edit shared household data, but must not tamper with the member
+  // roster: no adding/removing members, no changing anyone's admin flag, and no
+  // editing a member other than themselves (which would include self-promotion).
+  const me = currentMember(req);
+  if (!me?.admin) {
+    const current = (getHousehold().state as HouseholdState).members || [];
+    const next = Array.isArray(state.members) ? state.members : [];
+    const byId = (arr: HouseholdState['members']): Map<string, HouseholdState['members'][number]> =>
+      new Map(arr.map((m) => [m.id, m]));
+    const curMap = byId(current);
+    const nextMap = byId(next);
+
+    const sameRoster = current.length === next.length && current.every((m) => nextMap.has(m.id));
+    if (!sameRoster) {
+      res.status(403).json({ error: 'Seul un administrateur peut ajouter ou retirer un membre' });
+      return;
+    }
+    for (const m of next) {
+      const before = curMap.get(m.id)!;
+      if (!!before.admin !== !!m.admin) {
+        res.status(403).json({ error: 'Seul un administrateur peut modifier les droits d’administration' });
+        return;
+      }
+      // A non-admin may only alter their own member entry.
+      if (m.id !== me?.id && JSON.stringify(before) !== JSON.stringify(m)) {
+        res.status(403).json({ error: 'Vous ne pouvez modifier que votre propre profil de membre' });
+        return;
+      }
+    }
+  }
+
   const result = saveHousehold(state);
   res.json(result);
 });

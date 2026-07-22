@@ -36,6 +36,9 @@ db.exec(`
 
 // Migration: ICS calendar-sharing token (ignored if the column already exists).
 try { db.exec('ALTER TABLE household ADD COLUMN ics_token TEXT'); } catch { /* already present */ }
+// Migration: per-user token version, bumped to revoke all outstanding sessions
+// (e.g. on password change or account removal).
+try { db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'); } catch { /* already present */ }
 
 export function countUsers(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
@@ -89,7 +92,11 @@ export function listMemberAccounts(): { memberId: string; email: string }[] {
 
 export function updateUserCredentials(id: number, email?: string, password?: string): void {
   if (email !== undefined) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.toLowerCase(), id);
-  if (password !== undefined) db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), id);
+  if (password !== undefined) {
+    // Changing the password revokes every previously issued token for this user.
+    db.prepare('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?')
+      .run(bcrypt.hashSync(password, 10), id);
+  }
 }
 
 export function deleteUser(id: number): void {
@@ -102,6 +109,7 @@ export interface UserRow {
   password_hash: string;
   name: string;
   member_id: string | null;
+  token_version: number;
 }
 
 export function findUserByEmail(email: string): UserRow | undefined {
