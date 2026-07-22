@@ -124,6 +124,29 @@ de tâches, des catégories de budget).
   (jeton secret) à ajouter dans Google Agenda, Apple Calendrier, etc. — événements du foyer, en
   lecture seule. Un administrateur peut régénérer le lien (invalide l'ancien).
 
+## 🔄 Mises à jour depuis l'interface
+
+*Paramètres → Mises à jour* affiche la version installée et **vérifie** la dernière
+version publiée sur GitHub (releases, ou plus haut tag `vX.Y.Z`). Dépôt public → aucun
+token requis (sinon `FOYER_GITHUB_TOKEN`).
+
+Pour activer le **bouton « Mettre à jour maintenant »** (télécharge, recompile et
+redémarre le service) sur une installation **LXC native**, installez avec l'auto-MAJ :
+
+```bash
+SELF_UPDATE=true bash deploy/lxc/install.sh          # dans le conteneur
+# ou depuis l'hôte : SELF_UPDATE=true bash deploy/lxc/proxmox-create.sh
+```
+
+L'installeur met alors en place un **helper root déclenché par un `systemd.path`** : le
+backend (utilisateur `foyer`, non privilégié) dépose un fichier déclencheur, et une unité
+root exécute la mise à jour puis redémarre le service — **sans sudo**, le durcissement du
+service reste intact. Sans `SELF_UPDATE`, l'app affiche simplement qu'une version est
+disponible et rappelle la commande `bash deploy/lxc/update.sh`.
+
+Variables : `FOYER_SELF_UPDATE` (`true`/`false`), `FOYER_GITHUB_REPO`
+(défaut `PrudhommeWTF/Foyer-App`), `FOYER_GITHUB_TOKEN` (optionnel).
+
 ## 📦 Déploiement LXC Proxmox (natif, sans Docker)
 
 Installation légère dans un conteneur Debian/Ubuntu (Node.js + build + service **systemd**),

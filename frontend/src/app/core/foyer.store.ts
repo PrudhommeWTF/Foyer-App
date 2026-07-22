@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
-import { ApiService, SetupPayload } from './api.service';
+import { ApiService, SetupPayload, UpdateInfo } from './api.service';
 import { HouseholdState, Member } from './models';
 import { UiState, initialUi, IngrRow } from './ui-state';
 import { ageOn, contactIni, dstr, fileTypeOf, frenchHolidays, isBirthdayOn, occursOn, parseAmt, uid, weekDates } from './helpers';
@@ -30,6 +30,12 @@ export class FoyerStore {
   // Calendar overlays
   readonly schoolHolidays = signal<SchoolHoliday[]>([]);
   readonly icsToken = signal<string>('');
+
+  // Self-update
+  readonly updateInfo = signal<UpdateInfo | null>(null);
+  readonly updateChecking = signal(false);
+  readonly updating = signal(false);
+  readonly updateMsg = signal('');
 
   /** The household member for the currently authenticated user (NOT the shared profile). */
   readonly me = computed(() => {
@@ -127,6 +133,36 @@ export class FoyerStore {
     catch (e) { this.toast((e as Error).message); }
   }
   icsUrl(): string { const t = this.icsToken(); return t ? new URL('api/calendar/feed.ics?token=' + t, document.baseURI).href : ''; }
+
+  // ---- self-update ------------------------------------------------------
+  async checkUpdates(): Promise<void> {
+    this.updateChecking.set(true);
+    try { this.updateInfo.set(await this.api.updateCheck()); }
+    catch (e) { this.updateInfo.set({ current: '?', selfUpdate: false, error: (e as Error).message }); }
+    this.updateChecking.set(false);
+  }
+
+  async applyUpdate(): Promise<void> {
+    if (this.updating()) return;
+    this.updating.set(true);
+    this.updateMsg.set('Démarrage de la mise à jour…');
+    try {
+      const r = await this.api.startSystemUpdate();
+      if (r.error) { this.updating.set(false); this.toast(r.error); return; }
+    } catch (e) { this.updating.set(false); this.toast((e as Error).message); return; }
+    const started = Date.now();
+    const poll = async (): Promise<void> => {
+      if (Date.now() - started > 10 * 60 * 1000) { this.updating.set(false); this.updateMsg.set('Délai dépassé — vérifiez les logs du serveur.'); return; }
+      try {
+        const s = await this.api.updateStatus();
+        if (s.message) this.updateMsg.set(s.message);
+        if (s.state === 'done') { this.updating.set(false); this.toast('Mise à jour installée — rechargement…'); setTimeout(() => location.reload(), 1600); return; }
+        if (s.state === 'error') { this.updating.set(false); this.toast('Échec : ' + (s.message || 'voir les logs')); return; }
+      } catch { this.updateMsg.set('Redémarrage du service…'); }
+      setTimeout(poll, 3000);
+    };
+    setTimeout(poll, 3000);
+  }
 
   /** Derived (non-event) calendar items for a day: holidays, school holidays, birthdays, planned tasks. */
   dayExtras(ds: string): DayExtra[] {

@@ -4,6 +4,19 @@ import { HouseholdState } from './models';
 export interface AuthUser { email: string; name: string; memberId: string | null; }
 export interface LoginResult { token: string; user: AuthUser; }
 
+export interface UpdateInfo {
+  current: string;
+  latest?: string;
+  latestTag?: string;
+  name?: string;
+  notes?: string;
+  url?: string;
+  publishedAt?: string;
+  updateAvailable?: boolean;
+  selfUpdate: boolean;
+  error?: string;
+}
+
 export interface SetupPayload {
   household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
@@ -79,6 +92,10 @@ export class ApiService {
   }
   icsInfo(): Promise<{ token: string }> { return this.req('calendar/ics'); }
   icsRegenerate(): Promise<{ token: string }> { return this.req('calendar/ics/regenerate', { method: 'POST' }); }
+
+  updateCheck(): Promise<UpdateInfo> { return this.req('system/update-check'); }
+  startSystemUpdate(): Promise<{ started?: boolean; error?: string }> { return this.req('system/update', { method: 'POST' }); }
+  updateStatus(): Promise<{ state: string; message?: string; current: string }> { return this.req('system/update-status'); }
 
   getState(): Promise<{ state: HouseholdState; version: number }> {
     return this.req('state');
