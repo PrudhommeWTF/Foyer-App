@@ -180,7 +180,7 @@ import { ACADEMIES } from '../core/constants';
               <f-icon name="refresh" [size]="18" color="var(--primary)" [width]="2" />
               <span class="danger">Réinitialiser la démo</span>
             </button>
-            <div class="version">Foyer · v1.0.0</div>
+            <div class="version">Foyer @if (store.updateInfo()?.current; as v) { · v{{ v }} }</div>
           </div>
 
           <div class="card">

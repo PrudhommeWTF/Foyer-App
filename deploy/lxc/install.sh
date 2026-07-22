@@ -114,8 +114,22 @@ rm -rf "${APP_DIR}/frontend/node_modules"
 
 # --- Données & fichier d'environnement -----------------------------------
 mkdir -p "${DATA_DIR}"
-# Version déployée (lue par la vérification de mises à jour)
-VERSION="$(grep -oP '"version":\s*"\K[^"]+' "${APP_DIR}/backend/package.json" 2>/dev/null || echo 0.0.0)"
+# Version déployée (lue par la vérification de mises à jour). La source de vérité
+# est le TAG Git, pas package.json (qui n'est pas systématiquement incrémenté).
+# Priorité : FOYER_VERSION explicite > tag Git de la source > package.json.
+detect_version() {
+  if [[ -n "${FOYER_VERSION:-}" ]]; then echo "${FOYER_VERSION#v}"; return; fi
+  local d v
+  for d in "${FOYER_SRC:-}" "${APP_DIR}"; do
+    if [[ -n "${d}" && -d "${d}/.git" ]]; then
+      v="$(git -C "${d}" describe --tags --abbrev=0 2>/dev/null || true)"
+      if [[ -n "${v}" ]]; then echo "${v#v}"; return; fi
+    fi
+  done
+  grep -oP '"version":\s*"\K[^"]+' "${APP_DIR}/backend/package.json" 2>/dev/null || echo 0.0.0
+}
+VERSION="$(detect_version)"
+log "Version déployée : ${VERSION}"
 echo "${VERSION}" > "${DATA_DIR}/version"
 mkdir -p "$(dirname "${ENV_FILE}")"
 if [[ ! -f "${ENV_FILE}" ]]; then

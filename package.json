@@ -1,6 +1,6 @@
 {
   "name": "foyer-app",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Foyer — application de gestion familiale auto-hébergée (Angular + Node/SQLite), self-hosted via Docker Compose.",
   "private": true,
   "license": "MIT",

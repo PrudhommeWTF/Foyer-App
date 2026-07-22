@@ -208,7 +208,8 @@ La maquette de référence est conservée dans [`docs/`](docs/).
 
 - `.github/workflows/ci.yml` — build backend + frontend à chaque push/PR.
 - `.github/workflows/docker.yml` — publie une image **multi-arch** (`amd64`, `arm64`) sur
-  `ghcr.io/<owner>/foyer-app` (tags `latest`, `1.0.0`, `sha`, et `vX.Y.Z` sur tag Git).
+  `ghcr.io/<owner>/foyer-app` (tags `latest` + `sha` sur la branche par défaut ; `X.Y.Z`
+  et `X.Y` sur tag Git `vX.Y.Z`). La version affichée dans l'app provient du tag Git.
 
 ## 📝 Licence
 
