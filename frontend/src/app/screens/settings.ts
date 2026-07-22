@@ -196,6 +196,39 @@ import { ACADEMIES } from '../core/constants';
             }
           </div>
 
+          <div class="card">
+            <div class="sec-head">
+              <div class="sec-ic" style="background:#EDF2EB"><f-icon name="refresh" [size]="18" color="#5F7E5C" [width]="2" /></div>
+              <span class="sec-title">Mises à jour</span>
+            </div>
+            @let u = store.updateInfo();
+            @if (u?.updateAvailable) {
+              <div class="upd-badge new">Nouvelle version {{ u!.latestTag }} disponible</div>
+              @if (u!.name && u!.name !== u!.latestTag) { <div class="hint" style="margin-top:6px">{{ u!.name }}</div> }
+              <div class="upd-cur">Version installée : {{ u!.current }}</div>
+              @if (u!.url) { <a class="upd-link" [href]="u!.url" target="_blank" rel="noopener">Voir les notes de version ↗</a> }
+              @if (u!.selfUpdate) {
+                @if (store.isAdmin()) {
+                  <button class="btn btn-primary btn-block" style="margin-top:12px" [disabled]="store.updating()" (click)="doUpdate()">
+                    @if (store.updating()) { {{ store.updateMsg() || 'Mise à jour…' }} } @else { Mettre à jour maintenant }
+                  </button>
+                } @else { <div class="hint" style="margin-top:10px">Seul un administrateur peut lancer la mise à jour.</div> }
+              } @else {
+                <div class="hint" style="margin-top:10px">Auto-MAJ désactivée. Sur le serveur : <code>bash deploy/lxc/update.sh</code></div>
+              }
+            } @else if (u && !u.error) {
+              <div class="upd-badge ok"><f-icon name="check" [size]="14" color="#5F7E5C" [width]="3" /> À jour ({{ u.current }})</div>
+            } @else if (u?.error) {
+              <div class="upd-cur">Version installée : {{ u!.current }}</div>
+              <div class="hint" style="margin-top:6px">{{ u!.error }}</div>
+            } @else {
+              <div class="hint">Vérifiez la présence d'une nouvelle version sur GitHub.</div>
+            }
+            <button class="btn btn-soft btn-block" style="margin-top:12px" [disabled]="store.updateChecking() || store.updating()" (click)="store.checkUpdates()">
+              {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
+            </button>
+          </div>
+
           <button class="btn btn-primary btn-block" (click)="store.logout()">
             <f-icon name="logout" [size]="18" color="#fff" [width]="2.2" /> Se déconnecter
           </button>
@@ -259,6 +292,12 @@ import { ACADEMIES } from '../core/constants';
     .ics-url { font-size: 11.5px; font-weight: 700; color: var(--ink2); background: var(--soft); border-radius: 11px; padding: 11px 13px; word-break: break-all; margin-bottom: 10px; }
     .ics-actions { display: flex; gap: 8px; }
     .ics-actions .grow { flex: 1; }
+    .upd-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 800; padding: 6px 12px; border-radius: 20px; }
+    .upd-badge.ok { background: #EDF2EB; color: #5F7E5C; }
+    .upd-badge.new { background: #FDF0DA; color: #D9930F; }
+    .upd-cur { font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 8px; }
+    .upd-link { display: inline-block; margin-top: 6px; font-size: 12.5px; font-weight: 800; color: var(--primary); }
+    code { background: var(--soft2); padding: 1px 6px; border-radius: 6px; font-size: 11px; }
   `],
 })
 export class SettingsScreen {
@@ -282,6 +321,13 @@ export class SettingsScreen {
   constructor() {
     this.store.patch({ famNameField: this.d().familyName });
     this.store.loadIcs();
+    this.store.checkUpdates();
+  }
+
+  doUpdate(): void {
+    if (confirm('Lancer la mise à jour de Foyer ? Le service va se recompiler et redémarrer (environ 1–2 min).')) {
+      this.store.applyUpdate();
+    }
   }
 
   async copyIcs(): Promise<void> {

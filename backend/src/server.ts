@@ -28,6 +28,48 @@ import {
 import { buildInitialState, HouseholdState } from './seed';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
+const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
+const GITHUB_REPO = process.env.FOYER_GITHUB_REPO || 'PrudhommeWTF/Foyer-App';
+
+const selfUpdateEnabled = (): boolean => /^(1|true|yes|on)$/i.test(process.env.FOYER_SELF_UPDATE || '');
+
+function currentVersion(): string {
+  if (process.env.FOYER_VERSION) return process.env.FOYER_VERSION.replace(/^v/, '');
+  try { const vf = path.join(DATA_DIR, 'version'); if (fs.existsSync(vf)) return fs.readFileSync(vf, 'utf-8').trim().replace(/^v/, ''); } catch { /* ignore */ }
+  try { const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')); return String(pkg.version); } catch { /* ignore */ }
+  return '0.0.0';
+}
+
+function semverCmp(a: string, b: string): number {
+  const pa = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
+  return 0;
+}
+
+function ghHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'Foyer-App' };
+  if (process.env.FOYER_GITHUB_TOKEN) headers['Authorization'] = 'Bearer ' + process.env.FOYER_GITHUB_TOKEN;
+  return headers;
+}
+
+async function fetchLatestRelease(): Promise<{ tag: string; name: string; body: string; url: string; publishedAt: string }> {
+  // Prefer a published GitHub Release; fall back to the highest semver tag.
+  const rel = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { headers: ghHeaders(), signal: AbortSignal.timeout(8000) });
+  if (rel.ok) {
+    const j = (await rel.json()) as { tag_name: string; name?: string; body?: string; html_url: string; published_at: string };
+    return { tag: j.tag_name, name: j.name || j.tag_name, body: j.body || '', url: j.html_url, publishedAt: j.published_at };
+  }
+  if (rel.status !== 404) throw new Error('GitHub HTTP ' + rel.status);
+
+  const tagsRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=100`, { headers: ghHeaders(), signal: AbortSignal.timeout(8000) });
+  if (!tagsRes.ok) throw new Error(tagsRes.status === 404 ? 'aucune release ni tag' : 'GitHub HTTP ' + tagsRes.status);
+  const tags = (await tagsRes.json()) as { name: string }[];
+  const semverTags = tags.map((t) => t.name).filter((n) => /^v?\d+\.\d+/.test(n)).sort((a, b) => semverCmp(a, b));
+  const latest = semverTags[semverTags.length - 1];
+  if (!latest) throw new Error('aucune release ni tag de version');
+  return { tag: latest, name: latest, body: '', url: `https://github.com/${GITHUB_REPO}/releases/tag/${latest}`, publishedAt: '' };
+}
 
 const PORT = parseInt(process.env.PORT || '8099', 10);
 const JWT_SECRET = process.env.FOYER_JWT_SECRET || 'foyer-dev-secret-change-me';
@@ -358,6 +400,53 @@ api.get('/calendar/feed.ics', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline; filename="foyer.ics"');
   res.send(buildIcs(state));
+});
+
+// ---- System / self-update ----
+api.get('/system/version', auth, (_req, res) => {
+  res.json({ current: currentVersion(), selfUpdate: selfUpdateEnabled(), repo: GITHUB_REPO });
+});
+
+api.get('/system/update-check', auth, async (_req, res) => {
+  const current = currentVersion();
+  try {
+    const rel = await fetchLatestRelease();
+    const latest = rel.tag.replace(/^v/, '');
+    res.json({
+      current, latest, latestTag: rel.tag, name: rel.name,
+      notes: rel.body.slice(0, 2000), url: rel.url, publishedAt: rel.publishedAt,
+      updateAvailable: semverCmp(latest, current) > 0,
+      selfUpdate: selfUpdateEnabled(),
+    });
+  } catch (e) {
+    res.json({ current, error: 'Vérification impossible : ' + (e as Error).message, selfUpdate: selfUpdateEnabled() });
+  }
+});
+
+// Trigger a self-update. The backend only drops a trigger file; a root-owned
+// systemd path unit (installed when FOYER_SELF_UPDATE=1) performs the actual
+// download/build/restart, so the service keeps its hardening (no sudo).
+api.post('/system/update', auth, requireAdmin, (_req, res) => {
+  if (!selfUpdateEnabled()) {
+    res.status(400).json({ error: 'Mise à jour automatique non activée sur ce serveur. Lancez « deploy/lxc/update.sh » manuellement.' });
+    return;
+  }
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, 'update-status.json'), JSON.stringify({ state: 'running', message: 'Mise à jour lancée…', ts: Date.now() }));
+    fs.writeFileSync(path.join(DATA_DIR, '.update-trigger'), String(Date.now()));
+    res.json({ started: true });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+api.get('/system/update-status', auth, (_req, res) => {
+  try {
+    const p = path.join(DATA_DIR, 'update-status.json');
+    if (fs.existsSync(p)) { res.json({ ...JSON.parse(fs.readFileSync(p, 'utf-8')), current: currentVersion() }); return; }
+  } catch { /* ignore */ }
+  res.json({ state: 'idle', current: currentVersion() });
 });
 
 app.use('/api', api);

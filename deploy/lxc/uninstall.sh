@@ -29,7 +29,9 @@ if [[ "${EUID}" -ne 0 ]]; then err "Ce script doit être lancé en root."; exit 
 
 log "Arrêt et désactivation du service…"
 systemctl disable --now foyer 2>/dev/null || true
-rm -f /etc/systemd/system/foyer.service
+systemctl disable --now foyer-update.path 2>/dev/null || true
+rm -f /etc/systemd/system/foyer.service /etc/systemd/system/foyer-update.service /etc/systemd/system/foyer-update.path
+rm -f /usr/local/sbin/foyer-self-update.sh
 systemctl daemon-reload 2>/dev/null || true
 systemctl reset-failed foyer 2>/dev/null || true
 

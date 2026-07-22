@@ -114,6 +114,9 @@ rm -rf "${APP_DIR}/frontend/node_modules"
 
 # --- Données & fichier d'environnement -----------------------------------
 mkdir -p "${DATA_DIR}"
+# Version déployée (lue par la vérification de mises à jour)
+VERSION="$(grep -oP '"version":\s*"\K[^"]+' "${APP_DIR}/backend/package.json" 2>/dev/null || echo 0.0.0)"
+echo "${VERSION}" > "${DATA_DIR}/version"
 mkdir -p "$(dirname "${ENV_FILE}")"
 if [[ ! -f "${ENV_FILE}" ]]; then
   log "Création de ${ENV_FILE} (secret JWT généré)…"
@@ -130,6 +133,9 @@ FOYER_ALLOW_SIGNUP=true
 FOYER_SEED_DEMO=${SEED_DEMO:-false}
 FOYER_ADMIN_EMAIL=${ADMIN_EMAIL}
 FOYER_ADMIN_PASSWORD=${ADMIN_PASSWORD}
+# Mise à jour « en un clic » depuis l'interface (helper root via systemd).
+FOYER_SELF_UPDATE=${SELF_UPDATE:-false}
+FOYER_GITHUB_REPO=${FOYER_GITHUB_REPO:-PrudhommeWTF/Foyer-App}
 EOF
   chmod 600 "${ENV_FILE}"
 else
@@ -166,6 +172,37 @@ ReadWritePaths=${DATA_DIR}
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# --- Mise à jour « en un clic » (helper root déclenché par systemd path) --
+if [[ "${SELF_UPDATE:-false}" =~ ^(1|true|yes|on)$ ]]; then
+  log "Activation de la mise à jour depuis l'interface (helper root)…"
+  install -m 0755 -o root -g root "${SCRIPT_DIR}/self-update.sh" /usr/local/sbin/foyer-self-update.sh
+  cat > /etc/systemd/system/foyer-update.service <<EOF
+[Unit]
+Description=Foyer — mise à jour automatique
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=${ENV_FILE}
+Environment=APP_DIR=${APP_DIR}
+ExecStart=/usr/local/sbin/foyer-self-update.sh
+EOF
+  cat > /etc/systemd/system/foyer-update.path <<EOF
+[Unit]
+Description=Foyer — surveille le déclencheur de mise à jour
+
+[Path]
+PathExists=${DATA_DIR}/.update-trigger
+Unit=foyer-update.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now foyer-update.path >/dev/null 2>&1 || true
+fi
 
 systemctl daemon-reload
 systemctl enable --now foyer >/dev/null 2>&1 || systemctl restart foyer
