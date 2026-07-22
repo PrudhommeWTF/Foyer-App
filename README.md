@@ -56,7 +56,8 @@ Foyer-App/
 ```bash
 git clone https://github.com/PrudhommeWTF/Foyer-App.git
 cd Foyer-App
-# éditez docker-compose.yml pour définir FOYER_JWT_SECRET
+# secret de session obligatoire — générez-en un fort dans un fichier .env :
+echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
 docker compose up -d --build
 ```
 
@@ -81,7 +82,8 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 |---|---|---|
 | `PORT` | Port d'écoute | `8099` |
 | `FOYER_DATA_DIR` | Dossier de la base SQLite | `./data` (ou `/data` en conteneur) |
-| `FOYER_JWT_SECRET` | Secret de signature des sessions — **à définir** | `foyer-dev-secret-change-me` |
+| `FOYER_JWT_SECRET` | Secret de signature des sessions (≥ 16 caractères aléatoires) — **obligatoire** : en `NODE_ENV=production`, un secret absent/faible **empêche le démarrage** ; sinon un secret éphémère est généré (sessions perdues au redémarrage) | _(aucun)_ |
+| `FOYER_CORS_ORIGINS` | Origines cross-origin autorisées (liste séparée par des virgules) — laissez vide en mono-conteneur (l'API sert sa propre app) | _(aucune)_ |
 | `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`) | `true` |
 | `FOYER_SEED_DEMO` | Précharger les **données de démo** + un compte démo au lieu de l'onboarding | `false` |
 | `FOYER_ADMIN_EMAIL` / `FOYER_ADMIN_PASSWORD` | Identifiants du compte démo — **uniquement si `FOYER_SEED_DEMO=true`** | `camille.martin@email.fr` / `foyer` |
@@ -107,9 +109,24 @@ de tâches, des catégories de budget).
 > démarrez avec `FOYER_SEED_DEMO=true` (compte démo `camille.martin@email.fr` / `foyer`).
 > Une base déjà configurée n'est jamais réinitialisée.
 
-> 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort, changez le mot
-> de passe admin, puis passez `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS
-> (reverse-proxy type Caddy / Traefik / Nginx).
+> 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort (en production, l'app
+> **refuse de démarrer** sans secret solide), changez le mot de passe admin, puis passez
+> `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS (reverse-proxy type Caddy / Traefik / Nginx).
+
+### 🛡️ Durcissement de sécurité
+
+- **En-têtes HTTP** durcis via [helmet](https://helmetjs.github.io/) (CSP, `X-Content-Type-Options`,
+  `X-Frame-Options`, `Referrer-Policy`…). La CSP autorise les polices Google et les images `data:`/`blob:`.
+- **Limitation de débit** sur les points d'authentification (`/auth/login`, `/auth/register`, `/setup`)
+  pour freiner le _brute-force_ (30 tentatives / 15 min / IP).
+- **CORS restreint** : aucune origine cross-origin par défaut (l'API sert sa propre SPA) ; ouvrez-en
+  au besoin via `FOYER_CORS_ORIGINS`. `trust proxy` est activé pour lire l'IP cliente réelle derrière
+  un reverse-proxy.
+- **Secret JWT obligatoire** : un secret absent, trop court ou trop connu bloque le démarrage en production.
+- **Révocation des sessions** : changer le mot de passe d'un membre (ou supprimer son compte) invalide
+  immédiatement tous ses jetons existants.
+- **Autorisations** : seul un administrateur du foyer peut ajouter/retirer un membre ou modifier des droits
+  d'administration ; un membre non-admin ne peut éditer que son propre profil.
 
 ## 📅 Calendrier avancé
 

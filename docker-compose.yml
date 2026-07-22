@@ -12,8 +12,12 @@ services:
     volumes:
       - foyer-data:/data
     environment:
-      # CHANGE THIS before exposing publicly!
-      FOYER_JWT_SECRET: "change-me-to-a-long-random-string"
+      # REQUIRED. Generate a strong secret and put it in a .env file next to this
+      # compose file, e.g.:   echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
+      # The app refuses to start in production without a solid secret (≥ 16 chars).
+      FOYER_JWT_SECRET: "${FOYER_JWT_SECRET:?Définissez FOYER_JWT_SECRET, ex: echo \"FOYER_JWT_SECRET=$(openssl rand -hex 32)\" >> .env}"
+      # Extra cross-origin origins (comma-separated). Empty in single-container setups.
+      # FOYER_CORS_ORIGINS: "https://foyer.mondomaine.fr"
       # First launch shows the setup wizard (creates household + admin account).
       # Close registrations once your household is created:
       FOYER_ALLOW_SIGNUP: "true"

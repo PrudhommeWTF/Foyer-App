@@ -87,16 +87,22 @@ import { ACADEMIES } from '../core/constants';
               </div>
               <span class="sec-title">Membres du foyer</span>
             </div>
-            <button class="invite" (click)="store.newMember()">
-              <f-icon name="plus" [size]="15" color="var(--primary)" [width]="2.6" /> Inviter
-            </button>
+            @if (store.isAdmin()) {
+              <button class="invite" (click)="store.newMember()">
+                <f-icon name="plus" [size]="15" color="var(--primary)" [width]="2.6" /> Inviter
+              </button>
+            }
           </div>
 
           <div class="field-label">Nom du foyer</div>
-          <div class="fam-row">
-            <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
-            <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
-          </div>
+          @if (store.isAdmin()) {
+            <div class="fam-row">
+              <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
+              <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
+            </div>
+          } @else {
+            <div class="input readonly">{{ d().familyName }}</div>
+          }
 
           <div class="field-label">Membres ({{ d().members.length }})</div>
           <div class="members">
@@ -110,12 +116,14 @@ import { ACADEMIES } from '../core/constants';
                   </div>
                   <div class="m-role">{{ m.role }}</div>
                 </div>
-                <button class="icon-btn sm" (click)="store.editMember(m.id)">
-                  <f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2" />
-                </button>
-                <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })">
-                  <f-icon name="trash" [size]="16" color="var(--primary)" [width]="2" />
-                </button>
+                @if (store.isAdmin()) {
+                  <button class="icon-btn sm" (click)="store.editMember(m.id)">
+                    <f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2" />
+                  </button>
+                  <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })">
+                    <f-icon name="trash" [size]="16" color="var(--primary)" [width]="2" />
+                  </button>
+                }
               </div>
             }
           </div>
@@ -264,6 +272,8 @@ import { ACADEMIES } from '../core/constants';
     .fam-row { display: flex; gap: 10px; }
     .fam-row .input { flex: 1; }
     .fam-row .btn { flex: none; }
+    .field-label + .input.readonly { margin-bottom: 20px; }
+    .input.readonly { display: flex; align-items: center; color: var(--ink2); font-weight: 700; background: var(--soft); }
 
     .members { display: flex; flex-direction: column; gap: 10px; }
     .member { display: flex; align-items: center; gap: 14px; background: var(--soft); border-radius: 16px; padding: 14px 16px; }
