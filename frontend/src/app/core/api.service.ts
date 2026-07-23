@@ -33,10 +33,17 @@ const TOKEN_KEY = 'foyer.token';
 export class ApiService {
   private base = new URL('api/', document.baseURI).href;
 
-  get token(): string | null { return localStorage.getItem(TOKEN_KEY); }
+  // "Remember me": when true the session token lives in localStorage (survives a
+  // browser restart); when false it lives in sessionStorage (cleared on close).
+  private remember = true;
+  setRemember(v: boolean): void { this.remember = v; }
+
+  get token(): string | null { return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY); }
   set token(v: string | null) {
-    if (v) localStorage.setItem(TOKEN_KEY, v);
-    else localStorage.removeItem(TOKEN_KEY);
+    // Always clear both stores first so the token lives in exactly one place.
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    if (v) (this.remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, v);
   }
 
   private async req<T>(path: string, init: RequestInit = {}): Promise<T> {
