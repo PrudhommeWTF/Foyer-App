@@ -154,6 +154,16 @@ EOF
   chmod 600 "${ENV_FILE}"
 else
   log "${ENV_FILE} existe déjà — conservé."
+  # Permet d'activer l'auto-MAJ sur une install existante :
+  #   SELF_UPDATE=true bash deploy/lxc/install.sh
+  if [[ "${SELF_UPDATE:-false}" =~ ^(1|true|yes|on)$ ]]; then
+    if grep -q '^FOYER_SELF_UPDATE=' "${ENV_FILE}"; then
+      sed -i 's/^FOYER_SELF_UPDATE=.*/FOYER_SELF_UPDATE=true/' "${ENV_FILE}"
+    else
+      echo 'FOYER_SELF_UPDATE=true' >> "${ENV_FILE}"
+    fi
+    log "Auto-MAJ activée dans ${ENV_FILE}."
+  fi
 fi
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}" "${DATA_DIR}"
