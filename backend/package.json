@@ -1,6 +1,6 @@
 {
   "name": "foyer-backend",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Foyer — backend API (auth + household state) for the self-hosted family management app",
   "license": "MIT",
   "type": "commonjs",

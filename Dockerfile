@@ -39,6 +39,10 @@ COPY --from=frontend /build/frontend/dist/frontend/browser ./public
 ENV PORT=8099
 ENV FOYER_DATA_DIR=/data
 ENV FOYER_STATIC_DIR=/app/public
+# Version affichée / comparée aux releases GitHub. Injectée depuis le tag Git au
+# build (voir .github/workflows/docker.yml) ; vide → repli sur package.json.
+ARG FOYER_VERSION=
+ENV FOYER_VERSION=${FOYER_VERSION}
 VOLUME ["/data"]
 EXPOSE 8099
 
