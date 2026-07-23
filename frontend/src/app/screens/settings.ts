@@ -215,14 +215,10 @@ import { ACADEMIES } from '../core/constants';
               @if (u!.name && u!.name !== u!.latestTag) { <div class="hint" style="margin-top:6px">{{ u!.name }}</div> }
               <div class="upd-cur">Version installée : {{ u!.current }}</div>
               @if (u!.url) { <a class="upd-link" [href]="u!.url" target="_blank" rel="noopener">Voir les notes de version ↗</a> }
-              @if (u!.selfUpdate) {
-                @if (store.isAdmin()) {
-                  <button class="btn btn-primary btn-block" style="margin-top:12px" [disabled]="store.updating()" (click)="doUpdate()">
-                    @if (store.updating()) { {{ store.updateMsg() || 'Mise à jour…' }} } @else { Mettre à jour maintenant }
-                  </button>
-                } @else { <div class="hint" style="margin-top:10px">Seul un administrateur peut lancer la mise à jour.</div> }
-              } @else {
-                <div class="hint" style="margin-top:10px">Auto-MAJ désactivée. Sur le serveur : <code>bash deploy/lxc/update.sh</code></div>
+              @if (!u!.selfUpdate) {
+                <div class="hint" style="margin-top:10px">Auto-MAJ désactivée. Sur le serveur : <code>bash deploy/lxc/update.sh</code> (ou réinstallez avec <code>SELF_UPDATE=true</code>).</div>
+              } @else if (!store.isAdmin()) {
+                <div class="hint" style="margin-top:10px">Seul un administrateur peut lancer la mise à jour.</div>
               }
             } @else if (u && !u.error) {
               <div class="upd-badge ok"><f-icon name="check" [size]="14" color="#5F7E5C" [width]="3" /> À jour ({{ u.current }})</div>
@@ -232,9 +228,16 @@ import { ACADEMIES } from '../core/constants';
             } @else {
               <div class="hint">Vérifiez la présence d'une nouvelle version sur GitHub.</div>
             }
-            <button class="btn btn-soft btn-block" style="margin-top:12px" [disabled]="store.updateChecking() || store.updating()" (click)="store.checkUpdates()">
-              {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
-            </button>
+            <div class="upd-actions">
+              <button class="btn btn-soft grow" [disabled]="store.updateChecking() || store.updating()" (click)="store.checkUpdates()">
+                {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
+              </button>
+              @if (u?.updateAvailable && u!.selfUpdate && store.isAdmin()) {
+                <button class="btn btn-primary grow" [disabled]="store.updating()" (click)="doUpdate()">
+                  @if (store.updating()) { {{ store.updateMsg() || 'Mise à jour…' }} } @else { Mettre à jour maintenant }
+                </button>
+              }
+            </div>
           </div>
 
           <button class="btn btn-primary btn-block" (click)="store.logout()">
@@ -307,6 +310,9 @@ import { ACADEMIES } from '../core/constants';
     .upd-badge.new { background: #FDF0DA; color: #D9930F; }
     .upd-cur { font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 8px; }
     .upd-link { display: inline-block; margin-top: 6px; font-size: 12.5px; font-weight: 800; color: var(--primary); }
+    .upd-actions { display: flex; gap: 8px; margin-top: 12px; }
+    .upd-actions .grow { flex: 1; }
+    @media (max-width: 420px) { .upd-actions { flex-direction: column; } }
     code { background: var(--soft2); padding: 1px 6px; border-radius: 6px; font-size: 11px; }
   `],
 })
