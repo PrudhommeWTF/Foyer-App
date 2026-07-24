@@ -57,6 +57,15 @@ export function contactIni(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+/** Render an ISO date (YYYY-MM-DD) in the household's numeric date order. */
+export function fmtNumericDate(iso: string, order: 'dmy' | 'mdy' | 'ymd'): string {
+  const [y, m, d] = (iso || '').split('-');
+  if (!y || !m || !d) return iso || '';
+  if (order === 'mdy') return `${m}/${d}/${y}`;
+  if (order === 'ymd') return `${y}-${m}-${d}`;
+  return `${d}/${m}/${y}`;
+}
+
 /** Lowercase + strip accents, for accent/case-insensitive search matching. */
 export function normText(s: string): string {
   // Strip combining diacritical marks (U+0300–U+036F) after NFD decomposition.

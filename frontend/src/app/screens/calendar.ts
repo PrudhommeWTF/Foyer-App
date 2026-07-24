@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
-import { TODAY, DOW, RECUR_LABELS, CAL_KINDS } from '../core/constants';
+import { DOW, RECUR_LABELS, CAL_KINDS } from '../core/constants';
 import { cap, parseDay, dstr } from '../core/helpers';
 import { Recur } from '../core/models';
 
@@ -112,6 +112,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
             }
           </div>
           <div class="side-title f-display">{{ selLabel() }}</div>
+          <div class="side-date">{{ store.fmtNumDate(sel()) }}</div>
           @for (e of selEvents(); track e.id) {
             <div class="side-ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)" (click)="store.editEvent(e.id)">
               <div class="se-top">
@@ -248,6 +249,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
 
     .add-ev { margin-bottom: 6px; }
     .side-title { font-size: 18px; font-weight: 700; color: var(--ink); text-transform: capitalize; margin: 6px 0 2px; }
+    .side-date { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-bottom: 6px; }
     .side-ev { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); cursor: pointer; }
     .se-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .se-time { font-size: 16px; font-weight: 700; color: var(--ink); }
@@ -311,7 +313,7 @@ export class CalendarScreen {
   headerLabel = computed(() => {
     const v = this.store.ui().calView;
     const a = parseDay(this.store.ui().calAnchor);
-    if (v === 'month') return cap(a.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }));
+    if (v === 'month') return cap(a.toLocaleDateString(this.store.locale(), { month: 'long', year: 'numeric' }));
     const start = v === 'week' ? this.monday(a) : a;
     const end = new Date(start);
     end.setDate(start.getDate() + (v === 'week' ? 6 : 2));
@@ -353,19 +355,19 @@ export class CalendarScreen {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), extras: this.store.dayExtras(key), isToday: key === TODAY, isSel: key === selDay });
+      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), extras: this.store.dayExtras(key), isToday: key === this.store.todayStr(), isSel: key === selDay });
     }
     return out;
   });
 
   selEvents = computed(() => this.store.eventsForDay(this.store.ui().selDay));
   selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
-  selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })));
+  selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale(), { weekday: 'long', day: 'numeric', month: 'long' })));
 
   legendKinds = ['holiday', 'school', 'birthday', 'task'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label }));
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
-  dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })));
+  dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale(), { month: 'long', year: 'numeric' })));
   dpSummary = computed(() => {
     const s = this.store.ui();
     return s.evEnd ? `Du ${this.fmtSummary(s.evStart)} au ${this.fmtSummary(s.evEnd)}` : `Le ${this.fmtSummary(s.evStart)}`;
@@ -383,7 +385,7 @@ export class CalendarScreen {
       const key = dstr(d);
       const isSel = key === s.evStart || (!!s.evEnd && key === s.evEnd);
       const between = !!s.evEnd && key > s.evStart && key < s.evEnd;
-      out.push({ key, num: d.getDate(), inMonth: d.getMonth() === bm, isToday: key === TODAY, sel: isSel, between });
+      out.push({ key, num: d.getDate(), inMonth: d.getMonth() === bm, isToday: key === this.store.todayStr(), sel: isSel, between });
     }
     return out;
   });
@@ -396,18 +398,18 @@ export class CalendarScreen {
 
   private rangeLabel(start: Date, end: Date): string {
     if (start.getMonth() === end.getMonth()) {
-      return `${start.getDate()}–${end.getDate()} ${start.toLocaleDateString('fr-FR', { month: 'long' })}`;
+      return `${start.getDate()}–${end.getDate()} ${start.toLocaleDateString(this.store.locale(), { month: 'long' })}`;
     }
-    return `${start.getDate()} ${start.toLocaleDateString('fr-FR', { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString('fr-FR', { month: 'short' })}`;
+    return `${start.getDate()} ${start.toLocaleDateString(this.store.locale(), { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString(this.store.locale(), { month: 'short' })}`;
   }
 
   fmtShort(key: string): string {
     const d = parseDay(key);
-    return `${d.getDate()} ${d.toLocaleDateString('fr-FR', { month: 'short' })}`;
+    return `${d.getDate()} ${d.toLocaleDateString(this.store.locale(), { month: 'short' })}`;
   }
 
   fmtSummary(key: string): string {
-    return parseDay(key).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' });
+    return parseDay(key).toLocaleDateString(this.store.locale(), { weekday: 'short', day: 'numeric', month: 'long' });
   }
 
   recurLabel(r: Recur): string {
@@ -416,13 +418,13 @@ export class CalendarScreen {
 
   cellBorder(key: string): string {
     if (key === this.store.ui().selDay) return '2px solid var(--primary)';
-    if (key === TODAY) return '2px solid var(--honey)';
+    if (key === this.store.todayStr()) return '2px solid var(--honey)';
     return '2px solid transparent';
   }
 
   setView(v: 'month' | 'week' | '3'): void { this.store.patch({ calView: v }); }
 
-  goToday(): void { this.store.patch({ calAnchor: TODAY, selDay: TODAY }); }
+  goToday(): void { this.store.patch({ calAnchor: this.store.todayStr(), selDay: this.store.todayStr() }); }
 
   nav(dir: number): void {
     const a = parseDay(this.store.ui().calAnchor);

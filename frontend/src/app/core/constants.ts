@@ -4,6 +4,20 @@ import { ContactCat, SchedType } from './models';
 // "Today" in the demo dataset — the whole seed is anchored to mid‑July 2026.
 export const TODAY = '2026-07-16';
 
+// Regional settings → functional values (see Paramètres → Général).
+export const LANG_LOCALE: Record<string, string> = {
+  'Français': 'fr-FR', 'English': 'en-GB', 'Español': 'es-ES', 'Deutsch': 'de-DE',
+};
+export const TZ_IANA: Record<string, string> = {
+  'Europe/Paris (GMT+1)': 'Europe/Paris',
+  'Europe/London (GMT)': 'Europe/London',
+  'America/New_York (GMT-5)': 'America/New_York',
+};
+export type DateOrder = 'dmy' | 'mdy' | 'ymd';
+export const DATEFMT_ORDER: Record<string, DateOrder> = {
+  'JJ/MM/AAAA': 'dmy', 'MM/JJ/AAAA': 'mdy', 'AAAA-MM-JJ': 'ymd',
+};
+
 export const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 export const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 

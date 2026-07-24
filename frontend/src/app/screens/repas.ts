@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
-import { MEAL_SLOTS, DOW, TODAY } from '../core/constants';
+import { MEAL_SLOTS, DOW } from '../core/constants';
 import { weekDates, dstr } from '../core/helpers';
 
 @Component({
@@ -204,7 +204,7 @@ export class RepasScreen {
   dateLabel = computed(() => {
     const e = this.store.ui().mealEdit;
     if (!e) return '';
-    return new Date(e.dateStr + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+    return new Date(e.dateStr + 'T00:00:00').toLocaleDateString(this.store.locale(), { weekday: 'long', day: 'numeric', month: 'long' });
   });
 
   hasExisting = computed(() => {
@@ -212,13 +212,13 @@ export class RepasScreen {
     return !!e && !!this.d().meals[e.dateStr + '-' + e.slot];
   });
 
-  isToday(d: Date): boolean { return dstr(d) === TODAY; }
+  isToday(d: Date): boolean { return dstr(d) === this.store.todayStr(); }
 
   mealAt(d: Date, slot: string): { rid?: string; text?: string } | undefined {
     return this.d().meals[dstr(d) + '-' + slot];
   }
 
   private fmt(d: Date): string {
-    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    return d.toLocaleDateString(this.store.locale(), { day: 'numeric', month: 'short' });
   }
 }
