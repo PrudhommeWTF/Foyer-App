@@ -10,6 +10,8 @@ export interface UiState {
   toast: string;
   notifOpen: boolean;
   addMenuOpen: boolean;
+  searchOpen: boolean;
+  searchQuery: string;
 
   // calendar
   calView: 'month' | 'week' | '3';
@@ -85,6 +87,7 @@ export interface UiState {
 export function initialUi(): UiState {
   return {
     screen: 'home', selDay: '2026-07-16', moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
+    searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: '2026-07-16',
     weekOffset: 0, mealEdit: null, mealMode: 'recipe', mealRid: null, mealText: '',
     monthOffset: 0,

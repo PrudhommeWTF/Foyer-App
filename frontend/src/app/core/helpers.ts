@@ -57,6 +57,12 @@ export function contactIni(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+/** Lowercase + strip accents, for accent/case-insensitive search matching. */
+export function normText(s: string): string {
+  // Strip combining diacritical marks (U+0300–U+036F) after NFD decomposition.
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+}
+
 export function fileTypeOf(name: string): 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE' {
   const ext = (name.split('.').pop() || '').toLowerCase();
   if (['pdf'].includes(ext)) return 'PDF';

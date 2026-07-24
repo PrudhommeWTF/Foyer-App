@@ -125,7 +125,7 @@ export class LoginComponent {
   async submit(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
-    await this.store.login(this.email.trim(), this.pwd);
+    await this.store.login(this.email.trim(), this.pwd, this.remember());
     this.busy.set(false);
   }
 }

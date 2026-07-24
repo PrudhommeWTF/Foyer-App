@@ -19,13 +19,14 @@ import { SCREEN_TITLES } from '../core/constants';
       <div class="spacer"></div>
 
       @if (!store.narrow()) {
-        <div class="search"><f-icon name="search" [size]="18" color="#B7ABA0" [width]="2.2" /><span>Rechercher…</span></div>
+        <button class="search" (click)="store.openSearch()" title="Rechercher"><f-icon name="search" [size]="18" color="#B7ABA0" [width]="2.2" /><span>Rechercher…</span></button>
         <div class="avatars" (click)="store.openFamily()" title="Gérer la famille">
           @for (m of d().members; track m.id) {
             <f-avatar [ini]="m.ini" [color]="m.color" [size]="38" border="3px solid var(--soft)" />
           }
         </div>
       } @else {
+        <button class="icon-btn lg" (click)="store.openSearch()" title="Rechercher"><f-icon name="search" [size]="21" /></button>
         <button class="icon-btn lg" (click)="store.openFamily()" title="Gérer la famille"><f-icon name="users" [size]="21" /></button>
       }
 
@@ -57,7 +58,8 @@ import { SCREEN_TITLES } from '../core/constants';
     .topbar { height: 74px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 40px; border-bottom: 1px solid var(--line); background: var(--bg); }
     .mbrand { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: none; border-radius: 11px; background: linear-gradient(135deg, #E56B4E, #D9553A); box-shadow: 0 8px 16px -6px rgba(229,107,78,.6); }
     .title { font-size: 26px; font-weight: 700; color: var(--ink); }
-    .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 14px; padding: 10px 16px; width: 280px; box-shadow: var(--sh-float); font-size: 14px; font-weight: 600; color: var(--ink3); cursor: text; }
+    .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: none; border-radius: 14px; padding: 10px 16px; width: 280px; box-shadow: var(--sh-float); font-size: 14px; font-weight: 600; color: var(--ink3); cursor: text; font-family: inherit; text-align: left; transition: box-shadow .15s ease; }
+    .search:hover { box-shadow: var(--sh-float), 0 0 0 2px var(--line); }
     .avatars { display: flex; cursor: pointer; }
     .avatars > * { margin-left: -10px; }
     .icon-btn.lg { width: 44px; height: 44px; border-radius: 14px; }

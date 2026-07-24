@@ -2,11 +2,12 @@ import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload, UpdateInfo } from './api.service';
 import { HouseholdState, Member } from './models';
 import { UiState, initialUi, IngrRow } from './ui-state';
-import { ageOn, contactIni, dstr, fileTypeOf, frenchHolidays, isBirthdayOn, occursOn, parseAmt, uid, weekDates } from './helpers';
+import { ageOn, contactIni, dstr, fileTypeOf, frenchHolidays, isBirthdayOn, normText, occursOn, parseAmt, uid, weekDates } from './helpers';
 import { CAL_KINDS, LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
 
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
+export interface SearchHit { kind: string; icon: string; color: string; title: string; sub: string; screen: string; id?: string; }
 
 type SaveState = 'idle' | 'saving' | 'error';
 
@@ -195,8 +196,9 @@ export class FoyerStore {
     return s;
   }
 
-  async login(email: string, password: string): Promise<boolean> {
+  async login(email: string, password: string, remember = true): Promise<boolean> {
     this.authError.set('');
+    this.api.setRemember(remember);
     try {
       const res = await this.api.login(email, password);
       this.api.token = res.token;
@@ -334,6 +336,47 @@ export class FoyerStore {
   go(screen: string): void { this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false }); }
   toggleDark(): void { this.mutate((d) => { d.settings.dark = !d.settings.dark; }); }
   setThemeMode(mode: 'light' | 'dark'): void { this.mutate((d) => { d.settings.dark = mode === 'dark'; }); }
+
+  // ---- global search ----------------------------------------------------
+  openSearch(): void { this.patch({ searchOpen: true, searchQuery: '' }); }
+  closeSearch(): void { this.patch({ searchOpen: false, searchQuery: '' }); }
+
+  /** Accent/case-insensitive matches across the whole household state. */
+  readonly searchResults = computed<SearchHit[]>(() => {
+    const d = this._data();
+    const q = normText(this.ui().searchQuery);
+    if (!d || !q) return [];
+    const mname = (id: string): string => d.members.find((m) => m.id === id)?.name || '';
+    const hits: SearchHit[] = [];
+    const push = (h: SearchHit): void => { hits.push(h); };
+    for (const c of d.contacts) if (normText(`${c.name} ${c.role} ${c.phone || ''} ${c.email || ''} ${c.cat || ''}`).includes(q)) push({ kind: 'contact', icon: 'phone', color: c.color || '#4E93B8', title: c.name, sub: c.role || 'Contact', screen: 'contacts', id: c.id });
+    for (const t of d.tasks) if (normText(t.text).includes(q)) push({ kind: 'task', icon: 'task', color: '#6E9E5F', title: t.text, sub: 'Tâche' + (t.who ? ' · ' + mname(t.who) : ''), screen: 'taches', id: t.id });
+    for (const e of d.events) if (normText(e.title).includes(q)) push({ kind: 'event', icon: 'calendar', color: '#4E93B8', title: e.title, sub: 'Événement · ' + e.date, screen: 'calendar', id: e.id });
+    for (const s of d.shop) if (normText(s.name).includes(q)) push({ kind: 'shop', icon: 'panier', color: '#E08D3C', title: s.name, sub: 'Course' + (s.qty ? ' · ' + s.qty : ''), screen: 'courses', id: s.id });
+    for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
+    for (const f of d.files) if (normText(f.name).includes(q)) push({ kind: 'file', icon: 'documents', color: '#9B6FA8', title: f.name, sub: 'Document', screen: 'documents', id: f.id });
+    for (const x of d.tx) if (normText(x.name).includes(q)) push({ kind: 'tx', icon: 'budget', color: x.income ? '#6E9E5F' : '#C6492F', title: x.name, sub: 'Transaction', screen: 'budget', id: x.id });
+    for (const m of d.members) if (normText(`${m.name} ${m.role}`).includes(q)) push({ kind: 'member', icon: 'users', color: m.color, title: m.name, sub: m.role || 'Membre', screen: 'settings', id: m.id });
+    for (const msg of d.msgs) if (normText(msg.text).includes(q)) push({ kind: 'message', icon: 'messages', color: '#4E93B8', title: msg.text, sub: 'Message' + (msg.who ? ' · ' + mname(msg.who) : ''), screen: 'messages' });
+    return hits.slice(0, 40);
+  });
+
+  /** Navigate to a search hit and open its detail where possible. */
+  openHit(h: SearchHit): void {
+    this.closeSearch();
+    this.go(h.screen);
+    if (!h.id) return;
+    switch (h.kind) {
+      case 'contact': this.editContact(h.id); break;
+      case 'task': this.editTaskItem(h.id); break;
+      case 'event': this.editEvent(h.id); break;
+      case 'shop': this.editShop(h.id); break;
+      case 'recipe': this.patch({ openRecipeId: h.id }); break;
+      case 'tx': this.editTx(h.id); break;
+      case 'member': this.openFamily(); break;
+      default: break;
+    }
+  }
 
   // ---- events -----------------------------------------------------------
   eventsForDay(ds: string): HouseholdState['events'] {
