@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
-import { TODAY } from '../core/constants';
 
 @Component({
   selector: 'screen-home',
@@ -14,7 +13,7 @@ import { TODAY } from '../core/constants';
       <div class="screen-head">
         <div>
           <div class="hello f-script">Bonjour {{ store.me()?.name }}</div>
-          <div class="screen-sub">Jeudi 16 juillet · {{ today().length }} événements, {{ openTasks() }} tâches et le dîner vous attendent</div>
+          <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }} · {{ today().length }} événements, {{ openTasks() }} tâches et le dîner vous attendent</div>
         </div>
         <button class="btn btn-sage" (click)="store.generateList()"><f-icon name="bolt" [size]="20" color="#fff" /> Courses rapides depuis les repas</button>
       </div>
@@ -136,7 +135,7 @@ export class HomeScreen {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
-  today = computed(() => this.store.eventsForDay(TODAY));
+  today = computed(() => this.store.eventsForDay(this.store.todayStr()));
   openTasks = computed(() => this.d().tasks.filter((t) => !t.done).length);
   dashTasks = computed(() => this.d().tasks.filter((t) => !t.done).slice(0, 5));
   dashShop = computed(() => this.d().shop.slice(0, 8));
@@ -149,7 +148,7 @@ export class HomeScreen {
   barW = computed(() => (this.total() > 0 ? Math.min(this.spent() / this.total() * 100, 100) : 0));
 
   dinner = computed(() => {
-    const v = this.d().meals[TODAY + '-soir'];
+    const v = this.d().meals[this.store.todayStr() + '-soir'];
     if (v?.rid) { const r = this.d().recipes.find((x) => x.id === v.rid); if (r) return { name: r.name, meta: `${r.time} · niveau ${r.level.toLowerCase()}` }; }
     if (v?.text) return { name: v.text, meta: 'Repas libre' };
     return { name: 'Rien de prévu', meta: 'Ajoutez un repas au planning' };

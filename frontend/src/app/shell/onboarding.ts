@@ -169,7 +169,7 @@ const INTRO = [
                   </div>
                   <label class="field-label" style="margin-top:22px">Devise</label>
                   <div class="opts">
-                    @for (c of ['Euro (€)', 'Dollar ($)', 'Franc CHF']; track c) {
+                    @for (c of ['Euro (€)']; track c) {
                       <button class="opt" [class.on]="currency() === c" (click)="currency.set(c)">{{ c }}</button>
                     }
                   </div>

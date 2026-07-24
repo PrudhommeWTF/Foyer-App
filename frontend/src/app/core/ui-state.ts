@@ -1,4 +1,5 @@
 import { FileType, Prio, Recur, SchedType } from './models';
+import { dstr } from './helpers';
 
 export interface IngrRow { id: string; val: string; }
 
@@ -85,10 +86,11 @@ export interface UiState {
 }
 
 export function initialUi(): UiState {
+  const today = dstr(new Date());
   return {
-    screen: 'home', selDay: '2026-07-16', moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
+    screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
-    calView: 'month', calAnchor: '2026-07-16',
+    calView: 'month', calAnchor: today,
     weekOffset: 0, mealEdit: null, mealMode: 'recipe', mealRid: null, mealText: '',
     monthOffset: 0,
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: '2026-07-16', evPickStart: true, dpMonth: 0,

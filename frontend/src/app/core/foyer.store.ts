@@ -2,8 +2,8 @@ import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload, UpdateInfo } from './api.service';
 import { HouseholdState, Member } from './models';
 import { UiState, initialUi, IngrRow } from './ui-state';
-import { ageOn, contactIni, dstr, fileTypeOf, frenchHolidays, isBirthdayOn, normText, occursOn, parseAmt, uid, weekDates } from './helpers';
-import { CAL_KINDS, LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, parseAmt, uid, weekDates } from './helpers';
+import { CAL_KINDS, DATEFMT_ORDER, LANG_LOCALE, LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, TZ_IANA, tint, grad } from './constants';
 
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -52,6 +52,25 @@ export class FoyerStore {
   /** Non-null data accessor for use inside authed views. */
   readonly data = computed(() => this._data());
   readonly narrow = signal(false);
+
+  // ---- regional formatting (Paramètres → Général) -----------------------
+  /** BCP-47 locale derived from the household language setting. */
+  readonly locale = computed(() => LANG_LOCALE[this._data()?.settings.lang || ''] || 'fr-FR');
+  /** IANA time zone derived from the household setting. */
+  readonly timeZone = computed(() => TZ_IANA[this._data()?.settings.tz || ''] || 'Europe/Paris');
+  /** Real "today" (YYYY-MM-DD) in the household time zone. */
+  readonly todayStr = computed(() => {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: this.timeZone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    } catch { return dstr(new Date()); }
+  });
+  /** ISO date → household numeric format (e.g. 24/07/2026). */
+  fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
+  /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */
+  fmtLongDate(iso: string): string {
+    try { return cap(parseDay(iso).toLocaleDateString(this.locale(), { weekday: 'long', day: 'numeric', month: 'long' })); }
+    catch { return iso; }
+  }
 
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
