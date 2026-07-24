@@ -34,7 +34,7 @@ import { ACADEMIES } from '../core/constants';
               <button [class.active]="d().settings.lang === o" (click)="store.setSetting('lang', o)">{{ o }}</button>
             }
           </div>
-          <div class="hint">Détermine le format régional des dates (noms de jours/mois).</div>
+          <div class="hint">L'interface est en français.</div>
 
           <div class="field-label">Fuseau horaire</div>
           <div class="seg stack">
@@ -326,11 +326,11 @@ export class SettingsScreen {
   academies = ACADEMIES;
   copied = signal(false);
 
-  langOpts = ['Français', 'English', 'Español', 'Deutsch'];
+  langOpts = ['Français'];
   tzOpts = ['Europe/Paris (GMT+1)', 'Europe/London (GMT)', 'America/New_York (GMT-5)'];
   dateFmtOpts = ['JJ/MM/AAAA', 'MM/JJ/AAAA', 'AAAA-MM-JJ'];
   weekStartOpts = ['Lundi', 'Dimanche'];
-  currencyOpts = ['Euro (€)', 'Dollar ($)', 'Livre (£)'];
+  currencyOpts = ['Euro (€)'];
 
   prefs: { key: 'prefNotifs' | 'prefWeekly' | 'prefShared'; label: string; desc: string }[] = [
     { key: 'prefNotifs', label: 'Notifications push', desc: 'Alertes sur cet appareil' },
