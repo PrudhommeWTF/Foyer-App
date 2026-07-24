@@ -34,6 +34,7 @@ import { ACADEMIES } from '../core/constants';
               <button [class.active]="d().settings.lang === o" (click)="store.setSetting('lang', o)">{{ o }}</button>
             }
           </div>
+          <div class="hint">Détermine le format régional des dates (noms de jours/mois).</div>
 
           <div class="field-label">Fuseau horaire</div>
           <div class="seg stack">
@@ -41,6 +42,7 @@ import { ACADEMIES } from '../core/constants';
               <button [class.active]="d().settings.tz === o" (click)="store.setSetting('tz', o)">{{ o }}</button>
             }
           </div>
+          <div class="hint">Utilisé pour déterminer la date du jour (« aujourd'hui »).</div>
 
           <div class="field-label">Format de date</div>
           <div class="seg wrap">
@@ -48,6 +50,7 @@ import { ACADEMIES } from '../core/constants';
               <button [class.active]="d().settings.dateFmt === o" (click)="store.setSetting('dateFmt', o)">{{ o }}</button>
             }
           </div>
+          <div class="hint">Aperçu : {{ store.fmtNumDate(store.todayStr()) }}</div>
 
           <div class="two">
             <div>
@@ -301,6 +304,7 @@ import { ACADEMIES } from '../core/constants';
     .data-row .danger { color: var(--primary); }
     .version { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
     .hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; line-height: 1.5; }
+    .hint + .field-label { margin-top: 16px; }
     select.input { width: 100%; cursor: pointer; }
     .ics-url { font-size: 11.5px; font-weight: 700; color: var(--ink2); background: var(--soft); border-radius: 11px; padding: 11px 13px; word-break: break-all; margin-bottom: 10px; }
     .ics-actions { display: flex; gap: 8px; }
