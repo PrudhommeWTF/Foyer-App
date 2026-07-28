@@ -86,7 +86,6 @@ PURGE_NODE=true bash deploy/lxc/uninstall.sh  # retire aussi Node.js + le dépô
 | `APP_DIR` | Dossier du code | `/opt/foyer` |
 | `DATA_DIR` | Dossier des données SQLite | `/var/lib/foyer` |
 | `PORT` | Port d'écoute | `8099` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Compte initial | `camille.martin@email.fr` / `foyer` |
 | `FOYER_REPO` / `FOYER_BRANCH` | Source Git (si pas de copie locale) | dépôt / `main` |
 
 > 💡 Le build Angular demande ~1,5 Go de RAM. Vous pouvez créer le LXC avec 2 Go pour le

@@ -76,7 +76,7 @@ const INTRO = [
                   <h2 class="f-display">Comment s'appelle votre foyer ?</h2>
                   <p class="sub">C'est le nom qui apparaîtra en haut de votre espace partagé.</p>
                   <label class="field-label">Nom du foyer</label>
-                  <input class="input big" [ngModel]="famName()" (ngModelChange)="famName.set($event)" (keydown.enter)="next()" placeholder="Famille Martin" />
+                  <input class="input big" [ngModel]="famName()" (ngModelChange)="famName.set($event)" (keydown.enter)="next()" placeholder="Famille Dupont" />
                   <label class="field-label" style="margin-top:20px">Suggestions</label>
                   <div class="sugs">
                     @for (s of suggestions(); track s) {
@@ -95,11 +95,11 @@ const INTRO = [
                     <div><div class="pv-name">{{ name().trim() || 'Votre prénom' }}</div><span class="pv-admin">ADMIN</span></div>
                   </div>
                   <div class="two">
-                    <div><label class="field-label">Prénom</label><input class="input" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="Camille" /></div>
+                    <div><label class="field-label">Prénom</label><input class="input" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="Votre prénom" /></div>
                     <div><label class="field-label">Rôle</label><input class="input" [ngModel]="role()" (ngModelChange)="role.set($event)" placeholder="Maman" /></div>
                   </div>
                   <div class="two" style="margin-top:16px">
-                    <div><label class="field-label">Email</label><input class="input" type="email" [ngModel]="email()" (ngModelChange)="email.set($event)" placeholder="camille@email.fr" /></div>
+                    <div><label class="field-label">Email</label><input class="input" type="email" [ngModel]="email()" (ngModelChange)="email.set($event)" placeholder="vous@exemple.fr" /></div>
                     <div><label class="field-label">Mot de passe</label><input class="input" type="password" [ngModel]="password()" (ngModelChange)="password.set($event)" placeholder="6 caractères min." /></div>
                   </div>
                   <label class="field-label" style="margin-top:16px">Date de naissance (option.)</label>
@@ -332,7 +332,7 @@ export class OnboardingComponent {
   ini = computed(() => contactIni(this.name().trim() || '?'));
   progress = computed(() => Math.round((this.step() / 5) * 100));
   nextLabel = computed(() => (this.step() === 0 ? 'Commencer' : this.step() >= 5 ? 'Terminer' : 'Continuer'));
-  suggestions = computed(() => ['Famille ' + (this.name().trim() || 'Martin'), 'Chez nous', 'La Maisonnée', 'Le Nid']);
+  suggestions = computed(() => ['Famille ' + (this.name().trim() || 'Dupont'), 'Chez nous', 'La Maisonnée', 'Le Nid']);
   allMembers = computed<ObMember[]>(() => [{ id: 'me', name: this.name(), role: this.role(), color: this.color(), ini: this.ini(), email: '', password: '', birthday: '' }, ...this.members()].slice(0, 6));
 
   setTheme(t: 'light' | 'dark'): void {

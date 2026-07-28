@@ -8,7 +8,6 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
-  bootstrap,
   countUsers,
   createUser,
   createUserWithMember,
@@ -21,7 +20,6 @@ import {
   getUserById,
   getUserByMemberId,
   listMemberAccounts,
-  resetHousehold,
   saveHousehold,
   setIcsToken,
   setSchoolHolidaysCache,
@@ -108,7 +106,6 @@ const ALLOW_SIGNUP = (process.env.FOYER_ALLOW_SIGNUP || 'true') !== 'false';
 // root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
 
-bootstrap();
 
 const app = express();
 
@@ -339,11 +336,6 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
 
   const result = saveHousehold(state);
   res.json(result);
-});
-
-api.post('/state/reset', auth, (_req, res) => {
-  const result = resetHousehold();
-  res.json({ ...getHousehold(), ...result });
 });
 
 // ---- Current user ----

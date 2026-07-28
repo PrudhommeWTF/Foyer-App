@@ -85,8 +85,6 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `FOYER_JWT_SECRET` | Secret de signature des sessions (≥ 16 caractères aléatoires) — **obligatoire** : en `NODE_ENV=production`, un secret absent/faible **empêche le démarrage** ; sinon un secret éphémère est généré (sessions perdues au redémarrage) | _(aucun)_ |
 | `FOYER_CORS_ORIGINS` | Origines cross-origin autorisées (liste séparée par des virgules) — laissez vide en mono-conteneur (l'API sert sa propre app) | _(aucune)_ |
 | `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`) | `true` |
-| `FOYER_SEED_DEMO` | Précharger les **données de démo** + un compte démo au lieu de l'onboarding | `false` |
-| `FOYER_ADMIN_EMAIL` / `FOYER_ADMIN_PASSWORD` | Identifiants du compte démo — **uniquement si `FOYER_SEED_DEMO=true`** | `camille.martin@email.fr` / `foyer` |
 
 La base SQLite vit dans le volume `foyer-data` (`/data`) et **persiste** entre les
 redémarrages et les mises à jour de l'image.
@@ -103,11 +101,7 @@ mot de passe** de l'administrateur) · 4. **Membres** du foyer · 5. **Préfére
 À la validation, le compte administrateur et le foyer sont créés, et vous entrez
 directement dans l'application. Les écrans démarrent vierges (prêts à être remplis),
 avec quelques réglages par défaut (rayons de courses, une liste de courses, une liste
-de tâches, des catégories de budget).
-
-> Pour découvrir l'app avec un **jeu de données de démonstration** au lieu de l'onboarding,
-> démarrez avec `FOYER_SEED_DEMO=true` (compte démo `camille.martin@email.fr` / `foyer`).
-> Une base déjà configurée n'est jamais réinitialisée.
+de tâches, des catégories de budget). Une base déjà configurée n'est jamais réinitialisée.
 
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort (en production, l'app
 > **refuse de démarrer** sans secret solide), changez le mot de passe admin, puis passez

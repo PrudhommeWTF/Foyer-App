@@ -111,8 +111,4 @@ export class ApiService {
   putState(state: HouseholdState): Promise<{ version: number }> {
     return this.req('state', { method: 'PUT', body: JSON.stringify({ state }) });
   }
-
-  resetState(): Promise<{ state: HouseholdState; version: number }> {
-    return this.req('state/reset', { method: 'POST' });
-  }
 }

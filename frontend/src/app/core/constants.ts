@@ -1,9 +1,6 @@
 // Static design constants ported verbatim from the design handoff prototype.
 import { ContactCat, SchedType } from './models';
 
-// "Today" in the demo dataset — the whole seed is anchored to mid‑July 2026.
-export const TODAY = '2026-07-16';
-
 // Regional settings → functional values (see Paramètres → Général).
 export const LANG_LOCALE: Record<string, string> = {
   'Français': 'fr-FR', 'English': 'en-GB', 'Español': 'es-ES', 'Deutsch': 'de-DE',

@@ -768,10 +768,6 @@ export class FoyerStore {
     this.mutate((d) => { (d.settings as any)[key] = val; });
     if (key === 'academie') this.loadSchoolHolidays();
   }
-  async resetDemo(): Promise<void> {
-    try { const { state } = await this.api.resetState(); this._data.set(this.normalise(state)); this.toast('Données de démonstration réinitialisées'); }
-    catch { this.toast('Échec de la réinitialisation'); }
-  }
   exportData(): void {
     const d = this._data(); if (!d) return;
     const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
