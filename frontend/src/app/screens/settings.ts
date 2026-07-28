@@ -29,22 +29,6 @@ import { ACADEMIES } from '../core/constants';
               <span class="sec-title">Général</span>
             </div>
 
-            <div class="field-label">Langue</div>
-            <div class="seg wrap">
-              @for (o of langOpts; track o) {
-                <button [class.active]="d().settings.lang === o" (click)="store.setSetting('lang', o)">{{ o }}</button>
-              }
-            </div>
-            <div class="hint">L'interface est en français.</div>
-
-            <div class="field-label">Fuseau horaire</div>
-            <div class="seg stack">
-              @for (o of tzOpts; track o) {
-                <button [class.active]="d().settings.tz === o" (click)="store.setSetting('tz', o)">{{ o }}</button>
-              }
-            </div>
-            <div class="hint">Utilisé pour déterminer la date du jour (« aujourd'hui »).</div>
-
             <div class="field-label">Format de date</div>
             <div class="seg wrap">
               @for (o of dateFmtOpts; track o) {
@@ -53,23 +37,11 @@ import { ACADEMIES } from '../core/constants';
             </div>
             <div class="hint">Aperçu : {{ store.fmtNumDate(store.todayStr()) }}</div>
 
-            <div class="two">
-              <div>
-                <div class="field-label">Début de semaine</div>
-                <div class="seg">
-                  @for (o of weekStartOpts; track o) {
-                    <button [class.active]="d().settings.weekStart === o" (click)="store.setSetting('weekStart', o)">{{ o }}</button>
-                  }
-                </div>
-              </div>
-              <div>
-                <div class="field-label">Devise</div>
-                <div class="seg">
-                  @for (o of currencyOpts; track o) {
-                    <button [class.active]="d().settings.currency === o" (click)="store.setSetting('currency', o)">{{ o }}</button>
-                  }
-                </div>
-              </div>
+            <div class="field-label">Début de semaine</div>
+            <div class="seg">
+              @for (o of weekStartOpts; track o) {
+                <button [class.active]="d().settings.weekStart === o" (click)="store.setSetting('weekStart', o)">{{ o }}</button>
+              }
             </div>
 
             <div class="field-label" style="margin-top:16px">Académie (vacances scolaires)</div>
@@ -326,11 +298,8 @@ export class SettingsScreen {
   academies = ACADEMIES;
   copied = signal(false);
 
-  langOpts = ['Français'];
-  tzOpts = ['Europe/Paris (GMT+1)', 'Europe/London (GMT)', 'America/New_York (GMT-5)'];
   dateFmtOpts = ['JJ/MM/AAAA', 'MM/JJ/AAAA', 'AAAA-MM-JJ'];
   weekStartOpts = ['Lundi', 'Dimanche'];
-  currencyOpts = ['Euro (€)'];
 
   prefs: { key: 'prefNotifs' | 'prefWeekly' | 'prefShared'; label: string; desc: string }[] = [
     { key: 'prefNotifs', label: 'Notifications push', desc: 'Alertes sur cet appareil' },

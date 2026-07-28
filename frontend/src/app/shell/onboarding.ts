@@ -167,12 +167,6 @@ const INTRO = [
                       <button class="opt" [class.on]="weekStart() === w" (click)="weekStart.set(w)">{{ w }}</button>
                     }
                   </div>
-                  <label class="field-label" style="margin-top:22px">Devise</label>
-                  <div class="opts">
-                    @for (c of ['Euro (€)']; track c) {
-                      <button class="opt" [class.on]="currency() === c" (click)="currency.set(c)">{{ c }}</button>
-                    }
-                  </div>
                   <label class="field-label" style="margin-top:22px">Thème</label>
                   <div class="opts">
                     <button class="opt" [class.on]="theme() === 'light'" (click)="setTheme('light')"><f-icon name="sun" [size]="18" [color]="theme() === 'light' ? '#E56B4E' : 'var(--ink2)'" /> Clair</button>
@@ -191,7 +185,7 @@ const INTRO = [
                     <div class="rrow"><span>Membres</span><div class="ravatars">
                       @for (m of allMembers(); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="30" border="2px solid var(--surface)" /> }
                     </div></div>
-                    <div class="rrow"><span>Préférences</span><b>{{ weekStart() }} · {{ currency() }}</b></div>
+                    <div class="rrow"><span>Préférences</span><b>Semaine : {{ weekStart() }} · Thème : {{ theme() === 'dark' ? 'sombre' : 'clair' }}</b></div>
                   </div>
                 </div>
               }

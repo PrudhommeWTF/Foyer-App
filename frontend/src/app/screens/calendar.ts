@@ -313,7 +313,7 @@ export class CalendarScreen {
   headerLabel = computed(() => {
     const v = this.store.ui().calView;
     const a = parseDay(this.store.ui().calAnchor);
-    if (v === 'month') return cap(a.toLocaleDateString(this.store.locale(), { month: 'long', year: 'numeric' }));
+    if (v === 'month') return cap(a.toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' }));
     const start = v === 'week' ? this.monday(a) : a;
     const end = new Date(start);
     end.setDate(start.getDate() + (v === 'week' ? 6 : 2));
@@ -362,12 +362,12 @@ export class CalendarScreen {
 
   selEvents = computed(() => this.store.eventsForDay(this.store.ui().selDay));
   selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
-  selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale(), { weekday: 'long', day: 'numeric', month: 'long' })));
+  selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
 
   legendKinds = ['holiday', 'school', 'birthday', 'task'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label }));
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
-  dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale(), { month: 'long', year: 'numeric' })));
+  dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
   dpSummary = computed(() => {
     const s = this.store.ui();
     return s.evEnd ? `Du ${this.fmtSummary(s.evStart)} au ${this.fmtSummary(s.evEnd)}` : `Le ${this.fmtSummary(s.evStart)}`;
@@ -398,18 +398,18 @@ export class CalendarScreen {
 
   private rangeLabel(start: Date, end: Date): string {
     if (start.getMonth() === end.getMonth()) {
-      return `${start.getDate()}–${end.getDate()} ${start.toLocaleDateString(this.store.locale(), { month: 'long' })}`;
+      return `${start.getDate()}–${end.getDate()} ${start.toLocaleDateString(this.store.locale, { month: 'long' })}`;
     }
-    return `${start.getDate()} ${start.toLocaleDateString(this.store.locale(), { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString(this.store.locale(), { month: 'short' })}`;
+    return `${start.getDate()} ${start.toLocaleDateString(this.store.locale, { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString(this.store.locale, { month: 'short' })}`;
   }
 
   fmtShort(key: string): string {
     const d = parseDay(key);
-    return `${d.getDate()} ${d.toLocaleDateString(this.store.locale(), { month: 'short' })}`;
+    return `${d.getDate()} ${d.toLocaleDateString(this.store.locale, { month: 'short' })}`;
   }
 
   fmtSummary(key: string): string {
-    return parseDay(key).toLocaleDateString(this.store.locale(), { weekday: 'short', day: 'numeric', month: 'long' });
+    return parseDay(key).toLocaleDateString(this.store.locale, { weekday: 'short', day: 'numeric', month: 'long' });
   }
 
   recurLabel(r: Recur): string {
