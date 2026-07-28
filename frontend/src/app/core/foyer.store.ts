@@ -137,6 +137,7 @@ export class FoyerStore {
     await this.refreshAccounts();
     this.loadSchoolHolidays();
     this.loadIcs();
+    this.resumeUpdateIfRunning();
   }
 
   // ---- calendar overlays -----------------------------------------------
@@ -169,6 +170,27 @@ export class FoyerStore {
       const r = await this.api.startSystemUpdate();
       if (r.error) { this.updating.set(false); this.toast(r.error); return; }
     } catch (e) { this.updating.set(false); this.toast((e as Error).message); return; }
+    this.pollUpdateStatus();
+  }
+
+  /**
+   * If a self-update is already running on the server (e.g. the page was
+   * reloaded mid-update), resume showing its progress. Called on app load.
+   */
+  async resumeUpdateIfRunning(): Promise<void> {
+    if (this.updating()) return;
+    try {
+      const s = await this.api.updateStatus();
+      if (s.state === 'running') {
+        this.updating.set(true);
+        this.updateMsg.set(s.message || 'Mise à jour en cours…');
+        this.pollUpdateStatus();
+      }
+    } catch { /* status unreachable — ignore */ }
+  }
+
+  /** Poll the server update status every 3 s until it finishes (done/error/timeout). */
+  private pollUpdateStatus(): void {
     const started = Date.now();
     const poll = async (): Promise<void> => {
       if (Date.now() - started > 10 * 60 * 1000) { this.updating.set(false); this.updateMsg.set('Délai dépassé — vérifiez les logs du serveur.'); return; }

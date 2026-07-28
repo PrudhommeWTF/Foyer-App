@@ -170,35 +170,40 @@ import { ACADEMIES } from '../core/constants';
               <div class="sec-ic" style="background:#EDF2EB"><f-icon name="refresh" [size]="18" color="#5F7E5C" [width]="2" /></div>
               <span class="sec-title">Mises à jour</span>
             </div>
-            @let u = store.updateInfo();
-            @if (u?.updateAvailable) {
-              <div class="upd-badge new">Nouvelle version {{ u!.latestTag }} disponible</div>
-              @if (u!.name && u!.name !== u!.latestTag) { <div class="hint" style="margin-top:6px">{{ u!.name }}</div> }
-              <div class="upd-cur">Version installée : {{ u!.current }}</div>
-              @if (u!.url) { <a class="upd-link" [href]="u!.url" target="_blank" rel="noopener">Voir les notes de version ↗</a> }
-              @if (!u!.selfUpdate) {
-                <div class="hint" style="margin-top:10px">Auto-MAJ désactivée. Sur le serveur : <code>bash deploy/lxc/update.sh</code> (ou réinstallez avec <code>SELF_UPDATE=true</code>).</div>
-              } @else if (!store.isAdmin()) {
-                <div class="hint" style="margin-top:10px">Seul un administrateur peut lancer la mise à jour.</div>
-              }
-            } @else if (u && !u.error) {
-              <div class="upd-badge ok"><f-icon name="check" [size]="14" color="#5F7E5C" [width]="3" /> À jour ({{ u.current }})</div>
-            } @else if (u?.error) {
-              <div class="upd-cur">Version installée : {{ u!.current }}</div>
-              <div class="hint" style="margin-top:6px">{{ u!.error }}</div>
+            @if (store.updating()) {
+              <div class="upd-badge new"><f-icon name="refresh" [size]="13" color="#D9930F" [width]="3" /> Mise à jour en cours…</div>
+              <div class="upd-cur" style="margin-top:8px">{{ store.updateMsg() || 'Veuillez patienter…' }}</div>
+              <div class="upd-progress"><span class="upd-bar"></span></div>
+              <div class="hint" style="margin-top:8px">Ne fermez pas cette page ; elle se rechargera automatiquement à la fin.</div>
             } @else {
-              <div class="hint">Vérifiez la présence d'une nouvelle version sur GitHub.</div>
-            }
-            <div class="upd-actions">
-              <button class="btn btn-soft grow" [disabled]="store.updateChecking() || store.updating()" (click)="store.checkUpdates()">
-                {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
-              </button>
-              @if (u?.updateAvailable && u!.selfUpdate && store.isAdmin()) {
-                <button class="btn btn-primary grow" [disabled]="store.updating()" (click)="doUpdate()">
-                  @if (store.updating()) { {{ store.updateMsg() || 'Mise à jour…' }} } @else { Mettre à jour maintenant }
-                </button>
+              @let u = store.updateInfo();
+              @if (u?.updateAvailable) {
+                <div class="upd-badge new">Nouvelle version {{ u!.latestTag }} disponible</div>
+                @if (u!.name && u!.name !== u!.latestTag) { <div class="hint" style="margin-top:6px">{{ u!.name }}</div> }
+                <div class="upd-cur">Version installée : {{ u!.current }}</div>
+                @if (u!.url) { <a class="upd-link" [href]="u!.url" target="_blank" rel="noopener">Voir les notes de version ↗</a> }
+                @if (!u!.selfUpdate) {
+                  <div class="hint" style="margin-top:10px">Auto-MAJ désactivée. Sur le serveur : <code>bash deploy/lxc/update.sh</code> (ou réinstallez avec <code>SELF_UPDATE=true</code>).</div>
+                } @else if (!store.isAdmin()) {
+                  <div class="hint" style="margin-top:10px">Seul un administrateur peut lancer la mise à jour.</div>
+                }
+              } @else if (u && !u.error) {
+                <div class="upd-badge ok"><f-icon name="check" [size]="14" color="#5F7E5C" [width]="3" /> À jour ({{ u.current }})</div>
+              } @else if (u?.error) {
+                <div class="upd-cur">Version installée : {{ u!.current }}</div>
+                <div class="hint" style="margin-top:6px">{{ u!.error }}</div>
+              } @else {
+                <div class="hint">Vérifiez la présence d'une nouvelle version sur GitHub.</div>
               }
-            </div>
+              <div class="upd-actions">
+                <button class="btn btn-soft grow" [disabled]="store.updateChecking()" (click)="store.checkUpdates()">
+                  {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
+                </button>
+                @if (u?.updateAvailable && u!.selfUpdate && store.isAdmin()) {
+                  <button class="btn btn-primary grow" (click)="doUpdate()">Mettre à jour maintenant</button>
+                }
+              </div>
+            }
           </div>
 
           <div class="card">
@@ -285,6 +290,9 @@ import { ACADEMIES } from '../core/constants';
     .upd-actions { display: flex; gap: 8px; margin-top: 12px; }
     .upd-actions .grow { flex: 1; }
     @media (max-width: 420px) { .upd-actions { flex-direction: column; } }
+    .upd-progress { margin-top: 10px; height: 6px; border-radius: 20px; background: var(--soft2); overflow: hidden; }
+    .upd-bar { display: block; height: 100%; width: 40%; border-radius: 20px; background: var(--primary); animation: upd-slide 1.2s ease-in-out infinite; }
+    @keyframes upd-slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
     code { background: var(--soft2); padding: 1px 6px; border-radius: 6px; font-size: 11px; }
   `],
 })
