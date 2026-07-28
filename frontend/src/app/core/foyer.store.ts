@@ -210,7 +210,7 @@ export class FoyerStore {
   /** Guard against older/partial state documents missing newer keys. */
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
-    s.settings ||= { lang: 'Français', tz: 'Europe/Paris (GMT+1)', dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi', currency: 'Euro (€)', dark: false, prefNotifs: true, prefWeekly: true, prefShared: false };
+    s.settings ||= { dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi', dark: false, prefNotifs: true, prefWeekly: true, prefShared: false };
     return s;
   }
 

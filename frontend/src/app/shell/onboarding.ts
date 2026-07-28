@@ -319,7 +319,6 @@ export class OnboardingComponent {
   mBirthday = signal('');
   mColor = signal('#4E93B8');
   weekStart = signal('Lundi');
-  currency = signal('Euro (€)');
   theme = signal<'light' | 'dark'>('light');
   busy = signal(false);
 
@@ -373,7 +372,7 @@ export class OnboardingComponent {
     if (this.busy()) return;
     this.busy.set(true);
     const ok = await this.store.completeSetup({
-      household: { name: this.famName().trim(), weekStart: this.weekStart(), currency: this.currency(), theme: this.theme() },
+      household: { name: this.famName().trim(), weekStart: this.weekStart(), theme: this.theme() },
       admin: { name: this.name().trim(), role: this.role().trim(), color: this.color(), email: this.email().trim(), password: this.password(), birthday: this.birthday() || undefined },
       members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color, birthday: m.birthday || undefined, email: m.email || undefined, password: m.password || undefined })),
     });

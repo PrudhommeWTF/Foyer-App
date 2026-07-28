@@ -36,7 +36,7 @@ export const EMPTY_STATE: HouseholdState = {
   notifs: [],
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
   settings: {
-    lang: 'Français', tz: 'Europe/Paris (GMT+1)', dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi', currency: 'Euro (€)',
+    dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi',
     dark: false, prefNotifs: true, prefWeekly: true, prefShared: false, academie: '',
   },
 };
@@ -63,7 +63,7 @@ export interface OnboardingMember {
 }
 
 export interface OnboardingInput {
-  household: { name: string; weekStart?: string; currency?: string; theme?: 'light' | 'dark'; academie?: string };
+  household: { name: string; weekStart?: string; theme?: 'light' | 'dark'; academie?: string };
   admin: { name: string; role?: string; color?: string; email: string; birthday?: string | null };
   members?: OnboardingMember[];
 }
@@ -130,11 +130,8 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     notifs: [],
     profile: { name: admin.name, role: admin.role, email: admin.email || '', phone: '', color: admin.color, memberId: adminId },
     settings: {
-      lang: 'Français',
-      tz: 'Europe/Paris (GMT+1)',
       dateFmt: 'JJ/MM/AAAA',
       weekStart: input.household.weekStart || 'Lundi',
-      currency: input.household.currency || 'Euro (€)',
       dark: input.household.theme === 'dark',
       prefNotifs: true,
       prefWeekly: true,

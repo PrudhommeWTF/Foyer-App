@@ -20,7 +20,7 @@ export interface SchedSlot { id: string; who: string; day: string; start: string
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {
-  lang: string; tz: string; dateFmt: string; weekStart: string; currency: string;
+  dateFmt: string; weekStart: string;
   dark: boolean; prefNotifs: boolean; prefWeekly: boolean; prefShared: boolean;
   academie?: string;
 }
