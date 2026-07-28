@@ -1,9 +1,9 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload, UpdateInfo } from './api.service';
 import { HouseholdState, Member } from './models';
-import { UiState, initialUi, IngrRow } from './ui-state';
+import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, parseAmt, uid, weekDates } from './helpers';
-import { CAL_KINDS, DATEFMT_ORDER, LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
 
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -742,7 +742,7 @@ export class FoyerStore {
   }
   openProfile(): void {
     const m = this.me();
-    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfPhone: '', pfColor: m?.color || '#E56B4E' });
+    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
   }
   saveProfile(): void {
     const s = this.ui(); if (!s.pfName.trim()) { this.toast('Le prénom est requis'); return; }

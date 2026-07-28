@@ -79,7 +79,7 @@ export interface UiState {
   familyOpen: boolean; famNameField: string;
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfBirthday: string; memberDelId: string | null;
   profileOpen: boolean; pfTab: 'infos' | 'prefs';
-  pfName: string; pfRole: string; pfEmail: string; pfPhone: string; pfColor: string;
+  pfName: string; pfRole: string; pfEmail: string; pfColor: string;
 
   // member login account management
   accountFor: string | null; acEmail: string; acPassword: string; acBusy: boolean;
@@ -112,7 +112,7 @@ export function initialUi(): UiState {
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
-    profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfPhone: '', pfColor: '#E56B4E',
+    profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };
 }

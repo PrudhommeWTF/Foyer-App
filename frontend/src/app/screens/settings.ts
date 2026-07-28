@@ -239,11 +239,7 @@ import { ACADEMIES } from '../core/constants';
     .field-label + .seg, .field-label + .fam-row, .field-label + .members { margin-bottom: 20px; }
 
     .seg.wrap { flex-wrap: wrap; }
-    .seg.stack { flex-direction: column; }
-    .seg.stack button { text-align: left; }
     .seg button.grow { flex: 1; }
-    .two { display: flex; gap: 24px; flex-wrap: wrap; }
-    .two > div { flex: 1; min-width: 120px; }
 
     .invite { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; color: var(--primary); background: none; border: none; cursor: pointer; padding: 0; }
 
