@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 
-interface DemoMember { ini: string; name: string; color: string; }
+interface FamilyChip { ini: string; name: string; color: string; }
 
 @Component({
   selector: 'app-login',
@@ -25,7 +25,7 @@ interface DemoMember { ini: string; name: string; color: string; }
           <div class="hero-sub">Calendrier, courses, tâches, budget, repas… Organisez votre famille en toute sérénité.</div>
         </div>
         <div class="chips">
-          @for (m of demo; track m.ini) {
+          @for (m of chips; track m.ini) {
             <div class="mchip">
               <span class="avatar" [style.background]="m.color" style="width:28px;height:28px;font-size:12px;border:2px solid rgba(255,255,255,.5)">{{ m.ini }}</span>
               <span>{{ m.name }}</span>
@@ -44,7 +44,7 @@ interface DemoMember { ini: string; name: string; color: string; }
           <div class="subtitle">Connectez-vous à votre espace famille</div>
 
           <label class="field-label">Email</label>
-          <input class="input" [(ngModel)]="email" (keydown.enter)="submit()" placeholder="camille.martin@email.fr" style="margin-bottom:18px" />
+          <input class="input" [(ngModel)]="email" (keydown.enter)="submit()" placeholder="vous@exemple.fr" style="margin-bottom:18px" />
 
           <div class="pwd-row">
             <label class="field-label" style="margin:0">Mot de passe</label>
@@ -115,11 +115,11 @@ export class LoginComponent {
   busy = signal(false);
   error = this.store.authError;
 
-  demo: DemoMember[] = [
-    { ini: 'C', name: 'Camille', color: '#E56B4E' },
-    { ini: 'T', name: 'Thomas', color: '#4E93B8' },
-    { ini: 'L', name: 'Léa', color: '#9B6FA8' },
-    { ini: 'N', name: 'Noah', color: '#6E9E5F' },
+  chips: FamilyChip[] = [
+    { ini: 'M', name: 'Maman', color: '#E56B4E' },
+    { ini: 'P', name: 'Papa', color: '#4E93B8' },
+    { ini: 'A', name: 'Ado', color: '#9B6FA8' },
+    { ini: 'E', name: 'Enfant', color: '#6E9E5F' },
   ];
 
   async submit(): Promise<void> {

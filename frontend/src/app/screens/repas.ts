@@ -204,7 +204,7 @@ export class RepasScreen {
   dateLabel = computed(() => {
     const e = this.store.ui().mealEdit;
     if (!e) return '';
-    return new Date(e.dateStr + 'T00:00:00').toLocaleDateString(this.store.locale(), { weekday: 'long', day: 'numeric', month: 'long' });
+    return new Date(e.dateStr + 'T00:00:00').toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' });
   });
 
   hasExisting = computed(() => {
@@ -219,6 +219,6 @@ export class RepasScreen {
   }
 
   private fmt(d: Date): string {
-    return d.toLocaleDateString(this.store.locale(), { day: 'numeric', month: 'short' });
+    return d.toLocaleDateString(this.store.locale, { day: 'numeric', month: 'short' });
   }
 }

@@ -17,7 +17,6 @@
 #   APP_DIR         dossier d'installation du code (défaut: /opt/foyer)
 #   DATA_DIR        dossier des données SQLite (défaut: /var/lib/foyer)
 #   PORT            port d'écoute (défaut: 8099)
-#   ADMIN_EMAIL / ADMIN_PASSWORD   compte initial
 # ============================================================
 set -euo pipefail
 
@@ -26,8 +25,6 @@ FOYER_BRANCH="${FOYER_BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/foyer}"
 DATA_DIR="${DATA_DIR:-/var/lib/foyer}"
 PORT="${PORT:-8099}"
-ADMIN_EMAIL="${ADMIN_EMAIL:-camille.martin@email.fr}"
-ADMIN_PASSWORD="${ADMIN_PASSWORD:-foyer}"
 ENV_FILE="/etc/foyer/foyer.env"
 SERVICE_USER="foyer"
 
@@ -143,10 +140,6 @@ FOYER_STATIC_DIR=${APP_DIR}/backend/public
 FOYER_JWT_SECRET=${JWT}
 FOYER_ALLOW_SIGNUP=true
 # Au 1er démarrage, l'assistant de configuration crée le foyer + le compte admin.
-# Passez à "true" pour précharger le jeu de démo (compte ci-dessous) à la place.
-FOYER_SEED_DEMO=${SEED_DEMO:-false}
-FOYER_ADMIN_EMAIL=${ADMIN_EMAIL}
-FOYER_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 # Mise à jour « en un clic » depuis l'interface (helper root via systemd).
 FOYER_SELF_UPDATE=${SELF_UPDATE:-false}
 FOYER_GITHUB_REPO=${FOYER_GITHUB_REPO:-PrudhommeWTF/Foyer-App}
@@ -236,11 +229,7 @@ IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if systemctl is-active --quiet foyer; then
   log "✅ Foyer est démarré."
   log "   → http://${IP:-<IP_DU_LXC>}:${PORT}"
-  if [[ "${SEED_DEMO:-false}" =~ ^(1|true|yes|on)$ ]]; then
-    log "   Données de démo activées · compte : ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}"
-  else
-    log "   Ouvrez l'URL : l'assistant de configuration crée votre foyer au 1er démarrage."
-  fi
+  log "   Ouvrez l'URL : l'assistant de configuration crée votre foyer au 1er démarrage."
   log "   Config : ${ENV_FILE} · Logs : journalctl -u foyer -f"
 else
   err "Le service n'a pas démarré. Voir : journalctl -u foyer -e"

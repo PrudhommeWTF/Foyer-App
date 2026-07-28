@@ -18,7 +18,7 @@ export interface UpdateInfo {
 }
 
 export interface SetupPayload {
-  household: { name: string; weekStart: string; currency: string; theme: 'light' | 'dark'; academie?: string };
+  household: { name: string; weekStart: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
   members: { name: string; role: string; color: string; email?: string; password?: string; birthday?: string }[];
 }
@@ -110,9 +110,5 @@ export class ApiService {
 
   putState(state: HouseholdState): Promise<{ version: number }> {
     return this.req('state', { method: 'PUT', body: JSON.stringify({ state }) });
-  }
-
-  resetState(): Promise<{ state: HouseholdState; version: number }> {
-    return this.req('state/reset', { method: 'POST' });
   }
 }

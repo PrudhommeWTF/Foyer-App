@@ -19,121 +19,41 @@ import { ACADEMIES } from '../core/constants';
       </div>
 
       <div class="cols">
-        <!-- Column 1 — Général -->
-        <div class="card">
-          <div class="sec-head">
-            <div class="sec-ic" style="background:#EDF2EB">
-              <f-icon name="settings" [size]="18" color="#7A9B76" [width]="2" />
-            </div>
-            <span class="sec-title">Général</span>
-          </div>
-
-          <div class="field-label">Langue</div>
-          <div class="seg wrap">
-            @for (o of langOpts; track o) {
-              <button [class.active]="d().settings.lang === o" (click)="store.setSetting('lang', o)">{{ o }}</button>
-            }
-          </div>
-          <div class="hint">L'interface est en français.</div>
-
-          <div class="field-label">Fuseau horaire</div>
-          <div class="seg stack">
-            @for (o of tzOpts; track o) {
-              <button [class.active]="d().settings.tz === o" (click)="store.setSetting('tz', o)">{{ o }}</button>
-            }
-          </div>
-          <div class="hint">Utilisé pour déterminer la date du jour (« aujourd'hui »).</div>
-
-          <div class="field-label">Format de date</div>
-          <div class="seg wrap">
-            @for (o of dateFmtOpts; track o) {
-              <button [class.active]="d().settings.dateFmt === o" (click)="store.setSetting('dateFmt', o)">{{ o }}</button>
-            }
-          </div>
-          <div class="hint">Aperçu : {{ store.fmtNumDate(store.todayStr()) }}</div>
-
-          <div class="two">
-            <div>
-              <div class="field-label">Début de semaine</div>
-              <div class="seg">
-                @for (o of weekStartOpts; track o) {
-                  <button [class.active]="d().settings.weekStart === o" (click)="store.setSetting('weekStart', o)">{{ o }}</button>
-                }
-              </div>
-            </div>
-            <div>
-              <div class="field-label">Devise</div>
-              <div class="seg">
-                @for (o of currencyOpts; track o) {
-                  <button [class.active]="d().settings.currency === o" (click)="store.setSetting('currency', o)">{{ o }}</button>
-                }
-              </div>
-            </div>
-          </div>
-
-          <div class="field-label" style="margin-top:16px">Académie (vacances scolaires)</div>
-          <select class="input" [ngModel]="d().settings.academie || ''" (ngModelChange)="store.setSetting('academie', $event)">
-            <option value="">Non définie</option>
-            @for (a of academies; track a.name) {
-              <option [value]="a.name">{{ a.name }} — zone {{ a.zone }}</option>
-            }
-          </select>
-          <div class="hint">Affiche les vacances scolaires de votre zone dans le calendrier.</div>
-        </div>
-
-        <!-- Column 2 — Membres du foyer -->
-        <div class="card">
-          <div class="sec-head">
-            <div class="sec-left">
-              <div class="sec-ic" style="background:#E5F0F4">
-                <f-icon name="users" [size]="18" color="#4E93B8" [width]="2" />
-              </div>
-              <span class="sec-title">Membres du foyer</span>
-            </div>
-            @if (store.isAdmin()) {
-              <button class="invite" (click)="store.newMember()">
-                <f-icon name="plus" [size]="15" color="var(--primary)" [width]="2.6" /> Inviter
-              </button>
-            }
-          </div>
-
-          <div class="field-label">Nom du foyer</div>
-          @if (store.isAdmin()) {
-            <div class="fam-row">
-              <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
-              <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
-            </div>
-          } @else {
-            <div class="input readonly">{{ d().familyName }}</div>
-          }
-
-          <div class="field-label">Membres ({{ d().members.length }})</div>
-          <div class="members">
-            @for (m of d().members; track m.id) {
-              <div class="member">
-                <div class="m-av" [style.background]="m.color">{{ m.ini }}</div>
-                <div class="m-body">
-                  <div class="m-top">
-                    <span class="m-name">{{ m.name }}</span>
-                    @if (m.admin) { <span class="badge">Admin</span> }
-                  </div>
-                  <div class="m-role">{{ m.role }}</div>
-                </div>
-                @if (store.isAdmin()) {
-                  <button class="icon-btn sm" (click)="store.editMember(m.id)">
-                    <f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2" />
-                  </button>
-                  <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })">
-                    <f-icon name="trash" [size]="16" color="var(--primary)" [width]="2" />
-                  </button>
-                }
-              </div>
-            }
-          </div>
-        </div>
-
-        <!-- Column 3 — Apparence + Notifications + Données -->
+        <!-- Colonne 1 — Préférences (Général + Apparence) -->
         <div class="stackcol">
+          <div class="card">
+            <div class="sec-head">
+              <div class="sec-ic" style="background:#EDF2EB">
+                <f-icon name="settings" [size]="18" color="#7A9B76" [width]="2" />
+              </div>
+              <span class="sec-title">Général</span>
+            </div>
+
+            <div class="field-label">Format de date</div>
+            <div class="seg wrap">
+              @for (o of dateFmtOpts; track o) {
+                <button [class.active]="d().settings.dateFmt === o" (click)="store.setSetting('dateFmt', o)">{{ o }}</button>
+              }
+            </div>
+            <div class="hint">Aperçu : {{ store.fmtNumDate(store.todayStr()) }}</div>
+
+            <div class="field-label">Début de semaine</div>
+            <div class="seg">
+              @for (o of weekStartOpts; track o) {
+                <button [class.active]="d().settings.weekStart === o" (click)="store.setSetting('weekStart', o)">{{ o }}</button>
+              }
+            </div>
+
+            <div class="field-label" style="margin-top:16px">Académie (vacances scolaires)</div>
+            <select class="input" [ngModel]="d().settings.academie || ''" (ngModelChange)="store.setSetting('academie', $event)">
+              <option value="">Non définie</option>
+              @for (a of academies; track a.name) {
+                <option [value]="a.name">{{ a.name }} — zone {{ a.zone }}</option>
+              }
+            </select>
+            <div class="hint">Affiche les vacances scolaires de votre zone dans le calendrier.</div>
+          </div>
+
           <div class="card">
             <div class="sec-head">
               <div class="sec-ic" style="background:#F2ECF5">
@@ -145,6 +65,59 @@ import { ACADEMIES } from '../core/constants';
             <div class="seg">
               <button class="grow" [class.active]="!d().settings.dark" (click)="store.setThemeMode('light')">Clair</button>
               <button class="grow" [class.active]="d().settings.dark" (click)="store.setThemeMode('dark')">Sombre</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Colonne 2 — Le foyer (Membres + Notifications) -->
+        <div class="stackcol">
+          <div class="card">
+            <div class="sec-head">
+              <div class="sec-left">
+                <div class="sec-ic" style="background:#E5F0F4">
+                  <f-icon name="users" [size]="18" color="#4E93B8" [width]="2" />
+                </div>
+                <span class="sec-title">Membres du foyer</span>
+              </div>
+              @if (store.isAdmin()) {
+                <button class="invite" (click)="store.newMember()">
+                  <f-icon name="plus" [size]="15" color="var(--primary)" [width]="2.6" /> Inviter
+                </button>
+              }
+            </div>
+
+            <div class="field-label">Nom du foyer</div>
+            @if (store.isAdmin()) {
+              <div class="fam-row">
+                <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
+                <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
+              </div>
+            } @else {
+              <div class="input readonly">{{ d().familyName }}</div>
+            }
+
+            <div class="field-label">Membres ({{ d().members.length }})</div>
+            <div class="members">
+              @for (m of d().members; track m.id) {
+                <div class="member">
+                  <div class="m-av" [style.background]="m.color">{{ m.ini }}</div>
+                  <div class="m-body">
+                    <div class="m-top">
+                      <span class="m-name">{{ m.name }}</span>
+                      @if (m.admin) { <span class="badge">Admin</span> }
+                    </div>
+                    <div class="m-role">{{ m.role }}</div>
+                  </div>
+                  @if (store.isAdmin()) {
+                    <button class="icon-btn sm" (click)="store.editMember(m.id)">
+                      <f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2" />
+                    </button>
+                    <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })">
+                      <f-icon name="trash" [size]="16" color="var(--primary)" [width]="2" />
+                    </button>
+                  }
+                </div>
+              }
             </div>
           </div>
 
@@ -167,25 +140,10 @@ import { ACADEMIES } from '../core/constants';
               }
             </div>
           </div>
+        </div>
 
-          <div class="card">
-            <div class="sec-head">
-              <div class="sec-ic" style="background:#FDF0DA">
-                <f-icon name="folder" [size]="18" color="#F0B24B" [width]="2" />
-              </div>
-              <span class="sec-title">Données &amp; confidentialité</span>
-            </div>
-            <button class="data-row" (click)="store.exportData()">
-              <f-icon name="export" [size]="18" color="var(--ink2)" [width]="2" />
-              <span>Exporter mes données</span>
-            </button>
-            <button class="data-row" (click)="store.resetDemo()">
-              <f-icon name="refresh" [size]="18" color="var(--primary)" [width]="2" />
-              <span class="danger">Réinitialiser la démo</span>
-            </button>
-            <div class="version">Foyer @if (store.updateInfo()?.current; as v) { · v{{ v }} }</div>
-          </div>
-
+        <!-- Colonne 3 — Partage & système -->
+        <div class="stackcol">
           <div class="card">
             <div class="sec-head">
               <div class="sec-ic" style="background:#E5F0F4">
@@ -243,6 +201,20 @@ import { ACADEMIES } from '../core/constants';
             </div>
           </div>
 
+          <div class="card">
+            <div class="sec-head">
+              <div class="sec-ic" style="background:#FDF0DA">
+                <f-icon name="folder" [size]="18" color="#F0B24B" [width]="2" />
+              </div>
+              <span class="sec-title">Données &amp; confidentialité</span>
+            </div>
+            <button class="data-row" (click)="store.exportData()">
+              <f-icon name="export" [size]="18" color="var(--ink2)" [width]="2" />
+              <span>Exporter mes données</span>
+            </button>
+            <div class="version">Foyer</div>
+          </div>
+
           <button class="btn btn-primary btn-block" (click)="store.logout()">
             <f-icon name="logout" [size]="18" color="#fff" [width]="2.2" /> Se déconnecter
           </button>
@@ -267,11 +239,7 @@ import { ACADEMIES } from '../core/constants';
     .field-label + .seg, .field-label + .fam-row, .field-label + .members { margin-bottom: 20px; }
 
     .seg.wrap { flex-wrap: wrap; }
-    .seg.stack { flex-direction: column; }
-    .seg.stack button { text-align: left; }
     .seg button.grow { flex: 1; }
-    .two { display: flex; gap: 24px; flex-wrap: wrap; }
-    .two > div { flex: 1; min-width: 120px; }
 
     .invite { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 800; color: var(--primary); background: none; border: none; cursor: pointer; padding: 0; }
 
@@ -326,11 +294,8 @@ export class SettingsScreen {
   academies = ACADEMIES;
   copied = signal(false);
 
-  langOpts = ['Français'];
-  tzOpts = ['Europe/Paris (GMT+1)', 'Europe/London (GMT)', 'America/New_York (GMT-5)'];
   dateFmtOpts = ['JJ/MM/AAAA', 'MM/JJ/AAAA', 'AAAA-MM-JJ'];
   weekStartOpts = ['Lundi', 'Dimanche'];
-  currencyOpts = ['Euro (€)'];
 
   prefs: { key: 'prefNotifs' | 'prefWeekly' | 'prefShared'; label: string; desc: string }[] = [
     { key: 'prefNotifs', label: 'Notifications push', desc: 'Alertes sur cet appareil' },

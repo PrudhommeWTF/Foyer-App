@@ -8,7 +8,6 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import {
-  bootstrap,
   countUsers,
   createUser,
   createUserWithMember,
@@ -21,7 +20,6 @@ import {
   getUserById,
   getUserByMemberId,
   listMemberAccounts,
-  resetHousehold,
   saveHousehold,
   setIcsToken,
   setSchoolHolidaysCache,
@@ -108,7 +106,6 @@ const ALLOW_SIGNUP = (process.env.FOYER_ALLOW_SIGNUP || 'true') !== 'false';
 // root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
 
-bootstrap();
 
 const app = express();
 
@@ -250,7 +247,7 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
   for (const e of logins) { if (findUserByEmail(e)) { res.status(409).json({ error: `Un compte existe déjà avec l'email ${e}` }); return; } }
 
   const state = buildInitialState({
-    household: { name: household.name, weekStart: household.weekStart, currency: household.currency, theme: household.theme, academie: household.academie },
+    household: { name: household.name, weekStart: household.weekStart, theme: household.theme, academie: household.academie },
     admin: { name: admin.name, role: admin.role, color: admin.color, email: admin.email, birthday: admin.birthday || null },
     members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, birthday: m.birthday, email: m.email || undefined })),
   });
@@ -339,11 +336,6 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
 
   const result = saveHousehold(state);
   res.json(result);
-});
-
-api.post('/state/reset', auth, (_req, res) => {
-  const result = resetHousehold();
-  res.json({ ...getHousehold(), ...result });
 });
 
 // ---- Current user ----

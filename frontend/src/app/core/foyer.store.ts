@@ -1,9 +1,9 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload, UpdateInfo } from './api.service';
 import { HouseholdState, Member } from './models';
-import { UiState, initialUi, IngrRow } from './ui-state';
+import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, parseAmt, uid, weekDates } from './helpers';
-import { CAL_KINDS, DATEFMT_ORDER, LANG_LOCALE, LIST_ICONS, MEAL_SLOTS, SCHED_DAYS, TZ_IANA, tint, grad } from './constants';
+import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
 
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -53,22 +53,21 @@ export class FoyerStore {
   readonly data = computed(() => this._data());
   readonly narrow = signal(false);
 
-  // ---- regional formatting (Paramètres → Général) -----------------------
-  /** BCP-47 locale derived from the household language setting. */
-  readonly locale = computed(() => LANG_LOCALE[this._data()?.settings.lang || ''] || 'fr-FR');
-  /** IANA time zone derived from the household setting. */
-  readonly timeZone = computed(() => TZ_IANA[this._data()?.settings.tz || ''] || 'Europe/Paris');
+  // ---- regional formatting ----------------------------------------------
+  // Foyer cible la France métropolitaine : locale et fuseau sont fixes.
+  readonly locale = 'fr-FR';
+  readonly timeZone = 'Europe/Paris';
   /** Real "today" (YYYY-MM-DD) in the household time zone. */
   readonly todayStr = computed(() => {
     try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: this.timeZone(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      return new Intl.DateTimeFormat('en-CA', { timeZone: this.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     } catch { return dstr(new Date()); }
   });
   /** ISO date → household numeric format (e.g. 24/07/2026). */
   fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
   /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */
   fmtLongDate(iso: string): string {
-    try { return cap(parseDay(iso).toLocaleDateString(this.locale(), { weekday: 'long', day: 'numeric', month: 'long' })); }
+    try { return cap(parseDay(iso).toLocaleDateString(this.locale, { weekday: 'long', day: 'numeric', month: 'long' })); }
     catch { return iso; }
   }
 
@@ -211,7 +210,7 @@ export class FoyerStore {
   /** Guard against older/partial state documents missing newer keys. */
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
-    s.settings ||= { lang: 'Français', tz: 'Europe/Paris (GMT+1)', dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi', currency: 'Euro (€)', dark: false, prefNotifs: true, prefWeekly: true, prefShared: false };
+    s.settings ||= { dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi', dark: false, prefNotifs: true, prefWeekly: true, prefShared: false };
     return s;
   }
 
@@ -743,7 +742,7 @@ export class FoyerStore {
   }
   openProfile(): void {
     const m = this.me();
-    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfPhone: '', pfColor: m?.color || '#E56B4E' });
+    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
   }
   saveProfile(): void {
     const s = this.ui(); if (!s.pfName.trim()) { this.toast('Le prénom est requis'); return; }
@@ -767,10 +766,6 @@ export class FoyerStore {
   setSetting<K extends keyof HouseholdState['settings']>(key: K, val: HouseholdState['settings'][K]): void {
     this.mutate((d) => { (d.settings as any)[key] = val; });
     if (key === 'academie') this.loadSchoolHolidays();
-  }
-  async resetDemo(): Promise<void> {
-    try { const { state } = await this.api.resetState(); this._data.set(this.normalise(state)); this.toast('Données de démonstration réinitialisées'); }
-    catch { this.toast('Échec de la réinitialisation'); }
   }
   exportData(): void {
     const d = this._data(); if (!d) return;
