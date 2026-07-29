@@ -34,6 +34,9 @@ const GITHUB_REPO = process.env.FOYER_GITHUB_REPO || 'PrudhommeWTF/Foyer-App';
 const selfUpdateEnabled = (): boolean => /^(1|true|yes|on)$/i.test(process.env.FOYER_SELF_UPDATE || '');
 
 function currentVersion(): string {
+  // Source de vérité : la variable FOYER_VERSION (injectée par Docker au build et
+  // par l'installeur LXC dans /etc/foyer/foyer.env). Le fichier <data>/version est
+  // un repli hérité (installs antérieures), retiré à la prochaine mise à jour.
   if (process.env.FOYER_VERSION) return process.env.FOYER_VERSION.replace(/^v/, '');
   try { const vf = path.join(DATA_DIR, 'version'); if (fs.existsSync(vf)) return fs.readFileSync(vf, 'utf-8').trim().replace(/^v/, ''); } catch { /* ignore */ }
   try { const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')); return String(pkg.version); } catch { /* ignore */ }

@@ -106,7 +106,7 @@ if [[ -n "${LOCAL_SRC}" && -d "${LOCAL_SRC}/backend" ]]; then
       --exclude='backend/dist' --exclude='backend/public' --exclude='data' \
       -czf - . | pct exec "${CTID}" -- tar -C /root/foyer-src -xzf -
   log "Installation dans le conteneur…"
-  pct exec "${CTID}" -- bash -c "SELF_UPDATE='${SELF_UPDATE:-false}' FOYER_VERSION='${FOYER_VERSION}' FOYER_SRC=/root/foyer-src bash /root/foyer-src/deploy/lxc/install.sh"
+  pct exec "${CTID}" -- bash -c "SELF_UPDATE='${SELF_UPDATE:-true}' FOYER_VERSION='${FOYER_VERSION}' FOYER_SRC=/root/foyer-src bash /root/foyer-src/deploy/lxc/install.sh"
 else
   log "Installation dans le conteneur (clone Git ${FOYER_BRANCH})…"
   # On récupère aussi les tags pour que install.sh puisse déterminer la version.
@@ -114,7 +114,7 @@ else
     "apt-get update -qq && apt-get install -y -qq git >/dev/null && \
      git clone --branch '${FOYER_BRANCH}' '${FOYER_REPO:-https://github.com/PrudhommeWTF/Foyer-App.git}' /root/foyer-src && \
      git -C /root/foyer-src fetch --tags --quiet || true && \
-     SELF_UPDATE='${SELF_UPDATE:-false}' FOYER_VERSION='${FOYER_VERSION:-}' bash /root/foyer-src/deploy/lxc/install.sh"
+     SELF_UPDATE='${SELF_UPDATE:-true}' FOYER_VERSION='${FOYER_VERSION:-}' bash /root/foyer-src/deploy/lxc/install.sh"
 fi
 
 IP="$(pct exec "${CTID}" -- hostname -I 2>/dev/null | awk '{print $1}')"

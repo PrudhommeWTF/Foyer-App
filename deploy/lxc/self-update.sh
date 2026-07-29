@@ -62,8 +62,15 @@ npm --prefix "$APP_DIR/backend" ci --omit=dev
 rm -rf "$APP_DIR/backend/public"
 mkdir -p "$APP_DIR/backend/public"
 cp -r "$TMP/src/frontend/dist/frontend/browser/." "$APP_DIR/backend/public/"
-echo "${TAG#v}" > "${DATA_DIR}/version"
-chown -R "${SERVICE_USER}:${SERVICE_USER}" "$APP_DIR" "${DATA_DIR}/version"
+# Version déployée : enregistrée dans le fichier d'environnement (relu au
+# redémarrage du service). Remplace l'ancien fichier <data>/version.
+if grep -q '^FOYER_VERSION=' "$ENV_FILE"; then
+  sed -i "s|^FOYER_VERSION=.*|FOYER_VERSION=${TAG#v}|" "$ENV_FILE"
+else
+  echo "FOYER_VERSION=${TAG#v}" >> "$ENV_FILE"
+fi
+rm -f "${DATA_DIR}/version"
+chown -R "${SERVICE_USER}:${SERVICE_USER}" "$APP_DIR"
 
 status running "Redémarrage du service…"
 systemctl start foyer

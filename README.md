@@ -141,21 +141,24 @@ de tâches, des catégories de budget). Une base déjà configurée n'est jamais
 version publiée sur GitHub (releases, ou plus haut tag `vX.Y.Z`). Dépôt public → aucun
 token requis (sinon `FOYER_GITHUB_TOKEN`).
 
-Pour activer le **bouton « Mettre à jour maintenant »** (télécharge, recompile et
-redémarre le service) sur une installation **LXC native**, installez avec l'auto-MAJ :
+Sur une installation **LXC native**, le **bouton « Mettre à jour maintenant »**
+(télécharge, recompile et redémarre le service) est **activé par défaut**. L'installeur
+met en place un **helper root déclenché par un `systemd.path`** : le backend (utilisateur
+`foyer`, non privilégié) dépose un fichier déclencheur, et une unité root exécute la mise
+à jour puis redémarre le service — **sans sudo**, le durcissement du service reste intact.
+
+Pour **désactiver** l'auto-MAJ (l'app affichera simplement qu'une version est disponible
+et rappellera `bash deploy/lxc/update.sh`) :
 
 ```bash
-SELF_UPDATE=true bash deploy/lxc/install.sh          # dans le conteneur
-# ou depuis l'hôte : SELF_UPDATE=true bash deploy/lxc/proxmox-create.sh
+SELF_UPDATE=false bash deploy/lxc/install.sh          # dans le conteneur
+# ou depuis l'hôte : SELF_UPDATE=false bash deploy/lxc/proxmox-create.sh
 ```
 
-L'installeur met alors en place un **helper root déclenché par un `systemd.path`** : le
-backend (utilisateur `foyer`, non privilégié) dépose un fichier déclencheur, et une unité
-root exécute la mise à jour puis redémarre le service — **sans sudo**, le durcissement du
-service reste intact. Sans `SELF_UPDATE`, l'app affiche simplement qu'une version est
-disponible et rappelle la commande `bash deploy/lxc/update.sh`.
+Un choix explicite est mémorisé dans `/etc/foyer/foyer.env` (`FOYER_SELF_UPDATE`) et
+respecté lors des mises à jour suivantes.
 
-Variables : `FOYER_SELF_UPDATE` (`true`/`false`), `FOYER_GITHUB_REPO`
+Variables : `FOYER_SELF_UPDATE` (`true`/`false`, défaut `true`), `FOYER_GITHUB_REPO`
 (défaut `PrudhommeWTF/Foyer-App`), `FOYER_GITHUB_TOKEN` (optionnel).
 
 ## 📦 Déploiement LXC Proxmox (natif, sans Docker)
