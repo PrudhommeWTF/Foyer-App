@@ -127,7 +127,6 @@ detect_version() {
 }
 VERSION="$(detect_version)"
 log "Version déployée : ${VERSION}"
-echo "${VERSION}" > "${DATA_DIR}/version"
 mkdir -p "$(dirname "${ENV_FILE}")"
 if [[ ! -f "${ENV_FILE}" ]]; then
   log "Création de ${ENV_FILE} (secret JWT généré)…"
@@ -158,6 +157,15 @@ else
     log "Auto-MAJ activée dans ${ENV_FILE}."
   fi
 fi
+
+# Version déployée : stockée dans le fichier d'environnement (variable lue en
+# priorité par l'app, comme en Docker). Remplace l'ancien fichier <data>/version.
+if grep -q '^FOYER_VERSION=' "${ENV_FILE}"; then
+  sed -i "s|^FOYER_VERSION=.*|FOYER_VERSION=${VERSION}|" "${ENV_FILE}"
+else
+  echo "FOYER_VERSION=${VERSION}" >> "${ENV_FILE}"
+fi
+rm -f "${DATA_DIR}/version"
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}" "${DATA_DIR}"
 
