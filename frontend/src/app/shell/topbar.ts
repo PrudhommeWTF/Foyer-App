@@ -84,7 +84,7 @@ export class TopbarComponent {
   menu = ADD_MENU;
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   title = computed(() => SCREEN_TITLES[this.store.ui().screen] || 'Foyer');
-  unread = computed(() => this.d().notifs.filter((n) => !n.read).length);
+  unread = this.store.unreadCount;
 
   pick(id: string): void {
     const s = this.store;

@@ -12,7 +12,7 @@ const STEP_LABELS = ['Bienvenue', 'Nom du foyer', 'Votre profil', 'Membres', 'Pr
 const INTRO = [
   { icon: 'home', bg: '#FCE9E3', color: '#E56B4E', title: 'Nommez votre foyer', desc: 'Le nom de votre espace partagé' },
   { icon: 'users', bg: '#E5F0F4', color: '#4E93B8', title: 'Créez votre profil', desc: 'Votre identité dans le foyer' },
-  { icon: 'userPlus', bg: '#EDF6EA', color: '#6E9E5F', title: 'Invitez votre famille', desc: 'Ajoutez parents et enfants' },
+  { icon: 'userPlus', bg: '#EDF6EA', color: '#6E9E5F', title: 'Ajoutez votre famille', desc: 'Ajoutez parents et enfants' },
 ];
 
 @Component({
@@ -59,7 +59,7 @@ const INTRO = [
                 <div class="fade">
                   <div class="hero-ic" style="background:#FCE9E3"><f-icon name="users" [size]="34" color="#E56B4E" /></div>
                   <h1 class="f-display">Bienvenue dans Foyer 👋</h1>
-                  <p class="lead">Créons ensemble l'espace de votre famille. Vous allez nommer votre foyer, créer votre profil et inviter vos proches.</p>
+                  <p class="lead">Créons ensemble l'espace de votre famille. Vous allez nommer votre foyer, créer votre profil et ajouter vos proches.</p>
                   <div class="cards">
                     @for (it of intro; track it.title) {
                       <div class="intro">
@@ -161,13 +161,7 @@ const INTRO = [
                 <div class="fade">
                   <h2 class="f-display">Quelques préférences</h2>
                   <p class="sub">Adaptez Foyer à vos habitudes.</p>
-                  <label class="field-label">La semaine commence le</label>
-                  <div class="opts">
-                    @for (w of ['Lundi', 'Dimanche']; track w) {
-                      <button class="opt" [class.on]="weekStart() === w" (click)="weekStart.set(w)">{{ w }}</button>
-                    }
-                  </div>
-                  <label class="field-label" style="margin-top:22px">Thème</label>
+                  <label class="field-label">Thème</label>
                   <div class="opts">
                     <button class="opt" [class.on]="theme() === 'light'" (click)="setTheme('light')"><f-icon name="sun" [size]="18" [color]="theme() === 'light' ? '#E56B4E' : 'var(--ink2)'" /> Clair</button>
                     <button class="opt" [class.on]="theme() === 'dark'" (click)="setTheme('dark')"><f-icon name="moon" [size]="18" [color]="theme() === 'dark' ? '#E56B4E' : 'var(--ink2)'" /> Sombre</button>
@@ -185,7 +179,7 @@ const INTRO = [
                     <div class="rrow"><span>Membres</span><div class="ravatars">
                       @for (m of allMembers(); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="30" border="2px solid var(--surface)" /> }
                     </div></div>
-                    <div class="rrow"><span>Préférences</span><b>Semaine : {{ weekStart() }} · Thème : {{ theme() === 'dark' ? 'sombre' : 'clair' }}</b></div>
+                    <div class="rrow"><span>Préférences</span><b>Thème : {{ theme() === 'dark' ? 'sombre' : 'clair' }}</b></div>
                   </div>
                 </div>
               }
@@ -318,7 +312,6 @@ export class OnboardingComponent {
   mPassword = signal('');
   mBirthday = signal('');
   mColor = signal('#4E93B8');
-  weekStart = signal('Lundi');
   theme = signal<'light' | 'dark'>('light');
   busy = signal(false);
 
@@ -372,7 +365,7 @@ export class OnboardingComponent {
     if (this.busy()) return;
     this.busy.set(true);
     const ok = await this.store.completeSetup({
-      household: { name: this.famName().trim(), weekStart: this.weekStart(), theme: this.theme() },
+      household: { name: this.famName().trim(), theme: this.theme() },
       admin: { name: this.name().trim(), role: this.role().trim(), color: this.color(), email: this.email().trim(), password: this.password(), birthday: this.birthday() || undefined },
       members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color, birthday: m.birthday || undefined, email: m.email || undefined, password: m.password || undefined })),
     });

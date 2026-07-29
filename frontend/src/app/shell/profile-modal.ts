@@ -39,9 +39,7 @@ import { contactIni } from '../core/helpers';
           </div>
         } @else {
           <div class="prefs">
-            <label class="toggle" (click)="store.setSetting('prefNotifs', !d().settings.prefNotifs)"><span>Notifications push</span><span class="switch" [class.on]="d().settings.prefNotifs"><span class="knob"></span></span></label>
-            <label class="toggle" (click)="store.setSetting('prefWeekly', !d().settings.prefWeekly)"><span>Résumé hebdomadaire</span><span class="switch" [class.on]="d().settings.prefWeekly"><span class="knob"></span></span></label>
-            <label class="toggle" (click)="store.setSetting('prefShared', !d().settings.prefShared)"><span>Partage étendu</span><span class="switch" [class.on]="d().settings.prefShared"><span class="knob"></span></span></label>
+            <label class="toggle" (click)="store.setSetting('prefNotifs', !d().settings.prefNotifs)"><span>Notifications</span><span class="switch" [class.on]="d().settings.prefNotifs"><span class="knob"></span></span></label>
           </div>
         }
 

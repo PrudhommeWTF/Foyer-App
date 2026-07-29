@@ -1,9 +1,14 @@
 import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload, UpdateInfo } from './api.service';
-import { HouseholdState, Member } from './models';
+import { HouseholdState, Member, Notif } from './models';
 import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, parseAmt, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+
+const READ_NOTIFS_KEY = 'foyer.readNotifs';
+function loadReadNotifs(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(READ_NOTIFS_KEY) || '[]')); } catch { return new Set(); }
+}
 
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -52,6 +57,9 @@ export class FoyerStore {
   /** Non-null data accessor for use inside authed views. */
   readonly data = computed(() => this._data());
   readonly narrow = signal(false);
+
+  // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
+  readonly readNotifs = signal<Set<string>>(loadReadNotifs());
 
   // ---- regional formatting ----------------------------------------------
   // Foyer cible la France métropolitaine : locale et fuseau sont fixes.
@@ -232,7 +240,7 @@ export class FoyerStore {
   /** Guard against older/partial state documents missing newer keys. */
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
-    s.settings ||= { dateFmt: 'JJ/MM/AAAA', weekStart: 'Lundi', dark: false, prefNotifs: true, prefWeekly: true, prefShared: false };
+    s.settings ||= { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true };
     return s;
   }
 
@@ -748,7 +756,7 @@ export class FoyerStore {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });
     });
-    this.toast(s.mfEditId ? 'Membre modifié' : 'Invitation envoyée');
+    this.toast(s.mfEditId ? 'Membre modifié' : 'Membre ajouté');
     this.patch({ memberForm: false, mfEditId: null });
   }
   confirmMemberDel(): void {
@@ -779,10 +787,70 @@ export class FoyerStore {
     this.toast('Profil mis à jour');
   }
 
-  // ---- notifications ----------------------------------------------------
+  // ---- notifications (dérivées de l'état, côté client) ------------------
   toggleNotif(): void { this.patch({ notifOpen: !this.ui().notifOpen }); }
-  markAllRead(): void { this.mutate((d) => { d.notifs.forEach((n) => (n.read = true)); }); this.toast('Notifications marquées comme lues'); }
-  openNotif(id: string, screen?: string): void { this.mutate((d) => { const n = d.notifs.find((x) => x.id === id); if (n) n.read = true; }); this.patch({ notifOpen: false, screen: screen || this.ui().screen }); }
+
+  /**
+   * Notifications utiles calculées à partir de l'état : événements du jour/demain,
+   * tâches planifiées à faire ou en retard, anniversaires proches, budgets dépassés.
+   * L'affichage est conditionné au réglage « Notifications ».
+   */
+  readonly notifications = computed<Notif[]>(() => {
+    const d = this._data();
+    if (!d || !d.settings.prefNotifs) return [];
+    const today = this.todayStr();
+    const read = this.readNotifs();
+    const addDays = (iso: string, n: number): string => { const dt = parseDay(iso); dt.setDate(dt.getDate() + n); return dstr(dt); };
+    const tomorrow = addDays(today, 1);
+    const mName = (id: string): string => d.members.find((m) => m.id === id)?.name || '';
+    const raw: Omit<Notif, 'read'>[] = [];
+
+    // Événements aujourd'hui / demain
+    for (const e of this.eventsForDay(today)) raw.push({ id: `ev-${e.id}-${today}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + "Aujourd'hui" + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: "Aujourd'hui" });
+    for (const e of this.eventsForDay(tomorrow)) raw.push({ id: `ev-${e.id}-${tomorrow}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + 'Demain' + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: 'Demain' });
+
+    // Tâches planifiées : à faire aujourd'hui / en retard
+    for (const t of d.tasks) {
+      if (t.done || !t.planned) continue;
+      if (t.planned === today) raw.push({ id: `task-${t.id}-${t.planned}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.who ? ' · ' + mName(t.who) : ''), time: "Aujourd'hui" });
+      else if (t.planned < today) raw.push({ id: `task-${t.id}-${t.planned}`, kind: 'task', title: t.text, desc: 'En retard (prévue le ' + this.fmtNumDate(t.planned) + ')', time: 'En retard' });
+    }
+
+    // Anniversaires : aujourd'hui + 7 jours (membres & contacts)
+    for (let i = 0; i <= 7; i++) {
+      const ds = addDays(today, i);
+      const when = i === 0 ? "Aujourd'hui" : i === 1 ? 'Demain' : `Dans ${i} jours`;
+      const bday = (name: string, birthday: string, key: string): void => {
+        const a = ageOn(birthday, ds);
+        raw.push({ id: `bday-${key}-${ds.slice(5)}`, kind: 'birthday', title: 'Anniversaire de ' + name, desc: when + (a != null ? ` · ${a} ans` : ''), time: when });
+      };
+      for (const m of d.members) if (isBirthdayOn(m.birthday, ds)) bday(m.name, m.birthday!, 'm' + m.id);
+      for (const c of d.contacts) if (isBirthdayOn(c.birthday, ds)) bday(c.name, c.birthday!, 'c' + c.id);
+    }
+
+    // Budgets dépassés (mois courant)
+    for (const cat of d.bcats) {
+      if (!(cat.budget > 0)) continue;
+      const spent = d.tx.filter((t) => t.catId === cat.id && (t.m || 0) === 0 && !t.income).reduce((s, t) => s + t.amount, 0);
+      if (spent > cat.budget) raw.push({ id: `budget-${cat.id}`, kind: 'budget', title: `Budget « ${cat.name} » dépassé`, desc: `${Math.round(spent)} € dépensés sur ${cat.budget} €`, time: 'Ce mois-ci' });
+    }
+
+    return raw.map((n) => ({ ...n, read: read.has(n.id) }));
+  });
+
+  readonly unreadCount = computed(() => this.notifications().filter((n) => !n.read).length);
+
+  private persistReadNotifs(s: Set<string>): void { try { localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify([...s])); } catch { /* ignore */ } }
+  markAllRead(): void {
+    const s = new Set(this.readNotifs());
+    this.notifications().forEach((n) => s.add(n.id));
+    this.readNotifs.set(s); this.persistReadNotifs(s);
+  }
+  openNotif(id: string, screen?: string): void {
+    const s = new Set(this.readNotifs()); s.add(id);
+    this.readNotifs.set(s); this.persistReadNotifs(s);
+    this.patch({ notifOpen: false, screen: screen || this.ui().screen });
+  }
 
   // ---- settings ---------------------------------------------------------
   setSetting<K extends keyof HouseholdState['settings']>(key: K, val: HouseholdState['settings'][K]): void {
