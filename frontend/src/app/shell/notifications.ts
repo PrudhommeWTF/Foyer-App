@@ -7,6 +7,7 @@ const KIND_MAP: Record<string, { icon: string; color: string; screen: string }> 
   event: { icon: 'calendar', color: '#E56B4E', screen: 'calendar' },
   task: { icon: 'taches', color: '#9B6FA8', screen: 'taches' },
   budget: { icon: 'budget', color: '#F0B24B', screen: 'budget' },
+  birthday: { icon: 'cake', color: '#C77DA5', screen: 'calendar' },
   shop: { icon: 'courses', color: '#7A9B76', screen: 'courses' },
   doc: { icon: 'documents', color: '#4E93B8', screen: 'documents' },
 };
@@ -23,9 +24,12 @@ const KIND_MAP: Record<string, { icon: string; color: string; screen: string }> 
         <div class="modal-title">Notifications</div>
         <button class="icon-btn sm" (click)="store.patch({ notifOpen: false })"><f-icon name="x" [size]="18" /></button>
       </div>
-      <button class="mark" (click)="store.markAllRead()">Tout marquer comme lu</button>
+      @let items = store.notifications();
+      @if (items.length) {
+        <button class="mark" (click)="store.markAllRead()">Tout marquer comme lu</button>
+      }
       <div class="list">
-        @for (n of d().notifs; track n.id) {
+        @for (n of items; track n.id) {
           <button class="item" [class.unread]="!n.read" (click)="open(n)">
             <span class="ic" [style.background]="tintOf(kind(n.kind).color)"><f-icon [name]="kind(n.kind).icon" [size]="18" [color]="kind(n.kind).color" /></span>
             <span class="body">
@@ -35,6 +39,8 @@ const KIND_MAP: Record<string, { icon: string; color: string; screen: string }> 
             </span>
             @if (!n.read) { <span class="dot"></span> }
           </button>
+        } @empty {
+          <div class="empty">Rien de neuf pour le moment 🎉</div>
         }
       </div>
     </div>
@@ -54,11 +60,11 @@ const KIND_MAP: Record<string, { icon: string; color: string; screen: string }> 
     .s { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
     .time { font-size: 11px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--primary); flex: none; margin-top: 5px; }
+    .empty { padding: 40px 16px; text-align: center; font-size: 13.5px; font-weight: 700; color: var(--ink3); }
   `],
 })
 export class NotificationsComponent {
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   tintOf = tint;
   kind(k: string) { return KIND_MAP[k] || { icon: 'bell', color: '#8A7E74', screen: '' }; }
   open(n: { id: string; kind: string }): void { this.store.openNotif(n.id, this.kind(n.kind).screen || undefined); }

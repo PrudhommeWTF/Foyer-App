@@ -250,7 +250,7 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
   for (const e of logins) { if (findUserByEmail(e)) { res.status(409).json({ error: `Un compte existe déjà avec l'email ${e}` }); return; } }
 
   const state = buildInitialState({
-    household: { name: household.name, weekStart: household.weekStart, theme: household.theme, academie: household.academie },
+    household: { name: household.name, theme: household.theme, academie: household.academie },
     admin: { name: admin.name, role: admin.role, color: admin.color, email: admin.email, birthday: admin.birthday || null },
     members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, birthday: m.birthday, email: m.email || undefined })),
   });

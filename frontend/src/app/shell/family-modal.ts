@@ -26,7 +26,7 @@ import { contactIni } from '../core/helpers';
         }
         <div class="between"><div class="overline">Membres · {{ d().members.length }}</div>
           @if (store.isAdmin()) {
-            <button class="btn btn-soft" (click)="store.newMember()"><f-icon name="userPlus" [size]="17" /> Inviter</button>
+            <button class="btn btn-soft" (click)="store.newMember()"><f-icon name="userPlus" [size]="17" /> Ajouter</button>
           }</div>
         <div class="members">
           @for (m of d().members; track m.id) {
@@ -70,7 +70,7 @@ import { contactIni } from '../core/helpers';
     }
 
     @if (store.ui().memberForm) {
-      <f-modal [title]="store.ui().mfEditId ? 'Modifier le membre' : 'Inviter un membre'" (close)="store.patch({ memberForm: false })">
+      <f-modal [title]="store.ui().mfEditId ? 'Modifier le membre' : 'Ajouter un membre'" (close)="store.patch({ memberForm: false })">
         <div class="mform-head">
           <f-avatar [ini]="ini()" [color]="store.ui().mfColor" [size]="56" />
         </div>
@@ -92,7 +92,7 @@ import { contactIni } from '../core/helpers';
           <span>Administrateur du foyer</span>
           <span class="switch" [class.on]="store.ui().mfAdmin"><span class="knob"></span></span>
         </label>
-        <button class="btn btn-primary btn-block" style="margin-top:18px" (click)="store.saveMember()">{{ store.ui().mfEditId ? 'Enregistrer' : 'Envoyer l’invitation' }}</button>
+        <button class="btn btn-primary btn-block" style="margin-top:18px" (click)="store.saveMember()">{{ store.ui().mfEditId ? 'Enregistrer' : 'Ajouter au foyer' }}</button>
       </f-modal>
     }
 

@@ -18,7 +18,7 @@ export interface UpdateInfo {
 }
 
 export interface SetupPayload {
-  household: { name: string; weekStart: string; theme: 'light' | 'dark'; academie?: string };
+  household: { name: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
   members: { name: string; role: string; color: string; email?: string; password?: string; birthday?: string }[];
 }

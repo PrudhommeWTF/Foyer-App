@@ -47,5 +47,5 @@ export const ADD_MENU: { id: string; label: string; sub: string; icon: string; t
   { id: 'slot', label: 'Créneau', sub: 'Emploi du temps', icon: 'planning', tint: '#E5F0F4', color: '#4E93B8' },
   { id: 'contact', label: 'Contact', sub: 'Carnet du foyer', icon: 'contacts', tint: '#F2ECF5', color: '#9B6FA8' },
   { id: 'file', label: 'Document', sub: 'Téléverser un fichier', icon: 'documents', tint: '#FDF0DA', color: '#F0B24B' },
-  { id: 'member', label: 'Membre', sub: 'Inviter au foyer', icon: 'userPlus', tint: '#FDF0DA', color: '#F0B24B' },
+  { id: 'member', label: 'Membre', sub: 'Ajouter au foyer', icon: 'userPlus', tint: '#FDF0DA', color: '#F0B24B' },
 ];

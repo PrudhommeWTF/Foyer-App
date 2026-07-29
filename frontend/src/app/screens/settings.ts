@@ -37,13 +37,6 @@ import { ACADEMIES } from '../core/constants';
             </div>
             <div class="hint">Aperçu : {{ store.fmtNumDate(store.todayStr()) }}</div>
 
-            <div class="field-label">Début de semaine</div>
-            <div class="seg">
-              @for (o of weekStartOpts; track o) {
-                <button [class.active]="d().settings.weekStart === o" (click)="store.setSetting('weekStart', o)">{{ o }}</button>
-              }
-            </div>
-
             <div class="field-label" style="margin-top:16px">Académie (vacances scolaires)</div>
             <select class="input" [ngModel]="d().settings.academie || ''" (ngModelChange)="store.setSetting('academie', $event)">
               <option value="">Non définie</option>
@@ -81,7 +74,7 @@ import { ACADEMIES } from '../core/constants';
               </div>
               @if (store.isAdmin()) {
                 <button class="invite" (click)="store.newMember()">
-                  <f-icon name="plus" [size]="15" color="var(--primary)" [width]="2.6" /> Inviter
+                  <f-icon name="plus" [size]="15" color="var(--primary)" [width]="2.6" /> Ajouter
                 </button>
               }
             </div>
@@ -303,12 +296,9 @@ export class SettingsScreen {
   copied = signal(false);
 
   dateFmtOpts = ['JJ/MM/AAAA', 'MM/JJ/AAAA', 'AAAA-MM-JJ'];
-  weekStartOpts = ['Lundi', 'Dimanche'];
 
-  prefs: { key: 'prefNotifs' | 'prefWeekly' | 'prefShared'; label: string; desc: string }[] = [
-    { key: 'prefNotifs', label: 'Notifications push', desc: 'Alertes sur cet appareil' },
-    { key: 'prefWeekly', label: 'Résumé hebdomadaire', desc: 'Un récapitulatif chaque semaine' },
-    { key: 'prefShared', label: 'Partage étendu', desc: 'Visible par tout le foyer' },
+  prefs: { key: 'prefNotifs'; label: string; desc: string }[] = [
+    { key: 'prefNotifs', label: 'Notifications', desc: 'Afficher les alertes du foyer (agenda, tâches, anniversaires…)' },
   ];
 
   constructor() {
