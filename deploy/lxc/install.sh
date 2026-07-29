@@ -28,6 +28,13 @@ PORT="${PORT:-8099}"
 ENV_FILE="/etc/foyer/foyer.env"
 SERVICE_USER="foyer"
 
+# Auto-MAJ « en un clic » depuis l'interface : ACTIVÉE PAR DÉFAUT.
+# Priorité : SELF_UPDATE explicite > valeur déjà présente dans le fichier d'env
+# (on ne réactive donc pas une install que l'admin a désactivée) > défaut (true).
+_cur_su=""
+[[ -f "${ENV_FILE}" ]] && _cur_su="$(grep -oP '^FOYER_SELF_UPDATE=\K\S+' "${ENV_FILE}" 2>/dev/null || true)"
+SELF_UPDATE="${SELF_UPDATE:-${_cur_su:-true}}"
+
 # Build Angular non-interactif : ne pas demander le partage de données d'usage.
 export NG_CLI_ANALYTICS=false
 
@@ -140,21 +147,18 @@ FOYER_JWT_SECRET=${JWT}
 FOYER_ALLOW_SIGNUP=true
 # Au 1er démarrage, l'assistant de configuration crée le foyer + le compte admin.
 # Mise à jour « en un clic » depuis l'interface (helper root via systemd).
-FOYER_SELF_UPDATE=${SELF_UPDATE:-false}
+FOYER_SELF_UPDATE=${SELF_UPDATE}
 FOYER_GITHUB_REPO=${FOYER_GITHUB_REPO:-PrudhommeWTF/Foyer-App}
 EOF
   chmod 600 "${ENV_FILE}"
 else
   log "${ENV_FILE} existe déjà — conservé."
-  # Permet d'activer l'auto-MAJ sur une install existante :
-  #   SELF_UPDATE=true bash deploy/lxc/install.sh
-  if [[ "${SELF_UPDATE:-false}" =~ ^(1|true|yes|on)$ ]]; then
-    if grep -q '^FOYER_SELF_UPDATE=' "${ENV_FILE}"; then
-      sed -i 's/^FOYER_SELF_UPDATE=.*/FOYER_SELF_UPDATE=true/' "${ENV_FILE}"
-    else
-      echo 'FOYER_SELF_UPDATE=true' >> "${ENV_FILE}"
-    fi
-    log "Auto-MAJ activée dans ${ENV_FILE}."
+  # Applique la valeur d'auto-MAJ résolue (respecte l'existant ; override possible
+  # avec SELF_UPDATE=true|false bash deploy/lxc/install.sh).
+  if grep -q '^FOYER_SELF_UPDATE=' "${ENV_FILE}"; then
+    sed -i "s/^FOYER_SELF_UPDATE=.*/FOYER_SELF_UPDATE=${SELF_UPDATE}/" "${ENV_FILE}"
+  else
+    echo "FOYER_SELF_UPDATE=${SELF_UPDATE}" >> "${ENV_FILE}"
   fi
 fi
 
@@ -199,7 +203,7 @@ WantedBy=multi-user.target
 EOF
 
 # --- Mise à jour « en un clic » (helper root déclenché par systemd path) --
-if [[ "${SELF_UPDATE:-false}" =~ ^(1|true|yes|on)$ ]]; then
+if [[ "${SELF_UPDATE}" =~ ^(1|true|yes|on)$ ]]; then
   log "Activation de la mise à jour depuis l'interface (helper root)…"
   install -m 0755 -o root -g root "${SCRIPT_DIR}/self-update.sh" /usr/local/sbin/foyer-self-update.sh
   cat > /etc/systemd/system/foyer-update.service <<EOF
@@ -227,6 +231,12 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable --now foyer-update.path >/dev/null 2>&1 || true
+else
+  # Auto-MAJ désactivée : retire le helper root et les unités s'ils existent.
+  log "Auto-MAJ désactivée."
+  systemctl disable --now foyer-update.path >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/foyer-update.path /etc/systemd/system/foyer-update.service /usr/local/sbin/foyer-self-update.sh
+  systemctl daemon-reload
 fi
 
 systemctl daemon-reload
