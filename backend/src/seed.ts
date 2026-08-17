@@ -23,13 +23,6 @@ export const EMPTY_STATE: HouseholdState = {
   contacts: [],
   folders: [],
   files: [],
-  bcats: [
-    { id: 'c1', name: 'Courses', budget: 600, color: '#7A9B76', icon: 'panier' },
-    { id: 'c2', name: 'Logement', budget: 850, color: '#E56B4E', icon: 'maison' },
-    { id: 'c3', name: 'Transports', budget: 250, color: '#4E93B8', icon: 'voiture' },
-    { id: 'c4', name: 'Loisirs', budget: 300, color: '#F0B24B', icon: 'loisir' },
-  ],
-  tx: [],
   meals: {},
   recipes: [],
   sched: [],
@@ -70,8 +63,9 @@ export interface OnboardingInput {
 /**
  * Build the initial household state from the onboarding wizard: the chosen name,
  * members and preferences, plus a small structural scaffold (aisles, one shopping
- * list, one task list, default budget categories) so the app is usable but free of
- * demo personal data.
+ * list, one task list) so the app is usable but free of demo personal data.
+ * Finances have their own tables and their own starter categories (see
+ * finances/schema.ts), so nothing budget-related lives here.
  */
 export function buildInitialState(input: OnboardingInput): HouseholdState {
   const adminId = 'me';
@@ -116,13 +110,6 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     contacts: [],
     folders: [],
     files: [],
-    bcats: [
-      { id: 'c1', name: 'Courses', budget: 600, color: '#7A9B76', icon: 'panier' },
-      { id: 'c2', name: 'Logement', budget: 850, color: '#E56B4E', icon: 'maison' },
-      { id: 'c3', name: 'Transports', budget: 250, color: '#4E93B8', icon: 'voiture' },
-      { id: 'c4', name: 'Loisirs', budget: 300, color: '#F0B24B', icon: 'loisir' },
-    ],
-    tx: [],
     meals: {},
     recipes: [],
     sched: [],

@@ -26,6 +26,7 @@ import {
   updateUserCredentials,
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
+import { financesRouter } from './finances/routes';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -399,6 +400,11 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
   deleteUser(user.id);
   res.json({ ok: true });
 });
+
+// ---- Finances (relational tables, granular operations) ----
+// Kept out of /api/state on purpose: thousands of transactions must not be
+// reloaded and rewritten every time another module saves.
+api.use('/finances', auth, financesRouter());
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }

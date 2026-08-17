@@ -3,7 +3,7 @@
 # 🏡 Foyer — la maison, ensemble
 
 **Application de gestion familiale auto-hébergée** : calendrier partagé, listes de courses,
-tâches, messagerie, contacts, documents, budget, planning des repas, carnet de recettes,
+tâches, messagerie, contacts, documents, finances, planning des repas, carnet de recettes,
 emplois du temps et gestion du foyer — le tout dans une interface chaleureuse, claire ou sombre.
 
 Angular 21 · Node/Express · SQLite · Docker
@@ -16,14 +16,14 @@ Angular 21 · Node/Express · SQLite · Docker
 
 | Module | Description |
 |---|---|
-| 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, budget, courses, messages. |
+| 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. |
 | 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts). Partage par **flux ICS** (Google/Apple Agenda). |
 | 🛒 **Courses** | Multi-listes, rayons, articles cochables, génération depuis le planning repas. |
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Budget** | Catégories, transactions, barres de progression, comparaison mois-1. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -46,6 +46,10 @@ Foyer-App/
 - Le **backend** stocke l'état du foyer comme un document JSON versionné en **SQLite**
   (`GET/PUT /api/state`), avec authentification **JWT** (mots de passe **bcrypt**).
   Un seul conteneur, idéal pour l'auto-hébergement.
+- Le module **Finances** fait exception : ses données vivent dans des **tables relationnelles
+  dédiées** (`fin_*`, même fichier SQLite), servies par `/api/finances/*` avec des opérations
+  granulaires. Milliers d'opérations, agrégats côté serveur, pas de « dernier arrivé gagne ».
+  Voir [`docs/finances-architecture.md`](docs/finances-architecture.md).
 - Le **frontend** est une SPA. Toute la logique métier (dérivés budget, récurrence agenda,
   génération de courses…) est portée fidèlement depuis la maquette de design.
 - L'app utilise un `base href` **relatif** : un seul build fonctionne servi à la racine
@@ -122,6 +126,28 @@ de tâches, des catégories de budget). Une base déjà configurée n'est jamais
 - **Autorisations** : seul un administrateur du foyer peut ajouter/retirer un membre ou modifier des droits
   d'administration ; un membre non-admin ne peut éditer que son propre profil.
 
+## 💾 Sauvegarde et restauration
+
+La base est en mode **WAL** : copier `foyer.db` seul pendant que le service tourne donne une
+sauvegarde **corrompue**. Deux méthodes sûres.
+
+```bash
+# LXC natif : arrêt bref, archive complète du dossier de données
+systemctl stop foyer
+tar czf /root/foyer-$(date +%F-%H%M).tar.gz -C /var/lib/foyer .
+systemctl start foyer
+
+# Docker : instantané cohérent sans arrêt de service
+STAMP=$(date +%F-%H%M)
+docker compose exec -T foyer node -e "
+const db = require('better-sqlite3')('/data/foyer.db');
+db.exec(\"VACUUM INTO '/data/foyer-$STAMP.db'\"); db.close();"
+docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
+```
+
+Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
+[`docs/finances-architecture.md`](docs/finances-architecture.md#6-sauvegarde-et-restauration).
+
 ## 📅 Calendrier avancé
 
 - **Vacances scolaires** : choisissez l'**académie** du foyer dans *Paramètres → Général*.
@@ -193,6 +219,9 @@ npm run dev:frontend         # Angular sur :4200 (proxy /api → :8099)
 - Frontend : `frontend/` — `ng serve`, composants standalone + signals.
 - Backend : `backend/` — `npm run dev`.
 - Build de production : `npm run build` (backend `dist/` + frontend `dist/`).
+- Tests : `cd backend && npm test` (lanceur intégré à Node 22, aucune dépendance ajoutée).
+- Détection de code mort : `cd backend && npm run typecheck`, puis
+  `cd frontend && npx tsc -p tsconfig.app.json --noUnusedLocals --noUnusedParameters --noEmit`.
 
 ## 🎨 Design
 
@@ -203,7 +232,7 @@ La maquette de référence est conservée dans [`docs/`](docs/).
 
 ## 📦 CI / images
 
-- `.github/workflows/ci.yml` — build backend + frontend à chaque push/PR.
+- `.github/workflows/ci.yml` — build backend + frontend, **tests** et détection de code mort à chaque push/PR.
 - `.github/workflows/docker.yml` — publie une image **multi-arch** (`amd64`, `arm64`) sur
   `ghcr.io/<owner>/foyer-app` (tags `latest` + `sha` sur la branche par défaut ; `X.Y.Z`
   et `X.Y` sur tag Git `vX.Y.Z`). La version affichée dans l'app provient du tag Git.

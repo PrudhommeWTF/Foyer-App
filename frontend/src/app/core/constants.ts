@@ -8,7 +8,6 @@ export const DATEFMT_ORDER: Record<string, DateOrder> = {
 };
 
 export const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-export const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 export const MEAL_SLOTS = [
   { key: 'matin', label: 'Petit-déjeuner', short: 'Matin', dot: '#F0B24B' },
@@ -173,6 +172,6 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
-  messages: 'Messagerie', contacts: 'Contacts importants', documents: 'Documents', budget: 'Suivi de budget',
+  messages: 'Messagerie', contacts: 'Contacts importants', documents: 'Documents', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
 };

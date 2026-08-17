@@ -1,5 +1,4 @@
 import { EventItem } from './models';
-import { MONTH_NAMES } from './constants';
 
 export function pad2(n: number): string { return String(n).padStart(2, '0'); }
 
@@ -34,21 +33,6 @@ export function weekDates(offset: number): Date[] {
   for (let i = 0; i < 7; i++) { const d = new Date(base); d.setDate(base.getDate() + i); out.push(d); }
   return out;
 }
-
-export function monthLabelFor(off: number): string {
-  const base = 2026 * 12 + 6;
-  const idx = base + off;
-  const y = Math.floor(idx / 12);
-  const m = ((idx % 12) + 12) % 12;
-  return MONTH_NAMES[m] + ' ' + y;
-}
-
-export function parseAmt(v: string | number): number {
-  const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.').replace(/[^0-9.\-]/g, ''));
-  return isNaN(n) ? 0 : Math.abs(n);
-}
-export function fmtAmt(n: number): string { return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-export function fmtInt(n: number): string { return n.toLocaleString('fr-FR'); }
 
 export function contactIni(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

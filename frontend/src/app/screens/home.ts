@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FoyerStore } from '../core/foyer.store';
+import { FinancesStore, fmtEurosInt } from '../core/finances.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 
@@ -55,10 +56,21 @@ import { AvatarComponent } from '../shared/avatar';
         </div>
 
         <div class="card">
-          <div class="ch"><div class="card-title sm">Budget juillet</div><span class="link" (click)="store.go('budget')">Détails</span></div>
-          <div class="budget-amt f-display">{{ fmtInt(spent()) }} €<span class="budget-total"> / {{ fmtInt(total()) }} €</span></div>
-          <div class="bar"><div class="bar-fill" [style.width.%]="barW()"></div></div>
-          <div class="budget-left">Il reste {{ fmtInt(total() - spent()) }} € ce mois-ci</div>
+          <div class="ch"><div class="card-title sm">Finances · {{ fin.monthLabel() }}</div><span class="link" (click)="store.go('finances')">Détails</span></div>
+          @if (fin.summary(); as s) {
+            <div class="budget-amt f-display">{{ fmtEur(s.expense) }} €@if (s.budgetTotal > 0) { <span class="budget-total"> / {{ fmtEur(s.budgetTotal) }} €</span> }</div>
+            <div class="bar"><div class="bar-fill" [style.width.%]="barW(s.expense, s.budgetTotal)"></div></div>
+            <div class="budget-left">
+              @if (s.budgetTotal > 0) {
+                {{ s.expense <= s.budgetTotal ? 'Il reste ' + fmtEur(s.budgetTotal - s.expense) + ' € sur le budget de référence' : 'Budget de référence dépassé de ' + fmtEur(s.expense - s.budgetTotal) + ' €' }}
+              } @else {
+                {{ fmtEur(s.income) }} € de ressources, solde {{ s.balance > 0 ? '+' : '' }}{{ fmtEur(s.balance) }} €
+              }
+            </div>
+            @if (s.incomplete) { <div class="budget-warn">Mois incomplet : {{ s.missing.length }} compte{{ s.missing.length > 1 ? 's' : '' }} sans données récentes</div> }
+          } @else {
+            <div class="budget-left">Chargement des finances…</div>
+          }
         </div>
 
         <div class="card span2">
@@ -117,6 +129,7 @@ import { AvatarComponent } from '../shared/avatar';
     .bar { height: 9px; background: var(--line2); border-radius: 8px; margin-top: 12px; overflow: hidden; }
     .bar-fill { height: 100%; background: linear-gradient(90deg, #F0B24B, #E56B4E); border-radius: 8px; }
     .budget-left { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-top: 8px; }
+    .budget-warn { font-size: 11.5px; font-weight: 800; color: #B8860B; margin-top: 6px; }
     .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
     :host-context(.shell.narrow) .shop-grid { grid-template-columns: 1fr; }
     .shop-it { display: flex; align-items: center; gap: 11px; cursor: pointer; }
@@ -133,6 +146,7 @@ import { AvatarComponent } from '../shared/avatar';
 })
 export class HomeScreen {
   store = inject(FoyerStore);
+  fin = inject(FinancesStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
   today = computed(() => this.store.eventsForDay(this.store.todayStr()));
@@ -143,9 +157,10 @@ export class HomeScreen {
   shopTotal = computed(() => this.d().shop.length);
   shopDone = computed(() => this.d().shop.filter((x) => x.done).length);
 
-  spent = computed(() => this.d().tx.filter((t) => (t.m || 0) === 0 && !t.income).reduce((a, t) => a + t.amount, 0));
-  total = computed(() => this.d().bcats.reduce((a, c) => a + c.budget, 0));
-  barW = computed(() => (this.total() > 0 ? Math.min(this.spent() / this.total() * 100, 100) : 0));
+  fmtEur = fmtEurosInt;
+  barW(expense: number, budget: number): number { return budget > 0 ? Math.min(expense / budget * 100, 100) : 0; }
+
+  constructor() { void this.fin.init(); }
 
   dinner = computed(() => {
     const v = this.d().meals[this.store.todayStr() + '-soir'];
@@ -154,5 +169,4 @@ export class HomeScreen {
     return { name: 'Rien de prévu', meta: 'Ajoutez un repas au planning' };
   });
 
-  fmtInt(n: number): string { return Math.round(n).toLocaleString('fr-FR'); }
 }

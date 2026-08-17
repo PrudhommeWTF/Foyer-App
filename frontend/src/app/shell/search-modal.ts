@@ -1,18 +1,20 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, ViewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, computed, inject, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, SearchHit } from '../core/foyer.store';
+import { FinancesStore } from '../core/finances.store';
 import { IconComponent } from '../core/icon';
 import { tint } from '../core/constants';
 
 const KIND_LABEL: Record<string, string> = {
   contact: 'Contact', task: 'Tâche', event: 'Agenda', shop: 'Course',
-  recipe: 'Recette', file: 'Document', tx: 'Budget', member: 'Membre', message: 'Message',
+  recipe: 'Recette', file: 'Document', fin: 'Finances', member: 'Membre', message: 'Message',
 };
 
 /**
  * Global search palette: fuzzy-ish (accent/case-insensitive) matching across
- * contacts, tasks, events, courses, recipes, documents, budget, members and
- * messages. Selecting a result navigates to its screen and opens its detail.
+ * contacts, tasks, events, courses, recipes, documents, members and messages,
+ * plus finance operations (searched server-side, since they live in tables).
+ * Selecting a result navigates to its screen and opens its detail.
  */
 @Component({
   selector: 'app-search-modal',
@@ -25,18 +27,18 @@ const KIND_LABEL: Record<string, string> = {
       <div class="sbar">
         <f-icon name="search" [size]="20" color="var(--ink3)" [width]="2.2" />
         <input #box class="sinput" [ngModel]="store.ui().searchQuery"
-               (ngModelChange)="store.patch({ searchQuery: $event })"
+               (ngModelChange)="onQuery($event)"
                (keydown.enter)="openFirst()" (keydown.escape)="store.closeSearch()"
                placeholder="Rechercher un contact, une tâche, un événement…" />
         <button class="icon-btn sm" (click)="store.closeSearch()"><f-icon name="x" [size]="18" /></button>
       </div>
 
-      @let results = store.searchResults();
+      @let results = allResults();
       @if (store.ui().searchQuery.trim()) {
         @if (results.length) {
           <div class="list fscroll">
             @for (h of results; track $index) {
-              <button class="item" (click)="store.openHit(h)">
+              <button class="item" (click)="open(h)">
                 <span class="ic" [style.background]="tintOf(h.color)"><f-icon [name]="h.icon" [size]="17" [color]="h.color" /></span>
                 <span class="body">
                   <span class="t">{{ h.title }}</span>
@@ -74,11 +76,30 @@ const KIND_LABEL: Record<string, string> = {
 })
 export class SearchModalComponent implements AfterViewInit {
   store = inject(FoyerStore);
+  finances = inject(FinancesStore);
   tintOf = tint;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Local matches first, then finance operations fetched from the server. */
+  allResults = computed<SearchHit[]>(() => [...this.store.searchResults(), ...this.finances.searchHits()]);
+
+  onQuery(q: string): void {
+    this.store.patch({ searchQuery: q });
+    // The finances search hits the API: debounce it, unlike the in-memory ones.
+    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => void this.finances.search(q), 220);
+  }
+
+  /** Finance hits open the Finances screen filtered on the operation's label. */
+  open(h: SearchHit): void {
+    this.store.closeSearch();
+    if (h.kind === 'fin') this.finances.openSearchHit(h);
+    else this.store.openHit(h);
+  }
   @ViewChild('box') box?: ElementRef<HTMLInputElement>;
 
   ngAfterViewInit(): void { setTimeout(() => this.box?.nativeElement.focus(), 0); }
 
   label(h: SearchHit): string { return KIND_LABEL[h.kind] || ''; }
-  openFirst(): void { const r = this.store.searchResults(); if (r.length) this.store.openHit(r[0]); }
+  openFirst(): void { const r = this.allResults(); if (r.length) this.open(r[0]); }
 }
