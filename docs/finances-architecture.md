@@ -189,3 +189,8 @@ npm run typecheck   # tsc --noUnusedLocals --noUnusedParameters sur src/ et test
 
 Le lanceur est celui intégré à Node 22, exécuté via `tsx` (déjà présent) : aucune dépendance
 ajoutée. La CI exécute les deux à chaque push et à chaque pull request.
+
+`npm test` commence par `scripts/check-tests.js`, qui échoue si le dossier `test/` ne contient
+aucun fichier `*.test.ts`. Sans ce garde-fou, `tsx --test test/*.test.ts` sort en code 0 quand
+le motif ne correspond à rien : un dossier renommé laisserait la CI au vert en n'exécutant
+aucun test.
