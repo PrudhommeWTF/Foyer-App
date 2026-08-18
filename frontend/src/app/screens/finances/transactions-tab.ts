@@ -30,6 +30,7 @@ import { CAT_ICONS } from '../../core/constants';
         }
       </select>
       <button class="chip" [class.on]="store.ui().fltUncategorised" (click)="store.setFilter({ fltUncategorised: !store.ui().fltUncategorised })">Sans catégorie</button>
+      @if (store.ui().fltTag; as tag) { <button class="chip on" (click)="store.setFilter({ fltTag: '' })">Étiquette « {{ tag }} » <f-icon name="x" [size]="13" color="#fff" [width]="2.6" /></button> }
       @if (store.hasFilters()) { <button class="chip clear" (click)="store.clearFilters()"><f-icon name="x" [size]="13" color="var(--ink2)" [width]="2.6" /> Effacer</button> }
       <div class="spacer"></div>
       <button class="btn btn-primary" (click)="store.newTx()"><f-icon name="plus" [size]="16" color="#fff" [width]="2.6" /> Ajouter</button>
@@ -55,6 +56,7 @@ import { CAT_ICONS } from '../../core/constants';
             <div class="tx-name">{{ t.label }}</div>
             <div class="tx-meta">
               <span [class.muted]="!t.categoryId">{{ foyer.fmtNumDate(t.date) }} · {{ store.accountName(t.accountId) }} · {{ store.categoryPath(t.categoryId) }}</span>
+              @for (g of t.tags; track g) { <span class="tag">{{ g }}</span> }
               @if (t.cleared) { <span class="tag">pointée</span> }
             </div>
           </div>
@@ -129,6 +131,16 @@ import { CAT_ICONS } from '../../core/constants';
           <input type="checkbox" [ngModel]="store.ui().txCleared" (ngModelChange)="store.patch({ txCleared: $event })" />
           <span>Opération pointée sur le relevé</span>
         </label>
+        @if (store.ui().txId) {
+          <div class="prov">
+            @if (ruleName(); as r) {
+              <span>Catégorie posée par la règle « {{ r }} ». La modifier ici la fige : les rejeux ne la toucheront plus.</span>
+            } @else {
+              <span>Catégorie choisie à la main. Les rejeux de règles la laisseront intacte.</span>
+            }
+            <button class="mkrule" (click)="store.ruleFromTx(store.ui().txId!)">Créer une règle à partir de cette opération</button>
+          </div>
+        }
         <div class="modal-acts">
           @if (store.ui().txId) {
             <button class="btn btn-danger" (click)="store.patch({ txDelId: store.ui().txId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
@@ -192,6 +204,8 @@ import { CAT_ICONS } from '../../core/constants';
     .field-label { margin-top: 16px; }
     .frow .field-label { margin-top: 0; }
     .frow + .frow .field-label { margin-top: 16px; }
+    .prov { margin-top: 18px; background: var(--soft); border-radius: 13px; padding: 12px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink3); line-height: 1.5; }
+    .mkrule { display: block; margin-top: 8px; border: none; border-radius: 10px; padding: 7px 13px; background: var(--soft2); font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; }
     .check { display: flex; align-items: center; gap: 10px; margin-top: 16px; font-size: 13.5px; font-weight: 700; color: var(--ink2); cursor: pointer; }
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; }
     .modal-acts .spacer { flex: 1; }
@@ -210,4 +224,10 @@ export class FinancesTransactionsTab {
   abs = Math.abs;
 
   delLabel = computed(() => this.store.transactions().find((t) => t.id === this.store.ui().txDelId)?.label || '');
+
+  /** Name of the rule that decided this row's category, when a rule did. */
+  ruleName = computed(() => {
+    const id = this.store.transactions().find((t) => t.id === this.store.ui().txId)?.ruleId;
+    return id ? this.store.rules().find((r) => r.id === id)?.name || '' : '';
+  });
 }

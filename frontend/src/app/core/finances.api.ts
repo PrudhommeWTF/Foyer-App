@@ -21,6 +21,9 @@ export interface FinTransaction {
   id: number; accountId: number; date: string; amount: number; kind: TxKind;
   labelRaw: string; label: string; categoryId: number | null; contractId: number | null;
   notes: string; cleared: boolean; transferGroup: string | null; importId: number | null;
+  /** Rule that decided the current category; null when set by hand. */
+  ruleId: number | null;
+  tags: string[];
 }
 
 export interface FinAlias { id: number; accountId: number; labelNorm: string; labelRaw: string; }
@@ -59,7 +62,7 @@ export interface TxPayload {
 
 export interface TxQuery {
   from?: string; to?: string; accountId?: number; categoryId?: number;
-  uncategorised?: boolean; q?: string; limit?: number; offset?: number;
+  uncategorised?: boolean; tag?: string; q?: string; limit?: number; offset?: number;
 }
 
 /** Thin client over /api/finances, reusing ApiService's token and error handling. */
@@ -102,6 +105,7 @@ export class FinancesApi {
     if (q.accountId) p.set('accountId', String(q.accountId));
     if (q.categoryId) p.set('categoryId', String(q.categoryId));
     if (q.uncategorised) p.set('uncategorised', '1');
+    if (q.tag) p.set('tag', q.tag);
     if (q.q) p.set('q', q.q);
     if (q.limit !== undefined) p.set('limit', String(q.limit));
     if (q.offset !== undefined) p.set('offset', String(q.offset));
@@ -135,7 +139,7 @@ export class FinancesApi {
   mapImportAccount(id: number, label: string, accountId: number): Promise<{ preview: FinImportPreview }> {
     return this.api.request(`finances/imports/${id}/accounts`, { method: 'POST', body: JSON.stringify({ label, accountId }) });
   }
-  commitImport(id: number): Promise<{ imported: FinImport; inserted: number; duplicates: number }> {
+  commitImport(id: number): Promise<{ imported: FinImport; inserted: number; duplicates: number; categorised: FinApplyReport | null }> {
     return this.api.request(`finances/imports/${id}/commit`, { method: 'POST' });
   }
   discardImport(id: number): Promise<{ cancelled?: boolean; deleted?: number; ungrouped?: number }> {
@@ -153,6 +157,28 @@ export class FinancesApi {
   transfers(): Promise<{ transfers: FinTransfer[] }> { return this.api.request('finances/transfers'); }
   splitTransfer(group: string): Promise<{ split: number }> {
     return this.api.request(`finances/transfers/${group}`, { method: 'DELETE' });
+  }
+
+  // ---- categorisation rules ----
+  rules(): Promise<{ rules: FinRule[]; tags: FinTag[] }> { return this.api.request('finances/rules'); }
+  createRule(p: FinRuleInput): Promise<{ rule: FinRule }> {
+    return this.api.request('finances/rules', { method: 'POST', body: JSON.stringify(p) });
+  }
+  updateRule(id: number, p: FinRuleInput): Promise<{ rule: FinRule }> {
+    return this.api.request(`finances/rules/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+  }
+  deleteRule(id: number): Promise<{ rules: FinRule[] }> {
+    return this.api.request(`finances/rules/${id}`, { method: 'DELETE' });
+  }
+  moveRule(id: number, delta: 1 | -1): Promise<{ rules: FinRule[] }> {
+    return this.api.request(`finances/rules/${id}/move`, { method: 'POST', body: JSON.stringify({ delta }) });
+  }
+  /** What an unsaved rule would do. Writes nothing. */
+  previewRule(p: FinRuleInput): Promise<{ preview: FinRulePreview }> {
+    return this.api.request('finances/rules/preview', { method: 'POST', body: JSON.stringify(p) });
+  }
+  applyRules(p: { from?: string; to?: string; accountId?: number; force?: boolean }): Promise<{ report: FinApplyReport }> {
+    return this.api.request('finances/rules/apply', { method: 'POST', body: JSON.stringify(p) });
   }
 }
 
@@ -199,3 +225,38 @@ export interface FinTransferCandidate {
   daysApart: number; confidence: FinConfidence; reason: string;
 }
 export interface FinTransfer { group: string; date: string; amount: number; from: string; to: string; }
+
+// ---- categorisation rules --------------------------------------------------
+
+export type FinConditionField = 'label' | 'amount' | 'sens' | 'account' | 'dayOfMonth' | 'date';
+export type FinConditionOp =
+  | 'contains' | 'notContains' | 'equals' | 'startsWith' | 'regex'
+  | 'gt' | 'lt' | 'between' | 'is' | 'isNot' | 'before' | 'after';
+export type FinActionKind = 'category' | 'label' | 'tag' | 'transfer';
+
+export interface FinCondition { field: FinConditionField; op: FinConditionOp; value: string; value2: string; }
+export interface FinAction { kind: FinActionKind; value: string; }
+
+export interface FinRuleInput {
+  name: string; enabled: boolean; matchMode: 'all' | 'any'; stop: boolean;
+  conditions: FinCondition[]; actions: FinAction[];
+}
+export interface FinRule extends FinRuleInput { id: number; position: number; }
+
+export interface FinTag { id: number; name: string; count: number; }
+
+export interface FinPreviewRow {
+  id: number; date: string; amount: number; accountId: number; label: string;
+  categoryId: number | null;
+  newLabel: string | null; newCategoryId: number | null; newTags: string[]; newTransfer: boolean;
+  /** Category set by hand: the rule would leave it alone. */
+  manual: boolean;
+  /** False when the row already carries what the rule wants. */
+  changes: boolean;
+}
+export interface FinRulePreview { matched: number; wouldChange: number; manualKept: number; rows: FinPreviewRow[]; }
+
+export interface FinApplyReport {
+  examined: number; changed: number; manualKept: number;
+  perRule: { ruleId: number; name: string; changed: number }[];
+}

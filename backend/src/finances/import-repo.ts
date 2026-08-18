@@ -171,7 +171,7 @@ export function transferPool(from: string, to: string): TransferSide[] {
   return database.prepare(`
     SELECT t.id, t.account_id AS accountId, a.name AS accountName, t.date, t.amount, t.label
     FROM fin_transactions t JOIN fin_accounts a ON a.id = t.account_id
-    WHERE t.transfer_group IS NULL AND t.date >= ? AND t.date <= ?
+    WHERE t.transfer_group IS NULL AND t.kind <> 'virement' AND t.date >= ? AND t.date <= ?
     ORDER BY t.date, t.id
   `).all(from, to) as TransferSide[];
 }

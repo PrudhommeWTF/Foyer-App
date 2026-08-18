@@ -101,6 +101,9 @@ backend/src/finances/
   types.ts         formes échangées avec le frontend
   import-repo.ts   imports, virements internes, couverture
   import-routes.ts /api/finances/imports et /transfers
+  rules.ts         moteur de décision pur : aucune base, aucun effet de bord
+  rules-repo.ts    stockage des règles, étiquettes, rejeu et prévisualisation
+  rules-routes.ts  /api/finances/rules et /tags
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -179,7 +182,52 @@ retouche : c'est un changement de structure, pas de contenu.
 Décoder le BIFF8 à la main serait déraisonnable, et une bibliothèque pour ce seul cas ne vaut
 pas la dépendance. C'est une dette assumée, et le message d'erreur le dit.
 
-## 6. Sauvegarde et restauration
+## 8. Règles de catégorisation
+
+Le cas qui commande le reste : deux contrats d'un même fournisseur, au libellé bancaire
+rigoureusement identique, que **seul le montant** distingue. Quatre prélèvements AXA sur le
+même compte, dont trois libellés exactement `Prlv Sepa Axa` pour -635,46 €, -81,69 € et
+-40,63 €. Un moteur incapable de combiner « libellé contient » **et** « montant entre » ne sert
+à rien ici.
+
+**Critères disponibles** : libellé (contient, ne contient pas, égal, commence par, expression
+régulière), montant (supérieur, inférieur, entre, égal), sens (dépense ou recette), compte,
+jour du mois, date. Combinés en **toutes** ou **au moins une**.
+
+**Actions** : ranger dans une catégorie, réécrire le libellé, ajouter une étiquette, marquer
+comme virement interne (la ligne sort alors des dépenses et des ressources du mois).
+
+Quelques décisions qui se voient à l'usage :
+
+- **Les montants se comparent en valeur absolue, en euros.** On décrit un prélèvement comme
+  « entre 600 et 700 », pas « entre -700 et -600 ». Le critère « sens » sépare dépense et
+  recette.
+- **Les règles sont ordonnées** et évaluées de haut en bas. La dernière qui décide d'un champ
+  l'emporte ; les étiquettes, elles, s'accumulent. Une règle peut porter « arrêter là », qui
+  interrompt l'évaluation pour les lignes qu'elle a retenues.
+- **Une règle sans condition ne retient rien.** Elle repeindrait tout l'historique en silence,
+  l'API la refuse et le moteur ne la ferait de toute façon correspondre à aucune ligne.
+- **Une catégorie corrigée à la main n'est jamais écrasée par un rejeu.** C'est la colonne
+  `fin_transactions.rule_id` qui tranche : renseignée, la ligne appartient à une règle ;
+  `NULL`, elle a été classée à la main. Le rapport de rejeu annonce combien de lignes ont été
+  protégées à ce titre. La case « écraser aussi les catégories corrigées à la main » lève la
+  protection, explicitement.
+- **Une règle qui ne pose qu'une étiquette ne s'approprie pas la ligne** : elle laisse
+  `rule_id` intact, donc une catégorie manuelle garde son bouclier et le rejeu suivant annonce
+  bien zéro modification.
+- **Supprimer une règle ne défait rien.** Les lignes gardent leur catégorie, `rule_id` repasse
+  à `NULL` (clé étrangère `ON DELETE SET NULL`) : elles basculent en classement manuel.
+- **La prévisualisation emprunte exactement le même chemin de décision** que le rejeu et
+  n'écrit rien. Elle compare les valeurs, jamais la provenance, parce qu'un brouillon n'a pas
+  encore d'identifiant.
+
+Les règles tournent aussi **à la validation d'un import**, sur les seules lignes créées
+(`applyRules({ importId })`) : le message de fin annonce combien ont été rangées.
+
+`rules.ts` est **pur** : il décide, il n'écrit pas. C'est ce qui permet de le tester sans base
+et garantit que l'aperçu et le rejeu ne divergent jamais.
+
+## 9. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -250,7 +298,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 7. Tests
+## 10. Tests
 
 ```bash
 cd backend

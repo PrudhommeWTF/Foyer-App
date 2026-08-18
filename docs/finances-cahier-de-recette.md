@@ -318,14 +318,21 @@ condition `libellé contient` combinée en ET avec `montant entre X et Y`, actio
 
 **Tests.**
 
-- `R6.1` [tranche 3] Une règle `libellé contient "Prlv Sepa Axa"` ET `montant entre 600 et 700` rattache
-  la ligne à -635,46 € et **elle seule** parmi les quatre AXA.
-- `R6.2` [tranche 3] Deux règles concurrentes sur le même libellé, distinguées par fourchette de montant,
-  n'affectent chacune que leurs lignes (cas Engie 93-320 € contre 700-1 100 €).
-- `R6.3` [tranche 3] La prévisualisation d'une règle liste exactement les lignes qui seront modifiées,
-  avant enregistrement.
-- `R6.4` [tranche 3] Le rejeu sur l'historique est idempotent : rejouer deux fois donne le même résultat.
-- `R6.5` [tranche 3] L'ordre des règles et l'option « arrêter le traitement » sont respectés.
+- `R6.1` Une règle `libellé contient "Prlv Sepa Axa"` ET `montant entre 600 et 700` rattache
+  la ligne à -635,46 € et **elle seule** parmi les quatre AXA. **Vert.**
+- `R6.2` Deux règles concurrentes sur le même libellé, distinguées par fourchette de montant,
+  n'affectent chacune que leurs lignes. **Vert**, sur les trois AXA au libellé identique.
+- `R6.3` La prévisualisation d'une règle liste exactement les lignes qui seront modifiées,
+  avant enregistrement. **Vert**, et rien n'est écrit tant qu'on n'a pas enregistré.
+- `R6.4` Le rejeu sur l'historique est idempotent : rejouer deux fois donne le même résultat.
+  **Vert**, y compris pour une règle qui ne pose qu'une étiquette.
+- `R6.5` L'ordre des règles et l'option « arrêter le traitement » sont respectés. **Vert**,
+  de même que la protection des catégories corrigées à la main.
+
+Le rattachement à un contrat n'est pas encore une action disponible : les contrats arrivent en
+tranche 5. Proposer le choix aujourd'hui afficherait une liste vide. Les cinq critères et les
+quatre actions livrés couvrent le besoin de tri ; l'action « rattacher au contrat » s'ajoutera
+au même moteur, sans migration de règles.
 
 ## 4. L'oracle
 
@@ -363,6 +370,21 @@ du fichier de juillet-août sont déjà figés ci-dessus.
 | Effet d'une fusion sur le mois | dépenses **−5 700 €**, soldes inchangés | vert |
 | Libellés AXA identiques | 3 lignes, 3 montants, aucune catégorie appliquée | vert |
 | Mojibake `N?mes` conservé | libellé brut intact | vert |
+
+`backend/test/rules.test.ts` construit ses règles sur les mêmes lignes et vérifie :
+
+| Assertion | Attendu | Statut |
+|---|---|---|
+| `R6.1` libellé ET fourchette de montant | 1 ligne sur 4, la bonne | vert |
+| `R6.2` trois règles sur le libellé identique | 3 catégories distinctes | vert |
+| `R6.3` prévisualisation fidèle, sans écriture | annoncé = appliqué | vert |
+| `R6.4` rejeu idempotent | 0 modification au second passage | vert |
+| `R6.5` ordre des règles et « arrêter là » | dernière décision retenue | vert |
+| Catégorie corrigée à la main | conservée, et comptée dans le rapport | vert |
+| Étiquette posée deux fois | une seule occurrence, ligne non appropriée | vert |
+| Réécriture de libellé | `label` change, `label_raw` intact | vert |
+| Marquage en virement interne | la ligne sort des dépenses du mois | vert |
+| Suppression d'une règle | catégorie conservée, provenance libérée | vert |
 
 `backend/test/parsers.test.ts` couvre les formats : CSV (Bankin et anglais, débit/crédit
 séparés), OFX 1.x et 2.x, CAMT.053, .xlsx réel, faux .xls HTML et texte, refus du binaire
