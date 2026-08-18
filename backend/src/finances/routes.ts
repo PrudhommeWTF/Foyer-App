@@ -5,6 +5,7 @@ import express, { Request, Response, Router } from 'express';
 import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
+import { importRouter } from './import-routes';
 import { ACCOUNT_KINDS, TX_KINDS, TxKind } from './types';
 
 /** Reject with an explicit French message rather than a bare 400. */
@@ -116,6 +117,9 @@ function txInput(body: Record<string, unknown>): repo.TxInput {
 
 export function financesRouter(): Router {
   const r = express.Router();
+
+  // Import, deduplication and internal transfers live in their own router.
+  r.use(importRouter());
 
   // Single call that fills the whole screen: accounts, categories, balances,
   // per-account coverage and the months that hold data.

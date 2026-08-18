@@ -5,18 +5,20 @@ import { IconComponent } from '../../core/icon';
 import { FinancesTransactionsTab } from './transactions-tab';
 import { FinancesAccountsTab } from './accounts-tab';
 import { FinancesCategoriesTab } from './categories-tab';
+import { FinancesImportTab } from './import-tab';
 
-const TABS: { id: 'transactions' | 'comptes' | 'categories'; label: string }[] = [
+const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'import'; label: string }[] = [
   { id: 'transactions', label: 'Opérations' },
   { id: 'comptes', label: 'Comptes' },
   { id: 'categories', label: 'Catégories' },
+  { id: 'import', label: 'Import' },
 ];
 
 @Component({
   selector: 'screen-finances',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, FinancesTransactionsTab, FinancesAccountsTab, FinancesCategoriesTab],
+  imports: [IconComponent, FinancesTransactionsTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesImportTab],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -75,10 +77,10 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories'; label: string }[] =
               <div class="banner-title">Mois incomplet, les chiffres ci-dessus sont sous-estimés</div>
               <div class="banner-txt">
                 @for (m of store.summary()!.missing; track m.accountId) {
-                  <span class="miss">{{ m.name }} s'arrête au {{ foyer.fmtNumDate(m.lastDate || '') }}</span>
+                  <span class="miss">{{ m.name }} : données jusqu'au {{ foyer.fmtNumDate(m.coveredThrough || '') }}</span>
                 }
               </div>
-              <div class="banner-hint">Importez les relevés manquants, ou archivez le compte s'il n'est plus suivi (onglet Comptes).</div>
+              <div class="banner-hint">Importez les relevés manquants (onglet Import), ou archivez le compte s'il n'est plus suivi.</div>
             </div>
           </div>
         }
@@ -86,8 +88,10 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories'; label: string }[] =
         <fin-transactions-tab />
       } @else if (store.ui().tab === 'comptes') {
         <fin-accounts-tab />
-      } @else {
+      } @else if (store.ui().tab === 'categories') {
         <fin-categories-tab />
+      } @else {
+        <fin-import-tab />
       }
     </div>
   `,

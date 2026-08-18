@@ -66,6 +66,22 @@ export class ApiService {
     return res.blob();
   }
 
+  /**
+   * POST a file as a raw body. Avoids both a multipart dependency on the server
+   * and the 33% inflation of base64 in a JSON payload.
+   */
+  async upload<T>(path: string, file: File): Promise<T> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
+    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+    const res = await fetch(this.base + path, { method: 'POST', headers, body: file });
+    if (!res.ok) {
+      let msg = `Erreur ${res.status}`;
+      try { msg = (await res.json()).error || msg; } catch { /* ignore */ }
+      throw new Error(msg);
+    }
+    return res.json() as Promise<T>;
+  }
+
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string>) };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;

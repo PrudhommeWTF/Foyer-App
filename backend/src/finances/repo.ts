@@ -3,6 +3,7 @@
 // is the whole point of moving finances out of the JSON document.
 import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
+import { coveredThrough, initImportRepo } from './import-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
 import {
   Account, AccountCoverage, Category, CategorySummary, MonthSummary, Transaction, TxKind,
@@ -13,6 +14,9 @@ let database: Database;
 /** Wire the repository to the app database and register helper SQL functions. */
 export function initFinancesRepo(db: Database): void {
   database = db;
+  // The import layer shares the same connection; wiring it here means a caller
+  // cannot forget it and discover the omission only when a summary is computed.
+  initImportRepo(db);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is
   // needed: a full scan over a few thousand rows is sub-millisecond.
   db.function('fnorm', { deterministic: true }, (s: unknown) => normaliseLabel(String(s ?? '')));
@@ -220,7 +224,7 @@ export function updateTransaction(id: number, input: TxInput): Transaction | nul
   const info = database.prepare(`
     UPDATE fin_transactions
     SET account_id = ?, date = ?, amount = ?, kind = ?, label = ?, category_id = ?, contract_id = ?,
-        notes = ?, cleared = ?, updated_at = datetime('now')
+        notes = ?, cleared = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
     WHERE id = ?
   `).run(
     input.accountId, input.date, input.amount, input.kind, input.label,
@@ -240,7 +244,7 @@ export function deleteTransaction(id: number): void {
  * from income and expense: they move money inside the household, they are not
  * resources or spending.
  */
-export function monthSummary(month: string): MonthSummary {
+export function monthSummary(month: string, today = new Date().toISOString().slice(0, 10)): MonthSummary {
   const { from, to } = monthRange(month);
   const totals = database.prepare(`
     SELECT
@@ -272,16 +276,18 @@ export function monthSummary(month: string): MonthSummary {
     categories.push({ categoryId: null, name: 'Sans catégorie', color: '#8A7E74', icon: 'facture', budget: 0, spent: uncategorised });
   }
 
-  // An active account whose data stops before this month means the month is not
-  // fully covered, and the figures above understate reality.
-  const missing = database.prepare(`
-    SELECT a.id AS accountId, a.name AS name, MAX(t.date) AS lastDate
-    FROM fin_accounts a LEFT JOIN fin_transactions t ON t.account_id = a.id
-    WHERE a.archived = 0
-    GROUP BY a.id
-    HAVING COUNT(t.id) > 0 AND (MAX(t.date) < ?)
-    ORDER BY MAX(t.date)
-  `).all(from) as { accountId: number; name: string; lastDate: string | null }[];
+  // An active account whose data does not reach the end of the month means the
+  // figures above understate reality. Coverage comes from the window each import
+  // declared, not from the last operation: a passbook that moves twice a year is
+  // covered, a bank connection that died is not.
+  const covered = coveredThrough();
+  const deadline = today < to ? today : to;
+  const missing = (database.prepare(
+    'SELECT id AS accountId, name FROM fin_accounts WHERE archived = 0 ORDER BY position, id',
+  ).all() as { accountId: number; name: string }[])
+    .map((a) => ({ ...a, coveredThrough: covered.get(a.accountId) ?? null }))
+    .filter((a) => a.coveredThrough !== null && a.coveredThrough < deadline)
+    .sort((a, b) => String(a.coveredThrough).localeCompare(String(b.coveredThrough)));
 
   return {
     month,

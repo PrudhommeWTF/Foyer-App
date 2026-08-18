@@ -8,7 +8,7 @@
 import type { Database } from 'better-sqlite3';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
-export const FIN_SCHEMA_VERSION = 1;
+export const FIN_SCHEMA_VERSION = 2;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -231,6 +231,29 @@ const MIGRATIONS: Migration[] = [
         ['Charges du cabinet', '#9B6FA8', 'facture'],
         ['Divers', '#7A9B76', 'facture'],
       ].forEach((c, i) => cat.run(c[0], c[1], c[2], i));
+    },
+  },
+  {
+    version: 2,
+    label: 'import : brouillon, fenêtre de couverture',
+    up: (db) => {
+      db.exec(`
+        -- Staged rows of an import waiting for validation. Cleared once committed
+        -- or discarded, so a pending import never weighs on the database.
+        ALTER TABLE fin_imports ADD COLUMN payload TEXT NOT NULL DEFAULT '';
+
+        -- Period each import actually covers, per account. This is what makes the
+        -- « mois incomplet » answer exact instead of guessed from the last
+        -- operation: a dormant passbook covered by an import is not missing data.
+        CREATE TABLE fin_import_coverage (
+          import_id INTEGER NOT NULL REFERENCES fin_imports(id) ON DELETE CASCADE,
+          account_id INTEGER NOT NULL REFERENCES fin_accounts(id) ON DELETE CASCADE,
+          from_date TEXT NOT NULL,
+          to_date TEXT NOT NULL,
+          PRIMARY KEY (import_id, account_id)
+        );
+        CREATE INDEX fin_import_coverage_account ON fin_import_coverage (account_id, to_date);
+      `);
     },
   },
 ];

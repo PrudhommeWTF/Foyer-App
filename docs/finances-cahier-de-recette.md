@@ -18,6 +18,11 @@ Trois fichiers composent le jeu de référence.
 | `export_banks_20260728_20260831.csv` | 28/07/2026 au 17/08/2026 | export brut Bankin', doublons intacts | fourni |
 | Résultat attendu, 807 opérations | décembre 2025 à août 2026 | oracle du décompte final | **manquant** |
 
+**État de la recette au terme de la tranche 2.** Toutes les assertions ci-dessous tournent en
+CI (`backend/test/import.test.ts`), sur un extrait anonymisé du fichier fourni. Les seules qui
+restent en attente sont celles qui exigent le second export et l'oracle des 807, signalées
+comme telles.
+
 Les deux exports se chevauchent volontairement sur la **journée du 28/07/2026**, ce qui teste
 le cas de l'export incrémental.
 
@@ -97,10 +102,10 @@ avalerait un vrai retrait de 50 €.
 
 **Tests.**
 
-- `R1.1` 223 lignes brutes donnent 95 opérations.
-- `R1.2` Décompte par compte : joint 40, Thomas 24, Nolwenn perso 6, Nolwenn pro 25.
-- `R1.3` Les deux retraits DAB de 50 € du 05/08 sont tous les deux présents après import.
-- `R1.4` Deux blocs de libellé strictement identique du même compte ne produisent pas de
+- `R1.1` [vérifié] 223 lignes brutes donnent 95 opérations.
+- `R1.2` [vérifié] Décompte par compte : joint 40, Thomas 24, Nolwenn perso 6, Nolwenn pro 25.
+- `R1.3` [vérifié] Les deux retraits DAB de 50 € du 05/08 sont tous les deux présents après import.
+- `R1.4` [vérifié] Deux blocs de libellé strictement identique du même compte ne produisent pas de
   doublon (régression de la règle « libellés différents » abandonnée).
 
 ### Anomalie 2, le compte joint sous deux libellés
@@ -132,9 +137,9 @@ en cas d'erreur, deux comptes réels fusionneraient sans que ce soit détectable
 
 **Tests.**
 
-- `R2.1` Sans alias déclaré, l'import signale 5 comptes inconnus et n'écrit rien en base.
-- `R2.2` Avec les deux libellés du joint pointant sur le même compte, le total tombe à 95.
-- `R2.3` Un libellé inconnu ne crée jamais de compte tout seul.
+- `R2.1` [vérifié] Sans alias déclaré, l'import signale 5 comptes inconnus et n'écrit rien en base.
+- `R2.2` [vérifié] Avec les deux libellés du joint pointant sur le même compte, le total tombe à 95.
+- `R2.3` [vérifié] Un libellé inconnu ne crée jamais de compte tout seul.
 
 ### Anomalie 3, le chevauchement des exports
 
@@ -165,12 +170,12 @@ qui recalculent la clé à la volée.
 
 **Tests.**
 
-- `R3.1` Importer le fichier de juillet-août deux fois de suite : le second import annonce
+- `R3.1` [vérifié] Importer le fichier de juillet-août deux fois de suite : le second import annonce
   0 nouvelle opération et 95 doublons écartés.
-- `R3.2` Importer déc-juillet puis juillet-août : le second import écarte exactement les
+- `R3.2` [vérifié sur un fichier tronqué, à rejouer sur le vrai export] Importer déc-juillet puis juillet-août : le second import écarte exactement les
   **12** opérations du 28/07 et n'en perd aucune autre.
-- `R3.3` Importer dans l'ordre inverse donne le même total final.
-- `R3.4` Modifier le libellé et la catégorie d'une transaction, réimporter son fichier
+- `R3.3` [vérifié sur un fichier tronqué, à rejouer sur le vrai export] Importer dans l'ordre inverse donne le même total final.
+- `R3.4` [vérifié] Modifier le libellé et la catégorie d'une transaction, réimporter son fichier
   d'origine : aucune ligne créée, la modification est préservée.
 
 ### Anomalie 4, les virements internes
@@ -230,13 +235,13 @@ n'entre ni dans les dépenses ni dans les recettes du foyer.
 
 **Tests.**
 
-- `R4.1` Les trois virements réels sont détectés, tous en confiance forte.
-- `R4.2` La paire `Remcb00677` / `Retrait Dab` est classée en confiance faible et **non
+- `R4.1` [vérifié] Les trois virements réels sont détectés, tous en confiance forte.
+- `R4.2` [vérifié] La paire `Remcb00677` / `Retrait Dab` est classée en confiance faible et **non
   pré-cochée**.
-- `R4.3` Aucune fusion n'a lieu sans validation explicite.
-- `R4.4` Après validation, les deux lignes sont conservées, le total des dépenses du mois
+- `R4.3` [vérifié] Aucune fusion n'a lieu sans validation explicite.
+- `R4.4` [vérifié] Après validation, les deux lignes sont conservées, le total des dépenses du mois
   baisse de 5 700 €, et les soldes des deux comptes sont inchangés.
-- `R4.5` `Vir Loyer` +366 €, étiqueté « Virements internes » par Bankin', n'est pas proposé
+- `R4.5` [vérifié] `Vir Loyer` +366 €, étiqueté « Virements internes » par Bankin', n'est pas proposé
   comme virement interne (pas de contrepartie).
 
 ### Anomalie 5, la couverture inégale des comptes
@@ -263,11 +268,11 @@ volontaire : elle doit être fermée par une décision, pas par un oubli.
 
 **Tests.**
 
-- `R5.1` Après import des deux fichiers, la couverture par compte est exacte au jour près.
-- `R5.2` Un mois postérieur à l'arrêt d'un compte actif est marqué incomplet, avec le nom du
+- `R5.1` [vérifié] Après import des deux fichiers, la couverture par compte est exacte au jour près.
+- `R5.2` [vérifié] Un mois postérieur à l'arrêt d'un compte actif est marqué incomplet, avec le nom du
   compte et sa date de fin dans le message.
-- `R5.3` Archiver le compte retire l'alerte sans modifier les totaux historiques.
-- `R5.4` Un mois où tous les comptes actifs ont des opérations n'est pas marqué incomplet.
+- `R5.3` [vérifié] Archiver le compte retire l'alerte sans modifier les totaux historiques.
+- `R5.4` [vérifié] Un mois où tous les comptes actifs ont des opérations n'est pas marqué incomplet.
 
 ### Anomalie 6, les catégories Bankin' peu fiables
 
@@ -313,14 +318,14 @@ condition `libellé contient` combinée en ET avec `montant entre X et Y`, actio
 
 **Tests.**
 
-- `R6.1` Une règle `libellé contient "Prlv Sepa Axa"` ET `montant entre 600 et 700` rattache
+- `R6.1` [tranche 3] Une règle `libellé contient "Prlv Sepa Axa"` ET `montant entre 600 et 700` rattache
   la ligne à -635,46 € et **elle seule** parmi les quatre AXA.
-- `R6.2` Deux règles concurrentes sur le même libellé, distinguées par fourchette de montant,
+- `R6.2` [tranche 3] Deux règles concurrentes sur le même libellé, distinguées par fourchette de montant,
   n'affectent chacune que leurs lignes (cas Engie 93-320 € contre 700-1 100 €).
-- `R6.3` La prévisualisation d'une règle liste exactement les lignes qui seront modifiées,
+- `R6.3` [tranche 3] La prévisualisation d'une règle liste exactement les lignes qui seront modifiées,
   avant enregistrement.
-- `R6.4` Le rejeu sur l'historique est idempotent : rejouer deux fois donne le même résultat.
-- `R6.5` L'ordre des règles et l'option « arrêter le traitement » sont respectés.
+- `R6.4` [tranche 3] Le rejeu sur l'historique est idempotent : rejouer deux fois donne le même résultat.
+- `R6.5` [tranche 3] L'ordre des règles et l'option « arrêter le traitement » sont respectés.
 
 ## 4. L'oracle
 
@@ -340,7 +345,30 @@ Le décompte global de 807 ne suffit pas comme test : deux erreurs opposées peu
 compenser. Le décompte **par compte** est l'assertion qui compte, et les décomptes par compte
 du fichier de juillet-août sont déjà figés ci-dessus.
 
-## 5. Ce qui reste à fournir
+## 5. Ce qui est automatisé
+
+`backend/test/import.test.ts` rejoue le pipeline complet sur l'extrait anonymisé
+(`backend/test/fixtures/bankin-aout.csv`, 223 lignes) et vérifie :
+
+| Assertion | Attendu | Statut |
+|---|---|---|
+| Découpage en blocs | 40, 24, 40, 24, 6, 25, 40, 24 | vert |
+| Total après effondrement | **95** | vert |
+| Décompte par compte | joint 40, perso 24, conjoint 6, cabinet 25 | vert |
+| Doublons légitimes conservés | les 2 retraits de 50 € du 05/08 | vert |
+| Réimport du même fichier | 0 nouvelle opération | vert |
+| Chevauchement du 28/07 | **12** opérations de delta | vert |
+| Virements détectés | 3, tous en confiance forte | vert |
+| Faux rapprochement retrait/remise | classé douteux, jamais pré-coché | vert |
+| Effet d'une fusion sur le mois | dépenses **−5 700 €**, soldes inchangés | vert |
+| Libellés AXA identiques | 3 lignes, 3 montants, aucune catégorie appliquée | vert |
+| Mojibake `N?mes` conservé | libellé brut intact | vert |
+
+`backend/test/parsers.test.ts` couvre les formats : CSV (Bankin et anglais, débit/crédit
+séparés), OFX 1.x et 2.x, CAMT.053, .xlsx réel, faux .xls HTML et texte, refus du binaire
+Excel 97-2003, et les encodages UTF-8, UTF-16 et Windows-1252.
+
+## 6. Ce qui reste à fournir
 
 Deux des trois fichiers du jeu de référence manquent, et deux vérifications en dépendent :
 

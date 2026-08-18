@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -125,6 +125,38 @@ de tâches, des catégories de budget). Une base déjà configurée n'est jamais
   immédiatement tous ses jetons existants.
 - **Autorisations** : seul un administrateur du foyer peut ajouter/retirer un membre ou modifier des droits
   d'administration ; un membre non-admin ne peut éditer que son propre profil.
+
+## 📥 Import de relevés bancaires
+
+Le module Finances lit les exports de votre banque ou de votre agrégateur, et absorbe leurs
+défauts habituels plutôt que de vous les laisser sur les bras.
+
+| Format | Détail |
+|---|---|
+| **CSV / TSV** | séparateur et colonnes reconnus automatiquement (format Bankin' et en-têtes anglais) |
+| **OFX** | versions 1.x (SGML) et 2.x (XML) |
+| **CAMT.053** | ISO 20022 |
+| **.xlsx** | lu sans bibliothèque de tableur |
+| **faux .xls** | tableau HTML ou texte tabulé déguisé, cas fréquent des agrégateurs |
+
+Ce que l'import garantit :
+
+- **Déduplication**. Un compte synchronisé par plusieurs connexions apparaît plusieurs fois dans
+  le même fichier : les copies sont fusionnées, mais deux opérations réellement identiques le
+  même jour sont conservées toutes les deux.
+- **Alias de comptes**. Un même compte peut apparaître sous plusieurs libellés (changement de
+  nom, seconde connexion) : déclarez-les une fois, c'est mémorisé. Aucun compte n'est créé
+  automatiquement.
+- **Exports qui se chevauchent**. Réimporter un fichier déjà traité n'ajoute rien ; un export
+  incrémental n'apporte que son delta, même si vous renommez ou recatégorisez des opérations
+  entre-temps.
+- **Rapport avant écriture**. Rien n'est enregistré tant que vous n'avez pas validé, et tout
+  import validé s'annule en un clic, sans requête SQL.
+- **Virements internes** détectés et **proposés**, avec un niveau de confiance. Jamais fusionnés
+  tout seuls : sur des données réelles, deux montants opposés sans rapport se croisent.
+
+Détail du fonctionnement et cahier de recette :
+[`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md).
 
 ## 💾 Sauvegarde et restauration
 

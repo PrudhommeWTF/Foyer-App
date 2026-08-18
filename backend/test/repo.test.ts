@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
+import { commitImport, createDraft } from '../src/finances/import-repo';
 import * as repo from '../src/finances/repo';
 
 let db: Database.Database;
@@ -231,12 +232,39 @@ describe('synthèse mensuelle', () => {
     const tphIt = account('TPH-IT');
     tx(joint, '2026-04-10', -3811, 'Carrefour');
     tx(tphIt, '2026-03-19', -1000, 'Dernière opération connue');
+    // Les deux comptes ont été importés ; la connexion de TPH-IT s'est arrêtée
+    // au 19/03, il n'apparaît donc plus dans les imports suivants.
+    commitImport(createDraft('mars.csv', 'CSV'), [], new Map([
+      [joint, { from: '2026-01-01', to: '2026-04-30' }],
+      [tphIt, { from: '2026-01-01', to: '2026-03-19' }],
+    ]));
 
-    const s = repo.monthSummary('2026-04');
+    const s = repo.monthSummary('2026-04', '2026-04-10');
     assert.equal(s.incomplete, true);
     assert.equal(s.missing.length, 1);
     assert.equal(s.missing[0].name, 'TPH-IT');
-    assert.equal(s.missing[0].lastDate, '2026-03-19');
+    assert.equal(s.missing[0].coveredThrough, '2026-03-19');
+  });
+
+  it('une couverture déclarée par un import prime sur la dernière opération', () => {
+    const joint = account('Joint');
+    const livret = account('LDDS', { kind: 'epargne' });
+    tx(joint, '2026-04-10', -3811, 'Carrefour');
+    tx(livret, '2025-12-31', 11240, 'Intérêts annuels');
+
+    // Un premier import couvre le joint jusqu'en avril, le livret jusqu'en décembre.
+    commitImport(createDraft('ancien.csv', 'CSV'), [], new Map([
+      [joint, { from: '2025-12-01', to: '2026-04-30' }],
+      [livret, { from: '2025-12-01', to: '2025-12-31' }],
+    ]));
+    const before = repo.monthSummary('2026-04', '2026-04-10');
+    assert.equal(before.incomplete, true);
+    assert.deepEqual(before.missing.map((m) => m.name), ['LDDS']);
+
+    // Le livret ne bouge que deux fois par an : une fois couvert jusqu'en avril,
+    // il n'a plus à être signalé comme une donnée manquante malgré son immobilité.
+    commitImport(createDraft('recent.csv', 'CSV'), [], new Map([[livret, { from: '2026-01-01', to: '2026-04-30' }]]));
+    assert.equal(repo.monthSummary('2026-04', '2026-04-10').incomplete, false);
   });
 
   it('archiver un compte éteint l’alerte sans toucher aux totaux passés', () => {
@@ -244,12 +272,16 @@ describe('synthèse mensuelle', () => {
     const tphIt = account('TPH-IT');
     tx(joint, '2026-04-10', -3811, 'Carrefour');
     tx(tphIt, '2026-03-19', -1000, 'Dernière opération connue');
+    commitImport(createDraft('mars.csv', 'CSV'), [], new Map([
+      [joint, { from: '2026-01-01', to: '2026-04-30' }],
+      [tphIt, { from: '2026-01-01', to: '2026-03-19' }],
+    ]));
 
-    const before = repo.monthSummary('2026-03');
+    const before = repo.monthSummary('2026-03', '2026-03-31');
     repo.updateAccount(tphIt, { name: 'TPH-IT', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: true });
 
-    assert.equal(repo.monthSummary('2026-04').incomplete, false);
-    assert.equal(repo.monthSummary('2026-03').expense, before.expense, 'les totaux historiques sont inchangés');
+    assert.equal(repo.monthSummary('2026-04', '2026-04-10').incomplete, false);
+    assert.equal(repo.monthSummary('2026-03', '2026-03-31').expense, before.expense, 'les totaux historiques sont inchangés');
     assert.equal(repo.listTransactions({ accountId: tphIt }).total, 1, 'l’historique est conservé');
   });
 
@@ -258,16 +290,26 @@ describe('synthèse mensuelle', () => {
     const perso = account('Perso');
     tx(joint, '2026-08-10', -3811, 'Carrefour');
     tx(perso, '2026-08-28', 350000, 'Remuneration');
-    const s = repo.monthSummary('2026-08');
+    const s = repo.monthSummary('2026-08', '2026-08-28');
     assert.equal(s.incomplete, false);
     assert.deepEqual(s.missing, []);
+  });
+
+  it('ne signale jamais un compte que l’on n’a jamais importé', () => {
+    const joint = account('Joint');
+    const perso = account('Perso');
+    tx(joint, '2026-08-10', -3811, 'Carrefour');
+    tx(perso, '2026-08-01', 350000, 'Remuneration');
+    // Saisie manuelle uniquement : aucun import n'a affirmé couvrir la période,
+    // il n'y a donc rien à signaler comme manquant.
+    assert.equal(repo.monthSummary('2026-08', '2026-08-28').incomplete, false);
   });
 
   it('ignore un compte encore vierge de toute opération', () => {
     const joint = account('Joint');
     account('Compte tout juste créé');
     tx(joint, '2026-08-10', -3811, 'Carrefour');
-    assert.equal(repo.monthSummary('2026-08').incomplete, false);
+    assert.equal(repo.monthSummary('2026-08', '2026-08-10').incomplete, false);
   });
 
   it('liste les mois qui portent des données, du plus récent au plus ancien', () => {
