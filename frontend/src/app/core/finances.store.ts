@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
-  AccountKind, FinAccount, FinAlias, FinCategory, FinCoverage, FinMonthSummary,
-  FinTransaction, FinancesApi, TxKind,
+  AccountKind, FinAccount, FinAlias, FinCategory, FinCoverage, FinImport, FinImportPreview,
+  FinMonthSummary, FinTransfer, FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
 import { FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
@@ -13,7 +13,7 @@ import { Notif } from './models';
  */
 
 export interface FinancesUi {
-  tab: 'transactions' | 'comptes' | 'categories';
+  tab: 'transactions' | 'comptes' | 'categories' | 'import';
   month: string;
 
   // transaction filters
@@ -36,6 +36,16 @@ export interface FinancesUi {
   catName: string; catBudget: string; catColor: string; catIcon: string; catParent: number | null;
   catDelId: number | null;
 
+  // import
+  importBusy: boolean;
+  importError: string;
+  /** Labels the user is currently mapping: unknown label to chosen account. */
+  mapping: Record<string, number | null>;
+  /** Candidates the user has ticked for merging. */
+  picked: Record<string, boolean>;
+  showWeakCandidates: boolean;
+  undoImportId: number | null;
+
   busy: boolean;
 }
 
@@ -49,6 +59,8 @@ function initialUi(month: string): FinancesUi {
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
     catForm: false, catId: null, catName: '', catBudget: '', catColor: '#7A9B76', catIcon: 'facture',
     catParent: null, catDelId: null,
+    importBusy: false, importError: '', mapping: {}, picked: {},
+    showWeakCandidates: false, undoImportId: null,
     busy: false,
   };
 }
@@ -87,6 +99,12 @@ export class FinancesStore {
   /** Summary of the month we are actually in, for notifications and the home tile. */
   readonly currentSummary = signal<FinMonthSummary | null>(null);
   readonly searchHits = signal<SearchHit[]>([]);
+
+  // Import workflow
+  readonly preview = signal<FinImportPreview | null>(null);
+  readonly imports = signal<FinImport[]>([]);
+  readonly candidates = signal<FinTransferCandidate[]>([]);
+  readonly transfers = signal<FinTransfer[]>([]);
   readonly loaded = signal(false);
   readonly error = signal('');
 
@@ -117,7 +135,7 @@ export class FinancesStore {
       out.push({
         id: `fin-incomplet-${s.month}-${s.missing.map((m) => m.accountId).join('-')}`, kind: 'budget',
         title: 'Mois incomplet dans les finances',
-        desc: s.missing.map((m) => `${m.name} s'arrête au ${this.foyer.fmtNumDate(m.lastDate || '')}`).join(', '),
+        desc: s.missing.map((m) => `${m.name} : données jusqu'au ${this.foyer.fmtNumDate(m.coveredThrough || '')}`).join(', '),
         time: 'À vérifier', read: false,
       });
     }
@@ -173,6 +191,7 @@ export class FinancesStore {
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.currentSummary.set(null); this.searchHits.set([]);
+    this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.loaded.set(false); this.error.set('');
     this.ui.set(initialUi(this.currentMonth()));
   }
@@ -489,6 +508,139 @@ export class FinancesStore {
       this.patch({ catDelId: null });
       this.foyer.toast((e as Error).message);
     }
+  }
+
+  // ---- import ------------------------------------------------------------
+  async loadImports(): Promise<void> {
+    try {
+      const [i, t] = await Promise.all([this.api.imports(), this.api.transfers()]);
+      this.imports.set(i.imports);
+      this.transfers.set(t.transfers);
+    } catch (e) { this.patch({ importError: (e as Error).message }); }
+  }
+
+  /** Upload a file and show the report. Nothing is written yet. */
+  async upload(file: File): Promise<void> {
+    if (this.ui().importBusy) return;
+    this.patch({ importBusy: true, importError: '', mapping: {}, picked: {} });
+    this.preview.set(null);
+    this.candidates.set([]);
+    try {
+      const { preview } = await this.api.uploadImport(file);
+      this.preview.set(preview);
+      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, null])) });
+    } catch (e) {
+      this.patch({ importBusy: false, importError: (e as Error).message });
+    }
+  }
+
+  /** Attach an unknown export label to an account, then refresh the report. */
+  async mapAccount(label: string): Promise<void> {
+    const p = this.preview();
+    const accountId = this.ui().mapping[label];
+    if (!p || !accountId) { this.foyer.toast('Choisissez le compte à rattacher'); return; }
+    this.patch({ importBusy: true, importError: '' });
+    try {
+      const { preview } = await this.api.mapImportAccount(p.importId, label, accountId);
+      this.preview.set(preview);
+      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, this.ui().mapping[u.label] ?? null])) });
+    } catch (e) {
+      this.patch({ importBusy: false, importError: (e as Error).message });
+    }
+  }
+
+  /** Write the import, then offer the internal transfers it made possible. */
+  async commitImport(): Promise<void> {
+    const p = this.preview();
+    if (!p || p.blocked || this.ui().importBusy) return;
+    this.patch({ importBusy: true, importError: '' });
+    try {
+      const r = await this.api.commitImport(p.importId);
+      this.preview.set(null);
+      this.patch({ importBusy: false });
+      this.foyer.toast(`${r.inserted} opération${r.inserted > 1 ? 's' : ''} importée${r.inserted > 1 ? 's' : ''}`);
+      await Promise.all([this.afterWrite(), this.loadImports()]);
+      await this.loadCandidates();
+    } catch (e) {
+      this.patch({ importBusy: false, importError: (e as Error).message });
+    }
+  }
+
+  async discardPreview(): Promise<void> {
+    const p = this.preview();
+    if (!p) return;
+    try { await this.api.discardImport(p.importId); } catch { /* le brouillon expirera de lui-même */ }
+    this.preview.set(null);
+    this.patch({ importError: '', mapping: {} });
+    // Uploading a file hides the pending transfers to keep the report in focus;
+    // abandoning it must bring them back rather than leave them lost.
+    await this.loadCandidates();
+  }
+
+  /** Undo a committed import: its rows leave, nothing else moves. */
+  async undoImport(): Promise<void> {
+    const id = this.ui().undoImportId;
+    if (!id) return;
+    this.patch({ importBusy: true });
+    try {
+      const r = await this.api.discardImport(id);
+      this.patch({ importBusy: false, undoImportId: null });
+      this.foyer.toast(`${r.deleted ?? 0} opération${(r.deleted ?? 0) > 1 ? 's' : ''} retirée${(r.deleted ?? 0) > 1 ? 's' : ''}`);
+      await Promise.all([this.afterWrite(), this.loadImports()]);
+      await this.loadCandidates();
+    } catch (e) {
+      this.patch({ importBusy: false, undoImportId: null, importError: (e as Error).message });
+    }
+  }
+
+  /** Candidate transfers over the whole known history. */
+  async loadCandidates(): Promise<void> {
+    const months = this.months();
+    if (!months.length) { this.candidates.set([]); return; }
+    const from = months[months.length - 1] + '-01';
+    const to = this.foyer.todayStr();
+    try {
+      const { candidates } = await this.api.transferCandidates(from, to > from ? to : from);
+      this.candidates.set(candidates);
+      // Only the strong ones are ticked: a weak pair must be an explicit choice.
+      this.patch({ picked: Object.fromEntries(candidates.map((c) => [this.pairKey(c), c.confidence === 'forte'])) });
+    } catch (e) { this.patch({ importError: (e as Error).message }); }
+  }
+
+  pairKey(c: FinTransferCandidate): string { return `${c.debit.id}-${c.credit.id}`; }
+  isPicked(c: FinTransferCandidate): boolean { return !!this.ui().picked[this.pairKey(c)]; }
+  togglePick(c: FinTransferCandidate): void {
+    const key = this.pairKey(c);
+    this.patch({ picked: { ...this.ui().picked, [key]: !this.ui().picked[key] } });
+  }
+  readonly pickedCount = computed(() => this.candidates().filter((c) => this.isPicked(c)).length);
+  readonly strongCandidates = computed(() => this.candidates().filter((c) => c.confidence !== 'faible'));
+  readonly weakCandidates = computed(() => this.candidates().filter((c) => c.confidence === 'faible'));
+
+  /** Merge only what the user ticked. Nothing is ever merged on its own. */
+  async mergePicked(): Promise<void> {
+    const pairs = this.candidates().filter((c) => this.isPicked(c)).map((c) => ({ debitId: c.debit.id, creditId: c.credit.id }));
+    if (!pairs.length) { this.foyer.toast('Cochez au moins un rapprochement'); return; }
+    this.patch({ importBusy: true });
+    try {
+      const r = await this.api.mergeTransfers(pairs);
+      this.patch({ importBusy: false });
+      this.foyer.toast(r.failed.length
+        ? `${r.merged} virement(s) validé(s), ${r.failed.length} refusé(s)`
+        : `${r.merged} virement${r.merged > 1 ? 's' : ''} interne${r.merged > 1 ? 's' : ''} validé${r.merged > 1 ? 's' : ''}`);
+      if (r.failed.length) this.patch({ importError: r.failed[0].error });
+      await Promise.all([this.afterWrite(), this.loadCandidates(), this.loadImports()]);
+    } catch (e) {
+      this.patch({ importBusy: false, importError: (e as Error).message });
+    }
+  }
+
+  async splitTransfer(group: string): Promise<void> {
+    try {
+      await this.api.splitTransfer(group);
+      this.foyer.toast('Virement séparé en deux opérations');
+      await Promise.all([this.afterWrite(), this.loadCandidates(), this.loadImports()]);
+    } catch (e) { this.patch({ importError: (e as Error).message }); }
   }
 
   // ---- export ------------------------------------------------------------

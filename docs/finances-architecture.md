@@ -71,21 +71,49 @@ C'est le mode de panne le plus vicieux du module : sans ce signal, un mois auque
 compte affiche des chiffres **plausibles** et faux. Le seul moyen d'éteindre l'alerte est
 d'archiver le compte, c'est-à-dire de prendre une décision explicite.
 
-**Limite connue de la tranche 1** : l'heuristique regarde la dernière opération, pas la période
-réellement couverte par les imports. Un livret qui ne bouge que deux fois par an sera donc
-signalé, ce qui est correct dans le cas d'usage visé (les livrets du foyer s'arrêtent
-effectivement au 31/12) mais reste une approximation. La tranche 2 enregistrera la fenêtre de
-dates couverte par chaque import et remplacera l'heuristique par une réponse exacte.
+La couverture ne se déduit **pas** de la dernière opération : chaque import enregistre la
+fenêtre de dates qu'il couvre, par compte (`fin_import_coverage`). Un export dit « voici tout ce
+que j'ai pour ces comptes sur cette période », ce qui est une affirmation de complétude ; taper
+des opérations à la main n'en est pas une.
+
+Deux conséquences voulues :
+
+- un livret qui ne bouge que deux fois par an, mais présent dans un import récent, **n'est plus
+  signalé** ;
+- un compte que vous n'avez **jamais importé** n'est jamais signalé non plus. L'alerte ne sert
+  que si elle reste rare, et une saisie manuelle n'affirme rien sur ce qui manque.
+
+Un compte dont la connexion bancaire meurt disparaît des exports suivants : il garde donc sa
+vieille couverture et continue d'être signalé, ce qui est exactement le cas TPH-IT.
+
+**Limite résiduelle** : si votre agrégateur continue d'inclure la section d'un compte tout en
+n'ayant plus rien à y mettre, la couverture s'étendra à tort. Rien dans le fichier ne permet de
+distinguer « aucune activité » de « plus de données ». Archivez le compte le cas échéant.
 
 ## 4. Découpage du code
 
 ```
 backend/src/finances/
-  schema.ts    migrations versionnées, appliquées au démarrage par db.ts
-  money.ts     centimes, dates, normalisation de libellé (aucune dépendance)
-  repo.ts      accès SQLite : requêtes préparées, agrégats, export CSV
-  routes.ts    /api/finances, validation et messages d'erreur en français
-  types.ts     formes échangées avec le frontend
+  schema.ts        migrations versionnées, appliquées au démarrage par db.ts
+  money.ts         centimes, dates, normalisation de libellé (aucune dépendance)
+  repo.ts          accès SQLite : requêtes préparées, agrégats, export CSV
+  routes.ts        /api/finances, validation et messages d'erreur en français
+  types.ts         formes échangées avec le frontend
+  import-repo.ts   imports, virements internes, couverture
+  import-routes.ts /api/finances/imports et /transfers
+  import/
+    parse.ts   détection de format d'après les octets, pas l'extension
+    decode.ts  UTF-8, UTF-16, repli Windows-1252
+    csv.ts     texte délimité, colonnes reconnues par nom normalisé
+    ofx.ts     OFX 1.x (SGML) et 2.x (XML)
+    camt.ts    CAMT.053
+    xlsx.ts    .xlsx, faux .xls HTML, refus explicite du binaire 97-2003
+    zip.ts     lecture ZIP minimale (zlib), pour l'.xlsx
+    xml.ts     lecteur XML minimal, partagé par OFX et CAMT
+    blocks.ts  découpage en blocs et effondrement intra-fichier
+    dedupe.ts  déduplication contre la base
+    transfers.ts détection et notation des virements internes
+    run.ts     orchestration : résolution, préparation, rapport
 backend/test/  tests node:test (aucune dépendance ajoutée)
 
 frontend/src/app/core/finances.api.ts     client HTTP
@@ -107,6 +135,49 @@ interdit. Deux conséquences visibles dans le code :
   poussées dans `FoyerStore.externalNotifs`, que le panneau de notifications fusionne ;
 - la recherche globale des opérations passe par `FinancesStore.search()` (appel serveur,
   antirebond de 220 ms), et la palette de recherche fusionne les deux listes de résultats.
+
+## 6. Import : ce qui se passe, dans l'ordre
+
+1. **Décodage** des octets. L'encodage est reniflé (UTF-8, UTF-16, repli Windows-1252) et
+   reporté dans le rapport.
+2. **Détection du format** d'après le contenu, jamais l'extension : un « .xls » d'agrégateur est
+   souvent un tableau HTML ou du texte tabulé.
+3. **Découpage en blocs** : suites de lignes consécutives partageant le même libellé de compte.
+4. **Résolution** de chaque bloc vers un compte réel, via la table d'alias. Un libellé inconnu
+   **bloque** l'import : aucun compte n'est créé automatiquement.
+5. **Effondrement** des blocs redondants d'un même compte, au **maximum** d'occurrences par bloc
+   et non à la somme.
+6. **Déduplication** contre la base, par empreinte figée et rang d'occurrence.
+7. **Rapport**, affiché avant toute écriture.
+8. **Validation** explicite, en une transaction.
+9. **Virements internes** proposés, jamais fusionnés d'office.
+
+Le fichier n'est jamais conservé : seules les lignes lues sont stockées dans le brouillon
+(`fin_imports.payload`), le temps que vous rattachiez les comptes inconnus sans avoir à
+redéposer le fichier. Le brouillon est vidé à la validation, et les brouillons abandonnés depuis
+plus de 24 h sont purgés au premier import suivant.
+
+**Annuler un import** supprime uniquement les lignes qu'il a créées (`DELETE WHERE import_id`).
+Si l'une d'elles faisait partie d'un virement validé, la jambe survivante est dégroupée plutôt
+que laissée en demi-virement. L'écran annonce combien de lignes ont été retouchées à la main
+depuis l'import, et donc ce que vous perdriez. Valider un virement ne compte pas comme une
+retouche : c'est un changement de structure, pas de contenu.
+
+## 7. Formats acceptés
+
+| Format | Reconnaissance | Remarques |
+|---|---|---|
+| CSV, TSV | séparateur et colonnes reniflés | Bankin' (`Date;Description;Compte;Montant;…`) et en-têtes anglais |
+| OFX 1.x | `OFXHEADER:` ou `<OFX>` | dialecte SGML aux balises non fermées, normalisé avant lecture |
+| OFX 2.x | `<?xml>` + `<OFX>` | |
+| CAMT.053 | espace de noms ISO 20022 | un compte par `<Stmt>`, une ligne par `<Ntry>` |
+| .xlsx | signature ZIP | lu avec `zlib`, sans bibliothèque de tableur |
+| faux .xls HTML | `<table>` | cas fréquent des agrégateurs |
+| faux .xls texte | à défaut | traité comme du délimité |
+| .xls binaire (BIFF8) | signature OLE2 | **refusé**, avec le message qui indique de réexporter en CSV |
+
+Décoder le BIFF8 à la main serait déraisonnable, et une bibliothèque pour ce seul cas ne vaut
+pas la dépendance. C'est une dette assumée, et le message d'erreur le dit.
 
 ## 6. Sauvegarde et restauration
 

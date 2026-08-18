@@ -108,6 +108,7 @@ input, textarea, select, button { font-family: var(--font-body); }
 }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--primary); color: #fff; box-shadow: var(--sh-primary); }
+.btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
 .btn-primary:hover { filter: brightness(1.04); }
 .btn-sage { background: linear-gradient(135deg, #7A9B76, #5F7E5C); color: #fff; box-shadow: 0 12px 22px -12px rgba(95, 126, 92, .6); }
 .btn-soft { background: var(--soft2); color: var(--ink2); }

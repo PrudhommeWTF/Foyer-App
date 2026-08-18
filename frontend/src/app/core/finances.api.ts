@@ -34,7 +34,7 @@ export interface FinCategorySummary {
 export interface FinMonthSummary {
   month: string; income: number; expense: number; balance: number; budgetTotal: number;
   categories: FinCategorySummary[];
-  missing: { accountId: number; name: string; lastDate: string | null }[];
+  missing: { accountId: number; name: string; coveredThrough: string | null }[];
   incomplete: boolean;
 }
 
@@ -123,4 +123,79 @@ export class FinancesApi {
 
   /** CSV export as a blob (fetched with the session token, not a bare link). */
   exportCsv(): Promise<Blob> { return this.api.download('finances/export.csv'); }
+
+  // ---- import ----
+  /** Upload a file as a raw body: no multipart dependency, no base64 inflation. */
+  uploadImport(file: File): Promise<{ preview: FinImportPreview }> {
+    return this.api.upload('finances/imports?filename=' + encodeURIComponent(file.name), file);
+  }
+  importPreview(id: number): Promise<{ preview: FinImportPreview }> {
+    return this.api.request(`finances/imports/${id}/preview`);
+  }
+  mapImportAccount(id: number, label: string, accountId: number): Promise<{ preview: FinImportPreview }> {
+    return this.api.request(`finances/imports/${id}/accounts`, { method: 'POST', body: JSON.stringify({ label, accountId }) });
+  }
+  commitImport(id: number): Promise<{ imported: FinImport; inserted: number; duplicates: number }> {
+    return this.api.request(`finances/imports/${id}/commit`, { method: 'POST' });
+  }
+  discardImport(id: number): Promise<{ cancelled?: boolean; deleted?: number; ungrouped?: number }> {
+    return this.api.request(`finances/imports/${id}`, { method: 'DELETE' });
+  }
+  imports(): Promise<{ imports: FinImport[] }> { return this.api.request('finances/imports'); }
+
+  // ---- internal transfers ----
+  transferCandidates(from: string, to: string): Promise<{ candidates: FinTransferCandidate[] }> {
+    return this.api.request(`finances/transfers/candidates?from=${from}&to=${to}`);
+  }
+  mergeTransfers(pairs: { debitId: number; creditId: number }[]): Promise<{ merged: number; failed: { error: string }[] }> {
+    return this.api.request('finances/transfers', { method: 'POST', body: JSON.stringify({ pairs }) });
+  }
+  transfers(): Promise<{ transfers: FinTransfer[] }> { return this.api.request('finances/transfers'); }
+  splitTransfer(group: string): Promise<{ split: number }> {
+    return this.api.request(`finances/transfers/${group}`, { method: 'DELETE' });
+  }
 }
+
+// ---- import ---------------------------------------------------------------
+
+export interface FinRejectedRow { line: number; reason: string; raw: string; }
+export interface FinUnknownAccount { label: string; rows: number; firstDate: string; lastDate: string; sample: string[]; }
+
+export interface FinImportPreview {
+  importId: number;
+  filename: string;
+  format: string;
+  encoding: string;
+  totalRows: number;
+  uniqueRows: number;
+  collapsed: number;
+  duplicates: number;
+  toInsert: number;
+  perAccount: { accountId: number; name: string; total: number; toInsert: number; duplicates: number; from: string; to: string }[];
+  unknownAccounts: FinUnknownAccount[];
+  rejected: FinRejectedRow[];
+  transferCandidates: number;
+  blocked: boolean;
+}
+
+export interface FinImport {
+  id: number;
+  filename: string;
+  format: string;
+  status: 'pending' | 'committed' | 'cancelled';
+  startedAt: string;
+  finishedAt: string | null;
+  inserted: number;
+  duplicates: number;
+  liveRows: number;
+  editedRows: number;
+  coverage: { accountId: number; name: string; from: string; to: string }[];
+}
+
+export type FinConfidence = 'forte' | 'moyenne' | 'faible';
+export interface FinTransferSide { id: number; accountId: number; accountName: string; date: string; amount: number; label: string; }
+export interface FinTransferCandidate {
+  debit: FinTransferSide; credit: FinTransferSide;
+  daysApart: number; confidence: FinConfidence; reason: string;
+}
+export interface FinTransfer { group: string; date: string; amount: number; from: string; to: string; }

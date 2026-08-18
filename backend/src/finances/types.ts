@@ -65,8 +65,8 @@ export interface MonthSummary {
   balance: number;
   budgetTotal: number;
   categories: CategorySummary[];
-  /** Active accounts with no operation on or after the first day of the month. */
-  missing: { accountId: number; name: string; lastDate: string | null }[];
+  /** Active accounts whose data does not reach the end of this month. */
+  missing: { accountId: number; name: string; coveredThrough: string | null }[];
   incomplete: boolean;
 }
 
