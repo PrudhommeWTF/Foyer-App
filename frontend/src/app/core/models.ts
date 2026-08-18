@@ -17,8 +17,6 @@ export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
 export interface FileItem { id: string; name: string; folderId: string; type: FileType; date: string; data?: string | null; }
-export interface BudgetCat { id: string; name: string; budget: number; color: string; icon: string; }
-export interface Transaction { id: string; name: string; catId: string | null; amount: number; income: boolean; date: string; m: number; }
 export interface MealValue { rid?: string; text?: string; }
 export interface Recipe { id: string; name: string; time: string; level: string; color: string; photo?: string | null; ingr: string[]; steps: string[]; }
 export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: SchedType; }
@@ -43,8 +41,6 @@ export interface HouseholdState {
   contacts: Contact[];
   folders: Folder[];
   files: FileItem[];
-  bcats: BudgetCat[];
-  tx: Transaction[];
   meals: Record<string, MealValue>;
   recipes: Recipe[];
   sched: SchedSlot[];

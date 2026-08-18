@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FoyerStore } from '../core/foyer.store';
+import { FinancesStore } from '../core/finances.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { ADD_MENU } from './nav';
@@ -81,6 +82,7 @@ import { SCREEN_TITLES } from '../core/constants';
 })
 export class TopbarComponent {
   store = inject(FoyerStore);
+  private finances = inject(FinancesStore);
   menu = ADD_MENU;
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   title = computed(() => SCREEN_TITLES[this.store.ui().screen] || 'Foyer');
@@ -94,7 +96,7 @@ export class TopbarComponent {
       case 'task': s.patch({ screen: 'taches' }); s.openTask(); break;
       case 'shop': s.pickShopFromMenu(); break;
       case 'recipe': s.patch({ screen: 'recettes' }); s.newRecipe(); break;
-      case 'tx': s.patch({ screen: 'budget' }); s.newTx(); break;
+      case 'tx': s.patch({ screen: 'finances' }); this.finances.init().then(() => this.finances.newTx()); break;
       case 'slot': s.newSlot(''); break;
       case 'contact': s.patch({ screen: 'contacts' }); s.newContact(); break;
       case 'file': s.patch({ screen: 'documents' }); s.newFile(); break;

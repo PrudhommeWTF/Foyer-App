@@ -14,7 +14,7 @@ import { TachesScreen } from '../screens/taches';
 import { MessagesScreen } from '../screens/messages';
 import { ContactsScreen } from '../screens/contacts';
 import { DocumentsScreen } from '../screens/documents';
-import { BudgetScreen } from '../screens/budget';
+import { FinancesScreen } from '../screens/finances/finances';
 import { RepasScreen } from '../screens/repas';
 import { RecettesScreen } from '../screens/recettes';
 import { PlanningScreen } from '../screens/planning';
@@ -28,7 +28,7 @@ import { SettingsScreen } from '../screens/settings';
     SidebarComponent, TopbarComponent, TabbarComponent, NotificationsComponent,
     FamilyModalComponent, ProfileModalComponent, SearchModalComponent,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, MessagesScreen, ContactsScreen,
-    DocumentsScreen, BudgetScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
+    DocumentsScreen, FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
@@ -44,7 +44,7 @@ import { SettingsScreen } from '../screens/settings';
             @case ('messages') { <screen-messages /> }
             @case ('contacts') { <screen-contacts /> }
             @case ('documents') { <screen-documents /> }
-            @case ('budget') { <screen-budget /> }
+            @case ('finances') { <screen-finances /> }
             @case ('repas') { <screen-repas /> }
             @case ('recettes') { <screen-recettes /> }
             @case ('planning') { <screen-planning /> }

@@ -28,8 +28,23 @@ jobs:
           npm ci
           npm run build
 
+      # Le module Finances porte la logique la plus coûteuse en cas de bug
+      # (déduplication, agrégats, migrations) : ses tests bloquent la CI.
+      - name: Test backend
+        working-directory: backend
+        run: npm test
+
+      # « Pas de code mort » : imports, variables et paramètres inutilisés échouent.
+      - name: Lint code mort (backend)
+        working-directory: backend
+        run: npm run typecheck
+
       - name: Build frontend
         working-directory: frontend
         run: |
           npm ci
           npm run build
+
+      - name: Lint code mort (frontend)
+        working-directory: frontend
+        run: npx tsc -p tsconfig.app.json --noUnusedLocals --noUnusedParameters --noEmit

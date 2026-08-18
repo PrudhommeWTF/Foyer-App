@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { EMPTY_STATE } from './seed';
+import { migrateFinances } from './finances/schema';
+import { initFinancesRepo } from './finances/repo';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db');
@@ -11,6 +13,10 @@ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 export const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
+// The finances tables rely on foreign keys (cascades, SET NULL); SQLite needs
+// this enabled per connection. The legacy tables below declare none, so this is
+// a no-op for them.
+db.pragma('foreign_keys = ON');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -39,6 +45,10 @@ try { db.exec('ALTER TABLE household ADD COLUMN ics_token TEXT'); } catch { /* a
 // Migration: per-user token version, bumped to revoke all outstanding sessions
 // (e.g. on password change or account removal).
 try { db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'); } catch { /* already present */ }
+
+// Finances module: versioned schema, applied at boot and independent of the rest.
+migrateFinances(db);
+initFinancesRepo(db);
 
 export function countUsers(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;

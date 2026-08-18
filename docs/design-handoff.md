@@ -121,7 +121,13 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 ### 8. Documents (`documents`)
 - Grille de **dossiers** (couleur, compteur) avec CRUD ; navigation dans un dossier (fil « Tous les dossiers ») ; recherche transverse ; liste de fichiers récents. Fichier = `{id,name,folder,type}` (type PDF/IMG/DOC…). CRUD dossiers (suppression en cascade) et fichiers. Upload = ajout d'entrée (démo, pas de vrai stockage).
 
-### 9. Suivi de budget (`budget`)
+### 9. Suivi de budget (`budget`) — remplacé
+
+> **Obsolète.** Cet écran a été remplacé par le module **Finances** (écran `finances`), dont les
+> données vivent dans des tables SQLite dédiées et non dans le document d'état. La description
+> ci-dessous est conservée telle qu'elle figurait dans la maquette d'origine, à titre
+> historique. Voir [`finances-architecture.md`](finances-architecture.md) et
+> [`finances-cahier-de-recette.md`](finances-cahier-de-recette.md).
 - **Synthèse** : dépensé / budget total + barre de progression (rouge si dépassement), revenus / dépenses / solde du mois.
 - **Navigation par mois** (mois courant / précédents) avec libellé, et **comparaison mois-1** (ex. « −18% vs mois préc. »).
 - **Catégories** (CRUD) : carte par catégorie avec **icône** (14 choix), couleur, budget, barre de progression, dépense recalculée depuis les transactions, delta vs mois précédent. Suppression avec confirmation (réaffecte/retire).

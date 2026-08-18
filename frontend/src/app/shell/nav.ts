@@ -17,7 +17,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: 'repas', label: 'Planning des repas', icon: 'repas' },
       { id: 'recettes', label: 'Carnet de recettes', icon: 'recettes' },
-      { id: 'budget', label: 'Suivi de budget', icon: 'budget' },
+      { id: 'finances', label: 'Finances', icon: 'budget' },
       { id: 'planning', label: 'Emploi du temps', icon: 'planning' },
     ],
   },
@@ -43,7 +43,7 @@ export const ADD_MENU: { id: string; label: string; sub: string; icon: string; t
   { id: 'task', label: 'Tâche', sub: 'Assigner à un membre', icon: 'taches', tint: '#F2ECF5', color: '#9B6FA8' },
   { id: 'shop', label: 'Article de courses', sub: 'Ajouter à la liste', icon: 'courses', tint: '#EDF2EB', color: '#7A9B76' },
   { id: 'recipe', label: 'Recette', sub: 'Ajouter au carnet', icon: 'recettes', tint: '#FCE9E3', color: '#E56B4E' },
-  { id: 'tx', label: 'Transaction', sub: 'Dépense ou revenu', icon: 'budget', tint: '#EDF2EB', color: '#7A9B76' },
+  { id: 'tx', label: 'Opération', sub: 'Dépense ou recette', icon: 'budget', tint: '#EDF2EB', color: '#7A9B76' },
   { id: 'slot', label: 'Créneau', sub: 'Emploi du temps', icon: 'planning', tint: '#E5F0F4', color: '#4E93B8' },
   { id: 'contact', label: 'Contact', sub: 'Carnet du foyer', icon: 'contacts', tint: '#F2ECF5', color: '#9B6FA8' },
   { id: 'file', label: 'Document', sub: 'Téléverser un fichier', icon: 'documents', tint: '#FDF0DA', color: '#F0B24B' },

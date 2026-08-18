@@ -136,6 +136,7 @@ input, textarea, select, button { font-family: var(--font-body); }
   border-radius: var(--r-input); padding: 13px 16px; font-size: 15px; font-weight: 600;
   color: var(--ink); outline: none; transition: border-color .15s ease;
 }
+select.input { font-family: inherit; cursor: pointer; }
 .input:focus { border-color: var(--primary); }
 .input::placeholder { color: var(--ink3); }
 textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }

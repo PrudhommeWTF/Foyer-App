@@ -2,7 +2,7 @@ import { Injectable, computed, effect, signal } from '@angular/core';
 import { ApiService, SetupPayload, UpdateInfo } from './api.service';
 import { HouseholdState, Member, Notif } from './models';
 import { UiState, initialUi } from './ui-state';
-import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, parseAmt, uid, weekDates } from './helpers';
+import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
 
 const READ_NOTIFS_KEY = 'foyer.readNotifs';
@@ -403,7 +403,6 @@ export class FoyerStore {
     for (const s of d.shop) if (normText(s.name).includes(q)) push({ kind: 'shop', icon: 'panier', color: '#E08D3C', title: s.name, sub: 'Course' + (s.qty ? ' · ' + s.qty : ''), screen: 'courses', id: s.id });
     for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
     for (const f of d.files) if (normText(f.name).includes(q)) push({ kind: 'file', icon: 'documents', color: '#9B6FA8', title: f.name, sub: 'Document', screen: 'documents', id: f.id });
-    for (const x of d.tx) if (normText(x.name).includes(q)) push({ kind: 'tx', icon: 'budget', color: x.income ? '#6E9E5F' : '#C6492F', title: x.name, sub: 'Transaction', screen: 'budget', id: x.id });
     for (const m of d.members) if (normText(`${m.name} ${m.role}`).includes(q)) push({ kind: 'member', icon: 'users', color: m.color, title: m.name, sub: m.role || 'Membre', screen: 'settings', id: m.id });
     for (const msg of d.msgs) if (normText(msg.text).includes(q)) push({ kind: 'message', icon: 'messages', color: '#4E93B8', title: msg.text, sub: 'Message' + (msg.who ? ' · ' + mname(msg.who) : ''), screen: 'messages' });
     return hits.slice(0, 40);
@@ -420,7 +419,6 @@ export class FoyerStore {
       case 'event': this.editEvent(h.id); break;
       case 'shop': this.editShop(h.id); break;
       case 'recipe': this.patch({ openRecipeId: h.id }); break;
-      case 'tx': this.editTx(h.id); break;
       case 'member': this.openFamily(); break;
       default: break;
     }
@@ -632,34 +630,6 @@ export class FoyerStore {
   }
   confirmFileDel(): void { const id = this.ui().fileDelId; if (!id) return; this.mutate((d) => { d.files = d.files.filter((f) => f.id !== id); }); this.patch({ fileDelId: null }); this.toast('Fichier supprimé'); }
 
-  // ---- budget -----------------------------------------------------------
-  newCat(): void { this.patch({ catForm: true, catEditId: null, cName: '', cBudget: '', cColor: '#7A9B76', cIcon: 'panier' }); }
-  editCat(id: string): void { const c = this._data()?.bcats.find((x) => x.id === id); if (!c) return; this.patch({ catForm: true, catEditId: id, cName: c.name, cBudget: String(c.budget), cColor: c.color, cIcon: c.icon || 'panier' }); }
-  saveCat(): void {
-    const s = this.ui(); const name = s.cName.trim(); if (!name) { this.toast('Donne un nom à la catégorie'); return; }
-    const budget = parseAmt(s.cBudget);
-    this.mutate((d) => {
-      if (s.catEditId) { const i = d.bcats.findIndex((c) => c.id === s.catEditId); if (i >= 0) d.bcats[i] = { ...d.bcats[i], name, budget, color: s.cColor, icon: s.cIcon }; }
-      else d.bcats.push({ id: uid('c'), name, budget, color: s.cColor, icon: s.cIcon });
-    });
-    this.toast(s.catEditId ? 'Catégorie modifiée' : 'Catégorie ajoutée');
-    this.patch({ catForm: false, catEditId: null });
-  }
-  confirmCatDel(): void { const id = this.ui().catDelId; if (!id) return; this.mutate((d) => { d.bcats = d.bcats.filter((c) => c.id !== id); d.tx.forEach((t) => { if (t.catId === id) t.catId = null; }); }); this.patch({ catDelId: null }); this.toast('Catégorie supprimée'); }
-  newTx(): void { const first = this._data()?.bcats[0]; this.patch({ txForm: true, txEditId: null, txName: '', txAmount: '', txIncome: false, txCatId: first?.id || null, txDate: '16 juil.' }); }
-  editTx(id: string): void { const t = this._data()?.tx.find((x) => x.id === id); if (!t) return; this.patch({ txForm: true, txEditId: id, txName: t.name, txAmount: t.amount.toFixed(2).replace('.', ','), txIncome: t.income, txCatId: t.catId || this._data()?.bcats[0]?.id || null, txDate: t.date }); }
-  saveTx(): void {
-    const s = this.ui(); const name = s.txName.trim(); if (!name) { this.toast('Donne un libellé'); return; } const amount = parseAmt(s.txAmount); if (!amount) { this.toast('Saisis un montant'); return; }
-    const data = { name, amount, income: s.txIncome, catId: s.txIncome ? null : s.txCatId, date: s.txDate.trim() || '—' };
-    this.mutate((d) => {
-      if (s.txEditId) { const i = d.tx.findIndex((t) => t.id === s.txEditId); if (i >= 0) d.tx[i] = { ...d.tx[i], ...data }; }
-      else d.tx.unshift({ id: uid('x'), ...data, m: s.monthOffset });
-    });
-    this.toast(s.txEditId ? 'Transaction modifiée' : 'Transaction ajoutée');
-    this.patch({ txForm: false, txEditId: null });
-  }
-  delTx(): void { const id = this.ui().txEditId; if (!id) return; this.mutate((d) => { d.tx = d.tx.filter((t) => t.id !== id); }); this.patch({ txForm: false, txEditId: null }); this.toast('Transaction supprimée'); }
-
   // ---- meals ------------------------------------------------------------
   mealName(v?: { rid?: string; text?: string }): string | null {
     if (!v) return null;
@@ -788,6 +758,12 @@ export class FoyerStore {
   }
 
   // ---- notifications (dérivées de l'état, côté client) ------------------
+  /**
+   * Notifications poussées par les modules qui ne vivent pas dans ce document
+   * (Finances). Évite une dépendance circulaire entre les stores.
+   */
+  readonly externalNotifs = signal<Notif[]>([]);
+
   toggleNotif(): void { this.patch({ notifOpen: !this.ui().notifOpen }); }
 
   /**
@@ -828,12 +804,9 @@ export class FoyerStore {
       for (const c of d.contacts) if (isBirthdayOn(c.birthday, ds)) bday(c.name, c.birthday!, 'c' + c.id);
     }
 
-    // Budgets dépassés (mois courant)
-    for (const cat of d.bcats) {
-      if (!(cat.budget > 0)) continue;
-      const spent = d.tx.filter((t) => t.catId === cat.id && (t.m || 0) === 0 && !t.income).reduce((s, t) => s + t.amount, 0);
-      if (spent > cat.budget) raw.push({ id: `budget-${cat.id}`, kind: 'budget', title: `Budget « ${cat.name} » dépassé`, desc: `${Math.round(spent)} € dépensés sur ${cat.budget} €`, time: 'Ce mois-ci' });
-    }
+    // Les alertes de budget viennent du module Finances, dont les données vivent
+    // dans des tables dédiées et non dans ce document.
+    raw.push(...this.externalNotifs());
 
     return raw.map((n) => ({ ...n, read: read.has(n.id) }));
   });

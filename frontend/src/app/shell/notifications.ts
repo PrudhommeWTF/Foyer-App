@@ -6,7 +6,7 @@ import { tint } from '../core/constants';
 const KIND_MAP: Record<string, { icon: string; color: string; screen: string }> = {
   event: { icon: 'calendar', color: '#E56B4E', screen: 'calendar' },
   task: { icon: 'taches', color: '#9B6FA8', screen: 'taches' },
-  budget: { icon: 'budget', color: '#F0B24B', screen: 'budget' },
+  budget: { icon: 'budget', color: '#F0B24B', screen: 'finances' },
   birthday: { icon: 'cake', color: '#C77DA5', screen: 'calendar' },
   shop: { icon: 'courses', color: '#7A9B76', screen: 'courses' },
   doc: { icon: 'documents', color: '#4E93B8', screen: 'documents' },

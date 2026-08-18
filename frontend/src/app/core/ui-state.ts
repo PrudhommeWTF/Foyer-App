@@ -23,8 +23,6 @@ export interface UiState {
   mealMode: 'recipe' | 'text';
   mealRid: string | null;
   mealText: string;
-  // budget
-  monthOffset: number;
 
   // event modal + datepicker
   showEvent: boolean; evEditId: string | null;
@@ -63,10 +61,6 @@ export interface UiState {
   folderForm: boolean; foEditId: string | null; foName: string; foColor: string; folderDelId: string | null;
   fileForm: boolean; fiEditId: string | null; fiName: string; fiFolderId: string | null; fiType: FileType; fiData: string | null; fileDelId: string | null;
 
-  // budget forms
-  catForm: boolean; catEditId: string | null; cName: string; cBudget: string; cColor: string; cIcon: string; catDelId: string | null;
-  txForm: boolean; txEditId: string | null; txName: string; txAmount: string; txIncome: boolean; txCatId: string | null; txDate: string;
-
   // recipes
   recipeForm: boolean; editingId: string | null; confirmDelId: string | null; openRecipeId: string | null;
   fName: string; fTime: string; fLevel: string; fColor: string; fPhoto: string | null; fIngr: IngrRow[]; fSteps: IngrRow[];
@@ -92,7 +86,6 @@ export function initialUi(): UiState {
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
     weekOffset: 0, mealEdit: null, mealMode: 'recipe', mealRid: null, mealText: '',
-    monthOffset: 0,
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: '2026-07-16', evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shCat: 'Fruits & légumes', shListId: 'cl1', newShop: '',
     activeShopList: 'cl1', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
@@ -105,8 +98,6 @@ export function initialUi(): UiState {
     docFolder: null, docSearch: '',
     folderForm: false, foEditId: null, foName: '', foColor: '#E56B4E', folderDelId: null,
     fileForm: false, fiEditId: null, fiName: '', fiFolderId: null, fiType: 'PDF', fiData: null, fileDelId: null,
-    catForm: false, catEditId: null, cName: '', cBudget: '', cColor: '#7A9B76', cIcon: 'panier', catDelId: null,
-    txForm: false, txEditId: null, txName: '', txAmount: '', txIncome: false, txCatId: 'c1', txDate: '',
     recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
     fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhoto: null, fIngr: [], fSteps: [],
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
