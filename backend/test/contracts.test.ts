@@ -28,7 +28,7 @@ function reset(): void {
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
   repo.initFinancesRepo(db, tmpDir());
-  compte = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+  compte = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
 }
 
 const asset = (over: Partial<contracts.AssetInput> = {}): contracts.Asset => contracts.createAsset({
@@ -37,7 +37,7 @@ const asset = (over: Partial<contracts.AssetInput> = {}): contracts.Asset => con
 
 const contract = (over: Partial<contracts.ContractInput> = {}): contracts.Contract => contracts.createContract({
   name: 'Assurance véhicule', provider: 'AXA', kind: 'assurance',
-  assetId: null, accountId: null, categoryId: null, memberId: null,
+  assetId: null, accountId: null, categoryId: null, memberIds: [],
   amountMin: null, amountMax: null, periodicity: 'mensuelle',
   renewalOn: null, noticeDays: 0, endsOn: null, status: 'actif', notes: '', refs: [], ...over,
 });
@@ -78,6 +78,18 @@ describe('biens et contrats', () => {
     const after = repo.getTransaction(t)!;
     assert.equal(after.contractId, null);
     assert.equal(after.amount, -8169, 'l’argent a bien été dépensé, seule l’explication disparaît');
+  });
+
+  it('couvre plusieurs personnes, et les libère avec le contrat', () => {
+    const c = contract({ memberIds: ['m1', 'm2', 'm3'] });
+    assert.deepEqual(contracts.getContract(c.id)!.memberIds, ['m1', 'm2', 'm3']);
+
+    contracts.updateContract(c.id, { ...c, memberIds: ['m2'] });
+    assert.deepEqual(contracts.getContract(c.id)!.memberIds, ['m2']);
+
+    contracts.deleteContract(c.id);
+    const restants = (db.prepare('SELECT COUNT(*) AS n FROM fin_contract_members WHERE contract_id = ?').get(c.id) as { n: number }).n;
+    assert.equal(restants, 0);
   });
 
   it('conserve les références du contrat, dans l’ordre', () => {

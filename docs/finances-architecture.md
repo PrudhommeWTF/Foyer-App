@@ -117,6 +117,10 @@ backend/src/finances/
   contracts-routes.ts /api/finances/contracts et /assets
   attachments.ts   pièces jointes : octets sur disque, métadonnées en base
   attachments-routes.ts /api/finances/attachments
+  energy.ts        relevés de compteur et consommation dérivée
+  energy-routes.ts /api/finances/readings
+  savings.ts       pistes d'économies, cumul de ce qui reste à aller chercher
+  backup.ts        sauvegarde et restauration du seul module
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -336,11 +340,33 @@ la décision reste au foyer.
 Une **fourchette** plutôt qu'un montant exact, parce que les cotisations bougent de quelques
 centimes et qu'un signalement à chaque centime ne serait plus lu.
 
+### Qui est concerné
+
+Un compte joint a **deux** titulaires, une mutuelle peut couvrir **toute la famille** : une colonne
+unique ne pouvait pas le dire. La migration 4 crée `fin_account_members` et `fin_contract_members`,
+**recopie le titulaire unique déjà saisi** puis supprime la colonne. Rien à ressaisir sur une base
+existante, et une seule source de vérité pour la question « à qui est-ce ».
+
+Les identifiants de membres viennent du **document du foyer**, pas d'une table : ils ne peuvent pas
+être vérifiés par clé étrangère, seulement nettoyés (dédoublonnés, bornés). L'affichage est donc
+tolérant : un membre supprimé du foyer laisse son identifiant en base, et l'interface l'ignore
+plutôt que d'afficher un vide entre deux virgules.
+
+**La restauration signale les colonnes qu'elle ignore.** Restaurer une sauvegarde d'avant la
+migration 4 rapporte `fin_accounts (member_id)` : la colonne n'existe plus, son contenu vit
+ailleurs, et le taire ferait perdre une donnée sans que personne le sache.
+
 ### Rattacher les opérations
 
 Trois chemins, du plus manuel au plus automatique : le sélecteur du formulaire d'opération,
 l'action de règle « rattacher au contrat », et le filtre « opérations de ce contrat » qui part du
-contrat pour vérifier ce qu'il a réellement capté. L'action de règle utilise le même moteur que
+contrat pour vérifier ce qu'il a réellement capté.
+
+La fiche du contrat propose de **créer la règle directement**, pré-remplie : le libellé bancaire
+ressemble au **fournisseur** bien plus qu'au nom que vous avez donné au contrat, et c'est la
+**fourchette de montant** qui distingue deux contrats du même assureur. Ces deux critères
+deviennent les conditions, le rattachement au contrat devient l'action, et la règle se teste avant
+d'être enregistrée comme n'importe quelle autre. L'action de règle utilise le même moteur que
 le reste : elle se prévisualise, se rejoue et se protège comme les autres.
 
 **Supprimer ne défait rien.** Supprimer un bien libère ses contrats, supprimer un contrat détache
@@ -445,7 +471,104 @@ comm -13 /tmp/connus.txt /tmp/disque.txt
 comm -13 /tmp/connus.txt /tmp/disque.txt | while read -r f; do rm -v "/var/lib/foyer/pieces/$f"; done
 ```
 
-## 12. Sauvegarde et restauration
+## 12. Relevés de compteur
+
+Le module ne cherche pas à facturer : le fournisseur le fait déjà, et mieux. Il répond à une
+seule question, celle qu'aucune facture ne répond : **est-ce que je consomme plus qu'avant, et
+depuis quand ?**
+
+D'où le parti pris : tout est ramené à une **consommation par jour**. C'est la seule grandeur
+comparable entre deux relevés espacés de trois semaines et deux relevés espacés de deux mois, et
+la seule qui rende une dérive visible.
+
+**La comparaison se fait à la même fenêtre de calendrier un an plus tôt**, jamais à la période
+précédente. Comparer janvier à avril ne dit rien d'un foyer qui se chauffe.
+
+Deux façons de saisir, les deux acceptées : l'**index** du compteur (simple, ou heures pleines et
+creuses) ou la **consommation** lue sur une facture. Quand la facture donne le chiffre, il fait
+foi : aucune soustraction à se tromper. Le montant de la période est facultatif et ne sert qu'à
+calculer le prix du kWh.
+
+### Ce qui n'est pas mesurable n'est pas affiché
+
+Une consommation négative présentée comme un fait serait pire qu'une absence de chiffre. Quatre
+cas sont donc nommés plutôt que calculés :
+
+| Cas | Ce qui est affiché |
+|---|---|
+| Premier relevé | « premier relevé, rien à comparer » : il n'y a rien avant à soustraire |
+| Index inférieur au précédent | « compteur remplacé ? » : un compteur ne recule pas |
+| Deux relevés le même jour | « même jour que le relevé précédent » : pas de division par zéro |
+| Ni index ni consommation | « consommation non calculable » |
+
+Les relevés appartiennent au contrat et disparaissent avec lui (`ON DELETE CASCADE`).
+
+### Pistes d'économies
+
+Une piste n'est ni une opération ni un contrat : c'est une **intention chiffrée**. « Renégocier
+l'assurance habitation, 240 € par an. »
+
+Le module ne prétend pas mesurer l'économie réellement obtenue, seul le coût réel du contrat une
+fois la piste appliquée le dira. Il tient la liste, sépare ce qui reste à faire de ce qui est
+fait, et en donne le cumul annuel. C'est déjà ce qu'on oublie le plus.
+
+**Une piste abandonnée ne compte nulle part.** La garder dans un total gonflerait un chiffre que
+rien ne viendra jamais réaliser.
+
+**Le gain annuel est obligatoire**, même approximatif : sans lui la piste ne se compare à rien et
+la liste devient un pense-bête de plus.
+
+**La tâche créée depuis une piste est mémorisée** dans `task_id`, mais l'interface vérifie qu'elle
+existe encore dans le document du foyer avant d'afficher « tâche créée ». Une tâche supprimée
+ailleurs délie la piste, qui repropose le bouton. Promettre une tâche disparue serait pire que ne
+rien promettre.
+
+Supprimer un contrat détache ses pistes (`ON DELETE SET NULL`) sans les emporter : l'idée
+d'économiser survit au contrat qu'elle visait.
+
+## 13. Sauvegarde du seul module
+
+`GET /api/finances/export.json` rend un fichier JSON portant toutes les tables `fin_*`, une
+version de format et la **version de schéma** en vigueur. `POST /api/finances/restore` le relit.
+
+Ce n'est **pas** un remplacement de la sauvegarde du fichier SQLite, qui reste la référence et qui
+emporte tout. C'est l'outil du cas précis : rejouer une manipulation qui a mal tourné, ou
+déménager les finances vers une autre instance, sans toucher au reste du foyer.
+
+**Les pièces jointes n'y sont pas.** Le JSON porte leurs métadonnées, les octets restent sur le
+disque. Restaurer sur la même machine les retrouve ; restaurer ailleurs demande de copier le
+répertoire `pieces` en plus, et le démarrage signale ce qui manque.
+
+La restauration **écrase**, d'où quatre garde-fous :
+
+- **Confirmation explicite** dans le corps de la requête (`confirm: "REMPLACER"`), qu'aucun appel
+  accidentel ne portera ;
+- **transaction unique**, avec `defer_foreign_keys` : une sauvegarde incohérente est refusée en
+  bloc, la base reste exactement comme avant ;
+- **refus d'une sauvegarde plus récente** que le schéma en place, qui pourrait porter des colonnes
+  que cette version ne sait pas lire, et les perdre en silence ;
+- **acceptation d'une sauvegarde plus ancienne**, les migrations du module étant additives : les
+  colonnes ajoutées depuis prennent leur valeur par défaut.
+
+En ligne de commande :
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8099/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vous@exemple.fr","password":"…"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+
+# Sauvegarder
+curl -s http://localhost:8099/api/finances/export.json -H "Authorization: Bearer $TOKEN" \
+  -o foyer-finances-$(date +%F).json
+
+# Restaurer (écrase le module)
+python3 -c "import json,sys; b=json.load(open('foyer-finances-2026-08-19.json')); \
+  print(json.dumps({'confirm':'REMPLACER','backup':b}))" > /tmp/restore.json
+curl -s -X POST http://localhost:8099/api/finances/restore -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' --data-binary @/tmp/restore.json
+```
+
+## 14. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -530,7 +653,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 13. Tests
+## 15. Tests
 
 ```bash
 cd backend

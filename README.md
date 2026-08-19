@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec **un ou plusieurs titulaires** et soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -156,6 +156,17 @@ Ce que l'import garantit :
 - **Virements internes** détectés et **proposés**, avec un niveau de confiance. Jamais fusionnés
   tout seuls : sur des données réelles, deux montants opposés sans rapport se croisent.
 
+**Sauvegarde du seul module Finances** : l'onglet Import propose un export JSON (comptes,
+opérations, contrats, règles) et sa restauration. Utile pour rejouer une manipulation qui a mal
+tourné ou déménager les finances, sans toucher au reste du foyer. Ce n'est **pas** une sauvegarde
+complète : les pièces jointes restent sur le disque, et la sauvegarde du fichier SQLite reste la
+référence. La restauration écrase, en tout ou rien, et refuse une sauvegarde produite par une
+version plus récente.
+
+Depuis la fiche d'un contrat, le bouton **« Créer une règle pour ce contrat »** ouvre l'éditeur
+pré-rempli avec le fournisseur et la fourchette de montant, ce qui suffit à distinguer deux
+contrats du même assureur.
+
 Détail du fonctionnement et cahier de recette :
 [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md).
 
@@ -194,7 +205,8 @@ qui coûtent cher quand on les oublie.
   « rattacher au contrat » : le module additionne douze mois glissants et **signale** un
   prélèvement sorti de la fourchette annoncée.
 
-Les contrats se regroupent par **bien** (logement, véhicule), portent leurs **références**
+Les contrats se regroupent par **bien** (logement, véhicule), désignent **une ou plusieurs
+personnes** du foyer (une mutuelle couvre souvent toute la famille), portent leurs **références**
 (numéro de police, de client, de compteur) et se passent en « résilié » sans rien perdre de leur
 historique. Supprimer un bien libère ses contrats ; supprimer un contrat détache ses opérations
 sans les effacer.
@@ -205,6 +217,30 @@ pas à l'extension. Les fichiers sont écrits sur le disque, à côté de la bas
 SHA-256 : deux fois la même facture n'occupe qu'un fichier, et une sauvegarde du répertoire de
 données reste complète. Au démarrage, l'application compare la base et le disque **dans les deux
 sens** et signale tout écart sans jamais rien supprimer d'elle-même.
+
+## ⚡ Relevés de compteur
+
+Sur un contrat de type **Énergie**, notez l'index du compteur de temps en temps. Deux relevés
+suffisent : le module en tire une **consommation par jour**, la seule grandeur comparable entre
+des relevés espacés différemment, et la compare à **la même période un an plus tôt**. Comparer au
+mois précédent ne dirait rien d'un foyer qui se chauffe.
+
+Index simple ou heures pleines et creuses, au choix. Si vous préférez recopier la consommation
+depuis la facture, elle fait foi et aucune soustraction n'est tentée. Le montant de la période est
+facultatif, il sert à calculer le prix du kWh.
+
+Ce qui n'est pas mesurable n'est pas affiché : un index inférieur au précédent est signalé comme
+un **compteur probablement remplacé**, pas comme une consommation négative.
+
+## 💡 Pistes d'économies
+
+Une piste est une intention chiffrée : « renégocier l'assurance habitation, 240 € par an ».
+L'écran Contrats en tient la liste, sépare **ce qu'il reste à aller chercher** de **ce qui est
+déjà obtenu**, et permet d'en faire une tâche en un clic. Une piste abandonnée ne compte nulle
+part : un total gonflé par ce qui ne se fera jamais ne sert à rien.
+
+Le gain reste une **estimation**. C'est le coût réel du contrat, une fois la piste appliquée, qui
+dira ce qu'elle a vraiment rapporté.
 
 ## 💾 Sauvegarde et restauration
 
@@ -226,7 +262,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#12-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#14-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 

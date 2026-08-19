@@ -28,8 +28,8 @@ function reset(): void {
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
   repo.initFinancesRepo(db, tmpDir());
-  joint = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
-  livret = repo.createAccount({ name: 'Livret', kind: 'epargne', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+  joint = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
+  livret = repo.createAccount({ name: 'Livret', kind: 'epargne', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
 }
 
 /** One operation, entered by hand (so it claims nothing about completeness). */

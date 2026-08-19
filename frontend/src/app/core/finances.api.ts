@@ -8,7 +8,9 @@ export type AccountKind = 'courant' | 'pro' | 'epargne';
 export type TxKind = 'depense' | 'recette' | 'virement';
 
 export interface FinAccount {
-  id: number; name: string; kind: AccountKind; memberId: string | null;
+  id: number; name: string; kind: AccountKind;
+  /** Titulaires : zéro, un, ou plusieurs. */
+  memberIds: string[];
   openingBalance: number; openingDate: string | null; archived: boolean; position: number;
 }
 
@@ -47,7 +49,7 @@ export interface FinBootstrap {
 }
 
 export interface AccountPayload {
-  name: string; kind: AccountKind; memberId: string | null;
+  name: string; kind: AccountKind; memberIds: string[];
   openingBalance: string; openingDate: string | null; archived: boolean;
 }
 
@@ -124,6 +126,37 @@ export class FinancesApi {
 
   summary(month: string): Promise<{ summary: FinMonthSummary }> {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
+  }
+
+  // ---- savings ideas ----
+  createSaving(p: FinSavingPayload): Promise<{ saving: FinSaving }> {
+    return this.api.request('finances/savings', { method: 'POST', body: JSON.stringify(p) });
+  }
+  updateSaving(id: number, p: FinSavingPayload): Promise<{ saving: FinSaving; totals: FinSavingsTotals }> {
+    return this.api.request(`finances/savings/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+  }
+  deleteSaving(id: number): Promise<{ savings: FinSaving[]; totals: FinSavingsTotals }> {
+    return this.api.request(`finances/savings/${id}`, { method: 'DELETE' });
+  }
+  linkSavingTask(id: number, taskId: string | null): Promise<{ saving: FinSaving }> {
+    return this.api.request(`finances/savings/${id}/task`, { method: 'POST', body: JSON.stringify({ taskId }) });
+  }
+
+  // ---- meter readings ----
+  readings(contractId: number): Promise<FinReadingsBundle> {
+    return this.api.request(`finances/readings?contractId=${contractId}`);
+  }
+  createReading(p: FinReadingPayload): Promise<{ reading: FinReading }> {
+    return this.api.request('finances/readings', { method: 'POST', body: JSON.stringify(p) });
+  }
+  deleteReading(id: number): Promise<{ readings: FinReading[]; periods: FinPeriod[] }> {
+    return this.api.request(`finances/readings/${id}`, { method: 'DELETE' });
+  }
+
+  // ---- module backup ----
+  exportModule(): Promise<Blob> { return this.api.download('finances/export.json'); }
+  restoreModule(backup: unknown): Promise<{ report: FinRestoreReport }> {
+    return this.api.request('finances/restore', { method: 'POST', body: JSON.stringify({ confirm: 'REMPLACER', backup }) });
   }
 
   // ---- attachments ----
@@ -359,7 +392,9 @@ export interface FinContractRef { key: string; value: string; }
 
 export interface FinContractPayload {
   name: string; provider: string; kind: FinContractKind;
-  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  assetId: number | null; accountId: number | null; categoryId: number | null;
+  /** Personnes concernées : zéro, une, ou plusieurs. */
+  memberIds: string[];
   /** Sent as decimal strings; the server parses them once, into cents. */
   amountMin: string; amountMax: string;
   periodicity: FinPeriodicity;
@@ -369,7 +404,8 @@ export interface FinContractPayload {
 
 export interface FinContract {
   id: number; name: string; provider: string; kind: FinContractKind;
-  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  assetId: number | null; accountId: number | null; categoryId: number | null;
+  memberIds: string[];
   amountMin: number | null; amountMax: number | null;
   periodicity: FinPeriodicity;
   renewalOn: string | null; noticeDays: number; endsOn: string | null;
@@ -381,7 +417,7 @@ export interface FinDeadline {
   kind: FinDeadlineKind; date: string;
   /** Days from today; negative when the window has closed. */
   daysAway: number;
-  assetId: number | null; memberId: string | null;
+  assetId: number | null; memberIds: string[];
 }
 
 export interface FinContractCost {
@@ -396,11 +432,75 @@ export interface FinContractsBundle {
   costs: Record<number, FinContractCost>;
   /** Attachment count per contract. */
   pieces: Record<number, number>;
+  savings: FinSaving[];
+  savingsTotals: FinSavingsTotals;
 }
+
+export type FinSavingStatus = 'idee' | 'en-cours' | 'faite' | 'abandonnee';
+
+export interface FinSavingPayload {
+  title: string; description: string;
+  /** Sent as a decimal string; the server parses it once, into cents. */
+  annualGain: string;
+  contractId: number | null; assetId: number | null;
+  status: FinSavingStatus; targetDate: string | null; taskId: string | null;
+}
+
+export interface FinSaving {
+  id: number; title: string; description: string; annualGain: number;
+  contractId: number | null; assetId: number | null;
+  status: FinSavingStatus; targetDate: string | null; taskId: string | null; position: number;
+}
+
+export interface FinSavingsTotals { pending: number; done: number; count: number; openCount: number; }
 
 export type FinOwnerKind = 'contract' | 'asset' | 'transaction';
 
 export interface FinAttachment {
   id: number; ownerKind: FinOwnerKind; ownerId: number;
   name: string; mime: string; size: number; sha256: string; createdAt: string;
+}
+
+// ---- meter readings ---------------------------------------------------------
+
+export interface FinReadingPayload {
+  contractId: number; date: string;
+  indexTotal: string; indexHp: string; indexHc: string;
+  kwh: string; kwhHp: string; kwhHc: string;
+  cost: string; notes: string;
+}
+
+export interface FinReading {
+  id: number; contractId: number; date: string;
+  indexTotal: number | null; indexHp: number | null; indexHc: number | null;
+  kwh: number | null; kwhHp: number | null; kwhHc: number | null;
+  cost: number | null; notes: string;
+}
+
+export type FinGapReason = 'premier' | 'index-recule' | 'meme-jour' | 'inconnu';
+
+export interface FinPeriod {
+  readingId: number; from: string; to: string; days: number;
+  kwh: number | null; kwhHp: number | null; kwhHc: number | null;
+  kwhPerDay: number | null;
+  cost: number | null; costPerKwh: number | null;
+  lastYearKwhPerDay: number | null;
+  /** Set when the period holds no usable consumption. */
+  gap: FinGapReason | null;
+}
+
+export interface FinEnergySummary {
+  contractId: number; readings: number;
+  latest: FinPeriod | null;
+  yearKwh: number | null; yearCost: number | null;
+  /** Percentage change of the daily rate against a year earlier. */
+  trend: number | null;
+}
+
+export interface FinReadingsBundle { readings: FinReading[]; periods: FinPeriod[]; summary: FinEnergySummary; }
+
+export interface FinRestoreReport {
+  before: Record<string, number>;
+  after: Record<string, number>;
+  attachments: number;
 }

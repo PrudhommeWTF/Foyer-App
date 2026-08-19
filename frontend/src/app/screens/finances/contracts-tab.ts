@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind } from '../../core/finances.api';
+import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind, FinPeriod, FinReading, FinSaving } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { CAT_ICONS, FILE_TYPE_COLORS } from '../../core/constants';
 import { ModalComponent } from '../../shared/modal';
+import { AvatarComponent } from '../../shared/avatar';
 
 const ASSET_KINDS: { id: FinAsset['kind']; label: string; icon: string }[] = [
   { id: 'immobilier', label: 'Bien immobilier', icon: 'maison' },
@@ -41,7 +42,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
   selector: 'fin-contracts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, AvatarComponent],
   template: `
     <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
     @if (store.deadlines().length) {
@@ -138,6 +139,130 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         }
       </div>
     </div>
+
+    <!-- PISTES D'ÉCONOMIES -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Pistes d'économies</div>
+          <div class="panel-sub">Ce qu'il reste à faire pour payer moins, avec le gain annuel estimé</div>
+        </div>
+        <button class="btn btn-soft" (click)="store.newSaving(null)"><f-icon name="plus" [size]="16" color="var(--ink2)" [width]="2.6" /> Piste</button>
+      </div>
+
+      @if (store.savingsTotals(); as t) {
+        @if (t.count) {
+          <div class="totals">
+            <div>
+              <div class="overline">À aller chercher</div>
+              <div class="t-val f-display">{{ fmtInt(t.pending) }} € <span class="t-unit">par an</span></div>
+              <div class="t-sub">{{ t.openCount }} piste{{ t.openCount > 1 ? 's' : '' }} ouverte{{ t.openCount > 1 ? 's' : '' }}</div>
+            </div>
+            <div>
+              <div class="overline">Déjà obtenu</div>
+              <div class="t-val f-display" style="color:#6E9E5F">{{ fmtInt(t.done) }} € <span class="t-unit">par an</span></div>
+              <div class="t-sub">estimation, le coût réel des contrats fait foi</div>
+            </div>
+          </div>
+        }
+      }
+
+      <div class="clist">
+        @for (s of store.savings(); track s.id) {
+          <div class="saving" [class.done]="s.status === 'faite'" [class.dropped]="s.status === 'abandonnee'">
+            <button class="s-check" [class.on]="s.status === 'faite'"
+                    [attr.aria-label]="s.status === 'faite' ? 'Rouvrir la piste' : 'Marquer comme faite'"
+                    (click)="store.setSavingStatus(s.id, s.status === 'faite' ? 'idee' : 'faite')">
+              @if (s.status === 'faite') { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }
+            </button>
+            <div class="s-body" (click)="store.editSaving(s.id)">
+              <div class="s-title">
+                {{ s.title }}
+                @if (s.status === 'en-cours') { <span class="tag">en cours</span> }
+                @if (s.status === 'abandonnee') { <span class="tag">abandonnée</span> }
+              </div>
+              <div class="s-meta">{{ savingMeta(s) }}</div>
+            </div>
+            @if (s.status !== 'faite' && s.status !== 'abandonnee') {
+              @if (store.savingTask(s)) {
+                <span class="tag">tâche créée</span>
+              } @else {
+                <button class="dead-task" (click)="store.taskFromSaving(s.id)" title="Ajouter cette piste à mes tâches">
+                  <f-icon name="check" [size]="14" color="var(--ink2)" [width]="2.6" /> Tâche
+                </button>
+              }
+            }
+            <div class="s-gain">{{ fmtInt(s.annualGain) }} €<span class="s-unit">/an</span></div>
+          </div>
+        } @empty {
+          <div class="none">
+            Aucune piste. Le coût réel d'un contrat, quand il dépasse la fourchette annoncée, est
+            souvent le meilleur endroit où en trouver une.
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- FORMULAIRE DE PISTE -->
+    @if (store.ui().saForm) {
+      <f-modal [title]="store.ui().saId ? 'Modifier la piste' : 'Nouvelle piste d’économie'" [maxWidth]="520" (close)="store.patch({ saForm: false })">
+        <div class="field-label">Intitulé</div>
+        <input class="input" [ngModel]="store.ui().saTitle" (ngModelChange)="store.patch({ saTitle: $event })" placeholder="Ex : Renégocier l’assurance habitation" />
+        <div class="frow">
+          <div class="fgrow">
+            <div class="field-label">Gain annuel estimé €</div>
+            <input class="input" [ngModel]="store.ui().saGain" (ngModelChange)="store.patch({ saGain: $event })" placeholder="240" inputmode="decimal" />
+          </div>
+          <div class="fgrow">
+            <div class="field-label">Statut</div>
+            <select class="input" [ngModel]="store.ui().saStatus" (ngModelChange)="store.patch({ saStatus: $event })">
+              <option [ngValue]="'idee'">Idée</option>
+              <option [ngValue]="'en-cours'">En cours</option>
+              <option [ngValue]="'faite'">Faite</option>
+              <option [ngValue]="'abandonnee'">Abandonnée</option>
+            </select>
+          </div>
+        </div>
+        <div class="frow">
+          <div class="fgrow">
+            <div class="field-label">Contrat concerné</div>
+            <select class="input" [ngModel]="store.ui().saContract" (ngModelChange)="store.patch({ saContract: $event })">
+              <option [ngValue]="null">Aucun</option>
+              @for (c of store.contracts(); track c.id) { <option [ngValue]="c.id">{{ c.name }}{{ c.provider ? ' · ' + c.provider : '' }}</option> }
+            </select>
+          </div>
+          <div class="fgrow">
+            <div class="field-label">À faire avant le</div>
+            <input class="input" type="date" [ngModel]="store.ui().saDate" (ngModelChange)="store.patch({ saDate: $event })" />
+          </div>
+        </div>
+        <div class="field-label">Détail</div>
+        <input class="input" [ngModel]="store.ui().saDesc" (ngModelChange)="store.patch({ saDesc: $event })" placeholder="Facultatif : ce qu'il faut faire, qui appeler" />
+        <div class="hint sm">Le gain est une estimation, pas une mesure. C'est le coût réel du contrat, une fois la piste appliquée, qui dira ce qu'elle a vraiment rapporté.</div>
+        <div class="modal-acts">
+          @if (store.ui().saId) {
+            <button class="btn btn-danger" (click)="store.patch({ saDelId: store.ui().saId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+          }
+          <div class="spacer"></div>
+          <button class="btn btn-soft" (click)="store.patch({ saForm: false })">Annuler</button>
+          <button class="btn btn-primary" [disabled]="store.ui().busy" (click)="store.saveSaving()">Enregistrer</button>
+        </div>
+      </f-modal>
+    }
+
+    @if (store.ui().saDelId) {
+      <f-modal [maxWidth]="400" (close)="store.patch({ saDelId: null })">
+        <div class="confirm">
+          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
+          <div class="confirm-title f-display">Supprimer cette piste ?</div>
+          <div class="confirm-txt">Si elle a été menée à bien, passez-la plutôt en « faite » : son gain reste compté dans ce que vous avez obtenu.</div>
+          <div class="modal-acts">
+            <button class="btn btn-soft grow" (click)="store.patch({ saDelId: null })">Annuler</button>
+            <button class="btn btn-primary grow" (click)="store.confirmSavingDel()">Supprimer</button>
+          </div>
+        </div>
+      </f-modal>
+    }
 
     <!-- FORMULAIRE DE BIEN -->
     @if (store.ui().asForm) {
@@ -270,14 +395,21 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
               }
             </select>
           </div>
-          <div class="fgrow">
-            <div class="field-label">Membre</div>
-            <select class="input" [ngModel]="store.ui().coMember" (ngModelChange)="store.patch({ coMember: $event })">
-              <option value="">Le foyer</option>
-              @for (m of members(); track m.id) { <option [value]="m.id">{{ m.name }}</option> }
-            </select>
-          </div>
         </div>
+        <div class="field-label">Personnes concernées</div>
+        <div class="picker">
+          @for (m of members(); track m.id) {
+            <button class="pick" [class.on]="store.ui().coMembers.includes(m.id)"
+                    [style.border-color]="store.ui().coMembers.includes(m.id) ? m.color : 'transparent'"
+                    (click)="store.toggleMember('coMembers', m.id)">
+              <f-avatar [ini]="foyer.memberIni(m.id)" [color]="m.color" [size]="22" />
+              {{ m.name }}
+            </button>
+          } @empty {
+            <div class="hint">Aucun membre déclaré dans le foyer.</div>
+          }
+        </div>
+        <div class="hint sm">Une mutuelle peut couvrir toute la famille. Aucune sélectionnée veut dire « le foyer ».</div>
 
         <div class="sec-label">Références</div>
         @for (r of store.ui().coRefs; track $index; let i = $index) {
@@ -304,6 +436,65 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         </div>
 
         @if (store.ui().coId; as cid) {
+          @if (store.ui().coKind === 'energie') {
+            <div class="sec-label">Relevés de compteur</div>
+            @if (store.energy(); as e) {
+              @if (e.latest; as l) {
+                <div class="energy-head">
+                  <div>
+                    <div class="e-big">{{ round(l.kwhPerDay) }} kWh<span class="e-unit"> par jour</span></div>
+                    <div class="e-sub">du {{ foyer.fmtNumDate(l.from) }} au {{ foyer.fmtNumDate(l.to) }}, soit {{ l.days }} jours</div>
+                  </div>
+                  @if (e.trend !== null) {
+                    <div class="e-trend" [class.up]="e.trend > 0" [class.down]="e.trend < 0">
+                      {{ e.trend > 0 ? '+' : '' }}{{ round(e.trend) }} %
+                      <span class="e-trend-sub">par rapport à l'an dernier</span>
+                    </div>
+                  }
+                </div>
+              }
+            }
+            <div class="readings">
+              @for (r of store.readings(); track r.id) {
+                @let p = store.periodOf(r.id);
+                <div class="reading">
+                  <span class="r-date">{{ foyer.fmtNumDate(r.date) }}</span>
+                  <span class="r-index">{{ indexLabel(r) }}</span>
+                  <span class="r-use" [class.gap]="!!p?.gap">{{ periodLabel(p) }}</span>
+                  <button class="icon-btn sm" aria-label="Supprimer le relevé" (click)="store.deleteReading(r.id, cid)">
+                    <f-icon name="trash" [size]="13" color="var(--primary)" />
+                  </button>
+                </div>
+              } @empty {
+                <div class="none">Aucun relevé. Notez l'index du compteur de temps en temps : deux relevés suffisent à savoir si la consommation dérive.</div>
+              }
+            </div>
+            <div class="rerow">
+              <div class="refield">
+                <div class="field-label">Date du relevé</div>
+                <input class="input" type="date" [ngModel]="store.ui().reDate" (ngModelChange)="store.patch({ reDate: $event })" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Index</div>
+                <input class="input" [ngModel]="store.ui().reIndex" (ngModelChange)="store.patch({ reIndex: $event })" placeholder="17100" inputmode="decimal" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Heures pleines</div>
+                <input class="input" [ngModel]="store.ui().reIndexHp" (ngModelChange)="store.patch({ reIndexHp: $event })" placeholder="facultatif" inputmode="decimal" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Heures creuses</div>
+                <input class="input" [ngModel]="store.ui().reIndexHc" (ngModelChange)="store.patch({ reIndexHc: $event })" placeholder="facultatif" inputmode="decimal" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Montant €</div>
+                <input class="input" [ngModel]="store.ui().reCost" (ngModelChange)="store.patch({ reCost: $event })" placeholder="facultatif" inputmode="decimal" />
+              </div>
+              <button class="btn btn-soft readd" [disabled]="store.ui().busy" (click)="store.saveReading(cid)">Ajouter</button>
+            </div>
+            <div class="hint sm">Un index simple suffit. Les heures pleines et creuses ne servent qu'aux compteurs qui les distinguent, et le montant qu'à calculer le prix du kWh.</div>
+          }
+
           <div class="sec-label">Pièces jointes</div>
           <div class="pieces">
             @for (a of store.attachments(); track a.id) {
@@ -326,6 +517,15 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
             <span>{{ store.ui().busy ? 'Envoi…' : 'Ajouter une pièce' }}</span>
           </label>
           <div class="hint sm">PDF, JPEG, PNG, WEBP, GIF ou HEIC, 20 Mo au plus. Le type est reconnu au contenu, pas à l'extension.</div>
+
+          <div class="sec-label">Rattachement automatique</div>
+          <button class="mkrule" (click)="store.ruleFromContract(cid)">
+            <f-icon name="bolt" [size]="15" color="var(--primary)" [width]="2.4" /> Créer une règle pour ce contrat
+          </button>
+          <div class="hint sm">
+            La règle part du fournisseur et de la fourchette de montant : c'est ce qui distingue deux
+            contrats du même assureur. Vous pourrez la tester avant de l'enregistrer.
+          </div>
 
           @if (store.costOf(cid); as cost) {
             <div class="cost-box" [class.off]="cost.offRange">
@@ -419,6 +619,21 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .asset-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tag { background: var(--soft2); border-radius: 20px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; color: var(--ink2); }
 
+    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .totals { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; }
+    .t-val { font-size: 22px; font-weight: 700; color: var(--ink); margin-top: 3px; }
+    .t-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
+    .t-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .saving { display: flex; align-items: center; gap: 11px; border-radius: 13px; padding: 9px 11px; background: var(--soft); }
+    .saving.done, .saving.dropped { opacity: .6; }
+    .saving.done .s-title { text-decoration: line-through; }
+    .s-check { width: 22px; height: 22px; flex: none; border-radius: 7px; border: 2px solid var(--line2); background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+    .s-check.on { background: #6E9E5F; border-color: #6E9E5F; }
+    .s-body { flex: 1; min-width: 0; cursor: pointer; }
+    .s-title { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .s-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .s-gain { flex: none; font-size: 14px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .s-unit { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .clist { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
     .contract { display: flex; align-items: center; gap: 12px; border-radius: 13px; padding: 9px 11px; background: var(--soft); cursor: pointer; }
     .contract:hover { background: var(--soft2); }
@@ -442,6 +657,27 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .refrow .input { flex: 1; min-width: 0; }
     .icon-btn { width: 38px; height: 38px; flex: none; border: none; border-radius: 11px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
+    .energy-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: var(--soft); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+    .e-big { font-size: 20px; font-weight: 800; color: var(--ink); }
+    .e-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
+    .e-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .e-trend { font-size: 16px; font-weight: 800; text-align: right; }
+    .e-trend.up { color: #C6492F; }
+    .e-trend.down { color: #6E9E5F; }
+    .e-trend-sub { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .readings { display: flex; flex-direction: column; gap: 6px; }
+    .reading { display: flex; align-items: center; gap: 10px; background: var(--soft); border-radius: 11px; padding: 7px 10px; font-size: 12.5px; font-weight: 700; }
+    .r-date { flex: none; width: 82px; color: var(--ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .r-index { flex: none; width: 74px; color: var(--ink3); font-variant-numeric: tabular-nums; text-align: right; }
+    .rerow { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+    .refield { flex: 1 1 110px; min-width: 0; }
+    .refield .field-label { margin-top: 0; }
+    .readd { flex: none; height: 42px; }
+    .r-use { flex: 1; min-width: 0; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .r-use.gap { font-style: italic; color: var(--ink3); }
+    .picker { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pick { display: inline-flex; align-items: center; gap: 7px; border: 2px solid transparent; border-radius: 20px; padding: 4px 12px 4px 4px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+    .pick.on { background: var(--soft); color: var(--ink); }
     .pieces { display: flex; flex-direction: column; gap: 6px; }
     .piece { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 11px; padding: 7px 10px; }
     .p-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -449,6 +685,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .p-size { flex: none; font-size: 11.5px; font-weight: 700; color: var(--ink3); font-variant-numeric: tabular-nums; }
     .uploader { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; border-radius: 11px; padding: 8px 13px; background: var(--soft2); font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
     .uploader:has(input:disabled) { opacity: .5; cursor: default; }
+    .mkrule { display: inline-flex; align-items: center; gap: 7px; border: none; border-radius: 11px; padding: 9px 14px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
     .cost-box { margin-top: 18px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
     .cost-box.off { background: #FDF0DA; }
     :host-context(.dark) .cost-box.off { background: #3A3123; }
@@ -480,6 +717,15 @@ export class FinancesContractsTab {
 
   /** Household members, for the « qui porte ce contrat » selector. */
   members = computed(() => this.foyer.data()?.members ?? []);
+  /**
+   * Noms des personnes encore présentes dans le foyer. Un membre supprimé laisse
+   * son identifiant sur le contrat : l'ignorer vaut mieux qu'afficher un vide
+   * entre deux virgules.
+   */
+  memberNames(ids: string[]): string {
+    const known = this.members();
+    return ids.map((id) => known.find((m) => m.id === id)?.name).filter(Boolean).join(', ');
+  }
 
   constructor() { void this.store.loadContracts(); }
 
@@ -497,6 +743,8 @@ export class FinancesContractsTab {
     const bits: string[] = [CONTRACT_KINDS.find((k) => k.id === c.kind)?.label || ''];
     if (c.provider) bits.push(c.provider);
     if (c.accountId) bits.push(this.store.accountName(c.accountId));
+    const names = this.memberNames(c.memberIds);
+    if (names) bits.push(names);
     if (c.renewalOn) bits.push(`reconduit le ${this.foyer.fmtNumDate(c.renewalOn)}`);
     return bits.filter(Boolean).join(' · ');
   }
@@ -519,6 +767,45 @@ export class FinancesContractsTab {
   makeTask(event: Event, d: FinDeadline): void {
     event.stopPropagation();
     this.store.taskFromDeadline(d.contractId, d.kind, d.date);
+  }
+
+  /** Une valeur absente reste vide : un signe de remplacement ne dit rien de plus. */
+  /** Contrat concerné, échéance visée, détail : ce qui aide à décider. */
+  savingMeta(s: FinSaving): string {
+    const bits: string[] = [];
+    if (s.contractId) bits.push(this.store.contractName(s.contractId));
+    if (s.targetDate) bits.push(`avant le ${this.foyer.fmtNumDate(s.targetDate)}`);
+    if (s.description) bits.push(s.description);
+    return bits.join(' · ');
+  }
+
+  round(n: number | null): string {
+    return n === null ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+  }
+
+  /** What the meter showed, in the form it was entered. */
+  indexLabel(r: FinReading): string {
+    if (r.indexTotal !== null) return this.round(r.indexTotal);
+    if (r.indexHp !== null || r.indexHc !== null) return `${this.round(r.indexHp)} / ${this.round(r.indexHc)}`;
+    return r.kwh !== null ? `${this.round(r.kwh)} kWh` : '';
+  }
+
+  /**
+   * What the period consumed, or why it could not be measured. Saying « compteur
+   * remplacé » vaut mieux qu'afficher une consommation négative.
+   */
+  periodLabel(p: FinPeriod | undefined): string {
+    if (!p) return '';
+    switch (p.gap) {
+      case 'premier': return 'premier relevé, rien à comparer';
+      case 'index-recule': return 'index inférieur au précédent, compteur remplacé ?';
+      case 'meme-jour': return 'même jour que le relevé précédent';
+      case 'inconnu': return 'consommation non calculable';
+      default: break;
+    }
+    const bits = [`${this.round(p.kwh)} kWh en ${p.days} j`, `${this.round(p.kwhPerDay)} kWh/j`];
+    if (p.costPerKwh !== null) bits.push(`${this.round(p.costPerKwh)} c/kWh`);
+    return bits.join(' · ');
   }
 
   /** Same colour code as the Documents screen: terracotta for PDF, green for images. */

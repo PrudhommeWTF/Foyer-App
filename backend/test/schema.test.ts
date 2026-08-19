@@ -22,7 +22,32 @@ describe('migrations du module Finances', () => {
       'fin_contracts', 'fin_contract_refs', 'fin_imports', 'fin_transactions', 'fin_tags',
       'fin_transaction_tags', 'fin_readings', 'fin_rules', 'fin_rule_conditions',
       'fin_rule_actions', 'fin_savings', 'fin_attachments',
+      'fin_account_members', 'fin_contract_members',
     ]) assert.ok(names.includes(t), `table manquante : ${t}`);
+  });
+
+  it('migration 4 : reprend le titulaire unique déjà saisi, sans le perdre', () => {
+    const db = freshDb();
+    // On rejoue l'état d'une base arrêtée à la migration 3, colonne comprise.
+    migrateFinances(db);
+    db.exec('DROP TABLE fin_account_members; DROP TABLE fin_contract_members;');
+    db.exec("ALTER TABLE fin_accounts ADD COLUMN member_id TEXT");
+    db.exec("ALTER TABLE fin_contracts ADD COLUMN member_id TEXT");
+    db.prepare("INSERT INTO fin_accounts (name, kind, member_id, position) VALUES ('Compte', 'courant', 'm1', 0)").run();
+    db.prepare("INSERT INTO fin_accounts (name, kind, member_id, position) VALUES ('Sans titulaire', 'courant', '', 1)").run();
+    db.prepare("INSERT INTO fin_contracts (name, member_id) VALUES ('Assurance', 'm2')").run();
+    db.prepare("UPDATE fin_meta SET value = '3' WHERE key = 'schema_version'").run();
+
+    assert.equal(migrateFinances(db), FIN_SCHEMA_VERSION);
+
+    const accounts = db.prepare('SELECT account_id, member_id FROM fin_account_members').all();
+    assert.deepEqual(accounts, [{ account_id: 1, member_id: 'm1' }], 'le titulaire vide ne crée pas de ligne');
+    const contracts = db.prepare('SELECT contract_id, member_id FROM fin_contract_members').all();
+    assert.deepEqual(contracts, [{ contract_id: 1, member_id: 'm2' }]);
+
+    // La colonne a bien disparu : deux sources de vérité seraient pires qu'une.
+    const columns = (db.prepare('PRAGMA table_info(fin_accounts)').all() as { name: string }[]).map((c) => c.name);
+    assert.ok(!columns.includes('member_id'));
   });
 
   it('est rejouable : un second démarrage ne duplique rien', () => {

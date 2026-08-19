@@ -12,7 +12,7 @@ const state = (over: Partial<HouseholdState> = {}): HouseholdState =>
 
 const deadline = (over: Partial<Deadline> = {}): Deadline => ({
   contractId: 7, contractName: 'Assurance habitation', provider: 'AXA',
-  kind: 'preavis', date: '2026-09-15', daysAway: 27, assetId: null, memberId: null, ...over,
+  kind: 'preavis', date: '2026-09-15', daysAway: 27, assetId: null, memberIds: [], ...over,
 });
 
 /** Unfold nothing, just split: the builder must already emit CRLF. */

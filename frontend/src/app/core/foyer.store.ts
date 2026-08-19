@@ -546,16 +546,18 @@ export class FoyerStore {
    * l'utilisateur peut cocher, déplacer et supprimer doit lui appartenir, pas
    * réapparaître parce qu'une table dit autre chose.
    */
-  addExternalTask(text: string, plannedOn: string, memberId: string | null = null): void {
+  addExternalTask(text: string, plannedOn: string, memberId: string | null = null): string | null {
     const listId = this.activeTaskListId();
-    if (!listId) { this.toast('Créez d’abord une liste de tâches'); return; }
+    if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
+    const id = uid('t');
     this.mutate((d) => {
       d.tasks.unshift({
-        id: uid('t'), text, who: memberId || this.members()[0]?.id || 'cam',
+        id, text, who: memberId || this.members()[0]?.id || 'cam',
         due: this.fmtNumDate(plannedOn), done: false, listId, prio: 'high', planned: plannedOn,
       });
     });
     this.toast('Tâche ajoutée');
+    return id;
   }
 
   openTask(): void { this.patch({ showTask: true, taskEditId: null, tTitle: '', tWho: this.members()[0]?.id || 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: this.activeTaskListId(), tPlanned: '' }); }

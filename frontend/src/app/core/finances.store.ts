@@ -3,7 +3,8 @@ import {
   AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
-  FinAttachment, FinDeadline, FinImport, FinImportPreview, FinOwnerKind, FinPeriodicity,
+  FinAttachment, FinDeadline, FinEnergySummary, FinImport, FinImportPreview, FinOwnerKind,
+  FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
@@ -34,7 +35,7 @@ export interface FinancesUi {
 
   // account form
   acForm: boolean; acId: number | null;
-  acName: string; acKind: AccountKind; acMember: string; acOpening: string; acOpeningDate: string; acArchived: boolean;
+  acName: string; acKind: AccountKind; acMembers: string[]; acOpening: string; acOpeningDate: string; acArchived: boolean;
   acAliasInput: string; acDelId: number | null;
 
   // category form
@@ -60,7 +61,7 @@ export interface FinancesUi {
   // contract form
   coForm: boolean; coId: number | null;
   coName: string; coProvider: string; coKind: FinContractKind;
-  coAsset: number | null; coAccount: number | null; coCategory: number | null; coMember: string;
+  coAsset: number | null; coAccount: number | null; coCategory: number | null; coMembers: string[];
   coMin: string; coMax: string; coPeriodicity: FinPeriodicity;
   coRenewal: string; coNotice: string; coEnds: string;
   coStatus: FinContractStatus; coNotes: string; coRefs: FinContractRef[];
@@ -70,6 +71,19 @@ export interface FinancesUi {
   ruleForm: boolean; ruleId: number | null;
   ruleName: string; ruleEnabled: boolean; ruleMatch: 'all' | 'any'; ruleStop: boolean;
   ruleConditions: FinCondition[]; ruleActions: FinAction[];
+  // savings idea form
+  saForm: boolean; saId: number | null;
+  saTitle: string; saDesc: string; saGain: string; saStatus: FinSavingStatus;
+  saContract: number | null; saDate: string; saDelId: number | null;
+
+  // meter reading form
+  reDate: string; reIndex: string; reIndexHp: string; reIndexHc: string;
+  reKwh: string; reCost: string; reDelId: number | null;
+
+  /** Fichier de sauvegarde déposé, en attente de confirmation. */
+  restorePending: unknown | null;
+  restoreName: string;
+
   ruleDelId: number | null; ruleError: string; ruleBusy: boolean;
   /** « Tout réappliquer » also overwrites the categories corrected by hand. */
   applyForce: boolean;
@@ -83,7 +97,7 @@ function initialUi(month: string): FinancesUi {
     fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
     txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null,
-    acForm: false, acId: null, acName: '', acKind: 'courant', acMember: '', acOpening: '',
+    acForm: false, acId: null, acName: '', acKind: 'courant', acMembers: [], acOpening: '',
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
     catForm: false, catId: null, catName: '', catBudget: '', catColor: '#7A9B76', catIcon: 'facture',
     catParent: null, catDelId: null,
@@ -92,9 +106,13 @@ function initialUi(month: string): FinancesUi {
     asForm: false, asId: null, asName: '', asKind: 'immobilier', asStatus: 'actif', asAddress: '',
     asAcquired: '', asSold: '', asNotes: '', asDelId: null,
     coForm: false, coId: null, coName: '', coProvider: '', coKind: 'assurance',
-    coAsset: null, coAccount: null, coCategory: null, coMember: '',
+    coAsset: null, coAccount: null, coCategory: null, coMembers: [],
     coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
     coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null,
+    saForm: false, saId: null, saTitle: '', saDesc: '', saGain: '', saStatus: 'idee',
+    saContract: null, saDate: '', saDelId: null,
+    reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '', reDelId: null,
+    restorePending: null, restoreName: '',
     ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
     ruleConditions: [], ruleActions: [], ruleDelId: null, ruleError: '', ruleBusy: false,
     applyForce: false,
@@ -156,6 +174,14 @@ export class FinancesStore {
   readonly pieces = signal<Record<number, number>>({});
   /** Attachments of the item currently open in a form. */
   readonly attachments = signal<FinAttachment[]>([]);
+
+  // Meter readings of the contract currently open
+  readonly savings = signal<FinSaving[]>([]);
+  readonly savingsTotals = signal<FinSavingsTotals>({ pending: 0, done: 0, count: 0, openCount: 0 });
+
+  readonly readings = signal<FinReading[]>([]);
+  readonly periods = signal<FinPeriod[]>([]);
+  readonly energy = signal<FinEnergySummary | null>(null);
 
   // Import workflow
   readonly preview = signal<FinImportPreview | null>(null);
@@ -262,7 +288,7 @@ export class FinancesStore {
   taskFromDeadline(contractId: number, kind: string, date: string): void {
     const c = this.contracts().find((x) => x.id === contractId);
     if (!c) return;
-    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberId);
+    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberIds[0] ?? null);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
@@ -318,6 +344,8 @@ export class FinancesStore {
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
     this.assets.set([]); this.contracts.set([]); this.deadlines.set([]); this.costs.set({});
     this.pieces.set({}); this.attachments.set([]);
+    this.readings.set([]); this.periods.set([]); this.energy.set(null);
+    this.savings.set([]); this.savingsTotals.set({ pending: 0, done: 0, count: 0, openCount: 0 });
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
@@ -532,7 +560,7 @@ export class FinancesStore {
   // ---- accounts ----------------------------------------------------------
   newAccount(): void {
     this.patch({
-      acForm: true, acId: null, acName: '', acKind: 'courant', acMember: '',
+      acForm: true, acId: null, acName: '', acKind: 'courant', acMembers: [],
       acOpening: '', acOpeningDate: '', acArchived: false, acAliasInput: '',
     });
   }
@@ -541,7 +569,7 @@ export class FinancesStore {
     const a = this.accounts().find((x) => x.id === id);
     if (!a) return;
     this.patch({
-      acForm: true, acId: a.id, acName: a.name, acKind: a.kind, acMember: a.memberId || '',
+      acForm: true, acId: a.id, acName: a.name, acKind: a.kind, acMembers: [...a.memberIds],
       acOpening: a.openingBalance ? fmtEuros(a.openingBalance) : '', acOpeningDate: a.openingDate || '',
       acArchived: a.archived, acAliasInput: '',
     });
@@ -555,7 +583,7 @@ export class FinancesStore {
     const opening = u.acOpening.trim();
     if (opening && parseEuros(opening) === null) { this.foyer.toast('Solde d’ouverture invalide'); return; }
     const payload = {
-      name, kind: u.acKind, memberId: u.acMember || null,
+      name, kind: u.acKind, memberIds: u.acMembers,
       openingBalance: opening ? ((parseEuros(opening) as number) / 100).toFixed(2) : '0',
       openingDate: u.acOpeningDate || null, archived: u.acArchived,
     };
@@ -844,6 +872,39 @@ export class FinancesStore {
     void this.loadRules();
   }
 
+  /**
+   * Démarrer une règle depuis un contrat. Le libellé bancaire ressemble au
+   * fournisseur bien plus qu'au nom que vous avez donné au contrat, et c'est la
+   * fourchette de montant qui distingue deux contrats du même assureur : les
+   * deux servent de conditions, l'action rattache au contrat.
+   */
+  ruleFromContract(contractId: number): void {
+    const c = this.contracts().find((x) => x.id === contractId);
+    if (!c) return;
+    const conditions: FinCondition[] = [
+      { field: 'label', op: 'contains', value: c.provider || c.name, value2: '' },
+    ];
+    if (c.amountMin !== null || c.amountMax !== null) {
+      const min = c.amountMin ?? c.amountMax!;
+      const max = c.amountMax ?? c.amountMin!;
+      conditions.push({
+        field: 'amount', op: 'between',
+        value: String(Math.floor(min / 100)), value2: String(Math.ceil(max / 100)),
+      });
+    }
+    const actions: FinAction[] = [{ kind: 'contract', value: String(c.id) }];
+    if (c.categoryId) actions.push({ kind: 'category', value: String(c.categoryId) });
+
+    this.patch({
+      tab: 'regles', coForm: false, coId: null,
+      ruleForm: true, ruleId: null, ruleName: c.name.slice(0, 60), ruleEnabled: true,
+      ruleMatch: 'all', ruleStop: false, ruleError: '',
+      ruleConditions: conditions, ruleActions: actions,
+    });
+    this.rulePreview.set(null);
+    void this.loadRules();
+  }
+
   editRule(id: number): void {
     const r = this.rules().find((x) => x.id === id);
     if (!r) return;
@@ -975,6 +1036,8 @@ export class FinancesStore {
       this.deadlines.set(b.deadlines);
       this.costs.set(b.costs);
       this.pieces.set(b.pieces);
+      this.savings.set(b.savings);
+      this.savingsTotals.set(b.savingsTotals);
       this.error.set('');
     } catch (e) { this.error.set((e as Error).message); }
   }
@@ -1045,7 +1108,7 @@ export class FinancesStore {
   newContract(assetId: number | null = null): void {
     this.patch({
       coForm: true, coId: null, coName: '', coProvider: '', coKind: 'assurance',
-      coAsset: assetId, coAccount: null, coCategory: null, coMember: '',
+      coAsset: assetId, coAccount: null, coCategory: null, coMembers: [],
       coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
       coStatus: 'actif', coNotes: '', coRefs: [],
     });
@@ -1058,7 +1121,7 @@ export class FinancesStore {
     if (!c) return;
     this.patch({
       coForm: true, coId: c.id, coName: c.name, coProvider: c.provider, coKind: c.kind,
-      coAsset: c.assetId, coAccount: c.accountId, coCategory: c.categoryId, coMember: c.memberId || '',
+      coAsset: c.assetId, coAccount: c.accountId, coCategory: c.categoryId, coMembers: [...c.memberIds],
       coMin: c.amountMin !== null ? fmtEuros(c.amountMin) : '',
       coMax: c.amountMax !== null ? fmtEuros(c.amountMax) : '',
       coPeriodicity: c.periodicity, coRenewal: c.renewalOn || '',
@@ -1066,6 +1129,8 @@ export class FinancesStore {
       coStatus: c.status, coNotes: c.notes, coRefs: c.refs.map((r) => ({ ...r })),
     });
     void this.loadAttachments('contract', c.id);
+    if (c.kind === 'energie') void this.loadReadings(c.id);
+    else { this.readings.set([]); this.periods.set([]); this.energy.set(null); }
   }
 
   addRef(): void { this.patch({ coRefs: [...this.ui().coRefs, { key: '', value: '' }] }); }
@@ -1084,7 +1149,7 @@ export class FinancesStore {
     const payload = {
       name: u.coName.trim(), provider: u.coProvider.trim(), kind: u.coKind,
       assetId: u.coAsset, accountId: u.coAccount, categoryId: u.coCategory,
-      memberId: u.coMember || null,
+      memberIds: u.coMembers,
       amountMin: u.coMin.trim() ? (Math.abs(parseEuros(u.coMin) as number) / 100).toFixed(2) : '',
       amountMax: u.coMax.trim() ? (Math.abs(parseEuros(u.coMax) as number) / 100).toFixed(2) : '',
       periodicity: u.coPeriodicity, renewalOn: u.coRenewal || null,
@@ -1167,6 +1232,189 @@ export class FinancesStore {
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Cocher ou décocher une personne, sur un compte ou sur un contrat. */
+  toggleMember(field: 'acMembers' | 'coMembers', memberId: string): void {
+    const current = this.ui()[field];
+    const next = current.includes(memberId) ? current.filter((m) => m !== memberId) : [...current, memberId];
+    this.patch({ [field]: next } as Partial<FinancesUi>);
+  }
+
+  // ---- savings ideas -----------------------------------------------------
+  newSaving(contractId: number | null = null): void {
+    this.patch({
+      saForm: true, saId: null, saTitle: '', saDesc: '', saGain: '',
+      saStatus: 'idee', saContract: contractId, saDate: '',
+    });
+  }
+
+  editSaving(id: number): void {
+    const s = this.savings().find((x) => x.id === id);
+    if (!s) return;
+    this.patch({
+      saForm: true, saId: s.id, saTitle: s.title, saDesc: s.description,
+      saGain: s.annualGain ? fmtEuros(s.annualGain) : '', saStatus: s.status,
+      saContract: s.contractId, saDate: s.targetDate || '',
+    });
+  }
+
+  async saveSaving(): Promise<void> {
+    const u = this.ui();
+    if (u.busy) return;
+    if (!u.saTitle.trim()) { this.foyer.toast('Donnez un intitulé à la piste'); return; }
+    if (parseEuros(u.saGain) === null) { this.foyer.toast('Indiquez le gain annuel estimé, même approximatif'); return; }
+    const existing = u.saId ? this.savings().find((s) => s.id === u.saId) : null;
+    const payload = {
+      title: u.saTitle.trim(), description: u.saDesc.trim(),
+      annualGain: (Math.abs(parseEuros(u.saGain) as number) / 100).toFixed(2),
+      contractId: u.saContract, assetId: null, status: u.saStatus,
+      targetDate: u.saDate || null, taskId: existing?.taskId ?? null,
+    };
+    this.patch({ busy: true });
+    try {
+      if (u.saId) await this.api.updateSaving(u.saId, payload);
+      else await this.api.createSaving(payload);
+      this.patch({ saForm: false, saId: null, busy: false });
+      await this.loadContracts();
+      this.foyer.toast(u.saId ? 'Piste modifiée' : 'Piste ajoutée');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async confirmSavingDel(): Promise<void> {
+    const id = this.ui().saDelId;
+    if (!id) return;
+    try {
+      await this.api.deleteSaving(id);
+      this.patch({ saDelId: null, saForm: false, saId: null });
+      await this.loadContracts();
+      this.foyer.toast('Piste supprimée');
+    } catch (e) {
+      this.patch({ saDelId: null });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  /** Passer une piste d'un statut à l'autre sans ouvrir le formulaire. */
+  async setSavingStatus(id: number, status: FinSavingStatus): Promise<void> {
+    const s = this.savings().find((x) => x.id === id);
+    if (!s) return;
+    try {
+      await this.api.updateSaving(id, {
+        title: s.title, description: s.description,
+        annualGain: (s.annualGain / 100).toFixed(2),
+        contractId: s.contractId, assetId: s.assetId, status,
+        targetDate: s.targetDate, taskId: s.taskId,
+      });
+      await this.loadContracts();
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /**
+   * La tâche liée existe-t-elle encore ? Elle vit dans le document du foyer et
+   * peut y être supprimée : promettre une tâche disparue serait pire que rien.
+   */
+  savingTask(s: FinSaving): boolean {
+    return !!s.taskId && (this.foyer.data()?.tasks || []).some((t) => t.id === s.taskId);
+  }
+
+  /** Copier une piste dans les tâches, et retenir laquelle. */
+  async taskFromSaving(id: number): Promise<void> {
+    const s = this.savings().find((x) => x.id === id);
+    if (!s) return;
+    const taskId = this.foyer.addExternalTask(s.title, s.targetDate || this.foyer.todayStr());
+    if (!taskId) return;
+    try {
+      await this.api.linkSavingTask(id, taskId);
+      await this.loadContracts();
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  // ---- meter readings ----------------------------------------------------
+  async loadReadings(contractId: number): Promise<void> {
+    try {
+      const b = await this.api.readings(contractId);
+      this.readings.set(b.readings);
+      this.periods.set(b.periods);
+      this.energy.set(b.summary);
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  periodOf(readingId: number): FinPeriod | undefined {
+    return this.periods().find((p) => p.readingId === readingId);
+  }
+
+  async saveReading(contractId: number): Promise<void> {
+    const u = this.ui();
+    if (u.busy) return;
+    if (!u.reDate) { this.foyer.toast('Choisissez la date du relevé'); return; }
+    this.patch({ busy: true });
+    try {
+      await this.api.createReading({
+        contractId, date: u.reDate,
+        indexTotal: u.reIndex.trim(), indexHp: u.reIndexHp.trim(), indexHc: u.reIndexHc.trim(),
+        kwh: u.reKwh.trim(), kwhHp: '', kwhHc: '',
+        cost: u.reCost.trim(), notes: '',
+      });
+      this.patch({ busy: false, reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '' });
+      await this.loadReadings(contractId);
+      this.foyer.toast('Relevé enregistré');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async deleteReading(id: number, contractId: number): Promise<void> {
+    try {
+      await this.api.deleteReading(id);
+      await this.loadReadings(contractId);
+      this.foyer.toast('Relevé supprimé');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  // ---- module backup -----------------------------------------------------
+  async exportModule(): Promise<void> {
+    try {
+      const url = URL.createObjectURL(await this.api.exportModule());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `foyer-finances-${this.foyer.todayStr()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.foyer.toast('Sauvegarde du module téléchargée');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Read the dropped file, without restoring anything yet. */
+  async stageRestore(file: File): Promise<void> {
+    try {
+      const parsed = JSON.parse(await file.text());
+      this.patch({ restorePending: parsed, restoreName: file.name });
+    } catch {
+      this.foyer.toast('Ce fichier n’est pas une sauvegarde lisible');
+    }
+  }
+
+  /** Replace the module's data. Destructive, hence the explicit confirmation. */
+  async confirmRestore(): Promise<void> {
+    const pending = this.ui().restorePending;
+    if (!pending || this.ui().busy) return;
+    this.patch({ busy: true });
+    try {
+      const { report } = await this.api.restoreModule(pending);
+      this.patch({ busy: false, restorePending: null, restoreName: '' });
+      const n = report.after['fin_transactions'] ?? 0;
+      this.foyer.toast(`Module restauré : ${n} opération${n > 1 ? 's' : ''}`);
+      await Promise.all([this.init(true), this.loadContracts(), this.loadRules()]);
+      if (report.attachments) this.foyer.toast(`${report.attachments} pièce(s) jointe(s) référencée(s) : vérifiez le répertoire « pieces »`);
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
   }
 
   // ---- export ------------------------------------------------------------
