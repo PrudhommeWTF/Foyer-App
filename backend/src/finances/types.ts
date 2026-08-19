@@ -38,6 +38,9 @@ export interface Transaction {
   cleared: boolean;
   transferGroup: string | null;
   importId: number | null;
+  /** Rule that last decided the category or label; null when set by hand. */
+  ruleId: number | null;
+  tags: string[];
 }
 
 /** Per-account coverage, used to flag incomplete months. */

@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -158,6 +158,29 @@ Ce que l'import garantit :
 Détail du fonctionnement et cahier de recette :
 [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md).
 
+## 🏷️ Règles de catégorisation
+
+Les opérations qui reviennent tous les mois se rangent toutes seules. Une règle combine des
+critères (libellé, montant, sens, compte, jour du mois, date) en **toutes** ou **au moins une**,
+et déclenche des actions : ranger dans une catégorie, réécrire le libellé, poser une étiquette,
+marquer comme virement interne.
+
+- **Le montant fait partie des critères**, et c'est souvent lui qui tranche : deux contrats du
+  même assureur peuvent porter un libellé bancaire rigoureusement identique, seul le montant les
+  distingue. Les montants se comparent en valeur absolue, en euros : « entre 600 et 700 » attrape
+  un prélèvement de -635,46 €.
+- **Les règles sont ordonnées**, évaluées de haut en bas ; la dernière qui décide d'un champ
+  l'emporte. Une règle peut porter « arrêter là ».
+- **Aperçu avant application** : le bouton « Tester » liste les lignes concernées et ce qui
+  changerait, sans rien écrire.
+- **Une catégorie corrigée à la main n'est jamais écrasée** par un rejeu, et le rapport dit
+  combien de lignes ont été protégées. Une case à cocher permet de lever cette protection quand
+  c'est voulu.
+- **Supprimer une règle ne défait rien** : les opérations gardent leur catégorie, elles
+  repassent simplement en classement manuel.
+
+Les règles tournent aussi à la validation d'un import, sur les seules lignes créées.
+
 ## 💾 Sauvegarde et restauration
 
 La base est en mode **WAL** : copier `foyer.db` seul pendant que le service tourne donne une
@@ -178,7 +201,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#6-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#9-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 

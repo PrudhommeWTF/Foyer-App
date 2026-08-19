@@ -1,7 +1,9 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
-  AccountKind, FinAccount, FinAlias, FinCategory, FinCoverage, FinImport, FinImportPreview,
-  FinMonthSummary, FinTransfer, FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
+  AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
+  FinCondition, FinConditionField, FinConditionOp, FinCoverage, FinImport, FinImportPreview,
+  FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
+  FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
 import { FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
@@ -13,12 +15,12 @@ import { Notif } from './models';
  */
 
 export interface FinancesUi {
-  tab: 'transactions' | 'comptes' | 'categories' | 'import';
+  tab: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import';
   month: string;
 
   // transaction filters
   fltQuery: string; fltAccount: number | null; fltCategory: number | null;
-  fltUncategorised: boolean; page: number;
+  fltUncategorised: boolean; fltTag: string; page: number;
 
   // transaction form
   txForm: boolean; txId: number | null;
@@ -46,13 +48,21 @@ export interface FinancesUi {
   showWeakCandidates: boolean;
   undoImportId: number | null;
 
+  // rule editor
+  ruleForm: boolean; ruleId: number | null;
+  ruleName: string; ruleEnabled: boolean; ruleMatch: 'all' | 'any'; ruleStop: boolean;
+  ruleConditions: FinCondition[]; ruleActions: FinAction[];
+  ruleDelId: number | null; ruleError: string; ruleBusy: boolean;
+  /** « Tout réappliquer » also overwrites the categories corrected by hand. */
+  applyForce: boolean;
+
   busy: boolean;
 }
 
 function initialUi(month: string): FinancesUi {
   return {
     tab: 'transactions', month,
-    fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, page: 0,
+    fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
     txAccount: null, txCategory: null, txNotes: '', txCleared: false, txDelId: null,
     acForm: false, acId: null, acName: '', acKind: 'courant', acMember: '', acOpening: '',
@@ -61,11 +71,24 @@ function initialUi(month: string): FinancesUi {
     catParent: null, catDelId: null,
     importBusy: false, importError: '', mapping: {}, picked: {},
     showWeakCandidates: false, undoImportId: null,
+    ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
+    ruleConditions: [], ruleActions: [], ruleDelId: null, ruleError: '', ruleBusy: false,
+    applyForce: false,
     busy: false,
   };
 }
 
 const PAGE_SIZE = 50;
+
+/** Operators the engine accepts per criterion; the editor must not offer others. */
+const OPS_FOR: Record<FinConditionField, FinConditionOp[]> = {
+  label: ['contains', 'notContains', 'equals', 'startsWith', 'regex'],
+  amount: ['gt', 'lt', 'between', 'equals'],
+  sens: ['is', 'isNot'],
+  account: ['is', 'isNot'],
+  dayOfMonth: ['equals', 'between', 'gt', 'lt'],
+  date: ['between', 'before', 'after'],
+};
 
 /** Cents to a French euro string, e.g. -8430 gives « -84,30 ». */
 export function fmtEuros(cents: number): string {
@@ -105,6 +128,12 @@ export class FinancesStore {
   readonly imports = signal<FinImport[]>([]);
   readonly candidates = signal<FinTransferCandidate[]>([]);
   readonly transfers = signal<FinTransfer[]>([]);
+
+  // Categorisation rules
+  readonly rules = signal<FinRule[]>([]);
+  readonly tags = signal<FinTag[]>([]);
+  readonly rulePreview = signal<FinRulePreview | null>(null);
+  readonly applyReport = signal<FinApplyReport | null>(null);
   readonly loaded = signal(false);
   readonly error = signal('');
 
@@ -180,7 +209,9 @@ export class FinancesStore {
       if (b.months.length && !b.months.includes(this.ui().month)) this.patch({ month: b.months[0] });
       this.loaded.set(true);
       this.error.set('');
-      await Promise.all([this.reloadTransactions(), this.reloadSummary()]);
+      // Rules are loaded up front: an operation's form names the rule that
+      // decided its category, and that must not depend on visiting the tab.
+      await Promise.all([this.reloadTransactions(), this.reloadSummary(), this.loadRules()]);
     } catch (e) {
       this.error.set((e as Error).message);
     }
@@ -192,6 +223,7 @@ export class FinancesStore {
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.currentSummary.set(null); this.searchHits.set([]);
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
+    this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
     this.ui.set(initialUi(this.currentMonth()));
   }
@@ -243,6 +275,7 @@ export class FinancesStore {
         accountId: u.fltAccount ?? undefined,
         categoryId: u.fltCategory ?? undefined,
         uncategorised: u.fltUncategorised || undefined,
+        tag: u.fltTag || undefined,
         q: u.fltQuery.trim() || undefined,
         limit: PAGE_SIZE,
         offset: u.page * PAGE_SIZE,
@@ -286,7 +319,7 @@ export class FinancesStore {
   /** Open the Finances screen filtered on a search hit's label. */
   openSearchHit(h: SearchHit): void {
     this.foyer.go('finances');
-    this.patch({ tab: 'transactions', fltQuery: h.title, fltAccount: null, fltCategory: null, fltUncategorised: false, page: 0 });
+    this.patch({ tab: 'transactions', fltQuery: h.title, fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
     void this.reloadTransactions();
   }
 
@@ -295,12 +328,12 @@ export class FinancesStore {
     void this.reloadTransactions();
   }
   clearFilters(): void {
-    this.patch({ fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, page: 0 });
+    this.patch({ fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
     void this.reloadTransactions();
   }
   readonly hasFilters = computed(() => {
     const u = this.ui();
-    return !!(u.fltQuery.trim() || u.fltAccount || u.fltCategory || u.fltUncategorised);
+    return !!(u.fltQuery.trim() || u.fltAccount || u.fltCategory || u.fltUncategorised || u.fltTag);
   });
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / PAGE_SIZE)));
   goPage(p: number): void {
@@ -558,7 +591,10 @@ export class FinancesStore {
       const r = await this.api.commitImport(p.importId);
       this.preview.set(null);
       this.patch({ importBusy: false });
-      this.foyer.toast(`${r.inserted} opération${r.inserted > 1 ? 's' : ''} importée${r.inserted > 1 ? 's' : ''}`);
+      // The rules run on the fresh rows straight away: say how many they filed.
+      const filed = r.categorised?.changed ?? 0;
+      this.foyer.toast(`${r.inserted} opération${r.inserted > 1 ? 's' : ''} importée${r.inserted > 1 ? 's' : ''}`
+        + (filed ? `, ${filed} rangée${filed > 1 ? 's' : ''} par vos règles` : ''));
       await Promise.all([this.afterWrite(), this.loadImports()]);
       await this.loadCandidates();
     } catch (e) {
@@ -641,6 +677,173 @@ export class FinancesStore {
       this.foyer.toast('Virement séparé en deux opérations');
       await Promise.all([this.afterWrite(), this.loadCandidates(), this.loadImports()]);
     } catch (e) { this.patch({ importError: (e as Error).message }); }
+  }
+
+  // ---- categorisation rules ----------------------------------------------
+  async loadRules(): Promise<void> {
+    try {
+      const r = await this.api.rules();
+      this.rules.set(r.rules);
+      this.tags.set(r.tags);
+    } catch (e) { this.patch({ ruleError: (e as Error).message }); }
+  }
+
+  private blankCondition(): FinCondition { return { field: 'label', op: 'contains', value: '', value2: '' }; }
+
+  newRule(): void {
+    this.patch({
+      ruleForm: true, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
+      ruleConditions: [this.blankCondition()], ruleActions: [{ kind: 'category', value: '' }],
+      ruleError: '',
+    });
+    this.rulePreview.set(null);
+  }
+
+  /**
+   * Start a rule from an operation the user is looking at. The label and the
+   * amount are pre-filled because that pair is exactly what tells two contracts
+   * of the same provider apart.
+   */
+  ruleFromTx(id: number): void {
+    const t = this.transactions().find((x) => x.id === id);
+    if (!t) return;
+    const euros = Math.abs(t.amount) / 100;
+    this.patch({
+      tab: 'regles', txForm: false,
+      ruleForm: true, ruleId: null, ruleName: t.label.slice(0, 60), ruleEnabled: true,
+      ruleMatch: 'all', ruleStop: false, ruleError: '',
+      ruleConditions: [
+        { field: 'label', op: 'contains', value: t.label, value2: '' },
+        // Whole-euro bounds, deliberately loose: a subscription that goes up by
+        // a few cents must keep matching without editing the rule.
+        { field: 'amount', op: 'between', value: String(Math.floor(euros * 0.95)), value2: String(Math.ceil(euros * 1.05)) },
+      ],
+      ruleActions: [{ kind: 'category', value: t.categoryId ? String(t.categoryId) : '' }],
+    });
+    this.rulePreview.set(null);
+    void this.loadRules();
+  }
+
+  editRule(id: number): void {
+    const r = this.rules().find((x) => x.id === id);
+    if (!r) return;
+    this.patch({
+      ruleForm: true, ruleId: r.id, ruleName: r.name, ruleEnabled: r.enabled,
+      ruleMatch: r.matchMode, ruleStop: r.stop, ruleError: '',
+      ruleConditions: r.conditions.map((c) => ({ ...c })),
+      ruleActions: r.actions.map((a) => ({ ...a })),
+    });
+    this.rulePreview.set(null);
+  }
+
+  addCondition(): void { this.patch({ ruleConditions: [...this.ui().ruleConditions, this.blankCondition()] }); }
+  removeCondition(i: number): void { this.patch({ ruleConditions: this.ui().ruleConditions.filter((_, k) => k !== i) }); }
+  /** Changing the criterion resets the operator: « contient » means nothing on a date. */
+  setConditionField(i: number, field: FinConditionField): void {
+    this.patchCondition(i, { field, op: OPS_FOR[field][0], value: '', value2: '' });
+  }
+  patchCondition(i: number, p: Partial<FinCondition>): void {
+    this.patch({ ruleConditions: this.ui().ruleConditions.map((c, k) => (k === i ? { ...c, ...p } : c)) });
+  }
+  opsFor(field: FinConditionField): FinConditionOp[] { return OPS_FOR[field]; }
+
+  addAction(kind: FinActionKind): void { this.patch({ ruleActions: [...this.ui().ruleActions, { kind, value: '' }] }); }
+  removeAction(i: number): void { this.patch({ ruleActions: this.ui().ruleActions.filter((_, k) => k !== i) }); }
+  patchAction(i: number, value: string): void {
+    this.patch({ ruleActions: this.ui().ruleActions.map((a, k) => (k === i ? { ...a, value } : a)) });
+  }
+
+  private ruleInput(): FinRuleInput {
+    const u = this.ui();
+    return {
+      name: u.ruleName.trim(), enabled: u.ruleEnabled, matchMode: u.ruleMatch, stop: u.ruleStop,
+      conditions: u.ruleConditions, actions: u.ruleActions,
+    };
+  }
+
+  /** Show what the rule in the editor would change, before saving anything. */
+  async previewRule(): Promise<void> {
+    if (this.ui().ruleBusy) return;
+    this.patch({ ruleBusy: true, ruleError: '' });
+    try {
+      const { preview } = await this.api.previewRule(this.ruleInput());
+      this.rulePreview.set(preview);
+      this.patch({ ruleBusy: false });
+    } catch (e) {
+      this.rulePreview.set(null);
+      this.patch({ ruleBusy: false, ruleError: (e as Error).message });
+    }
+  }
+
+  /** Save, then apply straight away: a rule that changes nothing is a trap. */
+  async saveRule(): Promise<void> {
+    const u = this.ui();
+    if (u.ruleBusy) return;
+    this.patch({ ruleBusy: true, ruleError: '' });
+    try {
+      if (u.ruleId) await this.api.updateRule(u.ruleId, this.ruleInput());
+      else await this.api.createRule(this.ruleInput());
+      const { report } = await this.api.applyRules({});
+      this.applyReport.set(report);
+      this.patch({ ruleForm: false, ruleId: null, ruleBusy: false });
+      this.rulePreview.set(null);
+      await Promise.all([this.loadRules(), this.afterWrite()]);
+      this.foyer.toast(report.changed
+        ? `${report.changed} opération${report.changed > 1 ? 's' : ''} recatégorisée${report.changed > 1 ? 's' : ''}`
+        : 'Règle enregistrée, aucune opération à modifier');
+    } catch (e) {
+      this.patch({ ruleBusy: false, ruleError: (e as Error).message });
+    }
+  }
+
+  async confirmRuleDel(): Promise<void> {
+    const id = this.ui().ruleDelId;
+    if (!id) return;
+    try {
+      this.rules.set((await this.api.deleteRule(id)).rules);
+      this.patch({ ruleDelId: null, ruleForm: false, ruleId: null });
+      await this.afterWrite();
+      // The rows it had decided keep their category, but nobody owns it any more.
+      this.foyer.toast('Règle supprimée, les opérations gardent leur catégorie');
+    } catch (e) {
+      this.patch({ ruleDelId: null, ruleError: (e as Error).message });
+    }
+  }
+
+  async moveRule(id: number, delta: 1 | -1): Promise<void> {
+    try { this.rules.set((await this.api.moveRule(id, delta)).rules); }
+    catch (e) { this.patch({ ruleError: (e as Error).message }); }
+  }
+
+  /** Enable or disable without opening the editor. */
+  async toggleRule(id: number): Promise<void> {
+    const r = this.rules().find((x) => x.id === id);
+    if (!r) return;
+    try {
+      await this.api.updateRule(id, { ...r, enabled: !r.enabled });
+      await Promise.all([this.loadRules(), this.afterWrite()]);
+    } catch (e) { this.patch({ ruleError: (e as Error).message }); }
+  }
+
+  /** Replay every enabled rule over the whole history. */
+  async applyAll(): Promise<void> {
+    if (this.ui().ruleBusy) return;
+    this.patch({ ruleBusy: true, ruleError: '' });
+    try {
+      const { report } = await this.api.applyRules({ force: this.ui().applyForce });
+      this.applyReport.set(report);
+      this.patch({ ruleBusy: false });
+      await Promise.all([this.loadRules(), this.afterWrite()]);
+      this.foyer.toast(`${report.examined} opération${report.examined > 1 ? 's' : ''} passée${report.examined > 1 ? 's' : ''} en revue, ${report.changed} modifiée${report.changed > 1 ? 's' : ''}`);
+    } catch (e) {
+      this.patch({ ruleBusy: false, ruleError: (e as Error).message });
+    }
+  }
+
+  /** Filter the operation list on a tag, from the rules tab. */
+  filterByTag(name: string): void {
+    this.patch({ tab: 'transactions', fltTag: name, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, page: 0 });
+    void this.reloadTransactions();
   }
 
   // ---- export ------------------------------------------------------------

@@ -5,12 +5,14 @@ import { IconComponent } from '../../core/icon';
 import { FinancesTransactionsTab } from './transactions-tab';
 import { FinancesAccountsTab } from './accounts-tab';
 import { FinancesCategoriesTab } from './categories-tab';
+import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
 
-const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'import'; label: string }[] = [
+const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import'; label: string }[] = [
   { id: 'transactions', label: 'Opérations' },
   { id: 'comptes', label: 'Comptes' },
   { id: 'categories', label: 'Catégories' },
+  { id: 'regles', label: 'Règles' },
   { id: 'import', label: 'Import' },
 ];
 
@@ -18,7 +20,7 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'import'; label: s
   selector: 'screen-finances',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, FinancesTransactionsTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesImportTab],
+  imports: [IconComponent, FinancesTransactionsTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesRulesTab, FinancesImportTab],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -90,6 +92,8 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'import'; label: s
         <fin-accounts-tab />
       } @else if (store.ui().tab === 'categories') {
         <fin-categories-tab />
+      } @else if (store.ui().tab === 'regles') {
+        <fin-rules-tab />
       } @else {
         <fin-import-tab />
       }

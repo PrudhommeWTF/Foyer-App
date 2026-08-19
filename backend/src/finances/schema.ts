@@ -8,7 +8,7 @@
 import type { Database } from 'better-sqlite3';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
-export const FIN_SCHEMA_VERSION = 2;
+export const FIN_SCHEMA_VERSION = 3;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -253,6 +253,18 @@ const MIGRATIONS: Migration[] = [
           PRIMARY KEY (import_id, account_id)
         );
         CREATE INDEX fin_import_coverage_account ON fin_import_coverage (account_id, to_date);
+      `);
+    },
+  },
+  {
+    version: 3,
+    label: 'règles : provenance de la catégorisation',
+    up: (db) => {
+      db.exec(`
+        -- Which rule last decided this row's category or label. NULL means the
+        -- user set it by hand, and replaying the rules must not undo that.
+        ALTER TABLE fin_transactions ADD COLUMN rule_id INTEGER REFERENCES fin_rules(id) ON DELETE SET NULL;
+        CREATE INDEX fin_tx_rule ON fin_transactions (rule_id);
       `);
     },
   },

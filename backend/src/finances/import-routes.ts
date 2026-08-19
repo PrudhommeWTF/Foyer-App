@@ -10,6 +10,7 @@ import { UnsupportedFile, parseFile } from './import/parse';
 import { NO_ACCOUNT_LABEL, previewTransfers, resolveAndCollapse, stage } from './import/run';
 import { findTransferCandidates } from './import/transfers';
 import { ImportPreview, RawRow } from './import/types';
+import { applyRules } from './rules-repo';
 import { isIsoDate } from './money';
 
 const MAX_UPLOAD = 25 * 1024 * 1024;
@@ -157,7 +158,9 @@ export function importRouter(): Router {
     }
     const staged = stage(resolution, imports.existingByKey);
     const inserted = imports.commitImport(draftId, staged.rows, staged.coverage);
-    res.json({ imported: imports.getImport(draftId), inserted, duplicates: staged.duplicates });
+    // The whole point of the rules: a statement should arrive already sorted.
+    const categorised = inserted ? applyRules({ importId: draftId }) : null;
+    res.json({ imported: imports.getImport(draftId), inserted, duplicates: staged.duplicates, categorised });
   }));
 
   r.delete('/imports/:id', handler((req, res) => {

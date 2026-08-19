@@ -4,6 +4,7 @@
 import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
 import { coveredThrough, initImportRepo } from './import-repo';
+import { initRulesRepo, tagsFor } from './rules-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
 import {
   Account, AccountCoverage, Category, CategorySummary, MonthSummary, Transaction, TxKind,
@@ -17,6 +18,7 @@ export function initFinancesRepo(db: Database): void {
   // The import layer shares the same connection; wiring it here means a caller
   // cannot forget it and discover the omission only when a summary is computed.
   initImportRepo(db);
+  initRulesRepo(db);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is
   // needed: a full scan over a few thousand rows is sub-millisecond.
   db.function('fnorm', { deterministic: true }, (s: unknown) => normaliseLabel(String(s ?? '')));
@@ -39,11 +41,13 @@ interface TxRow {
   id: number; account_id: number; date: string; amount: number; kind: string;
   label_raw: string; label: string; category_id: number | null; contract_id: number | null;
   notes: string; cleared: number; transfer_group: string | null; import_id: number | null;
+  rule_id: number | null;
 }
-const toTransaction = (r: TxRow): Transaction => ({
+const toTransaction = (r: TxRow, tags: string[] = []): Transaction => ({
   id: r.id, accountId: r.account_id, date: r.date, amount: r.amount, kind: r.kind as TxKind,
   labelRaw: r.label_raw, label: r.label, categoryId: r.category_id, contractId: r.contract_id,
   notes: r.notes, cleared: !!r.cleared, transferGroup: r.transfer_group, importId: r.import_id,
+  ruleId: r.rule_id, tags,
 });
 
 // ---- accounts ------------------------------------------------------------
@@ -161,7 +165,7 @@ export function countChildren(id: number): number {
 // ---- transactions --------------------------------------------------------
 export interface TxFilter {
   from?: string; to?: string; accountId?: number; categoryId?: number;
-  uncategorised?: boolean; q?: string; limit?: number; offset?: number;
+  uncategorised?: boolean; q?: string; tag?: string; limit?: number; offset?: number;
 }
 
 function whereClause(f: TxFilter): { sql: string; params: unknown[] } {
@@ -172,6 +176,7 @@ function whereClause(f: TxFilter): { sql: string; params: unknown[] } {
   if (f.accountId) { parts.push('t.account_id = ?'); params.push(f.accountId); }
   if (f.categoryId) { parts.push('t.category_id = ?'); params.push(f.categoryId); }
   if (f.uncategorised) parts.push('t.category_id IS NULL');
+  if (f.tag) { parts.push('t.id IN (SELECT tt.transaction_id FROM fin_transaction_tags tt JOIN fin_tags g ON g.id = tt.tag_id WHERE g.name = ?)'); params.push(f.tag); }
   if (f.q) { parts.push("(fnorm(t.label) LIKE ? OR fnorm(t.label_raw) LIKE ? OR fnorm(t.notes) LIKE ?)"); const like = `%${normaliseLabel(f.q)}%`; params.push(like, like, like); }
   return { sql: parts.length ? 'WHERE ' + parts.join(' AND ') : '', params };
 }
@@ -184,12 +189,13 @@ export function listTransactions(f: TxFilter): { rows: Transaction[]; total: num
   const rows = database.prepare(
     `SELECT t.* FROM fin_transactions t ${sql} ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`,
   ).all(...params, limit, offset) as TxRow[];
-  return { rows: rows.map(toTransaction), total };
+  const tags = tagsFor(rows.map((r) => r.id));
+  return { rows: rows.map((r) => toTransaction(r, tags.get(r.id) ?? [])), total };
 }
 
 export function getTransaction(id: number): Transaction | null {
   const r = database.prepare('SELECT * FROM fin_transactions WHERE id = ?').get(id) as TxRow | undefined;
-  return r ? toTransaction(r) : null;
+  return r ? toTransaction(r, tagsFor([id]).get(id) ?? []) : null;
 }
 
 export interface TxInput {
@@ -220,11 +226,15 @@ export function createTransaction(input: TxInput): Transaction {
   return getTransaction(Number(info.lastInsertRowid))!;
 }
 
+/**
+ * A manual edit takes ownership of the row: `rule_id` is cleared, so replaying
+ * the rules will not undo the correction the user just made.
+ */
 export function updateTransaction(id: number, input: TxInput): Transaction | null {
   const info = database.prepare(`
     UPDATE fin_transactions
     SET account_id = ?, date = ?, amount = ?, kind = ?, label = ?, category_id = ?, contract_id = ?,
-        notes = ?, cleared = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
+        notes = ?, cleared = ?, rule_id = NULL, updated_at = strftime('%Y-%m-%d %H:%M:%f','now')
     WHERE id = ?
   `).run(
     input.accountId, input.date, input.amount, input.kind, input.label,
