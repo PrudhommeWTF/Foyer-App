@@ -31,13 +31,14 @@ import { CAT_ICONS } from '../../core/constants';
       </select>
       <button class="chip" [class.on]="store.ui().fltUncategorised" (click)="store.setFilter({ fltUncategorised: !store.ui().fltUncategorised })">Sans catégorie</button>
       @if (store.ui().fltTag; as tag) { <button class="chip on" (click)="store.setFilter({ fltTag: '' })">Étiquette « {{ tag }} » <f-icon name="x" [size]="13" color="#fff" [width]="2.6" /></button> }
+      @if (store.ui().fltContract; as cid) { <button class="chip on" (click)="store.setFilter({ fltContract: null })">Contrat « {{ store.contractName(cid) }} » <f-icon name="x" [size]="13" color="#fff" [width]="2.6" /></button> }
       @if (store.hasFilters()) { <button class="chip clear" (click)="store.clearFilters()"><f-icon name="x" [size]="13" color="var(--ink2)" [width]="2.6" /> Effacer</button> }
       <div class="spacer"></div>
       <button class="btn btn-primary" (click)="store.newTx()"><f-icon name="plus" [size]="16" color="#fff" [width]="2.6" /> Ajouter</button>
     </div>
 
     @if (store.hasFilters()) {
-      <div class="count">{{ store.total() }} opération{{ store.total() > 1 ? 's' : '' }} correspondent{{ store.ui().fltQuery.trim() ? ', toutes périodes confondues' : '' }}</div>
+      <div class="count">{{ store.total() }} opération{{ store.total() > 1 ? 's' : '' }} correspond{{ store.total() > 1 ? 'ent' : '' }}{{ store.spansHistory() ? ', toutes périodes confondues' : '' }}</div>
     }
 
     <div class="tx-list">
@@ -56,6 +57,7 @@ import { CAT_ICONS } from '../../core/constants';
             <div class="tx-name">{{ t.label }}</div>
             <div class="tx-meta">
               <span [class.muted]="!t.categoryId">{{ foyer.fmtNumDate(t.date) }} · {{ store.accountName(t.accountId) }} · {{ store.categoryPath(t.categoryId) }}</span>
+              @if (store.contractName(t.contractId); as cn) { <span class="tag">{{ cn }}</span> }
               @for (g of t.tags; track g) { <span class="tag">{{ g }}</span> }
               @if (t.cleared) { <span class="tag">pointée</span> }
             </div>
@@ -123,6 +125,13 @@ import { CAT_ICONS } from '../../core/constants';
               <option [ngValue]="c.id">{{ c.name }}</option>
               @for (s of store.childrenOf(c.id); track s.id) { <option [ngValue]="s.id">&nbsp;&nbsp;{{ c.name }} · {{ s.name }}</option> }
             }
+          </select>
+        }
+        @if (store.ui().txSign === 'out' && store.contracts().length) {
+          <div class="field-label">Contrat</div>
+          <select class="input" [ngModel]="store.ui().txContract" (ngModelChange)="store.patch({ txContract: $event })">
+            <option [ngValue]="null">Aucun contrat</option>
+            @for (c of store.activeContracts(); track c.id) { <option [ngValue]="c.id">{{ c.name }}{{ c.provider ? ' · ' + c.provider : '' }}</option> }
           </select>
         }
         <div class="field-label">Notes</div>

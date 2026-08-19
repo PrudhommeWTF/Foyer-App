@@ -17,13 +17,13 @@ Angular 21 · Node/Express · SQLite · Docker
 | Module | Description |
 |---|---|
 | 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. |
-| 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts). Partage par **flux ICS** (Google/Apple Agenda). |
+| 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts) et **échéances de contrat**. Partage par **flux ICS** (Google/Apple Agenda). |
 | 🛒 **Courses** | Multi-listes, rayons, articles cochables, génération depuis le planning repas. |
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -182,6 +182,30 @@ marquer comme virement interne.
 
 Les règles tournent aussi à la validation d'un import, sur les seules lignes créées.
 
+## 📄 Biens, contrats et échéances
+
+Un contrat explique des opérations. Déclarez-le une fois, et le module répond à deux questions
+qui coûtent cher quand on les oublie.
+
+- **Quand faut-il résilier ?** Renseignez la date de reconduction tacite et le préavis : le
+  dernier jour utile pour résilier apparaît dans les échéances, avec le décompte des jours. Un
+  contrat reconduit et manqué d'un jour coûte une période de plus.
+- **Combien coûte-t-il vraiment ?** Rattachez ses opérations, à la main ou par une règle
+  « rattacher au contrat » : le module additionne douze mois glissants et **signale** un
+  prélèvement sorti de la fourchette annoncée.
+
+Les contrats se regroupent par **bien** (logement, véhicule), portent leurs **références**
+(numéro de police, de client, de compteur) et se passent en « résilié » sans rien perdre de leur
+historique. Supprimer un bien libère ses contrats ; supprimer un contrat détache ses opérations
+sans les effacer.
+
+**Pièces jointes.** Rangez l'échéancier, l'attestation ou le dernier avis directement sur le
+contrat : PDF, JPEG, PNG, WEBP, GIF ou HEIC, 20 Mo au plus. Le type est reconnu **au contenu**,
+pas à l'extension. Les fichiers sont écrits sur le disque, à côté de la base, sous leur empreinte
+SHA-256 : deux fois la même facture n'occupe qu'un fichier, et une sauvegarde du répertoire de
+données reste complète. Au démarrage, l'application compare la base et le disque **dans les deux
+sens** et signale tout écart sans jamais rien supprimer d'elle-même.
+
 ## 💾 Sauvegarde et restauration
 
 La base est en mode **WAL** : copier `foyer.db` seul pendant que le service tourne donne une
@@ -202,7 +226,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#10-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#12-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 
@@ -213,9 +237,16 @@ Procédures de restauration, vérification d'une sauvegarde et export CSV en lig
   sont calculés localement, sans réseau.
 - **Anniversaires** : renseignez la date de naissance des membres (onboarding / gestion de la
   famille) et des contacts pour les voir apparaître chaque année dans le calendrier.
+- **Échéances de contrat** : les dates de résiliation et de reconduction saisies dans *Finances →
+  Contrats* apparaissent d'elles-mêmes dans le calendrier. Elles n'y sont pas **stockées** :
+  changer la date du contrat déplace le repère, sans copie périmée. Le bouton « Tâche » d'une
+  échéance en fait une vraie tâche, que vous pouvez cocher et déplacer ; c'est une copie
+  ponctuelle et assumée, elle ne suit pas le contrat si sa date change ensuite.
 - **Partage ICS** : *Paramètres → Partage du calendrier* fournit une URL `…/api/calendar/feed.ics?token=…`
-  (jeton secret) à ajouter dans Google Agenda, Apple Calendrier, etc. — événements du foyer, en
-  lecture seule. Un administrateur peut régénérer le lien (invalide l'ancien).
+  (jeton secret) à ajouter dans Google Agenda, Apple Calendrier, etc., en lecture seule. Le flux
+  porte les **événements du foyer et les échéances de contrat** à un an, avec un rappel une
+  semaine avant chaque date limite de résiliation. Un administrateur peut régénérer le lien
+  (invalide l'ancien).
 
 ## 🔄 Mises à jour depuis l'interface
 

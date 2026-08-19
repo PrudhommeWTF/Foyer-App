@@ -4,6 +4,8 @@
 import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
 import { coveredThrough, gapsOver, initImportRepo } from './import-repo';
+import { initAttachments, removeAllFor } from './attachments';
+import { initContracts } from './contracts';
 import { initDashboard } from './dashboard';
 import { initRulesRepo, tagsFor } from './rules-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
@@ -14,13 +16,20 @@ import {
 let database: Database;
 
 /** Wire the repository to the app database and register helper SQL functions. */
-export function initFinancesRepo(db: Database): void {
+/**
+ * Single entry point of the whole module. `dataDir` is required because the
+ * attachments write next to the database: an optional argument here would mean
+ * discovering the omission the day a document lands somewhere nobody backs up.
+ */
+export function initFinancesRepo(db: Database, dataDir: string): void {
   database = db;
   // The import layer shares the same connection; wiring it here means a caller
   // cannot forget it and discover the omission only when a summary is computed.
   initImportRepo(db);
   initRulesRepo(db);
+  initContracts(db);
   initDashboard(db);
+  initAttachments(db, dataDir);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is
   // needed: a full scan over a few thousand rows is sub-millisecond.
   db.function('fnorm', { deterministic: true }, (s: unknown) => normaliseLabel(String(s ?? '')));
@@ -167,7 +176,7 @@ export function countChildren(id: number): number {
 // ---- transactions --------------------------------------------------------
 export interface TxFilter {
   from?: string; to?: string; accountId?: number; categoryId?: number;
-  uncategorised?: boolean; q?: string; tag?: string; limit?: number; offset?: number;
+  uncategorised?: boolean; contractId?: number; q?: string; tag?: string; limit?: number; offset?: number;
 }
 
 function whereClause(f: TxFilter): { sql: string; params: unknown[] } {
@@ -178,6 +187,7 @@ function whereClause(f: TxFilter): { sql: string; params: unknown[] } {
   if (f.accountId) { parts.push('t.account_id = ?'); params.push(f.accountId); }
   if (f.categoryId) { parts.push('t.category_id = ?'); params.push(f.categoryId); }
   if (f.uncategorised) parts.push('t.category_id IS NULL');
+  if (f.contractId) { parts.push('t.contract_id = ?'); params.push(f.contractId); }
   if (f.tag) { parts.push('t.id IN (SELECT tt.transaction_id FROM fin_transaction_tags tt JOIN fin_tags g ON g.id = tt.tag_id WHERE g.name = ?)'); params.push(f.tag); }
   if (f.q) { parts.push("(fnorm(t.label) LIKE ? OR fnorm(t.label_raw) LIKE ? OR fnorm(t.notes) LIKE ?)"); const like = `%${normaliseLabel(f.q)}%`; params.push(like, like, like); }
   return { sql: parts.length ? 'WHERE ' + parts.join(' AND ') : '', params };
@@ -246,6 +256,8 @@ export function updateTransaction(id: number, input: TxInput): Transaction | nul
 }
 
 export function deleteTransaction(id: number): void {
+  // Its receipts go with it: kept, they would be rows nothing can reach.
+  removeAllFor('transaction', id);
   database.prepare('DELETE FROM fin_transactions WHERE id = ?').run(id);
 }
 

@@ -1,12 +1,15 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
-  FinCondition, FinConditionField, FinConditionOp, FinCoverage, FinDashboard, FinImport, FinImportPreview,
+  FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
+  FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
+  FinAttachment, FinDeadline, FinImport, FinImportPreview, FinOwnerKind, FinPeriodicity,
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
-import { FoyerStore, SearchHit } from './foyer.store';
+import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
+import { CAL_KINDS } from './constants';
 
 /**
  * Finances state. Unlike FoyerStore, which holds the whole household as one
@@ -15,17 +18,18 @@ import { Notif } from './models';
  */
 
 export interface FinancesUi {
-  tab: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'regles' | 'import';
+  tab: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrats' | 'regles' | 'import';
   month: string;
 
   // transaction filters
   fltQuery: string; fltAccount: number | null; fltCategory: number | null;
-  fltUncategorised: boolean; fltTag: string; page: number;
+  fltUncategorised: boolean; fltTag: string; fltContract: number | null; page: number;
 
   // transaction form
   txForm: boolean; txId: number | null;
   txLabel: string; txAmount: string; txSign: 'out' | 'in'; txDate: string;
-  txAccount: number | null; txCategory: number | null; txNotes: string; txCleared: boolean;
+  txAccount: number | null; txCategory: number | null; txContract: number | null;
+  txNotes: string; txCleared: boolean;
   txDelId: number | null;
 
   // account form
@@ -48,6 +52,20 @@ export interface FinancesUi {
   showWeakCandidates: boolean;
   undoImportId: number | null;
 
+  // asset form
+  asForm: boolean; asId: number | null;
+  asName: string; asKind: FinAssetKind; asStatus: FinAssetStatus; asAddress: string;
+  asAcquired: string; asSold: string; asNotes: string; asDelId: number | null;
+
+  // contract form
+  coForm: boolean; coId: number | null;
+  coName: string; coProvider: string; coKind: FinContractKind;
+  coAsset: number | null; coAccount: number | null; coCategory: number | null; coMember: string;
+  coMin: string; coMax: string; coPeriodicity: FinPeriodicity;
+  coRenewal: string; coNotice: string; coEnds: string;
+  coStatus: FinContractStatus; coNotes: string; coRefs: FinContractRef[];
+  coDelId: number | null;
+
   // rule editor
   ruleForm: boolean; ruleId: number | null;
   ruleName: string; ruleEnabled: boolean; ruleMatch: 'all' | 'any'; ruleStop: boolean;
@@ -62,15 +80,21 @@ export interface FinancesUi {
 function initialUi(month: string): FinancesUi {
   return {
     tab: 'transactions', month,
-    fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0,
+    fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
-    txAccount: null, txCategory: null, txNotes: '', txCleared: false, txDelId: null,
+    txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null,
     acForm: false, acId: null, acName: '', acKind: 'courant', acMember: '', acOpening: '',
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
     catForm: false, catId: null, catName: '', catBudget: '', catColor: '#7A9B76', catIcon: 'facture',
     catParent: null, catDelId: null,
     importBusy: false, importError: '', mapping: {}, picked: {},
     showWeakCandidates: false, undoImportId: null,
+    asForm: false, asId: null, asName: '', asKind: 'immobilier', asStatus: 'actif', asAddress: '',
+    asAcquired: '', asSold: '', asNotes: '', asDelId: null,
+    coForm: false, coId: null, coName: '', coProvider: '', coKind: 'assurance',
+    coAsset: null, coAccount: null, coCategory: null, coMember: '',
+    coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
+    coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null,
     ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
     ruleConditions: [], ruleActions: [], ruleDelId: null, ruleError: '', ruleBusy: false,
     applyForce: false,
@@ -124,6 +148,15 @@ export class FinancesStore {
   readonly searchHits = signal<SearchHit[]>([]);
   readonly dashboard = signal<FinDashboard | null>(null);
 
+  // Assets, contracts and deadlines
+  readonly assets = signal<FinAsset[]>([]);
+  readonly contracts = signal<FinContract[]>([]);
+  readonly deadlines = signal<FinDeadline[]>([]);
+  readonly costs = signal<Record<number, FinContractCost>>({});
+  readonly pieces = signal<Record<number, number>>({});
+  /** Attachments of the item currently open in a form. */
+  readonly attachments = signal<FinAttachment[]>([]);
+
   // Import workflow
   readonly preview = signal<FinImportPreview | null>(null);
   readonly imports = signal<FinImport[]>([]);
@@ -145,7 +178,12 @@ export class FinancesStore {
     effect(() => { if (!this.foyer.authed() && this.loaded()) this.reset(); });
     // Budget overruns and incomplete months are notifications, but they are computed
     // here: FoyerStore must not depend on this store (it would be circular).
-    effect(() => this.foyer.externalNotifs.set(this.buildNotifs(this.currentSummary())));
+    effect(() => this.foyer.externalNotifs.set([
+      ...this.buildNotifs(this.currentSummary()),
+      ...this.deadlineNotifs(),
+    ]));
+    // Les échéances apparaissent dans le calendrier partagé sans y être stockées.
+    effect(() => this.foyer.externalDayExtras.set(this.deadlineDayExtras()));
   }
 
   /** Overrun and coverage alerts for the month in progress. */
@@ -170,6 +208,61 @@ export class FinancesStore {
       });
     }
     return out;
+  }
+
+  /** Libellés des échéances, partagés par les notifications, les tâches et l'écran. */
+  private deadlineLabel(kind: string): string {
+    return kind === 'preavis' ? 'Dernier jour pour résilier'
+      : kind === 'renouvellement' ? 'Reconduction tacite'
+      : 'Fin du contrat';
+  }
+
+  /** Version courte : une case de calendrier fait quelques dizaines de pixels. */
+  private shortDeadlineLabel(kind: string): string {
+    return kind === 'preavis' ? 'Résilier' : kind === 'renouvellement' ? 'Reconduction' : 'Fin';
+  }
+
+  /** Repères de calendrier, un par échéance à venir. */
+  private deadlineDayExtras(): Record<string, DayExtra[]> {
+    const out: Record<string, DayExtra[]> = {};
+    for (const d of this.deadlines()) {
+      if (d.daysAway < 0) continue;
+      const item: DayExtra = {
+        kind: 'echeance',
+        label: `${this.shortDeadlineLabel(d.kind)} : ${d.contractName}`,
+        color: CAL_KINDS['echeance'].color,
+        // Le type est déjà dans le libellé : le complément se réduit au
+        // fournisseur, sans quoi il mange la place et tronque l'essentiel.
+        sub: d.provider || undefined,
+      };
+      (out[d.date] ??= []).push(item);
+    }
+    return out;
+  }
+
+  /**
+   * Alerte sur les seules échéances qui coûtent de l'argent si on les manque :
+   * la fenêtre de résiliation, et seulement dans le mois qui précède. Alerter
+   * six mois à l'avance apprendrait surtout à ignorer l'alerte.
+   */
+  private deadlineNotifs(): Notif[] {
+    return this.deadlines()
+      .filter((d) => d.kind === 'preavis' && d.daysAway >= 0 && d.daysAway <= 30)
+      .map((d) => ({
+        id: `fin-preavis-${d.contractId}-${d.date}`,
+        kind: 'budget',
+        title: `Résiliation possible jusqu'au ${this.foyer.fmtNumDate(d.date)}`,
+        desc: `${d.contractName}${d.provider ? ' · ' + d.provider : ''}. Passé ce jour, le contrat est reconduit.`,
+        time: d.daysAway === 0 ? "Aujourd'hui" : `Dans ${d.daysAway} jour${d.daysAway > 1 ? 's' : ''}`,
+        read: false,
+      }));
+  }
+
+  /** Copier une échéance dans les tâches, à la demande et une seule fois. */
+  taskFromDeadline(contractId: number, kind: string, date: string): void {
+    const c = this.contracts().find((x) => x.id === contractId);
+    if (!c) return;
+    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberId);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
@@ -212,7 +305,7 @@ export class FinancesStore {
       this.error.set('');
       // Rules are loaded up front: an operation's form names the rule that
       // decided its category, and that must not depend on visiting the tab.
-      await Promise.all([this.reloadTransactions(), this.reloadSummary(), this.loadRules()]);
+      await Promise.all([this.reloadTransactions(), this.reloadSummary(), this.loadRules(), this.loadContracts()]);
     } catch (e) {
       this.error.set((e as Error).message);
     }
@@ -223,6 +316,8 @@ export class FinancesStore {
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
+    this.assets.set([]); this.contracts.set([]); this.deadlines.set([]); this.costs.set({});
+    this.pieces.set({}); this.attachments.set([]);
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
@@ -277,14 +372,17 @@ export class FinancesStore {
 
   async reloadTransactions(): Promise<void> {
     const u = this.ui();
-    // A search spans the whole history; without one, the list follows the month.
-    const bounds = u.fltQuery.trim() ? {} : this.monthBounds(u.month);
+    // Some filters are inherently cross-period: a search, an étiquette, a contract
+    // that has run for years. Keeping the month bounds on those would silently
+    // return nothing. Without such a filter, the list follows the displayed month.
+    const bounds = this.spansHistory() ? {} : this.monthBounds(u.month);
     try {
       const r = await this.api.transactions({
         ...bounds,
         accountId: u.fltAccount ?? undefined,
         categoryId: u.fltCategory ?? undefined,
         uncategorised: u.fltUncategorised || undefined,
+        contractId: u.fltContract ?? undefined,
         tag: u.fltTag || undefined,
         q: u.fltQuery.trim() || undefined,
         limit: PAGE_SIZE,
@@ -329,7 +427,7 @@ export class FinancesStore {
   /** Open the Finances screen filtered on a search hit's label. */
   openSearchHit(h: SearchHit): void {
     this.foyer.go('finances');
-    this.patch({ tab: 'transactions', fltQuery: h.title, fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
+    this.patch({ tab: 'transactions', fltQuery: h.title, fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0 });
     void this.reloadTransactions();
   }
 
@@ -338,12 +436,17 @@ export class FinancesStore {
     void this.reloadTransactions();
   }
   clearFilters(): void {
-    this.patch({ fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
+    this.patch({ fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0 });
     void this.reloadTransactions();
   }
+  /** True when the active filters make the month bounds meaningless. */
+  readonly spansHistory = computed(() => {
+    const u = this.ui();
+    return !!(u.fltQuery.trim() || u.fltTag || u.fltContract);
+  });
   readonly hasFilters = computed(() => {
     const u = this.ui();
-    return !!(u.fltQuery.trim() || u.fltAccount || u.fltCategory || u.fltUncategorised || u.fltTag);
+    return !!(u.fltQuery.trim() || u.fltAccount || u.fltCategory || u.fltUncategorised || u.fltTag || u.fltContract);
   });
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / PAGE_SIZE)));
   goPage(p: number): void {
@@ -358,7 +461,7 @@ export class FinancesStore {
       txForm: true, txId: null, txLabel: '', txAmount: '', txSign: 'out',
       txDate: this.isCurrentMonth() ? today : from,
       txAccount: this.ui().fltAccount ?? this.activeAccounts()[0]?.id ?? null,
-      txCategory: null, txNotes: '', txCleared: false,
+      txCategory: null, txContract: null, txNotes: '', txCleared: false,
     });
   }
 
@@ -368,7 +471,7 @@ export class FinancesStore {
     this.patch({
       txForm: true, txId: t.id, txLabel: t.label, txAmount: fmtEuros(Math.abs(t.amount)),
       txSign: t.amount < 0 ? 'out' : 'in', txDate: t.date, txAccount: t.accountId,
-      txCategory: t.categoryId, txNotes: t.notes, txCleared: t.cleared,
+      txCategory: t.categoryId, txContract: t.contractId, txNotes: t.notes, txCleared: t.cleared,
     });
   }
 
@@ -387,6 +490,7 @@ export class FinancesStore {
       accountId: u.txAccount, date: u.txDate, amount: (signed / 100).toFixed(2),
       kind: (u.txSign === 'out' ? 'depense' : 'recette') as TxKind,
       label, categoryId: u.txSign === 'out' ? u.txCategory : null,
+      contractId: u.txSign === 'out' ? u.txContract : null,
       notes: u.txNotes.trim(), cleared: u.txCleared,
     };
     this.patch({ busy: true });
@@ -421,6 +525,7 @@ export class FinancesStore {
     await Promise.all([
       this.reloadTransactions(), this.reloadSummary(), this.refreshReference(),
       this.dashboard() ? this.loadDashboard() : Promise.resolve(),
+      this.loadContracts(),
     ]);
   }
 
@@ -857,8 +962,211 @@ export class FinancesStore {
 
   /** Filter the operation list on a tag, from the rules tab. */
   filterByTag(name: string): void {
-    this.patch({ tab: 'transactions', fltTag: name, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, page: 0 });
+    this.patch({ tab: 'transactions', fltTag: name, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltContract: null, page: 0 });
     void this.reloadTransactions();
+  }
+
+  // ---- assets and contracts ----------------------------------------------
+  async loadContracts(): Promise<void> {
+    try {
+      const b = await this.api.contracts();
+      this.assets.set(b.assets);
+      this.contracts.set(b.contracts);
+      this.deadlines.set(b.deadlines);
+      this.costs.set(b.costs);
+      this.pieces.set(b.pieces);
+      this.error.set('');
+    } catch (e) { this.error.set((e as Error).message); }
+  }
+
+  contractName(id: number | null): string {
+    return (id ? this.contracts().find((c) => c.id === id)?.name : null) || '';
+  }
+  assetName(id: number | null): string {
+    return (id ? this.assets().find((a) => a.id === id)?.name : null) || '';
+  }
+  costOf(id: number): FinContractCost | undefined { return this.costs()[id]; }
+  piecesOf(id: number): number { return this.pieces()[id] ?? 0; }
+  readonly activeContracts = computed(() => this.contracts().filter((c) => c.status === 'actif'));
+  contractsOfAsset(id: number): FinContract[] { return this.contracts().filter((c) => c.assetId === id); }
+  readonly looseContracts = computed(() => this.contracts().filter((c) => !c.assetId));
+
+  newAsset(): void {
+    this.patch({
+      asForm: true, asId: null, asName: '', asKind: 'immobilier', asStatus: 'actif',
+      asAddress: '', asAcquired: '', asSold: '', asNotes: '',
+    });
+  }
+
+  editAsset(id: number): void {
+    const a = this.assets().find((x) => x.id === id);
+    if (!a) return;
+    this.patch({
+      asForm: true, asId: a.id, asName: a.name, asKind: a.kind, asStatus: a.status,
+      asAddress: a.address, asAcquired: a.acquiredOn || '', asSold: a.soldOn || '', asNotes: a.notes,
+    });
+  }
+
+  async saveAsset(): Promise<void> {
+    const u = this.ui();
+    if (u.busy) return;
+    if (!u.asName.trim()) { this.foyer.toast('Donnez un nom au bien'); return; }
+    const payload = {
+      name: u.asName.trim(), kind: u.asKind, status: u.asStatus, address: u.asAddress.trim(),
+      acquiredOn: u.asAcquired || null, soldOn: u.asSold || null, notes: u.asNotes.trim(),
+    };
+    this.patch({ busy: true });
+    try {
+      if (u.asId) await this.api.updateAsset(u.asId, payload);
+      else await this.api.createAsset(payload);
+      this.patch({ asForm: false, asId: null, busy: false });
+      await this.loadContracts();
+      this.foyer.toast(u.asId ? 'Bien modifié' : 'Bien ajouté');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async confirmAssetDel(): Promise<void> {
+    const id = this.ui().asDelId;
+    if (!id) return;
+    try {
+      await this.api.deleteAsset(id);
+      this.patch({ asDelId: null, asForm: false, asId: null });
+      await this.loadContracts();
+      this.foyer.toast('Bien supprimé, ses contrats sont conservés');
+    } catch (e) {
+      this.patch({ asDelId: null });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  newContract(assetId: number | null = null): void {
+    this.patch({
+      coForm: true, coId: null, coName: '', coProvider: '', coKind: 'assurance',
+      coAsset: assetId, coAccount: null, coCategory: null, coMember: '',
+      coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
+      coStatus: 'actif', coNotes: '', coRefs: [],
+    });
+    // A piece needs something to hang on: nothing to show before the first save.
+    this.attachments.set([]);
+  }
+
+  editContract(id: number): void {
+    const c = this.contracts().find((x) => x.id === id);
+    if (!c) return;
+    this.patch({
+      coForm: true, coId: c.id, coName: c.name, coProvider: c.provider, coKind: c.kind,
+      coAsset: c.assetId, coAccount: c.accountId, coCategory: c.categoryId, coMember: c.memberId || '',
+      coMin: c.amountMin !== null ? fmtEuros(c.amountMin) : '',
+      coMax: c.amountMax !== null ? fmtEuros(c.amountMax) : '',
+      coPeriodicity: c.periodicity, coRenewal: c.renewalOn || '',
+      coNotice: c.noticeDays ? String(c.noticeDays) : '', coEnds: c.endsOn || '',
+      coStatus: c.status, coNotes: c.notes, coRefs: c.refs.map((r) => ({ ...r })),
+    });
+    void this.loadAttachments('contract', c.id);
+  }
+
+  addRef(): void { this.patch({ coRefs: [...this.ui().coRefs, { key: '', value: '' }] }); }
+  removeRef(i: number): void { this.patch({ coRefs: this.ui().coRefs.filter((_, k) => k !== i) }); }
+  patchRef(i: number, p: Partial<FinContractRef>): void {
+    this.patch({ coRefs: this.ui().coRefs.map((r, k) => (k === i ? { ...r, ...p } : r)) });
+  }
+
+  async saveContract(): Promise<void> {
+    const u = this.ui();
+    if (u.busy) return;
+    if (!u.coName.trim()) { this.foyer.toast('Donnez un nom au contrat'); return; }
+    for (const [v, name] of [[u.coMin, 'minimum'], [u.coMax, 'maximum']] as const) {
+      if (v.trim() && parseEuros(v) === null) { this.foyer.toast(`Montant ${name} invalide`); return; }
+    }
+    const payload = {
+      name: u.coName.trim(), provider: u.coProvider.trim(), kind: u.coKind,
+      assetId: u.coAsset, accountId: u.coAccount, categoryId: u.coCategory,
+      memberId: u.coMember || null,
+      amountMin: u.coMin.trim() ? (Math.abs(parseEuros(u.coMin) as number) / 100).toFixed(2) : '',
+      amountMax: u.coMax.trim() ? (Math.abs(parseEuros(u.coMax) as number) / 100).toFixed(2) : '',
+      periodicity: u.coPeriodicity, renewalOn: u.coRenewal || null,
+      noticeDays: parseInt(u.coNotice || '0', 10) || 0, endsOn: u.coEnds || null,
+      status: u.coStatus, notes: u.coNotes.trim(),
+      refs: u.coRefs.filter((r) => r.key.trim()).map((r) => ({ key: r.key.trim(), value: r.value.trim() })),
+    };
+    this.patch({ busy: true });
+    try {
+      if (u.coId) await this.api.updateContract(u.coId, payload);
+      else await this.api.createContract(payload);
+      this.patch({ coForm: false, coId: null, busy: false });
+      await Promise.all([this.loadContracts(), this.reloadTransactions()]);
+      this.foyer.toast(u.coId ? 'Contrat modifié' : 'Contrat ajouté');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async confirmContractDel(): Promise<void> {
+    const id = this.ui().coDelId;
+    if (!id) return;
+    try {
+      const r = await this.api.deleteContract(id);
+      this.patch({ coDelId: null, coForm: false, coId: null });
+      await Promise.all([this.loadContracts(), this.reloadTransactions()]);
+      this.foyer.toast(r.detached
+        ? `Contrat supprimé, ${r.detached} opération${r.detached > 1 ? 's' : ''} détachée${r.detached > 1 ? 's' : ''}`
+        : 'Contrat supprimé');
+    } catch (e) {
+      this.patch({ coDelId: null });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  /** Show the operations attached to a contract, over the whole history. */
+  openContractOperations(id: number): void {
+    this.patch({ tab: 'transactions', fltContract: id, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
+    void this.reloadTransactions();
+  }
+
+  // ---- attachments -------------------------------------------------------
+  async loadAttachments(owner: FinOwnerKind, id: number): Promise<void> {
+    try { this.attachments.set((await this.api.attachments(owner, id)).attachments); }
+    catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Upload a piece and refresh the list. The server judges the type by its bytes. */
+  async uploadAttachment(owner: FinOwnerKind, id: number, file: File): Promise<void> {
+    if (this.ui().busy) return;
+    this.patch({ busy: true });
+    try {
+      const r = await this.api.uploadAttachment(owner, id, file);
+      this.attachments.set(r.attachments);
+      this.patch({ busy: false });
+      await this.loadContracts();
+      this.foyer.toast(r.deduplicated ? 'Pièce ajoutée, identique à une autre déjà stockée' : 'Pièce ajoutée');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async deleteAttachment(id: number): Promise<void> {
+    try {
+      this.attachments.set((await this.api.deleteAttachment(id)).attachments);
+      await this.loadContracts();
+      this.foyer.toast('Pièce supprimée');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Download through the session token rather than a bare link. */
+  async openAttachment(a: FinAttachment): Promise<void> {
+    try {
+      const url = URL.createObjectURL(await this.api.downloadAttachment(a.id));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = a.name;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { this.foyer.toast((e as Error).message); }
   }
 
   // ---- export ------------------------------------------------------------

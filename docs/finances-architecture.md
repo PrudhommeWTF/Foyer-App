@@ -99,6 +99,8 @@ distinguer « aucune activité » de « plus de données ». Archivez le compte 
 ## 4. Découpage du code
 
 ```
+backend/src/
+  ics.ts           flux ICS : mise en forme seule, testable sans base
 backend/src/finances/
   schema.ts        migrations versionnées, appliquées au démarrage par db.ts
   money.ts         centimes, dates, normalisation de libellé (aucune dépendance)
@@ -111,6 +113,10 @@ backend/src/finances/
   rules-repo.ts    stockage des règles, étiquettes, rejeu et prévisualisation
   rules-routes.ts  /api/finances/rules et /tags
   dashboard.ts     agrégats mensuels et annuels, calculés en SQL
+  contracts.ts     biens, contrats, échéances dérivées, coût réel
+  contracts-routes.ts /api/finances/contracts et /assets
+  attachments.ts   pièces jointes : octets sur disque, métadonnées en base
+  attachments-routes.ts /api/finances/attachments
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -287,7 +293,159 @@ d'opération, où le signe et le « + » portent déjà le sens sans dépendre d
 
 Les mois incomplets sont **hachurés et légendés**, jamais distingués par la seule couleur.
 
-## 10. Sauvegarde et restauration
+## 10. Biens, contrats et échéances
+
+Un contrat n'est pas une opération : c'est ce qui les explique. Le module sert deux besoins
+concrets, et rien d'autre.
+
+**Ne pas rater une date limite de résiliation.** Un contrat tacitement reconduit et manqué d'un
+jour coûte une période entière de plus. C'est la seule échéance qui coûte vraiment de l'argent,
+et c'est pour elle que le reste existe.
+
+**Savoir ce qu'un contrat coûte réellement**, en confrontant la fourchette annoncée aux
+opérations qui lui sont rattachées. « Ton assurance annonce 70 à 76 €, elle en prélève 81,69 »
+est un fait que la liste d'opérations seule ne fait jamais remonter.
+
+Cette tranche **n'ajoute aucune table** : `fin_assets`, `fin_contracts` et `fin_contract_refs`
+ont été posées par la migration 1 et attendaient d'être utilisées.
+
+### Les échéances sont dérivées, jamais stockées
+
+Trois dates sortent d'un contrat actif, calculées à la volée :
+
+| Échéance | Calcul |
+|---|---|
+| Dernier jour pour résilier | reconduction moins le préavis |
+| Reconduction tacite | date de reconduction, reportée sur son prochain anniversaire |
+| Fin du contrat | date de fin, si elle est à venir |
+
+Rien n'est matérialisé : changer une date de reconduction change ses échéances, sans copie
+périmée qui traîne. Une date de reconduction vieille de trois ans reste la bonne date, elle est
+simplement due à nouveau : elle est reportée d'année en année jusqu'à retomber dans le futur.
+Un 29 février sur une année commune tombe au 1er mars, comme à la banque.
+
+Une fenêtre de préavis déjà fermée reste affichée, en grisé, jusqu'à la reconduction elle-même :
+c'est ce qui explique pourquoi rien ne peut être fait cette année.
+
+### Coût réel
+
+Le total des opérations rattachées sur douze mois glissants, et le dernier prélèvement confronté
+à la fourchette. Sortir de la fourchette est **signalé**, pas corrigé : c'est une information,
+la décision reste au foyer.
+
+Une **fourchette** plutôt qu'un montant exact, parce que les cotisations bougent de quelques
+centimes et qu'un signalement à chaque centime ne serait plus lu.
+
+### Rattacher les opérations
+
+Trois chemins, du plus manuel au plus automatique : le sélecteur du formulaire d'opération,
+l'action de règle « rattacher au contrat », et le filtre « opérations de ce contrat » qui part du
+contrat pour vérifier ce qu'il a réellement capté. L'action de règle utilise le même moteur que
+le reste : elle se prévisualise, se rejoue et se protège comme les autres.
+
+**Supprimer ne défait rien.** Supprimer un bien libère ses contrats, supprimer un contrat détache
+ses opérations : l'argent a bien été dépensé, seule l'explication disparaît. Un contrat terminé
+se passe en « résilié » plutôt que de se supprimer, pour garder son historique lisible.
+
+### Où les échéances apparaissent
+
+Une échéance n'existe qu'une fois, dans `contracts.ts`. Elle est **lue** à quatre endroits, et
+stockée à aucun.
+
+| Endroit | Ce qu'il en fait |
+|---|---|
+| Écran Contrats | Les six prochains mois, la fenêtre de préavis en rouge quand elle approche |
+| Calendrier partagé | Un repère par date, poussé dans `FoyerStore.externalDayExtras` |
+| Notifications | Les seules fenêtres de résiliation, dans les trente jours |
+| Flux ICS | Un an d'horizon, avec un rappel à J-7 sur les résiliations |
+
+Le passage par `externalDayExtras` reprend exactement le montage des notifications : `FinancesStore`
+dépend de `FoyerStore`, jamais l'inverse. Les repères sont **calculés** dans le store Finances et
+poussés dans un signal que le calendrier fusionne, ce qui évite la dépendance circulaire et
+garantit qu'aucune date ne se dédouble.
+
+**Les identifiants ICS sont stables par contrat et par type** (`fin-preavis-12@foyer`). Quand une
+reconduction est reportée d'un an, l'agenda **déplace** l'entrée au lieu d'en accumuler une par
+année. Seule la date limite de résiliation porte une `VALARM` : c'est la seule qui coûte de
+l'argent si elle passe, et un rappel sur chaque date apprendrait surtout à les ignorer.
+
+**Une tâche créée depuis une échéance est une copie ponctuelle**, pas un miroir. Elle passe par
+`FoyerStore.addExternalTask`, l'utilisateur peut la cocher, la déplacer, la supprimer, et elle ne
+réapparaît pas. Si la date du contrat change ensuite, la tâche ne suit pas : une tâche qui
+change toute seule sous les doigts de celui qui l'a cochée serait pire que pas de tâche du tout.
+
+`buildIcs` vit dans `src/ics.ts` et **ne fait que mettre en forme** : les échéances lui sont
+passées en argument. C'est ce qui permet de le tester sans base, et un fichier ICS mérite des
+tests parce que personne ne le relit : seuls des agendas le lisent, et ils refusent en silence ce
+qu'ils ne comprennent pas.
+
+## 11. Pièces jointes
+
+**Les octets sur le disque, les métadonnées dans SQLite.** Le choix a été pris en comparant les
+deux options, et il tient à un fait vérifiable : `better-sqlite3` **n'expose pas** l'API blob
+incrémentale de SQLite. Un PDF rangé en base est donc chargé intégralement en mémoire à chaque
+téléchargement, ce qui met un LXC modeste à genoux dès que deux personnes ouvrent une facture en
+même temps. Sur disque, `res.sendFile` sert en flux.
+
+Trois autres arguments ont pesé, tous vérifiés plutôt que supposés :
+
+- **L'effacement est réel.** `secure_delete` et `auto_vacuum` valent zéro par défaut : un `DELETE`
+  laisse les octets dans les pages libres jusqu'à un `VACUUM` complet. `rm` rend la place tout de
+  suite, ce qui comptera le jour où le foyer rangera ici autre chose que des factures.
+- **Le répertoire peut vivre à part**, sur un volume chiffré avec sa propre politique de
+  snapshots, sans emporter toute la base.
+- **Le dépannage reste possible sans SQL** : `ls`, `file`, `cp` suffisent à ressortir une facture
+  même application arrêtée.
+
+Le prix à payer est double, et il est assumé explicitement dans le code : deux sources de vérité
+peuvent diverger, et une suppression n'est pas transactionnelle.
+
+### Ce qui protège du désordre
+
+**Le nom du fichier ne vient jamais de l'utilisateur.** Une pièce est rangée sous
+`pieces/<2 premiers caractères de l'empreinte>/<empreinte><extension>`. Pas de traversée de
+chemin possible, pas de collision, pas de caractère exotique. Le nom d'origine reste en base,
+pour l'affichage et pour le téléchargement.
+
+**Le type est reconnu au contenu**, jamais à l'extension, comme pour l'import de relevés. PDF,
+JPEG, PNG, WEBP, GIF et HEIC (les photos d'iPhone) sont acceptés ; le reste est refusé en 415
+avec un message qui dit pourquoi.
+
+**Les octets identiques ne sont stockés qu'une fois.** La même facture rattachée au contrat et à
+son opération occupe un seul fichier. La suppression d'une fiche ne retire le fichier que
+lorsque plus aucune autre ne pointe dessus.
+
+**L'écriture passe par un fichier temporaire** renommé ensuite : un envoi interrompu ne laisse
+jamais un fichier à demi écrit sous son nom définitif.
+
+**Supprimer un contrat, un bien ou une opération emporte ses pièces.** Les garder produirait des
+fiches que plus rien ne peut atteindre. La fenêtre de confirmation annonce le nombre de pièces
+qui vont disparaître.
+
+### Divergence entre la base et le disque
+
+Un balayage tourne au démarrage et compte l'écart **dans les deux sens** :
+
+| Cas | Ce qui se passe |
+|---|---|
+| Fiche sans fichier | Comptée et signalée dans les logs, avec un exemple. Le téléchargement répond **410** avec la marche à suivre. La fiche est conservée : une restauration peut encore la sauver. |
+| Fichier sans fiche | Compté et signalé. **Rien n'est supprimé** : effacer ce que l'administrateur n'a pas vu serait exactement le mauvais réflexe. |
+
+`GET /api/finances/attachments-check` rend le même diagnostic à la demande.
+
+Nettoyer les fichiers orphelins, une fois le diagnostic lu et assumé :
+
+```bash
+# Lister ce que la base ne référence plus, sans rien supprimer
+sqlite3 /var/lib/foyer/foyer.db "SELECT rel_path FROM fin_attachments;" | sort > /tmp/connus.txt
+find /var/lib/foyer/pieces -type f -printf '%P\n' | sort > /tmp/disque.txt
+comm -13 /tmp/connus.txt /tmp/disque.txt
+
+# Les supprimer, après avoir regardé la liste ci-dessus
+comm -13 /tmp/connus.txt /tmp/disque.txt | while read -r f; do rm -v "/var/lib/foyer/pieces/$f"; done
+```
+
+## 12. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -321,17 +479,29 @@ docker compose exec -T foyer node -e "
 const db = require('better-sqlite3')('/data/foyer.db');
 db.exec(\"VACUUM INTO '/data/foyer-$STAMP.db'\"); db.close();"
 docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
+
+# Les pièces jointes vivent à côté de la base : VACUUM INTO ne les prend pas.
+docker compose exec -T foyer tar czf - -C /data pieces > ./pieces-$STAMP.tar.gz
 ```
+
+> **En LXC, rien ne change** : `tar czf ... -C /var/lib/foyer .` prend déjà tout le répertoire de
+> données, base et pièces comprises. Seule la méthode Docker demande les deux commandes
+> ci-dessus, parce que `VACUUM INTO` ne connaît que la base.
 
 Restauration :
 
 ```bash
 docker compose stop foyer
 docker compose cp ./foyer-2026-08-17-1430.db foyer:/data/foyer.db
+docker compose cp ./pieces-2026-08-17-1430.tar.gz foyer:/data/pieces.tar.gz
 docker compose exec -T foyer sh -c 'rm -f /data/foyer.db-wal /data/foyer.db-shm'
+docker compose exec -T foyer sh -c 'rm -rf /data/pieces && tar xzf /data/pieces.tar.gz -C /data && rm /data/pieces.tar.gz'
 docker compose start foyer
 docker compose logs -f foyer
 ```
+
+Le démarrage compte les écarts entre la base et le répertoire des pièces, et les affiche. Une
+restauration cohérente n'affiche rien à ce sujet.
 
 Supprimer les fichiers `-wal` et `-shm` est indispensable : laissés en place, ils réappliquent
 des écritures qui ne correspondent plus à la base restaurée.
@@ -342,6 +512,8 @@ des écritures qui ne correspondent plus à la base restaurée.
 sqlite3 foyer-2026-08-17-1430.db "PRAGMA integrity_check;"
 sqlite3 foyer-2026-08-17-1430.db "SELECT value FROM fin_meta WHERE key='schema_version';"
 sqlite3 foyer-2026-08-17-1430.db "SELECT COUNT(*) FROM fin_transactions;"
+sqlite3 foyer-2026-08-17-1430.db "SELECT COUNT(*) FROM fin_attachments;"
+tar tzf pieces-2026-08-17-1430.tar.gz | wc -l   # doit couvrir les pièces ci-dessus
 ```
 
 ### Export de secours, sans outil
@@ -358,7 +530,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 11. Tests
+## 13. Tests
 
 ```bash
 cd backend

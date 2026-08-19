@@ -62,7 +62,7 @@ export interface TxPayload {
 
 export interface TxQuery {
   from?: string; to?: string; accountId?: number; categoryId?: number;
-  uncategorised?: boolean; tag?: string; q?: string; limit?: number; offset?: number;
+  uncategorised?: boolean; contractId?: number; tag?: string; q?: string; limit?: number; offset?: number;
 }
 
 /** Thin client over /api/finances, reusing ApiService's token and error handling. */
@@ -105,6 +105,7 @@ export class FinancesApi {
     if (q.accountId) p.set('accountId', String(q.accountId));
     if (q.categoryId) p.set('categoryId', String(q.categoryId));
     if (q.uncategorised) p.set('uncategorised', '1');
+    if (q.contractId) p.set('contractId', String(q.contractId));
     if (q.tag) p.set('tag', q.tag);
     if (q.q) p.set('q', q.q);
     if (q.limit !== undefined) p.set('limit', String(q.limit));
@@ -123,6 +124,41 @@ export class FinancesApi {
 
   summary(month: string): Promise<{ summary: FinMonthSummary }> {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
+  }
+
+  // ---- attachments ----
+  attachments(owner: FinOwnerKind, id: number): Promise<{ attachments: FinAttachment[] }> {
+    return this.api.request(`finances/attachments?owner=${owner}&id=${id}`);
+  }
+  /** Raw body upload, like the statement import: no multipart, no base64 bloat. */
+  uploadAttachment(owner: FinOwnerKind, id: number, file: File): Promise<{ attachment: FinAttachment; deduplicated: boolean; attachments: FinAttachment[] }> {
+    return this.api.upload(`finances/attachments?owner=${owner}&id=${id}&filename=${encodeURIComponent(file.name)}`, file);
+  }
+  deleteAttachment(id: number): Promise<{ attachments: FinAttachment[] }> {
+    return this.api.request(`finances/attachments/${id}`, { method: 'DELETE' });
+  }
+  /** Fetched with the session token, so a piece is never reachable by URL alone. */
+  downloadAttachment(id: number): Promise<Blob> { return this.api.download(`finances/attachments/${id}?download=1`); }
+
+  // ---- assets, contracts, deadlines ----
+  contracts(): Promise<FinContractsBundle> { return this.api.request('finances/contracts'); }
+  createAsset(p: FinAssetPayload): Promise<{ asset: FinAsset }> {
+    return this.api.request('finances/assets', { method: 'POST', body: JSON.stringify(p) });
+  }
+  updateAsset(id: number, p: FinAssetPayload): Promise<{ asset: FinAsset }> {
+    return this.api.request(`finances/assets/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+  }
+  deleteAsset(id: number): Promise<{ assets: FinAsset[]; contracts: FinContract[] }> {
+    return this.api.request(`finances/assets/${id}`, { method: 'DELETE' });
+  }
+  createContract(p: FinContractPayload): Promise<{ contract: FinContract }> {
+    return this.api.request('finances/contracts', { method: 'POST', body: JSON.stringify(p) });
+  }
+  updateContract(id: number, p: FinContractPayload): Promise<{ contract: FinContract }> {
+    return this.api.request(`finances/contracts/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+  }
+  deleteContract(id: number): Promise<{ contracts: FinContract[]; detached: number }> {
+    return this.api.request(`finances/contracts/${id}`, { method: 'DELETE' });
   }
 
   /** Everything the dashboard shows, in one call. */
@@ -241,7 +277,7 @@ export type FinConditionField = 'label' | 'amount' | 'sens' | 'account' | 'dayOf
 export type FinConditionOp =
   | 'contains' | 'notContains' | 'equals' | 'startsWith' | 'regex'
   | 'gt' | 'lt' | 'between' | 'is' | 'isNot' | 'before' | 'after';
-export type FinActionKind = 'category' | 'label' | 'tag' | 'transfer';
+export type FinActionKind = 'category' | 'contract' | 'label' | 'tag' | 'transfer';
 
 export interface FinCondition { field: FinConditionField; op: FinConditionOp; value: string; value2: string; }
 export interface FinAction { kind: FinActionKind; value: string; }
@@ -256,8 +292,9 @@ export interface FinTag { id: number; name: string; count: number; }
 
 export interface FinPreviewRow {
   id: number; date: string; amount: number; accountId: number; label: string;
-  categoryId: number | null;
-  newLabel: string | null; newCategoryId: number | null; newTags: string[]; newTransfer: boolean;
+  categoryId: number | null; contractId: number | null;
+  newLabel: string | null; newCategoryId: number | null; newContractId: number | null;
+  newTags: string[]; newTransfer: boolean;
   /** Category set by hand: the rule would leave it alone. */
   manual: boolean;
   /** False when the row already carries what the rule wants. */
@@ -301,4 +338,69 @@ export interface FinDashboard {
     months: number; incompleteMonths: string[]; categories: FinYearCategory[];
   };
   topExpenses: FinTopExpense[];
+}
+
+// ---- assets, contracts, deadlines -------------------------------------------
+
+export type FinAssetKind = 'immobilier' | 'vehicule' | 'autre';
+export type FinAssetStatus = 'actif' | 'vendu';
+export type FinContractKind = 'assurance' | 'energie' | 'telecom' | 'abonnement' | 'credit' | 'sante' | 'autre';
+export type FinPeriodicity = 'mensuelle' | 'trimestrielle' | 'semestrielle' | 'annuelle' | 'ponctuelle';
+export type FinContractStatus = 'actif' | 'resilie';
+export type FinDeadlineKind = 'preavis' | 'renouvellement' | 'fin';
+
+export interface FinAssetPayload {
+  name: string; kind: FinAssetKind; status: FinAssetStatus; address: string;
+  acquiredOn: string | null; soldOn: string | null; notes: string;
+}
+export interface FinAsset extends FinAssetPayload { id: number; position: number; contracts: number; }
+
+export interface FinContractRef { key: string; value: string; }
+
+export interface FinContractPayload {
+  name: string; provider: string; kind: FinContractKind;
+  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  /** Sent as decimal strings; the server parses them once, into cents. */
+  amountMin: string; amountMax: string;
+  periodicity: FinPeriodicity;
+  renewalOn: string | null; noticeDays: number; endsOn: string | null;
+  status: FinContractStatus; notes: string; refs: FinContractRef[];
+}
+
+export interface FinContract {
+  id: number; name: string; provider: string; kind: FinContractKind;
+  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  amountMin: number | null; amountMax: number | null;
+  periodicity: FinPeriodicity;
+  renewalOn: string | null; noticeDays: number; endsOn: string | null;
+  status: FinContractStatus; notes: string; refs: FinContractRef[];
+}
+
+export interface FinDeadline {
+  contractId: number; contractName: string; provider: string;
+  kind: FinDeadlineKind; date: string;
+  /** Days from today; negative when the window has closed. */
+  daysAway: number;
+  assetId: number | null; memberId: string | null;
+}
+
+export interface FinContractCost {
+  contractId: number; count: number; total: number;
+  lastDate: string | null; lastAmount: number | null;
+  /** The last operation fell outside the declared range. */
+  offRange: boolean;
+}
+
+export interface FinContractsBundle {
+  assets: FinAsset[]; contracts: FinContract[]; deadlines: FinDeadline[];
+  costs: Record<number, FinContractCost>;
+  /** Attachment count per contract. */
+  pieces: Record<number, number>;
+}
+
+export type FinOwnerKind = 'contract' | 'asset' | 'transaction';
+
+export interface FinAttachment {
+  id: number; ownerKind: FinOwnerKind; ownerId: number;
+  name: string; mime: string; size: number; sha256: string; createdAt: string;
 }

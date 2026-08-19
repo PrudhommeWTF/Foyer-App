@@ -2,6 +2,7 @@
 import express, { Request, Response, Router } from 'express';
 import * as rules from './rules-repo';
 import { getAccount, getCategory } from './repo';
+import { getContract } from './contracts';
 import { ActionKind, Condition, ConditionField, ConditionOp, MatchMode } from './rules';
 import { isIsoDate } from './money';
 
@@ -17,7 +18,7 @@ const OPS: Record<ConditionField, ConditionOp[]> = {
   dayOfMonth: ['equals', 'between', 'gt', 'lt'],
   date: ['between', 'before', 'after'],
 };
-const ACTIONS: ActionKind[] = ['category', 'label', 'tag', 'transfer'];
+const ACTIONS: ActionKind[] = ['category', 'contract', 'label', 'tag', 'transfer'];
 
 function handler(fn: (req: Request, res: Response) => void) {
   return (req: Request, res: Response): void => {
@@ -85,6 +86,7 @@ function ruleInput(body: Record<string, unknown>): rules.RuleInput {
     if (!ACTIONS.includes(kind)) fail(`Action inconnue : « ${kind} ».`);
     const value = String(raw['value'] ?? '').trim();
     if (kind === 'category' && value && !getCategory(parseInt(value, 10))) fail('Catégorie introuvable dans les actions.');
+    if (kind === 'contract' && value && !getContract(parseInt(value, 10))) fail('Contrat introuvable dans les actions.');
     if (kind === 'label' && !value) fail('L’action « réécrire le libellé » attend le nouveau libellé.');
     if (kind === 'tag' && !value) fail('L’action « ajouter une étiquette » attend un nom d’étiquette.');
     return { kind, value };

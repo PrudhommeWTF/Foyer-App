@@ -23,6 +23,7 @@ const OPS: Record<FinConditionOp, string> = {
 
 const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
   { id: 'category', label: 'Ranger dans une catégorie', short: 'Catégorie' },
+  { id: 'contract', label: 'Rattacher à un contrat', short: 'Contrat' },
   { id: 'label', label: 'Réécrire le libellé', short: 'Libellé' },
   { id: 'tag', label: 'Ajouter une étiquette', short: 'Étiquette' },
   { id: 'transfer', label: 'Marquer comme virement interne', short: 'Virement interne' },
@@ -189,6 +190,12 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
                       <option [ngValue]="strId(c.id)">{{ c.name }}</option>
                       @for (s of store.childrenOf(c.id); track s.id) { <option [ngValue]="strId(s.id)">&nbsp;&nbsp;{{ c.name }} · {{ s.name }}</option> }
                     }
+                  </select>
+                }
+                @case ('contract') {
+                  <select class="input grow" [ngModel]="a.value" (ngModelChange)="store.patchAction(i, $event)">
+                    <option value="">Aucun contrat</option>
+                    @for (c of store.activeContracts(); track c.id) { <option [ngValue]="strId(c.id)">{{ c.name }}{{ c.provider ? ' · ' + c.provider : '' }}</option> }
                   </select>
                 }
                 @case ('transfer') { <div class="grow hint inline">L’opération sort des dépenses et des ressources du mois.</div> }
@@ -391,6 +398,7 @@ export class FinancesRulesTab {
   private actionText(a: FinAction): string {
     switch (a.kind) {
       case 'category': return `ranger dans « ${this.store.categoryPath(parseInt(a.value, 10) || null)} »`;
+      case 'contract': return `rattacher au contrat « ${this.store.contractName(parseInt(a.value, 10) || null)} »`;
       case 'label': return `réécrire le libellé en « ${a.value} »`;
       case 'tag': return `étiqueter « ${a.value} »`;
       default: return 'marquer comme virement interne';
@@ -405,6 +413,7 @@ export class FinancesRulesTab {
     const bits: string[] = [];
     if (row.manual) bits.push(`${this.store.categoryPath(row.categoryId)} (gardée)`);
     else if (row.newCategoryId !== null || this.hasCategoryAction()) bits.push(`${this.store.categoryPath(row.categoryId)} → ${this.store.categoryPath(row.newCategoryId)}`);
+    if (row.newContractId) bits.push(`contrat → ${this.store.contractName(row.newContractId)}`);
     if (row.newLabel) bits.push(`libellé → « ${row.newLabel} »`);
     if (row.newTags.length) bits.push(`étiquette ${row.newTags.join(', ')}`);
     if (row.newTransfer) bits.push('virement interne');

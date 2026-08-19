@@ -4,12 +4,18 @@
 // sous-estimé parce qu'il manque un relevé est pire qu'une absence de total :
 // ces tests portent donc autant sur les sommes que sur ce qui les signale.
 import assert from 'node:assert/strict';
+import fsp from 'node:fs';
+import os from 'node:os';
+import tmpPath from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
 import * as repo from '../src/finances/repo';
 import * as imports from '../src/finances/import-repo';
 import { SERIES_LENGTH, dashboard } from '../src/finances/dashboard';
+
+/** Un répertoire jetable par base : les pièces jointes écrivent sur disque. */
+const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
 
 let db: Database.Database;
 let joint: number;
@@ -21,7 +27,7 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db);
+  repo.initFinancesRepo(db, tmpDir());
   joint = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
   livret = repo.createAccount({ name: 'Livret', kind: 'epargne', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
 }

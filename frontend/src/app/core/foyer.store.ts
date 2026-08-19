@@ -224,6 +224,7 @@ export class FoyerStore {
     for (const m of d.members) { if (isBirthdayOn(m.birthday, ds)) { const a = ageOn(m.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + m.name, color: m.color, sub: a != null ? a + ' ans' : undefined }); } }
     for (const c of d.contacts) { if (isBirthdayOn(c.birthday, ds)) { const a = ageOn(c.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + c.name, color: CAL_KINDS['birthday'].color, sub: a != null ? a + ' ans' : undefined }); } }
     for (const t of d.tasks) { if (t.planned === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : undefined }); }
+    out.push(...(this.externalDayExtras()[ds] || []));
     return out;
   }
 
@@ -539,6 +540,24 @@ export class FoyerStore {
     this.mutate((d) => { d.tasks.unshift({ id: uid('t'), text: t, who: this.members()[0]?.id || 'cam', due: "Aujourd'hui", done: false, listId: lid, prio: 'med' }); });
     this.patch({ newTask: '' });
   }
+  /**
+   * Tâche créée depuis un autre module. C'est une **copie ponctuelle**, assumée :
+   * si la date du contrat bouge ensuite, la tâche ne suit pas. Une tâche que
+   * l'utilisateur peut cocher, déplacer et supprimer doit lui appartenir, pas
+   * réapparaître parce qu'une table dit autre chose.
+   */
+  addExternalTask(text: string, plannedOn: string, memberId: string | null = null): void {
+    const listId = this.activeTaskListId();
+    if (!listId) { this.toast('Créez d’abord une liste de tâches'); return; }
+    this.mutate((d) => {
+      d.tasks.unshift({
+        id: uid('t'), text, who: memberId || this.members()[0]?.id || 'cam',
+        due: this.fmtNumDate(plannedOn), done: false, listId, prio: 'high', planned: plannedOn,
+      });
+    });
+    this.toast('Tâche ajoutée');
+  }
+
   openTask(): void { this.patch({ showTask: true, taskEditId: null, tTitle: '', tWho: this.members()[0]?.id || 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: this.activeTaskListId(), tPlanned: '' }); }
   editTaskItem(id: string): void { const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return; this.patch({ showTask: true, taskEditId: id, tTitle: t.text, tWho: t.who, tDue: t.due, tPrio: t.prio || 'med', tListId: t.listId, tPlanned: t.planned || '' }); }
   saveTask(): void {
@@ -763,6 +782,14 @@ export class FoyerStore {
    * (Finances). Évite une dépendance circulaire entre les stores.
    */
   readonly externalNotifs = signal<Notif[]>([]);
+
+  /**
+   * Repères de calendrier poussés par les modules qui ne vivent pas dans ce
+   * document (échéances de contrat), indexés par date ISO. Comme les
+   * notifications, ils sont **calculés** ailleurs et jamais stockés ici : une
+   * date de reconduction qui change change son repère, sans copie périmée.
+   */
+  readonly externalDayExtras = signal<Record<string, DayExtra[]>>({});
 
   toggleNotif(): void { this.patch({ notifOpen: !this.ui().notifOpen }); }
 

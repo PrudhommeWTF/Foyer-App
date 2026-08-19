@@ -134,7 +134,7 @@ function candidates(f: ApplyFilter): Candidate[] {
   const sql = where.length ? 'WHERE ' + where.join(' AND ') : '';
   return database.prepare(`
     SELECT id, account_id AS accountId, date, amount, label, label_raw AS labelRaw,
-           category_id AS categoryId, kind, rule_id AS ruleId
+           category_id AS categoryId, contract_id AS contractId, kind, rule_id AS ruleId
     FROM fin_transactions ${sql} ORDER BY date, id
   `).all(...params) as Candidate[];
 }
@@ -163,6 +163,7 @@ export function applyRules(f: ApplyFilter = {}, respectManual = true): ApplyRepo
   let manualKept = 0;
 
   const setCategory = database.prepare("UPDATE fin_transactions SET category_id = ?, rule_id = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?");
+  const setContract = database.prepare("UPDATE fin_transactions SET contract_id = ?, rule_id = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?");
   const setLabel = database.prepare("UPDATE fin_transactions SET label = ?, rule_id = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?");
   const setTransfer = database.prepare("UPDATE fin_transactions SET kind = 'virement', rule_id = ?, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?");
   const addTag = database.prepare('INSERT INTO fin_transaction_tags (transaction_id, tag_id) VALUES (?, ?) ON CONFLICT DO NOTHING');
@@ -178,6 +179,7 @@ export function applyRules(f: ApplyFilter = {}, respectManual = true): ApplyRepo
       if (isNoop(tx, change, tags) && keepsProvenance(tx, change)) continue;
 
       if (change.categoryId !== undefined) setCategory.run(change.categoryId, change.ruleId, tx.id);
+      if (change.contractId !== undefined) setContract.run(change.contractId, change.ruleId, tx.id);
       if (change.label !== undefined) setLabel.run(change.label, change.ruleId, tx.id);
       if (change.transfer) setTransfer.run(change.ruleId, tx.id);
       for (const name of change.tags) addTag.run(tx.id, tagId(name));
@@ -205,9 +207,11 @@ export interface PreviewRow {
   accountId: number;
   label: string;
   categoryId: number | null;
+  contractId: number | null;
   /** What the rule would put there instead. */
   newLabel: string | null;
   newCategoryId: number | null;
+  newContractId: number | null;
   newTags: string[];
   newTransfer: boolean;
   /** True when the current value was set by hand and would be protected. */
@@ -246,9 +250,10 @@ export function previewRule(draft: RuleInput, limit = 40): PreviewReport {
     if (out.length < limit) {
       out.push({
         id: tx.id, date: tx.date, amount: tx.amount, accountId: tx.accountId,
-        label: tx.label, categoryId: tx.categoryId,
+        label: tx.label, categoryId: tx.categoryId, contractId: tx.contractId,
         newLabel: change?.label ?? null,
         newCategoryId: change?.categoryId ?? null,
+        newContractId: change?.contractId ?? null,
         newTags: change?.tags ?? [],
         newTransfer: !!change?.transfer,
         manual, changes,
