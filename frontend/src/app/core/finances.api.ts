@@ -126,6 +126,20 @@ export class FinancesApi {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
   }
 
+  // ---- savings ideas ----
+  createSaving(p: FinSavingPayload): Promise<{ saving: FinSaving }> {
+    return this.api.request('finances/savings', { method: 'POST', body: JSON.stringify(p) });
+  }
+  updateSaving(id: number, p: FinSavingPayload): Promise<{ saving: FinSaving; totals: FinSavingsTotals }> {
+    return this.api.request(`finances/savings/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+  }
+  deleteSaving(id: number): Promise<{ savings: FinSaving[]; totals: FinSavingsTotals }> {
+    return this.api.request(`finances/savings/${id}`, { method: 'DELETE' });
+  }
+  linkSavingTask(id: number, taskId: string | null): Promise<{ saving: FinSaving }> {
+    return this.api.request(`finances/savings/${id}/task`, { method: 'POST', body: JSON.stringify({ taskId }) });
+  }
+
   // ---- meter readings ----
   readings(contractId: number): Promise<FinReadingsBundle> {
     return this.api.request(`finances/readings?contractId=${contractId}`);
@@ -413,7 +427,27 @@ export interface FinContractsBundle {
   costs: Record<number, FinContractCost>;
   /** Attachment count per contract. */
   pieces: Record<number, number>;
+  savings: FinSaving[];
+  savingsTotals: FinSavingsTotals;
 }
+
+export type FinSavingStatus = 'idee' | 'en-cours' | 'faite' | 'abandonnee';
+
+export interface FinSavingPayload {
+  title: string; description: string;
+  /** Sent as a decimal string; the server parses it once, into cents. */
+  annualGain: string;
+  contractId: number | null; assetId: number | null;
+  status: FinSavingStatus; targetDate: string | null; taskId: string | null;
+}
+
+export interface FinSaving {
+  id: number; title: string; description: string; annualGain: number;
+  contractId: number | null; assetId: number | null;
+  status: FinSavingStatus; targetDate: string | null; taskId: string | null; position: number;
+}
+
+export interface FinSavingsTotals { pending: number; done: number; count: number; openCount: number; }
 
 export type FinOwnerKind = 'contract' | 'asset' | 'transaction';
 

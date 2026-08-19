@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind, FinPeriod, FinReading } from '../../core/finances.api';
+import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind, FinPeriod, FinReading, FinSaving } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
@@ -138,6 +138,130 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         }
       </div>
     </div>
+
+    <!-- PISTES D'ÉCONOMIES -->
+    <div class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title">Pistes d'économies</div>
+          <div class="panel-sub">Ce qu'il reste à faire pour payer moins, avec le gain annuel estimé</div>
+        </div>
+        <button class="btn btn-soft" (click)="store.newSaving(null)"><f-icon name="plus" [size]="16" color="var(--ink2)" [width]="2.6" /> Piste</button>
+      </div>
+
+      @if (store.savingsTotals(); as t) {
+        @if (t.count) {
+          <div class="totals">
+            <div>
+              <div class="overline">À aller chercher</div>
+              <div class="t-val f-display">{{ fmtInt(t.pending) }} € <span class="t-unit">par an</span></div>
+              <div class="t-sub">{{ t.openCount }} piste{{ t.openCount > 1 ? 's' : '' }} ouverte{{ t.openCount > 1 ? 's' : '' }}</div>
+            </div>
+            <div>
+              <div class="overline">Déjà obtenu</div>
+              <div class="t-val f-display" style="color:#6E9E5F">{{ fmtInt(t.done) }} € <span class="t-unit">par an</span></div>
+              <div class="t-sub">estimation, le coût réel des contrats fait foi</div>
+            </div>
+          </div>
+        }
+      }
+
+      <div class="clist">
+        @for (s of store.savings(); track s.id) {
+          <div class="saving" [class.done]="s.status === 'faite'" [class.dropped]="s.status === 'abandonnee'">
+            <button class="s-check" [class.on]="s.status === 'faite'"
+                    [attr.aria-label]="s.status === 'faite' ? 'Rouvrir la piste' : 'Marquer comme faite'"
+                    (click)="store.setSavingStatus(s.id, s.status === 'faite' ? 'idee' : 'faite')">
+              @if (s.status === 'faite') { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }
+            </button>
+            <div class="s-body" (click)="store.editSaving(s.id)">
+              <div class="s-title">
+                {{ s.title }}
+                @if (s.status === 'en-cours') { <span class="tag">en cours</span> }
+                @if (s.status === 'abandonnee') { <span class="tag">abandonnée</span> }
+              </div>
+              <div class="s-meta">{{ savingMeta(s) }}</div>
+            </div>
+            @if (s.status !== 'faite' && s.status !== 'abandonnee') {
+              @if (store.savingTask(s)) {
+                <span class="tag">tâche créée</span>
+              } @else {
+                <button class="dead-task" (click)="store.taskFromSaving(s.id)" title="Ajouter cette piste à mes tâches">
+                  <f-icon name="check" [size]="14" color="var(--ink2)" [width]="2.6" /> Tâche
+                </button>
+              }
+            }
+            <div class="s-gain">{{ fmtInt(s.annualGain) }} €<span class="s-unit">/an</span></div>
+          </div>
+        } @empty {
+          <div class="none">
+            Aucune piste. Le coût réel d'un contrat, quand il dépasse la fourchette annoncée, est
+            souvent le meilleur endroit où en trouver une.
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- FORMULAIRE DE PISTE -->
+    @if (store.ui().saForm) {
+      <f-modal [title]="store.ui().saId ? 'Modifier la piste' : 'Nouvelle piste d’économie'" [maxWidth]="520" (close)="store.patch({ saForm: false })">
+        <div class="field-label">Intitulé</div>
+        <input class="input" [ngModel]="store.ui().saTitle" (ngModelChange)="store.patch({ saTitle: $event })" placeholder="Ex : Renégocier l’assurance habitation" />
+        <div class="frow">
+          <div class="fgrow">
+            <div class="field-label">Gain annuel estimé €</div>
+            <input class="input" [ngModel]="store.ui().saGain" (ngModelChange)="store.patch({ saGain: $event })" placeholder="240" inputmode="decimal" />
+          </div>
+          <div class="fgrow">
+            <div class="field-label">Statut</div>
+            <select class="input" [ngModel]="store.ui().saStatus" (ngModelChange)="store.patch({ saStatus: $event })">
+              <option [ngValue]="'idee'">Idée</option>
+              <option [ngValue]="'en-cours'">En cours</option>
+              <option [ngValue]="'faite'">Faite</option>
+              <option [ngValue]="'abandonnee'">Abandonnée</option>
+            </select>
+          </div>
+        </div>
+        <div class="frow">
+          <div class="fgrow">
+            <div class="field-label">Contrat concerné</div>
+            <select class="input" [ngModel]="store.ui().saContract" (ngModelChange)="store.patch({ saContract: $event })">
+              <option [ngValue]="null">Aucun</option>
+              @for (c of store.contracts(); track c.id) { <option [ngValue]="c.id">{{ c.name }}{{ c.provider ? ' · ' + c.provider : '' }}</option> }
+            </select>
+          </div>
+          <div class="fgrow">
+            <div class="field-label">À faire avant le</div>
+            <input class="input" type="date" [ngModel]="store.ui().saDate" (ngModelChange)="store.patch({ saDate: $event })" />
+          </div>
+        </div>
+        <div class="field-label">Détail</div>
+        <input class="input" [ngModel]="store.ui().saDesc" (ngModelChange)="store.patch({ saDesc: $event })" placeholder="Facultatif : ce qu'il faut faire, qui appeler" />
+        <div class="hint sm">Le gain est une estimation, pas une mesure. C'est le coût réel du contrat, une fois la piste appliquée, qui dira ce qu'elle a vraiment rapporté.</div>
+        <div class="modal-acts">
+          @if (store.ui().saId) {
+            <button class="btn btn-danger" (click)="store.patch({ saDelId: store.ui().saId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+          }
+          <div class="spacer"></div>
+          <button class="btn btn-soft" (click)="store.patch({ saForm: false })">Annuler</button>
+          <button class="btn btn-primary" [disabled]="store.ui().busy" (click)="store.saveSaving()">Enregistrer</button>
+        </div>
+      </f-modal>
+    }
+
+    @if (store.ui().saDelId) {
+      <f-modal [maxWidth]="400" (close)="store.patch({ saDelId: null })">
+        <div class="confirm">
+          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
+          <div class="confirm-title f-display">Supprimer cette piste ?</div>
+          <div class="confirm-txt">Si elle a été menée à bien, passez-la plutôt en « faite » : son gain reste compté dans ce que vous avez obtenu.</div>
+          <div class="modal-acts">
+            <button class="btn btn-soft grow" (click)="store.patch({ saDelId: null })">Annuler</button>
+            <button class="btn btn-primary grow" (click)="store.confirmSavingDel()">Supprimer</button>
+          </div>
+        </div>
+      </f-modal>
+    }
 
     <!-- FORMULAIRE DE BIEN -->
     @if (store.ui().asForm) {
@@ -478,6 +602,21 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .asset-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tag { background: var(--soft2); border-radius: 20px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; color: var(--ink2); }
 
+    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+    .totals { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; }
+    .t-val { font-size: 22px; font-weight: 700; color: var(--ink); margin-top: 3px; }
+    .t-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
+    .t-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .saving { display: flex; align-items: center; gap: 11px; border-radius: 13px; padding: 9px 11px; background: var(--soft); }
+    .saving.done, .saving.dropped { opacity: .6; }
+    .saving.done .s-title { text-decoration: line-through; }
+    .s-check { width: 22px; height: 22px; flex: none; border-radius: 7px; border: 2px solid var(--line2); background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+    .s-check.on { background: #6E9E5F; border-color: #6E9E5F; }
+    .s-body { flex: 1; min-width: 0; cursor: pointer; }
+    .s-title { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .s-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .s-gain { flex: none; font-size: 14px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .s-unit { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .clist { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
     .contract { display: flex; align-items: center; gap: 12px; border-radius: 13px; padding: 9px 11px; background: var(--soft); cursor: pointer; }
     .contract:hover { background: var(--soft2); }
@@ -599,6 +738,15 @@ export class FinancesContractsTab {
   }
 
   /** Une valeur absente reste vide : un signe de remplacement ne dit rien de plus. */
+  /** Contrat concerné, échéance visée, détail : ce qui aide à décider. */
+  savingMeta(s: FinSaving): string {
+    const bits: string[] = [];
+    if (s.contractId) bits.push(this.store.contractName(s.contractId));
+    if (s.targetDate) bits.push(`avant le ${this.foyer.fmtNumDate(s.targetDate)}`);
+    if (s.description) bits.push(s.description);
+    return bits.join(' · ');
+  }
+
   round(n: number | null): string {
     return n === null ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
   }

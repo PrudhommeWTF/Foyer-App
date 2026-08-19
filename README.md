@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -226,6 +226,16 @@ facultatif, il sert à calculer le prix du kWh.
 
 Ce qui n'est pas mesurable n'est pas affiché : un index inférieur au précédent est signalé comme
 un **compteur probablement remplacé**, pas comme une consommation négative.
+
+## 💡 Pistes d'économies
+
+Une piste est une intention chiffrée : « renégocier l'assurance habitation, 240 € par an ».
+L'écran Contrats en tient la liste, sépare **ce qu'il reste à aller chercher** de **ce qui est
+déjà obtenu**, et permet d'en faire une tâche en un clic. Une piste abandonnée ne compte nulle
+part : un total gonflé par ce qui ne se fera jamais ne sert à rien.
+
+Le gain reste une **estimation**. C'est le coût réel du contrat, une fois la piste appliquée, qui
+dira ce qu'elle a vraiment rapporté.
 
 ## 💾 Sauvegarde et restauration
 

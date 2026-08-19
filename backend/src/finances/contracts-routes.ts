@@ -2,6 +2,7 @@
 import express, { Request, Response, Router } from 'express';
 import * as attachments from './attachments';
 import * as contracts from './contracts';
+import * as savings from './savings';
 import { getAccount, getCategory } from './repo';
 import { isIsoDate, parseCents } from './money';
 
@@ -115,6 +116,27 @@ function contractInput(body: Record<string, unknown>): contracts.ContractInput {
   };
 }
 
+function savingInput(body: Record<string, unknown>): savings.SavingInput {
+  const title = str(body['title'], 'intitulé de la piste');
+  if (!title) fail('Donnez un intitulé à la piste.');
+
+  const status = String(body['status'] ?? 'idee') as savings.SavingStatus;
+  if (!savings.SAVING_STATUSES.includes(status)) fail('Statut de piste invalide.');
+
+  const gain = optionalAmount(body['annualGain'], 'gain annuel');
+  if (gain === null) fail('Indiquez le gain annuel estimé, même approximatif : sans lui, la piste ne se compare à rien.');
+
+  return {
+    title, description: str(body['description'], 'description', 2000),
+    annualGain: gain as number,
+    contractId: optionalRef(body['contractId'], 'Contrat', (n) => contracts.getContract(n)),
+    assetId: optionalRef(body['assetId'], 'Bien', (n) => contracts.getAsset(n)),
+    status,
+    targetDate: optionalDate(body['targetDate'], 'échéance visée'),
+    taskId: str(body['taskId'], 'tâche', 40) || null,
+  };
+}
+
 export function contractsRouter(): Router {
   const r = express.Router();
 
@@ -126,6 +148,8 @@ export function contractsRouter(): Router {
       deadlines: contracts.deadlines(),
       costs: Object.fromEntries(contracts.contractCosts()),
       pieces: Object.fromEntries(attachments.countsFor('contract')),
+      savings: savings.listSavings(),
+      savingsTotals: savings.totals(),
     });
   }));
 
@@ -159,6 +183,30 @@ export function contractsRouter(): Router {
     const n = contracts.countTransactionsForContract(contractId);
     const pieces = contracts.deleteContract(contractId);
     res.json({ contracts: contracts.listContracts(), detached: n, pieces });
+  }));
+
+  // ---- pistes d'économies ----
+  r.post('/savings', handler((req, res) => {
+    res.status(201).json({ saving: savings.createSaving(savingInput(req.body || {})) });
+  }));
+
+  r.put('/savings/:id', handler((req, res) => {
+    const saving = savings.updateSaving(id(req.params['id'], 'piste'), savingInput(req.body || {}));
+    if (!saving) { res.status(404).json({ error: 'Piste introuvable.' }); return; }
+    res.json({ saving, totals: savings.totals() });
+  }));
+
+  r.delete('/savings/:id', handler((req, res) => {
+    savings.deleteSaving(id(req.params['id'], 'piste'));
+    res.json({ savings: savings.listSavings(), totals: savings.totals() });
+  }));
+
+  /** Mémorise la tâche créée depuis une piste, ou l'oublie quand elle a disparu. */
+  r.post('/savings/:id/task', handler((req, res) => {
+    const taskId = String(req.body?.taskId ?? '').trim().slice(0, 40) || null;
+    const saving = savings.linkTask(id(req.params['id'], 'piste'), taskId);
+    if (!saving) { res.status(404).json({ error: 'Piste introuvable.' }); return; }
+    res.json({ saving });
   }));
 
   return r;

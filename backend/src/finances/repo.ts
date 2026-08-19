@@ -9,6 +9,7 @@ import { initContracts } from './contracts';
 import { initDashboard } from './dashboard';
 import { initBackup } from './backup';
 import { initEnergy } from './energy';
+import { initSavings } from './savings';
 import { initRulesRepo, tagsFor } from './rules-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
 import {
@@ -32,6 +33,7 @@ export function initFinancesRepo(db: Database, dataDir: string): void {
   initContracts(db);
   initDashboard(db);
   initEnergy(db);
+  initSavings(db);
   initBackup(db);
   initAttachments(db, dataDir);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is

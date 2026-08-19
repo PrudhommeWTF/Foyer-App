@@ -4,7 +4,7 @@ import {
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
   FinAttachment, FinDeadline, FinEnergySummary, FinImport, FinImportPreview, FinOwnerKind,
-  FinPeriod, FinPeriodicity, FinReading,
+  FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
@@ -71,6 +71,11 @@ export interface FinancesUi {
   ruleForm: boolean; ruleId: number | null;
   ruleName: string; ruleEnabled: boolean; ruleMatch: 'all' | 'any'; ruleStop: boolean;
   ruleConditions: FinCondition[]; ruleActions: FinAction[];
+  // savings idea form
+  saForm: boolean; saId: number | null;
+  saTitle: string; saDesc: string; saGain: string; saStatus: FinSavingStatus;
+  saContract: number | null; saDate: string; saDelId: number | null;
+
   // meter reading form
   reDate: string; reIndex: string; reIndexHp: string; reIndexHc: string;
   reKwh: string; reCost: string; reDelId: number | null;
@@ -104,6 +109,8 @@ function initialUi(month: string): FinancesUi {
     coAsset: null, coAccount: null, coCategory: null, coMember: '',
     coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
     coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null,
+    saForm: false, saId: null, saTitle: '', saDesc: '', saGain: '', saStatus: 'idee',
+    saContract: null, saDate: '', saDelId: null,
     reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '', reDelId: null,
     restorePending: null, restoreName: '',
     ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
@@ -169,6 +176,9 @@ export class FinancesStore {
   readonly attachments = signal<FinAttachment[]>([]);
 
   // Meter readings of the contract currently open
+  readonly savings = signal<FinSaving[]>([]);
+  readonly savingsTotals = signal<FinSavingsTotals>({ pending: 0, done: 0, count: 0, openCount: 0 });
+
   readonly readings = signal<FinReading[]>([]);
   readonly periods = signal<FinPeriod[]>([]);
   readonly energy = signal<FinEnergySummary | null>(null);
@@ -335,6 +345,7 @@ export class FinancesStore {
     this.assets.set([]); this.contracts.set([]); this.deadlines.set([]); this.costs.set({});
     this.pieces.set({}); this.attachments.set([]);
     this.readings.set([]); this.periods.set([]); this.energy.set(null);
+    this.savings.set([]); this.savingsTotals.set({ pending: 0, done: 0, count: 0, openCount: 0 });
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
@@ -992,6 +1003,8 @@ export class FinancesStore {
       this.deadlines.set(b.deadlines);
       this.costs.set(b.costs);
       this.pieces.set(b.pieces);
+      this.savings.set(b.savings);
+      this.savingsTotals.set(b.savingsTotals);
       this.error.set('');
     } catch (e) { this.error.set((e as Error).message); }
   }
@@ -1185,6 +1198,98 @@ export class FinancesStore {
       link.download = a.name;
       link.click();
       URL.revokeObjectURL(url);
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  // ---- savings ideas -----------------------------------------------------
+  newSaving(contractId: number | null = null): void {
+    this.patch({
+      saForm: true, saId: null, saTitle: '', saDesc: '', saGain: '',
+      saStatus: 'idee', saContract: contractId, saDate: '',
+    });
+  }
+
+  editSaving(id: number): void {
+    const s = this.savings().find((x) => x.id === id);
+    if (!s) return;
+    this.patch({
+      saForm: true, saId: s.id, saTitle: s.title, saDesc: s.description,
+      saGain: s.annualGain ? fmtEuros(s.annualGain) : '', saStatus: s.status,
+      saContract: s.contractId, saDate: s.targetDate || '',
+    });
+  }
+
+  async saveSaving(): Promise<void> {
+    const u = this.ui();
+    if (u.busy) return;
+    if (!u.saTitle.trim()) { this.foyer.toast('Donnez un intitulé à la piste'); return; }
+    if (parseEuros(u.saGain) === null) { this.foyer.toast('Indiquez le gain annuel estimé, même approximatif'); return; }
+    const existing = u.saId ? this.savings().find((s) => s.id === u.saId) : null;
+    const payload = {
+      title: u.saTitle.trim(), description: u.saDesc.trim(),
+      annualGain: (Math.abs(parseEuros(u.saGain) as number) / 100).toFixed(2),
+      contractId: u.saContract, assetId: null, status: u.saStatus,
+      targetDate: u.saDate || null, taskId: existing?.taskId ?? null,
+    };
+    this.patch({ busy: true });
+    try {
+      if (u.saId) await this.api.updateSaving(u.saId, payload);
+      else await this.api.createSaving(payload);
+      this.patch({ saForm: false, saId: null, busy: false });
+      await this.loadContracts();
+      this.foyer.toast(u.saId ? 'Piste modifiée' : 'Piste ajoutée');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async confirmSavingDel(): Promise<void> {
+    const id = this.ui().saDelId;
+    if (!id) return;
+    try {
+      await this.api.deleteSaving(id);
+      this.patch({ saDelId: null, saForm: false, saId: null });
+      await this.loadContracts();
+      this.foyer.toast('Piste supprimée');
+    } catch (e) {
+      this.patch({ saDelId: null });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  /** Passer une piste d'un statut à l'autre sans ouvrir le formulaire. */
+  async setSavingStatus(id: number, status: FinSavingStatus): Promise<void> {
+    const s = this.savings().find((x) => x.id === id);
+    if (!s) return;
+    try {
+      await this.api.updateSaving(id, {
+        title: s.title, description: s.description,
+        annualGain: (s.annualGain / 100).toFixed(2),
+        contractId: s.contractId, assetId: s.assetId, status,
+        targetDate: s.targetDate, taskId: s.taskId,
+      });
+      await this.loadContracts();
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /**
+   * La tâche liée existe-t-elle encore ? Elle vit dans le document du foyer et
+   * peut y être supprimée : promettre une tâche disparue serait pire que rien.
+   */
+  savingTask(s: FinSaving): boolean {
+    return !!s.taskId && (this.foyer.data()?.tasks || []).some((t) => t.id === s.taskId);
+  }
+
+  /** Copier une piste dans les tâches, et retenir laquelle. */
+  async taskFromSaving(id: number): Promise<void> {
+    const s = this.savings().find((x) => x.id === id);
+    if (!s) return;
+    const taskId = this.foyer.addExternalTask(s.title, s.targetDate || this.foyer.todayStr());
+    if (!taskId) return;
+    try {
+      await this.api.linkSavingTask(id, taskId);
+      await this.loadContracts();
     } catch (e) { this.foyer.toast((e as Error).message); }
   }
 

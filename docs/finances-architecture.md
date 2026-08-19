@@ -119,6 +119,7 @@ backend/src/finances/
   attachments-routes.ts /api/finances/attachments
   energy.ts        relevés de compteur et consommation dérivée
   energy-routes.ts /api/finances/readings
+  savings.ts       pistes d'économies, cumul de ce qui reste à aller chercher
   backup.ts        sauvegarde et restauration du seul module
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
@@ -479,6 +480,29 @@ cas sont donc nommés plutôt que calculés :
 | Ni index ni consommation | « consommation non calculable » |
 
 Les relevés appartiennent au contrat et disparaissent avec lui (`ON DELETE CASCADE`).
+
+### Pistes d'économies
+
+Une piste n'est ni une opération ni un contrat : c'est une **intention chiffrée**. « Renégocier
+l'assurance habitation, 240 € par an. »
+
+Le module ne prétend pas mesurer l'économie réellement obtenue, seul le coût réel du contrat une
+fois la piste appliquée le dira. Il tient la liste, sépare ce qui reste à faire de ce qui est
+fait, et en donne le cumul annuel. C'est déjà ce qu'on oublie le plus.
+
+**Une piste abandonnée ne compte nulle part.** La garder dans un total gonflerait un chiffre que
+rien ne viendra jamais réaliser.
+
+**Le gain annuel est obligatoire**, même approximatif : sans lui la piste ne se compare à rien et
+la liste devient un pense-bête de plus.
+
+**La tâche créée depuis une piste est mémorisée** dans `task_id`, mais l'interface vérifie qu'elle
+existe encore dans le document du foyer avant d'afficher « tâche créée ». Une tâche supprimée
+ailleurs délie la piste, qui repropose le bouton. Promettre une tâche disparue serait pire que ne
+rien promettre.
+
+Supprimer un contrat détache ses pistes (`ON DELETE SET NULL`) sans les emporter : l'idée
+d'économiser survit au contrat qu'elle visait.
 
 ## 13. Sauvegarde du seul module
 
