@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
+import fsp from 'node:fs';
+import os from 'node:os';
+import tmpPath from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
 import { commitImport, createDraft } from '../src/finances/import-repo';
 import * as repo from '../src/finances/repo';
+
+/** Un répertoire jetable par base : les pièces jointes écrivent sur disque. */
+const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
 
 let db: Database.Database;
 
@@ -11,7 +17,7 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db);
+  repo.initFinancesRepo(db, tmpDir());
 }
 
 const account = (name: string, over: Partial<repo.AccountInput> = {}): number =>

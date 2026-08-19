@@ -2,6 +2,9 @@
 // docs/finances-cahier-de-recette.md, vérifiées sur un extrait anonymisé d'un
 // export Bankin' réel (223 lignes brutes pour 95 opérations).
 import assert from 'node:assert/strict';
+import fsp from 'node:fs';
+import os from 'node:os';
+import tmpPath from 'node:path';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
@@ -25,6 +28,9 @@ const LABELS = {
   pro: 'Compte Courant Professionnel Martin Marie (Ei)',
 };
 
+/** Un répertoire jetable par base : les pièces jointes écrivent sur disque. */
+const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
+
 let db: Database.Database;
 let acc: Record<string, number>;
 
@@ -32,7 +38,7 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db);
+  repo.initFinancesRepo(db, tmpDir());
   imports.initImportRepo(db);
   acc = {};
   for (const name of ['Compte joint', 'Compte Paul', 'Compte Marie', 'Cabinet Marie']) {

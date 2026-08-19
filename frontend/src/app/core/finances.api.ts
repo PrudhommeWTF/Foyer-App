@@ -126,6 +126,20 @@ export class FinancesApi {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
   }
 
+  // ---- attachments ----
+  attachments(owner: FinOwnerKind, id: number): Promise<{ attachments: FinAttachment[] }> {
+    return this.api.request(`finances/attachments?owner=${owner}&id=${id}`);
+  }
+  /** Raw body upload, like the statement import: no multipart, no base64 bloat. */
+  uploadAttachment(owner: FinOwnerKind, id: number, file: File): Promise<{ attachment: FinAttachment; deduplicated: boolean; attachments: FinAttachment[] }> {
+    return this.api.upload(`finances/attachments?owner=${owner}&id=${id}&filename=${encodeURIComponent(file.name)}`, file);
+  }
+  deleteAttachment(id: number): Promise<{ attachments: FinAttachment[] }> {
+    return this.api.request(`finances/attachments/${id}`, { method: 'DELETE' });
+  }
+  /** Fetched with the session token, so a piece is never reachable by URL alone. */
+  downloadAttachment(id: number): Promise<Blob> { return this.api.download(`finances/attachments/${id}?download=1`); }
+
   // ---- assets, contracts, deadlines ----
   contracts(): Promise<FinContractsBundle> { return this.api.request('finances/contracts'); }
   createAsset(p: FinAssetPayload): Promise<{ asset: FinAsset }> {
@@ -380,4 +394,13 @@ export interface FinContractCost {
 export interface FinContractsBundle {
   assets: FinAsset[]; contracts: FinContract[]; deadlines: FinDeadline[];
   costs: Record<number, FinContractCost>;
+  /** Attachment count per contract. */
+  pieces: Record<number, number>;
+}
+
+export type FinOwnerKind = 'contract' | 'asset' | 'transaction';
+
+export interface FinAttachment {
+  id: number; ownerKind: FinOwnerKind; ownerId: number;
+  name: string; mime: string; size: number; sha256: string; createdAt: string;
 }

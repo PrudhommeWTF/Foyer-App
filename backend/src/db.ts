@@ -5,6 +5,7 @@ import path from 'path';
 import { EMPTY_STATE } from './seed';
 import { migrateFinances } from './finances/schema';
 import { initFinancesRepo } from './finances/repo';
+import { reportOrphansAtBoot } from './finances/attachments';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db');
@@ -48,7 +49,10 @@ try { db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAU
 
 // Finances module: versioned schema, applied at boot and independent of the rest.
 migrateFinances(db);
-initFinancesRepo(db);
+// The pieces live next to the database, in the same data directory: one tar of
+// DATA_DIR remains a complete backup.
+initFinancesRepo(db, DATA_DIR);
+reportOrphansAtBoot();
 
 export function countUsers(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;

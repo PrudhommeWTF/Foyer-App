@@ -5,12 +5,18 @@
 // Le reste du fichier vérifie que le coût réel dit la vérité, y compris quand
 // elle contredit le montant annoncé.
 import assert from 'node:assert/strict';
+import fsp from 'node:fs';
+import os from 'node:os';
+import tmpPath from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
 import * as repo from '../src/finances/repo';
 import * as contracts from '../src/finances/contracts';
 import * as rules from '../src/finances/rules-repo';
+
+/** Un répertoire jetable par base : les pièces jointes écrivent sur disque. */
+const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
 
 let db: Database.Database;
 let compte: number;
@@ -21,7 +27,7 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db);
+  repo.initFinancesRepo(db, tmpDir());
   compte = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
 }
 

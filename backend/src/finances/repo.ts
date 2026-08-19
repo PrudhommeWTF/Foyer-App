@@ -4,6 +4,7 @@
 import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
 import { coveredThrough, gapsOver, initImportRepo } from './import-repo';
+import { initAttachments, removeAllFor } from './attachments';
 import { initContracts } from './contracts';
 import { initDashboard } from './dashboard';
 import { initRulesRepo, tagsFor } from './rules-repo';
@@ -15,7 +16,12 @@ import {
 let database: Database;
 
 /** Wire the repository to the app database and register helper SQL functions. */
-export function initFinancesRepo(db: Database): void {
+/**
+ * Single entry point of the whole module. `dataDir` is required because the
+ * attachments write next to the database: an optional argument here would mean
+ * discovering the omission the day a document lands somewhere nobody backs up.
+ */
+export function initFinancesRepo(db: Database, dataDir: string): void {
   database = db;
   // The import layer shares the same connection; wiring it here means a caller
   // cannot forget it and discover the omission only when a summary is computed.
@@ -23,6 +29,7 @@ export function initFinancesRepo(db: Database): void {
   initRulesRepo(db);
   initContracts(db);
   initDashboard(db);
+  initAttachments(db, dataDir);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is
   // needed: a full scan over a few thousand rows is sub-millisecond.
   db.function('fnorm', { deterministic: true }, (s: unknown) => normaliseLabel(String(s ?? '')));
@@ -249,6 +256,8 @@ export function updateTransaction(id: number, input: TxInput): Transaction | nul
 }
 
 export function deleteTransaction(id: number): void {
+  // Its receipts go with it: kept, they would be rows nothing can reach.
+  removeAllFor('transaction', id);
   database.prepare('DELETE FROM fin_transactions WHERE id = ?').run(id);
 }
 

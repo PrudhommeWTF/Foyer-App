@@ -2,6 +2,9 @@
 // le reste est celui de deux contrats du même fournisseur, au libellé bancaire
 // rigoureusement identique, distingués par le seul montant.
 import assert from 'node:assert/strict';
+import fsp from 'node:fs';
+import os from 'node:os';
+import tmpPath from 'node:path';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, it } from 'node:test';
@@ -24,6 +27,9 @@ const LABELS = {
   pro: 'Compte Courant Professionnel Martin Marie (Ei)',
 };
 
+/** Un répertoire jetable par base : les pièces jointes écrivent sur disque. */
+const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
+
 let db: Database.Database;
 let acc: Record<string, number>;
 
@@ -31,7 +37,7 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db);
+  repo.initFinancesRepo(db, tmpDir());
   acc = {};
   for (const name of ['Compte joint', 'Compte Paul', 'Compte Marie', 'Cabinet Marie']) {
     acc[name] = repo.createAccount({ name, kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;

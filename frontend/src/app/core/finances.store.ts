@@ -3,7 +3,7 @@ import {
   AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
-  FinDeadline, FinImport, FinImportPreview, FinPeriodicity,
+  FinAttachment, FinDeadline, FinImport, FinImportPreview, FinOwnerKind, FinPeriodicity,
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
@@ -152,6 +152,9 @@ export class FinancesStore {
   readonly contracts = signal<FinContract[]>([]);
   readonly deadlines = signal<FinDeadline[]>([]);
   readonly costs = signal<Record<number, FinContractCost>>({});
+  readonly pieces = signal<Record<number, number>>({});
+  /** Attachments of the item currently open in a form. */
+  readonly attachments = signal<FinAttachment[]>([]);
 
   // Import workflow
   readonly preview = signal<FinImportPreview | null>(null);
@@ -253,6 +256,7 @@ export class FinancesStore {
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
     this.assets.set([]); this.contracts.set([]); this.deadlines.set([]); this.costs.set({});
+    this.pieces.set({}); this.attachments.set([]);
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
@@ -909,6 +913,7 @@ export class FinancesStore {
       this.contracts.set(b.contracts);
       this.deadlines.set(b.deadlines);
       this.costs.set(b.costs);
+      this.pieces.set(b.pieces);
       this.error.set('');
     } catch (e) { this.error.set((e as Error).message); }
   }
@@ -920,6 +925,7 @@ export class FinancesStore {
     return (id ? this.assets().find((a) => a.id === id)?.name : null) || '';
   }
   costOf(id: number): FinContractCost | undefined { return this.costs()[id]; }
+  piecesOf(id: number): number { return this.pieces()[id] ?? 0; }
   readonly activeContracts = computed(() => this.contracts().filter((c) => c.status === 'actif'));
   contractsOfAsset(id: number): FinContract[] { return this.contracts().filter((c) => c.assetId === id); }
   readonly looseContracts = computed(() => this.contracts().filter((c) => !c.assetId));
@@ -982,6 +988,8 @@ export class FinancesStore {
       coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
       coStatus: 'actif', coNotes: '', coRefs: [],
     });
+    // A piece needs something to hang on: nothing to show before the first save.
+    this.attachments.set([]);
   }
 
   editContract(id: number): void {
@@ -996,6 +1004,7 @@ export class FinancesStore {
       coNotice: c.noticeDays ? String(c.noticeDays) : '', coEnds: c.endsOn || '',
       coStatus: c.status, coNotes: c.notes, coRefs: c.refs.map((r) => ({ ...r })),
     });
+    void this.loadAttachments('contract', c.id);
   }
 
   addRef(): void { this.patch({ coRefs: [...this.ui().coRefs, { key: '', value: '' }] }); }
@@ -1055,6 +1064,48 @@ export class FinancesStore {
   openContractOperations(id: number): void {
     this.patch({ tab: 'transactions', fltContract: id, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
     void this.reloadTransactions();
+  }
+
+  // ---- attachments -------------------------------------------------------
+  async loadAttachments(owner: FinOwnerKind, id: number): Promise<void> {
+    try { this.attachments.set((await this.api.attachments(owner, id)).attachments); }
+    catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Upload a piece and refresh the list. The server judges the type by its bytes. */
+  async uploadAttachment(owner: FinOwnerKind, id: number, file: File): Promise<void> {
+    if (this.ui().busy) return;
+    this.patch({ busy: true });
+    try {
+      const r = await this.api.uploadAttachment(owner, id, file);
+      this.attachments.set(r.attachments);
+      this.patch({ busy: false });
+      await this.loadContracts();
+      this.foyer.toast(r.deduplicated ? 'Pièce ajoutée, identique à une autre déjà stockée' : 'Pièce ajoutée');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async deleteAttachment(id: number): Promise<void> {
+    try {
+      this.attachments.set((await this.api.deleteAttachment(id)).attachments);
+      await this.loadContracts();
+      this.foyer.toast('Pièce supprimée');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Download through the session token rather than a bare link. */
+  async openAttachment(a: FinAttachment): Promise<void> {
+    try {
+      const url = URL.createObjectURL(await this.api.downloadAttachment(a.id));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = a.name;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { this.foyer.toast((e as Error).message); }
   }
 
   // ---- export ------------------------------------------------------------

@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation et coût réel face au montant annoncé. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -199,6 +199,13 @@ Les contrats se regroupent par **bien** (logement, véhicule), portent leurs **r
 historique. Supprimer un bien libère ses contrats ; supprimer un contrat détache ses opérations
 sans les effacer.
 
+**Pièces jointes.** Rangez l'échéancier, l'attestation ou le dernier avis directement sur le
+contrat : PDF, JPEG, PNG, WEBP, GIF ou HEIC, 20 Mo au plus. Le type est reconnu **au contenu**,
+pas à l'extension. Les fichiers sont écrits sur le disque, à côté de la base, sous leur empreinte
+SHA-256 : deux fois la même facture n'occupe qu'un fichier, et une sauvegarde du répertoire de
+données reste complète. Au démarrage, l'application compare la base et le disque **dans les deux
+sens** et signale tout écart sans jamais rien supprimer d'elle-même.
+
 ## 💾 Sauvegarde et restauration
 
 La base est en mode **WAL** : copier `foyer.db` seul pendant que le service tourne donne une
@@ -219,7 +226,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#11-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#12-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 

@@ -113,6 +113,8 @@ backend/src/finances/
   dashboard.ts     agrégats mensuels et annuels, calculés en SQL
   contracts.ts     biens, contrats, échéances dérivées, coût réel
   contracts-routes.ts /api/finances/contracts et /assets
+  attachments.ts   pièces jointes : octets sur disque, métadonnées en base
+  attachments-routes.ts /api/finances/attachments
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -343,7 +345,73 @@ le reste : elle se prévisualise, se rejoue et se protège comme les autres.
 ses opérations : l'argent a bien été dépensé, seule l'explication disparaît. Un contrat terminé
 se passe en « résilié » plutôt que de se supprimer, pour garder son historique lisible.
 
-## 11. Sauvegarde et restauration
+## 11. Pièces jointes
+
+**Les octets sur le disque, les métadonnées dans SQLite.** Le choix a été pris en comparant les
+deux options, et il tient à un fait vérifiable : `better-sqlite3` **n'expose pas** l'API blob
+incrémentale de SQLite. Un PDF rangé en base est donc chargé intégralement en mémoire à chaque
+téléchargement, ce qui met un LXC modeste à genoux dès que deux personnes ouvrent une facture en
+même temps. Sur disque, `res.sendFile` sert en flux.
+
+Trois autres arguments ont pesé, tous vérifiés plutôt que supposés :
+
+- **L'effacement est réel.** `secure_delete` et `auto_vacuum` valent zéro par défaut : un `DELETE`
+  laisse les octets dans les pages libres jusqu'à un `VACUUM` complet. `rm` rend la place tout de
+  suite, ce qui comptera le jour où le foyer rangera ici autre chose que des factures.
+- **Le répertoire peut vivre à part**, sur un volume chiffré avec sa propre politique de
+  snapshots, sans emporter toute la base.
+- **Le dépannage reste possible sans SQL** : `ls`, `file`, `cp` suffisent à ressortir une facture
+  même application arrêtée.
+
+Le prix à payer est double, et il est assumé explicitement dans le code : deux sources de vérité
+peuvent diverger, et une suppression n'est pas transactionnelle.
+
+### Ce qui protège du désordre
+
+**Le nom du fichier ne vient jamais de l'utilisateur.** Une pièce est rangée sous
+`pieces/<2 premiers caractères de l'empreinte>/<empreinte><extension>`. Pas de traversée de
+chemin possible, pas de collision, pas de caractère exotique. Le nom d'origine reste en base,
+pour l'affichage et pour le téléchargement.
+
+**Le type est reconnu au contenu**, jamais à l'extension, comme pour l'import de relevés. PDF,
+JPEG, PNG, WEBP, GIF et HEIC (les photos d'iPhone) sont acceptés ; le reste est refusé en 415
+avec un message qui dit pourquoi.
+
+**Les octets identiques ne sont stockés qu'une fois.** La même facture rattachée au contrat et à
+son opération occupe un seul fichier. La suppression d'une fiche ne retire le fichier que
+lorsque plus aucune autre ne pointe dessus.
+
+**L'écriture passe par un fichier temporaire** renommé ensuite : un envoi interrompu ne laisse
+jamais un fichier à demi écrit sous son nom définitif.
+
+**Supprimer un contrat, un bien ou une opération emporte ses pièces.** Les garder produirait des
+fiches que plus rien ne peut atteindre. La fenêtre de confirmation annonce le nombre de pièces
+qui vont disparaître.
+
+### Divergence entre la base et le disque
+
+Un balayage tourne au démarrage et compte l'écart **dans les deux sens** :
+
+| Cas | Ce qui se passe |
+|---|---|
+| Fiche sans fichier | Comptée et signalée dans les logs, avec un exemple. Le téléchargement répond **410** avec la marche à suivre. La fiche est conservée : une restauration peut encore la sauver. |
+| Fichier sans fiche | Compté et signalé. **Rien n'est supprimé** : effacer ce que l'administrateur n'a pas vu serait exactement le mauvais réflexe. |
+
+`GET /api/finances/attachments-check` rend le même diagnostic à la demande.
+
+Nettoyer les fichiers orphelins, une fois le diagnostic lu et assumé :
+
+```bash
+# Lister ce que la base ne référence plus, sans rien supprimer
+sqlite3 /var/lib/foyer/foyer.db "SELECT rel_path FROM fin_attachments;" | sort > /tmp/connus.txt
+find /var/lib/foyer/pieces -type f -printf '%P\n' | sort > /tmp/disque.txt
+comm -13 /tmp/connus.txt /tmp/disque.txt
+
+# Les supprimer, après avoir regardé la liste ci-dessus
+comm -13 /tmp/connus.txt /tmp/disque.txt | while read -r f; do rm -v "/var/lib/foyer/pieces/$f"; done
+```
+
+## 12. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -377,17 +445,29 @@ docker compose exec -T foyer node -e "
 const db = require('better-sqlite3')('/data/foyer.db');
 db.exec(\"VACUUM INTO '/data/foyer-$STAMP.db'\"); db.close();"
 docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
+
+# Les pièces jointes vivent à côté de la base : VACUUM INTO ne les prend pas.
+docker compose exec -T foyer tar czf - -C /data pieces > ./pieces-$STAMP.tar.gz
 ```
+
+> **En LXC, rien ne change** : `tar czf ... -C /var/lib/foyer .` prend déjà tout le répertoire de
+> données, base et pièces comprises. Seule la méthode Docker demande les deux commandes
+> ci-dessus, parce que `VACUUM INTO` ne connaît que la base.
 
 Restauration :
 
 ```bash
 docker compose stop foyer
 docker compose cp ./foyer-2026-08-17-1430.db foyer:/data/foyer.db
+docker compose cp ./pieces-2026-08-17-1430.tar.gz foyer:/data/pieces.tar.gz
 docker compose exec -T foyer sh -c 'rm -f /data/foyer.db-wal /data/foyer.db-shm'
+docker compose exec -T foyer sh -c 'rm -rf /data/pieces && tar xzf /data/pieces.tar.gz -C /data && rm /data/pieces.tar.gz'
 docker compose start foyer
 docker compose logs -f foyer
 ```
+
+Le démarrage compte les écarts entre la base et le répertoire des pièces, et les affiche. Une
+restauration cohérente n'affiche rien à ce sujet.
 
 Supprimer les fichiers `-wal` et `-shm` est indispensable : laissés en place, ils réappliquent
 des écritures qui ne correspondent plus à la base restaurée.
@@ -398,6 +478,8 @@ des écritures qui ne correspondent plus à la base restaurée.
 sqlite3 foyer-2026-08-17-1430.db "PRAGMA integrity_check;"
 sqlite3 foyer-2026-08-17-1430.db "SELECT value FROM fin_meta WHERE key='schema_version';"
 sqlite3 foyer-2026-08-17-1430.db "SELECT COUNT(*) FROM fin_transactions;"
+sqlite3 foyer-2026-08-17-1430.db "SELECT COUNT(*) FROM fin_attachments;"
+tar tzf pieces-2026-08-17-1430.tar.gz | wc -l   # doit couvrir les pièces ci-dessus
 ```
 
 ### Export de secours, sans outil
@@ -414,7 +496,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 12. Tests
+## 13. Tests
 
 ```bash
 cd backend

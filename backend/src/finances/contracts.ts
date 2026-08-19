@@ -8,6 +8,7 @@
 //
 // Aucune table nouvelle : celles-ci ont été posées par la migration 1.
 import type { Database } from 'better-sqlite3';
+import { removeAllFor } from './attachments';
 
 let database: Database;
 export function initContracts(db: Database): void { database = db; }
@@ -61,9 +62,14 @@ export function updateAsset(id: number, input: AssetInput): Asset | null {
   return info.changes ? getAsset(id) : null;
 }
 
-/** Deleting a asset releases its contracts rather than taking them down with it. */
-export function deleteAsset(id: number): void {
+/**
+ * Deleting an asset releases its contracts rather than taking them down with it.
+ * Its own pieces do go, though: kept, they would be rows nothing can reach.
+ */
+export function deleteAsset(id: number): number {
+  const pieces = removeAllFor('asset', id);
   database.prepare('DELETE FROM fin_assets WHERE id = ?').run(id);
+  return pieces;
 }
 
 // ---- contrats -------------------------------------------------------------
@@ -165,11 +171,21 @@ export function updateContract(id: number, input: ContractInput): Contract | nul
  * Deleting a contract detaches its operations rather than deleting them: the
  * money was spent, only the explanation goes away.
  */
-export function deleteContract(id: number): void {
+export function deleteContract(id: number): number {
+  // The pieces go outside the transaction because they touch the disk, which no
+  // rollback would undo. They are removed first: a failure then leaves a
+  // contract without its scans, which is recoverable, rather than rows pointing
+  // at a contract that no longer exists, which is not.
+  const pieces = removeAllFor('contract', id);
   database.transaction(() => {
     database.prepare('UPDATE fin_transactions SET contract_id = NULL WHERE contract_id = ?').run(id);
     database.prepare('DELETE FROM fin_contracts WHERE id = ?').run(id);
   })();
+  return pieces;
+}
+
+export function countAttachmentsForContract(id: number): number {
+  return (database.prepare("SELECT COUNT(*) AS n FROM fin_attachments WHERE owner_kind = 'contract' AND owner_id = ?").get(id) as { n: number }).n;
 }
 
 export function countTransactionsForContract(id: number): number {

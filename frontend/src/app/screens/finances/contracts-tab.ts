@@ -4,7 +4,7 @@ import { FinAsset, FinContract, FinContractKind, FinDeadlineKind } from '../../c
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-import { CAT_ICONS } from '../../core/constants';
+import { CAT_ICONS, FILE_TYPE_COLORS } from '../../core/constants';
 import { ModalComponent } from '../../shared/modal';
 
 const ASSET_KINDS: { id: FinAsset['kind']; label: string; icon: string }[] = [
@@ -95,6 +95,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
                 <div class="c-name">{{ c.name }}@if (c.status === 'resilie') { <span class="tag">résilié</span> }</div>
                 <div class="c-meta">{{ contractMeta(c) }}</div>
               </div>
+              @if (store.piecesOf(c.id); as n) { <span class="tag">{{ n }} pièce{{ n > 1 ? 's' : '' }}</span> }
               <div class="c-cost">{{ costLabel(c) }}</div>
             </div>
           } @empty {
@@ -115,6 +116,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
               <div class="c-name">{{ c.name }}@if (c.status === 'resilie') { <span class="tag">résilié</span> }</div>
               <div class="c-meta">{{ contractMeta(c) }}</div>
             </div>
+            @if (store.piecesOf(c.id); as n) { <span class="tag">{{ n }} pièce{{ n > 1 ? 's' : '' }}</span> }
             <div class="c-cost">{{ costLabel(c) }}</div>
           </div>
         } @empty {
@@ -294,6 +296,29 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         </div>
 
         @if (store.ui().coId; as cid) {
+          <div class="sec-label">Pièces jointes</div>
+          <div class="pieces">
+            @for (a of store.attachments(); track a.id) {
+              <div class="piece">
+                <f-icon name="documents" [size]="15" [color]="pieceColor(a.mime)" [width]="2" />
+                <button class="p-name" (click)="store.openAttachment(a)">{{ a.name }}</button>
+                <span class="p-size">{{ size(a.size) }}</span>
+                <button class="icon-btn sm" aria-label="Supprimer la pièce" (click)="store.deleteAttachment(a.id)">
+                  <f-icon name="trash" [size]="13" color="var(--primary)" />
+                </button>
+              </div>
+            } @empty {
+              <div class="none">Aucune pièce. Rangez ici l'échéancier, l'attestation, le dernier avis.</div>
+            }
+          </div>
+          <label class="uploader">
+            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic" hidden
+                   (change)="pick($event, cid)" [disabled]="store.ui().busy" />
+            <f-icon name="upload" [size]="15" color="var(--primary)" [width]="2.4" />
+            <span>{{ store.ui().busy ? 'Envoi…' : 'Ajouter une pièce' }}</span>
+          </label>
+          <div class="hint sm">PDF, JPEG, PNG, WEBP, GIF ou HEIC, 20 Mo au plus. Le type est reconnu au contenu, pas à l'extension.</div>
+
           @if (store.costOf(cid); as cost) {
             <div class="cost-box" [class.off]="cost.offRange">
               <div class="cost-line">
@@ -345,7 +370,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         <div class="confirm">
           <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
           <div class="confirm-title f-display">Supprimer ce contrat ?</div>
-          <div class="confirm-txt">Les opérations rattachées sont conservées, elles perdent seulement leur explication. Si le contrat est simplement terminé, passez-le en « résilié » plutôt que de le supprimer : son historique reste lisible.</div>
+          <div class="confirm-txt">@if (store.piecesOf(store.ui().coDelId!); as n) { <strong>{{ n }} pièce{{ n > 1 ? 's' : '' }} jointe{{ n > 1 ? 's' : '' }} sera{{ n > 1 ? 'ont' : '' }} supprimée{{ n > 1 ? 's' : '' }} du disque.</strong> } Les opérations rattachées sont conservées, elles perdent seulement leur explication. Si le contrat est simplement terminé, passez-le en « résilié » plutôt que de le supprimer : son historique reste lisible.</div>
           <div class="modal-acts">
             <button class="btn btn-soft grow" (click)="store.patch({ coDelId: null })">Annuler</button>
             <button class="btn btn-primary grow" (click)="store.confirmContractDel()">Supprimer</button>
@@ -407,6 +432,13 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .refrow .input { flex: 1; min-width: 0; }
     .icon-btn { width: 38px; height: 38px; flex: none; border: none; border-radius: 11px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
+    .pieces { display: flex; flex-direction: column; gap: 6px; }
+    .piece { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 11px; padding: 7px 10px; }
+    .p-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .p-name:hover { color: var(--primary); }
+    .p-size { flex: none; font-size: 11.5px; font-weight: 700; color: var(--ink3); font-variant-numeric: tabular-nums; }
+    .uploader { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; border-radius: 11px; padding: 8px 13px; background: var(--soft2); font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
+    .uploader:has(input:disabled) { opacity: .5; cursor: default; }
     .cost-box { margin-top: 18px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
     .cost-box.off { background: #FDF0DA; }
     :host-context(.dark) .cost-box.off { background: #3A3123; }
@@ -468,6 +500,26 @@ export class FinancesContractsTab {
     }
     const one = c.amountMin ?? c.amountMax;
     return one !== null ? `${fmtEuros(one)} €` : '';
+  }
+
+  /** Same colour code as the Documents screen: terracotta for PDF, green for images. */
+  pieceColor(mime: string): string {
+    return FILE_TYPE_COLORS[mime === 'application/pdf' ? 'PDF' : 'IMG'];
+  }
+
+  /** Human size: an invoice is « 340 Ko », not 348160 octets. */
+  size(bytes: number): string {
+    if (bytes < 1024) return `${bytes} o`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
+    return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} Mo`;
+  }
+
+  /** Send the picked file, then clear the input so the same file can be re-sent. */
+  pick(event: Event, contractId: number): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) void this.store.uploadAttachment('contract', contractId, file);
+    input.value = '';
   }
 
   /** Live preview of the notice deadline while the form is being filled. */

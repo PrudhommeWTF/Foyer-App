@@ -1,5 +1,6 @@
 // HTTP surface of assets, contracts and deadlines, mounted under /api/finances.
 import express, { Request, Response, Router } from 'express';
+import * as attachments from './attachments';
 import * as contracts from './contracts';
 import { getAccount, getCategory } from './repo';
 import { isIsoDate, parseCents } from './money';
@@ -124,6 +125,7 @@ export function contractsRouter(): Router {
       contracts: contracts.listContracts(),
       deadlines: contracts.deadlines(),
       costs: Object.fromEntries(contracts.contractCosts()),
+      pieces: Object.fromEntries(attachments.countsFor('contract')),
     });
   }));
 
@@ -138,8 +140,8 @@ export function contractsRouter(): Router {
   }));
 
   r.delete('/assets/:id', handler((req, res) => {
-    contracts.deleteAsset(id(req.params['id'], 'bien'));
-    res.json({ assets: contracts.listAssets(), contracts: contracts.listContracts() });
+    const pieces = contracts.deleteAsset(id(req.params['id'], 'bien'));
+    res.json({ assets: contracts.listAssets(), contracts: contracts.listContracts(), pieces });
   }));
 
   r.post('/contracts', handler((req, res) => {
@@ -155,8 +157,8 @@ export function contractsRouter(): Router {
   r.delete('/contracts/:id', handler((req, res) => {
     const contractId = id(req.params['id'], 'contrat');
     const n = contracts.countTransactionsForContract(contractId);
-    contracts.deleteContract(contractId);
-    res.json({ contracts: contracts.listContracts(), detached: n });
+    const pieces = contracts.deleteContract(contractId);
+    res.json({ contracts: contracts.listContracts(), detached: n, pieces });
   }));
 
   return r;

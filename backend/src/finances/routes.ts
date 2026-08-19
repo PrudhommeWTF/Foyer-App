@@ -6,6 +6,7 @@ import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
 import { dashboard } from './dashboard';
+import { attachmentsRouter } from './attachments-routes';
 import { contractsRouter } from './contracts-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
@@ -127,6 +128,8 @@ export function financesRouter(): Router {
   r.use(rulesRouter());
   // Assets, contracts and deadlines.
   r.use(contractsRouter());
+  // Attachments: bytes on disk, metadata in SQLite.
+  r.use(attachmentsRouter());
 
   // Single call that fills the whole screen: accounts, categories, balances,
   // per-account coverage and the months that hold data.
