@@ -372,7 +372,7 @@ describe('actions', () => {
   it('une étiquette ne prive pas une catégorie manuelle de sa protection', () => {
     const camping = byLabel('Camping')[0];
     const target = repo.updateTransaction(camping.id, {
-      accountId: camping.accountId, date: camping.date, amount: (camping.amount / 100).toFixed(2),
+      accountId: camping.accountId, date: camping.date, amount: camping.amount,
       kind: camping.kind, label: camping.label, categoryId: cat('Loisirs et vacances'),
       notes: '', cleared: false,
     })!;
