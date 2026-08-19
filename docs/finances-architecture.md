@@ -381,9 +381,25 @@ stockée à aucun.
 | Endroit | Ce qu'il en fait |
 |---|---|
 | Écran Contrats | Les six prochains mois, la fenêtre de préavis en rouge quand elle approche |
-| Calendrier partagé | Un repère par date, poussé dans `FoyerStore.externalDayExtras` |
+| Calendrier partagé | Un repère par date, passées comprises, poussé dans `FoyerStore.externalDayExtras` |
 | Notifications | Les seules fenêtres de résiliation, dans les trente jours |
-| Flux ICS | Un an d'horizon, avec un rappel à J-7 sur les résiliations |
+| Flux ICS | Le même horizon que le calendrier, avec un rappel à J-7 sur les résiliations |
+
+**L'horizon de calcul est `DEADLINE_HORIZON_DAYS = 400`, un peu plus d'un an.** C'est la seule
+valeur qui garantit qu'une reconduction annuelle est **toujours** dans la liste, quelle que soit la
+date du jour : avec six mois, un contrat qui se reconduisait dans huit n'apparaissait nulle part,
+ni dans le calendrier, ni dans le flux ICS. L'écran Contrats garde sa fenêtre courte en filtrant
+lui-même (`daysAway <= 185`) : au-delà, il n'y a rien à faire aujourd'hui. Le calendrier, lui,
+montre tout : on y navigue justement pour voir loin.
+
+**Le calendrier affiche aussi les échéances passées.** Elles sont sur une date révolue, donc seule
+une navigation en arrière les fait apparaître, et une fenêtre de résiliation manquée explique
+pourquoi rien n'est possible cette année. L'écran Contrats les montre déjà ; le calendrier ne peut
+pas dire l'inverse.
+
+La case d'un jour, en vue mois, n'affiche que deux événements et deux repères ; le badge
+`+N autres` compte **les deux**. Sans cela, une échéance tombant un jour déjà chargé (un férié et
+un anniversaire, par exemple) disparaissait sans laisser de trace.
 
 Le passage par `externalDayExtras` reprend exactement le montage des notifications : `FinancesStore`
 dépend de `FoyerStore`, jamais l'inverse. Les repères sont **calculés** dans le store Finances et

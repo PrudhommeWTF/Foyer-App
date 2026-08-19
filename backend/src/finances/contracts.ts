@@ -265,7 +265,15 @@ export function nextAnniversary(date: string, from: string): string {
  * Only the notice deadline really costs money, which is why it exists at all:
  * a tacitly renewed contract missed by one day costs a full extra period.
  */
-export function deadlines(today = new Date().toISOString().slice(0, 10), horizonDays = 180): Deadline[] {
+/**
+ * Un peu plus d'un an, pour qu'une reconduction annuelle soit **toujours** dans
+ * la liste, quelle que soit la date d'aujourd'hui. Un horizon de six mois
+ * faisait disparaître un contrat qui se reconduit dans huit : ni dans l'écran,
+ * ni dans le calendrier, ni nulle part.
+ */
+export const DEADLINE_HORIZON_DAYS = 400;
+
+export function deadlines(today = new Date().toISOString().slice(0, 10), horizonDays = DEADLINE_HORIZON_DAYS): Deadline[] {
   const horizon = addDays(today, horizonDays);
   const out: Deadline[] = [];
 

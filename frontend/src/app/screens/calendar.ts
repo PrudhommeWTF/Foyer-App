@@ -58,7 +58,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                       <span class="ex-lbl">{{ ex.label }}</span>
                     </div>
                   }
-                  @if (c.more) { <span class="more">+{{ c.more }} autre</span> }
+                  @if (c.more) { <span class="more">+{{ c.more }} autre{{ c.more > 1 ? 's' : '' }}</span> }
                 </div>
               }
             </div>
@@ -331,13 +331,18 @@ export class CalendarScreen {
       d.setDate(start.getDate() + i);
       const key = dstr(d);
       const evs = this.store.eventsForDay(key);
+      const extras = this.store.dayExtras(key);
+      // Le compteur porte sur les événements **et** les repères : sans cela, une
+      // échéance de contrat disparaissait sans laisser de trace le jour où elle
+      // tombait après un férié et un anniversaire.
+      const hidden = Math.max(0, evs.length - 2) + Math.max(0, extras.length - 2);
       out.push({
         key,
         num: d.getDate(),
         inMonth: d.getMonth() === month,
         chips: evs.slice(0, 2).map((e) => ({ title: e.title, bg: this.store.tint(this.store.memberColor(e.who)), fg: this.store.memberColor(e.who) })),
-        extras: this.store.dayExtras(key).slice(0, 2),
-        more: evs.length > 2 ? evs.length - 2 : 0,
+        extras: extras.slice(0, 2),
+        more: hidden,
       });
     }
     return out;

@@ -131,11 +131,21 @@ describe('échéances', () => {
 
   it('ignore les contrats résiliés et ce qui sort de l’horizon', () => {
     contract({ name: 'Résilié', renewalOn: '2026-09-01', status: 'resilie' });
-    contract({ name: 'Lointain', endsOn: '2028-01-01' });
+    contract({ name: 'Lointain', endsOn: '2029-01-01' });
     contract({ name: 'Proche', endsOn: '2026-09-30' });
 
     const names = contracts.deadlines(TODAY).map((d) => d.contractName);
     assert.deepEqual(names, ['Proche']);
+  });
+
+  it('couvre plus d’un an, pour qu’une reconduction annuelle soit toujours listée', () => {
+    // Une reconduction dans huit mois disparaissait complètement avec un horizon
+    // de six mois : ni écran, ni calendrier, ni flux ICS.
+    contract({ name: 'Fibre', renewalOn: '2027-06-15', noticeDays: 30 });
+
+    const dates = contracts.deadlines(TODAY).map((d) => d.date);
+    assert.deepEqual(dates, ['2027-05-16', '2027-06-15']);
+    assert.ok(contracts.DEADLINE_HORIZON_DAYS > 365, 'strictement plus d’un an, quelle que soit la date du jour');
   });
 
   it('trie les échéances par date, la plus proche en tête', () => {
