@@ -251,8 +251,12 @@ export class FinancesStore {
   /** Repères de calendrier, un par échéance à venir. */
   private deadlineDayExtras(): Record<string, DayExtra[]> {
     const out: Record<string, DayExtra[]> = {};
+    // Les échéances passées sont affichées elles aussi : elles sont sur une date
+    // révolue, donc seule une navigation en arrière les fait apparaître, et une
+    // fenêtre de résiliation manquée explique pourquoi rien n'est possible cette
+    // année. L'écran Contrats les montre déjà, le calendrier ne peut pas dire
+    // l'inverse.
     for (const d of this.deadlines()) {
-      if (d.daysAway < 0) continue;
       const item: DayExtra = {
         kind: 'echeance',
         label: `${this.shortDeadlineLabel(d.kind)} : ${d.contractName}`,

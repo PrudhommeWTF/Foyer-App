@@ -28,7 +28,7 @@ import {
 import { buildInitialState, HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
 import { buildIcs } from './ics';
-import { deadlines as contractDeadlines } from './finances/contracts';
+import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -469,9 +469,7 @@ api.get('/calendar/feed.ics', (req: Request, res: Response) => {
   if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline; filename="foyer.ics"');
-  // Un agenda reste abonné longtemps : l'horizon des échéances est plus large
-  // ici que dans l'écran, qui regarde à six mois.
-  res.send(buildIcs(state, contractDeadlines(new Date().toISOString().slice(0, 10), 365)));
+  res.send(buildIcs(state, contractDeadlines(new Date().toISOString().slice(0, 10), DEADLINE_HORIZON_DAYS)));
 });
 
 // ---- System / self-update ----

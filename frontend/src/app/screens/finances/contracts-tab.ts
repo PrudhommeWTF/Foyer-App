@@ -45,7 +45,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
   imports: [FormsModule, IconComponent, ModalComponent, AvatarComponent],
   template: `
     <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
-    @if (store.deadlines().length) {
+    @if (soonDeadlines().length) {
       <div class="panel">
         <div class="panel-title">Échéances des six prochains mois</div>
         <div class="panel-sub">
@@ -53,7 +53,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
           Ces dates apparaissent aussi dans le calendrier partagé et dans le flux ICS.
         </div>
         <div class="deads">
-          @for (d of store.deadlines(); track d.contractId + d.kind) {
+          @for (d of soonDeadlines(); track d.contractId + d.kind) {
             <div class="dead" [class.urgent]="d.kind === 'preavis' && d.daysAway >= 0 && d.daysAway <= 30"
                  [class.past]="d.daysAway < 0" (click)="store.editContract(d.contractId)">
               <div class="dead-when">
@@ -717,6 +717,13 @@ export class FinancesContractsTab {
 
   /** Household members, for the « qui porte ce contrat » selector. */
   members = computed(() => this.foyer.data()?.members ?? []);
+
+  /**
+   * Le serveur renvoie plus d'un an d'échéances, pour que le calendrier et le
+   * flux ICS ne perdent jamais une reconduction annuelle. Ce panneau, lui, garde
+   * sa fenêtre de six mois : au-delà, il n'y a rien à faire aujourd'hui.
+   */
+  soonDeadlines = computed(() => this.store.deadlines().filter((d) => d.daysAway <= 185));
   /**
    * Noms des personnes encore présentes dans le foyer. Un membre supprimé laisse
    * son identifiant sur le contrat : l'ignorer vaut mieux qu'afficher un vide
