@@ -42,11 +42,33 @@ export function initFinancesRepo(db: Database, dataDir: string): void {
 }
 
 // ---- row mappers ---------------------------------------------------------
-interface AccountRow { id: number; name: string; kind: string; member_id: string | null; opening_balance: number; opening_date: string | null; archived: number; position: number; }
-const toAccount = (r: AccountRow): Account => ({
-  id: r.id, name: r.name, kind: r.kind as Account['kind'], memberId: r.member_id,
+interface AccountRow { id: number; name: string; kind: string; opening_balance: number; opening_date: string | null; archived: number; position: number; }
+const toAccount = (r: AccountRow, memberIds: string[] = []): Account => ({
+  id: r.id, name: r.name, kind: r.kind as Account['kind'], memberIds,
   openingBalance: r.opening_balance, openingDate: r.opening_date, archived: !!r.archived, position: r.position,
 });
+
+/**
+ * Titulaires, indexés par compte. Un compte joint en a deux, une assurance
+ * famille peut en avoir quatre : la question « à qui est-ce » n'a pas de réponse
+ * unique dans un foyer.
+ */
+function accountMembers(): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  for (const r of database.prepare(
+    'SELECT account_id AS id, member_id AS m FROM fin_account_members ORDER BY account_id, position, member_id',
+  ).all() as { id: number; m: string }[]) {
+    const list = out.get(r.id);
+    if (list) list.push(r.m); else out.set(r.id, [r.m]);
+  }
+  return out;
+}
+
+function writeAccountMembers(accountId: number, memberIds: string[]): void {
+  database.prepare('DELETE FROM fin_account_members WHERE account_id = ?').run(accountId);
+  const stmt = database.prepare('INSERT INTO fin_account_members (account_id, member_id, position) VALUES (?, ?, ?)');
+  memberIds.forEach((m, i) => stmt.run(accountId, m, i));
+}
 
 interface CategoryRow { id: number; parent_id: number | null; name: string; monthly_budget: number; color: string; icon: string; position: number; }
 const toCategory = (r: CategoryRow): Category => ({
@@ -69,29 +91,39 @@ const toTransaction = (r: TxRow, tags: string[] = []): Transaction => ({
 
 // ---- accounts ------------------------------------------------------------
 export function listAccounts(): Account[] {
-  return (database.prepare('SELECT * FROM fin_accounts ORDER BY archived, position, id').all() as AccountRow[]).map(toAccount);
+  const members = accountMembers();
+  return (database.prepare('SELECT * FROM fin_accounts ORDER BY archived, position, id').all() as AccountRow[])
+    .map((r) => toAccount(r, members.get(r.id) ?? []));
 }
 
 export function getAccount(id: number): Account | null {
   const r = database.prepare('SELECT * FROM fin_accounts WHERE id = ?').get(id) as AccountRow | undefined;
-  return r ? toAccount(r) : null;
+  return r ? toAccount(r, accountMembers().get(id) ?? []) : null;
 }
 
-export interface AccountInput { name: string; kind: string; memberId: string | null; openingBalance: number; openingDate: string | null; archived: boolean; }
+export interface AccountInput { name: string; kind: string; memberIds: string[]; openingBalance: number; openingDate: string | null; archived: boolean; }
 
 export function createAccount(input: AccountInput): Account {
-  const pos = (database.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM fin_accounts').get() as { p: number }).p;
-  const info = database.prepare(
-    'INSERT INTO fin_accounts (name, kind, member_id, opening_balance, opening_date, archived, position) VALUES (?, ?, ?, ?, ?, ?, ?)',
-  ).run(input.name, input.kind, input.memberId, input.openingBalance, input.openingDate, input.archived ? 1 : 0, pos);
-  return getAccount(Number(info.lastInsertRowid))!;
+  return database.transaction(() => {
+    const pos = (database.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM fin_accounts').get() as { p: number }).p;
+    const info = database.prepare(
+      'INSERT INTO fin_accounts (name, kind, opening_balance, opening_date, archived, position) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(input.name, input.kind, input.openingBalance, input.openingDate, input.archived ? 1 : 0, pos);
+    const id = Number(info.lastInsertRowid);
+    writeAccountMembers(id, input.memberIds);
+    return getAccount(id)!;
+  })();
 }
 
 export function updateAccount(id: number, input: AccountInput): Account | null {
-  const info = database.prepare(
-    'UPDATE fin_accounts SET name = ?, kind = ?, member_id = ?, opening_balance = ?, opening_date = ?, archived = ? WHERE id = ?',
-  ).run(input.name, input.kind, input.memberId, input.openingBalance, input.openingDate, input.archived ? 1 : 0, id);
-  return info.changes ? getAccount(id) : null;
+  return database.transaction(() => {
+    const info = database.prepare(
+      'UPDATE fin_accounts SET name = ?, kind = ?, opening_balance = ?, opening_date = ?, archived = ? WHERE id = ?',
+    ).run(input.name, input.kind, input.openingBalance, input.openingDate, input.archived ? 1 : 0, id);
+    if (!info.changes) return null;
+    writeAccountMembers(id, input.memberIds);
+    return getAccount(id);
+  })();
 }
 
 export function countTransactionsForAccount(id: number): number {

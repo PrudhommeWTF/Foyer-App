@@ -42,7 +42,7 @@ function reset(): void {
   imports.initImportRepo(db);
   acc = {};
   for (const name of ['Compte joint', 'Compte Paul', 'Compte Marie', 'Cabinet Marie']) {
-    acc[name] = repo.createAccount({ name, kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+    acc[name] = repo.createAccount({ name, kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
   }
 }
 
@@ -144,7 +144,7 @@ describe('anomalie 2 : le compte joint sous deux libellés', () => {
   it('propose le compte qui porte exactement le même nom que le libellé', () => {
     // Un compte nommé comme dans le fichier : l'accent et la casse ne comptent pas.
     const jumeau = repo.createAccount({
-      name: 'compte courant  mme n dupont ou m t dupont', kind: 'courant', memberId: null,
+      name: 'compte courant  mme n dupont ou m t dupont', kind: 'courant', memberIds: [],
       openingBalance: 0, openingDate: null, archived: false,
     }).id;
 
@@ -157,11 +157,11 @@ describe('anomalie 2 : le compte joint sous deux libellés', () => {
 
   it('ne propose ni un compte archivé, ni un nom porté par deux comptes', () => {
     const archive = repo.createAccount({
-      name: LABELS.paul, kind: 'courant', memberId: null,
+      name: LABELS.paul, kind: 'courant', memberIds: [],
       openingBalance: 0, openingDate: null, archived: true,
     }).id;
-    repo.createAccount({ name: LABELS.marie, kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false });
-    repo.createAccount({ name: LABELS.marie, kind: 'epargne', memberId: null, openingBalance: 0, openingDate: null, archived: false });
+    repo.createAccount({ name: LABELS.marie, kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false });
+    repo.createAccount({ name: LABELS.marie, kind: 'epargne', memberIds: [], openingBalance: 0, openingDate: null, archived: false });
 
     const unknown = resolveAndCollapse(parseFile(bytes(), 'bankin.csv').rows).unknown;
     assert.equal(unknown.find((u) => u.label === LABELS.paul)!.suggestedAccountId, null, 'un compte archivé ne se propose pas');
@@ -383,7 +383,7 @@ describe('anomalie 5 : couverture des comptes et mois incomplets', () => {
   it('R5.2 : un compte dont la couverture s’arrête avant le mois est signalé', () => {
     declareAliases();
     runImport();
-    const tphIt = repo.createAccount({ name: 'TPH-IT', kind: 'pro', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+    const tphIt = repo.createAccount({ name: 'TPH-IT', kind: 'pro', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
     repo.createTransaction({ accountId: tphIt, date: '2026-03-19', amount: -8900, kind: 'depense', label: 'Prlv Sepa Ovh Sas', categoryId: null, notes: '', cleared: false });
     // Un import de mars couvrait TPH-IT ; sa connexion s'est arrêtée depuis.
     imports.commitImport(imports.createDraft('mars.csv', 'CSV'), [], new Map([[tphIt, { from: '2026-01-01', to: '2026-03-19' }]]));
@@ -397,12 +397,12 @@ describe('anomalie 5 : couverture des comptes et mois incomplets', () => {
   it('R5.3 : archiver le compte éteint l’alerte sans toucher aux totaux', () => {
     declareAliases();
     runImport();
-    const tphIt = repo.createAccount({ name: 'TPH-IT', kind: 'pro', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+    const tphIt = repo.createAccount({ name: 'TPH-IT', kind: 'pro', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
     repo.createTransaction({ accountId: tphIt, date: '2026-03-19', amount: -8900, kind: 'depense', label: 'Ovh', categoryId: null, notes: '', cleared: false });
     imports.commitImport(imports.createDraft('mars.csv', 'CSV'), [], new Map([[tphIt, { from: '2026-01-01', to: '2026-03-19' }]]));
     const expense = repo.monthSummary('2026-08', '2026-08-31').expense;
 
-    repo.updateAccount(tphIt, { name: 'TPH-IT', kind: 'pro', memberId: null, openingBalance: 0, openingDate: null, archived: true });
+    repo.updateAccount(tphIt, { name: 'TPH-IT', kind: 'pro', memberIds: [], openingBalance: 0, openingDate: null, archived: true });
     // Au 17/08, date de la dernière opération importée, le mois est couvert.
     const s = repo.monthSummary('2026-08', '2026-08-17');
     assert.equal(s.incomplete, false);
@@ -425,7 +425,7 @@ describe('anomalie 5 : couverture des comptes et mois incomplets', () => {
   it('un compte dormant couvert par l’import n’est plus signalé à tort', () => {
     declareAliases();
     // Un livret sans aucune opération dans la période, mais présent dans l'import.
-    const livret = repo.createAccount({ name: 'LDDS', kind: 'epargne', memberId: null, openingBalance: 1200000, openingDate: null, archived: false }).id;
+    const livret = repo.createAccount({ name: 'LDDS', kind: 'epargne', memberIds: [], openingBalance: 1200000, openingDate: null, archived: false }).id;
     repo.createTransaction({ accountId: livret, date: '2025-12-31', amount: 11240, kind: 'recette', label: 'Interets', categoryId: null, notes: '', cleared: false });
     // Sans import le concernant, il n'est pas considéré comme une donnée manquante.
     assert.equal(repo.monthSummary('2026-08', '2026-08-17').incomplete, false);

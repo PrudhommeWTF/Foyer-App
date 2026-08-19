@@ -8,7 +8,9 @@ export type AccountKind = 'courant' | 'pro' | 'epargne';
 export type TxKind = 'depense' | 'recette' | 'virement';
 
 export interface FinAccount {
-  id: number; name: string; kind: AccountKind; memberId: string | null;
+  id: number; name: string; kind: AccountKind;
+  /** Titulaires : zéro, un, ou plusieurs. */
+  memberIds: string[];
   openingBalance: number; openingDate: string | null; archived: boolean; position: number;
 }
 
@@ -47,7 +49,7 @@ export interface FinBootstrap {
 }
 
 export interface AccountPayload {
-  name: string; kind: AccountKind; memberId: string | null;
+  name: string; kind: AccountKind; memberIds: string[];
   openingBalance: string; openingDate: string | null; archived: boolean;
 }
 
@@ -390,7 +392,9 @@ export interface FinContractRef { key: string; value: string; }
 
 export interface FinContractPayload {
   name: string; provider: string; kind: FinContractKind;
-  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  assetId: number | null; accountId: number | null; categoryId: number | null;
+  /** Personnes concernées : zéro, une, ou plusieurs. */
+  memberIds: string[];
   /** Sent as decimal strings; the server parses them once, into cents. */
   amountMin: string; amountMax: string;
   periodicity: FinPeriodicity;
@@ -400,7 +404,8 @@ export interface FinContractPayload {
 
 export interface FinContract {
   id: number; name: string; provider: string; kind: FinContractKind;
-  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  assetId: number | null; accountId: number | null; categoryId: number | null;
+  memberIds: string[];
   amountMin: number | null; amountMax: number | null;
   periodicity: FinPeriodicity;
   renewalOn: string | null; noticeDays: number; endsOn: string | null;
@@ -412,7 +417,7 @@ export interface FinDeadline {
   kind: FinDeadlineKind; date: string;
   /** Days from today; negative when the window has closed. */
   daysAway: number;
-  assetId: number | null; memberId: string | null;
+  assetId: number | null; memberIds: string[];
 }
 
 export interface FinContractCost {

@@ -21,7 +21,7 @@ function reset(): void {
 }
 
 const account = (name: string, over: Partial<repo.AccountInput> = {}): number =>
-  repo.createAccount({ name, kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false, ...over }).id;
+  repo.createAccount({ name, kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false, ...over }).id;
 
 const tx = (accountId: number, date: string, amount: number, label: string, over: Partial<repo.TxInput> = {}): number =>
   repo.createTransaction({
@@ -34,14 +34,32 @@ const categoryId = (name: string): number => repo.listCategories().find((c) => c
 beforeEach(reset);
 
 describe('comptes', () => {
+  it('accepte plusieurs titulaires, et se souvient de leur ordre', () => {
+    const id = account('Compte joint', { memberIds: ['m1', 'm2'] });
+    assert.deepEqual(repo.getAccount(id)!.memberIds, ['m1', 'm2']);
+
+    repo.updateAccount(id, { name: 'Compte joint', kind: 'courant', memberIds: ['m2', 'm3'], openingBalance: 0, openingDate: null, archived: false });
+    assert.deepEqual(repo.getAccount(id)!.memberIds, ['m2', 'm3'], 'la liste est remplacée, pas complétée');
+
+    repo.updateAccount(id, { name: 'Compte joint', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false });
+    assert.deepEqual(repo.getAccount(id)!.memberIds, [], 'un compte sans titulaire précis reste possible');
+  });
+
+  it('emporte ses titulaires quand il est supprimé', () => {
+    const id = account('Éphémère', { memberIds: ['m1'] });
+    repo.deleteAccount(id);
+    const restants = (db.prepare('SELECT COUNT(*) AS n FROM fin_account_members WHERE account_id = ?').get(id) as { n: number }).n;
+    assert.equal(restants, 0);
+  });
+
   it('crée, met à jour et liste les comptes', () => {
-    const id = account('Compte joint', { kind: 'courant', memberId: 'me', openingBalance: 150000, openingDate: '2025-12-01' });
+    const id = account('Compte joint', { kind: 'courant', memberIds: ['me'], openingBalance: 150000, openingDate: '2025-12-01' });
     const a = repo.getAccount(id)!;
     assert.equal(a.name, 'Compte joint');
     assert.equal(a.openingBalance, 150000);
-    assert.equal(a.memberId, 'me');
+    assert.deepEqual(a.memberIds, ['me']);
 
-    repo.updateAccount(id, { name: 'Compte joint (BPACA)', kind: 'courant', memberId: 'me', openingBalance: 150000, openingDate: '2025-12-01', archived: true });
+    repo.updateAccount(id, { name: 'Compte joint (BPACA)', kind: 'courant', memberIds: ['me'], openingBalance: 150000, openingDate: '2025-12-01', archived: true });
     assert.equal(repo.getAccount(id)!.name, 'Compte joint (BPACA)');
     assert.equal(repo.getAccount(id)!.archived, true);
   });
@@ -284,7 +302,7 @@ describe('synthèse mensuelle', () => {
     ]));
 
     const before = repo.monthSummary('2026-03', '2026-03-31');
-    repo.updateAccount(tphIt, { name: 'TPH-IT', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: true });
+    repo.updateAccount(tphIt, { name: 'TPH-IT', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: true });
 
     assert.equal(repo.monthSummary('2026-04', '2026-04-10').incomplete, false);
     assert.equal(repo.monthSummary('2026-03', '2026-03-31').expense, before.expense, 'les totaux historiques sont inchangés');

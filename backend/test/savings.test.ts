@@ -33,7 +33,7 @@ const piste = (over: Partial<savings.SavingInput> = {}): savings.Saving => savin
 
 const contract = (): number => contracts.createContract({
   name: 'Assurance habitation', provider: 'AXA', kind: 'assurance',
-  assetId: null, accountId: null, categoryId: null, memberId: null,
+  assetId: null, accountId: null, categoryId: null, memberIds: [],
   amountMin: null, amountMax: null, periodicity: 'mensuelle',
   renewalOn: null, noticeDays: 0, endsOn: null, status: 'actif', notes: '', refs: [],
 }).id;

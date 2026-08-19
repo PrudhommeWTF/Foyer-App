@@ -25,7 +25,7 @@ function reset(): void {
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
   repo.initFinancesRepo(db, tmpDir());
-  compte = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+  compte = repo.createAccount({ name: 'Compte joint', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
 }
 
 /** A small but representative household: accounts, contract, rule, operations. */
@@ -33,7 +33,7 @@ function populate(): void {
   repo.addAlias(compte, 'Compte Courant Mme N Dupont');
   const contrat = contracts.createContract({
     name: 'Assurance', provider: 'AXA', kind: 'assurance', assetId: null, accountId: compte,
-    categoryId: null, memberId: null, amountMin: 7000, amountMax: 7600, periodicity: 'mensuelle',
+    categoryId: null, memberIds: [], amountMin: 7000, amountMax: 7600, periodicity: 'mensuelle',
     renewalOn: '2026-09-15', noticeDays: 60, endsOn: null, status: 'actif', notes: '',
     refs: [{ key: 'N° de police', value: '123' }],
   }).id;
@@ -83,7 +83,7 @@ describe('restauration', () => {
     // Le foyer part en vrille entre-temps.
     repo.deleteTransaction(repo.listTransactions({}).rows[0].id);
     contracts.deleteContract(contracts.listContracts()[0].id);
-    repo.createAccount({ name: 'Compte de trop', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false });
+    repo.createAccount({ name: 'Compte de trop', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false });
 
     const report = backup.restoreModule(dump);
 
@@ -105,6 +105,28 @@ describe('restauration', () => {
     const once = backup.exportModule().counts;
     backup.restoreModule(dump);
     assert.deepEqual(backup.exportModule().counts, once);
+  });
+
+  it('signale les colonnes qu’elle ignore, plutôt que de perdre en silence', () => {
+    populate();
+    const dump = JSON.parse(JSON.stringify(backup.exportModule()));
+    // Une sauvegarde d'avant la migration 4 portait un titulaire unique en colonne.
+    dump.schemaVersion = 3;
+    for (const row of dump.tables['fin_accounts']) row.member_id = 'm1';
+
+    const report = backup.restoreModule(dump);
+    assert.deepEqual(report.ignoredColumns, [{ table: 'fin_accounts', columns: ['member_id'] }]);
+    assert.equal(report.after['fin_accounts'], 1, 'le reste de la ligne est bien restauré');
+  });
+
+  it('emporte les titulaires dans la sauvegarde', () => {
+    repo.updateAccount(compte, { name: 'Compte joint', kind: 'courant', memberIds: ['m1', 'm2'], openingBalance: 0, openingDate: null, archived: false });
+    const dump = JSON.parse(JSON.stringify(backup.exportModule()));
+    assert.equal(dump.counts['fin_account_members'], 2);
+
+    repo.updateAccount(compte, { name: 'Compte joint', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false });
+    backup.restoreModule(dump);
+    assert.deepEqual(repo.getAccount(compte)!.memberIds, ['m1', 'm2']);
   });
 
   it('refuse une sauvegarde plus récente que le schéma en place', () => {

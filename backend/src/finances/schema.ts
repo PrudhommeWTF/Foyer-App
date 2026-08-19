@@ -8,7 +8,7 @@
 import type { Database } from 'better-sqlite3';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
-export const FIN_SCHEMA_VERSION = 3;
+export const FIN_SCHEMA_VERSION = 4;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -265,6 +265,40 @@ const MIGRATIONS: Migration[] = [
         -- user set it by hand, and replaying the rules must not undo that.
         ALTER TABLE fin_transactions ADD COLUMN rule_id INTEGER REFERENCES fin_rules(id) ON DELETE SET NULL;
         CREATE INDEX fin_tx_rule ON fin_transactions (rule_id);
+      `);
+    },
+  },
+  {
+    version: 4,
+    label: 'plusieurs titulaires par compte et par contrat',
+    up: (db) => {
+      db.exec(`
+        -- Un compte joint a deux titulaires, une assurance peut couvrir toute la
+        -- famille : une colonne unique ne pouvait pas le dire.
+        CREATE TABLE fin_account_members (
+          account_id INTEGER NOT NULL REFERENCES fin_accounts(id) ON DELETE CASCADE,
+          member_id TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (account_id, member_id)
+        );
+        CREATE TABLE fin_contract_members (
+          contract_id INTEGER NOT NULL REFERENCES fin_contracts(id) ON DELETE CASCADE,
+          member_id TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (contract_id, member_id)
+        );
+
+        -- Le titulaire unique déjà saisi devient le premier de la liste : rien
+        -- n'est perdu, et une base existante n'a rien à ressaisir.
+        INSERT INTO fin_account_members (account_id, member_id)
+          SELECT id, member_id FROM fin_accounts WHERE member_id IS NOT NULL AND member_id <> '';
+        INSERT INTO fin_contract_members (contract_id, member_id)
+          SELECT id, member_id FROM fin_contracts WHERE member_id IS NOT NULL AND member_id <> '';
+
+        -- La colonne part une fois recopiée : la laisser en place ferait deux
+        -- sources de vérité pour la même question.
+        ALTER TABLE fin_accounts DROP COLUMN member_id;
+        ALTER TABLE fin_contracts DROP COLUMN member_id;
       `);
     },
   },

@@ -18,8 +18,8 @@ export function initBackup(db: Database): void { database = db; }
  * la version de schéma voyage dans l'en-tête, pas dans les données.
  */
 const TABLES = [
-  'fin_accounts', 'fin_account_aliases', 'fin_categories',
-  'fin_assets', 'fin_contracts', 'fin_contract_refs',
+  'fin_accounts', 'fin_account_aliases', 'fin_account_members', 'fin_categories',
+  'fin_assets', 'fin_contracts', 'fin_contract_refs', 'fin_contract_members',
   'fin_imports', 'fin_import_coverage',
   'fin_transactions', 'fin_tags', 'fin_transaction_tags',
   'fin_readings', 'fin_rules', 'fin_rule_conditions', 'fin_rule_actions',
@@ -54,6 +54,13 @@ export interface RestoreReport {
   after: Record<string, number>;
   /** Pièces jointes référencées par la sauvegarde. Les octets, eux, sont sur le disque. */
   attachments: number;
+  /**
+   * Colonnes présentes dans la sauvegarde mais absentes du schéma actuel, donc
+   * ignorées. Les taire ferait perdre une donnée sans que personne le sache :
+   * une sauvegarde d'avant la migration 4 porte par exemple `member_id`, dont le
+   * contenu vit désormais dans une table dédiée.
+   */
+  ignoredColumns: { table: string; columns: string[] }[];
 }
 
 const counts = (): Record<string, number> => {
@@ -91,6 +98,7 @@ export function restoreModule(backup: unknown): RestoreReport {
   }
 
   const before = counts();
+  const ignoredColumns: { table: string; columns: string[] }[] = [];
 
   database.transaction(() => {
     // Les contraintes sont vérifiées au commit et non ligne à ligne : l'ordre
@@ -106,6 +114,8 @@ export function restoreModule(backup: unknown): RestoreReport {
       // ancienne en a moins, et une colonne inconnue ferait échouer l'INSERT.
       const known = new Set((database.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name));
       const columns = Object.keys(rows[0]).filter((c) => known.has(c));
+      const dropped = Object.keys(rows[0]).filter((c) => !known.has(c));
+      if (dropped.length) ignoredColumns.push({ table: t, columns: dropped });
       if (!columns.length) throw new RestoreRefused(`Sauvegarde inexploitable : aucune colonne connue dans « ${t} ».`);
       const stmt = database.prepare(
         `INSERT INTO ${t} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
@@ -115,5 +125,10 @@ export function restoreModule(backup: unknown): RestoreReport {
   })();
 
   const after = counts();
-  return { before, after, attachments: after['fin_attachments'] };
+  if (ignoredColumns.length) {
+    // eslint-disable-next-line no-console
+    console.warn('[foyer] Restauration : colonnes ignorées, absentes du schéma actuel : '
+      + ignoredColumns.map((i) => `${i.table} (${i.columns.join(', ')})`).join(' ; '));
+  }
+  return { before, after, attachments: after['fin_attachments'], ignoredColumns };
 }

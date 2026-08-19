@@ -35,7 +35,7 @@ export interface FinancesUi {
 
   // account form
   acForm: boolean; acId: number | null;
-  acName: string; acKind: AccountKind; acMember: string; acOpening: string; acOpeningDate: string; acArchived: boolean;
+  acName: string; acKind: AccountKind; acMembers: string[]; acOpening: string; acOpeningDate: string; acArchived: boolean;
   acAliasInput: string; acDelId: number | null;
 
   // category form
@@ -61,7 +61,7 @@ export interface FinancesUi {
   // contract form
   coForm: boolean; coId: number | null;
   coName: string; coProvider: string; coKind: FinContractKind;
-  coAsset: number | null; coAccount: number | null; coCategory: number | null; coMember: string;
+  coAsset: number | null; coAccount: number | null; coCategory: number | null; coMembers: string[];
   coMin: string; coMax: string; coPeriodicity: FinPeriodicity;
   coRenewal: string; coNotice: string; coEnds: string;
   coStatus: FinContractStatus; coNotes: string; coRefs: FinContractRef[];
@@ -97,7 +97,7 @@ function initialUi(month: string): FinancesUi {
     fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
     txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null,
-    acForm: false, acId: null, acName: '', acKind: 'courant', acMember: '', acOpening: '',
+    acForm: false, acId: null, acName: '', acKind: 'courant', acMembers: [], acOpening: '',
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
     catForm: false, catId: null, catName: '', catBudget: '', catColor: '#7A9B76', catIcon: 'facture',
     catParent: null, catDelId: null,
@@ -106,7 +106,7 @@ function initialUi(month: string): FinancesUi {
     asForm: false, asId: null, asName: '', asKind: 'immobilier', asStatus: 'actif', asAddress: '',
     asAcquired: '', asSold: '', asNotes: '', asDelId: null,
     coForm: false, coId: null, coName: '', coProvider: '', coKind: 'assurance',
-    coAsset: null, coAccount: null, coCategory: null, coMember: '',
+    coAsset: null, coAccount: null, coCategory: null, coMembers: [],
     coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
     coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null,
     saForm: false, saId: null, saTitle: '', saDesc: '', saGain: '', saStatus: 'idee',
@@ -288,7 +288,7 @@ export class FinancesStore {
   taskFromDeadline(contractId: number, kind: string, date: string): void {
     const c = this.contracts().find((x) => x.id === contractId);
     if (!c) return;
-    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberId);
+    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberIds[0] ?? null);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
@@ -560,7 +560,7 @@ export class FinancesStore {
   // ---- accounts ----------------------------------------------------------
   newAccount(): void {
     this.patch({
-      acForm: true, acId: null, acName: '', acKind: 'courant', acMember: '',
+      acForm: true, acId: null, acName: '', acKind: 'courant', acMembers: [],
       acOpening: '', acOpeningDate: '', acArchived: false, acAliasInput: '',
     });
   }
@@ -569,7 +569,7 @@ export class FinancesStore {
     const a = this.accounts().find((x) => x.id === id);
     if (!a) return;
     this.patch({
-      acForm: true, acId: a.id, acName: a.name, acKind: a.kind, acMember: a.memberId || '',
+      acForm: true, acId: a.id, acName: a.name, acKind: a.kind, acMembers: [...a.memberIds],
       acOpening: a.openingBalance ? fmtEuros(a.openingBalance) : '', acOpeningDate: a.openingDate || '',
       acArchived: a.archived, acAliasInput: '',
     });
@@ -583,7 +583,7 @@ export class FinancesStore {
     const opening = u.acOpening.trim();
     if (opening && parseEuros(opening) === null) { this.foyer.toast('Solde d’ouverture invalide'); return; }
     const payload = {
-      name, kind: u.acKind, memberId: u.acMember || null,
+      name, kind: u.acKind, memberIds: u.acMembers,
       openingBalance: opening ? ((parseEuros(opening) as number) / 100).toFixed(2) : '0',
       openingDate: u.acOpeningDate || null, archived: u.acArchived,
     };
@@ -872,6 +872,39 @@ export class FinancesStore {
     void this.loadRules();
   }
 
+  /**
+   * Démarrer une règle depuis un contrat. Le libellé bancaire ressemble au
+   * fournisseur bien plus qu'au nom que vous avez donné au contrat, et c'est la
+   * fourchette de montant qui distingue deux contrats du même assureur : les
+   * deux servent de conditions, l'action rattache au contrat.
+   */
+  ruleFromContract(contractId: number): void {
+    const c = this.contracts().find((x) => x.id === contractId);
+    if (!c) return;
+    const conditions: FinCondition[] = [
+      { field: 'label', op: 'contains', value: c.provider || c.name, value2: '' },
+    ];
+    if (c.amountMin !== null || c.amountMax !== null) {
+      const min = c.amountMin ?? c.amountMax!;
+      const max = c.amountMax ?? c.amountMin!;
+      conditions.push({
+        field: 'amount', op: 'between',
+        value: String(Math.floor(min / 100)), value2: String(Math.ceil(max / 100)),
+      });
+    }
+    const actions: FinAction[] = [{ kind: 'contract', value: String(c.id) }];
+    if (c.categoryId) actions.push({ kind: 'category', value: String(c.categoryId) });
+
+    this.patch({
+      tab: 'regles', coForm: false, coId: null,
+      ruleForm: true, ruleId: null, ruleName: c.name.slice(0, 60), ruleEnabled: true,
+      ruleMatch: 'all', ruleStop: false, ruleError: '',
+      ruleConditions: conditions, ruleActions: actions,
+    });
+    this.rulePreview.set(null);
+    void this.loadRules();
+  }
+
   editRule(id: number): void {
     const r = this.rules().find((x) => x.id === id);
     if (!r) return;
@@ -1075,7 +1108,7 @@ export class FinancesStore {
   newContract(assetId: number | null = null): void {
     this.patch({
       coForm: true, coId: null, coName: '', coProvider: '', coKind: 'assurance',
-      coAsset: assetId, coAccount: null, coCategory: null, coMember: '',
+      coAsset: assetId, coAccount: null, coCategory: null, coMembers: [],
       coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
       coStatus: 'actif', coNotes: '', coRefs: [],
     });
@@ -1088,7 +1121,7 @@ export class FinancesStore {
     if (!c) return;
     this.patch({
       coForm: true, coId: c.id, coName: c.name, coProvider: c.provider, coKind: c.kind,
-      coAsset: c.assetId, coAccount: c.accountId, coCategory: c.categoryId, coMember: c.memberId || '',
+      coAsset: c.assetId, coAccount: c.accountId, coCategory: c.categoryId, coMembers: [...c.memberIds],
       coMin: c.amountMin !== null ? fmtEuros(c.amountMin) : '',
       coMax: c.amountMax !== null ? fmtEuros(c.amountMax) : '',
       coPeriodicity: c.periodicity, coRenewal: c.renewalOn || '',
@@ -1116,7 +1149,7 @@ export class FinancesStore {
     const payload = {
       name: u.coName.trim(), provider: u.coProvider.trim(), kind: u.coKind,
       assetId: u.coAsset, accountId: u.coAccount, categoryId: u.coCategory,
-      memberId: u.coMember || null,
+      memberIds: u.coMembers,
       amountMin: u.coMin.trim() ? (Math.abs(parseEuros(u.coMin) as number) / 100).toFixed(2) : '',
       amountMax: u.coMax.trim() ? (Math.abs(parseEuros(u.coMax) as number) / 100).toFixed(2) : '',
       periodicity: u.coPeriodicity, renewalOn: u.coRenewal || null,
@@ -1199,6 +1232,13 @@ export class FinancesStore {
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Cocher ou décocher une personne, sur un compte ou sur un contrat. */
+  toggleMember(field: 'acMembers' | 'coMembers', memberId: string): void {
+    const current = this.ui()[field];
+    const next = current.includes(memberId) ? current.filter((m) => m !== memberId) : [...current, memberId];
+    this.patch({ [field]: next } as Partial<FinancesUi>);
   }
 
   // ---- savings ideas -----------------------------------------------------

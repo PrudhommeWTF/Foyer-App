@@ -40,7 +40,7 @@ function reset(): void {
   repo.initFinancesRepo(db, tmpDir());
   acc = {};
   for (const name of ['Compte joint', 'Compte Paul', 'Compte Marie', 'Cabinet Marie']) {
-    acc[name] = repo.createAccount({ name, kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+    acc[name] = repo.createAccount({ name, kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
   }
   repo.addAlias(acc['Compte joint'], LABELS.jointA);
   repo.addAlias(acc['Compte joint'], LABELS.jointB);

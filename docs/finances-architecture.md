@@ -340,11 +340,33 @@ la décision reste au foyer.
 Une **fourchette** plutôt qu'un montant exact, parce que les cotisations bougent de quelques
 centimes et qu'un signalement à chaque centime ne serait plus lu.
 
+### Qui est concerné
+
+Un compte joint a **deux** titulaires, une mutuelle peut couvrir **toute la famille** : une colonne
+unique ne pouvait pas le dire. La migration 4 crée `fin_account_members` et `fin_contract_members`,
+**recopie le titulaire unique déjà saisi** puis supprime la colonne. Rien à ressaisir sur une base
+existante, et une seule source de vérité pour la question « à qui est-ce ».
+
+Les identifiants de membres viennent du **document du foyer**, pas d'une table : ils ne peuvent pas
+être vérifiés par clé étrangère, seulement nettoyés (dédoublonnés, bornés). L'affichage est donc
+tolérant : un membre supprimé du foyer laisse son identifiant en base, et l'interface l'ignore
+plutôt que d'afficher un vide entre deux virgules.
+
+**La restauration signale les colonnes qu'elle ignore.** Restaurer une sauvegarde d'avant la
+migration 4 rapporte `fin_accounts (member_id)` : la colonne n'existe plus, son contenu vit
+ailleurs, et le taire ferait perdre une donnée sans que personne le sache.
+
 ### Rattacher les opérations
 
 Trois chemins, du plus manuel au plus automatique : le sélecteur du formulaire d'opération,
 l'action de règle « rattacher au contrat », et le filtre « opérations de ce contrat » qui part du
-contrat pour vérifier ce qu'il a réellement capté. L'action de règle utilise le même moteur que
+contrat pour vérifier ce qu'il a réellement capté.
+
+La fiche du contrat propose de **créer la règle directement**, pré-remplie : le libellé bancaire
+ressemble au **fournisseur** bien plus qu'au nom que vous avez donné au contrat, et c'est la
+**fourchette de montant** qui distingue deux contrats du même assureur. Ces deux critères
+deviennent les conditions, le rattachement au contrat devient l'action, et la règle se teste avant
+d'être enregistrée comme n'importe quelle autre. L'action de règle utilise le même moteur que
 le reste : elle se prévisualise, se rejoue et se protège comme les autres.
 
 **Supprimer ne défait rien.** Supprimer un bien libère ses contrats, supprimer un contrat détache

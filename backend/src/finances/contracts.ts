@@ -81,7 +81,9 @@ export interface ContractRef { key: string; value: string; }
 
 export interface ContractInput {
   name: string; provider: string; kind: ContractKind;
-  assetId: number | null; accountId: number | null; categoryId: number | null; memberId: string | null;
+  assetId: number | null; accountId: number | null; categoryId: number | null;
+  /** Personnes concernées : zéro, une, ou plusieurs. */
+  memberIds: string[];
   /** Expected amount range, in cents, always positive. */
   amountMin: number | null; amountMax: number | null;
   periodicity: Periodicity;
@@ -99,10 +101,28 @@ export interface Contract extends ContractInput { id: number; }
 
 interface ContractRow {
   id: number; name: string; provider: string; kind: ContractKind;
-  asset_id: number | null; account_id: number | null; category_id: number | null; member_id: string | null;
+  asset_id: number | null; account_id: number | null; category_id: number | null;
   amount_min: number | null; amount_max: number | null; periodicity: Periodicity;
   renewal_on: string | null; notice_days: number; ends_on: string | null;
   status: ContractStatus; notes: string;
+}
+
+/** Personnes concernées, indexées par contrat. */
+function contractMembers(): Map<number, string[]> {
+  const out = new Map<number, string[]>();
+  for (const r of database.prepare(
+    'SELECT contract_id AS id, member_id AS m FROM fin_contract_members ORDER BY contract_id, position, member_id',
+  ).all() as { id: number; m: string }[]) {
+    const list = out.get(r.id);
+    if (list) list.push(r.m); else out.set(r.id, [r.m]);
+  }
+  return out;
+}
+
+function writeMembers(contractId: number, memberIds: string[]): void {
+  database.prepare('DELETE FROM fin_contract_members WHERE contract_id = ?').run(contractId);
+  const stmt = database.prepare('INSERT INTO fin_contract_members (contract_id, member_id, position) VALUES (?, ?, ?)');
+  memberIds.forEach((m, i) => stmt.run(contractId, m, i));
 }
 
 function refsOf(contractId: number): ContractRef[] {
@@ -110,21 +130,23 @@ function refsOf(contractId: number): ContractRef[] {
     .all(contractId) as ContractRef[];
 }
 
-const toContract = (r: ContractRow): Contract => ({
+const toContract = (r: ContractRow, memberIds: string[] = []): Contract => ({
   id: r.id, name: r.name, provider: r.provider, kind: r.kind,
-  assetId: r.asset_id, accountId: r.account_id, categoryId: r.category_id, memberId: r.member_id,
+  assetId: r.asset_id, accountId: r.account_id, categoryId: r.category_id, memberIds,
   amountMin: r.amount_min, amountMax: r.amount_max, periodicity: r.periodicity,
   renewalOn: r.renewal_on, noticeDays: r.notice_days, endsOn: r.ends_on,
   status: r.status, notes: r.notes, refs: refsOf(r.id),
 });
 
 export function listContracts(): Contract[] {
-  return (database.prepare('SELECT * FROM fin_contracts ORDER BY status, name').all() as ContractRow[]).map(toContract);
+  const members = contractMembers();
+  return (database.prepare('SELECT * FROM fin_contracts ORDER BY status, name').all() as ContractRow[])
+    .map((r) => toContract(r, members.get(r.id) ?? []));
 }
 
 export function getContract(id: number): Contract | null {
   const r = database.prepare('SELECT * FROM fin_contracts WHERE id = ?').get(id) as ContractRow | undefined;
-  return r ? toContract(r) : null;
+  return r ? toContract(r, contractMembers().get(id) ?? []) : null;
 }
 
 function writeRefs(contractId: number, refs: ContractRef[]): void {
@@ -134,7 +156,7 @@ function writeRefs(contractId: number, refs: ContractRef[]): void {
 }
 
 const contractValues = (i: ContractInput): unknown[] => [
-  i.name, i.provider, i.kind, i.assetId, i.accountId, i.categoryId, i.memberId,
+  i.name, i.provider, i.kind, i.assetId, i.accountId, i.categoryId,
   i.amountMin, i.amountMax, i.periodicity, i.renewalOn, i.noticeDays, i.endsOn, i.status, i.notes,
 ];
 
@@ -142,12 +164,13 @@ export function createContract(input: ContractInput): Contract {
   return database.transaction(() => {
     const info = database.prepare(`
       INSERT INTO fin_contracts
-        (name, provider, kind, asset_id, account_id, category_id, member_id,
+        (name, provider, kind, asset_id, account_id, category_id,
          amount_min, amount_max, periodicity, renewal_on, notice_days, ends_on, status, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(...contractValues(input));
     const id = Number(info.lastInsertRowid);
     writeRefs(id, input.refs);
+    writeMembers(id, input.memberIds);
     return getContract(id)!;
   })();
 }
@@ -156,13 +179,14 @@ export function updateContract(id: number, input: ContractInput): Contract | nul
   return database.transaction(() => {
     const info = database.prepare(`
       UPDATE fin_contracts SET
-        name = ?, provider = ?, kind = ?, asset_id = ?, account_id = ?, category_id = ?, member_id = ?,
+        name = ?, provider = ?, kind = ?, asset_id = ?, account_id = ?, category_id = ?,
         amount_min = ?, amount_max = ?, periodicity = ?, renewal_on = ?, notice_days = ?, ends_on = ?,
         status = ?, notes = ?
       WHERE id = ?
     `).run(...contractValues(input), id);
     if (!info.changes) return null;
     writeRefs(id, input.refs);
+    writeMembers(id, input.memberIds);
     return getContract(id);
   })();
 }
@@ -204,7 +228,7 @@ export interface Deadline {
   /** Days from today; negative when already past. */
   daysAway: number;
   assetId: number | null;
-  memberId: string | null;
+  memberIds: string[];
 }
 
 const addDays = (iso: string, n: number): string => {
@@ -247,7 +271,7 @@ export function deadlines(today = new Date().toISOString().slice(0, 10), horizon
 
   for (const c of listContracts()) {
     if (c.status !== 'actif') continue;
-    const base = { contractId: c.id, contractName: c.name, provider: c.provider, assetId: c.assetId, memberId: c.memberId };
+    const base = { contractId: c.id, contractName: c.name, provider: c.provider, assetId: c.assetId, memberIds: c.memberIds };
 
     if (c.renewalOn) {
       const renewal = nextAnniversary(c.renewalOn, today);

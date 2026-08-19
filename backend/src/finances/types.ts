@@ -7,7 +7,8 @@ export interface Account {
   id: number;
   name: string;
   kind: AccountKind;
-  memberId: string | null;
+  /** Titulaires du compte : zéro, un, ou plusieurs. */
+  memberIds: string[];
   openingBalance: number;
   openingDate: string | null;
   archived: boolean;

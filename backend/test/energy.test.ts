@@ -27,7 +27,7 @@ function reset(): void {
   repo.initFinancesRepo(db, tmpDir());
   contractId = contracts.createContract({
     name: 'Électricité', provider: 'EDF', kind: 'energie',
-    assetId: null, accountId: null, categoryId: null, memberId: null,
+    assetId: null, accountId: null, categoryId: null, memberIds: [],
     amountMin: null, amountMax: null, periodicity: 'mensuelle',
     renewalOn: null, noticeDays: 0, endsOn: null, status: 'actif', notes: '', refs: [],
   }).id;

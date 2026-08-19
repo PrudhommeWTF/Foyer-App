@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec **un ou plusieurs titulaires** et soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -163,6 +163,10 @@ complète : les pièces jointes restent sur le disque, et la sauvegarde du fichi
 référence. La restauration écrase, en tout ou rien, et refuse une sauvegarde produite par une
 version plus récente.
 
+Depuis la fiche d'un contrat, le bouton **« Créer une règle pour ce contrat »** ouvre l'éditeur
+pré-rempli avec le fournisseur et la fourchette de montant, ce qui suffit à distinguer deux
+contrats du même assureur.
+
 Détail du fonctionnement et cahier de recette :
 [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md).
 
@@ -201,7 +205,8 @@ qui coûtent cher quand on les oublie.
   « rattacher au contrat » : le module additionne douze mois glissants et **signale** un
   prélèvement sorti de la fourchette annoncée.
 
-Les contrats se regroupent par **bien** (logement, véhicule), portent leurs **références**
+Les contrats se regroupent par **bien** (logement, véhicule), désignent **une ou plusieurs
+personnes** du foyer (une mutuelle couvre souvent toute la famille), portent leurs **références**
 (numéro de police, de client, de compteur) et se passent en « résilié » sans rien perdre de leur
 historique. Supprimer un bien libère ses contrats ; supprimer un contrat détache ses opérations
 sans les effacer.

@@ -74,11 +74,23 @@ function handler(fn: (req: Request, res: Response) => void) {
   };
 }
 
+/**
+ * Identifiants de membres, dédoublonnés et bornés. Ils viennent du document du
+ * foyer et non d'une table : on ne peut donc pas les vérifier par clé étrangère,
+ * seulement les nettoyer.
+ */
+function memberIds(v: unknown): string[] {
+  const raw = Array.isArray(v) ? v : [];
+  if (raw.length > 20) fail('Trop de personnes sélectionnées.');
+  const out = raw.map((m) => String(m ?? '').trim().slice(0, 40)).filter(Boolean);
+  return [...new Set(out)];
+}
+
 function accountInput(body: Record<string, unknown>): repo.AccountInput {
   return {
     name: str(body['name'], 'nom du compte'),
     kind: oneOf(body['kind'], ACCOUNT_KINDS, 'type de compte', 'courant'),
-    memberId: body['memberId'] ? str(body['memberId'], 'titulaire', { max: 64 }) : null,
+    memberIds: memberIds(body['memberIds']),
     openingBalance: body['openingBalance'] === undefined || body['openingBalance'] === '' ? 0 : amountCents(body['openingBalance'], 'solde d’ouverture'),
     openingDate: optionalIsoDate(body['openingDate'], 'date d’ouverture'),
     archived: !!body['archived'],

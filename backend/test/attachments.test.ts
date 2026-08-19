@@ -31,12 +31,12 @@ function reset(): void {
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
   repo.initFinancesRepo(db, dir);
-  compte = repo.createAccount({ name: 'Compte', kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false }).id;
+  compte = repo.createAccount({ name: 'Compte', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
 }
 
 const contract = (name = 'Assurance'): contracts.Contract => contracts.createContract({
   name, provider: 'AXA', kind: 'assurance', assetId: null, accountId: null, categoryId: null,
-  memberId: null, amountMin: null, amountMax: null, periodicity: 'mensuelle',
+  memberIds: [], amountMin: null, amountMax: null, periodicity: 'mensuelle',
   renewalOn: null, noticeDays: 0, endsOn: null, status: 'actif', notes: '', refs: [],
 });
 

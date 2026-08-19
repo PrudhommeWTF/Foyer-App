@@ -53,6 +53,13 @@ const optionalRef = (v: unknown, field: string, exists: (n: number) => unknown):
   return n;
 };
 
+/** Identifiants de membres, dédoublonnés et bornés. */
+function memberIds(v: unknown): string[] {
+  const raw = Array.isArray(v) ? v : [];
+  if (raw.length > 20) fail('Trop de personnes sélectionnées.');
+  return [...new Set(raw.map((m) => String(m ?? '').trim().slice(0, 40)).filter(Boolean))];
+}
+
 function assetInput(body: Record<string, unknown>): contracts.AssetInput {
   const name = str(body['name'], 'nom du bien');
   if (!name) fail('Donnez un nom au bien.');
@@ -110,7 +117,7 @@ function contractInput(body: Record<string, unknown>): contracts.ContractInput {
     assetId: optionalRef(body['assetId'], 'Bien', (n) => contracts.getAsset(n)),
     accountId: optionalRef(body['accountId'], 'Compte', (n) => getAccount(n)),
     categoryId: optionalRef(body['categoryId'], 'Catégorie', (n) => getCategory(n)),
-    memberId: str(body['memberId'], 'membre', 40) || null,
+    memberIds: memberIds(body['memberIds']),
     amountMin, amountMax, periodicity, renewalOn, noticeDays, endsOn,
     status, notes: str(body['notes'], 'notes', 2000), refs,
   };

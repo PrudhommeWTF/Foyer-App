@@ -33,8 +33,12 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
               <div class="badge" [style.background]="foyer.tint(kindColor(a.kind))" [style.color]="kindColor(a.kind)">{{ kindLabel(a.kind) }}</div>
               @if (a.archived) { <div class="badge muted">Archivé</div> }
             </div>
-            @if (a.memberId) {
-              <f-avatar [ini]="foyer.memberIni(a.memberId)" [color]="foyer.memberColor(a.memberId)" [size]="26" />
+            @if (a.memberIds.length) {
+              <div class="holders">
+                @for (m of knownMembers(a.memberIds); track m) {
+                  <f-avatar [ini]="foyer.memberIni(m)" [color]="foyer.memberColor(m)" [size]="26" />
+                }
+              </div>
             }
           </div>
           <div class="name">{{ a.name }}</div>
@@ -71,11 +75,20 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
           }
         </div>
 
-        <div class="field-label">Titulaire</div>
-        <select class="input" [ngModel]="store.ui().acMember" (ngModelChange)="store.patch({ acMember: $event })">
-          <option value="">Aucun titulaire précis</option>
-          @for (m of members(); track m.id) { <option [value]="m.id">{{ m.name }}</option> }
-        </select>
+        <div class="field-label">Titulaires</div>
+        <div class="picker">
+          @for (m of members(); track m.id) {
+            <button class="pick" [class.on]="store.ui().acMembers.includes(m.id)"
+                    [style.border-color]="store.ui().acMembers.includes(m.id) ? m.color : 'transparent'"
+                    (click)="store.toggleMember('acMembers', m.id)">
+              <f-avatar [ini]="foyer.memberIni(m.id)" [color]="m.color" [size]="22" />
+              {{ m.name }}
+            </button>
+          } @empty {
+            <div class="hint">Aucun membre déclaré dans le foyer.</div>
+          }
+        </div>
+        <div class="hint sm">Un compte joint en a deux. Aucun sélectionné veut dire « le foyer ».</div>
 
         <div class="frow">
           <div class="fgrow">
@@ -145,6 +158,13 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     }
   `,
   styles: [`
+    .holders { display: flex; gap: -4px; }
+    .holders f-avatar + f-avatar { margin-left: -8px; }
+    .picker { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pick { display: inline-flex; align-items: center; gap: 7px; border: 2px solid transparent; border-radius: 20px; padding: 4px 12px 4px 4px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+    .pick.on { background: var(--surface); color: var(--ink); box-shadow: 0 6px 14px -10px rgba(90,60,40,.6); }
+    .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); line-height: 1.5; }
+    .hint.sm { margin-top: 8px; }
     .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
     .spacer { flex: 1; }
     .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); max-width: 460px; }
@@ -197,6 +217,11 @@ export class FinancesAccountsTab {
   fmt = fmtEuros;
 
   members = computed(() => this.foyer.data()?.members || []);
+  /** Titulaires encore présents dans le foyer : un membre supprimé n'a plus d'avatar. */
+  knownMembers(ids: string[]): string[] {
+    const known = this.members();
+    return ids.filter((id) => known.some((m) => m.id === id));
+  }
   kindLabel(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.label || k; }
   kindColor(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.color || '#8A7E74'; }
   cov(id: number) { return this.store.coverageOf(id); }
