@@ -146,7 +146,8 @@ Ce que l'import garantit :
   même jour sont conservées toutes les deux.
 - **Alias de comptes**. Un même compte peut apparaître sous plusieurs libellés (changement de
   nom, seconde connexion) : déclarez-les une fois, c'est mémorisé. Aucun compte n'est créé
-  automatiquement.
+  automatiquement. Si le libellé du fichier porte exactement le nom d'un de vos comptes, il est
+  **pré-sélectionné** dans le rapport, il ne reste qu'à confirmer.
 - **Exports qui se chevauchent**. Réimporter un fichier déjà traité n'ajoute rien ; un export
   incrémental n'apporte que son delta, même si vous renommez ou recatégorisez des opérations
   entre-temps.

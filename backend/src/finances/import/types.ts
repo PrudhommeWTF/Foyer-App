@@ -28,7 +28,12 @@ export interface ParseResult {
 /** A contiguous run of lines sharing the same account label. */
 export interface Block { accountLabel: string; rows: RawRow[]; firstLine: number; lastLine: number; }
 
-export interface UnknownAccount { label: string; rows: number; firstDate: string; lastDate: string; sample: string[]; }
+export interface UnknownAccount {
+  label: string; rows: number; firstDate: string; lastDate: string; sample: string[];
+  /** Active account bearing the same name, pre-selected in the report. Null when
+   *  nothing matches, or when several accounts share the name. */
+  suggestedAccountId: number | null;
+}
 
 /** One operation that survived collapsing, ready to be checked against the database. */
 export interface StagedRow extends RawRow { accountId: number; dedupeKey: string; }

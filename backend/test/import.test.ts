@@ -134,6 +134,34 @@ describe('anomalie 2 : le compte joint sous deux libellés', () => {
     resolveAndCollapse(parseFile(bytes(), 'bankin.csv').rows);
     assert.equal(repo.listAccounts().length, before);
   });
+
+  it('propose le compte qui porte exactement le même nom que le libellé', () => {
+    // Un compte nommé comme dans le fichier : l'accent et la casse ne comptent pas.
+    const jumeau = repo.createAccount({
+      name: 'compte courant  mme n dupont ou m t dupont', kind: 'courant', memberId: null,
+      openingBalance: 0, openingDate: null, archived: false,
+    }).id;
+
+    const unknown = resolveAndCollapse(parseFile(bytes(), 'bankin.csv').rows).unknown;
+    const jointA = unknown.find((u) => u.label === LABELS.jointA)!;
+    assert.equal(jointA.suggestedAccountId, jumeau);
+    // Les autres libellés ne ressemblent à aucun compte : rien n'est proposé.
+    assert.ok(unknown.filter((u) => u.label !== LABELS.jointA).every((u) => u.suggestedAccountId === null));
+  });
+
+  it('ne propose ni un compte archivé, ni un nom porté par deux comptes', () => {
+    const archive = repo.createAccount({
+      name: LABELS.paul, kind: 'courant', memberId: null,
+      openingBalance: 0, openingDate: null, archived: true,
+    }).id;
+    repo.createAccount({ name: LABELS.marie, kind: 'courant', memberId: null, openingBalance: 0, openingDate: null, archived: false });
+    repo.createAccount({ name: LABELS.marie, kind: 'epargne', memberId: null, openingBalance: 0, openingDate: null, archived: false });
+
+    const unknown = resolveAndCollapse(parseFile(bytes(), 'bankin.csv').rows).unknown;
+    assert.equal(unknown.find((u) => u.label === LABELS.paul)!.suggestedAccountId, null, 'un compte archivé ne se propose pas');
+    assert.equal(unknown.find((u) => u.label === LABELS.marie)!.suggestedAccountId, null, 'un nom ambigu ne se propose pas');
+    assert.ok(repo.getAccount(archive)!.archived);
+  });
 });
 
 describe('anomalie 3 : chevauchement des exports', () => {

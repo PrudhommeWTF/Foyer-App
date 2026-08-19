@@ -185,7 +185,11 @@ export class FinancesApi {
 // ---- import ---------------------------------------------------------------
 
 export interface FinRejectedRow { line: number; reason: string; raw: string; }
-export interface FinUnknownAccount { label: string; rows: number; firstDate: string; lastDate: string; sample: string[]; }
+export interface FinUnknownAccount {
+  label: string; rows: number; firstDate: string; lastDate: string; sample: string[];
+  /** Account of the same name, pre-selected in the report. */
+  suggestedAccountId: number | null;
+}
 
 export interface FinImportPreview {
   importId: number;

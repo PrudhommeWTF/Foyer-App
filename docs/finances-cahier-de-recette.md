@@ -352,6 +352,10 @@ Le décompte global de 807 ne suffit pas comme test : deux erreurs opposées peu
 compenser. Le décompte **par compte** est l'assertion qui compte, et les décomptes par compte
 du fichier de juillet-août sont déjà figés ci-dessus.
 
+> **À jour au 19/08/2026 :** l'oracle des 807 reste en attente. Les fichiers fournis depuis
+> couvrent la même période dans deux formats, pas deux fenêtres qui se chevauchent, donc ils ne
+> peuvent pas le remplacer. Voir la section 6.
+
 ## 5. Ce qui est automatisé
 
 `backend/test/import.test.ts` rejoue le pipeline complet sur l'extrait anonymisé
@@ -390,15 +394,41 @@ du fichier de juillet-août sont déjà figés ci-dessus.
 séparés), OFX 1.x et 2.x, CAMT.053, .xlsx réel, faux .xls HTML et texte, refus du binaire
 Excel 97-2003, et les encodages UTF-8, UTF-16 et Windows-1252.
 
-## 6. Ce qui reste à fournir
+## 6. Le grand export, et ce qu'il apprend
 
-Deux des trois fichiers du jeu de référence manquent, et deux vérifications en dépendent :
+Un export couvrant **du 01/01/2025 au 17/08/2026** a été fourni, en CSV et en XLS. Le pipeline
+l'encaisse sans rien rejeter :
 
-- l'export **décembre 2025 à juillet 2026** : nécessaire pour `R3.2`, `R3.3`, `R5.1`, `R5.2` et
-  pour l'oracle des 807 ;
-- le fichier **résultat attendu, 807 opérations** : nécessaire pour figer les décomptes par
-  compte de l'oracle.
+| Mesure | Valeur |
+|---|---|
+| Lignes lues | **5 333** |
+| Lignes rejetées | 0 |
+| Libellés de compte distincts | 11, en **14 blocs** |
+| Lignes effondrées (copies du même relevé) | **2 213** |
+| Opérations réelles obtenues | **3 120** |
 
-Le fichier attendu au format **XLS** est arrivé en CSV. Ce n'est pas bloquant pour la logique
-de déduplication, qui opère après le parsing, mais le lecteur XLS ne sera pas testé sur un
-fichier réel tant qu'un vrai export XLS n'aura pas été fourni.
+Le compte le plus synchronisé apparaît en trois blocs de 303, 909 et 638 lignes et donne
+**909** opérations : la règle du maximum par bloc tient à cette échelle, là où la somme en
+aurait inventé 941 et où un simple ensemble d'empreintes en aurait perdu.
+
+Trois constats, sans détour :
+
+- **L'oracle des 807 ne s'applique pas à ces fichiers.** Il supposait deux exports de périodes
+  différentes se chevauchant sur le 28/07. Ici les deux fichiers couvrent la **même** période :
+  c'est un seul export dans deux formats, pas un export incrémental. `R3.2` et `R3.3` restent
+  donc à vérifier sur un vrai second export, plus tardif, quand il y en aura un.
+- **Le XLS n'est pas un export Bankin'**, c'est une conversion du CSV : ses métadonnées portent
+  `Last Saved By: cloudconvert_18`. C'est un classeur **Excel 97-2003 binaire (BIFF8)**, le seul
+  format que le module refuse, avec le message qui dit de réexporter en CSV ou en .xlsx.
+  Autrement dit, Bankin' exporte en CSV, et le CSV se lit.
+- **Le fichier n'est pas versionné.** Il contient des données bancaires réelles et des noms de
+  famille : le dépôt n'accueille que l'extrait anonymisé de 223 lignes. Figer un oracle à
+  3 120 opérations demanderait d'anonymiser d'abord les 5 333 lignes, ce qui est faisable mais
+  n'a pas été fait sans arbitrage.
+
+## 7. Ce qui reste à fournir
+
+- Un **second export plus tardif**, chevauchant celui-ci, pour vérifier `R3.2`, `R3.3`, `R5.1`
+  et `R5.2` sur des données réelles.
+- Un vrai export **XLS de banque** (pas une conversion), si un établissement en produit : le
+  lecteur de faux .xls (tableau HTML, texte tabulé) n'a pas encore rencontré de cas réel.

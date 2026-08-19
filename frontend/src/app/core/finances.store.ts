@@ -561,7 +561,9 @@ export class FinancesStore {
     try {
       const { preview } = await this.api.uploadImport(file);
       this.preview.set(preview);
-      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, null])) });
+      // A label identical to an account name arrives pre-selected: still one
+      // click to confirm, because an alias is remembered for good.
+      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, u.suggestedAccountId])) });
     } catch (e) {
       this.patch({ importBusy: false, importError: (e as Error).message });
     }
@@ -576,7 +578,7 @@ export class FinancesStore {
     try {
       const { preview } = await this.api.mapImportAccount(p.importId, label, accountId);
       this.preview.set(preview);
-      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, this.ui().mapping[u.label] ?? null])) });
+      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, this.ui().mapping[u.label] ?? u.suggestedAccountId])) });
     } catch (e) {
       this.patch({ importBusy: false, importError: (e as Error).message });
     }

@@ -147,7 +147,12 @@ interdit. Deux conséquences visibles dans le code :
    souvent un tableau HTML ou du texte tabulé.
 3. **Découpage en blocs** : suites de lignes consécutives partageant le même libellé de compte.
 4. **Résolution** de chaque bloc vers un compte réel, via la table d'alias. Un libellé inconnu
-   **bloque** l'import : aucun compte n'est créé automatiquement.
+   **bloque** l'import : aucun compte n'est créé automatiquement. Quand le libellé porte
+   exactement le nom d'un compte actif (casse, accents et espaces mis à part), ce compte est
+   **proposé** dans le rapport, pré-sélectionné ; il reste à confirmer, parce qu'un
+   rattachement crée un alias mémorisé pour de bon. Un nom porté par deux comptes, ou par un
+   seul compte archivé, ne propose rien : sur des données d'argent, une suggestion approximative
+   coûte plus cher qu'une absence de suggestion.
 5. **Effondrement** des blocs redondants d'un même compte, au **maximum** d'occurrences par bloc
    et non à la somme.
 6. **Déduplication** contre la base, par empreinte figée et rang d'occurrence.
