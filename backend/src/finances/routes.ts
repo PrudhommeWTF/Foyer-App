@@ -7,7 +7,9 @@ import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
 import { dashboard } from './dashboard';
 import { attachmentsRouter } from './attachments-routes';
+import * as backup from './backup';
 import { contractsRouter } from './contracts-routes';
+import { energyRouter } from './energy-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
 import { ACCOUNT_KINDS, TX_KINDS, TxKind } from './types';
@@ -130,6 +132,8 @@ export function financesRouter(): Router {
   r.use(contractsRouter());
   // Attachments: bytes on disk, metadata in SQLite.
   r.use(attachmentsRouter());
+  // Meter readings, on the energy contracts.
+  r.use(energyRouter());
 
   // Single call that fills the whole screen: accounts, categories, balances,
   // per-account coverage and the months that hold data.
@@ -142,6 +146,35 @@ export function financesRouter(): Router {
       months: repo.availableMonths(),
       aliases: repo.listAliases(),
     });
+  }));
+
+  /** Sauvegarde du seul module, en un fichier JSON. */
+  r.get('/export.json', handler((_req, res) => {
+    const dump = backup.exportModule();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="foyer-finances-${dump.generatedAt.slice(0, 10)}.json"`);
+    res.send(JSON.stringify(dump));
+  }));
+
+  /**
+   * Restauration : elle **écrase** les données du module. D'où la confirmation
+   * explicite dans le corps de la requête, qu'aucun appel accidentel ne portera.
+   */
+  r.post('/restore', express.json({ limit: '64mb' }), handler((req, res) => {
+    const body = req.body || {};
+    if (String(body.confirm || '') !== 'REMPLACER') {
+      res.status(400).json({
+        error: 'Restauration non confirmée. Cette opération remplace toutes les données du module Finances : '
+          + 'envoyez « confirm » avec la valeur REMPLACER pour la lancer.',
+      });
+      return;
+    }
+    try {
+      res.json({ report: backup.restoreModule(body.backup) });
+    } catch (e) {
+      if (e instanceof backup.RestoreRefused) { res.status(422).json({ error: e.message }); return; }
+      throw e;
+    }
   }));
 
   // ---- accounts ----

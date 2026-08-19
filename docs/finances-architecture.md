@@ -117,6 +117,9 @@ backend/src/finances/
   contracts-routes.ts /api/finances/contracts et /assets
   attachments.ts   pièces jointes : octets sur disque, métadonnées en base
   attachments-routes.ts /api/finances/attachments
+  energy.ts        relevés de compteur et consommation dérivée
+  energy-routes.ts /api/finances/readings
+  backup.ts        sauvegarde et restauration du seul module
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -445,7 +448,81 @@ comm -13 /tmp/connus.txt /tmp/disque.txt
 comm -13 /tmp/connus.txt /tmp/disque.txt | while read -r f; do rm -v "/var/lib/foyer/pieces/$f"; done
 ```
 
-## 12. Sauvegarde et restauration
+## 12. Relevés de compteur
+
+Le module ne cherche pas à facturer : le fournisseur le fait déjà, et mieux. Il répond à une
+seule question, celle qu'aucune facture ne répond : **est-ce que je consomme plus qu'avant, et
+depuis quand ?**
+
+D'où le parti pris : tout est ramené à une **consommation par jour**. C'est la seule grandeur
+comparable entre deux relevés espacés de trois semaines et deux relevés espacés de deux mois, et
+la seule qui rende une dérive visible.
+
+**La comparaison se fait à la même fenêtre de calendrier un an plus tôt**, jamais à la période
+précédente. Comparer janvier à avril ne dit rien d'un foyer qui se chauffe.
+
+Deux façons de saisir, les deux acceptées : l'**index** du compteur (simple, ou heures pleines et
+creuses) ou la **consommation** lue sur une facture. Quand la facture donne le chiffre, il fait
+foi : aucune soustraction à se tromper. Le montant de la période est facultatif et ne sert qu'à
+calculer le prix du kWh.
+
+### Ce qui n'est pas mesurable n'est pas affiché
+
+Une consommation négative présentée comme un fait serait pire qu'une absence de chiffre. Quatre
+cas sont donc nommés plutôt que calculés :
+
+| Cas | Ce qui est affiché |
+|---|---|
+| Premier relevé | « premier relevé, rien à comparer » : il n'y a rien avant à soustraire |
+| Index inférieur au précédent | « compteur remplacé ? » : un compteur ne recule pas |
+| Deux relevés le même jour | « même jour que le relevé précédent » : pas de division par zéro |
+| Ni index ni consommation | « consommation non calculable » |
+
+Les relevés appartiennent au contrat et disparaissent avec lui (`ON DELETE CASCADE`).
+
+## 13. Sauvegarde du seul module
+
+`GET /api/finances/export.json` rend un fichier JSON portant toutes les tables `fin_*`, une
+version de format et la **version de schéma** en vigueur. `POST /api/finances/restore` le relit.
+
+Ce n'est **pas** un remplacement de la sauvegarde du fichier SQLite, qui reste la référence et qui
+emporte tout. C'est l'outil du cas précis : rejouer une manipulation qui a mal tourné, ou
+déménager les finances vers une autre instance, sans toucher au reste du foyer.
+
+**Les pièces jointes n'y sont pas.** Le JSON porte leurs métadonnées, les octets restent sur le
+disque. Restaurer sur la même machine les retrouve ; restaurer ailleurs demande de copier le
+répertoire `pieces` en plus, et le démarrage signale ce qui manque.
+
+La restauration **écrase**, d'où quatre garde-fous :
+
+- **Confirmation explicite** dans le corps de la requête (`confirm: "REMPLACER"`), qu'aucun appel
+  accidentel ne portera ;
+- **transaction unique**, avec `defer_foreign_keys` : une sauvegarde incohérente est refusée en
+  bloc, la base reste exactement comme avant ;
+- **refus d'une sauvegarde plus récente** que le schéma en place, qui pourrait porter des colonnes
+  que cette version ne sait pas lire, et les perdre en silence ;
+- **acceptation d'une sauvegarde plus ancienne**, les migrations du module étant additives : les
+  colonnes ajoutées depuis prennent leur valeur par défaut.
+
+En ligne de commande :
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8099/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vous@exemple.fr","password":"…"}' | sed -E 's/.*"token":"([^"]+)".*/\1/')
+
+# Sauvegarder
+curl -s http://localhost:8099/api/finances/export.json -H "Authorization: Bearer $TOKEN" \
+  -o foyer-finances-$(date +%F).json
+
+# Restaurer (écrase le module)
+python3 -c "import json,sys; b=json.load(open('foyer-finances-2026-08-19.json')); \
+  print(json.dumps({'confirm':'REMPLACER','backup':b}))" > /tmp/restore.json
+curl -s -X POST http://localhost:8099/api/finances/restore -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' --data-binary @/tmp/restore.json
+```
+
+## 14. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -530,7 +607,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 13. Tests
+## 15. Tests
 
 ```bash
 cd backend

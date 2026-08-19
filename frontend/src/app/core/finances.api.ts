@@ -126,6 +126,23 @@ export class FinancesApi {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
   }
 
+  // ---- meter readings ----
+  readings(contractId: number): Promise<FinReadingsBundle> {
+    return this.api.request(`finances/readings?contractId=${contractId}`);
+  }
+  createReading(p: FinReadingPayload): Promise<{ reading: FinReading }> {
+    return this.api.request('finances/readings', { method: 'POST', body: JSON.stringify(p) });
+  }
+  deleteReading(id: number): Promise<{ readings: FinReading[]; periods: FinPeriod[] }> {
+    return this.api.request(`finances/readings/${id}`, { method: 'DELETE' });
+  }
+
+  // ---- module backup ----
+  exportModule(): Promise<Blob> { return this.api.download('finances/export.json'); }
+  restoreModule(backup: unknown): Promise<{ report: FinRestoreReport }> {
+    return this.api.request('finances/restore', { method: 'POST', body: JSON.stringify({ confirm: 'REMPLACER', backup }) });
+  }
+
   // ---- attachments ----
   attachments(owner: FinOwnerKind, id: number): Promise<{ attachments: FinAttachment[] }> {
     return this.api.request(`finances/attachments?owner=${owner}&id=${id}`);
@@ -403,4 +420,48 @@ export type FinOwnerKind = 'contract' | 'asset' | 'transaction';
 export interface FinAttachment {
   id: number; ownerKind: FinOwnerKind; ownerId: number;
   name: string; mime: string; size: number; sha256: string; createdAt: string;
+}
+
+// ---- meter readings ---------------------------------------------------------
+
+export interface FinReadingPayload {
+  contractId: number; date: string;
+  indexTotal: string; indexHp: string; indexHc: string;
+  kwh: string; kwhHp: string; kwhHc: string;
+  cost: string; notes: string;
+}
+
+export interface FinReading {
+  id: number; contractId: number; date: string;
+  indexTotal: number | null; indexHp: number | null; indexHc: number | null;
+  kwh: number | null; kwhHp: number | null; kwhHc: number | null;
+  cost: number | null; notes: string;
+}
+
+export type FinGapReason = 'premier' | 'index-recule' | 'meme-jour' | 'inconnu';
+
+export interface FinPeriod {
+  readingId: number; from: string; to: string; days: number;
+  kwh: number | null; kwhHp: number | null; kwhHc: number | null;
+  kwhPerDay: number | null;
+  cost: number | null; costPerKwh: number | null;
+  lastYearKwhPerDay: number | null;
+  /** Set when the period holds no usable consumption. */
+  gap: FinGapReason | null;
+}
+
+export interface FinEnergySummary {
+  contractId: number; readings: number;
+  latest: FinPeriod | null;
+  yearKwh: number | null; yearCost: number | null;
+  /** Percentage change of the daily rate against a year earlier. */
+  trend: number | null;
+}
+
+export interface FinReadingsBundle { readings: FinReading[]; periods: FinPeriod[]; summary: FinEnergySummary; }
+
+export interface FinRestoreReport {
+  before: Record<string, number>;
+  after: Record<string, number>;
+  attachments: number;
 }

@@ -3,7 +3,8 @@ import {
   AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
-  FinAttachment, FinDeadline, FinImport, FinImportPreview, FinOwnerKind, FinPeriodicity,
+  FinAttachment, FinDeadline, FinEnergySummary, FinImport, FinImportPreview, FinOwnerKind,
+  FinPeriod, FinPeriodicity, FinReading,
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
@@ -70,6 +71,14 @@ export interface FinancesUi {
   ruleForm: boolean; ruleId: number | null;
   ruleName: string; ruleEnabled: boolean; ruleMatch: 'all' | 'any'; ruleStop: boolean;
   ruleConditions: FinCondition[]; ruleActions: FinAction[];
+  // meter reading form
+  reDate: string; reIndex: string; reIndexHp: string; reIndexHc: string;
+  reKwh: string; reCost: string; reDelId: number | null;
+
+  /** Fichier de sauvegarde déposé, en attente de confirmation. */
+  restorePending: unknown | null;
+  restoreName: string;
+
   ruleDelId: number | null; ruleError: string; ruleBusy: boolean;
   /** « Tout réappliquer » also overwrites the categories corrected by hand. */
   applyForce: boolean;
@@ -95,6 +104,8 @@ function initialUi(month: string): FinancesUi {
     coAsset: null, coAccount: null, coCategory: null, coMember: '',
     coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
     coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null,
+    reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '', reDelId: null,
+    restorePending: null, restoreName: '',
     ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
     ruleConditions: [], ruleActions: [], ruleDelId: null, ruleError: '', ruleBusy: false,
     applyForce: false,
@@ -156,6 +167,11 @@ export class FinancesStore {
   readonly pieces = signal<Record<number, number>>({});
   /** Attachments of the item currently open in a form. */
   readonly attachments = signal<FinAttachment[]>([]);
+
+  // Meter readings of the contract currently open
+  readonly readings = signal<FinReading[]>([]);
+  readonly periods = signal<FinPeriod[]>([]);
+  readonly energy = signal<FinEnergySummary | null>(null);
 
   // Import workflow
   readonly preview = signal<FinImportPreview | null>(null);
@@ -318,6 +334,7 @@ export class FinancesStore {
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
     this.assets.set([]); this.contracts.set([]); this.deadlines.set([]); this.costs.set({});
     this.pieces.set({}); this.attachments.set([]);
+    this.readings.set([]); this.periods.set([]); this.energy.set(null);
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
@@ -1066,6 +1083,8 @@ export class FinancesStore {
       coStatus: c.status, coNotes: c.notes, coRefs: c.refs.map((r) => ({ ...r })),
     });
     void this.loadAttachments('contract', c.id);
+    if (c.kind === 'energie') void this.loadReadings(c.id);
+    else { this.readings.set([]); this.periods.set([]); this.energy.set(null); }
   }
 
   addRef(): void { this.patch({ coRefs: [...this.ui().coRefs, { key: '', value: '' }] }); }
@@ -1167,6 +1186,90 @@ export class FinancesStore {
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  // ---- meter readings ----------------------------------------------------
+  async loadReadings(contractId: number): Promise<void> {
+    try {
+      const b = await this.api.readings(contractId);
+      this.readings.set(b.readings);
+      this.periods.set(b.periods);
+      this.energy.set(b.summary);
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  periodOf(readingId: number): FinPeriod | undefined {
+    return this.periods().find((p) => p.readingId === readingId);
+  }
+
+  async saveReading(contractId: number): Promise<void> {
+    const u = this.ui();
+    if (u.busy) return;
+    if (!u.reDate) { this.foyer.toast('Choisissez la date du relevé'); return; }
+    this.patch({ busy: true });
+    try {
+      await this.api.createReading({
+        contractId, date: u.reDate,
+        indexTotal: u.reIndex.trim(), indexHp: u.reIndexHp.trim(), indexHc: u.reIndexHc.trim(),
+        kwh: u.reKwh.trim(), kwhHp: '', kwhHc: '',
+        cost: u.reCost.trim(), notes: '',
+      });
+      this.patch({ busy: false, reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '' });
+      await this.loadReadings(contractId);
+      this.foyer.toast('Relevé enregistré');
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
+  }
+
+  async deleteReading(id: number, contractId: number): Promise<void> {
+    try {
+      await this.api.deleteReading(id);
+      await this.loadReadings(contractId);
+      this.foyer.toast('Relevé supprimé');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  // ---- module backup -----------------------------------------------------
+  async exportModule(): Promise<void> {
+    try {
+      const url = URL.createObjectURL(await this.api.exportModule());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `foyer-finances-${this.foyer.todayStr()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.foyer.toast('Sauvegarde du module téléchargée');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Read the dropped file, without restoring anything yet. */
+  async stageRestore(file: File): Promise<void> {
+    try {
+      const parsed = JSON.parse(await file.text());
+      this.patch({ restorePending: parsed, restoreName: file.name });
+    } catch {
+      this.foyer.toast('Ce fichier n’est pas une sauvegarde lisible');
+    }
+  }
+
+  /** Replace the module's data. Destructive, hence the explicit confirmation. */
+  async confirmRestore(): Promise<void> {
+    const pending = this.ui().restorePending;
+    if (!pending || this.ui().busy) return;
+    this.patch({ busy: true });
+    try {
+      const { report } = await this.api.restoreModule(pending);
+      this.patch({ busy: false, restorePending: null, restoreName: '' });
+      const n = report.after['fin_transactions'] ?? 0;
+      this.foyer.toast(`Module restauré : ${n} opération${n > 1 ? 's' : ''}`);
+      await Promise.all([this.init(true), this.loadContracts(), this.loadRules()]);
+      if (report.attachments) this.foyer.toast(`${report.attachments} pièce(s) jointe(s) référencée(s) : vérifiez le répertoire « pieces »`);
+    } catch (e) {
+      this.patch({ busy: false });
+      this.foyer.toast((e as Error).message);
+    }
   }
 
   // ---- export ------------------------------------------------------------

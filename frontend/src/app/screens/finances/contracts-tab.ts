@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind } from '../../core/finances.api';
+import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind, FinPeriod, FinReading } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
@@ -304,6 +304,65 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         </div>
 
         @if (store.ui().coId; as cid) {
+          @if (store.ui().coKind === 'energie') {
+            <div class="sec-label">Relevés de compteur</div>
+            @if (store.energy(); as e) {
+              @if (e.latest; as l) {
+                <div class="energy-head">
+                  <div>
+                    <div class="e-big">{{ round(l.kwhPerDay) }} kWh<span class="e-unit"> par jour</span></div>
+                    <div class="e-sub">du {{ foyer.fmtNumDate(l.from) }} au {{ foyer.fmtNumDate(l.to) }}, soit {{ l.days }} jours</div>
+                  </div>
+                  @if (e.trend !== null) {
+                    <div class="e-trend" [class.up]="e.trend > 0" [class.down]="e.trend < 0">
+                      {{ e.trend > 0 ? '+' : '' }}{{ round(e.trend) }} %
+                      <span class="e-trend-sub">par rapport à l'an dernier</span>
+                    </div>
+                  }
+                </div>
+              }
+            }
+            <div class="readings">
+              @for (r of store.readings(); track r.id) {
+                @let p = store.periodOf(r.id);
+                <div class="reading">
+                  <span class="r-date">{{ foyer.fmtNumDate(r.date) }}</span>
+                  <span class="r-index">{{ indexLabel(r) }}</span>
+                  <span class="r-use" [class.gap]="!!p?.gap">{{ periodLabel(p) }}</span>
+                  <button class="icon-btn sm" aria-label="Supprimer le relevé" (click)="store.deleteReading(r.id, cid)">
+                    <f-icon name="trash" [size]="13" color="var(--primary)" />
+                  </button>
+                </div>
+              } @empty {
+                <div class="none">Aucun relevé. Notez l'index du compteur de temps en temps : deux relevés suffisent à savoir si la consommation dérive.</div>
+              }
+            </div>
+            <div class="rerow">
+              <div class="refield">
+                <div class="field-label">Date du relevé</div>
+                <input class="input" type="date" [ngModel]="store.ui().reDate" (ngModelChange)="store.patch({ reDate: $event })" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Index</div>
+                <input class="input" [ngModel]="store.ui().reIndex" (ngModelChange)="store.patch({ reIndex: $event })" placeholder="17100" inputmode="decimal" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Heures pleines</div>
+                <input class="input" [ngModel]="store.ui().reIndexHp" (ngModelChange)="store.patch({ reIndexHp: $event })" placeholder="facultatif" inputmode="decimal" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Heures creuses</div>
+                <input class="input" [ngModel]="store.ui().reIndexHc" (ngModelChange)="store.patch({ reIndexHc: $event })" placeholder="facultatif" inputmode="decimal" />
+              </div>
+              <div class="refield">
+                <div class="field-label">Montant €</div>
+                <input class="input" [ngModel]="store.ui().reCost" (ngModelChange)="store.patch({ reCost: $event })" placeholder="facultatif" inputmode="decimal" />
+              </div>
+              <button class="btn btn-soft readd" [disabled]="store.ui().busy" (click)="store.saveReading(cid)">Ajouter</button>
+            </div>
+            <div class="hint sm">Un index simple suffit. Les heures pleines et creuses ne servent qu'aux compteurs qui les distinguent, et le montant qu'à calculer le prix du kWh.</div>
+          }
+
           <div class="sec-label">Pièces jointes</div>
           <div class="pieces">
             @for (a of store.attachments(); track a.id) {
@@ -442,6 +501,24 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .refrow .input { flex: 1; min-width: 0; }
     .icon-btn { width: 38px; height: 38px; flex: none; border: none; border-radius: 11px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
+    .energy-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: var(--soft); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+    .e-big { font-size: 20px; font-weight: 800; color: var(--ink); }
+    .e-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
+    .e-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .e-trend { font-size: 16px; font-weight: 800; text-align: right; }
+    .e-trend.up { color: #C6492F; }
+    .e-trend.down { color: #6E9E5F; }
+    .e-trend-sub { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .readings { display: flex; flex-direction: column; gap: 6px; }
+    .reading { display: flex; align-items: center; gap: 10px; background: var(--soft); border-radius: 11px; padding: 7px 10px; font-size: 12.5px; font-weight: 700; }
+    .r-date { flex: none; width: 82px; color: var(--ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+    .r-index { flex: none; width: 74px; color: var(--ink3); font-variant-numeric: tabular-nums; text-align: right; }
+    .rerow { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
+    .refield { flex: 1 1 110px; min-width: 0; }
+    .refield .field-label { margin-top: 0; }
+    .readd { flex: none; height: 42px; }
+    .r-use { flex: 1; min-width: 0; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .r-use.gap { font-style: italic; color: var(--ink3); }
     .pieces { display: flex; flex-direction: column; gap: 6px; }
     .piece { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 11px; padding: 7px 10px; }
     .p-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -519,6 +596,36 @@ export class FinancesContractsTab {
   makeTask(event: Event, d: FinDeadline): void {
     event.stopPropagation();
     this.store.taskFromDeadline(d.contractId, d.kind, d.date);
+  }
+
+  /** Une valeur absente reste vide : un signe de remplacement ne dit rien de plus. */
+  round(n: number | null): string {
+    return n === null ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+  }
+
+  /** What the meter showed, in the form it was entered. */
+  indexLabel(r: FinReading): string {
+    if (r.indexTotal !== null) return this.round(r.indexTotal);
+    if (r.indexHp !== null || r.indexHc !== null) return `${this.round(r.indexHp)} / ${this.round(r.indexHc)}`;
+    return r.kwh !== null ? `${this.round(r.kwh)} kWh` : '';
+  }
+
+  /**
+   * What the period consumed, or why it could not be measured. Saying « compteur
+   * remplacé » vaut mieux qu'afficher une consommation négative.
+   */
+  periodLabel(p: FinPeriod | undefined): string {
+    if (!p) return '';
+    switch (p.gap) {
+      case 'premier': return 'premier relevé, rien à comparer';
+      case 'index-recule': return 'index inférieur au précédent, compteur remplacé ?';
+      case 'meme-jour': return 'même jour que le relevé précédent';
+      case 'inconnu': return 'consommation non calculable';
+      default: break;
+    }
+    const bits = [`${this.round(p.kwh)} kWh en ${p.days} j`, `${this.round(p.kwhPerDay)} kWh/j`];
+    if (p.costPerKwh !== null) bits.push(`${this.round(p.costPerKwh)} c/kWh`);
+    return bits.join(' · ');
   }
 
   /** Same colour code as the Documents screen: terracotta for PDF, green for images. */
