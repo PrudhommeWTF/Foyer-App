@@ -27,6 +27,8 @@ import {
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
+import { buildIcs } from './ics';
+import { deadlines as contractDeadlines } from './finances/contracts';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -448,51 +450,6 @@ api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) =
   }
 });
 
-// ---- ICS calendar feed (events only) ----
-const pad2 = (n: number): string => String(n).padStart(2, '0');
-const icsDate = (ds: string): string => ds.replace(/-/g, '');
-function icsAddDay(ds: string): string {
-  const d = new Date(ds + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + 1);
-  return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}`;
-}
-const icsEsc = (s: string): string => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-function icsRrule(recur: string): string {
-  switch (recur) {
-    case 'daily': return 'FREQ=DAILY';
-    case 'weekday': return 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR';
-    case 'weekly': return 'FREQ=WEEKLY';
-    case 'monthly': return 'FREQ=MONTHLY';
-    default: return '';
-  }
-}
-function buildIcs(state: HouseholdState): string {
-  const dtstamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '').slice(0, 15) + 'Z';
-  const mname = (id: string): string => state.members.find((m) => m.id === id)?.name || '';
-  const L: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Foyer//Calendrier//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${icsEsc(state.familyName)}`];
-  for (const ev of state.events) {
-    const allDay = !ev.time || ev.time === '—';
-    L.push('BEGIN:VEVENT', `UID:${ev.id}@foyer`, `DTSTAMP:${dtstamp}`);
-    if (allDay) {
-      L.push(`DTSTART;VALUE=DATE:${icsDate(ev.date)}`);
-      L.push(`DTEND;VALUE=DATE:${icsAddDay(ev.end && ev.end !== ev.date ? ev.end : ev.date)}`);
-    } else {
-      const [hh, mm] = ev.time.split(':');
-      L.push(`DTSTART:${icsDate(ev.date)}T${pad2(+hh)}${pad2(+mm)}00`);
-      if (ev.end && ev.end !== ev.date) L.push(`DTEND:${icsDate(ev.end)}T${pad2(+hh)}${pad2(+mm)}00`);
-      else L.push(`DTEND:${icsDate(ev.date)}T${pad2(Math.min(+hh + 1, 23))}${pad2(+mm)}00`);
-    }
-    const rr = icsRrule(ev.recur);
-    if (rr) L.push(`RRULE:${rr}`);
-    L.push(`SUMMARY:${icsEsc(ev.title)}`);
-    const who = mname(ev.who);
-    if (who) L.push(`DESCRIPTION:${icsEsc(who)}`);
-    L.push('END:VEVENT');
-  }
-  L.push('END:VCALENDAR');
-  return L.join('\r\n') + '\r\n';
-}
-
 api.get('/calendar/ics', auth, (_req, res) => {
   let token = getIcsToken();
   if (!token) { token = crypto.randomBytes(18).toString('hex'); setIcsToken(token); }
@@ -512,7 +469,9 @@ api.get('/calendar/feed.ics', (req: Request, res: Response) => {
   if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline; filename="foyer.ics"');
-  res.send(buildIcs(state));
+  // Un agenda reste abonné longtemps : l'horizon des échéances est plus large
+  // ici que dans l'écran, qui regarde à six mois.
+  res.send(buildIcs(state, contractDeadlines(new Date().toISOString().slice(0, 10), 365)));
 });
 
 // ---- System / self-update ----

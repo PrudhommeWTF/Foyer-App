@@ -17,7 +17,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | Module | Description |
 |---|---|
 | 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. |
-| 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts). Partage par **flux ICS** (Google/Apple Agenda). |
+| 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts) et **échéances de contrat**. Partage par **flux ICS** (Google/Apple Agenda). |
 | 🛒 **Courses** | Multi-listes, rayons, articles cochables, génération depuis le planning repas. |
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
@@ -237,9 +237,16 @@ Procédures de restauration, vérification d'une sauvegarde et export CSV en lig
   sont calculés localement, sans réseau.
 - **Anniversaires** : renseignez la date de naissance des membres (onboarding / gestion de la
   famille) et des contacts pour les voir apparaître chaque année dans le calendrier.
+- **Échéances de contrat** : les dates de résiliation et de reconduction saisies dans *Finances →
+  Contrats* apparaissent d'elles-mêmes dans le calendrier. Elles n'y sont pas **stockées** :
+  changer la date du contrat déplace le repère, sans copie périmée. Le bouton « Tâche » d'une
+  échéance en fait une vraie tâche, que vous pouvez cocher et déplacer ; c'est une copie
+  ponctuelle et assumée, elle ne suit pas le contrat si sa date change ensuite.
 - **Partage ICS** : *Paramètres → Partage du calendrier* fournit une URL `…/api/calendar/feed.ics?token=…`
-  (jeton secret) à ajouter dans Google Agenda, Apple Calendrier, etc. — événements du foyer, en
-  lecture seule. Un administrateur peut régénérer le lien (invalide l'ancien).
+  (jeton secret) à ajouter dans Google Agenda, Apple Calendrier, etc., en lecture seule. Le flux
+  porte les **événements du foyer et les échéances de contrat** à un an, avec un rappel une
+  semaine avant chaque date limite de résiliation. Un administrateur peut régénérer le lien
+  (invalide l'ancien).
 
 ## 🔄 Mises à jour depuis l'interface
 

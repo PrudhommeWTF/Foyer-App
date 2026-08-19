@@ -364,7 +364,7 @@ export class CalendarScreen {
   selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
   selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
 
-  legendKinds = ['holiday', 'school', 'birthday', 'task'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label }));
+  legendKinds = ['holiday', 'school', 'birthday', 'task', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label }));
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
   dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));

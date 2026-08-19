@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FinAsset, FinContract, FinContractKind, FinDeadlineKind } from '../../core/finances.api';
+import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
@@ -47,7 +47,10 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     @if (store.deadlines().length) {
       <div class="panel">
         <div class="panel-title">Échéances des six prochains mois</div>
-        <div class="panel-sub">Un contrat tacitement reconduit et manqué d'un jour coûte une période de plus</div>
+        <div class="panel-sub">
+          Un contrat tacitement reconduit et manqué d'un jour coûte une période de plus.
+          Ces dates apparaissent aussi dans le calendrier partagé et dans le flux ICS.
+        </div>
         <div class="deads">
           @for (d of store.deadlines(); track d.contractId + d.kind) {
             <div class="dead" [class.urgent]="d.kind === 'preavis' && d.daysAway >= 0 && d.daysAway <= 30"
@@ -60,6 +63,11 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
                 <div class="dead-title">{{ DEADLINE_LABEL[d.kind] }}</div>
                 <div class="dead-sub">{{ d.contractName }}@if (d.provider) { · {{ d.provider }} }</div>
               </div>
+              @if (d.daysAway >= 0) {
+                <button class="dead-task" (click)="makeTask($event, d)" title="Ajouter cette échéance à mes tâches">
+                  <f-icon name="check" [size]="14" color="var(--ink2)" [width]="2.6" /> Tâche
+                </button>
+              }
               @if (d.kind === 'preavis') {
                 <f-icon name="urgent" [size]="17" [color]="d.daysAway < 0 ? 'var(--ink3)' : '#C6492F'" [width]="2.2" />
               }
@@ -394,6 +402,8 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .dead-date { font-size: 13px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
     .dead-in { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .dead-body { flex: 1; min-width: 0; }
+    .dead-task { flex: none; display: inline-flex; align-items: center; gap: 5px; border: none; border-radius: 10px; padding: 6px 11px; background: var(--surface); font-family: inherit; font-size: 12px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+    .dead-task:hover { color: var(--primary); }
     .dead-title { font-size: 13.5px; font-weight: 800; color: var(--ink); }
     .dead-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -500,6 +510,15 @@ export class FinancesContractsTab {
     }
     const one = c.amountMin ?? c.amountMax;
     return one !== null ? `${fmtEuros(one)} €` : '';
+  }
+
+  /**
+   * Copy a deadline into the tasks. The row itself opens the contract, so the
+   * click must not bubble up to it.
+   */
+  makeTask(event: Event, d: FinDeadline): void {
+    event.stopPropagation();
+    this.store.taskFromDeadline(d.contractId, d.kind, d.date);
   }
 
   /** Same colour code as the Documents screen: terracotta for PDF, green for images. */

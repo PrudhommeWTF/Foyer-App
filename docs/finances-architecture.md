@@ -99,6 +99,8 @@ distinguer « aucune activité » de « plus de données ». Archivez le compte 
 ## 4. Découpage du code
 
 ```
+backend/src/
+  ics.ts           flux ICS : mise en forme seule, testable sans base
 backend/src/finances/
   schema.ts        migrations versionnées, appliquées au démarrage par db.ts
   money.ts         centimes, dates, normalisation de libellé (aucune dépendance)
@@ -344,6 +346,38 @@ le reste : elle se prévisualise, se rejoue et se protège comme les autres.
 **Supprimer ne défait rien.** Supprimer un bien libère ses contrats, supprimer un contrat détache
 ses opérations : l'argent a bien été dépensé, seule l'explication disparaît. Un contrat terminé
 se passe en « résilié » plutôt que de se supprimer, pour garder son historique lisible.
+
+### Où les échéances apparaissent
+
+Une échéance n'existe qu'une fois, dans `contracts.ts`. Elle est **lue** à quatre endroits, et
+stockée à aucun.
+
+| Endroit | Ce qu'il en fait |
+|---|---|
+| Écran Contrats | Les six prochains mois, la fenêtre de préavis en rouge quand elle approche |
+| Calendrier partagé | Un repère par date, poussé dans `FoyerStore.externalDayExtras` |
+| Notifications | Les seules fenêtres de résiliation, dans les trente jours |
+| Flux ICS | Un an d'horizon, avec un rappel à J-7 sur les résiliations |
+
+Le passage par `externalDayExtras` reprend exactement le montage des notifications : `FinancesStore`
+dépend de `FoyerStore`, jamais l'inverse. Les repères sont **calculés** dans le store Finances et
+poussés dans un signal que le calendrier fusionne, ce qui évite la dépendance circulaire et
+garantit qu'aucune date ne se dédouble.
+
+**Les identifiants ICS sont stables par contrat et par type** (`fin-preavis-12@foyer`). Quand une
+reconduction est reportée d'un an, l'agenda **déplace** l'entrée au lieu d'en accumuler une par
+année. Seule la date limite de résiliation porte une `VALARM` : c'est la seule qui coûte de
+l'argent si elle passe, et un rappel sur chaque date apprendrait surtout à les ignorer.
+
+**Une tâche créée depuis une échéance est une copie ponctuelle**, pas un miroir. Elle passe par
+`FoyerStore.addExternalTask`, l'utilisateur peut la cocher, la déplacer, la supprimer, et elle ne
+réapparaît pas. Si la date du contrat change ensuite, la tâche ne suit pas : une tâche qui
+change toute seule sous les doigts de celui qui l'a cochée serait pire que pas de tâche du tout.
+
+`buildIcs` vit dans `src/ics.ts` et **ne fait que mettre en forme** : les échéances lui sont
+passées en argument. C'est ce qui permet de le tester sans base, et un fichier ICS mérite des
+tests parce que personne ne le relit : seuls des agendas le lisent, et ils refusent en silence ce
+qu'ils ne comprennent pas.
 
 ## 11. Pièces jointes
 

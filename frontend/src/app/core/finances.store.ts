@@ -7,8 +7,9 @@ import {
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
-import { FoyerStore, SearchHit } from './foyer.store';
+import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
+import { CAL_KINDS } from './constants';
 
 /**
  * Finances state. Unlike FoyerStore, which holds the whole household as one
@@ -177,7 +178,12 @@ export class FinancesStore {
     effect(() => { if (!this.foyer.authed() && this.loaded()) this.reset(); });
     // Budget overruns and incomplete months are notifications, but they are computed
     // here: FoyerStore must not depend on this store (it would be circular).
-    effect(() => this.foyer.externalNotifs.set(this.buildNotifs(this.currentSummary())));
+    effect(() => this.foyer.externalNotifs.set([
+      ...this.buildNotifs(this.currentSummary()),
+      ...this.deadlineNotifs(),
+    ]));
+    // Les échéances apparaissent dans le calendrier partagé sans y être stockées.
+    effect(() => this.foyer.externalDayExtras.set(this.deadlineDayExtras()));
   }
 
   /** Overrun and coverage alerts for the month in progress. */
@@ -202,6 +208,61 @@ export class FinancesStore {
       });
     }
     return out;
+  }
+
+  /** Libellés des échéances, partagés par les notifications, les tâches et l'écran. */
+  private deadlineLabel(kind: string): string {
+    return kind === 'preavis' ? 'Dernier jour pour résilier'
+      : kind === 'renouvellement' ? 'Reconduction tacite'
+      : 'Fin du contrat';
+  }
+
+  /** Version courte : une case de calendrier fait quelques dizaines de pixels. */
+  private shortDeadlineLabel(kind: string): string {
+    return kind === 'preavis' ? 'Résilier' : kind === 'renouvellement' ? 'Reconduction' : 'Fin';
+  }
+
+  /** Repères de calendrier, un par échéance à venir. */
+  private deadlineDayExtras(): Record<string, DayExtra[]> {
+    const out: Record<string, DayExtra[]> = {};
+    for (const d of this.deadlines()) {
+      if (d.daysAway < 0) continue;
+      const item: DayExtra = {
+        kind: 'echeance',
+        label: `${this.shortDeadlineLabel(d.kind)} : ${d.contractName}`,
+        color: CAL_KINDS['echeance'].color,
+        // Le type est déjà dans le libellé : le complément se réduit au
+        // fournisseur, sans quoi il mange la place et tronque l'essentiel.
+        sub: d.provider || undefined,
+      };
+      (out[d.date] ??= []).push(item);
+    }
+    return out;
+  }
+
+  /**
+   * Alerte sur les seules échéances qui coûtent de l'argent si on les manque :
+   * la fenêtre de résiliation, et seulement dans le mois qui précède. Alerter
+   * six mois à l'avance apprendrait surtout à ignorer l'alerte.
+   */
+  private deadlineNotifs(): Notif[] {
+    return this.deadlines()
+      .filter((d) => d.kind === 'preavis' && d.daysAway >= 0 && d.daysAway <= 30)
+      .map((d) => ({
+        id: `fin-preavis-${d.contractId}-${d.date}`,
+        kind: 'budget',
+        title: `Résiliation possible jusqu'au ${this.foyer.fmtNumDate(d.date)}`,
+        desc: `${d.contractName}${d.provider ? ' · ' + d.provider : ''}. Passé ce jour, le contrat est reconduit.`,
+        time: d.daysAway === 0 ? "Aujourd'hui" : `Dans ${d.daysAway} jour${d.daysAway > 1 ? 's' : ''}`,
+        read: false,
+      }));
+  }
+
+  /** Copier une échéance dans les tâches, à la demande et une seule fois. */
+  taskFromDeadline(contractId: number, kind: string, date: string): void {
+    const c = this.contracts().find((x) => x.id === contractId);
+    if (!c) return;
+    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberId);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
