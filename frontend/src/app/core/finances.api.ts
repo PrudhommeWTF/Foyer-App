@@ -125,6 +125,11 @@ export class FinancesApi {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
   }
 
+  /** Everything the dashboard shows, in one call. */
+  dashboard(month: string): Promise<{ dashboard: FinDashboard }> {
+    return this.api.request('finances/dashboard?month=' + encodeURIComponent(month));
+  }
+
   /** CSV export as a blob (fetched with the session token, not a bare link). */
   exportCsv(): Promise<Blob> { return this.api.download('finances/export.csv'); }
 
@@ -263,4 +268,37 @@ export interface FinRulePreview { matched: number; wouldChange: number; manualKe
 export interface FinApplyReport {
   examined: number; changed: number; manualKept: number;
   perRule: { ruleId: number; name: string; changed: number }[];
+}
+
+// ---- dashboard -------------------------------------------------------------
+
+export interface FinMonthPoint {
+  month: string; income: number; expense: number; balance: number;
+  /** An account's data does not cover the whole month. */
+  incomplete: boolean;
+}
+
+export interface FinYearCategory {
+  categoryId: number | null; name: string; color: string; icon: string;
+  spent: number;
+  /** Monthly budget of reference multiplied by the months elapsed. */
+  budget: number;
+}
+
+export interface FinTopExpense {
+  id: number; date: string; label: string; amount: number;
+  accountId: number; categoryId: number | null;
+}
+
+export interface FinDashboard {
+  month: FinMonthSummary;
+  previous: { month: string; income: number; expense: number; balance: number } | null;
+  series: FinMonthPoint[];
+  averageExpense: number;
+  completeMonths: number;
+  year: {
+    year: number; income: number; expense: number; balance: number;
+    months: number; incompleteMonths: string[]; categories: FinYearCategory[];
+  };
+  topExpenses: FinTopExpense[];
 }

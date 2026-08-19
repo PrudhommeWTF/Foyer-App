@@ -74,6 +74,13 @@ export function monthRange(month: string): { from: string; to: string } {
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
 }
 
+/** Shift a 'YYYY-MM' month by a number of months, forwards or backwards. */
+export function shiftMonth(month: string, delta: number): string {
+  const [y, m] = month.split('-').map(Number);
+  const idx = y * 12 + (m - 1) + delta;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+}
+
 /**
  * Normalise a label for deduplication: uppercase, accents stripped, whitespace
  * collapsed. Deliberately conservative. Anything more aggressive (dropping

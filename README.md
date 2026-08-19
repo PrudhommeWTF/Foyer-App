@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -202,7 +202,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#9-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#10-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 

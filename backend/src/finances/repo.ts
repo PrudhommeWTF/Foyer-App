@@ -3,7 +3,8 @@
 // is the whole point of moving finances out of the JSON document.
 import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
-import { coveredThrough, initImportRepo } from './import-repo';
+import { coveredThrough, gapsOver, initImportRepo } from './import-repo';
+import { initDashboard } from './dashboard';
 import { initRulesRepo, tagsFor } from './rules-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
 import {
@@ -19,6 +20,7 @@ export function initFinancesRepo(db: Database): void {
   // cannot forget it and discover the omission only when a summary is computed.
   initImportRepo(db);
   initRulesRepo(db);
+  initDashboard(db);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is
   // needed: a full scan over a few thousand rows is sub-millisecond.
   db.function('fnorm', { deterministic: true }, (s: unknown) => normaliseLabel(String(s ?? '')));
@@ -292,11 +294,12 @@ export function monthSummary(month: string, today = new Date().toISOString().sli
   // covered, a bank connection that died is not.
   const covered = coveredThrough();
   const deadline = today < to ? today : to;
+  const gaps = new Set(gapsOver(from, deadline));
   const missing = (database.prepare(
     'SELECT id AS accountId, name FROM fin_accounts WHERE archived = 0 ORDER BY position, id',
   ).all() as { accountId: number; name: string }[])
+    .filter((a) => gaps.has(a.accountId))
     .map((a) => ({ ...a, coveredThrough: covered.get(a.accountId) ?? null }))
-    .filter((a) => a.coveredThrough !== null && a.coveredThrough < deadline)
     .sort((a, b) => String(a.coveredThrough).localeCompare(String(b.coveredThrough)));
 
   return {

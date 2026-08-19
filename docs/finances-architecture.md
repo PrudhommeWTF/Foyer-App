@@ -64,8 +64,14 @@ empreinte aléatoire (`m:<uuid>`) : elles ne sont jamais dédoublonnées.
 
 ## 3. Mois incomplets
 
-Un mois est signalé incomplet dès qu'un compte **actif** n'a aucune opération à partir du
-premier jour de ce mois. Le bandeau nomme le compte et la date de sa dernière opération connue.
+Un mois est signalé incomplet dès que la période du mois n'est pas **entièrement** couverte pour
+un compte **actif**, en s'arrêtant à aujourd'hui pour le mois en cours. Le bandeau nomme le
+compte et la date où ses données s'arrêtent, et regroupe les comptes qui s'arrêtent le même jour.
+
+« Entièrement » veut dire ce qu'il dit : une fin de données prématurée, mais aussi un **trou au
+milieu** entre deux imports non jointifs. Voir la section 9 pour le détail du calcul, partagé
+avec le tableau de bord afin que la carte du mois et le graphique annuel ne se contredisent
+jamais.
 
 C'est le mode de panne le plus vicieux du module : sans ce signal, un mois auquel il manque un
 compte affiche des chiffres **plausibles** et faux. Le seul moyen d'éteindre l'alerte est
@@ -104,6 +110,7 @@ backend/src/finances/
   rules.ts         moteur de décision pur : aucune base, aucun effet de bord
   rules-repo.ts    stockage des règles, étiquettes, rejeu et prévisualisation
   rules-routes.ts  /api/finances/rules et /tags
+  dashboard.ts     agrégats mensuels et annuels, calculés en SQL
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -233,7 +240,54 @@ Les règles tournent aussi **à la validation d'un import**, sur les seules lign
 `rules.ts` est **pur** : il décide, il n'écrit pas. C'est ce qui permet de le tester sans base
 et garantit que l'aperçu et le rejeu ne divergent jamais.
 
-## 9. Sauvegarde et restauration
+## 9. Tableau de bord
+
+Un seul appel, `GET /api/finances/dashboard?month=AAAA-MM`, renvoie tout ce que l'onglet Bilan
+affiche : le mois, ses douze prédécesseurs, l'année en cours et les plus grosses dépenses. Les
+sommes sont faites **en SQL**, jamais dans le navigateur : c'est précisément ce pour quoi le
+module a des tables plutôt qu'un document JSON.
+
+**Les douze points sont toujours rendus**, mois vides compris, à zéro. Un trou dessiné comme un
+trou est honnête ; un trou silencieusement sauté ferait mentir le graphique sur la période
+couverte.
+
+**La moyenne mensuelle ignore les mois incomplets et les mois vides.** Les inclure tirerait la
+référence vers le bas et ferait passer chaque mois normal pour un excès.
+
+**Le budget de référence est mis à l'échelle des mois écoulés** dans la vue annuelle : comparer
+un cumul de trois mois à douze fois un budget mensuel ne dirait rien.
+
+### Couverture : la fin, mais aussi le début et les trous
+
+Le drapeau « mois incomplet » ne se contente plus de regarder si les données s'arrêtent avant la
+fin du mois. `coverageIntervals()` fusionne les fenêtres déclarées par les imports, compte par
+compte, et `gapsOver(from, to)` vérifie que la période demandée est **entièrement** couverte.
+Trois conséquences :
+
+- un **trou au milieu** (janvier à mars importés, juin à août importés, rien entre les deux) rend
+  les mois manquants incomplets, alors que l'ancien test les déclarait bons ;
+- deux imports **jointifs** (fin au 30/04, reprise au 01/05) se recollent, sans faux trou d'un
+  jour ;
+- rien n'est affirmé sur la période **antérieure au premier import** d'un compte : un livret
+  ouvert cette année ne rend pas incomplets tous les mois de l'an dernier.
+
+Un compte tenu uniquement à la main ne rend jamais un mois incomplet : une saisie manuelle ne
+prétend pas à l'exhaustivité, seul un import déclare une période.
+
+`monthSummary()` et le tableau de bord partagent ce test. C'est délibéré : la carte du mois et le
+graphique annuel ne doivent jamais se contredire sur le même mois.
+
+### Couleurs du graphique
+
+Deux séries, donc la couleur **est** le canal d'identité et doit survivre au daltonisme. Le vert
+maison contre le terracotta se sépare de ΔE 4,8 pour un deutéranope, là où le plancher est de 8 :
+illisible pour environ 8 % des hommes. Le bleu maison, d'un cran plus soutenu (`#3B8CBD`),
+atteint 16,1 et passe les six contrôles dans les deux thèmes. Le vert reste sur les lignes
+d'opération, où le signe et le « + » portent déjà le sens sans dépendre de la couleur.
+
+Les mois incomplets sont **hachurés et légendés**, jamais distingués par la seule couleur.
+
+## 10. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -304,7 +358,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 10. Tests
+## 11. Tests
 
 ```bash
 cd backend
