@@ -204,9 +204,10 @@ comme virement interne (la ligne sort alors des dépenses et des ressources du m
 
 Quelques décisions qui se voient à l'usage :
 
-- **Les montants se comparent en valeur absolue, en euros.** On décrit un prélèvement comme
-  « entre 600 et 700 », pas « entre -700 et -600 ». Le critère « sens » sépare dépense et
-  recette.
+- **Les montants se comparent en valeur absolue, en euros, des deux côtés.** On décrit un
+  prélèvement comme « entre 600 et 700 », et l'interface affiche « -635,46 € » : les bornes
+  saisies en négatif donnent donc exactement le même résultat. Le signe est porté par le critère
+  « sens », par lui seul.
 - **Les règles sont ordonnées** et évaluées de haut en bas. La dernière qui décide d'un champ
   l'emporte ; les étiquettes, elles, s'accumulent. Une règle peut porter « arrêter là », qui
   interrompt l'évaluation pour les lignes qu'elle a retenues.

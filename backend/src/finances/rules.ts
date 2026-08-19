@@ -63,16 +63,22 @@ const numeric = (v: string): number | null => {
   const n = parseFloat(String(v).replace(',', '.'));
   return Number.isFinite(n) ? n : null;
 };
+const abs = (n: number | null): number | null => (n === null ? null : Math.abs(n));
 
 /**
- * Amounts are compared on their **absolute value**, in euros. People describe a
- * direct debit as « between 600 and 700 », not « between -700 and -600 ». Use
- * the `sens` field to tell an expense from a resource.
+ * Amounts are compared on their **absolute value**, in euros, on both sides of
+ * the comparison. People describe a direct debit as « between 600 and 700 », and
+ * the ones who type « between -700 and -600 » mean the same thing. Use the
+ * `sens` field to tell an expense from a resource.
  */
 function matchAmount(cents: number, c: Condition): boolean {
   const euros = Math.abs(cents) / 100;
-  const a = numeric(c.value);
-  const b = numeric(c.value2);
+  // The bounds are taken in absolute value too. The interface shows « -635,46 € »,
+  // so people do type « entre -700 et -600 »; comparing a positive amount to a
+  // negative bound would match nothing, silently. Sign belongs to `sens`, and to
+  // nothing else.
+  const a = abs(numeric(c.value));
+  const b = abs(numeric(c.value2));
   switch (c.op) {
     case 'gt': return a !== null && euros > a;
     case 'lt': return a !== null && euros < a;

@@ -168,8 +168,8 @@ marquer comme virement interne.
 
 - **Le montant fait partie des critères**, et c'est souvent lui qui tranche : deux contrats du
   même assureur peuvent porter un libellé bancaire rigoureusement identique, seul le montant les
-  distingue. Les montants se comparent en valeur absolue, en euros : « entre 600 et 700 » attrape
-  un prélèvement de -635,46 €.
+  distingue. Les montants se comparent en valeur absolue, en euros, des deux côtés : « entre 600
+  et 700 » comme « entre -700 et -600 » attrapent le prélèvement de -635,46 €.
 - **Les règles sont ordonnées**, évaluées de haut en bas ; la dernière qui décide d'un champ
   l'emporte. Une règle peut porter « arrêter là ».
 - **Aperçu avant application** : le bouton « Tester » liste les lignes concernées et ce qui
