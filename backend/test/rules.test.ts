@@ -294,7 +294,8 @@ describe('critères', () => {
 
   const tx = (over: Partial<Candidate> = {}): Candidate => ({
     id: 1, accountId: 1, date: '2026-08-10', amount: -63546,
-    label: 'Prlv Sepa Axa', labelRaw: 'Prlv Sepa Axa', categoryId: null, kind: 'depense', ruleId: null, ...over,
+    label: 'Prlv Sepa Axa', labelRaw: 'Prlv Sepa Axa', categoryId: null, contractId: null,
+    kind: 'depense', ruleId: null, ...over,
   });
   const rule = (conditions: Rule['conditions'], matchMode: Rule['matchMode'] = 'all'): Rule =>
     ({ id: 1, name: 'r', position: 0, enabled: true, matchMode, stop: false, conditions, actions: [{ kind: 'tag', value: 'x' }] });

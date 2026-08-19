@@ -6,6 +6,7 @@ import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
 import { dashboard } from './dashboard';
+import { contractsRouter } from './contracts-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
 import { ACCOUNT_KINDS, TX_KINDS, TxKind } from './types';
@@ -124,6 +125,8 @@ export function financesRouter(): Router {
   r.use(importRouter());
   // Categorisation rules likewise.
   r.use(rulesRouter());
+  // Assets, contracts and deadlines.
+  r.use(contractsRouter());
 
   // Single call that fills the whole screen: accounts, categories, balances,
   // per-account coverage and the months that hold data.
@@ -214,6 +217,7 @@ export function financesRouter(): Router {
       accountId: q['accountId'] ? id(q['accountId'], 'compte') : undefined,
       categoryId: q['categoryId'] ? id(q['categoryId'], 'catégorie') : undefined,
       uncategorised: q['uncategorised'] === '1',
+      contractId: q['contractId'] ? id(q['contractId'], 'contrat') : undefined,
       tag: q['tag'] ? String(q['tag']).slice(0, 60) : undefined,
       q: q['q'] ? String(q['q']).slice(0, 100) : undefined,
       limit: q['limit'] ? parseInt(String(q['limit']), 10) : undefined,

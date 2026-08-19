@@ -111,6 +111,8 @@ backend/src/finances/
   rules-repo.ts    stockage des règles, étiquettes, rejeu et prévisualisation
   rules-routes.ts  /api/finances/rules et /tags
   dashboard.ts     agrégats mensuels et annuels, calculés en SQL
+  contracts.ts     biens, contrats, échéances dérivées, coût réel
+  contracts-routes.ts /api/finances/contracts et /assets
   import/
     parse.ts   détection de format d'après les octets, pas l'extension
     decode.ts  UTF-8, UTF-16, repli Windows-1252
@@ -287,7 +289,61 @@ d'opération, où le signe et le « + » portent déjà le sens sans dépendre d
 
 Les mois incomplets sont **hachurés et légendés**, jamais distingués par la seule couleur.
 
-## 10. Sauvegarde et restauration
+## 10. Biens, contrats et échéances
+
+Un contrat n'est pas une opération : c'est ce qui les explique. Le module sert deux besoins
+concrets, et rien d'autre.
+
+**Ne pas rater une date limite de résiliation.** Un contrat tacitement reconduit et manqué d'un
+jour coûte une période entière de plus. C'est la seule échéance qui coûte vraiment de l'argent,
+et c'est pour elle que le reste existe.
+
+**Savoir ce qu'un contrat coûte réellement**, en confrontant la fourchette annoncée aux
+opérations qui lui sont rattachées. « Ton assurance annonce 70 à 76 €, elle en prélève 81,69 »
+est un fait que la liste d'opérations seule ne fait jamais remonter.
+
+Cette tranche **n'ajoute aucune table** : `fin_assets`, `fin_contracts` et `fin_contract_refs`
+ont été posées par la migration 1 et attendaient d'être utilisées.
+
+### Les échéances sont dérivées, jamais stockées
+
+Trois dates sortent d'un contrat actif, calculées à la volée :
+
+| Échéance | Calcul |
+|---|---|
+| Dernier jour pour résilier | reconduction moins le préavis |
+| Reconduction tacite | date de reconduction, reportée sur son prochain anniversaire |
+| Fin du contrat | date de fin, si elle est à venir |
+
+Rien n'est matérialisé : changer une date de reconduction change ses échéances, sans copie
+périmée qui traîne. Une date de reconduction vieille de trois ans reste la bonne date, elle est
+simplement due à nouveau : elle est reportée d'année en année jusqu'à retomber dans le futur.
+Un 29 février sur une année commune tombe au 1er mars, comme à la banque.
+
+Une fenêtre de préavis déjà fermée reste affichée, en grisé, jusqu'à la reconduction elle-même :
+c'est ce qui explique pourquoi rien ne peut être fait cette année.
+
+### Coût réel
+
+Le total des opérations rattachées sur douze mois glissants, et le dernier prélèvement confronté
+à la fourchette. Sortir de la fourchette est **signalé**, pas corrigé : c'est une information,
+la décision reste au foyer.
+
+Une **fourchette** plutôt qu'un montant exact, parce que les cotisations bougent de quelques
+centimes et qu'un signalement à chaque centime ne serait plus lu.
+
+### Rattacher les opérations
+
+Trois chemins, du plus manuel au plus automatique : le sélecteur du formulaire d'opération,
+l'action de règle « rattacher au contrat », et le filtre « opérations de ce contrat » qui part du
+contrat pour vérifier ce qu'il a réellement capté. L'action de règle utilise le même moteur que
+le reste : elle se prévisualise, se rejoue et se protège comme les autres.
+
+**Supprimer ne défait rien.** Supprimer un bien libère ses contrats, supprimer un contrat détache
+ses opérations : l'argent a bien été dépensé, seule l'explication disparaît. Un contrat terminé
+se passe en « résilié » plutôt que de se supprimer, pour garder son historique lisible.
+
+## 11. Sauvegarde et restauration
 
 Le fichier SQLite est en mode WAL : **copier `foyer.db` seul pendant que le service tourne
 donne une sauvegarde corrompue.** Deux méthodes sûres.
@@ -358,7 +414,7 @@ curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8099/api/finances/export.csv -o finances.csv
 ```
 
-## 11. Tests
+## 12. Tests
 
 ```bash
 cd backend

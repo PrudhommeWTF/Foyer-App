@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Biens et contrats** avec échéances de résiliation et coût réel face au montant annoncé. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -182,6 +182,23 @@ marquer comme virement interne.
 
 Les règles tournent aussi à la validation d'un import, sur les seules lignes créées.
 
+## 📄 Biens, contrats et échéances
+
+Un contrat explique des opérations. Déclarez-le une fois, et le module répond à deux questions
+qui coûtent cher quand on les oublie.
+
+- **Quand faut-il résilier ?** Renseignez la date de reconduction tacite et le préavis : le
+  dernier jour utile pour résilier apparaît dans les échéances, avec le décompte des jours. Un
+  contrat reconduit et manqué d'un jour coûte une période de plus.
+- **Combien coûte-t-il vraiment ?** Rattachez ses opérations, à la main ou par une règle
+  « rattacher au contrat » : le module additionne douze mois glissants et **signale** un
+  prélèvement sorti de la fourchette annoncée.
+
+Les contrats se regroupent par **bien** (logement, véhicule), portent leurs **références**
+(numéro de police, de client, de compteur) et se passent en « résilié » sans rien perdre de leur
+historique. Supprimer un bien libère ses contrats ; supprimer un contrat détache ses opérations
+sans les effacer.
+
 ## 💾 Sauvegarde et restauration
 
 La base est en mode **WAL** : copier `foyer.db` seul pendant que le service tourne donne une
@@ -202,7 +219,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#10-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#11-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 

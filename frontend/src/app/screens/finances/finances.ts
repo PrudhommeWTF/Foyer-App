@@ -6,14 +6,16 @@ import { FinancesTransactionsTab } from './transactions-tab';
 import { FinancesDashboardTab } from './dashboard-tab';
 import { FinancesAccountsTab } from './accounts-tab';
 import { FinancesCategoriesTab } from './categories-tab';
+import { FinancesContractsTab } from './contracts-tab';
 import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
 
-const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'regles' | 'import'; label: string }[] = [
+const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrats' | 'regles' | 'import'; label: string }[] = [
   { id: 'transactions', label: 'Opérations' },
   { id: 'bilan', label: 'Bilan' },
   { id: 'comptes', label: 'Comptes' },
   { id: 'categories', label: 'Catégories' },
+  { id: 'contrats', label: 'Contrats' },
   { id: 'regles', label: 'Règles' },
   { id: 'import', label: 'Import' },
 ];
@@ -22,7 +24,7 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'regles'
   selector: 'screen-finances',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, FinancesTransactionsTab, FinancesDashboardTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesRulesTab, FinancesImportTab],
+  imports: [IconComponent, FinancesTransactionsTab, FinancesDashboardTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesContractsTab, FinancesRulesTab, FinancesImportTab],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -94,6 +96,8 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'regles'
         <fin-accounts-tab />
       } @else if (store.ui().tab === 'categories') {
         <fin-categories-tab />
+      } @else if (store.ui().tab === 'contrats') {
+        <fin-contracts-tab />
       } @else if (store.ui().tab === 'regles') {
         <fin-rules-tab />
       } @else {

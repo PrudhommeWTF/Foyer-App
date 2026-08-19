@@ -20,7 +20,7 @@ export type ConditionOp =
 
 export interface Condition { field: ConditionField; op: ConditionOp; value: string; value2: string; }
 
-export type ActionKind = 'category' | 'label' | 'tag' | 'transfer';
+export type ActionKind = 'category' | 'label' | 'tag' | 'transfer' | 'contract';
 export interface Action { kind: ActionKind; value: string; }
 
 export interface Rule {
@@ -44,6 +44,7 @@ export interface Candidate {
   label: string;
   labelRaw: string;
   categoryId: number | null;
+  contractId: number | null;
   kind: string;
   /** null when the current state was set by hand rather than by a rule. */
   ruleId: number | null;
@@ -52,6 +53,7 @@ export interface Candidate {
 /** What a rule would change on one transaction. Empty means it changes nothing. */
 export interface Effect {
   categoryId?: number | null;
+  contractId?: number | null;
   label?: string;
   tags?: string[];
   transfer?: boolean;
@@ -164,6 +166,11 @@ export function effectOf(rule: Rule): Effect {
         effect.categoryId = Number.isInteger(id) && id > 0 ? id : null;
         break;
       }
+      case 'contract': {
+        const id = parseInt(a.value, 10);
+        effect.contractId = Number.isInteger(id) && id > 0 ? id : null;
+        break;
+      }
       case 'label': if (a.value.trim()) effect.label = a.value.trim(); break;
       case 'tag': if (a.value.trim()) (effect.tags ??= []).push(a.value.trim()); break;
       case 'transfer': effect.transfer = true; break;
@@ -189,6 +196,7 @@ export function evaluate(tx: Candidate, rules: Rule[]): Outcome[] {
 
 export interface Change {
   categoryId?: number | null;
+  contractId?: number | null;
   label?: string;
   transfer?: boolean;
   tags: string[];
@@ -222,6 +230,7 @@ export function planChange(tx: Candidate, rules: Rule[], respectManual = true): 
     // adds a tag stays out of it, so a category set by hand keeps its shield.
     let decides = false;
     if (o.effect.categoryId !== undefined && !manualCategory) { change.categoryId = o.effect.categoryId; decides = true; }
+    if (o.effect.contractId !== undefined) { change.contractId = o.effect.contractId; decides = true; }
     if (o.effect.label !== undefined) { change.label = o.effect.label; decides = true; }
     if (o.effect.transfer) { change.transfer = true; decides = true; }
     if (o.effect.tags?.length) { change.tags.push(...o.effect.tags); touched = true; }
@@ -241,6 +250,7 @@ export function planChange(tx: Candidate, rules: Rule[], respectManual = true): 
  */
 export function isNoop(tx: Candidate, change: Change, existingTags: string[]): boolean {
   if (change.categoryId !== undefined && change.categoryId !== tx.categoryId) return false;
+  if (change.contractId !== undefined && change.contractId !== tx.contractId) return false;
   if (change.label !== undefined && change.label !== tx.label) return false;
   if (change.transfer && tx.kind !== 'virement') return false;
   return !change.tags.some((t) => !existingTags.includes(t));
