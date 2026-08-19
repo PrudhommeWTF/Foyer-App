@@ -231,6 +231,73 @@ export function listTransfers(limit = 200): { group: string; date: string; amoun
  * For an imported account, manual rows entered after the last import still count:
  * you knew about them when you typed them.
  */
+export interface Interval { from: string; to: string }
+
+const nextDay = (iso: string): string => {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * Covered windows per account, merged. Two imports that touch or overlap become
+ * one interval; a hole between them stays a hole, which is the point: it is what
+ * lets a month be called incomplete because data is **missing in the middle**,
+ * not only because it stops early.
+ */
+export function coverageIntervals(): Map<number, Interval[]> {
+  const rows = database.prepare(
+    'SELECT account_id AS id, from_date AS f, to_date AS t FROM fin_import_coverage ORDER BY account_id, from_date',
+  ).all() as { id: number; f: string; t: string }[];
+
+  const out = new Map<number, Interval[]>();
+  for (const r of rows) {
+    const list = out.get(r.id);
+    const last = list?.[list.length - 1];
+    if (last && r.f <= nextDay(last.to)) { if (r.t > last.to) last.to = r.t; }
+    else if (list) list.push({ from: r.f, to: r.t });
+    else out.set(r.id, [{ from: r.f, to: r.t }]);
+  }
+
+  // An operation dated after the declared window still proves coverage up to it:
+  // an import states a period, the rows inside it can only extend the end.
+  for (const r of database.prepare(
+    'SELECT account_id AS id, MAX(date) AS d FROM fin_transactions WHERE account_id IN (SELECT DISTINCT account_id FROM fin_import_coverage) GROUP BY account_id',
+  ).all() as { id: number; d: string }[]) {
+    const list = out.get(r.id);
+    const last = list?.[list.length - 1];
+    if (last && r.d > last.to) last.to = r.d;
+  }
+  return out;
+}
+
+/**
+ * Accounts whose data does not cover the whole of `[from, deadline]`.
+ *
+ * Only accounts already fed by an import are judged: a manually kept account
+ * never claims to be exhaustive, so it can never be incomplete. Nothing is
+ * claimed either about the period **before** an account's first covered day,
+ * which is what keeps a passbook opened last year from flagging every month of
+ * the year before.
+ */
+export function gapsOver(from: string, deadline: string): number[] {
+  const intervals = coverageIntervals();
+  const out: number[] = [];
+  for (const [accountId, list] of intervals) {
+    const start = list[0].from > from ? list[0].from : from;
+    if (start > deadline) continue;
+    // Walk the intervals: everything from `start` to `deadline` must be covered.
+    let cursor = start;
+    for (const iv of list) {
+      if (iv.from > cursor) break;
+      if (iv.to >= cursor) cursor = nextDay(iv.to);
+      if (cursor > deadline) break;
+    }
+    if (cursor <= deadline) out.push(accountId);
+  }
+  return out;
+}
+
 export function coveredThrough(): Map<number, string> {
   const out = new Map<number, string>();
   for (const r of database.prepare(

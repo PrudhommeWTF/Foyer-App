@@ -274,6 +274,24 @@ describe('protection du travail manuel', () => {
 });
 
 describe('critères', () => {
+  it('lit les bornes de montant en valeur absolue, comme le montant lui-même', () => {
+    // L'interface affiche « -635,46 € » : saisir « entre -700 et -600 » est un
+    // réflexe, et doit donner exactement le même résultat que « entre 600 et 700 ».
+    const positif = rules.previewRule(axaRule('AXA', '600', '700', cat('Assurances')));
+    const negatif = rules.previewRule(axaRule('AXA', '-700', '-600', cat('Assurances')));
+    assert.equal(positif.matched, 1);
+    assert.deepEqual(negatif.rows.map((r) => r.id), positif.rows.map((r) => r.id));
+
+    // Même symétrie sur « supérieur à » et « égal à ».
+    const gt = (v: string): number => rules.previewRule({
+      name: 'seuil', enabled: true, matchMode: 'all', stop: false,
+      conditions: [{ field: 'amount', op: 'gt', value: v, value2: '' }],
+      actions: [{ kind: 'tag', value: 'gros' }],
+    }).matched;
+    assert.equal(gt('-500'), gt('500'));
+    assert.ok(gt('500') > 0);
+  });
+
   const tx = (over: Partial<Candidate> = {}): Candidate => ({
     id: 1, accountId: 1, date: '2026-08-10', amount: -63546,
     label: 'Prlv Sepa Axa', labelRaw: 'Prlv Sepa Axa', categoryId: null, kind: 'depense', ruleId: null, ...over,

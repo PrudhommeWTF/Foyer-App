@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
   AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
-  FinCondition, FinConditionField, FinConditionOp, FinCoverage, FinImport, FinImportPreview,
+  FinCondition, FinConditionField, FinConditionOp, FinCoverage, FinDashboard, FinImport, FinImportPreview,
   FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
@@ -15,7 +15,7 @@ import { Notif } from './models';
  */
 
 export interface FinancesUi {
-  tab: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import';
+  tab: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'regles' | 'import';
   month: string;
 
   // transaction filters
@@ -122,6 +122,7 @@ export class FinancesStore {
   /** Summary of the month we are actually in, for notifications and the home tile. */
   readonly currentSummary = signal<FinMonthSummary | null>(null);
   readonly searchHits = signal<SearchHit[]>([]);
+  readonly dashboard = signal<FinDashboard | null>(null);
 
   // Import workflow
   readonly preview = signal<FinImportPreview | null>(null);
@@ -221,7 +222,7 @@ export class FinancesStore {
     this.accounts.set([]); this.categories.set([]); this.balances.set({});
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
-    this.currentSummary.set(null); this.searchHits.set([]);
+    this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set('');
@@ -250,6 +251,15 @@ export class FinancesStore {
     this.patch({ month, page: 0 });
     void this.reloadTransactions();
     void this.reloadSummary();
+    if (this.dashboard()) void this.loadDashboard();
+  }
+
+  /** Aggregates of the displayed month, its twelve predecessors and the year. */
+  async loadDashboard(): Promise<void> {
+    try {
+      this.dashboard.set((await this.api.dashboard(this.ui().month)).dashboard);
+      this.error.set('');
+    } catch (e) { this.error.set((e as Error).message); }
   }
   readonly monthLabel = computed(() => {
     const [y, m] = this.ui().month.split('-').map(Number);
@@ -408,7 +418,10 @@ export class FinancesStore {
 
   /** Anything that changes money reloads the list, the balances and the summary. */
   private async afterWrite(): Promise<void> {
-    await Promise.all([this.reloadTransactions(), this.reloadSummary(), this.refreshReference()]);
+    await Promise.all([
+      this.reloadTransactions(), this.reloadSummary(), this.refreshReference(),
+      this.dashboard() ? this.loadDashboard() : Promise.resolve(),
+    ]);
   }
 
   // ---- accounts ----------------------------------------------------------
@@ -561,7 +574,9 @@ export class FinancesStore {
     try {
       const { preview } = await this.api.uploadImport(file);
       this.preview.set(preview);
-      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, null])) });
+      // A label identical to an account name arrives pre-selected: still one
+      // click to confirm, because an alias is remembered for good.
+      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, u.suggestedAccountId])) });
     } catch (e) {
       this.patch({ importBusy: false, importError: (e as Error).message });
     }
@@ -576,7 +591,7 @@ export class FinancesStore {
     try {
       const { preview } = await this.api.mapImportAccount(p.importId, label, accountId);
       this.preview.set(preview);
-      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, this.ui().mapping[u.label] ?? null])) });
+      this.patch({ importBusy: false, mapping: Object.fromEntries(preview.unknownAccounts.map((u) => [u.label, this.ui().mapping[u.label] ?? u.suggestedAccountId])) });
     } catch (e) {
       this.patch({ importBusy: false, importError: (e as Error).message });
     }

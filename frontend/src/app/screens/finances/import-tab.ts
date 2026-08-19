@@ -57,7 +57,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
             <f-icon name="urgent" [size]="18" color="#B8860B" [width]="2.2" />
             <div>
               <div class="banner-title">{{ p.unknownAccounts.length }} libellé{{ p.unknownAccounts.length > 1 ? 's' : '' }} de compte non reconnu{{ p.unknownAccounts.length > 1 ? 's' : '' }}</div>
-              <div class="banner-hint">Rattachez chacun à un compte. Aucun compte n'est créé automatiquement : deviner serait plus risqué qu'utile. Le rattachement est mémorisé pour les imports suivants.</div>
+              <div class="banner-hint">Rattachez chacun à un compte. Un libellé qui porte exactement le nom d'un de vos comptes est déjà proposé, il reste à confirmer. Aucun compte n'est créé automatiquement : deviner serait plus risqué qu'utile. Le rattachement est mémorisé pour les imports suivants.</div>
             </div>
           </div>
           <div class="unknowns">
@@ -67,6 +67,9 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
                   <div class="ul-label">{{ u.label }}</div>
                   <div class="ul-meta">{{ u.rows }} ligne{{ u.rows > 1 ? 's' : '' }} · du {{ foyer.fmtNumDate(u.firstDate) }} au {{ foyer.fmtNumDate(u.lastDate) }}</div>
                   <div class="ul-sample">ex. {{ u.sample.join(' · ') }}</div>
+                  @if (u.suggestedAccountId) {
+                    <div class="ul-hint">Même nom qu'un compte existant, rattachement proposé.</div>
+                  }
                 </div>
                 <select class="input sel" [ngModel]="store.ui().mapping[u.label]" (ngModelChange)="setMapping(u.label, $event)">
                   <option [ngValue]="null">Rattacher à…</option>
@@ -258,12 +261,16 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .fig-l { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; opacity: .7; margin-top: 2px; }
 
     .unknowns { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+    .ul-hint { font-size: 11.5px; font-weight: 800; color: #6E9E5F; margin-top: 3px; }
     .unknown { display: flex; align-items: center; gap: 11px; background: var(--soft2); border-radius: 14px; padding: 12px 14px; flex-wrap: wrap; }
-    .ul { flex: 1; min-width: 220px; }
+    .ul { flex: 1 1 220px; min-width: 0; }
     .ul-label { font-size: 13.5px; font-weight: 800; color: var(--ink); word-break: break-word; }
     .ul-meta { font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 2px; }
     .ul-sample { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; font-style: italic; }
-    .sel { width: auto; min-width: 180px; height: 40px; padding: 0 12px; }
+    /* Un select se dimensionne sur son option la plus large : sans largeur fixe,
+       les longs noms de compte poussent le bouton à la ligne. */
+    .sel { flex: none; width: 250px; max-width: 100%; height: 40px; padding: 0 12px; text-overflow: ellipsis; }
+    .unknown .btn { flex: none; }
 
     .table-wrap { overflow-x: auto; margin-bottom: 16px; }
     .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }

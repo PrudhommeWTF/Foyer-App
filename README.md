@@ -23,7 +23,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
-| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
+| 💰 **Finances** | Comptes (courant, professionnel, épargne) avec soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
@@ -146,7 +146,8 @@ Ce que l'import garantit :
   même jour sont conservées toutes les deux.
 - **Alias de comptes**. Un même compte peut apparaître sous plusieurs libellés (changement de
   nom, seconde connexion) : déclarez-les une fois, c'est mémorisé. Aucun compte n'est créé
-  automatiquement.
+  automatiquement. Si le libellé du fichier porte exactement le nom d'un de vos comptes, il est
+  **pré-sélectionné** dans le rapport, il ne reste qu'à confirmer.
 - **Exports qui se chevauchent**. Réimporter un fichier déjà traité n'ajoute rien ; un export
   incrémental n'apporte que son delta, même si vous renommez ou recatégorisez des opérations
   entre-temps.
@@ -167,8 +168,8 @@ marquer comme virement interne.
 
 - **Le montant fait partie des critères**, et c'est souvent lui qui tranche : deux contrats du
   même assureur peuvent porter un libellé bancaire rigoureusement identique, seul le montant les
-  distingue. Les montants se comparent en valeur absolue, en euros : « entre 600 et 700 » attrape
-  un prélèvement de -635,46 €.
+  distingue. Les montants se comparent en valeur absolue, en euros, des deux côtés : « entre 600
+  et 700 » comme « entre -700 et -600 » attrapent le prélèvement de -635,46 €.
 - **Les règles sont ordonnées**, évaluées de haut en bas ; la dernière qui décide d'un champ
   l'emporte. Une règle peut porter « arrêter là ».
 - **Aperçu avant application** : le bouton « Tester » liste les lignes concernées et ce qui
@@ -201,7 +202,7 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 ```
 
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
-[`docs/finances-architecture.md`](docs/finances-architecture.md#9-sauvegarde-et-restauration).
+[`docs/finances-architecture.md`](docs/finances-architecture.md#10-sauvegarde-et-restauration).
 
 ## 📅 Calendrier avancé
 

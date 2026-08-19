@@ -5,6 +5,7 @@ import express, { Request, Response, Router } from 'express';
 import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
+import { dashboard } from './dashboard';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
 import { ACCOUNT_KINDS, TX_KINDS, TxKind } from './types';
@@ -197,6 +198,14 @@ export function financesRouter(): Router {
   }));
 
   // ---- transactions ----
+  // Everything the dashboard tab shows, in one call: the month, the twelve months
+  // before it, the year to date and the biggest expenses.
+  r.get('/dashboard', handler((req, res) => {
+    const month = String(req.query['month'] || '');
+    if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
+    res.json({ dashboard: dashboard(month) });
+  }));
+
   r.get('/transactions', handler((req, res) => {
     const q = req.query;
     const result = repo.listTransactions({

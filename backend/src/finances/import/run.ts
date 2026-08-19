@@ -4,6 +4,7 @@
 // parsed rows are stored in the draft so mapping an unknown account label and
 // asking for a new report does not require uploading the file again.
 import { findAccountByAlias, getAccount, listAccounts } from '../repo';
+import { normaliseLabel } from '../money';
 import { collapseBlocks, splitBlocks } from './blocks';
 import { dedupeAgainst } from './dedupe';
 import { findTransferCandidates } from './transfers';
@@ -58,10 +59,24 @@ export function resolveAndCollapse(rows: RawRow[]): Resolution {
       firstDate: dates[0],
       lastDate: dates[dates.length - 1],
       sample: rs.slice(0, 3).map((r) => r.label),
+      suggestedAccountId: suggestAccount(label),
     };
   }).sort((a, b) => b.rows - a.rows);
 
   return { byAccount: collapsedByAccount, unknown, collapsed };
+}
+
+/**
+ * Account bearing the same name as the file's label, offered as a default in the
+ * report. Only a normalised equality counts (case, accents and spacing aside):
+ * on money data, an approximate match would be worse than no suggestion at all.
+ * Archived accounts are skipped, and an ambiguous name suggests nothing.
+ */
+function suggestAccount(label: string): number | null {
+  const wanted = normaliseLabel(label);
+  if (!wanted) return null;
+  const hits = listAccounts().filter((a) => !a.archived && normaliseLabel(a.name) === wanted);
+  return hits.length === 1 ? hits[0].id : null;
 }
 
 export interface StageResult {

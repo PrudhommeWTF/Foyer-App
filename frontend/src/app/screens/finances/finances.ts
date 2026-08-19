@@ -3,13 +3,15 @@ import { FinancesStore, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { FinancesTransactionsTab } from './transactions-tab';
+import { FinancesDashboardTab } from './dashboard-tab';
 import { FinancesAccountsTab } from './accounts-tab';
 import { FinancesCategoriesTab } from './categories-tab';
 import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
 
-const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import'; label: string }[] = [
+const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'regles' | 'import'; label: string }[] = [
   { id: 'transactions', label: 'Opérations' },
+  { id: 'bilan', label: 'Bilan' },
   { id: 'comptes', label: 'Comptes' },
   { id: 'categories', label: 'Catégories' },
   { id: 'regles', label: 'Règles' },
@@ -20,7 +22,7 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import
   selector: 'screen-finances',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, FinancesTransactionsTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesRulesTab, FinancesImportTab],
+  imports: [IconComponent, FinancesTransactionsTab, FinancesDashboardTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesRulesTab, FinancesImportTab],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -45,7 +47,7 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import
         }
       </div>
 
-      @if (store.ui().tab === 'transactions') {
+      @if (store.ui().tab === 'transactions' || store.ui().tab === 'bilan') {
         <div class="synth">
           <div class="synth-top">
             <div class="nav">
@@ -78,8 +80,8 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import
             <div>
               <div class="banner-title">Mois incomplet, les chiffres ci-dessus sont sous-estimés</div>
               <div class="banner-txt">
-                @for (m of store.summary()!.missing; track m.accountId) {
-                  <span class="miss">{{ m.name }} : données jusqu'au {{ foyer.fmtNumDate(m.coveredThrough || '') }}</span>
+                @for (g of missingGroups(); track g.date) {
+                  <span class="miss">{{ g.label }} : données jusqu'au {{ g.date }}</span>
                 }
               </div>
               <div class="banner-hint">Importez les relevés manquants (onglet Import), ou archivez le compte s'il n'est plus suivi.</div>
@@ -87,7 +89,7 @@ const TABS: { id: 'transactions' | 'comptes' | 'categories' | 'regles' | 'import
           </div>
         }
 
-        <fin-transactions-tab />
+        @if (store.ui().tab === 'bilan') { <fin-dashboard-tab /> } @else { <fin-transactions-tab /> }
       } @else if (store.ui().tab === 'comptes') {
         <fin-accounts-tab />
       } @else if (store.ui().tab === 'categories') {
@@ -140,6 +142,25 @@ export class FinancesScreen {
   constructor() { void this.store.init(); }
 
   reload(): void { void this.store.init(true); }
+
+  /**
+   * Ten accounts stopping on the same day is one fact, not ten lines. Accounts are
+   * grouped by the date their data stops at, and only listed by name when there
+   * are few enough for the list to stay readable.
+   */
+  missingGroups = computed(() => {
+    const missing = this.store.summary()?.missing ?? [];
+    const byDate = new Map<string, string[]>();
+    for (const m of missing) {
+      const date = this.foyer.fmtNumDate(m.coveredThrough || '');
+      const list = byDate.get(date);
+      if (list) list.push(m.name); else byDate.set(date, [m.name]);
+    }
+    return [...byDate.entries()].map(([date, names]) => ({
+      date,
+      label: names.length > 3 ? `${names.length} comptes` : names.join(', '),
+    }));
+  });
 
   accountCount = computed(() => {
     const n = this.store.activeAccounts().length;
