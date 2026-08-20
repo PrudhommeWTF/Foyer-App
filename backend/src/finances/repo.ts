@@ -134,14 +134,40 @@ export function deleteAccount(id: number): void {
   database.prepare('DELETE FROM fin_accounts WHERE id = ?').run(id);
 }
 
-/** Opening balance plus every operation, per account. */
+/**
+ * Solde d'un compte : le solde d'ouverture, plus les opérations **postérieures**
+ * à sa date d'ouverture. Sans date, tout l'historique compte.
+ *
+ * La date est inclusive côté solde : « solde au 20/08 » est le solde de fin de
+ * journée, comme sur un relevé bancaire, donc les opérations du 20/08 sont déjà
+ * dedans et seules celles d'après le font bouger.
+ */
 export function accountBalances(): Record<number, number> {
   const rows = database.prepare(`
     SELECT a.id AS id, a.opening_balance + COALESCE(SUM(t.amount), 0) AS balance
-    FROM fin_accounts a LEFT JOIN fin_transactions t ON t.account_id = a.id
+    FROM fin_accounts a
+    LEFT JOIN fin_transactions t
+      ON t.account_id = a.id AND (a.opening_date IS NULL OR t.date > a.opening_date)
     GROUP BY a.id
   `).all() as { id: number; balance: number }[];
   return Object.fromEntries(rows.map((r) => [r.id, r.balance]));
+}
+
+/**
+ * Opérations qu'une date d'ouverture écarte du solde, par compte. Elles restent
+ * dans l'historique et dans le bilan : seul le solde les ignore, puisque le
+ * solde saisi est censé les contenir déjà. Sans ce compteur, de l'argent
+ * semblerait disparaître sans explication.
+ */
+export function opsBeforeOpening(): Record<number, number> {
+  const rows = database.prepare(`
+    SELECT a.id AS id, COUNT(t.id) AS n
+    FROM fin_accounts a
+    JOIN fin_transactions t ON t.account_id = a.id AND t.date <= a.opening_date
+    WHERE a.opening_date IS NOT NULL
+    GROUP BY a.id
+  `).all() as { id: number; n: number }[];
+  return Object.fromEntries(rows.map((r) => [r.id, r.n]));
 }
 
 export function accountCoverage(): AccountCoverage[] {

@@ -5,7 +5,7 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { AvatarComponent } from '../../shared/avatar';
-import { AccountKind } from '../../core/finances.api';
+import { AccountKind, FinAccount } from '../../core/finances.api';
 
 const KINDS: { k: AccountKind; label: string; color: string }[] = [
   { k: 'courant', label: 'Courant', color: '#4E93B8' },
@@ -50,6 +50,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
               } @else { <span class="muted">Aucune opération</span> }
             }
           </div>
+          @if (a.openingDate) { <div class="anchor">{{ anchorLabel(a) }}</div> }
           @if (store.aliasesOf(a.id).length; as n) {
             <div class="aliases">{{ n }} libellé{{ n > 1 ? 's' : '' }} d'export rattaché{{ n > 1 ? 's' : '' }}</div>
           }
@@ -100,7 +101,12 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
             <input class="input" type="date" [ngModel]="store.ui().acOpeningDate" (ngModelChange)="store.patch({ acOpeningDate: $event })" />
           </div>
         </div>
-        <div class="note">Le solde affiché vaut le solde d'ouverture plus toutes les opérations enregistrées.</div>
+        <div class="note">
+          Avec une date, le solde affiché part de ce montant et n'ajoute que les opérations
+          postérieures : celles du jour même et d'avant sont considérées comme
+          déjà comprises dedans, comme sur un relevé bancaire. Sans date, le solde d'ouverture
+          s'ajoute à toutes les opérations enregistrées.
+        </div>
 
         <label class="check">
           <input type="checkbox" [ngModel]="store.ui().acArchived" (ngModelChange)="store.patch({ acArchived: $event })" />
@@ -183,6 +189,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     .meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 12px; font-weight: 700; color: var(--ink3); }
     .meta .muted, .alias-empty { font-style: italic; }
     .aliases { margin-top: 8px; font-size: 11.5px; font-weight: 800; color: var(--ink3); }
+    .anchor { margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.35; }
     .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
@@ -225,5 +232,13 @@ export class FinancesAccountsTab {
   kindLabel(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.label || k; }
   kindColor(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.color || '#8A7E74'; }
   cov(id: number) { return this.store.coverageOf(id); }
+  /** Date du solde, et ce qu'elle écarte : sans ça, les opérations d'avant semblent perdues. */
+  anchorLabel(a: FinAccount): string {
+    const base = `Solde constaté le ${this.foyer.fmtNumDate(a.openingDate || '')}`;
+    const n = this.store.ignoredOpsOf(a.id);
+    if (!n) return base;
+    const s = n > 1 ? 's' : '';
+    return `${base}, ${n} opération${s} antérieure${s} déjà comprise${s}`;
+  }
   delName = computed(() => this.store.accounts().find((a) => a.id === this.store.ui().acDelId)?.name || '');
 }

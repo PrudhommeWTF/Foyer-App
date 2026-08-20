@@ -76,6 +76,31 @@ describe('comptes', () => {
     assert.equal(balances[livret], 500000, 'un compte sans opération garde son solde d’ouverture');
   });
 
+  it('n’ajoute que les opérations postérieures quand le solde porte une date', () => {
+    const joint = account('Joint', { openingBalance: 100000, openingDate: '2026-08-20' });
+    tx(joint, '2026-01-10', -30000, 'Vieille dépense');
+    tx(joint, '2026-08-20', -2000, 'Course du jour même');
+    tx(joint, '2026-08-21', -1500, 'Lendemain');
+
+    assert.equal(repo.accountBalances()[joint], 100000 - 1500,
+      'le solde saisi contient déjà le jour même et tout ce qui précède');
+    assert.equal(repo.opsBeforeOpening()[joint], 2, 'les deux opérations écartées sont signalées');
+  });
+
+  it('sans date, le solde d’ouverture s’ajoute à tout l’historique', () => {
+    const joint = account('Joint', { openingBalance: 100000 });
+    tx(joint, '2020-01-10', -30000, 'Très vieille dépense');
+    assert.equal(repo.accountBalances()[joint], 70000);
+    assert.equal(repo.opsBeforeOpening()[joint], undefined, 'rien à signaler sans date');
+  });
+
+  it('un solde daté sans opération antérieure ne signale rien', () => {
+    const joint = account('Joint', { openingBalance: 100000, openingDate: '2026-08-20' });
+    tx(joint, '2026-08-25', 5000, 'Après');
+    assert.equal(repo.accountBalances()[joint], 105000);
+    assert.equal(repo.opsBeforeOpening()[joint], undefined);
+  });
+
   it('reporte la couverture par compte', () => {
     const tphIt = account('TPH-IT');
     const livret = account('Livret enfant', { kind: 'epargne' });
