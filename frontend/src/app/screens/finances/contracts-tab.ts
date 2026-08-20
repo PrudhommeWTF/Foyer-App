@@ -382,7 +382,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
             <div class="field-label">Compte prélevé</div>
             <select class="input" [ngModel]="store.ui().coAccount" (ngModelChange)="store.patch({ coAccount: $event })">
               <option [ngValue]="null">Aucun</option>
-              @for (a of store.activeAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
+              @for (a of store.activeLedgerAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
             </select>
           </div>
           <div class="fgrow">

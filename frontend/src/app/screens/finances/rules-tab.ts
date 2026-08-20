@@ -141,7 +141,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
                 @case ('account') {
                   <select class="input grow" [ngModel]="c.value" (ngModelChange)="store.patchCondition(i, { value: $event })">
                     <option value="">Choisir…</option>
-                    @for (a of store.accounts(); track a.id) { <option [ngValue]="strId(a.id)">{{ a.name }}</option> }
+                    @for (a of store.ledgerAccounts(); track a.id) { <option [ngValue]="strId(a.id)">{{ a.name }}</option> }
                   </select>
                 }
                 @case ('sens') {

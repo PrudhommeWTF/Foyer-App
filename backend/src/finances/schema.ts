@@ -8,7 +8,7 @@
 import type { Database } from 'better-sqlite3';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
-export const FIN_SCHEMA_VERSION = 4;
+export const FIN_SCHEMA_VERSION = 5;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -299,6 +299,23 @@ const MIGRATIONS: Migration[] = [
         -- sources de vérité pour la même question.
         ALTER TABLE fin_accounts DROP COLUMN member_id;
         ALTER TABLE fin_contracts DROP COLUMN member_id;
+      `);
+    },
+  },
+  {
+    version: 5,
+    label: 'comptes de crédit : paramètres du prêt',
+    up: (db) => {
+      db.exec(`
+        -- Les termes d'un prêt amortissable, tels qu'ils sont écrits sur l'offre
+        -- de prêt. NULL partout pour un compte qui n'est pas un crédit. Le
+        -- capital restant dû n'est pas ici : il se calcule (voir loans.ts).
+        ALTER TABLE fin_accounts ADD COLUMN loan_principal INTEGER;
+        -- Taux annuel nominal en points de base, pour rester en entiers : 345 = 3,45 %.
+        ALTER TABLE fin_accounts ADD COLUMN loan_rate_bp INTEGER;
+        ALTER TABLE fin_accounts ADD COLUMN loan_payment INTEGER;
+        ALTER TABLE fin_accounts ADD COLUMN loan_insurance INTEGER;
+        ALTER TABLE fin_accounts ADD COLUMN loan_first_on TEXT;
       `);
     },
   },

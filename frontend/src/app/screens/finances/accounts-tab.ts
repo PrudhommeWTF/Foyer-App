@@ -11,6 +11,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
   { k: 'courant', label: 'Courant', color: '#4E93B8' },
   { k: 'pro', label: 'Professionnel', color: '#9B6FA8' },
   { k: 'epargne', label: 'Épargne', color: '#7A9B76' },
+  { k: 'credit', label: 'Crédit', color: '#B8735A' },
 ];
 
 @Component({
@@ -42,15 +43,30 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
             }
           </div>
           <div class="name">{{ a.name }}</div>
-          <div class="bal f-display" [style.color]="store.balanceOf(a.id) < 0 ? 'var(--primary)' : 'var(--ink)'">{{ fmt(store.balanceOf(a.id)) }} €</div>
-          <div class="meta">
-            @if (cov(a.id); as c) {
-              @if (c.count) {
-                <span>{{ c.count }} opération{{ c.count > 1 ? 's' : '' }}, jusqu'au {{ foyer.fmtNumDate(c.lastDate || '') }}</span>
-              } @else { <span class="muted">Aucune opération</span> }
+          @if (a.kind === 'credit') {
+            @if (loan(a.id); as l) {
+              <div class="bal f-display">{{ fmt(l.owed) }} €</div>
+              <div class="meta">capital restant dû, sur {{ fmt(l.principal) }} € empruntés</div>
+              <div class="gauge"><div class="fill" [style.width]="pct(l.progress)"></div></div>
+              <div class="meta">
+                {{ round(l.progress * 100) }} % remboursé, {{ l.left }} échéance{{ l.left > 1 ? 's' : '' }} restante{{ l.left > 1 ? 's' : '' }}
+              </div>
+              <div class="anchor">{{ fmt(l.monthly) }} € par mois, dernière échéance le {{ foyer.fmtNumDate(l.endsOn) }}</div>
+            } @else {
+              <div class="bal f-display muted">—</div>
+              <div class="meta muted">Termes du prêt à renseigner</div>
             }
-          </div>
-          @if (a.openingDate) { <div class="anchor">{{ anchorLabel(a) }}</div> }
+          } @else {
+            <div class="bal f-display" [style.color]="store.balanceOf(a.id) < 0 ? 'var(--primary)' : 'var(--ink)'">{{ fmt(store.balanceOf(a.id)) }} €</div>
+            <div class="meta">
+              @if (cov(a.id); as c) {
+                @if (c.count) {
+                  <span>{{ c.count }} opération{{ c.count > 1 ? 's' : '' }}, jusqu'au {{ foyer.fmtNumDate(c.lastDate || '') }}</span>
+                } @else { <span class="muted">Aucune opération</span> }
+              }
+            </div>
+            @if (a.openingDate) { <div class="anchor">{{ anchorLabel(a) }}</div> }
+          }
           @if (store.aliasesOf(a.id).length; as n) {
             <div class="aliases">{{ n }} libellé{{ n > 1 ? 's' : '' }} d'export rattaché{{ n > 1 ? 's' : '' }}</div>
           }
@@ -91,9 +107,42 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
         </div>
         <div class="hint sm">Un compte joint en a deux. Aucun sélectionné veut dire « le foyer ».</div>
 
+        @if (store.ui().acKind === 'credit') {
+          <div class="field-label">Termes du prêt</div>
+          <div class="frow">
+            <div class="fgrow">
+              <div class="field-label sm">Capital emprunté €</div>
+              <input class="input" [ngModel]="store.ui().acPrincipal" (ngModelChange)="store.patch({ acPrincipal: $event })" placeholder="200 000,00" inputmode="decimal" />
+            </div>
+            <div class="fnarrow">
+              <div class="field-label sm">Taux annuel %</div>
+              <input class="input" [ngModel]="store.ui().acRate" (ngModelChange)="store.patch({ acRate: $event })" placeholder="3,00" inputmode="decimal" />
+            </div>
+          </div>
+          <div class="frow">
+            <div class="fgrow">
+              <div class="field-label sm">Mensualité €</div>
+              <input class="input" [ngModel]="store.ui().acPayment" (ngModelChange)="store.patch({ acPayment: $event })" placeholder="1 109,20" inputmode="decimal" />
+            </div>
+            <div class="fgrow">
+              <div class="field-label sm">Assurance €/mois</div>
+              <input class="input" [ngModel]="store.ui().acInsurance" (ngModelChange)="store.patch({ acInsurance: $event })" placeholder="0,00" inputmode="decimal" />
+            </div>
+            <div class="fgrow">
+              <div class="field-label sm">Première échéance</div>
+              <input class="input" type="date" [ngModel]="store.ui().acFirstOn" (ngModelChange)="store.patch({ acFirstOn: $event })" />
+            </div>
+          </div>
+          <div class="note">
+            Recopiez ces quatre chiffres de votre offre de prêt. Tout le reste se calcule :
+            capital restant dû, part d'intérêts de chaque échéance, date de fin, intérêts de l'année.
+            La mensualité s'entend hors assurance : laissez l'assurance à zéro si elle y est déjà comprise.
+          </div>
+        }
+
         <div class="frow">
           <div class="fgrow">
-            <div class="field-label">Solde d'ouverture €</div>
+            <div class="field-label">{{ store.ui().acKind === 'credit' ? 'Capital restant dû €' : "Solde d'ouverture €" }}</div>
             <input class="input" [ngModel]="store.ui().acOpening" (ngModelChange)="store.patch({ acOpening: $event })" placeholder="0,00" inputmode="decimal" />
           </div>
           <div class="fgrow">
@@ -101,19 +150,28 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
             <input class="input" type="date" [ngModel]="store.ui().acOpeningDate" (ngModelChange)="store.patch({ acOpeningDate: $event })" />
           </div>
         </div>
-        <div class="note">
-          Avec une date, le solde affiché part de ce montant et n'ajoute que les opérations
-          postérieures : celles du jour même et d'avant sont considérées comme
-          déjà comprises dedans, comme sur un relevé bancaire. Sans date, le solde d'ouverture
-          s'ajoute à toutes les opérations enregistrées.
-        </div>
+        @if (store.ui().acKind === 'credit') {
+          <div class="note">
+            Facultatif, et c'est le recalage : après un remboursement anticipé ou une
+            renégociation, recopiez ici le capital restant dû lu sur votre relevé, avec sa date.
+            Le tableau d'amortissement repart de ce chiffre. Laissez vide pour suivre l'offre
+            de prêt d'origine.
+          </div>
+        } @else {
+          <div class="note">
+            Avec une date, le solde affiché part de ce montant et n'ajoute que les opérations
+            postérieures : celles du jour même et d'avant sont considérées comme
+            déjà comprises dedans, comme sur un relevé bancaire. Sans date, le solde d'ouverture
+            s'ajoute à toutes les opérations enregistrées.
+          </div>
+        }
 
         <label class="check">
           <input type="checkbox" [ngModel]="store.ui().acArchived" (ngModelChange)="store.patch({ acArchived: $event })" />
           <span>Compte archivé (historique conservé, plus d'alerte de mois incomplet)</span>
         </label>
 
-        @if (store.ui().acId) {
+        @if (store.ui().acId && store.ui().acKind !== 'credit') {
           <div class="field-label">Libellés d'export rattachés</div>
           <div class="note">
             Un même compte peut apparaître sous plusieurs libellés dans les exports de votre banque
@@ -189,6 +247,9 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     .meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 12px; font-weight: 700; color: var(--ink3); }
     .meta .muted, .alias-empty { font-style: italic; }
     .aliases { margin-top: 8px; font-size: 11.5px; font-weight: 800; color: var(--ink3); }
+    .gauge { margin-top: 8px; height: 7px; border-radius: 99px; background: var(--soft2); overflow: hidden; }
+    .fill { height: 100%; border-radius: 99px; background: #B8735A; }
+    .field-label.sm { font-size: 10.5px; }
     .anchor { margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.35; }
     .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
@@ -232,6 +293,9 @@ export class FinancesAccountsTab {
   kindLabel(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.label || k; }
   kindColor(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.color || '#8A7E74'; }
   cov(id: number) { return this.store.coverageOf(id); }
+  loan(id: number) { return this.store.loanOf(id); }
+  pct(v: number): string { return `${Math.max(0, Math.min(100, v * 100))}%`; }
+  round(v: number): number { return Math.round(v); }
   /** Date du solde, et ce qu'elle écarte : sans ça, les opérations d'avant semblent perdues. */
   anchorLabel(a: FinAccount): string {
     const base = `Solde constaté le ${this.foyer.fmtNumDate(a.openingDate || '')}`;

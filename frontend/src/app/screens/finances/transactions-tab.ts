@@ -20,7 +20,7 @@ import { CAT_ICONS } from '../../core/constants';
       </div>
       <select class="input sel" [ngModel]="store.ui().fltAccount" (ngModelChange)="store.setFilter({ fltAccount: $event })">
         <option [ngValue]="null">Tous les comptes</option>
-        @for (a of store.accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}{{ a.archived ? ' (archivé)' : '' }}</option> }
+        @for (a of store.ledgerAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}{{ a.archived ? ' (archivé)' : '' }}</option> }
       </select>
       <select class="input sel" [ngModel]="store.ui().fltCategory" (ngModelChange)="store.setFilter({ fltCategory: $event })">
         <option [ngValue]="null">Toutes les catégories</option>
@@ -66,7 +66,7 @@ import { CAT_ICONS } from '../../core/constants';
         </div>
       } @empty {
         <div class="tx-empty">
-          @if (!store.activeAccounts().length) {
+          @if (!store.activeLedgerAccounts().length) {
             <div class="empty-title">Aucun compte pour l'instant</div>
             <div class="empty-txt">Créez vos comptes dans l'onglet « Comptes », puis saisissez ou importez vos opérations.</div>
           } @else if (store.hasFilters()) {
@@ -109,7 +109,7 @@ import { CAT_ICONS } from '../../core/constants';
           <div class="fgrow">
             <div class="field-label">Compte</div>
             <select class="input" [ngModel]="store.ui().txAccount" (ngModelChange)="store.patch({ txAccount: $event })">
-              @for (a of store.activeAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
+              @for (a of store.activeLedgerAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
             </select>
           </div>
           <div class="fnarrow">

@@ -13,7 +13,7 @@ import { initSavings } from './savings';
 import { initRulesRepo, tagsFor } from './rules-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
 import {
-  Account, AccountCoverage, Category, CategorySummary, MonthSummary, Transaction, TxKind,
+  Account, AccountCoverage, Category, CategorySummary, LoanTerms, MonthSummary, Transaction, TxKind,
 } from './types';
 
 let database: Database;
@@ -42,10 +42,28 @@ export function initFinancesRepo(db: Database, dataDir: string): void {
 }
 
 // ---- row mappers ---------------------------------------------------------
-interface AccountRow { id: number; name: string; kind: string; opening_balance: number; opening_date: string | null; archived: number; position: number; }
+interface AccountRow {
+  id: number; name: string; kind: string; opening_balance: number; opening_date: string | null;
+  archived: number; position: number;
+  loan_principal: number | null; loan_rate_bp: number | null; loan_payment: number | null;
+  loan_insurance: number | null; loan_first_on: string | null;
+}
+/**
+ * Les termes du prêt ne remontent que s'ils sont complets : un prêt à moitié
+ * saisi ne peut rien calculer, et un objet à trous ferait croire le contraire.
+ */
+const toLoan = (r: AccountRow): LoanTerms | null => (
+  r.loan_principal != null && r.loan_payment != null && r.loan_first_on
+    ? {
+      principal: r.loan_principal, rateBp: r.loan_rate_bp ?? 0, payment: r.loan_payment,
+      insurance: r.loan_insurance ?? 0, firstOn: r.loan_first_on,
+    }
+    : null
+);
 const toAccount = (r: AccountRow, memberIds: string[] = []): Account => ({
   id: r.id, name: r.name, kind: r.kind as Account['kind'], memberIds,
   openingBalance: r.opening_balance, openingDate: r.opening_date, archived: !!r.archived, position: r.position,
+  loan: r.kind === 'credit' ? toLoan(r) : null,
 });
 
 /**
@@ -101,14 +119,26 @@ export function getAccount(id: number): Account | null {
   return r ? toAccount(r, accountMembers().get(id) ?? []) : null;
 }
 
-export interface AccountInput { name: string; kind: string; memberIds: string[]; openingBalance: number; openingDate: string | null; archived: boolean; }
+export interface AccountInput {
+  name: string; kind: string; memberIds: string[]; openingBalance: number; openingDate: string | null;
+  archived: boolean; loan?: LoanTerms | null;
+}
+
+/** Les cinq colonnes du prêt, dans l'ordre des requêtes. Null partout hors crédit. */
+const loanCols = (input: AccountInput): (number | string | null)[] => {
+  const l = input.kind === 'credit' ? (input.loan ?? null) : null;
+  return l ? [l.principal, l.rateBp, l.payment, l.insurance, l.firstOn] : [null, null, null, null, null];
+};
 
 export function createAccount(input: AccountInput): Account {
   return database.transaction(() => {
     const pos = (database.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM fin_accounts').get() as { p: number }).p;
     const info = database.prepare(
-      'INSERT INTO fin_accounts (name, kind, opening_balance, opening_date, archived, position) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(input.name, input.kind, input.openingBalance, input.openingDate, input.archived ? 1 : 0, pos);
+      `INSERT INTO fin_accounts
+         (name, kind, opening_balance, opening_date, archived, position,
+          loan_principal, loan_rate_bp, loan_payment, loan_insurance, loan_first_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(input.name, input.kind, input.openingBalance, input.openingDate, input.archived ? 1 : 0, pos, ...loanCols(input));
     const id = Number(info.lastInsertRowid);
     writeAccountMembers(id, input.memberIds);
     return getAccount(id)!;
@@ -118,8 +148,10 @@ export function createAccount(input: AccountInput): Account {
 export function updateAccount(id: number, input: AccountInput): Account | null {
   return database.transaction(() => {
     const info = database.prepare(
-      'UPDATE fin_accounts SET name = ?, kind = ?, opening_balance = ?, opening_date = ?, archived = ? WHERE id = ?',
-    ).run(input.name, input.kind, input.openingBalance, input.openingDate, input.archived ? 1 : 0, id);
+      `UPDATE fin_accounts SET name = ?, kind = ?, opening_balance = ?, opening_date = ?, archived = ?,
+         loan_principal = ?, loan_rate_bp = ?, loan_payment = ?, loan_insurance = ?, loan_first_on = ?
+       WHERE id = ?`,
+    ).run(input.name, input.kind, input.openingBalance, input.openingDate, input.archived ? 1 : 0, ...loanCols(input), id);
     if (!info.changes) return null;
     writeAccountMembers(id, input.memberIds);
     return getAccount(id);

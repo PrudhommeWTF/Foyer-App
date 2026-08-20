@@ -1,11 +1,11 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import {
-  AccountKind, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
+  AccountKind, AccountPayload, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
   FinAttachment, FinDeadline, FinEnergySummary, FinImport, FinImportPreview, FinOwnerKind,
   FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
-  FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
+  FinLoanView, FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
 } from './finances.api';
 import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
@@ -36,6 +36,7 @@ export interface FinancesUi {
   // account form
   acForm: boolean; acId: number | null;
   acName: string; acKind: AccountKind; acMembers: string[]; acOpening: string; acOpeningDate: string; acArchived: boolean;
+  acPrincipal: string; acRate: string; acPayment: string; acInsurance: string; acFirstOn: string;
   acAliasInput: string; acDelId: number | null;
 
   // category form
@@ -98,6 +99,7 @@ function initialUi(month: string): FinancesUi {
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
     txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null,
     acForm: false, acId: null, acName: '', acKind: 'courant', acMembers: [], acOpening: '',
+    acPrincipal: '', acRate: '', acPayment: '', acInsurance: '', acFirstOn: '',
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
     catForm: false, catId: null, catName: '', catBudget: '', catColor: '#7A9B76', catIcon: 'facture',
     catParent: null, catDelId: null,
@@ -157,6 +159,8 @@ export class FinancesStore {
   readonly balances = signal<Record<number, number>>({});
   /** Opérations qu'une date d'ouverture écarte du solde, par compte. */
   readonly ignoredOps = signal<Record<number, number>>({});
+  /** L'état de chaque prêt, par compte. Un compte sans crédit n'y est pas. */
+  readonly loans = signal<Record<number, FinLoanView>>({});
   readonly coverage = signal<FinCoverage[]>([]);
   readonly months = signal<string[]>([]);
   readonly aliases = signal<FinAlias[]>([]);
@@ -303,6 +307,13 @@ export class FinancesStore {
   private currentMonth(): string { return this.foyer.todayStr().slice(0, 7); }
 
   readonly activeAccounts = computed(() => this.accounts().filter((a) => !a.archived));
+  /**
+   * Les comptes qui portent des opérations. Un compte de crédit n'en porte
+   * jamais : son capital restant dû vient des termes du prêt. Il n'a donc rien
+   * à faire dans un sélecteur d'opération, d'import ou de règle.
+   */
+  readonly ledgerAccounts = computed(() => this.accounts().filter((a) => a.kind !== 'credit'));
+  readonly activeLedgerAccounts = computed(() => this.ledgerAccounts().filter((a) => !a.archived));
   readonly rootCategories = computed(() => this.categories().filter((c) => c.parentId === null));
   childrenOf(id: number): FinCategory[] { return this.categories().filter((c) => c.parentId === id); }
 
@@ -318,6 +329,7 @@ export class FinancesStore {
   }
   balanceOf(id: number): number { return this.balances()[id] ?? 0; }
   ignoredOpsOf(id: number): number { return this.ignoredOps()[id] ?? 0; }
+  loanOf(id: number): FinLoanView | undefined { return this.loans()[id]; }
   coverageOf(id: number): FinCoverage | undefined { return this.coverage().find((c) => c.accountId === id); }
 
   // ---- lifecycle ---------------------------------------------------------
@@ -330,6 +342,7 @@ export class FinancesStore {
       this.categories.set(b.categories);
       this.balances.set(b.balances);
       this.ignoredOps.set(b.ignoredOps);
+      this.loans.set(b.loans);
       this.coverage.set(b.coverage);
       this.months.set(b.months);
       this.aliases.set(b.aliases);
@@ -346,7 +359,7 @@ export class FinancesStore {
   }
 
   reset(): void {
-    this.accounts.set([]); this.categories.set([]); this.balances.set({}); this.ignoredOps.set({});
+    this.accounts.set([]); this.categories.set([]); this.balances.set({}); this.ignoredOps.set({}); this.loans.set({});
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
@@ -366,6 +379,7 @@ export class FinancesStore {
     this.categories.set(b.categories);
     this.balances.set(b.balances);
     this.ignoredOps.set(b.ignoredOps);
+    this.loans.set(b.loans);
     this.coverage.set(b.coverage);
     this.months.set(b.months);
     this.aliases.set(b.aliases);
@@ -497,7 +511,7 @@ export class FinancesStore {
     this.patch({
       txForm: true, txId: null, txLabel: '', txAmount: '', txSign: 'out',
       txDate: this.isCurrentMonth() ? today : from,
-      txAccount: this.ui().fltAccount ?? this.activeAccounts()[0]?.id ?? null,
+      txAccount: this.ui().fltAccount ?? this.activeLedgerAccounts()[0]?.id ?? null,
       txCategory: null, txContract: null, txNotes: '', txCleared: false,
     });
   }
@@ -571,6 +585,7 @@ export class FinancesStore {
     this.patch({
       acForm: true, acId: null, acName: '', acKind: 'courant', acMembers: [],
       acOpening: '', acOpeningDate: '', acArchived: false, acAliasInput: '',
+      acPrincipal: '', acRate: '', acPayment: '', acInsurance: '', acFirstOn: '',
     });
   }
 
@@ -579,9 +594,38 @@ export class FinancesStore {
     if (!a) return;
     this.patch({
       acForm: true, acId: a.id, acName: a.name, acKind: a.kind, acMembers: [...a.memberIds],
-      acOpening: a.openingBalance ? fmtEuros(a.openingBalance) : '', acOpeningDate: a.openingDate || '',
+      // Sur un crédit, le champ est un capital restant dû : il se saisit et se
+      // relit en positif, même si la base porte une dette, donc un négatif.
+      acOpening: a.openingBalance ? fmtEuros(a.kind === 'credit' ? -a.openingBalance : a.openingBalance) : '',
+      acOpeningDate: a.openingDate || '',
       acArchived: a.archived, acAliasInput: '',
+      acPrincipal: a.loan ? fmtEuros(a.loan.principal) : '',
+      acRate: a.loan ? (a.loan.rateBp / 100).toFixed(2).replace('.', ',') : '',
+      acPayment: a.loan ? fmtEuros(a.loan.payment) : '',
+      acInsurance: a.loan && a.loan.insurance ? fmtEuros(a.loan.insurance) : '',
+      acFirstOn: a.loan ? a.loan.firstOn : '',
     });
+  }
+
+  /** Euros saisis (« 1 109,20 ») vers la forme décimale que le backend attend. */
+  private decimal(v: string): string {
+    const c = parseEuros(v.trim());
+    return c === null ? '' : (c / 100).toFixed(2);
+  }
+
+  /**
+   * Un prêt à moitié saisi ne calcule rien et n'explique rien. On refuse tôt,
+   * en nommant le champ qui manque, plutôt que de laisser un écran vide.
+   */
+  private loanFormValid(): boolean {
+    const u = this.ui();
+    if (!u.acPrincipal.trim()) return true; // prêt pas encore renseigné : le compte existe quand même
+    for (const [v, label] of [[u.acPrincipal, 'capital emprunté'], [u.acPayment, 'mensualité']] as [string, string][]) {
+      if (parseEuros(v.trim()) === null) { this.foyer.toast(`Montant invalide : ${label}`); return false; }
+    }
+    if (u.acInsurance.trim() && parseEuros(u.acInsurance.trim()) === null) { this.foyer.toast('Assurance invalide'); return false; }
+    if (!u.acFirstOn) { this.foyer.toast('Donnez la date de la première échéance'); return false; }
+    return true;
   }
 
   async saveAccount(): Promise<void> {
@@ -591,10 +635,20 @@ export class FinancesStore {
     if (!name) { this.foyer.toast('Donnez un nom au compte'); return; }
     const opening = u.acOpening.trim();
     if (opening && parseEuros(opening) === null) { this.foyer.toast('Solde d’ouverture invalide'); return; }
-    const payload = {
+    const credit = u.acKind === 'credit';
+    if (credit && !this.loanFormValid()) return;
+    // Un capital restant dû est une dette : saisi en positif, stocké en négatif,
+    // pour que le compte se comporte comme les autres partout ailleurs.
+    const cents = opening ? (parseEuros(opening) as number) : 0;
+    const payload: AccountPayload = {
       name, kind: u.acKind, memberIds: u.acMembers,
-      openingBalance: opening ? ((parseEuros(opening) as number) / 100).toFixed(2) : '0',
+      openingBalance: ((credit ? -Math.abs(cents) : cents) / 100).toFixed(2),
       openingDate: u.acOpeningDate || null, archived: u.acArchived,
+      loan: credit && u.acPrincipal.trim() ? {
+        principal: this.decimal(u.acPrincipal), rateBp: u.acRate.trim() || '0',
+        payment: this.decimal(u.acPayment), insurance: u.acInsurance.trim() ? this.decimal(u.acInsurance) : '',
+        firstOn: u.acFirstOn,
+      } : null,
     };
     this.patch({ busy: true });
     try {
