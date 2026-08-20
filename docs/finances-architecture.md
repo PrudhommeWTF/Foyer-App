@@ -45,6 +45,18 @@ déjà publiée** : ajoutez-en une nouvelle, sinon les installations existantes 
 détache ses opérations (`SET NULL`) au lieu de les perdre ; supprimer une catégorie parente
 emporte ses sous-catégories (`CASCADE`) mais jamais les opérations.
 
+**Le solde d'ouverture peut porter une date, et cette date filtre.** Sans date, le solde
+d'ouverture s'ajoute à toutes les opérations du compte. Avec une date, il ne s'ajoute qu'aux
+opérations **postérieures** : le montant saisi est réputé contenir déjà le jour même et tout ce
+qui précède, comme un solde de fin de journée sur un relevé bancaire. C'est ce qui permet de
+recaler un compte sur son solde réel sans purger l'historique importé.
+
+Les opérations écartées restent en base, dans la liste et dans le bilan : seul le solde les
+ignore. Comme ce filtre pourrait donner l'impression que de l'argent a disparu, la carte du
+compte l'annonce (« Solde constaté le 20/08/2026, 3 opérations antérieures déjà comprises »).
+`repo.opsBeforeOpening()` fournit ce compteur, exposé sous `ignoredOps` par `/bootstrap` et
+`/accounts`.
+
 **Un compte qui porte des opérations ne peut pas être supprimé.** L'API répond 409 avec un
 message qui explique quoi faire (archiver). Archiver conserve tout l'historique et sort le
 compte des alertes de mois incomplet.

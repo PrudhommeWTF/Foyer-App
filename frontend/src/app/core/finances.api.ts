@@ -45,6 +45,7 @@ export interface FinMonthSummary {
 
 export interface FinBootstrap {
   accounts: FinAccount[]; categories: FinCategory[]; balances: Record<number, number>;
+  ignoredOps: Record<number, number>;
   coverage: FinCoverage[]; months: string[]; aliases: FinAlias[];
 }
 

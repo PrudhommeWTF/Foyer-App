@@ -155,6 +155,8 @@ export class FinancesStore {
   readonly accounts = signal<FinAccount[]>([]);
   readonly categories = signal<FinCategory[]>([]);
   readonly balances = signal<Record<number, number>>({});
+  /** Opérations qu'une date d'ouverture écarte du solde, par compte. */
+  readonly ignoredOps = signal<Record<number, number>>({});
   readonly coverage = signal<FinCoverage[]>([]);
   readonly months = signal<string[]>([]);
   readonly aliases = signal<FinAlias[]>([]);
@@ -315,6 +317,7 @@ export class FinancesStore {
     return parent ? `${parent.name} · ${c.name}` : c.name;
   }
   balanceOf(id: number): number { return this.balances()[id] ?? 0; }
+  ignoredOpsOf(id: number): number { return this.ignoredOps()[id] ?? 0; }
   coverageOf(id: number): FinCoverage | undefined { return this.coverage().find((c) => c.accountId === id); }
 
   // ---- lifecycle ---------------------------------------------------------
@@ -326,6 +329,7 @@ export class FinancesStore {
       this.accounts.set(b.accounts);
       this.categories.set(b.categories);
       this.balances.set(b.balances);
+      this.ignoredOps.set(b.ignoredOps);
       this.coverage.set(b.coverage);
       this.months.set(b.months);
       this.aliases.set(b.aliases);
@@ -342,7 +346,7 @@ export class FinancesStore {
   }
 
   reset(): void {
-    this.accounts.set([]); this.categories.set([]); this.balances.set({});
+    this.accounts.set([]); this.categories.set([]); this.balances.set({}); this.ignoredOps.set({});
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
@@ -361,6 +365,7 @@ export class FinancesStore {
     this.accounts.set(b.accounts);
     this.categories.set(b.categories);
     this.balances.set(b.balances);
+    this.ignoredOps.set(b.ignoredOps);
     this.coverage.set(b.coverage);
     this.months.set(b.months);
     this.aliases.set(b.aliases);

@@ -154,6 +154,7 @@ export function financesRouter(): Router {
       accounts: repo.listAccounts(),
       categories: repo.listCategories(),
       balances: repo.accountBalances(),
+      ignoredOps: repo.opsBeforeOpening(),
       coverage: repo.accountCoverage(),
       months: repo.availableMonths(),
       aliases: repo.listAliases(),
@@ -190,7 +191,9 @@ export function financesRouter(): Router {
   }));
 
   // ---- accounts ----
-  r.get('/accounts', handler((_req, res) => res.json({ accounts: repo.listAccounts(), balances: repo.accountBalances() })));
+  r.get('/accounts', handler((_req, res) => res.json({
+    accounts: repo.listAccounts(), balances: repo.accountBalances(), ignoredOps: repo.opsBeforeOpening(),
+  })));
 
   r.post('/accounts', handler((req, res) => {
     res.status(201).json({ account: repo.createAccount(accountInput(req.body || {})) });
