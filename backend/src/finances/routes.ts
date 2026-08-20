@@ -12,7 +12,8 @@ import { contractsRouter } from './contracts-routes';
 import { energyRouter } from './energy-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
-import { ACCOUNT_KINDS, TX_KINDS, TxKind } from './types';
+import * as loans from './loans';
+import { ACCOUNT_KINDS, LoanTerms, TX_KINDS, TxKind } from './types';
 
 /** Reject with an explicit French message rather than a bare 400. */
 class Invalid extends Error {}
@@ -86,14 +87,49 @@ function memberIds(v: unknown): string[] {
   return [...new Set(out)];
 }
 
+/**
+ * Termes du prêt, pour un compte de crédit. Tout vide veut dire « pas encore
+ * saisi » : le compte existe, il ne calcule rien, et l'écran le dit. Dès qu'un
+ * champ est rempli, les quatre obligatoires le deviennent, sinon on garderait
+ * un prêt à moitié saisi qui ne produit qu'un écran vide inexplicable.
+ */
+function loanTerms(body: Record<string, unknown>): LoanTerms | null {
+  const raw = (body['loan'] || {}) as Record<string, unknown>;
+  const given = ['principal', 'rateBp', 'payment', 'insurance', 'firstOn']
+    .some((k) => raw[k] !== undefined && raw[k] !== '' && raw[k] !== null);
+  if (!given) return null;
+  const terms: LoanTerms = {
+    principal: amountCents(raw['principal'], 'capital emprunté'),
+    rateBp: ratePoints(raw['rateBp']),
+    payment: amountCents(raw['payment'], 'mensualité'),
+    insurance: raw['insurance'] === undefined || raw['insurance'] === '' ? 0 : amountCents(raw['insurance'], 'assurance'),
+    firstOn: str(raw['firstOn'], 'date de première échéance'),
+  };
+  if (!isIsoDate(terms.firstOn)) fail('Date de première échéance invalide : attendu AAAA-MM-JJ.');
+  try { loans.checkTerms(terms); }
+  catch (e) { fail((e as Error).message); }
+  return terms;
+}
+
+/** Taux annuel, saisi en pourcentage (« 3,45 »), stocké en points de base. */
+function ratePoints(v: unknown): number {
+  const s = String(v ?? '').trim().replace(',', '.');
+  if (!s) return 0;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0 || n > 30) fail('Taux annuel invalide : attendu un pourcentage entre 0 et 30.');
+  return Math.round(n * 100);
+}
+
 function accountInput(body: Record<string, unknown>): repo.AccountInput {
+  const kind = oneOf(body['kind'], ACCOUNT_KINDS, 'type de compte', 'courant');
   return {
     name: str(body['name'], 'nom du compte'),
-    kind: oneOf(body['kind'], ACCOUNT_KINDS, 'type de compte', 'courant'),
+    kind,
     memberIds: memberIds(body['memberIds']),
     openingBalance: body['openingBalance'] === undefined || body['openingBalance'] === '' ? 0 : amountCents(body['openingBalance'], 'solde d’ouverture'),
     openingDate: optionalIsoDate(body['openingDate'], 'date d’ouverture'),
     archived: !!body['archived'],
+    loan: kind === 'credit' ? loanTerms(body) : null,
   };
 }
 
@@ -115,7 +151,19 @@ function categoryInput(body: Record<string, unknown>): repo.CategoryInput {
 
 function txInput(body: Record<string, unknown>): repo.TxInput {
   const accountId = id(body['accountId'], 'compte');
-  if (!repo.getAccount(accountId)) fail('Compte introuvable.');
+  const account = repo.getAccount(accountId) ?? fail('Compte introuvable.');
+  // Un compte de crédit ne tient pas de registre : son capital restant dû se
+  // calcule à partir des termes du prêt. Y écrire des opérations créerait une
+  // seconde source de vérité, et les deux divergeraient dès la première
+  // échéance. Un remboursement anticipé se saisit en recalant le capital
+  // restant dû à sa date.
+  if (account.kind === 'credit') {
+    fail(
+      `« ${account.name} » est un compte de crédit : son capital restant dû vient des termes du prêt, `
+      + 'pas d’opérations. Pour un remboursement anticipé ou une renégociation, ressaisissez le capital '
+      + 'restant dû à sa date dans la fiche du compte.',
+    );
+  }
   const amount = amountCents(body['amount'], 'montant');
   const kind = oneOf<TxKind>(body['kind'], TX_KINDS, 'type d’opération', amount >= 0 ? 'recette' : 'depense');
   if (kind === 'depense' && amount > 0) fail('Une dépense doit avoir un montant négatif.');
@@ -131,6 +179,16 @@ function txInput(body: Record<string, unknown>): repo.TxInput {
     notes: str(body['notes'], 'notes', { max: 2000, required: false }),
     cleared: !!body['cleared'],
   };
+}
+
+/** L'état de chaque prêt, indexé par compte. Les comptes sans prêt n'y sont pas. */
+function loanViews(): Record<number, loans.LoanView> {
+  const out: Record<number, loans.LoanView> = {};
+  for (const a of repo.listAccounts()) {
+    const v = loans.loanView(a);
+    if (v) out[a.id] = v;
+  }
+  return out;
 }
 
 export function financesRouter(): Router {
@@ -155,6 +213,7 @@ export function financesRouter(): Router {
       categories: repo.listCategories(),
       balances: repo.accountBalances(),
       ignoredOps: repo.opsBeforeOpening(),
+      loans: loanViews(),
       coverage: repo.accountCoverage(),
       months: repo.availableMonths(),
       aliases: repo.listAliases(),
@@ -193,7 +252,18 @@ export function financesRouter(): Router {
   // ---- accounts ----
   r.get('/accounts', handler((_req, res) => res.json({
     accounts: repo.listAccounts(), balances: repo.accountBalances(), ignoredOps: repo.opsBeforeOpening(),
+    loans: loanViews(),
   })));
+
+  /**
+   * Le tableau d'amortissement complet, pour le comparer à celui de la banque.
+   * Tableau vide quand le compte n'est pas un crédit ou que ses termes manquent.
+   */
+  r.get('/accounts/:id/schedule', handler((req, res) => {
+    const a = repo.getAccount(id(req.params['id'], 'compte'));
+    if (!a) { res.status(404).json({ error: 'Compte introuvable.' }); return; }
+    res.json({ instalments: loans.loanSchedule(a) });
+  }));
 
   r.post('/accounts', handler((req, res) => {
     res.status(201).json({ account: repo.createAccount(accountInput(req.body || {})) });

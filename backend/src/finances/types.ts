@@ -1,6 +1,6 @@
 // Wire shapes for /api/finances. Amounts are always signed integer cents.
 
-export type AccountKind = 'courant' | 'pro' | 'epargne';
+export type AccountKind = 'courant' | 'pro' | 'epargne' | 'credit';
 export type TxKind = 'depense' | 'recette' | 'virement';
 
 export interface Account {
@@ -13,6 +13,25 @@ export interface Account {
   openingDate: string | null;
   archived: boolean;
   position: number;
+  /** Paramètres du prêt, renseignés seulement quand `kind` vaut `credit`. */
+  loan: LoanTerms | null;
+}
+
+/**
+ * Un prêt amortissable à taux fixe, tel qu'il est écrit sur une offre de prêt.
+ * Le capital restant dû n'est pas là : il se calcule (voir `loans.ts`).
+ */
+export interface LoanTerms {
+  /** Capital emprunté, en centimes. */
+  principal: number;
+  /** Taux annuel nominal, en points de base : 3,45 % vaut 345. */
+  rateBp: number;
+  /** Mensualité hors assurance, en centimes. */
+  payment: number;
+  /** Assurance emprunteur mensuelle, en centimes. Zéro si elle est déjà dans la mensualité. */
+  insurance: number;
+  /** Date de la première échéance. */
+  firstOn: string;
 }
 
 export interface Category {
@@ -74,11 +93,12 @@ export interface MonthSummary {
   incomplete: boolean;
 }
 
-export const ACCOUNT_KINDS: AccountKind[] = ['courant', 'pro', 'epargne'];
+export const ACCOUNT_KINDS: AccountKind[] = ['courant', 'pro', 'epargne', 'credit'];
 export const TX_KINDS: TxKind[] = ['depense', 'recette', 'virement'];
 
 export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
   courant: 'Compte courant',
   pro: 'Compte professionnel',
   epargne: 'Épargne',
+  credit: 'Crédit',
 };

@@ -4,7 +4,7 @@ import { ApiService } from './api.service';
 // Wire shapes of /api/finances. Amounts are signed integer cents everywhere:
 // the euro value only exists at display time.
 
-export type AccountKind = 'courant' | 'pro' | 'epargne';
+export type AccountKind = 'courant' | 'pro' | 'epargne' | 'credit';
 export type TxKind = 'depense' | 'recette' | 'virement';
 
 export interface FinAccount {
@@ -12,6 +12,43 @@ export interface FinAccount {
   /** Titulaires : zéro, un, ou plusieurs. */
   memberIds: string[];
   openingBalance: number; openingDate: string | null; archived: boolean; position: number;
+  /** Termes du prêt, seulement pour un compte de type crédit. */
+  loan: FinLoanTerms | null;
+}
+
+/** Un prêt amortissable à taux fixe, tel qu'il est écrit sur l'offre de prêt. */
+export interface FinLoanTerms {
+  principal: number;
+  /** Taux annuel nominal en points de base : 3,45 % vaut 345. */
+  rateBp: number;
+  payment: number;
+  insurance: number;
+  firstOn: string;
+}
+
+/** Une échéance du tableau d'amortissement. */
+export interface FinInstalment {
+  date: string; n: number; interest: number; principal: number;
+  insurance: number; total: number; owed: number;
+}
+
+/** L'état d'un prêt aujourd'hui : tout est recalculé, rien n'est stocké. */
+export interface FinLoanView {
+  accountId: number;
+  /** Capital restant dû, positif. C'est une dette, pas un solde. */
+  owed: number;
+  principal: number;
+  repaid: number;
+  /** Part remboursée, de 0 à 1. */
+  progress: number;
+  paid: number;
+  left: number;
+  endsOn: string;
+  interestLeft: number;
+  insuranceLeft: number;
+  monthly: number;
+  next: FinInstalment | null;
+  thisYear: { interest: number; insurance: number };
 }
 
 export interface FinCategory {
@@ -46,12 +83,15 @@ export interface FinMonthSummary {
 export interface FinBootstrap {
   accounts: FinAccount[]; categories: FinCategory[]; balances: Record<number, number>;
   ignoredOps: Record<number, number>;
+  loans: Record<number, FinLoanView>;
   coverage: FinCoverage[]; months: string[]; aliases: FinAlias[];
 }
 
 export interface AccountPayload {
   name: string; kind: AccountKind; memberIds: string[];
   openingBalance: string; openingDate: string | null; archived: boolean;
+  /** Montants et taux en texte : le backend convertit, comme pour les autres saisies. */
+  loan: { principal: string; rateBp: string; payment: string; insurance: string; firstOn: string } | null;
 }
 
 export interface CategoryPayload {

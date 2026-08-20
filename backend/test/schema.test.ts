@@ -31,6 +31,9 @@ describe('migrations du module Finances', () => {
     // On rejoue l'état d'une base arrêtée à la migration 3, colonne comprise.
     migrateFinances(db);
     db.exec('DROP TABLE fin_account_members; DROP TABLE fin_contract_members;');
+    for (const c of ['loan_principal', 'loan_rate_bp', 'loan_payment', 'loan_insurance', 'loan_first_on']) {
+      db.exec(`ALTER TABLE fin_accounts DROP COLUMN ${c}`);
+    }
     db.exec("ALTER TABLE fin_accounts ADD COLUMN member_id TEXT");
     db.exec("ALTER TABLE fin_contracts ADD COLUMN member_id TEXT");
     db.prepare("INSERT INTO fin_accounts (name, kind, member_id, position) VALUES ('Compte', 'courant', 'm1', 0)").run();
@@ -48,6 +51,19 @@ describe('migrations du module Finances', () => {
     // La colonne a bien disparu : deux sources de vérité seraient pires qu'une.
     const columns = (db.prepare('PRAGMA table_info(fin_accounts)').all() as { name: string }[]).map((c) => c.name);
     assert.ok(!columns.includes('member_id'));
+  });
+
+  it('migration 5 : ajoute les colonnes du prêt sans toucher aux comptes existants', () => {
+    const db = freshDb();
+    migrateFinances(db);
+    db.prepare("INSERT INTO fin_accounts (name, kind, opening_balance, position) VALUES ('Joint', 'courant', 5000, 0)").run();
+    const columns = (db.prepare('PRAGMA table_info(fin_accounts)').all() as { name: string }[]).map((c) => c.name);
+    for (const c of ['loan_principal', 'loan_rate_bp', 'loan_payment', 'loan_insurance', 'loan_first_on']) {
+      assert.ok(columns.includes(c), `colonne manquante : ${c}`);
+    }
+    const row = db.prepare('SELECT kind, opening_balance, loan_principal FROM fin_accounts').get() as Record<string, unknown>;
+    assert.deepEqual(row, { kind: 'courant', opening_balance: 5000, loan_principal: null },
+      'un compte ordinaire n’a rien à ressaisir');
   });
 
   it('est rejouable : un second démarrage ne duplique rien', () => {

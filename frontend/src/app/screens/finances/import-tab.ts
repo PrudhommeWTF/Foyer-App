@@ -73,7 +73,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
                 </div>
                 <select class="input sel" [ngModel]="store.ui().mapping[u.label]" (ngModelChange)="setMapping(u.label, $event)">
                   <option [ngValue]="null">Rattacher à…</option>
-                  @for (a of store.accounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
+                  @for (a of store.ledgerAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
                 </select>
                 <button class="btn btn-soft" [disabled]="!store.ui().mapping[u.label] || store.ui().importBusy" (click)="store.mapAccount(u.label)">Rattacher</button>
               </div>

@@ -57,6 +57,18 @@ compte l'annonce (« Solde constaté le 20/08/2026, 3 opérations antérieures d
 `repo.opsBeforeOpening()` fournit ce compteur, exposé sous `ignoredOps` par `/bootstrap` et
 `/accounts`.
 
+**Un compte de crédit ne tient pas de registre.** Un prêt amortissable à taux fixe est
+entièrement déterminé par quatre chiffres de l'offre de prêt (capital, taux, mensualité, date de
+première échéance) : le capital restant dû à n'importe quelle date s'en déduit. Y écrire aussi des
+opérations créerait une seconde source de vérité, et les deux divergeraient dès la première
+échéance, puisque la mensualité contient des intérêts. L'API refuse donc toute opération sur un
+compte de crédit, avec un message qui dit quoi faire à la place, et ces comptes sortent des
+sélecteurs d'opération, d'import et de règle.
+
+**Un remboursement anticipé ou une renégociation se saisit en recalant.** On recopie le capital
+restant dû du relevé annuel dans le champ « à la date du », et le tableau d'amortissement repart
+de là. C'est le même mécanisme de solde ancré que pour un compte ordinaire, avec le même sens.
+
 **Un compte qui porte des opérations ne peut pas être supprimé.** L'API répond 409 avec un
 message qui explique quoi faire (archiver). Archiver conserve tout l'historique et sort le
 compte des alertes de mois incomplet.
@@ -126,6 +138,7 @@ backend/src/finances/
   rules-routes.ts  /api/finances/rules et /tags
   dashboard.ts     agrégats mensuels et annuels, calculés en SQL
   contracts.ts     biens, contrats, échéances dérivées, coût réel
+  loans.ts         prêts amortissables : capital restant dû, échéancier, intérêts
   contracts-routes.ts /api/finances/contracts et /assets
   attachments.ts   pièces jointes : octets sur disque, métadonnées en base
   attachments-routes.ts /api/finances/attachments
@@ -432,6 +445,40 @@ change toute seule sous les doigts de celui qui l'a cochée serait pire que pas 
 passées en argument. C'est ce qui permet de le tester sans base, et un fichier ICS mérite des
 tests parce que personne ne le relit : seuls des agendas le lisent, et ils refusent en silence ce
 qu'ils ne comprennent pas.
+
+## 10 bis. Crédits
+
+`loans.ts` ne stocke rien. Comme les échéances de contrats, tout se recalcule : capital restant
+dû, décomposition de chaque échéance, date de fin, intérêts de l'année, coût total. Un tableau
+d'amortissement figé en base serait faux dès le premier remboursement anticipé, et personne ne
+saurait pourquoi.
+
+Le calcul est celui d'un prêt amortissable à taux fixe, le cas de la quasi-totalité des crédits
+immobiliers et à la consommation français : intérêts du mois = capital restant dû × taux / 12,
+capital amorti = mensualité moins ces intérêts. **La dernière échéance est ajustée** pour solder
+exactement, sinon les arrondis mensuels laissent toujours un centime traîner. C'est ce que fait un
+prêteur.
+
+Deux garde-fous. **Une mensualité qui ne couvre pas les intérêts du premier mois est refusée à la
+saisie**, avec le chiffre qui manque : sans ce contrôle, le capital monterait à chaque échéance et
+le tableau ne se terminerait jamais. Et `loanView()` renvoie `null` plutôt que de propager une
+exception : un écran ne doit pas tomber à cause d'une ligne de base douteuse, il doit le dire.
+
+Le taux est stocké en **points de base** (`loan_rate_bp`, 345 pour 3,45 %), pour rester en entiers
+partout, comme les montants sont en centimes.
+
+### Ce que le crédit ne fait pas
+
+La mensualité qui sort du compte courant reste une **dépense entière** dans le bilan : c'est bien
+de l'argent qui quitte le foyer. La décomposition capital / intérêts est affichée à part, sur le
+prêt, sans toucher aux recettes et dépenses. Sortir la part capital des dépenses serait plus juste
+économiquement, mais rendrait des totaux mensuels déjà connus dépendants de l'exactitude de
+l'échéancier.
+
+Ne sont pas modélisés : taux variable, différé d'amortissement, renégociation. Chacun se rattrape
+en recalant le capital restant dû. La dernière échéance n'est pas non plus poussée dans le
+calendrier ni dans le flux ICS : le type `Deadline` est taillé pour les contrats, et lui faire
+porter un prêt demanderait de le généraliser proprement plutôt que d'inventer un contrat fantôme.
 
 ## 11. Pièces jointes
 
