@@ -2,15 +2,13 @@
 //
 // Comme les pièces Finances, tout est derrière le garde de session : une photo
 // de recette n'est jamais joignable par sa seule URL.
+import { contentDisposition } from '../headers';
 import express, { Request, Response, Router } from 'express';
 import { ACCEPTED_IMAGE_LABEL, IMAGE_MIMES, detectType } from './blobs';
 import * as files from './files';
 
 /** Une photo prise au téléphone pèse quelques mégaoctets. */
 const MAX_UPLOAD = '20mb';
-
-/** Nom de fichier pour le navigateur : les guillemets et les sauts de ligne sautent. */
-const headerName = (name: string): string => name.replace(/["\\\r\n]/g, '').slice(0, 120) || 'fichier';
 
 export function filesRouter(): Router {
   const r = express.Router();
@@ -68,7 +66,7 @@ export function filesRouter(): Router {
     // Les octets sont adressés par leur empreinte : le contenu d'un identifiant
     // ne change jamais, le navigateur peut le garder longtemps.
     res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
-    res.setHeader('Content-Disposition', `inline; filename="${headerName(file.name)}"`);
+    res.setHeader('Content-Disposition', contentDisposition('inline', file.name, 'fichier'));
     // sendFile diffuse : une photo de 8 Mo ne devient jamais un tampon de 8 Mo ici.
     res.sendFile(file.path);
   });

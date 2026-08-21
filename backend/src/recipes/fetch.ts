@@ -28,8 +28,17 @@ const MAX_BYTES = 3 * 1024 * 1024;
 const TIMEOUT_MS = 12000;
 const MAX_REDIRECTS = 4;
 
-/** Se présenter honnêtement : un site a le droit de savoir qui le lit. */
-const USER_AGENT = 'Foyer/1.0 (application familiale auto-hébergée ; import de recette déclenché par l’utilisateur)';
+/**
+ * Se présenter honnêtement : un site a le droit de savoir qui le lit, et de
+ * retrouver le projet derrière.
+ *
+ * En ASCII pur, délibérément. La version précédente portait une apostrophe
+ * typographique (U+2019), invisible à l'œil et supérieure à 255 : « fetch »
+ * refusait de construire la requête, et AUCUN import n'a jamais pu aboutir. Un
+ * en-tête est un détail de protocole, pas un texte d'interface : il n'a aucune
+ * raison de sortir de l'ASCII.
+ */
+const USER_AGENT = 'Foyer/1.0 (+https://github.com/PrudhommeWTF/Foyer-App; self-hosted family app; user-initiated recipe import)';
 
 /**
  * Une adresse IP que le serveur n'a rien à aller chercher : boucle locale,
@@ -119,6 +128,56 @@ async function readCapped(res: Response, max: number): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+/**
+ * Traductions des pannes réseau les plus courantes. Un code brut ne dit rien à
+ * qui exploite le serveur : la panne se répare autrement selon qu'il manque une
+ * route, que le certificat est refusé ou que le site a coupé la connexion.
+ */
+const PANNES: Record<string, string> = {
+  ENOTFOUND: 'le nom de domaine ne se résout pas depuis le serveur',
+  EAI_AGAIN: 'la résolution du nom a échoué (DNS injoignable ou saturé)',
+  ECONNREFUSED: 'le site a refusé la connexion',
+  ECONNRESET: 'le site a coupé la connexion en cours de route',
+  EHOSTUNREACH: 'aucune route vers le site depuis le serveur',
+  ENETUNREACH: 'aucune route vers le site depuis le serveur (vérifiez notamment l’IPv6)',
+  ETIMEDOUT: 'la connexion a expiré',
+  UND_ERR_CONNECT_TIMEOUT: 'la connexion a expiré',
+  EPROTO: 'échec de la négociation TLS',
+  CERT_HAS_EXPIRED: 'le certificat du site est expiré',
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'le certificat du site n’a pas pu être vérifié',
+  SELF_SIGNED_CERT_IN_CHAIN: 'le certificat du site est auto-signé',
+  DEPTH_ZERO_SELF_SIGNED_CERT: 'le certificat du site est auto-signé',
+};
+
+/**
+ * Ce que Node sait réellement de la panne. Sans cela, tout échec se résume à
+ * « site injoignable », qui ne dit ni quoi vérifier ni chez qui.
+ */
+export function networkReason(e: unknown): string {
+  const err = e as { name?: string; cause?: { code?: string; message?: string; errors?: unknown[] } };
+  if (err?.name === 'TimeoutError') return 'le site n’a pas répondu à temps';
+  const cause = err?.cause;
+  if (!cause) {
+    // Aucune cause : la requête n'a même pas atteint le réseau. C'est un défaut
+    // de Foyer, pas une panne du site, et le confondre avec « injoignable » fait
+    // chercher des heures du mauvais côté. Vécu une fois, plus jamais.
+    return 'la requête n’a pas pu être émise (' + ((e as Error)?.message || 'raison inconnue') + ')';
+  }
+
+  // Plusieurs adresses essayées, IPv4 puis IPv6 : Node agrège les échecs, et
+  // c'est exactement la trace d'une pile IPv6 annoncée mais non routée.
+  if (Array.isArray(cause.errors) && cause.errors.length) {
+    const codes = [...new Set(cause.errors
+      .map((x) => (x as { code?: string; message?: string })?.code || (x as { message?: string })?.message)
+      .filter(Boolean) as string[])];
+    return codes.map((c) => PANNES[c] || c).join(', ');
+  }
+  const code = cause.code;
+  if (code) return PANNES[code] || code;
+  if (cause.message) return cause.message;
+  return 'connexion impossible';
+}
+
 export interface FetchedPage { url: string; body: Buffer; contentType: string }
 
 /**
@@ -137,10 +196,11 @@ export async function fetchPublic(raw: string, accept: string): Promise<FetchedP
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (e) {
-      const reason = (e as Error).name === 'TimeoutError'
-        ? 'le site n’a pas répondu à temps'
-        : 'le site est injoignable depuis le serveur';
-      throw new FetchError(`Import impossible : ${reason} (${current.hostname}).`);
+      // Trace complète côté serveur : c'est là que l'exploitant ira chercher la
+      // pile d'appels, la réponse à l'écran devant rester une phrase.
+      // eslint-disable-next-line no-console
+      console.warn(`[foyer] Recettes : échec réseau sur ${current.href} —`, e);
+      throw new FetchError(`Import impossible : ${networkReason(e)} (${current.hostname}).`);
     }
 
     if (res.status >= 300 && res.status < 400) {
