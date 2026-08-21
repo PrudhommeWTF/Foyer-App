@@ -273,14 +273,88 @@ describe('titre d’étape', () => {
   });
 });
 
+describe('une recette d’un troisième site', () => {
+  // CuisineAZ écrit les ingrédients d'une troisième façon, et sa page porte un
+  // commentaire d'internaute dans le même bloc JSON-LD que la recette.
+  const node = fixture('cuisineaz-gratin-courgettes.json');
+  const CAZ = 'https://www.cuisineaz.com/recettes/gratin-de-courgettes-simple-122741.aspx';
+
+  it('lit un nombre de portions écrit sans le mot « personnes »', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.equal(recipe.portions, 6);
+    assert.equal(recipe.prepMin, 10);
+    assert.equal(recipe.cookMin, 25);
+  });
+
+  it('reconnaît une image en .jpeg autant qu’en .jpg', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.ok(recipe.imageUrl?.endsWith('.jpeg'));
+  });
+
+  it('laisse un titre qui ne porte aucun appât intact', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.equal(recipe.name, 'Gratin de courgettes simple');
+  });
+
+  it('garde les titres d’étapes de ce site aussi', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.equal(recipe.steps.length, 4);
+    assert.match(recipe.steps[0], /^Préparation des courgettes : Lavez les courgettes/);
+    assert.match(recipe.steps[3], /^Service du gratin : Servez/);
+  });
+
+  it('reprend les ingrédients dans leur graphie, marques de pluriel comprises', () => {
+    // Une troisième convention d'écriture : « 5 Courgette(s) », l'unité avant un
+    // nom en capitale et sans préposition, et la ligature dans « Œuf(s) ».
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.deepEqual(recipe.ingr, [
+      '5 Courgette(s)', '1 Œuf(s)', '20 cl Crème fraîche', '150 g Gruyère râpé',
+      '1 noix Beurre', '2 pincée(s) Sel', '1 pincée(s) Poivre',
+    ]);
+  });
+});
+
+describe('ce que la page contient et que la recette ne doit pas prendre', () => {
+  it('un commentaire d’internaute, lien publicitaire compris, ne ressort nulle part', () => {
+    // La page réelle porte un commentaire terminé par « <a href="…"> discord id
+    // lookup </a> ». Ces blocs sont du texte écrit par n'importe qui : rien de ce
+    // qui n'est pas un champ de recette déclaré ne doit entrer dans la fiche.
+    const { recipe } = fromRecipeNode(fixture('cuisineaz-gratin-courgettes.json'), 'https://x/r');
+    const tout = JSON.stringify(recipe);
+    assert.equal(/discordlookup|discord id|commentCount/i.test(tout), false);
+    assert.equal(/<a\s|href=/i.test(tout), false);
+  });
+
+  it('ne lit que les champs de recette, même si les autres sont hostiles', () => {
+    const { recipe } = fromRecipeNode({
+      '@type': 'Recipe',
+      name: 'Tarte',
+      recipeIngredient: ['1 pomme'],
+      recipeInstructions: ['Cuire.'],
+      recipeYield: '4',
+      description: '<script>alert(1)</script>',
+      comment: { text: 'malveillant <img onerror=alert(1)>' },
+      review: [{ reviewBody: 'encore du texte libre' }],
+      estimatedCost: 'Pas cher',
+      author: { name: 'Quelqu’un', url: 'https://ailleurs.invalid' },
+    }, 'https://x/r');
+    const tout = JSON.stringify(recipe);
+    assert.equal(/script|onerror|malveillant|encore du texte|Pas cher|ailleurs\.invalid/i.test(tout), false);
+    assert.deepEqual(recipe.ingr, ['1 pomme']);
+  });
+});
+
 describe('toutes les pages réelles du jeu de test', () => {
   // Garde-fou pour les fixtures à venir : ce qui est ajouté dans le dossier doit
   // se lire, sinon le fichier est là sans que personne ne s'en aperçoive.
   const noms = fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
 
   it('le dossier de fixtures n’est pas vide', () => {
-    assert.ok(noms.length >= 5, 'au moins cinq pages réelles');
-    assert.ok(noms.some((n) => !n.startsWith('marmiton-')), 'au moins un autre site que Marmiton');
+    assert.ok(noms.length >= 6, 'au moins six pages réelles');
+    // Au moins trois sites différents : c'est ce qui empêche la couverture de
+    // redevenir mono-site sans que rien ne le signale.
+    const sites = new Set(noms.map((n) => n.split('-')[0]));
+    assert.ok(sites.size >= 3, 'au moins trois sites : ' + [...sites].join(', '));
   });
 
   for (const nom of noms) {
