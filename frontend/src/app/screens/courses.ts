@@ -4,6 +4,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { LIST_ICONS, PALETTE } from '../core/constants';
+import { RAYONS } from '../core/articles';
 import { Aisle, ShopItem, ShopState } from '../core/models';
 
 interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
@@ -151,7 +152,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
         </div>
       }
 
-      <div class="gen-card" (click)="store.generateList(0)">
+      <div class="gen-card" (click)="store.prepareList(0)">
         <f-icon name="bolt" [size]="22" color="#fff" />
         <div class="gen-t">Générer depuis les repas</div>
         <div class="gen-s">Ajoute les ingrédients des repas prévus cette semaine</div>
@@ -266,6 +267,14 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
             <div class="swatch" [style.background]="c" [style.box-shadow]="store.ui().aiColor === c ? '0 0 0 3px var(--surface), 0 0 0 5px ' + c : ''" (click)="store.patch({ aiColor: c })"></div>
           }
         </div>
+        <div class="field-label">Type de rayon</div>
+        <div class="hint mb2">Sert à ranger automatiquement les ingrédients générés depuis les repas. Facultatif : sans lui, le nom du rayon suffit souvent.</div>
+        <div class="seg-wrap">
+          <div class="seg-opt" [class.on]="!store.ui().aiKind" (click)="store.patch({ aiKind: '' })">Aucun</div>
+          @for (r of RAYONS; track r.key) {
+            <div class="seg-opt" [class.on]="store.ui().aiKind === r.key" (click)="store.patch({ aiKind: r.key })">{{ r.name }}</div>
+          }
+        </div>
         <div class="modal-actions">
           <button class="btn btn-soft grow" (click)="store.patch({ aiForm: false })">Annuler</button>
           <button class="btn btn-primary grow2" (click)="store.saveAisle()">Enregistrer</button>
@@ -365,6 +374,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .up { transform: rotate(90deg); }
     .down { transform: rotate(90deg); }
     .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .mb2 { margin-bottom: 10px; }
 
     .modal-row { display: flex; gap: 12px; margin-bottom: 16px; }
     .modal-row .grow { flex: 1; }
@@ -397,6 +407,7 @@ export class CoursesScreen {
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
   readonly LIST_ICONS = LIST_ICONS;
+  readonly RAYONS = RAYONS;
   readonly PALETTE = PALETTE;
   readonly iconKeys = Object.keys(LIST_ICONS);
   readonly states: { k: ShopState; label: string }[] = [

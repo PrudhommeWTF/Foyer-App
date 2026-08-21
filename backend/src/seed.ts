@@ -10,9 +10,9 @@ import { HouseholdState } from './models';
  * l'ordre des allées plutôt que dans l'ordre de saisie.
  */
 const STARTER_AISLES = (): HouseholdState['aisles'] => [
-  { id: 'a1', name: 'Fruits & légumes', color: '#7A9B76', position: 0 },
-  { id: 'a2', name: 'Frais', color: '#4E93B8', position: 1 },
-  { id: 'a3', name: 'Épicerie', color: '#F0B24B', position: 2 },
+  { id: 'a1', name: 'Fruits & légumes', color: '#7A9B76', position: 0, kind: 'legumes' },
+  { id: 'a2', name: 'Frais', color: '#4E93B8', position: 1, kind: 'frais' },
+  { id: 'a3', name: 'Épicerie', color: '#F0B24B', position: 2, kind: 'epicerie' },
   { id: 'a4', name: 'À trier', color: '#8A7E74', position: 3 },
 ];
 
@@ -22,6 +22,7 @@ export const EMPTY_STATE: HouseholdState = {
   members: [],
   events: [],
   aisles: STARTER_AISLES(),
+  articles: [],
   shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
   shop: [],
   taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }],
@@ -104,6 +105,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     members: [admin, ...others],
     events: [],
     aisles: STARTER_AISLES(),
+    articles: [],
     shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
     shop: [],
     taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }],

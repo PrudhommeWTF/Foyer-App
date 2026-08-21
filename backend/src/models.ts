@@ -4,7 +4,25 @@ import type { ShopItem } from './shopping/ops';
 
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null; }
-export interface Aisle { id: string; name: string; color: string; position: number; }
+/**
+ * Un rayon du magasin. `kind` est facultatif : il relie un rayon du foyer à un
+ * type connu du référentiel d'articles, pour que « farine » aille à l'épicerie
+ * même si le rayon a été renommé « Sec & conserves ». Sans lui, le nom du rayon
+ * sert de repli.
+ */
+export type Rayon = 'legumes' | 'viande' | 'frais' | 'surgele' | 'boulangerie' | 'epicerie' | 'boisson' | 'entretien';
+export interface Aisle { id: string; name: string; color: string; position: number; kind?: Rayon | null; }
+/**
+ * Article du référentiel propre au foyer. La base intégrée à l'application en
+ * connaît déjà quelques centaines : `articles` ne contient que ce qu'elle
+ * ignore ou nomme mal, et gagne toujours contre elle.
+ */
+export interface Article {
+  key: string; name: string; syn: string[]; rayon: Rayon;
+  /** Denrée de fond de placard : proposée, mais exclue de la liste par défaut. */
+  pantry?: boolean;
+  allerg?: string[];
+}
 export interface ShopList { id: string; name: string; color: string; icon: string; }
 // La forme d'un article et celle de ses mutations vivent avec le moteur qui les
 // écrit réellement, article par article (voir shopping/ops.ts).
@@ -25,7 +43,11 @@ export interface FileItem { id: string; name: string; folderId: string; type: st
  * absents, prévus au modèle cible.
  */
 export interface MealItem { rid?: string; text?: string; }
-export interface MealValue { items: MealItem[]; }
+export interface MealValue {
+  items: MealItem[];
+  /** Couverts réellement prévus, quand ils diffèrent de la taille du foyer. */
+  pax?: number | null;
+}
 // `photoId` désigne une ligne de hh_attachments : les octets ne sont plus dans
 // le document, qui repartait en entier à chaque enregistrement.
 export interface Recipe {
@@ -58,6 +80,7 @@ export interface HouseholdState {
   members: Member[];
   events: EventItem[];
   aisles: Aisle[];
+  articles: Article[];
   shopLists: ShopList[];
   shop: ShopItem[];
   taskLists: TaskList[];

@@ -29,6 +29,13 @@ export interface ShopItem {
   aisleId: string;
   state: ShopState;
   listId: string;
+  /**
+   * Provenance. `art` porte la clé d'article du référentiel, `gen` marque ce que
+   * la génération depuis les repas a écrit : une régénération ne remplace ainsi
+   * que ce qu'elle a elle-même produit, jamais un ajout fait à la main.
+   */
+  art?: string | null;
+  gen?: boolean | null;
   /** Membre qui a posé l'état courant, et quand. Sert à l'afficher, pas à arbitrer. */
   by?: string | null;
   at?: string | null;
@@ -36,7 +43,7 @@ export interface ShopItem {
 
 interface Base { opId: string; by?: string | null; at?: string | null; }
 export type ShopOp =
-  | (Base & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string })
+  | (Base & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean })
   | (Base & { op: 'set-state'; id: string; state: ShopState })
   | (Base & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string })
   | (Base & { op: 'remove'; id: string });
@@ -107,7 +114,11 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
         if (!ctx.listIds.has(listId)) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
         const aisleId = trimmed(o['aisleId'], 80);
         if (!ctx.aisleIds.has(aisleId)) { skipped.push({ opId, reason: 'Le rayon visé n’existe plus.' }); break; }
-        out.push({ id, name, qty: trimmed(o['qty'], 40), aisleId, state: 'a-prendre', listId, by, at });
+        out.push({
+          id, name, qty: trimmed(o['qty'], 40), aisleId, state: 'a-prendre', listId, by, at,
+          ...(o['art'] ? { art: trimmed(o['art'], 80) } : {}),
+          ...(o['gen'] ? { gen: true } : {}),
+        });
         applied.push(opId);
         break;
       }

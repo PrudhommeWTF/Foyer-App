@@ -30,7 +30,7 @@ import { MealValue } from '../core/models';
             <button class="btn btn-soft sm" (click)="store.patch({ weekOffset: 0 })">Cette semaine</button>
           }
         </div>
-        <button class="btn btn-sage" (click)="store.generateList(store.ui().weekOffset)">
+        <button class="btn btn-sage" (click)="store.prepareList(store.ui().weekOffset)">
           <f-icon name="bolt" [size]="20" color="#fff" [width]="2" /> Générer les courses
         </button>
       </div>
@@ -99,6 +99,14 @@ import { MealValue } from '../core/models';
           <div class="menu-empty">Aucun plat choisi. Touchez une recette ci-dessous, ou ajoutez un intitulé libre.</div>
         }
 
+        <div class="field-label">Couverts</div>
+        <div class="pax-row">
+          <input class="input pax" type="number" inputmode="numeric" min="1" max="30"
+                 [ngModel]="store.ui().mealPax" (ngModelChange)="store.patch({ mealPax: $event })"
+                 [placeholder]="store.householdPax() + ' (le foyer)'" />
+          <span class="pax-hint">Les quantités de la liste de courses suivent ce nombre. Laissez vide pour le foyer entier.</span>
+        </div>
+
         <div class="field-label">Ajouter un intitulé libre</div>
         <div class="free-row">
           <input class="input" [ngModel]="store.ui().mealText" (ngModelChange)="store.patch({ mealText: $event })"
@@ -137,6 +145,10 @@ import { MealValue } from '../core/models';
     }
   `,
   styles: [`
+    .pax-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .pax { width: 120px; flex: none; }
+    .pax-hint { flex: 1; min-width: 180px; font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+
     .head-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
     .nav { display: flex; align-items: center; gap: 12px; }
     .nav-label { text-align: center; min-width: 230px; }

@@ -18,13 +18,13 @@ Angular 21 · Node/Express · SQLite · Docker
 |---|---|
 | 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. |
 | 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts) et **échéances de contrat**. Partage par **flux ICS** (Google/Apple Agenda). |
-| 🛒 **Courses** | Multi-listes, rayons **réordonnables** (l'ordre des allées de votre magasin), coche **en un tap**, trois états (à prendre, dans le panier, indisponible), articles pris regroupés en bas, suggestions dès les premières lettres, génération depuis le planning repas. **Écriture article par article** : deux téléphones peuvent cocher en même temps sans que l'un écrase l'autre, et les coches faites **hors ligne** repartent au retour du réseau. |
+| 🛒 **Courses** | Multi-listes, rayons **réordonnables** (l'ordre des allées de votre magasin), coche **en un tap**, trois états (à prendre, dans le panier, indisponible), articles pris regroupés en bas, suggestions dès les premières lettres, génération depuis le planning repas. **Écriture article par article** : deux téléphones peuvent cocher en même temps sans que l'un écrase l'autre, et les coches faites **hors ligne** repartent au retour du réseau. **Génération depuis les repas** : les ingrédients de la semaine sont lus, additionnés, mis à l'échelle des couverts et rangés par rayon, avec un **rapport affiché avant d'écrire** (à ajouter, à compléter, à retirer, écarté comme fond de placard, non reconnu). Une régénération ne défait jamais un ajout manuel ni un article déjà coché. |
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
 | 💰 **Finances** | Comptes (courant, professionnel, épargne, **crédit**) avec **un ou plusieurs titulaires** et soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Crédits immobiliers et à la consommation** : quatre chiffres de l'offre de prêt suffisent, capital restant dû, échéancier, date de fin et intérêts de l'année se calculent. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
-| 🍽️ **Repas** | Grille 7 jours, semaine courante, déjeuner et dîner (petit-déjeuner en option dans *Paramètres → Repas*). **Plusieurs plats par créneau** : entrée, plat, dessert se choisissent séparément, chacun étant une recette du carnet ou un texte libre. La génération des courses prend les ingrédients de tous les plats. |
+| 🍽️ **Repas** | Grille 7 jours, semaine courante, déjeuner et dîner (petit-déjeuner en option dans *Paramètres → Repas*). **Plusieurs plats par créneau** : entrée, plat, dessert se choisissent séparément, chacun étant une recette du carnet ou un texte libre. **Couverts par créneau** : les quantités de la liste de courses suivent le nombre de convives. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques, portions et temps de préparation/cuisson. **Import depuis l'adresse d'une page de recette** (Marmiton, 750g, Cuisine AZ, blogs…) par lecture des données structurées `schema.org/Recipe` : titre, portions, durées, ingrédients, étapes et photo remplissent le formulaire, que vous relisez avant d'enregistrer. Les **photos sont stockées sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement). |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
 | ⚙️ **Paramètres** | Langue, thème, notifications, membres, export/reset des données. |
@@ -371,6 +371,15 @@ La maquette de référence est conservée dans [`docs/`](docs/).
 Architecture de la chaîne recettes → planning → courses, procédures de sauvegarde,
 de migration et de nettoyage des fichiers, diagnostic d'un article qui n'arrive pas
 dans la liste : [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
+
+**Des repas à la liste de courses** : les lignes d'ingrédients sont lues
+(quantité, unité, produit), rattachées à un référentiel d'environ 200 articles
+français, additionnées entre recettes et mises à l'échelle des couverts. Le
+rapport s'affiche avant que quoi que ce soit ne soit écrit, et chaque ligne dit de
+quelle recette elle vient. Ce qui n'est pas reconnu part quand même aux courses
+avec son texte d'origine : **aucune ligne n'est perdue**. Le référentiel du foyer
+(*Courses → Rayon*, et les articles que vous corrigez) l'emporte toujours sur la
+base intégrée.
 
 **Import de recette** : c'est la seule requête sortante du module, déclenchée par
 un geste explicite et journalisée. Le serveur refuse toute adresse pointant sur le

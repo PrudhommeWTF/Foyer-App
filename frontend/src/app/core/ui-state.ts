@@ -1,4 +1,4 @@
-import { FileType, MealItem, Prio, Recur, SchedType, ShopState } from './models';
+import { FileType, MealItem, Prio, Rayon, Recur, SchedType, ShopState } from './models';
 import { dstr } from './helpers';
 
 export interface IngrRow { id: string; val: string; }
@@ -23,6 +23,10 @@ export interface UiState {
   /** Plats retenus pour le créneau en cours d'édition, dans l'ordre du service. */
   mealItems: MealItem[];
   mealText: string;
+  /** Couverts du créneau en cours d'édition. Vide = la taille du foyer. */
+  mealPax: string;
+  /** Rapport de génération de la liste, affiché avant d'écrire quoi que ce soit. */
+  genOpen: boolean;
 
   // event modal + datepicker
   showEvent: boolean; evEditId: string | null;
@@ -39,7 +43,7 @@ export interface UiState {
   activeShopList: string; shopListForm: boolean; clEditId: string | null;
   clName: string; clColor: string; clIcon: string; shopListDelId: string | null;
   // aisles
-  aiForm: boolean; aiEditId: string | null; aiName: string; aiColor: string; aisleDelId: string | null;
+  aiForm: boolean; aiEditId: string | null; aiName: string; aiColor: string; aiKind: Rayon | ''; aisleDelId: string | null;
 
   // task modal
   showTask: boolean; taskEditId: string | null;
@@ -91,12 +95,12 @@ export function initialUi(): UiState {
     screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
-    weekOffset: 0, mealEdit: null, mealItems: [], mealText: '',
+    weekOffset: 0, mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false,
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
     aisleOrderOpen: false,
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
-    aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aisleDelId: null,
+    aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
     showTask: false, taskEditId: null, tTitle: '', tWho: 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: 'l1', tPlanned: '', newTask: '',
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', listDelId: null,
     newMsg: '',
