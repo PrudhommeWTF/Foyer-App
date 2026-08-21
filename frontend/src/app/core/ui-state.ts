@@ -1,4 +1,4 @@
-import { FileType, Prio, Recur, SchedType, ShopState } from './models';
+import { FileType, MealItem, Prio, Recur, SchedType, ShopState } from './models';
 import { dstr } from './helpers';
 
 export interface IngrRow { id: string; val: string; }
@@ -20,8 +20,8 @@ export interface UiState {
   // meals
   weekOffset: number;
   mealEdit: { dateStr: string; slot: string } | null;
-  mealMode: 'recipe' | 'text';
-  mealRid: string | null;
+  /** Plats retenus pour le créneau en cours d'édition, dans l'ordre du service. */
+  mealItems: MealItem[];
   mealText: string;
 
   // event modal + datepicker
@@ -91,7 +91,7 @@ export function initialUi(): UiState {
     screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
-    weekOffset: 0, mealEdit: null, mealMode: 'recipe', mealRid: null, mealText: '',
+    weekOffset: 0, mealEdit: null, mealItems: [], mealText: '',
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
     aisleOrderOpen: false,

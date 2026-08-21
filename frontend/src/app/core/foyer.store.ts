@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
-import { HouseholdState, Member, Notif, ShopItem, ShopState } from './models';
+import { HouseholdState, MealItem, MealValue, Member, Notif, ShopItem, ShopState } from './models';
 import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
@@ -901,23 +901,52 @@ export class FoyerStore {
   confirmFileDel(): void { const id = this.ui().fileDelId; if (!id) return; this.mutate((d) => { d.files = d.files.filter((f) => f.id !== id); }); this.patch({ fileDelId: null }); this.toast('Fichier supprimé'); }
 
   // ---- meals ------------------------------------------------------------
-  mealName(v?: { rid?: string; text?: string }): string | null {
-    if (!v) return null;
-    if (v.rid) { const r = this._data()?.recipes.find((x) => x.id === v.rid); return r ? r.name : 'Recette supprimée'; }
-    return v.text || null;
+  // Un créneau porte plusieurs plats, dans l'ordre du service : une entrée, un
+  // plat, un dessert se choisissent séparément. Pas d'étiquette imposée, l'ordre
+  // suffit et une taxonomie fixe (entrée/plat/dessert) laisserait dehors l'apéro,
+  // le fromage et l'accompagnement.
+
+  /** Intitulé d'un plat : le nom de la recette, ou le texte saisi. */
+  mealItemName(it: MealItem): string {
+    if (it.rid) { const r = this._data()?.recipes.find((x) => x.id === it.rid); return r ? r.name : 'Recette supprimée'; }
+    return it.text || '';
   }
+  /** Intitulés d'un créneau, dans l'ordre. Vide quand rien n'est prévu. */
+  mealNames(v?: MealValue): string[] {
+    return (v?.items || []).map((it) => this.mealItemName(it)).filter(Boolean);
+  }
+  /** Une ligne pour les vignettes et l'accueil : « Salade · Gratin · Tiramisu ». */
+  mealLabel(v?: MealValue): string | null {
+    const names = this.mealNames(v);
+    return names.length ? names.join(' · ') : null;
+  }
+
   editMeal(dateStr: string, slot: string): void {
     const v = this._data()?.meals[dateStr + '-' + slot];
-    this.patch({ mealEdit: { dateStr, slot }, mealMode: v && v.text ? 'text' : 'recipe', mealRid: v && v.rid ? v.rid : null, mealText: v && v.text ? v.text : '' });
+    this.patch({ mealEdit: { dateStr, slot }, mealItems: (v?.items || []).map((i) => ({ ...i })), mealText: '' });
+  }
+  /** Un tap sur une recette l'ajoute au menu, un second l'en retire. */
+  toggleMealRecipe(rid: string): void {
+    const items = this.ui().mealItems;
+    const i = items.findIndex((x) => x.rid === rid);
+    this.patch({ mealItems: i >= 0 ? items.filter((_, k) => k !== i) : [...items, { rid }] });
+  }
+  isMealRecipe(rid: string): boolean { return this.ui().mealItems.some((x) => x.rid === rid); }
+  addMealText(): void {
+    const t = this.ui().mealText.trim(); if (!t) return;
+    this.patch({ mealItems: [...this.ui().mealItems, { text: t }], mealText: '' });
+  }
+  removeMealItem(index: number): void {
+    this.patch({ mealItems: this.ui().mealItems.filter((_, i) => i !== index) });
   }
   saveMeal(): void {
-    const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot;
-    let val: { rid?: string; text?: string };
-    if (this.ui().mealMode === 'recipe') { if (!this.ui().mealRid) { this.toast('Choisis une recette'); return; } val = { rid: this.ui().mealRid! }; }
-    else { const t = this.ui().mealText.trim(); if (!t) { this.toast('Saisis un intitulé'); return; } val = { text: t }; }
-    this.mutate((d) => { d.meals[key] = val; });
+    const e = this.ui().mealEdit; if (!e) return;
+    const items = this.ui().mealItems;
+    if (!items.length) { this.toast('Choisis au moins un plat'); return; }
+    const key = e.dateStr + '-' + e.slot;
+    this.mutate((d) => { d.meals[key] = { items }; });
     this.patch({ mealEdit: null });
-    this.toast('Repas enregistré');
+    this.toast(items.length > 1 ? items.length + ' plats enregistrés' : 'Repas enregistré');
   }
   clearMeal(): void { const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot; this.mutate((d) => { delete d.meals[key]; }); this.patch({ mealEdit: null }); this.toast('Repas retiré'); }
   /**
@@ -936,13 +965,16 @@ export class FoyerStore {
     weekDates(weekOffset, this.todayStr()).forEach((day) => {
       const ds = dstr(day);
       this.mealSlots().forEach((sl) => {
-        const v = d.meals[ds + '-' + sl.key]; if (!v || !v.rid) return;
-        const r = d.recipes.find((x) => x.id === v.rid); if (!r) return;
-        r.ingr.forEach((ing) => {
-          const label = cap(ing.trim());
-          if (!label || names.has(label.toLowerCase())) return;
-          names.add(label.toLowerCase());
-          add.push({ op: 'add', id: uid('g'), name: label, qty: '', aisleId, listId });
+        // Tous les plats du créneau, pas seulement le premier : une entrée et un
+        // dessert ont autant besoin de leurs ingrédients que le plat principal.
+        (d.meals[ds + '-' + sl.key]?.items || []).forEach((it) => {
+          const r = it.rid ? d.recipes.find((x) => x.id === it.rid) : undefined; if (!r) return;
+          r.ingr.forEach((ing) => {
+            const label = cap(ing.trim());
+            if (!label || names.has(label.toLowerCase())) return;
+            names.add(label.toLowerCase());
+            add.push({ op: 'add', id: uid('g'), name: label, qty: '', aisleId, listId });
+          });
         });
       });
     });

@@ -259,6 +259,8 @@ l'utilisateur : pas de mystère d'un côté ni de l'autre.
 ## Modèle de données
 
 ```ts
+MealValue { items: MealItem[] }               // un créneau porte plusieurs plats
+MealItem  { rid? } | { text? }                // recette du carnet, ou texte libre
 Aisle    { id, name, color, position }        // position = ordre des allées du magasin
 ShopItem { id, name, qty, aisleId, state, listId, by?, at? }
 ShopState = 'a-prendre' | 'panier' | 'indisponible'
@@ -284,6 +286,17 @@ Ce qui a changé et pourquoi :
   pas une cuisson qui n'a jamais existé, et une durée illisible laisse les champs
   vides en le signalant.
 - **`source`.** Page d'origine d'une recette importée, pour pouvoir y retourner.
+- **Un repas devient une liste de plats.** Un créneau ne portait qu'un plat, ce
+  qui interdisait entrée, plat et dessert. Il porte maintenant une liste
+  ordonnée : **l'ordre du service tient lieu d'étiquette**, une taxonomie fixe
+  (entrée/plat/dessert) laissant dehors l'apéritif, le fromage et
+  l'accompagnement. L'enveloppe `MealValue` existe pour ce qu'elle accueillera
+  ensuite sans changer de forme une seconde fois : le nombre de couverts réel et
+  les convives absents, prévus au modèle cible.
+
+  Dans la modale, un tap sur une recette l'ajoute au menu, un second l'en retire.
+  La génération de la liste de courses prend les ingrédients de **tous** les
+  plats du créneau : une entrée et un dessert en ont autant besoin que le plat.
 
 `ingr` reste un tableau de chaînes : les ingrédients structurés sont le sujet de
 la tranche 2.
@@ -299,6 +312,7 @@ Le document est migré par son propre jeu de transformations versionnées
 | 1 | Photos de recettes sorties du document vers le disque |
 | 2 | Rayon par identifiant, rang des rayons, état à trois valeurs |
 | 3 | Recettes : portions et temps séparés, à la place du texte libre |
+| 4 | Planning : plusieurs plats par créneau |
 
 Trois règles, tenues par des tests (`backend/test/state-migrations.test.ts`) :
 

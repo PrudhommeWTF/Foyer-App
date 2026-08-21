@@ -168,9 +168,17 @@ export class HomeScreen {
 
   dinner = computed(() => {
     const v = this.d().meals[this.store.todayStr() + '-soir'];
-    if (v?.rid) { const r = this.d().recipes.find((x) => x.id === v.rid); if (r) return { name: r.name, meta: `${this.store.recipeTime(r)} · niveau ${r.level.toLowerCase()}` }; }
-    if (v?.text) return { name: v.text, meta: 'Repas libre' };
-    return { name: 'Rien de prévu', meta: 'Ajoutez un repas au planning' };
+    const names = this.store.mealNames(v);
+    if (!names.length) return { name: 'Rien de prévu', meta: 'Ajoutez un repas au planning' };
+    // Le premier plat en titre, le reste en dessous : sur la tuile du jour, la
+    // question est « qu'est-ce qu'on mange », pas « combien de plats ».
+    const reste = names.slice(1);
+    const premier = v!.items[0];
+    const r = premier.rid ? this.d().recipes.find((x) => x.id === premier.rid) : undefined;
+    const meta = reste.length ? reste.join(' · ')
+      : r ? `${this.store.recipeTime(r)} · niveau ${r.level.toLowerCase()}`
+      : 'Repas libre';
+    return { name: names[0], meta };
   });
 
 }
