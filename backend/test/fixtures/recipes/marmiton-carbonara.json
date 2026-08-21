@@ -1,0 +1,51 @@
+{
+ "@type": "Recipe",
+ "@id": "https://www.marmiton.org/recettes/recette_pates-a-la-carbonara_80453.aspx#recipe",
+ "mainEntityOfPage": {
+  "@id": "https://www.marmiton.org/recettes/recette_pates-a-la-carbonara_80453.aspx"
+ },
+ "name": "Pâtes à la \"carbonara\" à la française : la meilleure recette",
+ "recipeCategory": "Plat principal",
+ "image": [
+  "https://assets.afcdn.com/recipe/20211214/125831_w1024h1024c1cx866cy866cxt0cyt292cxb1732cyb1732.jpg",
+  "https://assets.afcdn.com/recipe/20211214/125831_w1024h1024c1cx866cy866cxt0cyt292cxb1732cyb1732.webp",
+  "https://assets.afcdn.com/recipe/20211214/125831_w1024h768c1cx866cy866cxt0cyt292cxb1732cyb1732.jpg",
+  "https://assets.afcdn.com/recipe/20211214/125831_w1024h768c1cx866cy866cxt0cyt292cxb1732cyb1732.webp",
+  "https://assets.afcdn.com/recipe/20211214/125831_w1024h576c1cx866cy866cxt0cyt292cxb1732cyb1732.jpg",
+  "https://assets.afcdn.com/recipe/20211214/125831_w1024h576c1cx866cy866cxt0cyt292cxb1732cyb1732.webp"
+ ],
+ "datePublished": "2008-08-22T11:08:00+02:00",
+ "dateModified": "2024-08-05T05:01:17+02:00",
+ "prepTime": "PT10M",
+ "cookTime": "PT10M",
+ "totalTime": "PT20M",
+ "recipeYield": "4 personnes",
+ "recipeIngredient": [
+  "500 g de pâtes",
+  "50 cl de crème fraîche",
+  "3 jaunes d'oeuf",
+  "1 pincée de sel",
+  "poivre",
+  "250 g de lardons \"selon préférence\"",
+  "1 oignon"
+ ],
+ "recipeInstructions": [
+  { "@type": "HowToStep", "text": "Cuire les pâtes dans un grand volume d'eau bouillante salée." },
+  { "@type": "HowToStep", "text": "Emincer les oignons et les faire revenir à la poêle. Dès qu'ils ont bien dorés, y ajouter les lardons." },
+  { "@type": "HowToStep", "text": "Préparer dans un saladier la crème fraîche, les oeufs, le sel, le poivre et mélanger." },
+  { "@type": "HowToStep", "text": "Retirer les lardons du feu dès qu'ils sont dorés et les ajouter à la crème." },
+  { "@type": "HowToStep", "text": "Une fois les pâtes cuite al dente, les égoutter et y incorporer la crème. Remettre sur le feu si le plat a refroidi." },
+  { "@type": "HowToStep", "text": "Servir et bon appétit !\nVous pouvez également agrémenter votre plat avec des champignons." }
+ ],
+ "author": { "@type": "Person", "name": "Anonyme" },
+ "description": "Recette Pâtes à la \"carbonara\" à la française : la meilleure recette rapide et facile : 4 personnes, 20 min de préparation. Notée 4.5/5 par 298 membres Marmiton.",
+ "keywords": "Pâtes à la \"carbonara\" à la française, pâtes en sauce, pâtes, crème fraîche, jaune d'oeuf, sel, poivre, lardons, oignon, Très facile, Bon marché, rapide",
+ "aggregateRating": { "@type": "AggregateRating", "reviewCount": 298, "ratingValue": 4.5, "worstRating": 1, "bestRating": 5 },
+ "video": { "@id": "https://www.marmiton.org/recettes/recette_pates-a-la-carbonara_80453.aspx#video" },
+ "nutrition": {
+  "@type": "NutritionInformation",
+  "calories": "952 calories", "servingSize": "354 grams",
+  "carbohydrateContent": "72.8 g", "fatContent": "58.5 g", "fiberContent": "4.9 g",
+  "proteinContent": "29 g", "saturatedFatContent": "34.2 g", "sodiumContent": "2.5 g", "sugarContent": "7.7 g"
+ }
+}

@@ -93,6 +93,68 @@ describe('une recette Marmiton réelle', () => {
   });
 });
 
+describe('une seconde recette Marmiton, aux textes moins sages', () => {
+  const node = fixture('marmiton-carbonara.json');
+  const URL_CARBO = 'https://www.marmiton.org/recettes/recette_pates-a-la-carbonara_80453.aspx';
+
+  it('nettoie un titre qui contient lui-même des guillemets', () => {
+    const { recipe } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.name, 'Pâtes à la "carbonara" à la française');
+  });
+
+  it('conserve les guillemets à l’intérieur d’une ligne d’ingrédient', () => {
+    // « 250 g de lardons "selon préférence" » : la mention entre guillemets fait
+    // partie de ce que la cuisinière a écrit, on ne la rogne pas.
+    const { recipe } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.ingr.length, 7);
+    assert.equal(recipe.ingr[5], '250 g de lardons "selon préférence"');
+    assert.equal(recipe.ingr[2], "3 jaunes d'oeuf");
+  });
+
+  it('replie un saut de ligne interne sans fabriquer une étape de plus', () => {
+    // Le site déclare six étapes, dont la dernière porte un conseil après un
+    // retour à la ligne. Le découper en produirait sept : ce serait inventer une
+    // étape que la recette n'a pas.
+    const { recipe } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.steps.length, 6);
+    assert.equal(
+      recipe.steps[5],
+      'Servir et bon appétit ! Vous pouvez également agrémenter votre plat avec des champignons.',
+    );
+  });
+
+  it('lit les portions et les deux temps sans rien signaler', () => {
+    const { recipe, warnings } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.portions, 4);
+    assert.equal(recipe.prepMin, 10);
+    assert.equal(recipe.cookMin, 10);
+    assert.deepEqual(warnings, []);
+  });
+});
+
+describe('toutes les pages réelles du jeu de test', () => {
+  // Garde-fou pour les fixtures à venir : ce qui est ajouté dans le dossier doit
+  // se lire, sinon le fichier est là sans que personne ne s'en aperçoive.
+  const noms = fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
+
+  it('le dossier de fixtures n’est pas vide', () => {
+    assert.ok(noms.length >= 2, 'au moins deux pages réelles');
+  });
+
+  for (const nom of noms) {
+    it(`${nom} produit une recette exploitable`, () => {
+      const { recipe } = fromRecipeNode(fixture(nom), 'https://exemple.invalid/r');
+      assert.ok(recipe.name.length > 2, 'un titre');
+      assert.ok(recipe.ingr.length > 0, 'des ingrédients');
+      assert.ok(recipe.steps.length > 0, 'des étapes');
+      assert.ok(recipe.portions && recipe.portions > 0, 'des portions');
+      // Aucune ligne ne doit être perdue en route.
+      const source = fixture(nom)['recipeIngredient'] as string[];
+      assert.equal(recipe.ingr.length, new Set(source.map((x) => x.trim())).size);
+    });
+  }
+});
+
 // ---- retrouver le nœud dans une page ---------------------------------------
 
 describe('extraction du bloc JSON-LD', () => {
