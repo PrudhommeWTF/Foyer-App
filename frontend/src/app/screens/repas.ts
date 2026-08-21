@@ -4,7 +4,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { MEAL_SLOTS, DOW } from '../core/constants';
-import { weekDates, dstr } from '../core/helpers';
+import { dstr, parseDay } from '../core/helpers';
 import { MealValue } from '../core/models';
 
 /** Largeur en deçà de laquelle la semaine se lit en pile plutôt qu'en grille. */
@@ -19,23 +19,30 @@ const GRID_MIN = 760;
     <div class="screen-enter">
       <div class="head-bar">
         <div class="nav">
-          <button class="icon-btn" (click)="store.patch({ weekOffset: store.ui().weekOffset - 1 })" aria-label="Semaine précédente">
+          <button class="icon-btn" (click)="nav(-1)" [attr.aria-label]="view() === '3' ? 'Trois jours précédents' : 'Semaine précédente'">
             <f-icon name="chevronLeft" [size]="18" [color]="'var(--ink2)'" [width]="2.2" />
           </button>
           <div class="nav-label">
-            <div class="week-label f-display">{{ weekLabel() }}</div>
-            <div class="week-tag" [style.color]="weekTagColor()">{{ weekTag() }}</div>
+            <div class="week-label f-display">{{ rangeLabel() }}</div>
+            <div class="week-tag" [style.color]="rangeTagColor()">{{ rangeTag() }}</div>
           </div>
-          <button class="icon-btn" (click)="store.patch({ weekOffset: store.ui().weekOffset + 1 })" aria-label="Semaine suivante">
+          <button class="icon-btn" (click)="nav(1)" [attr.aria-label]="view() === '3' ? 'Trois jours suivants' : 'Semaine suivante'">
             <f-icon name="chevronRight" [size]="18" [color]="'var(--ink2)'" [width]="2.2" />
           </button>
-          @if (store.ui().weekOffset !== 0) {
-            <button class="btn btn-soft sm" (click)="store.patch({ weekOffset: 0 })">Cette semaine</button>
+          @if (!showsToday()) {
+            <button class="btn btn-soft sm" (click)="goToday()">Aujourd'hui</button>
           }
         </div>
-        <button class="btn btn-sage" (click)="store.prepareList(store.ui().weekOffset)">
-          <f-icon name="bolt" [size]="20" color="#fff" [width]="2" /> Générer les courses
-        </button>
+        <div class="head-right">
+          <div class="seg2">
+            <button [class.active]="view() === '3'" (click)="setView('3')">3 jours</button>
+            <button [class.active]="view() === 'week'" (click)="setView('week')">Semaine</button>
+          </div>
+          <button class="btn btn-sage" (click)="store.prepareList(days())">
+            <f-icon name="bolt" [size]="20" color="#fff" [width]="2" />
+            {{ view() === '3' ? 'Courses de ces 3 jours' : 'Courses de la semaine' }}
+          </button>
+        </div>
       </div>
 
       @if (!wide()) {
@@ -43,18 +50,18 @@ const GRID_MIN = 760;
              horizontalement : illisible d'une main. La semaine devient une pile
              de jours, chaque créneau une ligne pleine largeur. -->
         <div class="days">
-          @for (d of wDates(); track dstr(d); let i = $index) {
+          @for (d of days(); track d) {
             <div class="day" [class.today]="isToday(d)" [class.past]="isPast(d)">
               <div class="day-head">
-                <span class="day-dow">{{ DOW[i] }}</span>
-                <span class="day-num f-display">{{ d.getDate() }}</span>
+                <span class="day-dow">{{ dowOf(d) }}</span>
+                <span class="day-num f-display">{{ dayNum(d) }}</span>
                 <span class="day-month">{{ monthOf(d) }}</span>
                 @if (isToday(d)) { <span class="day-today">Aujourd'hui</span> }
               </div>
               @for (slot of store.mealSlots(); track slot.key) {
                 @let meal = mealAt(d, slot.key);
                 @let names = store.mealNames(meal);
-                <button class="srow" [class.filled]="names.length > 0" (click)="store.editMeal(dstr(d), slot.key)">
+                <button class="srow" [class.filled]="names.length > 0" (click)="store.editMeal(d, slot.key)">
                   <span class="dot" [style.background]="slot.dot"></span>
                   <span class="srow-slot">{{ slot.short }}</span>
                   <span class="srow-body">
@@ -73,12 +80,12 @@ const GRID_MIN = 760;
         </div>
       } @else {
         <div class="grid-scroll">
-          <div class="grid">
+          <div class="grid" [style.grid-template-columns]="gridCols()" [style.min-width.px]="gridMin()" [style.max-width.px]="gridMax()">
             <div class="corner"></div>
-            @for (d of wDates(); track $index) {
+            @for (d of days(); track d) {
               <div class="dhead" [class.today]="isToday(d)">
-                <div class="dow">{{ DOW[$index] }}</div>
-                <div class="dnum f-display">{{ d.getDate() }}</div>
+                <div class="dow">{{ dowOf(d) }}</div>
+                <div class="dnum f-display">{{ dayNum(d) }}</div>
               </div>
             }
 
@@ -86,10 +93,10 @@ const GRID_MIN = 760;
               <div class="rlabel">
                 <span class="rlabel-txt">{{ slot.label }}</span>
               </div>
-              @for (d of wDates(); track dstr(d)) {
+              @for (d of days(); track d) {
                 @let meal = mealAt(d, slot.key);
                 @let names = store.mealNames(meal);
-                <div class="cell" [class.filled]="names.length > 0" [class.today]="isToday(d)" (click)="store.editMeal(dstr(d), slot.key)">
+                <div class="cell" [class.filled]="names.length > 0" [class.today]="isToday(d)" (click)="store.editMeal(d, slot.key)">
                   <div class="cell-top">
                     <span class="dot" [style.background]="slot.dot"></span>
                     <span class="cell-slot">{{ slot.short }}</span>
@@ -193,6 +200,10 @@ const GRID_MIN = 760;
 
     .head-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }
     .nav { display: flex; align-items: center; gap: 12px; }
+    .head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .seg2 { display: flex; gap: 3px; background: var(--soft); border-radius: 12px; padding: 4px; flex: none; }
+    .seg2 button { padding: 7px 13px; border: none; background: transparent; border-radius: 9px; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; }
+    .seg2 button.active { background: var(--surface); color: var(--ink); box-shadow: 0 4px 10px -6px rgba(90,60,40,.5); }
     .nav-label { text-align: center; min-width: 230px; }
     .week-label { font-size: 19px; font-weight: 700; color: var(--ink); }
     .week-tag { font-size: 12.5px; font-weight: 700; }
@@ -224,7 +235,7 @@ const GRID_MIN = 760;
     /* La grille ne s'affiche plus qu'au-dessus de 860 px, la pile prenant le
        relais en dessous : les colonnes sont dimensionnées pour tenir dans une
        fenêtre de portable, barre latérale comprise, sans défilement latéral. */
-    .grid { display: grid; grid-template-columns: 56px repeat(7, minmax(84px, 1fr)); gap: 10px; align-items: stretch; min-width: 724px; }
+    .grid { display: grid; gap: 10px; align-items: stretch; }
     .corner { }
     .dhead { text-align: center; padding: 6px 0; border-radius: 12px; }
     .dhead.today { background: var(--honey); }
@@ -280,6 +291,9 @@ const GRID_MIN = 760;
     :host-context(.shell.narrow) .head-bar { gap: 12px; margin-bottom: 16px; }
     :host-context(.shell.narrow) .nav { width: 100%; justify-content: space-between; flex-wrap: wrap; }
     :host-context(.shell.narrow) .nav-label { min-width: 0; flex: 1; }
+    :host-context(.shell.narrow) .head-right { width: 100%; gap: 10px; }
+    :host-context(.shell.narrow) .seg2 { flex: 1; }
+    :host-context(.shell.narrow) .seg2 button { flex: 1; }
     :host-context(.shell.narrow) .head-bar .btn-sage { width: 100%; justify-content: center; }
   `],
 })
@@ -308,13 +322,13 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void { this.ro?.disconnect(); }
 
   constructor() {
-    // En pile, un vendredi arrive après quatre jours révolus : « qu'est-ce qu'on
-    // mange ce soir » ne doit pas demander de faire défiler. La semaine courante
-    // s'ouvre donc sur le jour même.
+    // En pile, la fenêtre qui contient aujourd'hui s'ouvre sur le jour même :
+    // « qu'est-ce qu'on mange ce soir » ne doit pas demander de faire défiler
+    // les jours révolus. Sans objet en vue 3 jours, qui commence sur le jour.
     effect(() => {
-      const chezSoi = this.store.ui().weekOffset === 0 && !this.wide();
-      void this.wDates();
-      if (!chezSoi) return;
+      const aRecentrer = this.view() === 'week' && !this.wide() && this.showsToday();
+      void this.days();
+      if (!aRecentrer) return;
       setTimeout(() => {
         const el = (this.host.nativeElement as HTMLElement).querySelector('.day.today');
         el?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -322,25 +336,55 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
     });
   }
 
-  readonly DOW = DOW;
-  readonly dstr = dstr;
+  /**
+   * Vue effective. Le réglage est vide tant que l'utilisateur n'a rien choisi :
+   * trois jours tiennent sur un écran de téléphone, la semaine demande d'en
+   * faire défiler deux ; sur grand écran la semaine entière se lit d'un coup.
+   */
+  view = computed<'3' | 'week'>(() => this.store.ui().mealView || (this.wide() ? 'week' : '3'));
 
-  wDates = computed(() => weekDates(this.store.ui().weekOffset, this.store.todayStr()));
-
-  weekLabel = computed(() => {
-    const w = this.wDates();
-    return 'Semaine du ' + this.fmt(w[0]) + ' au ' + this.fmt(w[6]);
+  /** Jours affichés, du plus ancien au plus récent. */
+  days = computed<string[]>(() => {
+    const anchor = this.store.ui().mealAnchor || this.store.todayStr();
+    if (this.view() === 'week') return this.store.weekDays(anchor);
+    const a = parseDay(anchor);
+    return [0, 1, 2].map((n) => { const d = new Date(a); d.setDate(a.getDate() + n); return dstr(d); });
   });
 
-  weekTag = computed(() => {
-    const o = this.store.ui().weekOffset;
-    if (o === 0) return 'Cette semaine';
-    if (o === 1) return 'Semaine prochaine';
-    if (o === -1) return 'Semaine dernière';
-    return o > 0 ? 'Dans ' + o + ' semaines' : 'Il y a ' + -o + ' semaines';
+  showsToday = computed(() => this.days().includes(this.store.todayStr()));
+
+  rangeLabel = computed(() => {
+    const w = this.days();
+    const [a, b] = [w[0], w[w.length - 1]];
+    // « Du 21 au 23 août » plutôt que de répéter le mois quand il est le même.
+    const debut = a.slice(0, 7) === b.slice(0, 7) ? String(parseDay(a).getDate()) : this.fmt(a);
+    return (this.view() === 'week' ? 'Semaine du ' : 'Du ') + debut + ' au ' + this.fmt(b);
   });
 
-  weekTagColor = computed(() => (this.store.ui().weekOffset === 0 ? '#D9930F' : 'var(--ink2)'));
+  rangeTag = computed(() => {
+    if (this.showsToday()) return this.view() === 'week' ? 'Cette semaine' : "À partir d'aujourd'hui";
+    const ecart = Math.round((parseDay(this.days()[0]).getTime() - parseDay(this.store.todayStr()).getTime()) / 86400000);
+    if (ecart > 0) return 'Dans ' + ecart + (ecart > 1 ? ' jours' : ' jour');
+    return 'Il y a ' + -ecart + (ecart < -1 ? ' jours' : ' jour');
+  });
+
+  rangeTagColor = computed(() => (this.showsToday() ? '#D9930F' : 'var(--ink2)'));
+
+  /** La grille suit le nombre de jours : trois colonnes larges, ou sept serrées. */
+  gridCols = computed(() => '56px repeat(' + this.days().length + ', minmax(84px, 1fr))');
+  gridMin = computed(() => (this.view() === 'week' ? 724 : 0));
+  /** Trois colonnes n'ont rien à gagner à s'étaler sur un écran de 27 pouces. */
+  gridMax = computed(() => (this.view() === 'week' ? null : 820));
+
+  setView(v: '3' | 'week'): void { this.store.patch({ mealView: v }); }
+  goToday(): void { this.store.patch({ mealAnchor: this.store.todayStr() }); }
+
+  /** Un cran de navigation vaut la fenêtre affichée : trois jours, ou sept. */
+  nav(dir: number): void {
+    const a = parseDay(this.store.ui().mealAnchor || this.store.todayStr());
+    a.setDate(a.getDate() + dir * (this.view() === 'week' ? 7 : 3));
+    this.store.patch({ mealAnchor: dstr(a) });
+  }
 
   slotLabel = computed(() => {
     const e = this.store.ui().mealEdit;
@@ -358,16 +402,18 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
     return !!e && !!this.d().meals[e.dateStr + '-' + e.slot]?.items?.length;
   });
 
-  isToday(d: Date): boolean { return dstr(d) === this.store.todayStr(); }
+  isToday(day: string): boolean { return day === this.store.todayStr(); }
 
   /** Un jour déjà passé : affiché en retrait plutôt que masqué, on y revient parfois. */
-  isPast(d: Date): boolean { return dstr(d) < this.store.todayStr(); }
+  isPast(day: string): boolean { return day < this.store.todayStr(); }
 
-  monthOf(d: Date): string { return d.toLocaleDateString(this.store.locale, { month: 'short' }); }
+  dowOf(day: string): string { return DOW[(parseDay(day).getDay() + 6) % 7]; }
+  dayNum(day: string): number { return parseDay(day).getDate(); }
+  monthOf(day: string): string { return parseDay(day).toLocaleDateString(this.store.locale, { month: 'short' }); }
 
-  mealAt(d: Date, slot: string): MealValue | undefined { return this.d().meals[dstr(d) + '-' + slot]; }
+  mealAt(day: string, slot: string): MealValue | undefined { return this.d().meals[day + '-' + slot]; }
 
-  private fmt(d: Date): string {
-    return d.toLocaleDateString(this.store.locale, { day: 'numeric', month: 'short' });
+  private fmt(day: string): string {
+    return parseDay(day).toLocaleDateString(this.store.locale, { day: 'numeric', month: 'short' });
   }
 }

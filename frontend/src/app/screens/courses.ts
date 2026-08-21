@@ -152,7 +152,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
         </div>
       }
 
-      <div class="gen-card" (click)="store.prepareList(0)">
+      <div class="gen-card" (click)="store.prepareList(store.weekDays())">
         <f-icon name="bolt" [size]="22" color="#fff" />
         <div class="gen-t">Générer depuis les repas</div>
         <div class="gen-s">Ajoute les ingrédients des repas prévus cette semaine</div>
