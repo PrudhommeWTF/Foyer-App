@@ -5,7 +5,11 @@ import path from 'path';
 import { EMPTY_STATE } from './seed';
 import { migrateFinances } from './finances/schema';
 import { initFinancesRepo } from './finances/repo';
-import { reportOrphansAtBoot } from './finances/attachments';
+import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
+import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
+import * as files from './storage/files';
+import { initShopping } from './shopping/repo';
+import { STATE_VERSION, migrateState, photoStorer } from './state/migrations';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db');
@@ -47,12 +51,111 @@ try { db.exec('ALTER TABLE household ADD COLUMN ics_token TEXT'); } catch { /* a
 // (e.g. on password change or account removal).
 try { db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'); } catch { /* already present */ }
 
+// The bytes of every module live next to the database, in the same data
+// directory: one tar of DATA_DIR remains a complete backup.
+initBlobs(DATA_DIR);
+
 // Finances module: versioned schema, applied at boot and independent of the rest.
 migrateFinances(db);
-// The pieces live next to the database, in the same data directory: one tar of
-// DATA_DIR remains a complete backup.
-initFinancesRepo(db, DATA_DIR);
+initFinancesRepo(db);
+
+// Household-side tables (files, shopping-ops journal), then the document itself.
+migrateHousehold(db);
+files.initFiles(db);
+initShopping(db);
+migrateHouseholdDocument();
+
+// Photos qu'aucune recette ne cite plus (recette supprimée, photo remplacée,
+// formulaire abandonné). Le ménage se fait ici plutôt qu'à chaque
+// enregistrement : une recette est sauvegardée vingt fois pendant qu'on la
+// modifie, et se tromper de sens effacerait la photo qu'on vient de poser.
+pruneUnreferencedRecipePhotos();
+
+// Both attachment tables are registered by now: the sweep sees the whole disk.
 reportOrphansAtBoot();
+
+/**
+ * Applique les migrations du document d'état, une fois, au démarrage.
+ *
+ * Le document d'origine est écrit dans <data>/backups avant la première
+ * transformation : revenir en arrière consiste à remettre ce fichier en base
+ * (procédure en commandes shell dans docs/cuisine-architecture.md). La lecture,
+ * la transformation et l'écriture tiennent dans une transaction : une coupure
+ * de courant au milieu laisse le document intact et la migration se rejoue au
+ * démarrage suivant.
+ */
+function migrateHouseholdDocument(): void {
+  const from = stateVersion(db);
+  if (from >= STATE_VERSION) return;
+
+  const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
+  if (!row) {
+    // Foyer pas encore créé : rien à transformer, mais la version est acquise,
+    // le nouvel état naissant déjà à la bonne forme.
+    setStateVersion(db, STATE_VERSION);
+    return;
+  }
+
+  try {
+    const doc = JSON.parse(row.state) as Record<string, unknown>;
+    const outcome = migrateState(doc, from, {
+      storeDataUrl: photoStorer((ownerId, name, buf, type) => files.store('recipe', ownerId || 'inconnu', name, buf, type).file.id),
+    }, path.join(DATA_DIR, 'backups'));
+
+    db.transaction(() => {
+      db.prepare("UPDATE household SET state = ?, version = version + 1, updated_at = datetime('now') WHERE id = 1")
+        .run(JSON.stringify(doc));
+      setStateVersion(db, outcome.to);
+    })();
+
+    for (const m of outcome.applied) {
+      // eslint-disable-next-line no-console
+      console.log(`[foyer] État : migration ${m.version} appliquée (${m.label}).`);
+    }
+    for (const note of outcome.notes) {
+      // eslint-disable-next-line no-console
+      console.log('[foyer] État : ' + note);
+    }
+    if (outcome.backupPath) {
+      // eslint-disable-next-line no-console
+      console.log(`[foyer] État : document d'origine sauvegardé dans ${outcome.backupPath}`);
+    }
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[foyer] ERREUR : la migration du document d'état a échoué : ${(e as Error).message}\n` +
+      `        Le document reste en version ${stateVersion(db)}, il n'a pas été réécrit.\n` +
+      `        Une copie d'origine se trouve dans ${path.join(DATA_DIR, 'backups')} si la sauvegarde avait eu lieu.\n` +
+      "        Restaurez-la si nécessaire (voir docs/cuisine-architecture.md) et signalez l'erreur.",
+    );
+    throw e;
+  }
+}
+
+/**
+ * Retire les fichiers que le document ne désigne plus. Ne fait rien tant qu'un
+ * foyer n'a pas été créé : sur une base vierge, « rien n'est référencé » veut
+ * dire « rien n'est encore écrit », surtout pas « tout est à effacer ».
+ */
+function pruneUnreferencedRecipePhotos(): void {
+  const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
+  if (!row) return;
+  try {
+    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[] };
+    const referenced = new Set<number>();
+    for (const r of doc.recipes || []) if (typeof r.photoId === 'number') referenced.add(r.photoId);
+    const removed = files.pruneUnreferenced(referenced);
+    if (removed) {
+      // eslint-disable-next-line no-console
+      console.log(`[foyer] Fichiers : ${removed} photo(s) de recette sans propriétaire retirée(s).`);
+    }
+  } catch (e) {
+    // Un document illisible est un problème à signaler, pas une raison de
+    // supprimer des fichiers au jugé.
+    // eslint-disable-next-line no-console
+    console.warn('[foyer] Fichiers : ménage des photos ignoré, document d’état illisible : ' + (e as Error).message);
+  }
+}
 
 export function countUsers(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;

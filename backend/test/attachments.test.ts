@@ -11,6 +11,7 @@ import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
 import * as repo from '../src/finances/repo';
 import * as attachments from '../src/finances/attachments';
+import { initBlobs } from '../src/storage/blobs';
 import * as contracts from '../src/finances/contracts';
 
 let db: Database.Database;
@@ -30,7 +31,10 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db, dir);
+  // Le magasin d'octets est un service du foyer, initialisé une fois au
+  // démarrage (voir db.ts). Les tests font de même plutôt que de le supposer.
+  initBlobs(dir);
+  repo.initFinancesRepo(db);
   compte = repo.createAccount({ name: 'Compte', kind: 'courant', memberIds: [], openingBalance: 0, openingDate: null, archived: false }).id;
 }
 
@@ -156,8 +160,9 @@ describe('divergence entre la base et le disque', () => {
     fs.unlinkSync(path.join(dir, 'pieces', attachment.sha256.slice(0, 2), attachment.sha256 + '.pdf'));
 
     const report = attachments.sweepOrphans();
-    assert.equal(report.danglingRows.length, 1);
-    assert.equal(report.danglingRows[0].name, 'facture.pdf');
+    assert.equal(report.danglingPaths.length, 1);
+    assert.equal(report.danglingPaths[0].name, 'facture.pdf');
+    assert.equal(report.danglingPaths[0].holder, 'Finances/pièces jointes');
     assert.equal(attachments.get(attachment.id)!.name, 'facture.pdf', 'la fiche est conservée : une restauration peut la sauver');
     assert.equal(attachments.fileOf(attachment.id), null, 'mais le téléchargement sait qu’il n’a rien à servir');
   });
@@ -182,7 +187,7 @@ describe('divergence entre la base et le disque', () => {
     const c = contract();
     put('contract', c.id, 'facture.pdf', PDF);
     const report = attachments.sweepOrphans();
-    assert.deepEqual(report.danglingRows, []);
+    assert.deepEqual(report.danglingPaths, []);
     assert.deepEqual(report.orphanFiles, []);
   });
 });

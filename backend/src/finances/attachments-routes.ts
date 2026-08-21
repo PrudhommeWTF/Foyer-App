@@ -107,11 +107,13 @@ export function attachmentsRouter(): Router {
 
   /** What the table and the disk disagree on. Read-only: nothing is deleted. */
   r.get('/attachments-check', handler((_req, res) => {
+    // Le balayage couvre désormais toutes les tables qui référencent des octets,
+    // pas seulement les pièces Finances : c'est le disque qui est inspecté.
     const report = attachments.sweepOrphans();
     res.json({
-      danglingRows: report.danglingRows,
+      danglingRows: report.danglingPaths,
       orphanFiles: report.orphanFiles.length,
-      ok: !report.danglingRows.length && !report.orphanFiles.length,
+      ok: !report.danglingPaths.length && !report.orphanFiles.length,
     });
   }));
 

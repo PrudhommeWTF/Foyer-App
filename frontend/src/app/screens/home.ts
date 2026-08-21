@@ -74,14 +74,16 @@ import { AvatarComponent } from '../shared/avatar';
         </div>
 
         <div class="card span2">
-          <div class="ch"><div class="card-title sm">Courses · {{ shopDone() }}/{{ shopTotal() }}</div><span class="link" (click)="store.go('courses')">Ouvrir la liste</span></div>
+          <div class="ch"><div class="card-title sm">Courses · {{ shopLeft() }} restant(s)</div><span class="link" (click)="store.go('courses')">Ouvrir la liste</span></div>
           <div class="shop-grid">
             @for (it of dashShop(); track it.id) {
               <div class="shop-it" (click)="store.toggleShop(it.id)">
-                <span class="tick" [class.on]="it.done">@if (it.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }</span>
-                <span class="shop-name" [class.done]="it.done">{{ it.name }}</span>
+                <span class="tick" [class.on]="it.state === 'panier'">@if (it.state === 'panier') { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }</span>
+                <span class="shop-name" [class.done]="it.state === 'panier'">{{ it.name }}</span>
                 <span class="shop-qty">{{ it.qty }}</span>
               </div>
+            } @empty {
+              <div class="shop-empty">Rien à acheter pour le moment.</div>
             }
           </div>
         </div>
@@ -138,6 +140,7 @@ import { AvatarComponent } from '../shared/avatar';
     .shop-name { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--ink); }
     .shop-name.done { color: var(--ink3); text-decoration: line-through; }
     .shop-qty { font-size: 12px; font-weight: 700; color: var(--ink3); }
+    .shop-empty { grid-column: 1 / -1; font-size: 13px; font-weight: 700; color: var(--ink3); }
     .msgs { display: flex; flex-direction: column; gap: 12px; }
     .msg { display: flex; gap: 10px; }
     .msg-name { font-size: 12px; font-weight: 800; color: var(--ink2); }
@@ -152,10 +155,11 @@ export class HomeScreen {
   today = computed(() => this.store.eventsForDay(this.store.todayStr()));
   openTasks = computed(() => this.d().tasks.filter((t) => !t.done).length);
   dashTasks = computed(() => this.d().tasks.filter((t) => !t.done).slice(0, 5));
-  dashShop = computed(() => this.d().shop.slice(0, 8));
+  // Ce qui reste à acheter : la tuile d'accueil sert à savoir quoi prendre, pas
+  // à relire ce qui est déjà dans le panier.
+  dashShop = computed(() => this.d().shop.filter((x) => x.state === 'a-prendre').slice(0, 8));
   dashMsgs = computed(() => this.d().msgs.slice(-3));
-  shopTotal = computed(() => this.d().shop.length);
-  shopDone = computed(() => this.d().shop.filter((x) => x.done).length);
+  shopLeft = computed(() => this.d().shop.filter((x) => x.state === 'a-prendre').length);
 
   fmtEur = fmtEurosInt;
   barW(expense: number, budget: number): number { return budget > 0 ? Math.min(expense / budget * 100, 100) : 0; }

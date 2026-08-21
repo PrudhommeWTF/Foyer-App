@@ -18,13 +18,12 @@ import {
 
 let database: Database;
 
-/** Wire the repository to the app database and register helper SQL functions. */
 /**
- * Single entry point of the whole module. `dataDir` is required because the
- * attachments write next to the database: an optional argument here would mean
- * discovering the omission the day a document lands somewhere nobody backs up.
+ * Single entry point of the whole module. The bytes of the attachments live in
+ * the household blob store, initialised once in db.ts: this module only holds
+ * their metadata.
  */
-export function initFinancesRepo(db: Database, dataDir: string): void {
+export function initFinancesRepo(db: Database): void {
   database = db;
   // The import layer shares the same connection; wiring it here means a caller
   // cannot forget it and discover the omission only when a summary is computed.
@@ -35,7 +34,7 @@ export function initFinancesRepo(db: Database, dataDir: string): void {
   initEnergy(db);
   initSavings(db);
   initBackup(db);
-  initAttachments(db, dataDir);
+  initAttachments(db);
   // Accent/case-insensitive matching for search, computed in SQLite. No index is
   // needed: a full scan over a few thousand rows is sub-millisecond.
   db.function('fnorm', { deterministic: true }, (s: unknown) => normaliseLabel(String(s ?? '')));

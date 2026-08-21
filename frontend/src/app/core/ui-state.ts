@@ -1,4 +1,4 @@
-import { FileType, Prio, Recur, SchedType } from './models';
+import { FileType, Prio, Recur, SchedType, ShopState } from './models';
 import { dstr } from './helpers';
 
 export interface IngrRow { id: string; val: string; }
@@ -31,8 +31,10 @@ export interface UiState {
 
   // shop item modal
   showShop: boolean; shEditId: string | null;
-  shTitle: string; shQty: string; shCat: string; shListId: string;
+  shTitle: string; shQty: string; shState: ShopState; shAisleId: string; shListId: string;
   newShop: string;
+  /** Réordonnancement des rayons : l'ordre des allées du magasin habituel. */
+  aisleOrderOpen: boolean;
   // shop lists
   activeShopList: string; shopListForm: boolean; clEditId: string | null;
   clName: string; clColor: string; clIcon: string; shopListDelId: string | null;
@@ -63,7 +65,8 @@ export interface UiState {
 
   // recipes
   recipeForm: boolean; editingId: string | null; confirmDelId: string | null; openRecipeId: string | null;
-  fName: string; fTime: string; fLevel: string; fColor: string; fPhoto: string | null; fIngr: IngrRow[]; fSteps: IngrRow[];
+  fRecipeId: string;
+  fName: string; fTime: string; fLevel: string; fColor: string; fPhotoId: number | null; fPhotoBusy: boolean; fIngr: IngrRow[]; fSteps: IngrRow[];
 
   // planning
   schedChild: string; schedEdit: boolean; seEditId: string | null;
@@ -87,8 +90,9 @@ export function initialUi(): UiState {
     calView: 'month', calAnchor: today,
     weekOffset: 0, mealEdit: null, mealMode: 'recipe', mealRid: null, mealText: '',
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
-    showShop: false, shEditId: null, shTitle: '', shQty: '', shCat: 'Fruits & légumes', shListId: 'cl1', newShop: '',
-    activeShopList: 'cl1', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
+    showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
+    aisleOrderOpen: false,
+    activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aisleDelId: null,
     showTask: false, taskEditId: null, tTitle: '', tWho: 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: 'l1', tPlanned: '', newTask: '',
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', listDelId: null,
@@ -99,7 +103,7 @@ export function initialUi(): UiState {
     folderForm: false, foEditId: null, foName: '', foColor: '#E56B4E', folderDelId: null,
     fileForm: false, fiEditId: null, fiName: '', fiFolderId: null, fiType: 'PDF', fiData: null, fileDelId: null,
     recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
-    fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhoto: null, fIngr: [], fSteps: [],
+    fRecipeId: '', fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,

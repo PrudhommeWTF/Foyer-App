@@ -11,6 +11,7 @@ import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
 import * as repo from '../src/finances/repo';
+import { initBlobs } from '../src/storage/blobs';
 import * as imports from '../src/finances/import-repo';
 import { parseFile } from '../src/finances/import/parse';
 import { resolveAndCollapse, stage } from '../src/finances/import/run';
@@ -38,7 +39,10 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db, tmpDir());
+  // Le magasin d’octets est un service du foyer, initialisé une fois au
+  // démarrage (voir db.ts). Les tests font de même plutôt que de le supposer.
+  initBlobs(tmpDir());
+  repo.initFinancesRepo(db);
   imports.initImportRepo(db);
   acc = {};
   for (const name of ['Compte joint', 'Compte Paul', 'Compte Marie', 'Cabinet Marie']) {

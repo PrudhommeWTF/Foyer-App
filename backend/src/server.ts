@@ -27,6 +27,9 @@ import {
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
+import { filesRouter } from './storage/routes';
+import { shoppingRouter } from './shopping/routes';
+import { preserveShopping } from './shopping/repo';
 import { buildIcs } from './ics';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 
@@ -340,6 +343,20 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
     }
   }
 
+  // The shopping list never travels in a whole-document save: whatever this
+  // client believes about it is discarded in favour of what the server holds.
+  // That is what makes an overwrite structurally impossible, however stale the
+  // client is. Aisles and lists, on the other hand, ARE edited here, so their
+  // consequences for the items are applied server-side.
+  const kept = preserveShopping(state as unknown as Record<string, unknown>);
+  if (kept.movedToFallback || kept.dropped) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[foyer] Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
+      `et ${kept.dropped} retiré(s) avec leur liste, à la suite d'une édition des rayons ou des listes.`,
+    );
+  }
+
   const result = saveHousehold(state);
   res.json(result);
 });
@@ -407,6 +424,14 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
 api.use('/finances', auth, financesRouter());
+
+// Recipe photos and other household files: bytes on disk, never in the state
+// document (a data-URL there was re-sent in full on every single save).
+api.use('/files', auth, filesRouter());
+
+// The shopping list writes item by item rather than by whole-document PUT.
+// See shopping/ops.ts for why: two phones ticking at once is the common case.
+api.use('/shopping', auth, shoppingRouter());
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }

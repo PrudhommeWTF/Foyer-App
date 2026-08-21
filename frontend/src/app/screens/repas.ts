@@ -87,7 +87,9 @@ import { weekDates, dstr } from '../core/helpers';
           <div class="recipe-grid">
             @for (r of d().recipes; track r.id) {
               <div class="recipe-card" [class.sel]="store.ui().mealRid === r.id" (click)="store.patch({ mealRid: r.id, mealMode: 'recipe' })">
-                <div class="thumb" [style.background]="r.photo ? 'url(' + r.photo + ')' : store.grad(r.color)"></div>
+                @let th = store.photoUrl(r.photoId);
+                <div class="thumb" [style.background]="th ? 'url(' + th + ')' : store.grad(r.color)"
+                     [style.background-size]="'cover'" [style.background-position]="'center'"></div>
                 <div class="rc-body">
                   <div class="rc-name">{{ r.name }}</div>
                   <div class="rc-time">{{ r.time }}</div>
