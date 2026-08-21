@@ -1,6 +1,6 @@
-import { Injectable, computed, effect, signal } from '@angular/core';
-import { ApiService, SetupPayload, UpdateInfo } from './api.service';
-import { HouseholdState, Member, Notif } from './models';
+import { Injectable, computed, effect, signal, untracked } from '@angular/core';
+import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
+import { HouseholdState, Member, Notif, ShopItem, ShopState } from './models';
 import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
@@ -9,6 +9,21 @@ const READ_NOTIFS_KEY = 'foyer.readNotifs';
 function loadReadNotifs(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(READ_NOTIFS_KEY) || '[]')); } catch { return new Set(); }
 }
+
+/**
+ * File des opérations de courses pas encore acquittées par le serveur.
+ *
+ * Elle est persistée dans le navigateur, et c'est tout l'intérêt : les coches
+ * faites dans un magasin sans réseau survivent à un onglet recyclé par iOS. Sans
+ * cela, elles ne vivaient qu'en mémoire et disparaissaient sans un mot.
+ */
+const SHOP_QUEUE_KEY = 'foyer.shopQueue';
+function loadShopQueue(): ShopOp[] {
+  try { const v = JSON.parse(localStorage.getItem(SHOP_QUEUE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+/** Cadence de sondage tant que l'écran Courses est visible. */
+const SHOP_POLL_MS = 5000;
 
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -56,6 +71,13 @@ export class FoyerStore {
 
   /** Non-null data accessor for use inside authed views. */
   readonly data = computed(() => this._data());
+
+  /**
+   * Meal slots actually shown. Breakfast is opt-in: it is almost never planned
+   * and costs a third of the grid height on a phone. Hiding it keeps whatever
+   * was already recorded, it only stops displaying the row.
+   */
+  readonly mealSlots = computed(() => MEAL_SLOTS.filter((s) => s.key !== 'matin' || !!this._data()?.settings.showBreakfast));
   readonly narrow = signal(false);
 
   // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
@@ -79,6 +101,18 @@ export class FoyerStore {
     catch { return iso; }
   }
 
+  // ---- synchronisation de la liste de courses ----------------------------
+  /** Version du document connue du client ; sert au sondage différentiel. */
+  private shopVersion = 0;
+  /** Opérations en attente d'acquittement, persistées (voir SHOP_QUEUE_KEY). */
+  private shopQueue = signal<ShopOp[]>(loadShopQueue());
+  /** Nombre de coches pas encore parties. Affiché : sans cela le doute est total. */
+  readonly shopPending = computed(() => this.shopQueue().length);
+  readonly shopOffline = signal(false);
+  private shopFlushing = false;
+  private shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private shopPollTimer: ReturnType<typeof setInterval> | null = null;
+
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -88,6 +122,31 @@ export class FoyerStore {
       const d = this._data();
       const dark = d ? d.settings.dark : false;
       document.documentElement.classList.toggle('dark', dark);
+    });
+
+    // Les photos sont téléchargées avec la session dès qu'une recette en cite
+    // une. `untracked` évite que la mise en cache relance l'effet en boucle.
+    effect(() => {
+      const needed = this.neededPhotoIds();
+      const known = untracked(() => this.photoUrls());
+      for (const id of needed) if (!(id in known)) void this.loadPhoto(id);
+    });
+
+    // Le sondage ne tourne que sur l'écran Courses : ailleurs il ne servirait
+    // qu'à vider la batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
+    effect(() => {
+      const onCourses = this.ui().screen === 'courses' && this.authed();
+      if (onCourses) this.startShopPolling(); else this.stopShopPolling();
+    });
+
+    // Retour du réseau : la file part immédiatement, sans attendre que
+    // quelqu'un touche à nouveau l'écran.
+    window.addEventListener('online', () => { this.shopOffline.set(false); void this.flushShopQueue(); });
+    window.addEventListener('offline', () => this.shopOffline.set(true));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible' || !this.authed()) return;
+      void this.flushShopQueue();
+      if (this.ui().screen === 'courses') void this.pollShopping();
     });
   }
 
@@ -286,6 +345,7 @@ export class FoyerStore {
     this.accounts.set({});
     this.schoolHolidays.set([]);
     this.icsToken.set('');
+    this.revokePhotos();
   }
 
   // ---- member login accounts --------------------------------------------
@@ -365,6 +425,138 @@ export class FoyerStore {
     } catch {
       this.saveState.set('error');
     }
+  }
+
+  // ---- liste de courses : opérations, file et sondage ---------------------
+  //
+  // La liste ne part plus dans `putState` : le serveur ignore ce champ. Toute
+  // mutation passe par une opération ciblée, ce qui rend impossible qu'un
+  // téléphone périmé décoche ce que l'autre vient de cocher.
+  //
+  // Trois choses se passent ici, dans cet ordre :
+  //   1. l'écran est mis à jour tout de suite, sans attendre le réseau ;
+  //   2. l'opération est mise en file, et la file est persistée ;
+  //   3. la file part au serveur, dont la réponse fait autorité.
+
+  private saveShopQueue(q: ShopOp[]): void {
+    this.shopQueue.set(q);
+    try { localStorage.setItem(SHOP_QUEUE_KEY, JSON.stringify(q)); } catch { /* quota : la file reste en mémoire */ }
+  }
+
+  /**
+   * Applique une opération à la liste locale. Volontairement naïf : ni
+   * validation ni journal, le serveur s'en charge et sa réponse écrase ce
+   * résultat. Ici on ne cherche qu'à ce que la coche s'affiche au doigt levé.
+   */
+  private applyShopLocally(op: ShopOp): void {
+    const cur = this._data(); if (!cur) return;
+    const items = cur.shop.map((i) => ({ ...i }));
+    const idx = items.findIndex((i) => i.id === op.id);
+    switch (op.op) {
+      case 'add':
+        if (idx < 0) items.push({ id: op.id, name: op.name, qty: op.qty || '', aisleId: op.aisleId, state: 'a-prendre', listId: op.listId, by: op.by ?? null, at: op.at ?? null });
+        break;
+      case 'set-state':
+        if (idx >= 0) items[idx] = { ...items[idx], state: op.state, by: op.by ?? null, at: op.at ?? null };
+        break;
+      case 'edit':
+        if (idx >= 0) {
+          items[idx] = {
+            ...items[idx],
+            ...(op.name !== undefined ? { name: op.name } : {}),
+            ...(op.qty !== undefined ? { qty: op.qty } : {}),
+            ...(op.aisleId !== undefined ? { aisleId: op.aisleId } : {}),
+            ...(op.listId !== undefined ? { listId: op.listId } : {}),
+          };
+        }
+        break;
+      case 'remove':
+        if (idx >= 0) items.splice(idx, 1);
+        break;
+    }
+    this._data.set({ ...cur, shop: items });
+  }
+
+  /** Empile une ou plusieurs opérations : affichage immédiat, envoi groupé. */
+  private pushShopOps(ops: ShopOpDraft[]): void {
+    const by = this.me()?.id ?? null;
+    const at = new Date().toISOString();
+    const full = ops.map((o) => ({ ...o, opId: uid('op'), by, at }) as ShopOp);
+    for (const op of full) this.applyShopLocally(op);
+    this.saveShopQueue([...this.shopQueue(), ...full]);
+    if (this.shopFlushTimer) clearTimeout(this.shopFlushTimer);
+    // Court délai : trois coches d'affilée partent en un seul aller-retour.
+    this.shopFlushTimer = setTimeout(() => void this.flushShopQueue(), 300);
+  }
+
+  /**
+   * Envoie la file. En cas d'échec réseau, elle reste intacte et repartira au
+   * prochain geste, au retour du réseau ou au prochain sondage : rien n'est
+   * perdu, c'est tout l'objet de l'exercice.
+   */
+  async flushShopQueue(): Promise<void> {
+    if (this.shopFlushing || !this.authed()) return;
+    const batch = this.shopQueue();
+    if (!batch.length) return;
+    this.shopFlushing = true;
+    try {
+      const res = await this.api.shoppingOps(batch);
+      this.shopOffline.set(false);
+      // Retenues comme écartées, les opérations quittent la file : une
+      // opération définitivement refusée qu'on rejouerait tournerait sans fin.
+      const settled = new Set([...res.applied, ...res.skipped.map((k) => k.opId)]);
+      this.saveShopQueue(this.shopQueue().filter((o) => !settled.has(o.opId)));
+      this.adoptShopping(res.version, res.items);
+      if (res.skipped.length) {
+        // Le dire : un article qui n'arrive jamais dans la liste sans explication
+        // est exactement ce qui fait abandonner l'outil.
+        this.toast(res.skipped.length === 1 ? res.skipped[0].reason : res.skipped.length + ' modifications refusées');
+      }
+    } catch {
+      this.shopOffline.set(true);
+    } finally {
+      this.shopFlushing = false;
+    }
+  }
+
+  /** Remplace la liste locale par celle du serveur, qui fait autorité. */
+  private adoptShopping(version: number, items: ShopItem[]): void {
+    this.shopVersion = version;
+    const cur = this._data(); if (!cur) return;
+    // Les opérations encore en file n'ont pas été vues du serveur : les rejouer
+    // par-dessus sa réponse évite qu'une coche faite hors ligne clignote.
+    this._data.set({ ...cur, shop: items });
+    for (const op of this.shopQueue()) this.applyShopLocally(op);
+  }
+
+  /** Sondage différentiel : sans changement, la réponse tient en trois lignes. */
+  async pollShopping(): Promise<void> {
+    if (!this.authed()) return;
+    try {
+      const snap = await this.api.shopping(this.shopVersion);
+      this.shopOffline.set(false);
+      if (snap.unchanged || !snap.items) { this.shopVersion = snap.version; return; }
+      this.adoptShopping(snap.version, snap.items);
+    } catch {
+      this.shopOffline.set(true);
+    }
+  }
+
+  private startShopPolling(): void {
+    if (this.shopPollTimer) return;
+    void this.flushShopQueue();
+    void this.pollShopping();
+    this.shopPollTimer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      void this.flushShopQueue();
+      void this.pollShopping();
+    }, SHOP_POLL_MS);
+  }
+
+  private stopShopPolling(): void {
+    if (!this.shopPollTimer) return;
+    clearInterval(this.shopPollTimer);
+    this.shopPollTimer = null;
   }
 
   toast(msg: string): void {
@@ -468,34 +660,68 @@ export class FoyerStore {
     this.toast('Événement supprimé');
   }
 
-  // ---- shopping items ---------------------------------------------------
-  toggleShop(id: string): void { this.mutate((d) => { const it = d.shop.find((x) => x.id === id); if (it) it.done = !it.done; }); }
+  // ---- articles de courses ------------------------------------------------
+  // Toutes ces méthodes passent par `pushShopOps` : rien de la liste ne part
+  // dans l'enregistrement du document complet.
+
+  /** Un tap : à prendre ou dans le panier. Sans confirmation, c'est le geste du magasin. */
+  toggleShop(id: string): void {
+    const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
+    this.setShopState(id, it.state === 'panier' ? 'a-prendre' : 'panier');
+  }
+  setShopState(id: string, state: ShopState): void { this.pushShopOps([{ op: 'set-state', id, state }]); }
+
   addShopQuick(): void {
     const t = this.ui().newShop.trim(); if (!t) return;
-    const cl = this.activeShopListId();
-    this.mutate((d) => { d.shop.push({ id: uid('s'), name: t, qty: 'x1', cat: 'À trier', done: false, listId: cl }); });
+    const listId = this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return; }
+    this.pushShopOps([{ op: 'add', id: uid('s'), name: t, qty: '', aisleId: this.defaultAisleId(), listId }]);
     this.patch({ newShop: '' });
   }
   activeShopListId(): string {
     const s = this.ui();
     return s.activeShopList !== 'all' ? s.activeShopList : (this._data()?.shopLists[0]?.id || '');
   }
-  openShop(): void { this.patch({ showShop: true, shEditId: null, shTitle: '', shQty: '', shCat: 'Fruits & légumes', shListId: this.activeShopListId() }); }
+  /** Rayon de repli d'un article saisi à la volée : « À trier », créé au besoin. */
+  private defaultAisleId(): string {
+    const aisles = this._data()?.aisles || [];
+    return (aisles.find((a) => a.name === 'À trier') || aisles[aisles.length - 1] || aisles[0])?.id || '';
+  }
+  openShop(): void {
+    this.patch({ showShop: true, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: this.defaultAisleId(), shListId: this.activeShopListId() });
+  }
   editShop(id: string): void {
     const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
-    this.patch({ showShop: true, shEditId: id, shTitle: it.name, shQty: it.qty, shCat: it.cat, shListId: it.listId || this.activeShopListId() });
+    this.patch({ showShop: true, shEditId: id, shTitle: it.name, shQty: it.qty, shState: it.state, shAisleId: it.aisleId, shListId: it.listId || this.activeShopListId() });
   }
   saveShop(): void {
-    const s = this.ui(); const t = s.shTitle.trim(); if (!t) { this.toast('Donne un nom à l’article'); return; }
-    const qty = s.shQty.trim() || 'x1';
-    this.mutate((d) => {
-      if (s.shEditId) { const i = d.shop.findIndex((x) => x.id === s.shEditId); if (i >= 0) d.shop[i] = { ...d.shop[i], name: t, qty, cat: s.shCat, listId: s.shListId }; }
-      else d.shop.push({ id: uid('s'), name: t, qty, cat: s.shCat, done: false, listId: s.shListId });
-    });
-    this.toast(s.shEditId ? 'Article modifié' : 'Article ajouté aux courses');
+    const s = this.ui(); const name = s.shTitle.trim(); if (!name) { this.toast('Donne un nom à l’article'); return; }
+    const qty = s.shQty.trim();
+    if (s.shEditId) {
+      const before = this._data()?.shop.find((x) => x.id === s.shEditId);
+      const ops: ShopOpDraft[] = [{ op: 'edit', id: s.shEditId, name, qty, aisleId: s.shAisleId, listId: s.shListId }];
+      // L'état est une opération distincte : elle porte qui l'a posé et quand,
+      // ce qu'une simple édition de champs ne dit pas.
+      if (before && before.state !== s.shState) ops.push({ op: 'set-state', id: s.shEditId, state: s.shState });
+      this.pushShopOps(ops);
+    } else {
+      this.pushShopOps([{ op: 'add', id: uid('s'), name, qty, aisleId: s.shAisleId, listId: s.shListId }]);
+    }
+    this.toast(s.shEditId ? 'Article modifié' : 'Article ajouté');
     this.patch({ showShop: false, shEditId: null });
   }
-  delShop(): void { const id = this.ui().shEditId; if (!id) return; this.mutate((d) => { d.shop = d.shop.filter((x) => x.id !== id); }); this.patch({ showShop: false, shEditId: null }); this.toast('Article supprimé'); }
+  delShop(): void {
+    const id = this.ui().shEditId; if (!id) return;
+    this.pushShopOps([{ op: 'remove', id }]);
+    this.patch({ showShop: false, shEditId: null });
+    this.toast('Article supprimé');
+  }
+  /** Vide les articles déjà pris d'une liste, une fois les courses rangées. */
+  clearPicked(listId: string): void {
+    const done = (this._data()?.shop || []).filter((i) => i.listId === listId && i.state !== 'a-prendre');
+    if (!done.length) { this.toast('Rien à retirer'); return; }
+    this.pushShopOps(done.map((i) => ({ op: 'remove' as const, id: i.id })));
+    this.toast(done.length + (done.length > 1 ? ' articles retirés' : ' article retiré'));
+  }
 
   // ---- shopping lists ---------------------------------------------------
   newShopList(): void { this.patch({ shopListForm: true, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier' }); }
@@ -507,27 +733,50 @@ export class FoyerStore {
   }
   confirmShopListDel(): void {
     const id = this.ui().shopListDelId; if (!id) return;
+    // Les listes s'éditent par le document complet ; le serveur retire lui-même
+    // les articles orphelins (voir shopping/repo.ts, reconcile). La copie locale
+    // fait de même pour que l'écran ne montre pas des articles déjà partis.
     this.mutate((d) => { d.shopLists = d.shopLists.filter((l) => l.id !== id); d.shop = d.shop.filter((x) => x.listId !== id); });
     this.patch({ shopListDelId: null, activeShopList: this.ui().activeShopList === id ? 'all' : this.ui().activeShopList });
     this.toast('Liste supprimée');
   }
 
-  // ---- aisles -----------------------------------------------------------
+  // ---- rayons -------------------------------------------------------------
+  aislesInOrder(): HouseholdState['aisles'] { return (this._data()?.aisles || []).slice().sort((a, b) => a.position - b.position); }
   newAisle(): void { this.patch({ aiForm: true, aiEditId: null, aiName: '', aiColor: '#7A9B76' }); }
   editAisle(id: string): void { const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return; this.patch({ aiForm: true, aiEditId: id, aiName: a.name, aiColor: a.color }); }
   saveAisle(): void {
     const s = this.ui(); const name = s.aiName.trim(); if (!name) { this.toast('Donne un nom au rayon'); return; }
     if (s.aiEditId) {
-      const old = this._data()?.aisles.find((a) => a.id === s.aiEditId); const oldName = old?.name;
-      this.mutate((d) => { const i = d.aisles.findIndex((a) => a.id === s.aiEditId); if (i >= 0) d.aisles[i] = { ...d.aisles[i], name, color: s.aiColor }; d.shop.forEach((x) => { if (x.cat === oldName) x.cat = name; }); });
+      // Les articles désignent le rayon par son identifiant : renommer ne demande
+      // plus de rattraper quoi que ce soit dans la liste.
+      this.mutate((d) => { const i = d.aisles.findIndex((a) => a.id === s.aiEditId); if (i >= 0) d.aisles[i] = { ...d.aisles[i], name, color: s.aiColor }; });
       this.toast('Rayon modifié');
-    } else { this.mutate((d) => { d.aisles.push({ id: uid('a'), name, color: s.aiColor }); }); this.toast('Rayon ajouté'); }
+    } else {
+      this.mutate((d) => { d.aisles.push({ id: uid('a'), name, color: s.aiColor, position: d.aisles.length }); });
+      this.toast('Rayon ajouté');
+    }
     this.patch({ aiForm: false, aiEditId: null });
+  }
+  /** Remonte ou descend un rayon : c'est l'ordre des allées du magasin habituel. */
+  moveAisle(id: string, dir: -1 | 1): void {
+    const ordered = this.aislesInOrder();
+    const i = ordered.findIndex((a) => a.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= ordered.length) return;
+    const ids = ordered.map((a) => a.id);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    this.mutate((d) => { d.aisles.forEach((a) => { a.position = ids.indexOf(a.id); }); });
   }
   confirmAisleDel(): void {
     const id = this.ui().aisleDelId; if (!id) return;
-    const a = this._data()?.aisles.find((x) => x.id === id); const nm = a?.name;
-    this.mutate((d) => { d.aisles = d.aisles.filter((x) => x.id !== id); d.shop.forEach((x) => { if (x.cat === nm) x.cat = 'À trier'; }); });
+    const fallback = this.defaultAisleId();
+    if (id === fallback) { this.patch({ aisleDelId: null }); this.toast('« À trier » sert de rayon de repli, il ne peut pas être supprimé'); return; }
+    this.mutate((d) => {
+      d.aisles = d.aisles.filter((x) => x.id !== id);
+      d.aisles.forEach((a, i) => { a.position = i; });
+      d.shop.forEach((x) => { if (x.aisleId === id) x.aisleId = fallback; });
+    });
     this.patch({ aisleDelId: null });
     this.toast('Rayon supprimé');
   }
@@ -671,35 +920,107 @@ export class FoyerStore {
     this.toast('Repas enregistré');
   }
   clearMeal(): void { const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot; this.mutate((d) => { delete d.meals[key]; }); this.patch({ mealEdit: null }); this.toast('Repas retiré'); }
-  generateList(): void {
-    const cl = this.activeShopListId();
+  /**
+   * Rough draft of the recipe → planning → list chain: one line of ingredients
+   * becomes one article. The week is passed in explicitly because `weekOffset`
+   * belongs to the meal screen: a button elsewhere must not silently generate
+   * whatever week was last browsed there.
+   */
+  generateList(weekOffset = this.ui().weekOffset): void {
+    const listId = this.activeShopListId();
     const d = this._data(); if (!d) return;
-    const names = new Set(d.shop.filter((i) => i.listId === cl).map((i) => i.name.toLowerCase()));
-    const add: HouseholdState['shop'] = [];
-    weekDates(this.ui().weekOffset).forEach((day) => {
+    if (!listId) { this.toast('Créez d’abord une liste de courses'); return; }
+    const aisleId = this.defaultAisleId();
+    const names = new Set(d.shop.filter((i) => i.listId === listId).map((i) => i.name.toLowerCase()));
+    const add: { op: 'add'; id: string; name: string; qty: string; aisleId: string; listId: string }[] = [];
+    weekDates(weekOffset, this.todayStr()).forEach((day) => {
       const ds = dstr(day);
-      MEAL_SLOTS.forEach((sl) => {
+      this.mealSlots().forEach((sl) => {
         const v = d.meals[ds + '-' + sl.key]; if (!v || !v.rid) return;
         const r = d.recipes.find((x) => x.id === v.rid); if (!r) return;
         r.ingr.forEach((ing) => {
-          const short = ing.replace(/^[0-9].*?(de |d’)?/, '').trim();
-          const label = short.charAt(0).toUpperCase() + short.slice(1);
-          if (!names.has(label.toLowerCase())) { names.add(label.toLowerCase()); add.push({ id: uid('g'), name: label, qty: '', cat: 'Depuis le planning repas', done: false, listId: cl }); }
+          const label = cap(ing.trim());
+          if (!label || names.has(label.toLowerCase())) return;
+          names.add(label.toLowerCase());
+          add.push({ op: 'add', id: uid('g'), name: label, qty: '', aisleId, listId });
         });
       });
     });
-    this.mutate((s) => { s.shop.push(...add); });
+    this.pushShopOps(add);
     this.patch({ screen: 'courses' });
     this.toast(add.length + ' ingrédients ajoutés depuis les repas');
   }
 
   // ---- recipes ----------------------------------------------------------
-  newRecipe(): void { this.patch({ recipeForm: true, editingId: null, fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhoto: null, fIngr: [{ id: uid('i'), val: '' }], fSteps: [{ id: uid('p'), val: '' }] }); }
+  // L'identifiant est tiré à l'ouverture du formulaire, avant l'enregistrement :
+  // une photo a besoin d'un propriétaire pour être rangée, y compris sur une
+  // recette qui n'existe pas encore.
+  newRecipe(): void { this.patch({ recipeForm: true, editingId: null, fRecipeId: uid('r'), fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [{ id: uid('i'), val: '' }], fSteps: [{ id: uid('p'), val: '' }] }); }
   editRecipe(id: string): void {
     const r = this._data()?.recipes.find((x) => x.id === id); if (!r) return;
-    this.patch({ recipeForm: true, editingId: id, openRecipeId: null, fName: r.name, fTime: r.time, fLevel: r.level, fColor: r.color, fPhoto: r.photo || null, fIngr: r.ingr.map((v) => ({ id: uid('i'), val: v })), fSteps: r.steps.map((v) => ({ id: uid('p'), val: v })) });
+    this.patch({ recipeForm: true, editingId: id, fRecipeId: id, openRecipeId: null, fName: r.name, fTime: r.time, fLevel: r.level, fColor: r.color, fPhotoId: r.photoId ?? null, fPhotoBusy: false, fIngr: r.ingr.map((v) => ({ id: uid('i'), val: v })), fSteps: r.steps.map((v) => ({ id: uid('p'), val: v })) });
   }
-  onRecipePhoto(file: File): void { const rd = new FileReader(); rd.onload = (ev) => this.patch({ fPhoto: ev.target?.result as string }); rd.readAsDataURL(file); }
+  // ---- photos ------------------------------------------------------------
+  // Une balise <img> ou un background CSS ne porte pas l'en-tête d'autorisation :
+  // pointer directement /api/files renverrait 401. Le jeton dans l'URL est exclu
+  // (il finirait dans l'historique du navigateur, voir api.service.ts), donc la
+  // photo est téléchargée avec la session puis exposée en URL d'objet locale.
+  // `null` en cache signifie « déjà tenté, sans succès » : on ne réessaie pas en
+  // boucle, le dégradé de couleur de la recette prend le relais.
+  private photoUrls = signal<Record<number, string | null>>({});
+
+  /**
+   * URL d'affichage d'une photo, ou null tant qu'elle n'est pas arrivée. Lecture
+   * pure : le téléchargement est déclenché par l'effet du constructeur, car
+   * écrire dans un signal depuis un gabarit est interdit (NG0600).
+   */
+  photoUrl(photoId?: number | null): string | null {
+    return photoId ? this.photoUrls()[photoId] ?? null : null;
+  }
+
+  /** Photos citées par le document et par le formulaire en cours. */
+  private neededPhotoIds(): number[] {
+    const ids = new Set<number>();
+    for (const r of this._data()?.recipes || []) if (r.photoId) ids.add(r.photoId);
+    const editing = this.ui().fPhotoId;
+    if (editing) ids.add(editing);
+    return [...ids];
+  }
+
+  private async loadPhoto(id: number): Promise<void> {
+    // Marqué avant l'appel : l'effet se réexécute pendant le téléchargement, et
+    // sans cette marque il en lancerait un par passage.
+    this.photoUrls.update((m) => ({ ...m, [id]: null }));
+    try {
+      const blob = await this.api.download('files/' + id);
+      this.photoUrls.update((m) => ({ ...m, [id]: URL.createObjectURL(blob) }));
+    } catch { /* fichier absent ou session expirée : la recette garde son dégradé */ }
+  }
+
+  /** Met une photo tout juste envoyée en cache, pour un aperçu sans aller-retour. */
+  private cachePhoto(id: number, file: Blob): void {
+    this.photoUrls.update((m) => ({ ...m, [id]: URL.createObjectURL(file) }));
+  }
+
+  private revokePhotos(): void {
+    for (const url of Object.values(this.photoUrls())) if (url) URL.revokeObjectURL(url);
+    this.photoUrls.set({});
+  }
+  async onRecipePhoto(file: File): Promise<void> {
+    const ownerId = this.ui().fRecipeId; if (!ownerId) return;
+    this.patch({ fPhotoBusy: true });
+    try {
+      const res = await this.api.uploadFile('recipe', ownerId, file);
+      this.cachePhoto(res.file.id, file);
+      this.patch({ fPhotoId: res.file.id });
+    } catch (e) {
+      // Le message du serveur nomme le format attendu : le relayer tel quel vaut
+      // mieux qu'un « échec » qui ne dit pas quoi faire.
+      this.toast((e as Error).message);
+    } finally {
+      this.patch({ fPhotoBusy: false });
+    }
+  }
   addIngr(): void { this.patch({ fIngr: [...this.ui().fIngr, { id: uid('i'), val: '' }] }); }
   addStep(): void { this.patch({ fSteps: [...this.ui().fSteps, { id: uid('p'), val: '' }] }); }
   setIngr(id: string, val: string): void { this.patch({ fIngr: this.ui().fIngr.map((x) => (x.id === id ? { ...x, val } : x)) }); }
@@ -710,10 +1031,10 @@ export class FoyerStore {
     const s = this.ui(); const name = s.fName.trim(); if (!name) { this.toast('Donne un nom à la recette'); return; }
     const ingr = s.fIngr.map((x) => x.val.trim()).filter(Boolean);
     const steps = s.fSteps.map((x) => x.val.trim()).filter(Boolean);
-    const data = { name, time: s.fTime.trim() || '—', level: s.fLevel, color: s.fColor, photo: s.fPhoto || null, ingr, steps };
+    const data = { name, time: s.fTime.trim() || '—', level: s.fLevel, color: s.fColor, photoId: s.fPhotoId, ingr, steps };
     this.mutate((d) => {
       if (s.editingId) { const i = d.recipes.findIndex((r) => r.id === s.editingId); if (i >= 0) d.recipes[i] = { ...d.recipes[i], ...data }; }
-      else d.recipes.unshift({ id: uid('r'), ...data });
+      else d.recipes.unshift({ id: s.fRecipeId || uid('r'), ...data });
     });
     this.toast(s.editingId ? 'Recette modifiée' : 'Recette ajoutée au carnet');
     this.patch({ recipeForm: false, editingId: null });

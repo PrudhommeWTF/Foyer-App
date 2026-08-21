@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { migrateFinances } from '../src/finances/schema';
 import { commitImport, createDraft } from '../src/finances/import-repo';
 import * as repo from '../src/finances/repo';
+import { initBlobs } from '../src/storage/blobs';
 
 /** Un répertoire jetable par base : les pièces jointes écrivent sur disque. */
 const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
@@ -17,7 +18,10 @@ function reset(): void {
   db = new Database(':memory:');
   db.pragma('foreign_keys = ON');
   migrateFinances(db);
-  repo.initFinancesRepo(db, tmpDir());
+  // Le magasin d’octets est un service du foyer, initialisé une fois au
+  // démarrage (voir db.ts). Les tests font de même plutôt que de le supposer.
+  initBlobs(tmpDir());
+  repo.initFinancesRepo(db);
 }
 
 const account = (name: string, over: Partial<repo.AccountInput> = {}): number =>

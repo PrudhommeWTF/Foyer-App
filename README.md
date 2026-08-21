@@ -18,14 +18,14 @@ Angular 21 · Node/Express · SQLite · Docker
 |---|---|
 | 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. |
 | 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts) et **échéances de contrat**. Partage par **flux ICS** (Google/Apple Agenda). |
-| 🛒 **Courses** | Multi-listes, rayons, articles cochables, génération depuis le planning repas. |
+| 🛒 **Courses** | Multi-listes, rayons **réordonnables** (l'ordre des allées de votre magasin), coche **en un tap**, trois états (à prendre, dans le panier, indisponible), articles pris regroupés en bas, suggestions dès les premières lettres, génération depuis le planning repas. **Écriture article par article** : deux téléphones peuvent cocher en même temps sans que l'un écrase l'autre, et les coches faites **hors ligne** repartent au retour du réseau. |
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
 | 💰 **Finances** | Comptes (courant, professionnel, épargne, **crédit**) avec **un ou plusieurs titulaires** et soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Crédits immobiliers et à la consommation** : quatre chiffres de l'offre de prêt suffisent, capital restant dû, échéancier, date de fin et intérêts de l'année se calculent. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
-| 🍽️ **Repas** | Grille 7 jours × 3 créneaux, recettes ou texte libre. |
-| 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. |
+| 🍽️ **Repas** | Grille 7 jours, semaine courante, déjeuner et dîner (petit-déjeuner en option dans *Paramètres → Repas*), recettes ou texte libre. |
+| 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. Les **photos sont stockées sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement). |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
 | ⚙️ **Paramètres** | Langue, thème, notifications, membres, export/reset des données. |
 
@@ -50,6 +50,13 @@ Foyer-App/
   dédiées** (`fin_*`, même fichier SQLite), servies par `/api/finances/*` avec des opérations
   granulaires. Milliers d'opérations, agrégats côté serveur, pas de « dernier arrivé gagne ».
   Voir [`docs/finances-architecture.md`](docs/finances-architecture.md).
+- La **liste de courses** reste dans le document, mais s'écrit **article par article**
+  (`/api/shopping/ops`) : `PUT /api/state` ignore ce champ et conserve celui du serveur.
+  Deux personnes cochent en même temps sans que l'une écrase l'autre, et les coches faites
+  hors ligne sont rejouées au retour du réseau.
+- Les **fichiers** (pièces jointes Finances, photos de recettes) vivent sur le disque dans
+  `<données>/pieces`, adressés par leur empreinte, jamais en base64 dans le document.
+  Voir [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
 - Le **frontend** est une SPA. Toute la logique métier (dérivés budget, récurrence agenda,
   génération de courses…) est portée fidèlement depuis la maquette de design.
 - L'app utilise un `base href` **relatif** : un seul build fonctionne servi à la racine
@@ -264,6 +271,11 @@ docker compose cp foyer:/data/foyer-$STAMP.db ./foyer-$STAMP.db
 Procédures de restauration, vérification d'une sauvegarde et export CSV en ligne de commande :
 [`docs/finances-architecture.md`](docs/finances-architecture.md#14-sauvegarde-et-restauration).
 
+Le document d'état est migré au démarrage lorsque sa forme change. Une **copie du
+document d'origine** est écrite dans `<données>/backups/` avant toute
+transformation, et la procédure de retour en arrière est dans
+[`docs/cuisine-architecture.md`](docs/cuisine-architecture.md#migrations-du-document-détat).
+
 ## 📅 Calendrier avancé
 
 - **Vacances scolaires** : choisissez l'**académie** du foyer dans *Paramètres → Général*.
@@ -352,6 +364,12 @@ Reconstruit fidèlement depuis le *handoff* de design (haute fidélité) : polic
 Bricolage Grotesque / Nunito / Caveat, palette terracotta & sauge, thème clair/sombre,
 rayons et ombres définis dans [`frontend/src/styles.scss`](frontend/src/styles.scss).
 La maquette de référence est conservée dans [`docs/`](docs/).
+
+## 🍽️ Cuisine : recettes, repas, courses
+
+Architecture de la chaîne recettes → planning → courses, procédures de sauvegarde,
+de migration et de nettoyage des fichiers, diagnostic d'un article qui n'arrive pas
+dans la liste : [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
 
 ## 📦 CI / images
 

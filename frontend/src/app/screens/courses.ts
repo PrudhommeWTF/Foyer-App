@@ -4,10 +4,16 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { LIST_ICONS, PALETTE } from '../core/constants';
-import { ShopItem } from '../core/models';
+import { Aisle, ShopItem, ShopState } from '../core/models';
 
-interface AisleGroup { id: string | null; name: string; color: string; editable: boolean; items: ShopItem[]; }
+interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
 
+/**
+ * Écran des courses, pensé pour le magasin avant le bureau : une colonne, des
+ * cibles larges, une coche en un tap sans confirmation, et les articles pris
+ * regroupés en bas plutôt que disparus (les retrouver est ce qu'on fait à la
+ * caisse quand on doute d'en avoir pris un).
+ */
 @Component({
   selector: 'screen-courses',
   standalone: true,
@@ -15,7 +21,7 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
   imports: [FormsModule, IconComponent, ModalComponent],
   template: `
     <div class="screen-enter">
-      <!-- List chips -->
+      <!-- Listes -->
       <div class="chips">
         <div class="chip-l" [class.active]="active() === 'all'"
              [style.background]="active() === 'all' ? '#8A7E74' : ''"
@@ -40,77 +46,119 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
         </div>
       </div>
 
-      <!-- Active-list header -->
-      @if (activeList(); as al) {
-        <div class="list-head">
-          <div class="list-id">
-            <div class="list-ic" [style.background]="al.color"><f-icon [path]="LIST_ICONS[al.icon]" [size]="18" color="#fff" /></div>
-            <span class="list-name f-display">{{ al.name }}</span>
-          </div>
-          <button class="icon-btn sm" (click)="store.editShopList(al.id)"><f-icon name="edit" [size]="15" color="var(--ink2)" /></button>
-          <button class="icon-btn sm" (click)="store.patch({ shopListDelId: al.id })"><f-icon name="trash" [size]="15" color="#E56B4E" /></button>
+      <!-- Ajout rapide : trois taps au maximum, champ puis suggestion ou Entrée -->
+      <div class="quick">
+        <input class="input" placeholder="Ajouter un article…" enterkeyhint="done"
+               autocomplete="off" autocapitalize="sentences"
+               [ngModel]="store.ui().newShop" (ngModelChange)="store.patch({ newShop: $event })"
+               (keydown.enter)="store.addShopQuick()">
+        <button class="add-btn" (click)="store.addShopQuick()" aria-label="Ajouter">
+          <f-icon name="plus" [size]="22" color="#fff" [width]="2.6" />
+        </button>
+      </div>
+      @if (suggestions().length) {
+        <div class="sugg">
+          @for (sg of suggestions(); track sg) {
+            <button class="sugg-chip" (click)="addSuggestion(sg)">{{ sg }}</button>
+          }
         </div>
       }
 
-      <div class="panels">
-        <!-- LEFT -->
-        <div class="col-left">
-          <div class="quick">
-            <input class="input" placeholder="Ajouter un article…"
-                   [ngModel]="store.ui().newShop" (ngModelChange)="store.patch({ newShop: $event })"
-                   (keydown.enter)="store.addShopQuick()">
-            <button class="btn btn-primary" (click)="store.addShopQuick()"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Ajouter</button>
-          </div>
+      <!-- État de la synchronisation. Silencieux quand tout va bien. -->
+      @if (store.shopOffline() || store.shopPending()) {
+        <div class="sync" [class.off]="store.shopOffline()">
+          <f-icon [name]="store.shopOffline() ? 'x' : 'refresh'" [size]="15" [color]="store.shopOffline() ? '#C6492F' : 'var(--ink2)'" [width]="2.4" />
+          @if (store.shopOffline()) {
+            <span>Hors ligne. {{ store.shopPending() }} modification(s) en attente, elles partiront au retour du réseau.</span>
+          } @else {
+            <span>Envoi de {{ store.shopPending() }} modification(s)…</span>
+          }
+        </div>
+      }
 
-          <div class="by-head">
-            <span class="overline">Par rayon</span>
-            <span class="add-aisle" (click)="store.newAisle()"><f-icon name="plus" [size]="14" color="#E56B4E" [width]="2.6" /> Rayon</span>
-          </div>
-
-          <div class="cats">
-            @for (g of groups(); track g.name) {
-              <div class="cat-card" [style.border-left]="'4px solid ' + g.color">
-                <div class="cat-head">
-                  <div class="cat-name"><span class="dot" [style.background]="g.color"></span>{{ g.name }}</div>
-                  @if (g.editable && g.id) {
-                    <div class="cat-acts">
-                      <span class="mini" (click)="store.editAisle(g.id)"><f-icon name="edit" [size]="13" color="var(--ink2)" /></span>
-                      <span class="mini" (click)="store.patch({ aisleDelId: g.id })"><f-icon name="trash" [size]="13" color="#E56B4E" /></span>
-                    </div>
-                  }
-                </div>
-                @for (it of g.items; track it.id) {
-                  <div class="shop-row" (click)="store.editShop(it.id)">
-                    <span class="tick" [class.on]="it.done" (click)="$event.stopPropagation(); store.toggleShop(it.id)">
-                      @if (it.done) { <f-icon name="check" [size]="12" color="#fff" [width]="3.6" /> }
-                    </span>
-                    <span class="s-name" [class.done]="it.done">{{ it.name }}</span>
-                    <span class="s-qty">{{ it.qty }}</span>
-                  </div>
-                }
-              </div>
-            } @empty { <div class="empty">Aucun article dans cette liste.</div> }
+      <!-- En-tête de la liste active -->
+      @if (activeList(); as al) {
+        <div class="list-head">
+          <div class="list-ic" [style.background]="al.color"><f-icon [path]="LIST_ICONS[al.icon]" [size]="18" color="#fff" /></div>
+          <span class="list-name f-display">{{ al.name }}</span>
+          <div class="head-acts">
+            <button class="icon-btn sm" (click)="store.editShopList(al.id)" aria-label="Modifier la liste"><f-icon name="edit" [size]="16" color="var(--ink2)" /></button>
+            <button class="icon-btn sm" (click)="store.patch({ shopListDelId: al.id })" aria-label="Supprimer la liste"><f-icon name="trash" [size]="16" color="#E56B4E" /></button>
           </div>
         </div>
+      }
 
-        <!-- RIGHT -->
-        <div class="col-right">
-          <div class="card prog-card">
-            <div class="card-title sm">Progression</div>
-            <div class="prog-n f-display">{{ progress().done }}<span class="prog-tot">/{{ progress().total }}</span></div>
-            <div class="prog-lbl">articles cochés</div>
-            <div class="bar"><div class="bar-fill" [style.width.%]="progress().pct"></div></div>
+      <div class="prog">
+        <div class="prog-txt">{{ progress().done }} / {{ progress().total }} articles pris</div>
+        <div class="bar"><div class="bar-fill" [style.width.%]="progress().pct"></div></div>
+      </div>
+
+      <div class="by-head">
+        <span class="overline">Par rayon</span>
+        <span class="acts">
+          <span class="mini-link" (click)="store.patch({ aisleOrderOpen: true })"><f-icon name="planning" [size]="14" color="var(--ink2)" [width]="2.4" /> Ordre</span>
+          <span class="mini-link" (click)="store.newAisle()"><f-icon name="plus" [size]="14" color="#E56B4E" [width]="2.6" /> Rayon</span>
+        </span>
+      </div>
+
+      <!-- À prendre, dans l'ordre des allées -->
+      @for (g of todo(); track g.aisle.id) {
+        <div class="cat" [style.border-left]="'4px solid ' + g.aisle.color">
+          <div class="cat-head">
+            <div class="cat-name"><span class="dot" [style.background]="g.aisle.color"></span>{{ g.aisle.name }}</div>
+            <span class="cat-n">{{ g.items.length }}</span>
           </div>
-          <div class="gen-card" (click)="store.generateList()">
-            <f-icon name="bolt" [size]="24" color="#fff" />
-            <div class="gen-t">Générer depuis les repas</div>
-            <div class="gen-s">Ajoute tous les ingrédients du planning de la semaine en un clic</div>
-          </div>
+          @for (it of g.items; track it.id) {
+            <div class="row" [class.unavail]="it.state === 'indisponible'">
+              <button class="tick" [class.unavail]="it.state === 'indisponible'" (click)="store.toggleShop(it.id)"
+                      [attr.aria-label]="'Cocher ' + it.name">
+                @if (it.state === 'indisponible') { <f-icon name="x" [size]="15" color="#C6492F" [width]="3" /> }
+              </button>
+              <button class="row-body" (click)="store.editShop(it.id)">
+                <span class="s-name">{{ it.name }}</span>
+                @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+              </button>
+            </div>
+          }
         </div>
+      } @empty {
+        <div class="empty">
+          @if (progress().total) { Tout est dans le panier. } @else { Aucun article dans cette liste. }
+        </div>
+      }
+
+      <!-- Déjà pris, regroupés en bas -->
+      @if (picked().length) {
+        <div class="done-head">
+          <span class="overline">Dans le panier ({{ picked().length }})</span>
+          @if (activeList(); as al) {
+            <span class="mini-link" (click)="store.clearPicked(al.id)"><f-icon name="trash" [size]="14" color="var(--ink2)" [width]="2.4" /> Vider</span>
+          }
+        </div>
+        <div class="cat done-cat">
+          @for (it of picked(); track it.id) {
+            <div class="row">
+              <button class="tick on" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Décocher ' + it.name">
+                <f-icon name="check" [size]="14" color="#fff" [width]="3.4" />
+              </button>
+              <button class="row-body" (click)="store.editShop(it.id)">
+                <span class="s-name done">{{ it.name }}</span>
+                @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+              </button>
+              @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
+            </div>
+          }
+        </div>
+      }
+
+      <div class="gen-card" (click)="store.generateList(0)">
+        <f-icon name="bolt" [size]="22" color="#fff" />
+        <div class="gen-t">Générer depuis les repas</div>
+        <div class="gen-s">Ajoute les ingrédients des repas prévus cette semaine</div>
       </div>
     </div>
 
-    <!-- Shop item modal -->
+    <!-- Article -->
     @if (store.ui().showShop) {
       <f-modal [title]="store.ui().shEditId ? 'Modifier l\\'article' : 'Nouvel article'" [maxWidth]="440" (close)="store.patch({ showShop: false })">
         <div class="modal-row">
@@ -123,10 +171,20 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
             <input class="input" placeholder="x1" [ngModel]="store.ui().shQty" (ngModelChange)="store.patch({ shQty: $event })" (keydown.enter)="store.saveShop()">
           </div>
         </div>
+
+        <div class="field-label">État</div>
+        <div class="seg mb">
+          @for (st of states; track st.k) {
+            <button class="grow" [class.active]="store.ui().shState === st.k" (click)="store.patch({ shState: st.k })">{{ st.label }}</button>
+          }
+        </div>
+
         <div class="field-label">Rayon</div>
         <div class="seg-wrap">
-          @for (a of d().aisles; track a.id) {
-            <div class="seg-opt" [class.on]="store.ui().shCat === a.name" (click)="store.patch({ shCat: a.name })">{{ a.name }}</div>
+          @for (a of store.aislesInOrder(); track a.id) {
+            <div class="seg-opt" [class.on]="store.ui().shAisleId === a.id" (click)="store.patch({ shAisleId: a.id })">
+              <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
+            </div>
           }
         </div>
         <div class="field-label">Liste</div>
@@ -139,7 +197,7 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
         </div>
         <div class="modal-actions">
           @if (store.ui().shEditId) {
-            <button class="icon-btn del-btn" (click)="store.delShop()"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
+            <button class="icon-btn del-btn" (click)="store.delShop()" aria-label="Supprimer"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
           }
           <button class="btn btn-soft grow" (click)="store.patch({ showShop: false })">Annuler</button>
           <button class="btn btn-primary grow2" (click)="store.saveShop()">Enregistrer</button>
@@ -147,11 +205,35 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
       </f-modal>
     }
 
-    <!-- Shop list modal -->
+    <!-- Ordre des rayons -->
+    @if (store.ui().aisleOrderOpen) {
+      <f-modal title="Ordre des rayons" [maxWidth]="440" (close)="store.patch({ aisleOrderOpen: false })">
+        <div class="hint mb">Rangez les rayons dans l'ordre où vous les parcourez en magasin. La liste de courses suit cet ordre.</div>
+        <div class="order-list">
+          @for (a of store.aislesInOrder(); track a.id; let i = $index, last = $last) {
+            <div class="order-row">
+              <span class="s-dot" [style.background]="a.color"></span>
+              <span class="order-name">{{ a.name }}</span>
+              <button class="icon-btn sm" [disabled]="i === 0" (click)="store.moveAisle(a.id, -1)" aria-label="Monter">
+                <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
+              </button>
+              <button class="icon-btn sm" [disabled]="last" (click)="store.moveAisle(a.id, 1)" aria-label="Descendre">
+                <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" class="down" />
+              </button>
+            </div>
+          }
+        </div>
+        <div class="modal-actions" style="margin-top:18px">
+          <button class="btn btn-primary grow" (click)="store.patch({ aisleOrderOpen: false })">Terminé</button>
+        </div>
+      </f-modal>
+    }
+
+    <!-- Liste -->
     @if (store.ui().shopListForm) {
       <f-modal [title]="store.ui().clEditId ? 'Modifier la liste' : 'Nouvelle liste'" [maxWidth]="460" (close)="store.patch({ shopListForm: false })">
         <div class="field-label">Nom de la liste</div>
-        <input class="input mb" placeholder="Ex : Courses Auchan" [ngModel]="store.ui().clName" (ngModelChange)="store.patch({ clName: $event })">
+        <input class="input mb" placeholder="Ex : Drive, Boulangerie…" [ngModel]="store.ui().clName" (ngModelChange)="store.patch({ clName: $event })">
         <div class="field-label">Couleur</div>
         <div class="swatch-row mb">
           @for (c of PALETTE; track c) {
@@ -173,7 +255,7 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
       </f-modal>
     }
 
-    <!-- Aisle modal -->
+    <!-- Rayon -->
     @if (store.ui().aiForm) {
       <f-modal [title]="store.ui().aiEditId ? 'Modifier le rayon' : 'Nouveau rayon'" [maxWidth]="440" (close)="store.patch({ aiForm: false })">
         <div class="field-label">Nom du rayon</div>
@@ -191,7 +273,6 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
       </f-modal>
     }
 
-    <!-- Delete list confirm -->
     @if (store.ui().shopListDelId) {
       <f-modal [maxWidth]="400" (close)="store.patch({ shopListDelId: null })">
         <div class="confirm">
@@ -206,7 +287,6 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
       </f-modal>
     }
 
-    <!-- Delete aisle confirm -->
     @if (store.ui().aisleDelId) {
       <f-modal [maxWidth]="400" (close)="store.patch({ aisleDelId: null })">
         <div class="confirm">
@@ -222,62 +302,79 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
     }
   `,
   styles: [`
-    .chips { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
-    .chip-l { display: flex; align-items: center; gap: 8px; padding: 9px 15px; border-radius: var(--r-chip); font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--surface); color: var(--ink2); box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); }
+    .chips { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+    .chip-l { display: flex; align-items: center; gap: 8px; padding: 11px 15px; border-radius: var(--r-chip); font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--surface); color: var(--ink2); box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); }
     .chip-l .cnt { font-size: 12px; }
-    .chip-new { display: flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: var(--r-chip); font-size: 13px; font-weight: 800; cursor: pointer; color: #E56B4E; border: 2px dashed var(--line2); }
-    .list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-    .list-id { display: flex; align-items: center; gap: 10px; }
-    .list-ic { width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
-    .list-name { font-size: 19px; font-weight: 700; color: var(--ink); }
+    .chip-new { display: flex; align-items: center; gap: 6px; padding: 11px 14px; border-radius: var(--r-chip); font-size: 13px; font-weight: 800; cursor: pointer; color: #E56B4E; border: 2px dashed var(--line2); }
 
-    .panels { display: flex; gap: 24px; align-items: flex-start; }
-    .col-left { flex: 1; min-width: 0; }
-    .col-right { width: 300px; flex: none; }
-    :host-context(.shell.narrow) .panels { flex-direction: column; }
-    :host-context(.shell.narrow) .col-right { width: 100%; }
-    @media (max-width: 860px) { .panels { flex-direction: column; } .col-right { width: 100%; } }
+    /* Ajout rapide : le champ et son bouton font 52 px de haut, utilisables au pouce. */
+    .quick { display: flex; gap: 10px; margin-bottom: 10px; }
+    .quick .input { flex: 1; min-height: 52px; font-size: 16px; }
+    .add-btn { width: 52px; height: 52px; flex: none; border: none; border-radius: 15px; background: var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .sugg { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .sugg-chip { border: none; background: var(--soft2); color: var(--ink2); border-radius: 12px; padding: 9px 14px; font-size: 13.5px; font-weight: 800; cursor: pointer; }
 
-    .quick { display: flex; gap: 12px; margin-bottom: 22px; }
-    .quick .input { flex: 1; }
-    .by-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-    .add-aisle { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #E56B4E; cursor: pointer; }
+    .sync { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 13px; background: var(--soft2); color: var(--ink2); font-size: 12.5px; font-weight: 700; margin-bottom: 14px; }
+    .sync.off { background: #FCE9E3; color: #C6492F; }
 
-    .cats { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
-    :host-context(.shell.narrow) .cats { grid-template-columns: 1fr; }
-    @media (max-width: 860px) { .cats { grid-template-columns: 1fr; } }
-    .cat-card { background: var(--surface); border-radius: var(--r-card); padding: 16px 18px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); }
-    .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .cat-name { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; }
-    .cat-name .dot { width: 10px; height: 10px; border-radius: 3px; }
-    .cat-acts { display: flex; gap: 6px; }
-    .mini { width: 26px; height: 26px; border-radius: 8px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .shop-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; cursor: pointer; }
-    .tick { width: 22px; height: 22px; flex: none; border-radius: 7px; border: 2px solid var(--line2); background: transparent; display: flex; align-items: center; justify-content: center; }
-    .tick.on { background: var(--sage); border-color: var(--sage); }
-    .s-name { flex: 1; font-size: 14.5px; font-weight: 700; color: var(--ink); }
-    .s-name.done { color: var(--ink3); text-decoration: line-through; }
-    .s-qty { font-size: 13px; font-weight: 700; color: var(--ink3); }
-    .empty { grid-column: 1 / -1; color: var(--ink2); font-weight: 700; font-size: 14px; padding: 24px 0; }
+    .list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .list-ic { width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
+    .list-name { font-size: 19px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
+    .head-acts { display: flex; gap: 6px; }
 
-    .prog-card { margin-bottom: 16px; }
-    .prog-n { font-size: 34px; font-weight: 700; color: #E56B4E; margin: 6px 0 2px; }
-    .prog-tot { font-size: 18px; color: var(--ink3); }
-    .prog-lbl { font-size: 13px; font-weight: 700; color: var(--ink2); }
-    .bar { height: 9px; background: var(--line2); border-radius: 8px; margin-top: 14px; overflow: hidden; }
+    .prog { margin-bottom: 18px; }
+    .prog-txt { font-size: 12.5px; font-weight: 800; color: var(--ink2); margin-bottom: 7px; }
+    .bar { height: 8px; background: var(--line2); border-radius: 8px; overflow: hidden; }
     .bar-fill { height: 100%; background: var(--sage); border-radius: 8px; transition: width .3s ease; }
-    .gen-card { background: linear-gradient(135deg,#7A9B76,#5F7E5C); border-radius: var(--r-card-lg); padding: 22px; cursor: pointer; box-shadow: 0 14px 26px -14px rgba(95,126,92,.6); }
-    .gen-t { color: #fff; font-weight: 800; font-size: 16px; margin-top: 10px; }
+
+    .by-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .by-head .acts { display: flex; gap: 14px; }
+    .mini-link { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+
+    .cat { background: var(--surface); border-radius: var(--r-card); padding: 12px 14px 6px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); margin-bottom: 14px; }
+    .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .cat-name { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 13.5px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; }
+    .cat-name .dot { width: 10px; height: 10px; border-radius: 3px; }
+    .cat-n { font-size: 12px; font-weight: 800; color: var(--ink3); }
+    .done-cat { opacity: .75; }
+    .done-head { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 12px; }
+
+    /* La ligne fait 52 px : la coche et le corps sont deux cibles distinctes,
+       assez larges pour être visées d'une main dans un magasin. */
+    .row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
+    .row + .row { border-top: 1px solid var(--line); }
+    .tick { width: 30px; height: 30px; flex: none; border-radius: 9px; border: 2px solid var(--line2); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+    .tick.on { background: var(--sage); border-color: var(--sage); }
+    .tick.unavail { border-color: #E9B4A6; background: #FCE9E3; }
+    .row-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 14px 0; text-align: left; cursor: pointer; font: inherit; }
+    .s-name { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+    .s-name.done { color: var(--ink3); text-decoration: line-through; }
+    .row.unavail .s-name { color: #C6492F; }
+    .s-qty { font-size: 13px; font-weight: 800; color: var(--ink3); flex: none; }
+    .who { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .empty { color: var(--ink2); font-weight: 700; font-size: 14px; padding: 24px 0; }
+
+    .gen-card { background: linear-gradient(135deg,#7A9B76,#5F7E5C); border-radius: var(--r-card-lg); padding: 20px; cursor: pointer; box-shadow: 0 14px 26px -14px rgba(95,126,92,.6); margin-top: 24px; }
+    .gen-t { color: #fff; font-weight: 800; font-size: 16px; margin-top: 8px; }
     .gen-s { color: #fff; opacity: .85; font-size: 13px; font-weight: 600; margin-top: 4px; }
+
+    .order-list { display: flex; flex-direction: column; gap: 8px; }
+    .order-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: var(--soft); }
+    .order-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .order-row .icon-btn[disabled] { opacity: .3; }
+    .up { transform: rotate(90deg); }
+    .down { transform: rotate(90deg); }
+    .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
 
     .modal-row { display: flex; gap: 12px; margin-bottom: 16px; }
     .modal-row .grow { flex: 1; }
     .qty-f { width: 110px; }
     .mb { margin-bottom: 20px; }
+    .seg .grow { flex: 1; }
     .seg-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
-    .seg-opt { display: flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); border: 2px solid transparent; }
+    .seg-opt { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); border: 2px solid transparent; }
     .seg-opt.on { background: var(--primary); color: #fff; }
-    .s-dot { width: 9px; height: 9px; border-radius: 3px; }
+    .s-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
     .icon-grid { display: flex; flex-wrap: wrap; gap: 9px; }
     .icon-cell { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .modal-actions { display: flex; gap: 12px; align-items: center; }
@@ -288,6 +385,11 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
     .warn { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
     .confirm-t { font-size: 20px; font-weight: 700; color: var(--ink); }
     .confirm-s { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 22px; }
+
+    /* Sur large écran, la liste reste une colonne lisible plutôt que de s'étirer. */
+    @media (min-width: 861px) {
+      :host { display: block; max-width: 760px; }
+    }
   `],
 })
 export class CoursesScreen {
@@ -297,36 +399,64 @@ export class CoursesScreen {
   readonly LIST_ICONS = LIST_ICONS;
   readonly PALETTE = PALETTE;
   readonly iconKeys = Object.keys(LIST_ICONS);
+  readonly states: { k: ShopState; label: string }[] = [
+    { k: 'a-prendre', label: 'À prendre' },
+    { k: 'panier', label: 'Pris' },
+    { k: 'indisponible', label: 'Indispo.' },
+  ];
 
   active = computed(() => this.store.ui().activeShopList);
   lists = computed(() => this.d().shopLists);
-  allCount = computed(() => this.d().shop.filter((x) => !x.done).length);
+  allCount = computed(() => this.d().shop.filter((x) => x.state === 'a-prendre').length);
   activeList = computed(() => { const a = this.active(); return a === 'all' ? null : this.d().shopLists.find((l) => l.id === a) ?? null; });
 
   scope = computed(() => { const a = this.active(); return a === 'all' ? this.d().shop : this.d().shop.filter((x) => x.listId === a); });
 
-  groups = computed<AisleGroup[]>(() => {
-    const scope = this.scope();
-    const aisles = this.d().aisles;
-    const names = new Set(aisles.map((a) => a.name));
-    const out: AisleGroup[] = [];
-    for (const a of aisles) {
-      const items = scope.filter((x) => x.cat === a.name);
-      if (items.length) out.push({ id: a.id, name: a.name, color: a.color, editable: true, items });
-    }
-    const extra = new Map<string, ShopItem[]>();
-    for (const it of scope) {
-      if (!names.has(it.cat)) { const arr = extra.get(it.cat) ?? []; arr.push(it); extra.set(it.cat, arr); }
-    }
-    for (const [name, items] of extra) out.push({ id: null, name, color: '#8A7E74', editable: false, items });
-    return out;
+  /** À prendre et introuvables, groupés par rayon, dans l'ordre des allées. */
+  todo = computed<AisleGroup[]>(() => {
+    const scope = this.scope().filter((x) => x.state !== 'panier');
+    return this.store.aislesInOrder()
+      .map((aisle) => ({ aisle, items: scope.filter((x) => x.aisleId === aisle.id) }))
+      .filter((g) => g.items.length);
   });
+
+  /** Les articles pris restent visibles, en bas : c'est ce qu'on relit en caisse. */
+  picked = computed(() => this.scope().filter((x) => x.state === 'panier'));
 
   progress = computed(() => {
     const s = this.scope();
-    const total = s.length; const done = s.filter((x) => x.done).length;
+    const total = s.length; const done = s.filter((x) => x.state === 'panier').length;
     return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
   });
 
-  countFor(id: string): number { return this.d().shop.filter((x) => x.listId === id && !x.done).length; }
+  /**
+   * Suggestions tirées de ce que le foyer achète déjà, dès les premières lettres.
+   * Le référentiel d'articles arrive à la tranche suivante ; en attendant, les
+   * articles passés sont une source honnête et sans surprise.
+   */
+  suggestions = computed(() => {
+    const q = this.store.ui().newShop.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const it of this.d().shop) {
+      const n = it.name.trim();
+      const k = n.toLowerCase();
+      if (k === q || seen.has(k) || !k.includes(q)) continue;
+      seen.add(k);
+      out.push(n);
+      if (out.length === 4) break;
+    }
+    return out;
+  });
+
+  addSuggestion(name: string): void {
+    this.store.patch({ newShop: name });
+    this.store.addShopQuick();
+  }
+
+  countFor(id: string): number { return this.d().shop.filter((x) => x.listId === id && x.state === 'a-prendre').length; }
+
+  whoColor(it: ShopItem): string | null { return it.by ? this.store.memberColor(it.by) : null; }
+  whoName(it: ShopItem): string { return it.by ? 'Coché par ' + this.store.memberName(it.by) : ''; }
 }

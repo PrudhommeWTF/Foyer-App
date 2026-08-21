@@ -25,8 +25,9 @@ import { RECIPE_PALETTE } from '../core/constants';
       <div class="grid">
         @for (r of d().recipes; track r.id) {
           <div class="rcard" (click)="store.patch({ openRecipeId: r.id })">
+            @let thumb = store.photoUrl(r.photoId);
             <div class="rhead"
-                 [style.background]="r.photo ? 'url(' + r.photo + ')' : store.grad(r.color)"
+                 [style.background]="thumb ? 'url(' + thumb + ')' : store.grad(r.color)"
                  [style.background-size]="'cover'" [style.background-position]="'center'">
               <div class="rscrim"></div>
               <div class="rname f-display">{{ r.name }}</div>
@@ -48,8 +49,9 @@ import { RECIPE_PALETTE } from '../core/constants';
     <!-- Detail modal -->
     @if (openRecipe(); as r) {
       <f-modal [maxWidth]="520" (close)="store.patch({ openRecipeId: null })">
+        @let hero = store.photoUrl(r.photoId);
         <div class="dhead"
-             [style.background]="r.photo ? 'url(' + r.photo + ')' : store.grad(r.color)"
+             [style.background]="hero ? 'url(' + hero + ')' : store.grad(r.color)"
              [style.background-size]="'cover'" [style.background-position]="'center'">
           <div class="rscrim"></div>
           <div class="dname f-display">{{ r.name }}</div>
@@ -109,23 +111,23 @@ import { RECIPE_PALETTE } from '../core/constants';
 
         <div class="field-label">Apparence</div>
         <div class="appearance mb">
-          <label class="upload">
-            <input type="file" accept="image/*" (change)="onPhoto($event)">
+          <label class="upload" [class.busy]="store.ui().fPhotoBusy">
+            <input type="file" accept="image/*" [disabled]="store.ui().fPhotoBusy" (change)="onPhoto($event)">
             <f-icon name="upload" [size]="18" color="var(--ink2)" />
-            <span>Photo</span>
+            <span>{{ store.ui().fPhotoBusy ? 'Envoi…' : 'Photo' }}</span>
           </label>
           <div class="swatch-row">
             @for (c of RECIPE_PALETTE; track c) {
               <div class="swatch" [style.background]="store.grad(c)"
-                   [style.box-shadow]="store.ui().fColor === c && !store.ui().fPhoto ? '0 0 0 3px var(--surface), 0 0 0 5px ' + c : ''"
-                   (click)="store.patch({ fColor: c, fPhoto: null })"></div>
+                   [style.box-shadow]="store.ui().fColor === c && !store.ui().fPhotoId ? '0 0 0 3px var(--surface), 0 0 0 5px ' + c : ''"
+                   (click)="store.patch({ fColor: c, fPhotoId: null })"></div>
             }
           </div>
         </div>
-        @if (store.ui().fPhoto; as ph) {
+        @if (store.photoUrl(store.ui().fPhotoId); as ph) {
           <div class="preview mb">
             <div class="preview-img" [style.background-image]="'url(' + ph + ')'"></div>
-            <button class="btn btn-soft" (click)="store.patch({ fPhoto: null })">
+            <button class="btn btn-soft" (click)="store.patch({ fPhotoId: null })">
               <f-icon name="x" [size]="15" color="var(--ink2)" /> Retirer la photo
             </button>
           </div>
@@ -220,6 +222,7 @@ import { RECIPE_PALETTE } from '../core/constants';
     .appearance { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
     .upload { display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; border-radius: 13px; border: 2px dashed var(--line2); background: var(--soft); font-size: 13.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
     .upload input { display: none; }
+    .upload.busy { opacity: .6; cursor: progress; }
     .preview { display: flex; align-items: center; gap: 14px; }
     .preview-img { width: 88px; height: 66px; border-radius: 13px; background-size: cover; background-position: center; flex: none; }
     .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -254,7 +257,10 @@ export class RecettesScreen {
   });
 
   onPhoto(e: Event): void {
-    const f = (e.target as HTMLInputElement).files?.[0];
-    if (f) this.store.onRecipePhoto(f);
+    const input = e.target as HTMLInputElement;
+    const f = input.files?.[0];
+    // Le champ est vidé : reposer deux fois le même fichier doit relancer l'envoi.
+    input.value = '';
+    if (f) void this.store.onRecipePhoto(f);
   }
 }

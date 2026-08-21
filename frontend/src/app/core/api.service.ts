@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HouseholdState } from './models';
+import { HouseholdState, ShopItem } from './models';
 
 export interface AuthUser { email: string; name: string; memberId: string | null; }
 export interface LoginResult { token: string; user: AuthUser; }
@@ -15,6 +15,33 @@ export interface UpdateInfo {
   updateAvailable?: boolean;
   selfUpdate: boolean;
   error?: string;
+}
+
+export interface StoredFile { id: number; name: string; mime: string; size: number; createdAt: string; }
+
+/** Instantané de la liste. `unchanged` évite de renvoyer les articles pour rien. */
+export interface ShoppingSnapshot { version: number; items?: ShopItem[]; unchanged?: boolean; }
+
+interface OpBase { opId: string; by?: string | null; at?: string; }
+export type ShopOp =
+  | (OpBase & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string })
+  | (OpBase & { op: 'set-state'; id: string; state: ShopItem['state'] })
+  | (OpBase & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string })
+  | (OpBase & { op: 'remove'; id: string });
+
+/**
+ * Une opération avant qu'on ne l'estampille. Le conditionnel distribue sur
+ * l'union : un `Omit` direct la réduirait à ses seules clés communes, et le
+ * compilateur laisserait passer un « ajouter » sans nom.
+ */
+export type ShopOpDraft = ShopOp extends infer T ? (T extends ShopOp ? Omit<T, 'opId' | 'by' | 'at'> : never) : never;
+
+export interface ShoppingApplied {
+  version: number;
+  items: ShopItem[];
+  applied: string[];
+  /** Écartées définitivement, avec la raison : le client les retire de sa file. */
+  skipped: { opId: string; reason: string }[];
 }
 
 export interface SetupPayload {
@@ -147,4 +174,22 @@ export class ApiService {
   putState(state: HouseholdState): Promise<{ version: number }> {
     return this.request('state', { method: 'PUT', body: JSON.stringify({ state }) });
   }
+
+  // ---- liste de courses --------------------------------------------------
+  // Elle ne voyage pas dans `putState` : le serveur ignore ce que ce client
+  // croit savoir de la liste et n'accepte que des opérations ciblées.
+  shopping(since?: number): Promise<ShoppingSnapshot> {
+    return this.request('shopping' + (since != null ? '?since=' + since : ''));
+  }
+
+  shoppingOps(ops: ShopOp[]): Promise<ShoppingApplied> {
+    return this.request('shopping/ops', { method: 'POST', body: JSON.stringify({ ops }) });
+  }
+
+  // ---- fichiers ----------------------------------------------------------
+  uploadFile(owner: 'recipe', ownerId: string, file: File): Promise<{ file: StoredFile; deduplicated: boolean }> {
+    const q = `files?owner=${owner}&id=${encodeURIComponent(ownerId)}&filename=${encodeURIComponent(file.name)}`;
+    return this.upload(q, file);
+  }
+
 }

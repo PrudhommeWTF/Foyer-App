@@ -4,17 +4,24 @@
 // lives in the frontend.
 import { HouseholdState } from './models';
 
+/**
+ * Rayons de départ. Leur `position` donne l'ordre de parcours du magasin, que
+ * l'écran Courses laisse réordonner : c'est ce qui fait qu'une liste se lit dans
+ * l'ordre des allées plutôt que dans l'ordre de saisie.
+ */
+const STARTER_AISLES = (): HouseholdState['aisles'] => [
+  { id: 'a1', name: 'Fruits & légumes', color: '#7A9B76', position: 0 },
+  { id: 'a2', name: 'Frais', color: '#4E93B8', position: 1 },
+  { id: 'a3', name: 'Épicerie', color: '#F0B24B', position: 2 },
+  { id: 'a4', name: 'À trier', color: '#8A7E74', position: 3 },
+];
+
 /** Blank household used as the default before onboarding writes the real state. */
 export const EMPTY_STATE: HouseholdState = {
   familyName: '',
   members: [],
   events: [],
-  aisles: [
-    { id: 'a1', name: 'Fruits & légumes', color: '#7A9B76' },
-    { id: 'a2', name: 'Frais', color: '#4E93B8' },
-    { id: 'a3', name: 'Épicerie', color: '#F0B24B' },
-    { id: 'a4', name: 'À trier', color: '#8A7E74' },
-  ],
+  aisles: STARTER_AISLES(),
   shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
   shop: [],
   taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }],
@@ -29,7 +36,7 @@ export const EMPTY_STATE: HouseholdState = {
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
   settings: {
     dateFmt: 'JJ/MM/AAAA',
-    dark: false, prefNotifs: true, academie: '',
+    dark: false, prefNotifs: true, academie: '', showBreakfast: false,
   },
 };
 
@@ -96,12 +103,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     familyName: input.household.name.trim(),
     members: [admin, ...others],
     events: [],
-    aisles: [
-      { id: 'a1', name: 'Fruits & légumes', color: '#7A9B76' },
-      { id: 'a2', name: 'Frais', color: '#4E93B8' },
-      { id: 'a3', name: 'Épicerie', color: '#F0B24B' },
-      { id: 'a4', name: 'À trier', color: '#8A7E74' },
-    ],
+    aisles: STARTER_AISLES(),
     shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
     shop: [],
     taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }],
@@ -119,6 +121,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
       dark: input.household.theme === 'dark',
       prefNotifs: true,
       academie: input.household.academie || '',
+      showBreakfast: false,
     },
   };
 }

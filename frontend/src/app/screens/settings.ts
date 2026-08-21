@@ -49,6 +49,24 @@ import { ACADEMIES } from '../core/constants';
 
           <div class="card">
             <div class="sec-head">
+              <div class="sec-ic" style="background:#FDF0DA">
+                <f-icon name="repas" [size]="18" color="#F0B24B" [width]="2" />
+              </div>
+              <span class="sec-title">Repas</span>
+            </div>
+            <div class="prefs">
+              <div class="pref" (click)="store.setSetting('showBreakfast', !d().settings.showBreakfast)">
+                <div>
+                  <div class="pref-label">Afficher le petit-déjeuner</div>
+                  <div class="pref-desc">Ajoute la ligne du matin au planning des repas. Les repas déjà saisis sont conservés quand elle est masquée.</div>
+                </div>
+                <div class="sw" [class.on]="d().settings.showBreakfast"><div class="knob"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="sec-head">
               <div class="sec-ic" style="background:#F2ECF5">
                 <f-icon name="moon" [size]="18" color="#9B6FA8" [width]="2" />
               </div>
