@@ -17,7 +17,8 @@ module à stockage relationnel.
 | 2 a | Lecture des lignes d'ingrédients, référentiel d'articles, génération avec rapport | Livrée |
 | 2 b | Écran de reprise en masse des lignes non reconnues, allergènes affichés | À venir |
 | 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
-| 3 b | Semaine type des convives, duplication de semaine, suggestions | À venir |
+| 3 b | Recopie d'une période sur une autre | Livrée |
+| 3 c | Semaine type des convives, suggestions, anti-répétition | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires, stock de placard | À venir |
 
@@ -414,6 +415,41 @@ demander de faire défiler quatre jours révolus.
 L'ancrage est **un jour**, plus un décalage de semaines : une fenêtre de trois
 jours n'a pas de numéro de semaine, et la navigation avance d'autant de jours que
 la fenêtre en montre.
+
+### Recopier une période sur une autre
+
+Une semaine ressemble à la précédente, à deux ou trois plats près. Rouvrir
+quatorze créneaux un par un décourage de tenir le planning, et un planning qu'on
+ne tient pas ne sert plus à faire les courses.
+
+La recopie va toujours **vers la période affichée** : on se place là où l'on veut
+des repas, puis on choisit d'où les prendre parmi les quatre périodes
+précédentes, chacune annoncée avec le nombre de repas qu'elle contient. Recopier
+vers l'avant se fait donc en se plaçant sur la semaine à remplir, ce qui évite
+d'avoir à choisir une direction en plus d'une source.
+
+Deux modes, et la différence n'est pas cosmétique :
+
+| Mode | Effet | Risque |
+|---|---|---|
+| Compléter | ne remplit que les créneaux vides | aucun, rien n'est détruit |
+| Remplacer | la période visée devient la copie exacte de la source, **trous compris** | destructeur, annoncé en rouge |
+
+Le rapport est affiché avant d'écrire, comme pour les courses, et le bouton
+change de libellé et de couleur quand la copie détruit quelque chose.
+
+Deux détails que les tests verrouillent, parce qu'ils ne se voient pas à
+l'usage :
+
+- **Les repas sont dupliqués en profondeur.** Un partage de référence ferait
+  qu'éditer une semaine change l'autre, sans aucun signe à l'écran.
+- **Un créneau qui porte déjà le même menu n'est pas annoncé comme écrasé.** Sans
+  cela, recopier deux fois de suite affiche « 10 créneaux seront écrasés » alors
+  que rien ne changerait, et une alerte qui crie pour rien finit par ne plus être
+  lue.
+
+Seuls les créneaux affichés sont recopiés : recopier un petit-déjeuner alors que
+la ligne est masquée créerait des repas que personne ne peut voir ni retirer.
 
 **La génération des courses suit la fenêtre affichée.** En vue trois jours, le
 bouton dit « Courses de ces 3 jours » et ne prend que ces repas ; en vue semaine,
