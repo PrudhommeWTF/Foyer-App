@@ -117,7 +117,8 @@ de tâches, des catégories de budget). Une base déjà configurée n'est jamais
 
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort (en production, l'app
 > **refuse de démarrer** sans secret solide), changez le mot de passe admin, puis passez
-> `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS (reverse-proxy type Caddy / Traefik / Nginx).
+> `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS (reverse-proxy type Caddy / Traefik / Nginx),
+> voir [Derrière un reverse-proxy](#-derrière-un-reverse-proxy).
 
 ### 🛡️ Durcissement de sécurité
 
@@ -375,6 +376,95 @@ bash deploy/lxc/install.sh                 # depuis une copie du dépôt dans le
 Exploitation : `systemctl status foyer`, `journalctl -u foyer -f`, mise à jour via
 `bash deploy/lxc/update.sh`. Détails, options et bonnes pratiques dans
 [`deploy/README.md`](deploy/README.md).
+
+## 🌐 Derrière un reverse-proxy
+
+**Foyer ne fait pas de TLS.** Il écoute en clair sur `0.0.0.0:8099` ; c'est le
+proxy qui termine le HTTPS et joint le conteneur en **`http://`**. Un
+`proxy_pass https://…` vers Foyer donne un 502 immédiat, et c'est l'erreur la
+plus fréquente juste après la mise en place d'un certificat.
+
+Rien n'est à configurer côté Foyer : `trust proxy` est déjà actif, et
+`FOYER_CORS_ORIGINS` **ne sert pas ici** (l'application et son API sont sur la
+même origine, donc CORS n'intervient pas ; cette variable est réservée aux
+déploiements où l'app et l'API vivent sur deux domaines).
+
+### nginx
+
+```nginx
+server {
+    server_name foyer.exemple.fr;
+
+    # /api/state accepte 15 Mo : la valeur par défaut de 1 Mo ferait échouer
+    # l'enregistrement d'un document, en 413.
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://IP_DU_CONTENEUR:8099;   # http, jamais https
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Une mise à jour depuis l'interface télécharge, recompile et redémarre :
+        # un délai court couperait la requête en plein travail.
+        proxy_read_timeout 300s;
+    }
+}
+```
+
+Le proxy ne doit pas réécrire `Cache-Control` : Foyer distingue déjà les fichiers
+empreints (gardés un an) de `index.html` (jamais gardé), et écraser cette
+distinction ferait réapparaître d'anciennes versions sur les téléphones.
+
+### Nginx Proxy Manager
+
+Trois champs, et trois façons de se tromper :
+
+| Champ | Valeur | Erreur classique |
+|---|---|---|
+| Scheme | `http` | `https` : 502 immédiat, Foyer ne fait pas de TLS |
+| Forward Hostname / IP | l'IP seule, `10.0.0.42` | y recopier `http://`, que NPM ajoute lui-même |
+| Forward Port | `8099` | laisser `80`, proposé par défaut |
+
+Dans l'onglet *Advanced* : `client_max_body_size 20m;`.
+
+### Diagnostiquer un 502
+
+Le 502 vient du proxy, jamais de Foyer : la requête n'atteint même pas le code
+applicatif. Dans l'ordre, en s'arrêtant à la première anomalie :
+
+```bash
+# 1. Sur le conteneur Foyer : le service répond-il ?
+systemctl status foyer --no-pager
+ss -lptn | grep 8099                    # doit écouter sur 0.0.0.0
+curl -sI http://127.0.0.1:8099/         # doit répondre 200
+
+# 2. Depuis la machine du proxy : la joint-elle ?
+curl -sI http://IP_DU_CONTENEUR:8099/
+
+# 3. Le journal du proxy, qui donne la raison exacte
+tail -30 /var/log/nginx/error.log                        # nginx installé nativement
+docker exec <ID_NPM> sh -c 'tail -30 /data/logs/*error.log'   # Nginx Proxy Manager
+
+# 4. Ce que le proxy vise réellement, à ne pas confondre avec ce qu'on croit avoir saisi
+docker exec <ID_NPM> sh -c 'grep -H "proxy_pass\|server_name" /data/nginx/proxy_host/*.conf'
+```
+
+L'étape 4 est la plus utile : une IP mal saisie ressemble à une configuration
+correcte tant qu'on la relit dans l'interface plutôt que dans le fichier généré.
+
+| Message du journal | Cause |
+|---|---|
+| `connect() failed (111: Connection refused)` | mauvais port, ou service arrêté |
+| `connect() failed (113: No route to host)` | mauvaise IP, ou pare-feu |
+| `upstream timed out` | paquets filtrés en chemin |
+| `SSL_do_handshake() failed` | `https` vers Foyer, qui parle en clair |
+| `no live upstreams` | bloc `upstream` mal formé |
+
+Si le proxy tourne en conteneur, vérifier aussi depuis **l'intérieur** de celui-ci
+(`docker exec <ID> curl -sI http://IP:8099/`) : un hôte qui joint Foyer ne prouve
+pas que son conteneur le joint aussi.
 
 ## 🧑‍💻 Développement
 
