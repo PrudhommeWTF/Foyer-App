@@ -1,0 +1,573 @@
+// Le lecteur schema.org/Recipe, testé sur une vraie page (le JSON-LD réel de
+// Marmiton, dans test/fixtures/recipes) et sur les formes que le standard
+// autorise et que les autres sites servent effectivement.
+//
+// Aucun appel réseau ici, et c'est délibéré : la CI doit rester muette vers
+// l'extérieur, et un test qui dépend d'un site tiers échoue le jour où celui-ci
+// est en maintenance, pour une raison qui n'a rien à voir avec le code.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { describe, it } from 'node:test';
+import {
+  ImportError, cleanTitle, findRecipeNode, findRestHint, fromRecipeNode, parseImage,
+  parseIngredients, parseInstructions, parseIsoDuration, parseRecipePage, parseYield,
+} from '../src/recipes/schema-org';
+
+const FIXTURES = path.join(__dirname, 'fixtures', 'recipes');
+const fixture = (name: string): Record<string, unknown> =>
+  JSON.parse(fs.readFileSync(path.join(FIXTURES, name), 'utf8'));
+
+/** Enrobe un nœud JSON-LD dans une page, comme le sert un vrai site. */
+const page = (...blocks: unknown[]): string =>
+  '<!DOCTYPE html><html><head><title>x</title>'
+  + blocks.map((b) => `<script type="application/ld+json">${typeof b === 'string' ? b : JSON.stringify(b)}</script>`).join('')
+  + '</head><body><h1>Recette</h1></body></html>';
+
+const MARMITON_URL = 'https://www.marmiton.org/recettes/recette_gratin-de-courgettes-rapide_17071.aspx';
+
+// ---- la vraie page ---------------------------------------------------------
+
+describe('une recette Marmiton réelle', () => {
+  const node = fixture('marmiton-gratin-courgettes.json');
+
+  it('lit le titre, les portions et les deux temps', () => {
+    const { recipe } = fromRecipeNode(node, MARMITON_URL);
+    // Le titre est débarrassé de l'appât à moteur de recherche.
+    assert.equal(recipe.name, 'Gratin de courgettes rapide');
+    assert.equal(recipe.portions, 4);
+    assert.equal(recipe.prepMin, 15);
+    assert.equal(recipe.cookMin, 15);
+    assert.equal(recipe.source, MARMITON_URL);
+  });
+
+  it('reprend les huit lignes d’ingrédients telles qu’écrites', () => {
+    const { recipe } = fromRecipeNode(node, MARMITON_URL);
+    assert.deepEqual(recipe.ingr, [
+      '4 courgettes',
+      '3 oignons',
+      '100 g de gruyère râpé',
+      '2 oeufs',
+      '2 cuillères à soupe de crème fraîche',
+      '1 noix de beurre',
+      'sel',
+      'poivre',
+    ]);
+  });
+
+  it('reprend les sept étapes dans l’ordre', () => {
+    const { recipe } = fromRecipeNode(node, MARMITON_URL);
+    assert.equal(recipe.steps.length, 7);
+    assert.equal(recipe.steps[0], 'Emincer les oignons.');
+    assert.equal(recipe.steps[6], 'Mettre les courgettes dans un plat et verser par dessus la sauce et faire à four chaud pendant 15 min.');
+  });
+
+  it('choisit une image en JPEG plutôt qu’en WebP', () => {
+    const { recipe } = fromRecipeNode(node, MARMITON_URL);
+    assert.ok(recipe.imageUrl?.endsWith('.jpg'), 'le WebP passe mal dans certains clients');
+  });
+
+  it('n’importe ni les calories, ni la note du site, ni les régimes', () => {
+    // Le foyer ne fait pas de suivi nutritionnel, et 4,9/5 sur Marmiton n'est
+    // pas la note de la famille. Ce qu'on ne sait pas utiliser, on ne le range pas.
+    const { recipe } = fromRecipeNode(node, MARMITON_URL);
+    const keys = Object.keys(recipe);
+    for (const absent of ['nutrition', 'calories', 'rating', 'aggregateRating', 'suitableForDiet', 'keywords']) {
+      assert.equal(keys.includes(absent), false, absent + ' ne doit pas être importé');
+    }
+  });
+
+  it('ne signale rien sur une page complète', () => {
+    assert.deepEqual(fromRecipeNode(node, MARMITON_URL).warnings, []);
+  });
+
+  it('se laisse retrouver au milieu des autres blocs de la page', () => {
+    const html = page(
+      { '@type': 'BreadcrumbList', itemListElement: [] },
+      { '@type': 'Organization', name: 'Marmiton' },
+      node,
+      { '@type': 'VideoObject', name: 'vidéo' },
+    );
+    const { recipe } = parseRecipePage(html, MARMITON_URL);
+    assert.equal(recipe.name, 'Gratin de courgettes rapide');
+  });
+});
+
+describe('une seconde recette Marmiton, aux textes moins sages', () => {
+  const node = fixture('marmiton-carbonara.json');
+  const URL_CARBO = 'https://www.marmiton.org/recettes/recette_pates-a-la-carbonara_80453.aspx';
+
+  it('nettoie un titre qui contient lui-même des guillemets', () => {
+    const { recipe } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.name, 'Pâtes à la "carbonara" à la française');
+  });
+
+  it('conserve les guillemets à l’intérieur d’une ligne d’ingrédient', () => {
+    // « 250 g de lardons "selon préférence" » : la mention entre guillemets fait
+    // partie de ce que la cuisinière a écrit, on ne la rogne pas.
+    const { recipe } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.ingr.length, 7);
+    assert.equal(recipe.ingr[5], '250 g de lardons "selon préférence"');
+    assert.equal(recipe.ingr[2], "3 jaunes d'oeuf");
+  });
+
+  it('replie un saut de ligne interne sans fabriquer une étape de plus', () => {
+    // Le site déclare six étapes, dont la dernière porte un conseil après un
+    // retour à la ligne. Le découper en produirait sept : ce serait inventer une
+    // étape que la recette n'a pas.
+    const { recipe } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.steps.length, 6);
+    assert.equal(
+      recipe.steps[5],
+      'Servir et bon appétit ! Vous pouvez également agrémenter votre plat avec des champignons.',
+    );
+  });
+
+  it('lit les portions et les deux temps sans rien signaler', () => {
+    const { recipe, warnings } = fromRecipeNode(node, URL_CARBO);
+    assert.equal(recipe.portions, 4);
+    assert.equal(recipe.prepMin, 10);
+    assert.equal(recipe.cookMin, 10);
+    assert.deepEqual(warnings, []);
+  });
+});
+
+describe('une troisième recette Marmiton', () => {
+  const node = fixture('marmiton-croque-monsieur.json');
+
+  it('coupe les espaces que le site laisse traîner en fin d’étape', () => {
+    // Deux des quatre étapes se terminent par une espace dans la source. Elle
+    // ressortirait à l'affichage et fausserait toute comparaison de textes.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.steps.length, 4);
+    assert.ok(recipe.steps.every((s) => s === s.trim()), 'aucune étape ne doit garder d’espace au bord');
+    assert.equal(recipe.steps[1], 'Dans un bol mélanger le fromage râpé avec le lait, le sel, le poivre et la muscade.');
+  });
+
+  it('garde « sel » et « poivre » comme deux lignes distinctes', () => {
+    // Ces lignes sans quantité sont des ingrédients de placard : la tranche 2
+    // devra les écarter de la liste de courses sans les retirer de la recette.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.ingr.length, 9);
+    assert.deepEqual(recipe.ingr.slice(-2), ['poivre', 'sel']);
+  });
+});
+
+describe('un dessert sans cuisson, mais avec un long repos', () => {
+  const node = fixture('marmiton-tiramisu-framboises.json');
+
+  it('ne retient que l’appât final d’un titre à deux fois deux-points', () => {
+    // « Tiramisu aux framboises : la recette inratable : la meilleure recette ».
+    // Le sous-titre du milieu appartient à la recette, seul le dernier est du bruit.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.name, 'Tiramisu aux framboises : la recette inratable');
+  });
+
+  it('lit « PT0S » comme une absence de cuisson, pas comme zéro minute', () => {
+    // Un zéro s'afficherait « Cuisson 0 min », ce qui est faux : ce dessert ne
+    // cuit pas du tout.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.cookMin, null);
+    assert.equal(recipe.prepMin, 25);
+    assert.equal(recipe.portions, 6);
+  });
+
+  it('ne réclame pas de temps quand la préparation seule est connue', () => {
+    const { warnings } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(warnings.some((w) => /temps total/.test(w)), false);
+  });
+
+  it('signale le repos de 24 heures, que les durées ne montrent pas', () => {
+    // La fiche annonce 25 min et se mange le lendemain. Sans ce signalement,
+    // planifier ce dessert pour samedi soir revient à s'y prendre un jour trop tard.
+    const { warnings } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    const repos = warnings.find((w) => /temps de repos/.test(w));
+    assert.ok(repos, 'le repos doit être signalé');
+    assert.match(repos!, /24 heures/);
+  });
+});
+
+describe('repérage d’un temps de repos', () => {
+  it('reconnaît les formulations courantes', () => {
+    assert.match(findRestHint(['Mettre au réfrigérateur 24 heures avant de servir.'])!, /24 heures/);
+    assert.ok(findRestHint(['Laisser mariner toute la nuit au frais.']));
+    assert.ok(findRestHint(['Préparer la pâte la veille et la laisser reposer.']));
+    assert.ok(findRestHint(['Laisser lever 2 h dans un endroit tiède.']));
+  });
+
+  it('ignore ce qui ne change pas un planning', () => {
+    // Il faut à la fois un mot de repos et une durée longue dans la même phrase.
+    assert.equal(findRestHint(['Laisser reposer 10 min hors du feu.']), null, 'un repos court');
+    assert.equal(findRestHint(['Enfourner 2 heures à 150 degrés.']), null, 'une cuisson longue');
+    assert.equal(findRestHint(['Mélanger et servir aussitôt.']), null);
+    assert.equal(findRestHint([]), null);
+  });
+
+  it('ne se déclenche pas sur les trois autres pages réelles', () => {
+    for (const nom of ['marmiton-gratin-courgettes.json', 'marmiton-carbonara.json', 'marmiton-croque-monsieur.json']) {
+      const { warnings } = fromRecipeNode(fixture(nom), 'https://x/r');
+      assert.equal(warnings.some((w) => /temps de repos/.test(w)), false, nom);
+    }
+  });
+});
+
+describe('une recette d’un autre site que Marmiton', () => {
+  // Le seul test qui prouve que le lecteur est générique, et non calé sur un
+  // site : le Journal des Femmes publie la même norme, autrement.
+  const node = fixture('journaldesfemmes-gratin-courgettes.json');
+  const JDF = 'https://cuisine.journaldesfemmes.fr/recette/222125-gratin-de-courgettes';
+
+  it('lit une durée écrite avec ses heures à zéro', () => {
+    // « PT0H05M » là où Marmiton écrit « PT5M ». Les deux sont valides.
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.equal(recipe.prepMin, 5);
+    assert.equal(recipe.cookMin, 30);
+    assert.equal(recipe.portions, 6);
+  });
+
+  it('trouve l’image quand elle est un objet unique et non une liste', () => {
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.ok(recipe.imageUrl?.endsWith('40034787.jpg'));
+  });
+
+  it('garde le titre de chaque étape devant sa consigne', () => {
+    // Ce site titre ses étapes (« Cuisson des courgettes ») en plus de la
+    // consigne. C'est un repère utile quand on cuisine en suivant l'écran :
+    // le jeter perdrait une information que la page publie.
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.equal(recipe.steps.length, 5);
+    assert.match(recipe.steps[0], /^Préparation des courgettes : Lavez les courgettes/);
+    assert.match(recipe.steps[4], /^Cuisson du gratin : Versez cette préparation/);
+  });
+
+  it('laisse telle quelle l’étape que le site n’a pas titrée', () => {
+    // La quatrième n'a pas de nom : pas de deux-points orphelin devant.
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.match(recipe.steps[3], /^Dans un saladier, battez les oeufs/);
+  });
+
+  it('ignore les blocs que la page ajoute autour de la recette', () => {
+    // Vidéo, « about », « mentions », note du site : rien de tout cela n'entre.
+    const { recipe, warnings } = fromRecipeNode(node, JDF);
+    assert.equal(recipe.name, 'Gratin de courgettes');
+    assert.equal(recipe.ingr.length, 8);
+    assert.deepEqual(warnings, []);
+  });
+});
+
+describe('titre d’étape', () => {
+  it('n’est pas répété quand la consigne le reprend déjà', () => {
+    assert.deepEqual(
+      parseInstructions([{ name: 'Cuisson', text: 'Cuisson au four pendant 20 min.' }]),
+      ['Cuisson au four pendant 20 min.'],
+    );
+  });
+
+  it('n’est pas mis en tête quand il est en fait la consigne entière', () => {
+    const long = 'Faites revenir les oignons dans le beurre jusqu’à ce qu’ils soient bien dorés, puis réservez.';
+    assert.deepEqual(parseInstructions([{ name: long, text: 'Suite.' }]), ['Suite.']);
+  });
+
+  it('sert de consigne quand il n’y a pas de texte', () => {
+    assert.deepEqual(parseInstructions([{ name: 'Mélanger le tout.' }]), ['Mélanger le tout.']);
+  });
+});
+
+describe('une recette d’un troisième site', () => {
+  // CuisineAZ écrit les ingrédients d'une troisième façon, et sa page porte un
+  // commentaire d'internaute dans le même bloc JSON-LD que la recette.
+  const node = fixture('cuisineaz-gratin-courgettes.json');
+  const CAZ = 'https://www.cuisineaz.com/recettes/gratin-de-courgettes-simple-122741.aspx';
+
+  it('lit un nombre de portions écrit sans le mot « personnes »', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.equal(recipe.portions, 6);
+    assert.equal(recipe.prepMin, 10);
+    assert.equal(recipe.cookMin, 25);
+  });
+
+  it('reconnaît une image en .jpeg autant qu’en .jpg', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.ok(recipe.imageUrl?.endsWith('.jpeg'));
+  });
+
+  it('laisse un titre qui ne porte aucun appât intact', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.equal(recipe.name, 'Gratin de courgettes simple');
+  });
+
+  it('garde les titres d’étapes de ce site aussi', () => {
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.equal(recipe.steps.length, 4);
+    assert.match(recipe.steps[0], /^Préparation des courgettes : Lavez les courgettes/);
+    assert.match(recipe.steps[3], /^Service du gratin : Servez/);
+  });
+
+  it('reprend les ingrédients dans leur graphie, marques de pluriel comprises', () => {
+    // Une troisième convention d'écriture : « 5 Courgette(s) », l'unité avant un
+    // nom en capitale et sans préposition, et la ligature dans « Œuf(s) ».
+    const { recipe } = fromRecipeNode(node, CAZ);
+    assert.deepEqual(recipe.ingr, [
+      '5 Courgette(s)', '1 Œuf(s)', '20 cl Crème fraîche', '150 g Gruyère râpé',
+      '1 noix Beurre', '2 pincée(s) Sel', '1 pincée(s) Poivre',
+    ]);
+  });
+});
+
+describe('ce que la page contient et que la recette ne doit pas prendre', () => {
+  it('un commentaire d’internaute, lien publicitaire compris, ne ressort nulle part', () => {
+    // La page réelle porte un commentaire terminé par « <a href="…"> discord id
+    // lookup </a> ». Ces blocs sont du texte écrit par n'importe qui : rien de ce
+    // qui n'est pas un champ de recette déclaré ne doit entrer dans la fiche.
+    const { recipe } = fromRecipeNode(fixture('cuisineaz-gratin-courgettes.json'), 'https://x/r');
+    const tout = JSON.stringify(recipe);
+    assert.equal(/discordlookup|discord id|commentCount/i.test(tout), false);
+    assert.equal(/<a\s|href=/i.test(tout), false);
+  });
+
+  it('ne lit que les champs de recette, même si les autres sont hostiles', () => {
+    const { recipe } = fromRecipeNode({
+      '@type': 'Recipe',
+      name: 'Tarte',
+      recipeIngredient: ['1 pomme'],
+      recipeInstructions: ['Cuire.'],
+      recipeYield: '4',
+      description: '<script>alert(1)</script>',
+      comment: { text: 'malveillant <img onerror=alert(1)>' },
+      review: [{ reviewBody: 'encore du texte libre' }],
+      estimatedCost: 'Pas cher',
+      author: { name: 'Quelqu’un', url: 'https://ailleurs.invalid' },
+    }, 'https://x/r');
+    const tout = JSON.stringify(recipe);
+    assert.equal(/script|onerror|malveillant|encore du texte|Pas cher|ailleurs\.invalid/i.test(tout), false);
+    assert.deepEqual(recipe.ingr, ['1 pomme']);
+  });
+});
+
+describe('toutes les pages réelles du jeu de test', () => {
+  // Garde-fou pour les fixtures à venir : ce qui est ajouté dans le dossier doit
+  // se lire, sinon le fichier est là sans que personne ne s'en aperçoive.
+  const noms = fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
+
+  it('le dossier de fixtures n’est pas vide', () => {
+    assert.ok(noms.length >= 6, 'au moins six pages réelles');
+    // Au moins trois sites différents : c'est ce qui empêche la couverture de
+    // redevenir mono-site sans que rien ne le signale.
+    const sites = new Set(noms.map((n) => n.split('-')[0]));
+    assert.ok(sites.size >= 3, 'au moins trois sites : ' + [...sites].join(', '));
+  });
+
+  for (const nom of noms) {
+    it(`${nom} produit une recette exploitable`, () => {
+      const { recipe } = fromRecipeNode(fixture(nom), 'https://exemple.invalid/r');
+      assert.ok(recipe.name.length > 2, 'un titre');
+      assert.ok(recipe.ingr.length > 0, 'des ingrédients');
+      assert.ok(recipe.steps.length > 0, 'des étapes');
+      assert.ok(recipe.portions && recipe.portions > 0, 'des portions');
+      // Aucune ligne ne doit être perdue en route.
+      const source = fixture(nom)['recipeIngredient'] as string[];
+      assert.equal(recipe.ingr.length, new Set(source.map((x) => x.trim())).size);
+    });
+  }
+});
+
+// ---- retrouver le nœud dans une page ---------------------------------------
+
+describe('extraction du bloc JSON-LD', () => {
+  it('accepte un @graph, un tableau ou un mainEntity', () => {
+    const r = { '@type': 'Recipe', name: 'Tarte', recipeIngredient: ['1 pomme'] };
+    for (const shape of [
+      { '@context': 'https://schema.org', '@graph': [{ '@type': 'WebPage' }, r] },
+      [{ '@type': 'WebSite' }, r],
+      { '@type': 'WebPage', mainEntity: r },
+    ]) {
+      assert.equal(findRecipeNode(page(shape))?.['name'], 'Tarte', JSON.stringify(shape).slice(0, 40));
+    }
+  });
+
+  it('accepte le type en tableau ou en URL complète', () => {
+    assert.ok(findRecipeNode(page({ '@type': ['Recipe', 'NewsArticle'], name: 'A' })));
+    assert.ok(findRecipeNode(page({ '@type': 'https://schema.org/Recipe', name: 'B' })));
+  });
+
+  it('un bloc illisible n’empêche pas de lire les suivants', () => {
+    // Cas vécu sur des pages réelles : un bloc tronqué par un greffon, et la
+    // recette juste après. S'arrêter au premier échec perdrait la recette.
+    const html = page('{ ceci n\'est pas du JSON', { '@type': 'Recipe', name: 'Sauvée' });
+    assert.equal(findRecipeNode(html)?.['name'], 'Sauvée');
+  });
+
+  it('supporte les attributs et la casse du vrai HTML', () => {
+    const html = `<SCRIPT TYPE='application/ld+json' data-x="1">${JSON.stringify({ '@type': 'Recipe', name: 'Casse' })}</script >`;
+    assert.equal(findRecipeNode(html)?.['name'], 'Casse');
+  });
+
+  it('rend null quand la page ne publie aucune recette', () => {
+    assert.equal(findRecipeNode(page({ '@type': 'Article', name: 'Pas une recette' })), null);
+    assert.equal(findRecipeNode('<html><body>rien du tout</body></html>'), null);
+  });
+
+  it('le message d’erreur dit quoi faire, pas juste que ça a échoué', () => {
+    assert.throws(
+      () => parseRecipePage('<html></html>', 'https://exemple.test/x'),
+      (e: Error) => e instanceof ImportError && /page d’une recette/.test(e.message),
+    );
+  });
+});
+
+// ---- durées ----------------------------------------------------------------
+
+describe('durées ISO 8601', () => {
+  it('lit les formes courantes', () => {
+    assert.equal(parseIsoDuration('PT15M'), 15);
+    assert.equal(parseIsoDuration('PT1H30M'), 90);
+    assert.equal(parseIsoDuration('PT2H'), 120);
+    assert.equal(parseIsoDuration('P1DT2H'), 1560, 'une marinade de 24 h existe');
+    assert.equal(parseIsoDuration('PT90S'), 2);
+  });
+
+  it('rend null plutôt qu’un zéro trompeur', () => {
+    for (const v of ['PT0S', '', '15 min', 'PT', null, undefined, 42, 'P']) {
+      assert.equal(parseIsoDuration(v), null, String(v));
+    }
+  });
+});
+
+// ---- portions --------------------------------------------------------------
+
+describe('nombre de portions', () => {
+  it('lit le nombre au milieu du texte libre', () => {
+    assert.equal(parseYield('4 personnes'), 4);
+    assert.equal(parseYield('6'), 6);
+    assert.equal(parseYield('pour 8 parts'), 8);
+    assert.equal(parseYield(['4 personnes', '4']), 4);
+    assert.equal(parseYield(4), null, 'un nombre pur n’est pas du texte : schema.org le donne en chaîne');
+  });
+
+  it('refuse de deviner quand il n’y a pas de nombre de couverts', () => {
+    // Une portion inventée fausserait toute la mise à l'échelle des courses.
+    for (const v of ['', 'plusieurs', null, '1000 g de pâte', '0 personne']) {
+      assert.equal(parseYield(v), null, String(v));
+    }
+  });
+});
+
+// ---- titres ----------------------------------------------------------------
+
+describe('nettoyage du titre', () => {
+  it('retire les appâts à moteur de recherche', () => {
+    assert.equal(cleanTitle('Gratin de courgettes rapide : la meilleure recette'), 'Gratin de courgettes rapide');
+    assert.equal(cleanTitle('Blanquette de veau - recette facile'), 'Blanquette de veau');
+    assert.equal(cleanTitle('Crêpes : la vraie recette'), 'Crêpes');
+  });
+
+  it('laisse intact ce qui n’est pas un appât', () => {
+    assert.equal(cleanTitle('Poulet basquaise'), 'Poulet basquaise');
+    assert.equal(cleanTitle('Tarte tatin : la recette de ma grand-mère'), 'Tarte tatin : la recette de ma grand-mère');
+  });
+
+  it('ne vide jamais un titre à force de le nettoyer', () => {
+    assert.equal(cleanTitle('La meilleure recette'), 'La meilleure recette');
+  });
+});
+
+// ---- ingrédients et étapes -------------------------------------------------
+
+describe('ingrédients', () => {
+  it('nettoie les espaces et retire les doublons exacts', () => {
+    assert.deepEqual(
+      parseIngredients(['  2   oeufs ', '2 oeufs', '', '   ', '100 g\nde farine']),
+      ['2 oeufs', '100 g de farine'],
+    );
+  });
+
+  it('accepte une liste d’objets balisés', () => {
+    assert.deepEqual(parseIngredients([{ name: '3 pommes' }, { name: '' }]), ['3 pommes']);
+  });
+});
+
+describe('étapes', () => {
+  it('lit un tableau de HowToStep', () => {
+    assert.deepEqual(
+      parseInstructions([{ '@type': 'HowToStep', text: 'Un.' }, { '@type': 'HowToStep', text: 'Deux.' }]),
+      ['Un.', 'Deux.'],
+    );
+  });
+
+  it('lit un tableau de chaînes et une chaîne unique', () => {
+    assert.deepEqual(parseInstructions(['Un.', 'Deux.']), ['Un.', 'Deux.']);
+    assert.deepEqual(parseInstructions('Un.\n\nDeux.\nTrois.'), ['Un.', 'Deux.', 'Trois.']);
+  });
+
+  it('déplie les sections en gardant leur intertitre', () => {
+    // Une pâtisserie sépare « Pour la pâte » et « Pour la garniture » : perdre
+    // ces intertitres rendrait la suite d'étapes incompréhensible.
+    const out = parseInstructions([
+      { '@type': 'HowToSection', name: 'Pour la pâte', itemListElement: [{ '@type': 'HowToStep', text: 'Mélanger.' }] },
+      { '@type': 'HowToSection', name: 'Pour la garniture', itemListElement: [{ '@type': 'HowToStep', text: 'Couper.' }] },
+    ]);
+    assert.deepEqual(out, ['Pour la pâte', 'Mélanger.', 'Pour la garniture', 'Couper.']);
+  });
+
+  it('se rabat sur name ou description quand text manque', () => {
+    assert.deepEqual(parseInstructions([{ name: 'Par le nom.' }, { description: 'Par la description.' }]),
+      ['Par le nom.', 'Par la description.']);
+  });
+
+  it('ignore le vide sans produire d’étape fantôme', () => {
+    assert.deepEqual(parseInstructions([{ text: '' }, '   ', null, undefined]), []);
+  });
+});
+
+// ---- images ----------------------------------------------------------------
+
+describe('image', () => {
+  it('préfère un JPEG ou un PNG au WebP', () => {
+    assert.equal(parseImage(['https://x.test/a.webp', 'https://x.test/b.jpg']), 'https://x.test/b.jpg');
+    assert.equal(parseImage('https://x.test/c.png'), 'https://x.test/c.png');
+  });
+
+  it('accepte un ImageObject et retombe sur la première venue', () => {
+    assert.equal(parseImage({ '@type': 'ImageObject', url: 'https://x.test/d.avif' }), 'https://x.test/d.avif');
+  });
+
+  it('refuse ce qui n’est pas une URL absolue', () => {
+    assert.equal(parseImage(['/relatif.jpg', 'javascript:alert(1)']), null);
+    assert.equal(parseImage(null), null);
+  });
+});
+
+// ---- pages incomplètes : signaler, jamais inventer --------------------------
+
+describe('pages incomplètes', () => {
+  it('signale les portions absentes sans en inventer', () => {
+    const { recipe, warnings } = fromRecipeNode(
+      { '@type': 'Recipe', name: 'Sans portions', recipeIngredient: ['1 pomme'], recipeInstructions: ['Cuire.'] },
+      'https://x.test/r',
+    );
+    assert.equal(recipe.portions, null);
+    assert.ok(warnings.some((w) => /portions/.test(w)));
+  });
+
+  it('reprend le temps total en préparation, et le dit', () => {
+    const { recipe, warnings } = fromRecipeNode(
+      { '@type': 'Recipe', name: 'X', totalTime: 'PT45M', recipeIngredient: ['a'], recipeInstructions: ['b'] },
+      'https://x.test/r',
+    );
+    assert.equal(recipe.prepMin, 45);
+    assert.equal(recipe.cookMin, null);
+    assert.ok(warnings.some((w) => /temps total/.test(w)));
+  });
+
+  it('signale une recette sans ingrédient ni étape plutôt que d’échouer', () => {
+    // La fiche reste créable : le titre et la source sont déjà du travail gagné.
+    const { recipe, warnings } = fromRecipeNode({ '@type': 'Recipe', name: 'Vide' }, 'https://x.test/r');
+    assert.equal(recipe.name, 'Vide');
+    assert.deepEqual(recipe.ingr, []);
+    assert.equal(warnings.length, 3, 'ingrédients, étapes et portions');
+  });
+
+  it('refuse une recette sans titre : il n’y a rien à préremplir', () => {
+    assert.throws(() => fromRecipeNode({ '@type': 'Recipe', recipeIngredient: ['a'] }, 'https://x.test/r'), ImportError);
+  });
+});

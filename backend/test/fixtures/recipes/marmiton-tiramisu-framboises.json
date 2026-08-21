@@ -1,0 +1,51 @@
+{
+ "@type": "Recipe",
+ "@id": "https://www.marmiton.org/recettes/recette_tiramisu-aux-framboises_28919.aspx#recipe",
+ "mainEntityOfPage": { "@id": "https://www.marmiton.org/recettes/recette_tiramisu-aux-framboises_28919.aspx" },
+ "name": "Tiramisu aux framboises : la recette inratable : la meilleure recette",
+ "recipeCategory": "Dessert",
+ "image": [
+  "https://assets.afcdn.com/recipe/20190704/94699_w1024h1024c1cx2625cy3362cxt0cyt0cxb5251cyb6725.jpg",
+  "https://assets.afcdn.com/recipe/20190704/94699_w1024h1024c1cx2625cy3362cxt0cyt0cxb5251cyb6725.webp",
+  "https://assets.afcdn.com/recipe/20190704/94699_w1024h768c1cx2625cy3362cxt0cyt0cxb5251cyb6725.jpg",
+  "https://assets.afcdn.com/recipe/20190704/94699_w1024h768c1cx2625cy3362cxt0cyt0cxb5251cyb6725.webp",
+  "https://assets.afcdn.com/recipe/20190704/94699_w1024h576c1cx2625cy3362cxt0cyt0cxb5251cyb6725.jpg",
+  "https://assets.afcdn.com/recipe/20190704/94699_w1024h576c1cx2625cy3362cxt0cyt0cxb5251cyb6725.webp"
+ ],
+ "datePublished": "2006-10-23T11:43:00+02:00",
+ "dateModified": "2026-06-29T05:03:24+02:00",
+ "prepTime": "PT25M",
+ "cookTime": "PT0S",
+ "totalTime": "PT25M",
+ "recipeYield": "6 personnes",
+ "recipeIngredient": [
+  "3 oeufs (4 si petits)",
+  "100 g de sucre roux (à doser en fonction du sucre des framboises)",
+  "1 sachet de sucre vanillé",
+  "250 g de mascarpone",
+  "24 biscuits à la cuillère",
+  "lait",
+  "500 g de framboises (fraîches ou surgelées)"
+ ],
+ "recipeInstructions": [
+  { "@type": "HowToStep", "text": "Dans le fond d'un plat, disposer des biscuits cuillère trempés dans du lait (cette étape n'est pas obligatoire car ils absorberont le jus des framboises). " },
+  { "@type": "HowToStep", "text": "Dans un saladier, écraser les framboises avec 30 g de sucre avec une fourchette ou presse-purée. Les répartir sur le fond de biscuits et mettre au réfrigérateur. En garder quelques-unes entières pour la décoration. " },
+  { "@type": "HowToStep", "text": "Pendant ce temps, séparer les blancs des jaunes d'oeufs. " },
+  { "@type": "HowToStep", "text": "Battre les jaunes avec le sucre et le sucre vanillé jusqu'à blanchiment du mélange. Rajouter le mascarpone au fouet. " },
+  { "@type": "HowToStep", "text": "Monter les blancs en neige bien fermes et les incorporer délicatement au mélange précédent avec une cuillère en bois. " },
+  { "@type": "HowToStep", "text": "Verser la préparation sur les framboises. " },
+  { "@type": "HowToStep", "text": "Mettre au réfrigérateur 24 heures avant de servir, voire 48h." }
+ ],
+ "author": { "@type": "Person", "name": "Anonyme" },
+ "description": "Recette Tiramisu aux framboises : la recette inratable : la meilleure recette rapide et facile : 6 personnes, 25 min de préparation. Notée 4.8/5 par 395 membres Marmiton.",
+ "keywords": "Tiramisu aux framboises : la recette inratable, tiramisu, oeuf, sucre roux, sucre vanillé, mascarpone, biscuits à la cuillère, lait, framboises, Très facile, Moyen, rapide",
+ "aggregateRating": { "@type": "AggregateRating", "reviewCount": 395, "ratingValue": 4.8, "worstRating": 1, "bestRating": 5 },
+ "video": { "@id": "https://www.marmiton.org/recettes/recette_tiramisu-aux-framboises_28919.aspx#video" },
+ "nutrition": {
+  "@type": "NutritionInformation",
+  "calories": "497 calories", "servingSize": "230.2 grams",
+  "carbohydrateContent": "53.1 g", "fatContent": "25.1 g", "fiberContent": "5.9 g",
+  "proteinContent": "11 g", "saturatedFatContent": "15.1 g", "sodiumContent": "0.5 g", "sugarContent": "31.9 g"
+ },
+ "suitableForDiet": ["https://schema.org/VegetarianDiet"]
+}

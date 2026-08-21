@@ -92,7 +92,7 @@ import { weekDates, dstr } from '../core/helpers';
                      [style.background-size]="'cover'" [style.background-position]="'center'"></div>
                 <div class="rc-body">
                   <div class="rc-name">{{ r.name }}</div>
-                  <div class="rc-time">{{ r.time }}</div>
+                  <div class="rc-time">{{ store.recipeTime(r) }}{{ r.portions ? ' · ' + r.portions + ' pers.' : '' }}</div>
                 </div>
               </div>
             } @empty {

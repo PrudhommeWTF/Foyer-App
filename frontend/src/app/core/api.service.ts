@@ -44,6 +44,20 @@ export interface ShoppingApplied {
   skipped: { opId: string; reason: string }[];
 }
 
+/** Recette lue sur une page externe, prête à remplir le formulaire. */
+export interface ImportedRecipe {
+  name: string; source: string;
+  portions: number | null; prepMin: number | null; cookMin: number | null;
+  ingr: string[]; steps: string[];
+}
+export interface RecipeImportResult {
+  recipe: ImportedRecipe;
+  /** Photo déjà rangée sur le serveur, quand la page en publiait une. */
+  photoId: number | null;
+  /** Ce que le lecteur n'a pas su lire. Affiché tel quel à l'utilisateur. */
+  warnings: string[];
+}
+
 export interface SetupPayload {
   household: { name: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
@@ -184,6 +198,14 @@ export class ApiService {
 
   shoppingOps(ops: ShopOp[]): Promise<ShoppingApplied> {
     return this.request('shopping/ops', { method: 'POST', body: JSON.stringify({ ops }) });
+  }
+
+  // ---- import de recette --------------------------------------------------
+  // Seule sortie réseau du module, faite par le serveur : le navigateur ne peut
+  // pas appeler un site tiers (la politique de sécurité du contenu l'interdit,
+  // et le partage d'origine du site le refuserait de toute façon).
+  importRecipe(url: string, recipeId: string): Promise<RecipeImportResult> {
+    return this.request('recipes/import', { method: 'POST', body: JSON.stringify({ url, recipeId }) });
   }
 
   // ---- fichiers ----------------------------------------------------------

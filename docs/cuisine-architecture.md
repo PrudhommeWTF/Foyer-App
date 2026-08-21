@@ -13,6 +13,7 @@ module à stockage relationnel.
 |---|---|---|
 | 0 | Semaine ancrée sur la date du jour, rayon des articles générés, petit-déjeuner masqué par défaut, exécuteur de tests frontend | Livrée |
 | 1 | Photos sur le disque, liste de courses concurrente, écran Courses pensé magasin | Livrée |
+| 1 bis | Import d'une recette depuis une URL (schema.org/Recipe), portions et temps séparés | Livrée |
 | 2 | Ingrédients structurés, référentiel d'articles, génération avec rapport | À venir |
 | 3 | Planning iPhone, semaine type des convives, duplication, suggestions | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
@@ -105,13 +106,135 @@ Une opération écartée l'est **définitivement**, pas différée : le client l
 de sa file, sinon il la rejouerait sans fin. La raison est affichée à
 l'utilisateur et journalisée côté serveur.
 
+## Import d'une recette depuis une URL
+
+C'est la **seule sortie réseau** du module, et elle obéit aux trois conditions
+posées au départ : déclenchée par un geste explicite, journalisée, coupable par
+configuration (`FOYER_RECIPE_IMPORT=false`).
+
+### Pourquoi un lecteur générique et pas un lecteur Marmiton
+
+La plupart des sites de cuisine francophones publient leur recette en **JSON-LD
+`schema.org/Recipe`** dans la page, pour que les moteurs de recherche affichent
+une fiche. Foyer lit ce balisage, et rien d'autre. Conséquences :
+
+- un seul lecteur couvre Marmiton, 750g, Cuisine AZ et les blogs sous WordPress
+  avec un greffon recette ;
+- il ne casse pas quand l'un d'eux refait son habillage, puisqu'il ne regarde
+  jamais leur HTML de présentation ;
+- il n'y a **pas de recherche par mots-clés**, et c'est délibéré : interroger le
+  moteur d'un site voudrait dire analyser sa page de résultats, donc du code
+  fragile propre à un site, et un parcours de son catalogue plutôt qu'un import
+  d'une page choisie. On cherche dans le navigateur, on colle le lien.
+
+### Ce qui est importé, et ce qui ne l'est pas
+
+| Importé | Laissé de côté, et pourquoi |
+|---|---|
+| Titre (débarrassé des appâts à moteur de recherche) | **Calories et valeurs nutritionnelles** : le foyer ne fait pas de suivi nutritionnel |
+| Portions, temps de préparation, temps de cuisson | **Note du site** : 4,9/5 sur Marmiton n'est pas la note de la famille |
+| Lignes d'ingrédients, telles qu'écrites | **Régimes déclarés, catégorie, mots-clés** : aucun écran ne les lit encore |
+| Étapes, avec le titre que le site leur donne | **Auteur** : la source suffit à retrouver la page |
+| Photo (rangée dans le magasin d'octets) | |
+
+Ce qui n'est pas compris est **signalé, jamais inventé** : portions absentes,
+temps non détaillés, ingrédients introuvables produisent un avertissement affiché
+dans le formulaire. La relecture du formulaire avant enregistrement tient lieu
+d'écran de reprise manuelle.
+
+### Ce que « générique » veut dire en pratique
+
+Les sites publient la même norme de façons différentes, et le lecteur absorbe
+ces écarts. Constatés sur les pages du jeu de test :
+
+| Écart | Marmiton | Journal des Femmes | CuisineAZ |
+|---|---|---|---|
+| Durées | `PT15M` | `PT0H05M` | `PT10M` |
+| Portions | « 4 personnes » | « 6 personnes » | « 6 » |
+| Image | tableau, JPEG et WebP mêlés | un `ImageObject` seul | tableau en `.jpeg` |
+| Étapes | `text` seul | `name` **et** `text` | `name` **et** `text` |
+| Ingrédients | « 100 g **de** gruyère râpé » | « 100 g gruyère » | « 150 g Gruyère râpé », « 5 Courgette(s) » |
+
+Le titre d'étape est conservé devant la consigne (« Cuisson des courgettes :
+Faites-les cuire… ») : c'est un repère utile quand on cuisine en suivant l'écran.
+Il est laissé de côté quand il répète le début de la consigne ou qu'il est en
+réalité la consigne entière.
+
+### Rien d'autre que les champs de recette
+
+Une page publie souvent, dans le **même bloc JSON-LD**, des choses qui ne sont pas
+la recette : la fiche de l'auteur, une vidéo, des commentaires d'internautes. Un
+de ceux du jeu de test se termine par un lien publicitaire en HTML.
+
+Le lecteur ne va chercher que les champs déclarés de la recette. Ni les
+commentaires, ni les avis, ni les descriptions d'auteur n'atteignent la fiche, et
+un test l'exige explicitement sur un nœud hostile. Côté écran, les textes sont
+rendus par interpolation Angular, donc échappés : le dépôt n'utilise nulle part
+`innerHTML` ni `bypassSecurityTrust`.
+
+### Le temps de repos, que le standard ne sait pas dire
+
+`schema.org` n'a pas de champ pour le repos. Un tiramisu qui doit passer 24 heures
+au réfrigérateur s'annonce « 25 min », et le repos n'existe que dans la phrase
+d'une étape. Quelqu'un qui le planifie pour le dîner de samedi s'y prend le
+samedi après-midi, et se trompe d'un jour.
+
+L'import repère donc ces phrases et les **signale telles qu'elles sont écrites**,
+sans en tirer de donnée. Il faut un mot de repos (réfrigérateur, reposer, mariner,
+lever, la veille) **et** une durée longue (heures, jours, une nuit) dans la même
+phrase : « laisser reposer 10 min » ne change pas un planning, « au réfrigérateur
+24 heures » si. Une cuisson longue au four ne déclenche rien.
+
+L'étiquette « à préparer la veille » du modèle cible, posée à la main, restera le
+bon endroit pour en faire quelque chose d'exploitable.
+
+### Les gardes de la sortie réseau
+
+Le serveur va chercher une adresse fournie par un utilisateur, sur un réseau
+domestique où vivent un hyperviseur, un routeur et d'autres services. Trois
+protections, testées dans `backend/test/recipe-fetch.test.ts` :
+
+1. **Adresses privées refusées**, après résolution DNS. Vérifier le nom ne
+   suffirait pas : rien n'empêche un domaine public de pointer sur 192.168.1.1.
+   Sont bloqués la boucle locale, les plages du RFC 1918, le lien-local (dont
+   `169.254.169.254`, les métadonnées d'hébergeur), le CGNAT et le multicast, en
+   IPv4 comme en IPv6, y compris l'IPv4 encapsulée (`::ffff:127.0.0.1`).
+2. **Redirections suivies une par une**, chaque étape étant revalidée. Une page
+   publique qui redirige vers `127.0.0.1` est le contournement classique.
+3. **Taille et durée bornées** : 3 Mo, 12 secondes, 4 redirections. Le corps est
+   lu par morceaux et coupé net, un `await res.text()` avalerait tout.
+
+S'y ajoutent : `https` et `http` seuls, refus des adresses portant un
+identifiant, et une limitation à 30 imports par tranche de 5 minutes.
+
+### Exploitation
+
+```bash
+# Suivre les imports (chacun laisse une trace)
+journalctl -u foyer -f | grep '\[foyer\] Recettes'
+
+# Couper toute sortie réseau du module, LXC
+echo 'FOYER_RECIPE_IMPORT=false' >> /etc/foyer/foyer.env && systemctl restart foyer
+
+# Docker : la même variable dans docker-compose.yml
+```
+
+Sortie attendue d'un import réussi :
+
+```
+[foyer] Recettes : import de https://www.marmiton.org/... → « Gratin de courgettes rapide » (8 ingrédients, 7 étapes, photo).
+```
+
+Un refus est journalisé avec sa raison, et le même message s'affiche à
+l'utilisateur : pas de mystère d'un côté ni de l'autre.
+
 ## Modèle de données
 
 ```ts
 Aisle    { id, name, color, position }        // position = ordre des allées du magasin
 ShopItem { id, name, qty, aisleId, state, listId, by?, at? }
 ShopState = 'a-prendre' | 'panier' | 'indisponible'
-Recipe   { id, name, time, level, color, photoId?, ingr: string[], steps: string[] }
+Recipe   { id, name, level, color, photoId?, portions?, prepMin?, cookMin?, source?, ingr: string[], steps: string[] }
 ```
 
 Ce qui a changé et pourquoi :
@@ -125,6 +248,14 @@ Ce qui a changé et pourquoi :
 - **`by` / `at`.** Qui a coché et quand, pour rendre lisible ce que l'autre
   téléphone vient de faire.
 - **`photo` → `photoId`.** Voir plus haut.
+- **`time` → `prepMin` / `cookMin` / `portions`.** L'ancien champ était un texte
+  libre unique (« 45 min ») qui ne disait même pas s'il valait la préparation, la
+  cuisson ou le total. La mise à l'échelle des courses (recette pour 4, planning
+  à 6) a besoin d'un nombre de portions, et l'import en fournit un. La migration
+  reprend la durée en **préparation** : c'est la seule lecture qui ne fabrique
+  pas une cuisson qui n'a jamais existé, et une durée illisible laisse les champs
+  vides en le signalant.
+- **`source`.** Page d'origine d'une recette importée, pour pouvoir y retourner.
 
 `ingr` reste un tableau de chaînes : les ingrédients structurés sont le sujet de
 la tranche 2.
@@ -139,6 +270,7 @@ Le document est migré par son propre jeu de transformations versionnées
 |---|---|
 | 1 | Photos de recettes sorties du document vers le disque |
 | 2 | Rayon par identifiant, rang des rayons, état à trois valeurs |
+| 3 | Recettes : portions et temps séparés, à la place du texte libre |
 
 Trois règles, tenues par des tests (`backend/test/state-migrations.test.ts`) :
 
@@ -281,6 +413,9 @@ farine.
 | `backend/test/shopping-repo.test.ts` | Transaction tout ou rien, journal persistant, un `PUT` périmé n'emporte pas la liste |
 | `backend/test/state-migrations.test.ts` | Rejouabilité, aucune perte, sauvegarde écrite avant transformation |
 | `backend/test/household-files.test.ts` | Déduplication entre les deux tables, balayage des orphelins |
+| `backend/test/recipe-import.test.ts` | Lecture du JSON-LD sur une vraie page Marmiton, et sur les formes tordues du standard |
+| `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
+| `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
 | `frontend/src/app/core/helpers.test.ts` | Semaine ancrée sur le jour, lundi en tête, changements d'heure |
 
 ```bash
@@ -296,4 +431,13 @@ cd frontend && npm test
 - La limite `express.json({ limit: '15mb' })` sur `/api/state` reste dimensionnée
   pour ces documents-là. Elle pourra baisser quand ils auront migré.
 - `ingr` reste du texte libre. La tranche 2 le structure, en conservant toujours
-  la ligne d'origine à côté de la forme analysée.
+  la ligne d'origine à côté de la forme analysée. Les lignes qui sortent de
+  l'import sont régulières : le moteur d'analyse devra aussi être éprouvé sur des
+  fiches saisies à la main, qui le sont beaucoup moins.
+- Les pages d'exemple servant de tests sont dans `backend/test/fixtures/recipes`,
+  au format JSON-LD extrait. Pour en ajouter une :
+
+  ```bash
+  curl -sSL -A 'Mozilla/5.0' 'https://…' \
+    | grep -oP '(?<=application/ld\+json">).*?(?=</script>)'
+  ```

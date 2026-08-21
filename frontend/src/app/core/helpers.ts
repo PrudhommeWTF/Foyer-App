@@ -121,3 +121,6 @@ export function ageOn(birthday: string, ds: string): number | null {
   if (isNaN(by) || isNaN(y)) return null;
   return y - by;
 }
+
+/** Nombre optionnel vers champ de saisie : null devient vide, pas « null ». */
+export function num(v: number | null | undefined): string { return v == null ? '' : String(v); }

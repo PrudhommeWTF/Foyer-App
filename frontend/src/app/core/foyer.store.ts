@@ -2,7 +2,7 @@ import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
 import { HouseholdState, Member, Notif, ShopItem, ShopState } from './models';
 import { UiState, initialUi } from './ui-state';
-import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, occursOn, parseDay, uid, weekDates } from './helpers';
+import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
 
 const READ_NOTIFS_KEY = 'foyer.readNotifs';
@@ -955,10 +955,68 @@ export class FoyerStore {
   // L'identifiant est tiré à l'ouverture du formulaire, avant l'enregistrement :
   // une photo a besoin d'un propriétaire pour être rangée, y compris sur une
   // recette qui n'existe pas encore.
-  newRecipe(): void { this.patch({ recipeForm: true, editingId: null, fRecipeId: uid('r'), fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [{ id: uid('i'), val: '' }], fSteps: [{ id: uid('p'), val: '' }] }); }
+  newRecipe(): void {
+    this.patch({
+      recipeForm: true, editingId: null, fRecipeId: uid('r'),
+      fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false,
+      fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
+      fImportUrl: '', fImportBusy: false, fImportWarnings: [],
+      fIngr: [{ id: uid('i'), val: '' }], fSteps: [{ id: uid('p'), val: '' }],
+    });
+  }
   editRecipe(id: string): void {
     const r = this._data()?.recipes.find((x) => x.id === id); if (!r) return;
-    this.patch({ recipeForm: true, editingId: id, fRecipeId: id, openRecipeId: null, fName: r.name, fTime: r.time, fLevel: r.level, fColor: r.color, fPhotoId: r.photoId ?? null, fPhotoBusy: false, fIngr: r.ingr.map((v) => ({ id: uid('i'), val: v })), fSteps: r.steps.map((v) => ({ id: uid('p'), val: v })) });
+    this.patch({
+      recipeForm: true, editingId: id, fRecipeId: id, openRecipeId: null,
+      fName: r.name, fLevel: r.level, fColor: r.color, fPhotoId: r.photoId ?? null, fPhotoBusy: false,
+      fPortions: num(r.portions), fPrepMin: num(r.prepMin), fCookMin: num(r.cookMin), fSource: r.source || '',
+      fImportUrl: '', fImportBusy: false, fImportWarnings: [],
+      fIngr: r.ingr.map((v) => ({ id: uid('i'), val: v })), fSteps: r.steps.map((v) => ({ id: uid('p'), val: v })),
+    });
+  }
+
+  /**
+   * Remplit le formulaire depuis une page de recette. Le serveur fait l'appel
+   * sortant et la lecture (voir backend/src/recipes) ; ici on ne fait que poser
+   * le résultat dans les champs, que l'utilisateur relit avant d'enregistrer.
+   * C'est cette relecture qui tient lieu d'écran de reprise manuelle.
+   */
+  async importRecipe(): Promise<void> {
+    const s = this.ui();
+    const url = s.fImportUrl.trim();
+    if (!url) { this.toast('Collez l’adresse de la recette'); return; }
+    this.patch({ fImportBusy: true, fImportWarnings: [] });
+    try {
+      const res = await this.api.importRecipe(url, s.fRecipeId);
+      const r = res.recipe;
+      if (res.photoId) this.photoUrls.update((m) => { const c = { ...m }; delete c[res.photoId!]; return c; });
+      this.patch({
+        fName: r.name,
+        fPortions: num(r.portions), fPrepMin: num(r.prepMin), fCookMin: num(r.cookMin),
+        fSource: r.source,
+        // Un import ne doit pas effacer ce qui a déjà été saisi à la main : les
+        // listes vides du formulaire neuf sont remplacées, une saisie ne l'est
+        // que si la page a effectivement quelque chose à mettre à la place.
+        fIngr: r.ingr.length ? r.ingr.map((v) => ({ id: uid('i'), val: v })) : s.fIngr,
+        fSteps: r.steps.length ? r.steps.map((v) => ({ id: uid('p'), val: v })) : s.fSteps,
+        ...(res.photoId ? { fPhotoId: res.photoId } : {}),
+        fImportWarnings: res.warnings,
+        fImportUrl: '',
+      });
+      this.toast('Recette importée, relisez-la avant d’enregistrer');
+    } catch (e) {
+      // Le message du serveur dit quoi faire : le relayer tel quel.
+      this.patch({ fImportWarnings: [(e as Error).message] });
+    } finally {
+      this.patch({ fImportBusy: false });
+    }
+  }
+
+  /** Durée totale d'une recette, pour les vignettes et l'accueil. */
+  recipeTime(r: { prepMin?: number | null; cookMin?: number | null }): string {
+    const total = (r.prepMin || 0) + (r.cookMin || 0);
+    if (!total) return '—';
+    return total < 60 ? total + ' min' : Math.floor(total / 60) + ' h' + (total % 60 ? ' ' + (total % 60) : '');
   }
   // ---- photos ------------------------------------------------------------
   // Une balise <img> ou un background CSS ne porte pas l'en-tête d'autorisation :
@@ -1031,7 +1089,13 @@ export class FoyerStore {
     const s = this.ui(); const name = s.fName.trim(); if (!name) { this.toast('Donne un nom à la recette'); return; }
     const ingr = s.fIngr.map((x) => x.val.trim()).filter(Boolean);
     const steps = s.fSteps.map((x) => x.val.trim()).filter(Boolean);
-    const data = { name, time: s.fTime.trim() || '—', level: s.fLevel, color: s.fColor, photoId: s.fPhotoId, ingr, steps };
+    const int = (v: string): number | null => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
+    const data = {
+      name, level: s.fLevel, color: s.fColor, photoId: s.fPhotoId,
+      portions: int(s.fPortions), prepMin: int(s.fPrepMin), cookMin: int(s.fCookMin),
+      source: s.fSource.trim() || null,
+      ingr, steps,
+    };
     this.mutate((d) => {
       if (s.editingId) { const i = d.recipes.findIndex((r) => r.id === s.editingId); if (i >= 0) d.recipes[i] = { ...d.recipes[i], ...data }; }
       else d.recipes.unshift({ id: s.fRecipeId || uid('r'), ...data });

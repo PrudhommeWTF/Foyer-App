@@ -1,0 +1,28 @@
+{
+ "@type": "Recipe",
+ "name": "Gratin de courgettes simple",
+ "recipeYield": "6",
+ "prepTime": "PT10M",
+ "cookTime": "PT25M",
+ "totalTime": "PT35M",
+ "recipeIngredient": ["5 Courgette(s)","1 Œuf(s)","20 cl Crème fraîche","150 g Gruyère râpé","1 noix Beurre","2 pincée(s) Sel","1 pincée(s) Poivre"],
+ "recipeInstructions": [
+  { "@type": "HowToStep", "name": "Préparation des courgettes", "text": "Lavez les courgettes, essuyez-les et épluchez-les en laissant des petites bandes de peau. Coupez-les ensuite en rondelles.", "url": "https://x#1" },
+  { "@type": "HowToStep", "name": "Cuisson des courgettes et préparation de la garniture", "text": "Faites bouillir de l'eau salée dans une casserole, et plongez-y les courgettes pendant 5 min. Pendant ce temps, mélangez l'œuf, la crème fraîche, 100 g de gruyère râpé, le sel et le poivre dans un saladier.", "url": "https://x#2" },
+  { "@type": "HowToStep", "name": "Préparation du gratin et cuisson", "text": "Préchauffez le four th.6-7 (200°C). Égouttez les courgettes et disposez-les dans un plat à gratin. Recouvrez les légumes avec l’appareil, parsemez le dessus du reste de gruyère râpé, et enfournez pour 25 min.", "url": "https://x#3" },
+  { "@type": "HowToStep", "name": "Service du gratin", "text": "Servez votre gratin de courgettes sans attendre.", "url": "https://x#4" }
+ ],
+ "comment": {
+  "@type": "Comment",
+  "text": "Très belle recette ! Je me demandais, avez-vous déjà essayé d'ajouter un peu de fromage râpé dans la préparation des courgettes avant la cuisson pour plus de saveur ? <a href=\"https://discordlookup.org/\"> discord id lookup </a>",
+  "author": { "@type": "Person", "name": "leo" }
+ },
+ "commentCount": "39",
+ "estimatedCost": "Pas cher",
+ "image": [
+  "https://img.cuisineaz.com/1200x1200/2019/08/07/i149734-gratin-de-courgettes-simple.jpeg",
+  "https://img.cuisineaz.com/1200x900/2019/08/07/i149734-gratin-de-courgettes-simple.jpeg"
+ ],
+ "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.9", "reviewCount": 73, "bestRating": 5 },
+ "nutrition": { "@type": "NutritionInformation", "calories": "99" }
+}

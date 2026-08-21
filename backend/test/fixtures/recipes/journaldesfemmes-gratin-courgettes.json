@@ -1,0 +1,52 @@
+{
+ "@context": "https://schema.org",
+ "@type": "Recipe",
+ "dateModified": "2024-06-28T17:16:00+00:00",
+ "datePublished": "2024-06-28T17:16:00+00:00",
+ "name": "Gratin de courgettes : la meilleure recette",
+ "description": "Envie de changer des courgettes à la poêle ? Découvrez cette recette de gratin de courgettes au four, une recette à petit prix, facile et idéale pour accompagner vos viandes et poissons pour un repas original, léger et équilibré.",
+ "recipeYield": "6 personnes",
+ "video": {
+  "@context": "http://schema.org",
+  "@type": "VideoObject",
+  "name": "Gratin de courgettes&nbsp;: la meilleure recette",
+  "thumbnailUrl": "https://media.ccmbg.com/tc/906311727/912809/1630080075",
+  "uploadDate": "2024-06-28T19:16:00+02:00",
+  "contentUrl": "https://media.ccmbg.com/vc/1630080075/906311727/912809.mp4",
+  "duration": "PT1M22S"
+ },
+ "recipeCategory": "Gratin de courgette",
+ "about": [
+  { "@type": "Thing", "name": "Gratin de courgette" },
+  { "@type": "Thing", "name": "Recette végétarienne", "sameAs": "https://fr.wikipedia.org/wiki/Cuisine_v%C3%A9g%C3%A9tarienne" }
+ ],
+ "image": {
+  "@type": "ImageObject",
+  "url": "https://img-3.journaldesfemmes.fr/je5P9TDeDiQ9r6jxpupbjKCqFaU=/750x500/573c1e2d4b3f48e2b6eebfe7669c09ea/ccmcms-jdf/40034787.jpg"
+ },
+ "recipeInstructions": [
+  { "@type": "HowToStep", "name": "Préparation des courgettes", "url": "https://cuisine.journaldesfemmes.fr/recette/222125-gratin-de-courgettes#Preparation-des-courgettes-1", "text": "Lavez les courgettes sans les éplucher. Essuyez-les et coupez-les en rondelles de 1 cm ou en gros cubes." },
+  { "@type": "HowToStep", "name": "Cuisson des courgettes", "url": "https://cuisine.journaldesfemmes.fr/recette/222125-gratin-de-courgettes#Cuisson-des-courgettes-2", "text": "Faites-les cuire 15 à 18 minutes dans 3 litres d'eau bouillante salée.\nÉgouttez dans une passoire et pressez-les avec une écumoire pour extraire le trop plein d'eau." },
+  { "@type": "HowToStep", "name": "Préparation du gratin", "url": "https://cuisine.journaldesfemmes.fr/recette/222125-gratin-de-courgettes#Preparation-du-gratin-3", "text": "Versez les courgettes dans un plat à gratin beurré. Hachez-les grossièrement à la fourchette." },
+  { "@type": "HowToStep", "text": "Dans un saladier, battez les oeufs en omelette, ajoutez la crème, le gruyère râpé, le sel, le poivre et saupoudrez de muscade râpée." },
+  { "@type": "HowToStep", "name": "Cuisson du gratin", "url": "https://cuisine.journaldesfemmes.fr/recette/222125-gratin-de-courgettes#Cuisson-du-gratin-5", "text": "Versez cette préparation sur les courgettes, mélangez et faites gratiner à four chaud 15 minutes à 180°C." }
+ ],
+ "prepTime": "PT0H05M",
+ "totalTime": "PT0H05M",
+ "cookTime": "PT0H30M",
+ "nutrition": { "@type": "NutritionInformation", "calories": 200 },
+ "recipeIngredient": [
+  "1 kg courgettes",
+  "250 g crème fraîche",
+  "3 oeufs",
+  "50 g beurre",
+  "100 g gruyère",
+  "muscade râpée",
+  "sel",
+  "poivre"
+ ],
+ "author": { "@type": "Person", "name": "Françoise", "familyName": "LUNARDELLI-MERLE" },
+ "recipeCuisine": "française",
+ "keywords": "Recette courgette, Recette été, Recette gruyère, Recette végétarienne, Recette familiale, Recette légère, Recette noix de muscade, Choix de la rédaction, Gratin, Recette gratin de courgette",
+ "aggregateRating": { "@type": "AggregateRating", "ratingValue": 4.4, "ratingCount": 740, "bestRating": 5, "worstRating": 0 }
+}

@@ -33,7 +33,8 @@ import { RECIPE_PALETTE } from '../core/constants';
               <div class="rname f-display">{{ r.name }}</div>
             </div>
             <div class="rfoot">
-              <span class="rtime"><f-icon name="clock" [size]="14" color="var(--ink2)" /> {{ r.time }}</span>
+              <span class="rtime"><f-icon name="clock" [size]="14" color="var(--ink2)" /> {{ store.recipeTime(r) }}</span>
+              @if (r.portions) { <span class="rdot">·</span><span>{{ r.portions }} pers.</span> }
               <span class="rdot">·</span>
               <span>{{ r.level }}</span>
               <span class="rdot">·</span>
@@ -57,9 +58,17 @@ import { RECIPE_PALETTE } from '../core/constants';
           <div class="dname f-display">{{ r.name }}</div>
         </div>
         <div class="dmeta">
-          <span class="pill"><f-icon name="clock" [size]="14" color="var(--ink2)" /> {{ r.time }}</span>
+          @if (r.prepMin) { <span class="pill"><f-icon name="clock" [size]="14" color="var(--ink2)" /> Préparation {{ r.prepMin }} min</span> }
+          @if (r.cookMin) { <span class="pill">Cuisson {{ r.cookMin }} min</span> }
+          @if (!r.prepMin && !r.cookMin) { <span class="pill"><f-icon name="clock" [size]="14" color="var(--ink2)" /> Durée non renseignée</span> }
+          @if (r.portions) { <span class="pill">{{ r.portions }} personnes</span> }
           <span class="pill">{{ r.level }}</span>
         </div>
+        @if (r.source) {
+          <a class="source" [href]="r.source" target="_blank" rel="noopener noreferrer">
+            <f-icon name="export" [size]="14" color="var(--ink2)" /> Voir la recette d'origine
+          </a>
+        }
 
         <div class="section-t">Ingrédients</div>
         <div class="ingr-list">
@@ -89,24 +98,58 @@ import { RECIPE_PALETTE } from '../core/constants';
     <!-- Form modal -->
     @if (store.ui().recipeForm) {
       <f-modal [title]="store.ui().editingId ? 'Modifier la recette' : 'Nouvelle recette'" [maxWidth]="560" (close)="store.patch({ recipeForm: false })">
+        @if (!store.ui().editingId) {
+          <div class="import">
+            <div class="field-label">Importer depuis une page de recette</div>
+            <div class="import-row">
+              <input class="input" type="url" inputmode="url" autocomplete="off"
+                     placeholder="Collez l'adresse d'une recette (Marmiton, 750g…)"
+                     [ngModel]="store.ui().fImportUrl" (ngModelChange)="store.patch({ fImportUrl: $event })"
+                     (keydown.enter)="doImport()">
+              <button class="btn btn-sage" [disabled]="store.ui().fImportBusy" (click)="doImport()">
+                {{ store.ui().fImportBusy ? 'Lecture…' : 'Importer' }}
+              </button>
+            </div>
+            <div class="hint">Le serveur va lire la page et remplir le formulaire. Relisez avant d'enregistrer.</div>
+          </div>
+        }
+
+        @if (store.ui().fImportWarnings.length) {
+          <div class="warn-box mb">
+            @for (w of store.ui().fImportWarnings; track $index) {
+              <div class="warn-line"><f-icon name="bell" [size]="14" color="#D9930F" [width]="2.4" /> {{ w }}</div>
+            }
+          </div>
+        }
+
         <div class="field-label">Nom de la recette</div>
         <input class="input mb" placeholder="Ex : Tarte aux pommes"
                [ngModel]="store.ui().fName" (ngModelChange)="store.patch({ fName: $event })">
 
         <div class="form-row mb">
           <div class="grow">
-            <div class="field-label">Temps</div>
-            <input class="input" placeholder="45 min"
-                   [ngModel]="store.ui().fTime" (ngModelChange)="store.patch({ fTime: $event })">
+            <div class="field-label num">Prépa.</div>
+            <input class="input" type="number" inputmode="numeric" min="0" placeholder="15"
+                   [ngModel]="store.ui().fPrepMin" (ngModelChange)="store.patch({ fPrepMin: $event })">
           </div>
           <div class="grow">
-            <div class="field-label">Difficulté</div>
-            <div class="seg lvl">
-              @for (l of levels; track l) {
-                <button [class.active]="store.ui().fLevel === l" (click)="store.patch({ fLevel: l })">{{ l }}</button>
-              }
-            </div>
+            <div class="field-label num">Cuisson</div>
+            <input class="input" type="number" inputmode="numeric" min="0" placeholder="30"
+                   [ngModel]="store.ui().fCookMin" (ngModelChange)="store.patch({ fCookMin: $event })">
           </div>
+          <div class="grow">
+            <div class="field-label num">Portions</div>
+            <input class="input" type="number" inputmode="numeric" min="1" placeholder="4"
+                   [ngModel]="store.ui().fPortions" (ngModelChange)="store.patch({ fPortions: $event })">
+          </div>
+        </div>
+        <div class="hint mb">Durées en minutes. Les portions servent à mettre les courses à l'échelle du nombre de couverts.</div>
+
+        <div class="field-label">Difficulté</div>
+        <div class="seg lvl mb">
+          @for (l of levels; track l) {
+            <button [class.active]="store.ui().fLevel === l" (click)="store.patch({ fLevel: l })">{{ l }}</button>
+          }
         </div>
 
         <div class="field-label">Apparence</div>
@@ -215,7 +258,20 @@ import { RECIPE_PALETTE } from '../core/constants';
 
     /* form */
     .mb { margin-bottom: 20px; }
-    .form-row { display: flex; gap: 16px; }
+    .import { background: var(--soft); border-radius: 15px; padding: 14px 15px; margin-bottom: 20px; }
+    .import-row { display: flex; gap: 10px; }
+    .import-row .input { flex: 1; min-width: 0; }
+    .import .field-label { margin-bottom: 8px; }
+    .hint { font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .import .hint { margin-top: 8px; }
+    .warn-box { background: #FDF0DA; border-radius: 13px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .warn-line { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; font-weight: 700; color: #8A6412; line-height: 1.4; }
+    .source { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: var(--ink2); margin-bottom: 20px; text-decoration: none; }
+    .source:hover { text-decoration: underline; }
+    /* Trois champs courts sur 390 px : libellés sur une ligne, champs alignés. */
+    .form-row { display: flex; gap: 12px; align-items: flex-end; }
+    .field-label.num { white-space: nowrap; font-size: 12px; letter-spacing: .02em; }
+    .form-row + .hint { margin-top: -12px; }
     .form-row .grow { flex: 1; min-width: 0; }
     .seg.lvl { display: flex; width: 100%; }
     .seg.lvl > button { flex: 1; }
@@ -255,6 +311,8 @@ export class RecettesScreen {
     const id = this.store.ui().openRecipeId;
     return id ? this.d().recipes.find((r) => r.id === id) ?? null : null;
   });
+
+  doImport(): void { void this.store.importRecipe(); }
 
   onPhoto(e: Event): void {
     const input = e.target as HTMLInputElement;

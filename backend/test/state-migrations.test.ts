@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { STATE_MIGRATIONS, STATE_VERSION, decodeDataUrl, migrateState, photoStorer } from '../src/state/migrations';
+import { STATE_MIGRATIONS, STATE_VERSION, decodeDataUrl, migrateState, parseFrenchDuration, photoStorer } from '../src/state/migrations';
 
 /** Une image PNG minuscule mais valide, telle qu'une ancienne fiche en contenait. */
 const PNG_DATA_URL =
@@ -138,6 +138,46 @@ test('les rangs des rayons suivent l’ordre du document d’origine', () => {
   assert.deepEqual(doc['aisles'].map((a: any) => a.position), [0, 1, 2]);
 });
 
+// ---- portions et temps des recettes ----------------------------------------
+
+test('la durée en texte libre est reprise en temps de préparation', () => {
+  // L'ancien champ ne disait pas s'il valait la préparation, la cuisson ou le
+  // total : le reprendre en préparation ne fabrique pas de cuisson imaginaire.
+  const { doc } = run({ recipes: [{ id: 'r1', name: 'A', time: '45 min' }, { id: 'r2', name: 'B', time: '1 h 30' }] });
+  assert.equal(doc['recipes'][0].prepMin, 45);
+  assert.equal(doc['recipes'][1].prepMin, 90);
+  assert.ok(doc['recipes'].every((r: any) => !('time' in r)));
+});
+
+test('une durée illisible laisse le champ vide et se signale', () => {
+  const { doc, outcome } = run({ recipes: [{ id: 'r1', name: 'A', time: 'un moment' }] });
+  assert.equal(doc['recipes'][0].prepMin, undefined);
+  assert.ok(outcome.notes.some((n) => /illisible/.test(n)));
+});
+
+test('le tiret de remplissage n’est pas compté comme une durée illisible', () => {
+  const { outcome } = run({ recipes: [{ id: 'r1', name: 'A', time: '—' }] });
+  assert.equal(outcome.notes.some((n) => /illisible/.test(n)), false);
+});
+
+test('une recette déjà en minutes n’est pas retouchée', () => {
+  const { doc } = run({ recipes: [{ id: 'r1', name: 'A', time: '45 min', prepMin: 10, cookMin: 20 }] });
+  assert.equal(doc['recipes'][0].prepMin, 10);
+  assert.equal(doc['recipes'][0].cookMin, 20);
+});
+
+test('les durées à la française se lisent sous leurs formes courantes', () => {
+  assert.equal(parseFrenchDuration('45 min'), 45);
+  assert.equal(parseFrenchDuration('1 h 30'), 90);
+  assert.equal(parseFrenchDuration('1h30'), 90);
+  assert.equal(parseFrenchDuration('2 heures'), 120);
+  assert.equal(parseFrenchDuration('20'), 20);
+  assert.equal(parseFrenchDuration('1 h'), 60);
+  for (const v of ['', '—', 'un moment', 'toute la nuit', null, '0 min']) {
+    assert.equal(parseFrenchDuration(v), null, String(v));
+  }
+});
+
 // ---- les garanties transverses ---------------------------------------------
 
 test('rejouer les migrations sur un document déjà migré ne change rien', () => {
@@ -185,8 +225,8 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2]);
-  assert.equal(res.outcome.to, 2);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3]);
+  assert.equal(res.outcome.to, STATE_VERSION);
 });
 
 test('un document déjà à jour ne déclenche ni transformation ni sauvegarde', () => {

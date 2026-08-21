@@ -29,6 +29,7 @@ import { buildInitialState, HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
+import { recipesRouter } from './recipes/routes';
 import { preserveShopping } from './shopping/repo';
 import { buildIcs } from './ics';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
@@ -432,6 +433,10 @@ api.use('/files', auth, filesRouter());
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
 api.use('/shopping', auth, shoppingRouter());
+
+// La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
+// URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
+api.use('/recipes', auth, recipesRouter());
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
