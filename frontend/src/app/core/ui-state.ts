@@ -18,7 +18,14 @@ export interface UiState {
   calView: 'month' | 'week' | '3';
   calAnchor: string;
   // meals
-  weekOffset: number;
+  /**
+   * Jour d'ancrage du planning. En vue semaine, la semaine qui le contient ; en
+   * vue 3 jours, lui et les deux suivants. Un simple décalage de semaines ne
+   * suffisait plus dès lors que la fenêtre peut faire trois jours.
+   */
+  mealAnchor: string;
+  /** Vide = automatique : trois jours sur téléphone, la semaine sur grand écran. */
+  mealView: '' | '3' | 'week';
   mealEdit: { dateStr: string; slot: string } | null;
   /** Plats retenus pour le créneau en cours d'édition, dans l'ordre du service. */
   mealItems: MealItem[];
@@ -95,7 +102,7 @@ export function initialUi(): UiState {
     screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
-    weekOffset: 0, mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false,
+    mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false,
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
     aisleOrderOpen: false,

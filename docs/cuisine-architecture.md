@@ -16,7 +16,7 @@ module à stockage relationnel.
 | 1 bis | Import d'une recette depuis une URL (schema.org/Recipe), portions et temps séparés | Livrée |
 | 2 a | Lecture des lignes d'ingrédients, référentiel d'articles, génération avec rapport | Livrée |
 | 2 b | Écran de reprise en masse des lignes non reconnues, allergènes affichés | À venir |
-| 3 a | Semaine lisible sur téléphone : la grille devient une pile de jours | Livrée |
+| 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
 | 3 b | Semaine type des convives, duplication de semaine, suggestions | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires, stock de placard | À venir |
@@ -389,20 +389,39 @@ enregistrée** (`MealValue.pax`), pour qu'un chiffre recopié partout ne se pér
 pas au premier changement de famille. Une recette sans portions connues n'est pas
 mise à l'échelle, et le rapport le dit.
 
-## La semaine, en grille ou en pile
+## Le planning : deux fenêtres, deux mises en page
 
-La grille 7 jours par 2 créneaux demandait 900 px de large : sur téléphone elle
-défilait horizontalement, ce qui est inutilisable d'une main. La semaine se
-présente donc de deux façons, et **c'est la largeur réellement disponible qui
-tranche**, pas celle de la fenêtre : entre 900 et 1100 px la barre latérale
-occupe la place, et la grille défilait encore. Le composant mesure son propre
-hôte (`ResizeObserver`, seuil 760 px) plutôt que de se fier au point de bascule
-du chrome.
+Deux réglages indépendants gouvernent cet écran, et il faut les distinguer.
+
+**Combien de jours** : trois ou sept, au choix de l'utilisateur. Sept jours en
+pile font deux écrans de téléphone à faire défiler ; trois jours en font un seul,
+et c'est l'horizon utile un soir de semaine. Le réglage est vide par défaut et se
+résout alors automatiquement : **trois jours sur téléphone, la semaine sur grand
+écran**. Dès que l'utilisateur touche le sélecteur, son choix tient.
+
+**Grille ou pile** : la grille jours en colonnes demandait 900 px de large, donc
+sur téléphone elle défilait horizontalement, ce qui est inutilisable d'une main.
+**C'est la largeur réellement disponible qui tranche**, pas celle de la fenêtre :
+entre 900 et 1100 px la barre latérale occupe la place, et la grille défilait
+encore. Le composant mesure son propre hôte (`ResizeObserver`, seuil 760 px)
+plutôt que de se fier au point de bascule du chrome.
 
 En pile, chaque jour est une carte et chaque créneau une ligne de 52 px, visable
 au pouce. Les jours passés restent consultables mais s'effacent, et la semaine
 courante s'ouvre sur le jour même : « qu'est-ce qu'on mange ce soir » ne doit pas
 demander de faire défiler quatre jours révolus.
+
+L'ancrage est **un jour**, plus un décalage de semaines : une fenêtre de trois
+jours n'a pas de numéro de semaine, et la navigation avance d'autant de jours que
+la fenêtre en montre.
+
+**La génération des courses suit la fenêtre affichée.** En vue trois jours, le
+bouton dit « Courses de ces 3 jours » et ne prend que ces repas ; en vue semaine,
+les sept. Sur la semaine réelle du foyer, cela fait 13 articles contre 34 : c'est
+la différence entre faire un saut au magasin et faire les courses. Les jours sont
+passés explicitement à `prepareList`, et jamais déduits de ce que l'écran avait
+en mémoire : un bouton ailleurs (l'accueil, l'écran Courses) demande toujours la
+semaine en cours, quelle que soit la fenêtre laissée sur le planning.
 
 Un piège qui a coûté une passe de vérification : l'hôte d'un composant Angular
 est **`inline` par défaut**, donc mesuré à zéro. Sans `:host { display: block }`,

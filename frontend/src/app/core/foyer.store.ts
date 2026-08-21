@@ -972,26 +972,26 @@ export class FoyerStore {
   readonly genReport = signal<PlanReport | null>(null);
   /** Fonds de placard que l'utilisateur veut quand même acheter cette fois. */
   readonly genPantry = signal<Set<string>>(new Set());
-  readonly genWeek = signal(0);
+
+  /** Les sept jours de la semaine contenant une date, du lundi au dimanche. */
+  weekDays(anchorIso = this.todayStr()): string[] { return weekDates(0, anchorIso).map(dstr); }
 
   /**
-   * Prépare la liste depuis les repas de la semaine : additionne les
+   * Prépare la liste depuis les repas des jours donnés : additionne les
    * ingrédients, les met à l'échelle des couverts, les range par rayon, et rend
    * compte **sans rien écrire**.
    *
-   * La semaine est passée explicitement parce que `weekOffset` appartient à
-   * l'écran Repas : un bouton ailleurs ne doit pas générer en douce la semaine
-   * qu'on y avait laissée.
+   * Les jours sont passés explicitement, et non déduits de ce que l'écran Repas
+   * affichait : un bouton ailleurs ne doit pas générer en douce la période qu'on
+   * y avait laissée, et la fenêtre peut désormais faire trois jours comme sept.
    */
-  prepareList(weekOffset = this.ui().weekOffset): void {
+  prepareList(days: string[]): void {
     const d = this._data(); if (!d) return;
     const listId = this.activeShopListId();
     if (!listId) { this.toast('Créez d’abord une liste de courses'); return; }
-    const slots = weekDates(weekOffset, this.todayStr()).flatMap((day) => {
-      const ds = dstr(day);
-      return this.mealSlots().map((sl) => d.meals[ds + '-' + sl.key]).filter((v): v is MealValue => !!v?.items?.length);
-    });
-    if (!slots.length) { this.toast('Aucun repas planifié cette semaine'); return; }
+    const slots = days.flatMap((ds) =>
+      this.mealSlots().map((sl) => d.meals[ds + '-' + sl.key]).filter((v): v is MealValue => !!v?.items?.length));
+    if (!slots.length) { this.toast('Aucun repas planifié sur cette période'); return; }
     this.genReport.set(buildPlan({
       slots: slots.map((value) => ({ value })),
       recipes: d.recipes, aisles: d.aisles, articles: d.articles, index: this.articleIndex(),
@@ -999,7 +999,6 @@ export class FoyerStore {
       fallbackAisle: this.defaultAisleId(), defaultPax: this.householdPax(),
     }));
     this.genPantry.set(new Set());
-    this.genWeek.set(weekOffset);
     this.patch({ genOpen: true });
   }
 
