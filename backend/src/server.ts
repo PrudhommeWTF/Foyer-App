@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { cacheControlFor } from './static-cache';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -553,9 +554,17 @@ app.use('/api', api);
 
 // ---- Static frontend (single-container deployment) ----
 if (fs.existsSync(STATIC_DIR)) {
-  app.use(express.static(STATIC_DIR));
+  // `index: false` laisse la route ci-dessous servir index.html, pour que la
+  // racine et une adresse profonde reçoivent exactement les mêmes en-têtes.
+  app.use(express.static(STATIC_DIR, {
+    index: false,
+    setHeaders: (res, filePath) => res.setHeader('Cache-Control', cacheControlFor(filePath)),
+  }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    // Jamais de cache sur le document : c'est lui qui nomme les fichiers de
+    // l'application, donc le garder revient à garder la version d'avant.
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.sendFile(path.join(STATIC_DIR, 'index.html'));
   });
 }

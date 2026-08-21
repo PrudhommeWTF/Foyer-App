@@ -228,7 +228,7 @@ import { ACADEMIES } from '../core/constants';
               <f-icon name="export" [size]="18" color="var(--ink2)" [width]="2" />
               <span>Exporter mes données</span>
             </button>
-            <div class="version">Foyer</div>
+            <div class="version">Foyer{{ store.version() ? ' ' + store.version() : '' }}</div>
           </div>
 
           <button class="btn btn-primary btn-block" (click)="store.logout()">
