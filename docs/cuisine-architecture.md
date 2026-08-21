@@ -14,7 +14,8 @@ module à stockage relationnel.
 | 0 | Semaine ancrée sur la date du jour, rayon des articles générés, petit-déjeuner masqué par défaut, exécuteur de tests frontend | Livrée |
 | 1 | Photos sur le disque, liste de courses concurrente, écran Courses pensé magasin | Livrée |
 | 1 bis | Import d'une recette depuis une URL (schema.org/Recipe), portions et temps séparés | Livrée |
-| 2 | Ingrédients structurés, référentiel d'articles, génération avec rapport | À venir |
+| 2 a | Lecture des lignes d'ingrédients, référentiel d'articles, génération avec rapport | Livrée |
+| 2 b | Écran de reprise en masse des lignes non reconnues, allergènes affichés | À venir |
 | 3 | Planning iPhone, semaine type des convives, duplication, suggestions | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires, stock de placard | À venir |
@@ -259,10 +260,11 @@ l'utilisateur : pas de mystère d'un côté ni de l'autre.
 ## Modèle de données
 
 ```ts
-MealValue { items: MealItem[] }               // un créneau porte plusieurs plats
+MealValue { items: MealItem[], pax? }         // un créneau porte plusieurs plats, et ses couverts
 MealItem  { rid? } | { text? }                // recette du carnet, ou texte libre
-Aisle    { id, name, color, position }        // position = ordre des allées du magasin
-ShopItem { id, name, qty, aisleId, state, listId, by?, at? }
+Aisle    { id, name, color, position, kind? } // position = ordre des allées, kind = type de rayon
+Article  { key, name, syn[], rayon, pantry?, allerg? }   // corrections du foyer seulement
+ShopItem { id, name, qty, aisleId, state, listId, by?, at?, art?, gen? }
 ShopState = 'a-prendre' | 'panier' | 'indisponible'
 Recipe   { id, name, level, color, photoId?, portions?, prepMin?, cookMin?, source?, ingr: string[], steps: string[] }
 ```
@@ -298,8 +300,93 @@ Ce qui a changé et pourquoi :
   La génération de la liste de courses prend les ingrédients de **tous** les
   plats du créneau : une entrée et un dessert en ont autant besoin que le plat.
 
-`ingr` reste un tableau de chaînes : les ingrédients structurés sont le sujet de
-la tranche 2.
+## Les ingrédients : lus, jamais réécrits
+
+`Recipe.ingr` **reste un tableau de chaînes**, et c'est délibéré.
+
+L'évidence aurait été de convertir chaque ligne en objet structuré au moment de
+l'import, une bonne fois pour toutes. C'est le choix qui a été écarté, pour trois
+raisons :
+
+1. **Aucune migration, donc aucune perte possible.** Le texte saisi reste la
+   seule vérité. Une analyse ratée n'abîme rien, puisqu'elle n'écrit rien.
+2. **Une recette importée hier profite de l'analyse d'aujourd'hui.** L'analyse
+   étant rejouée à chaque besoin, améliorer le lecteur améliore rétroactivement
+   tout le carnet, sans rien retraiter.
+3. **Une correction se fait dans le référentiel, pas dans la recette.** Apprendre
+   que « émincé 100% végétal ACCRO » est du tofu corrige toutes les recettes d'un
+   coup, y compris celles qui n'existent pas encore. Ligne à ligne, la même
+   correction serait à refaire indéfiniment.
+
+Le coût est un calcul refait à chaque génération : 165 lignes analysées en
+quelques millisecondes, sans commune mesure avec le risque évité.
+
+### Le référentiel d'articles, à deux étages
+
+- **Une base intégrée au code** (`frontend/src/app/core/articles.ts`), environ
+  200 articles français avec leur rayon, leur statut de fond de placard et leurs
+  allergènes. Elle n'est **pas** copiée dans le document : elle s'enrichit à
+  chaque version sans migration et ne pèse rien dans l'état.
+- **`state.articles`**, qui ne contient que ce que la base ignore ou nomme mal.
+  Il gagne toujours contre elle : une correction faite à la main ne doit jamais
+  être défaite par une mise à jour de l'application.
+
+Le rayon d'un article est un **type** (`legumes`, `viande`, `frais`, `surgele`,
+`boulangerie`, `epicerie`, `boisson`, `entretien`), pas un identifiant de rayon.
+Le foyer renomme et réordonne ses rayons librement ; `Aisle.kind` fait le lien,
+et à défaut le nom du rayon sert de repli. Un type sans rayon correspondant
+retombe sur son voisin le plus proche (la boucherie va au frais), jamais dans
+« À trier ».
+
+### Ce que le lecteur sait faire, et ce qu'il ne sait pas
+
+Mesuré sur le carnet réel du foyer (18 recettes importées de Marmiton, 165
+lignes, `fixtures/cuisine-reelle.json`) : **164 lignes sur 165 rattachées à un
+article**. La seule qui reste est « parures de légumes (carottes, navet,
+courgettes) », qui désigne des épluchures : il n'y a rien à mettre au caddie.
+
+La garantie qui prime sur ce taux : **aucune ligne n'est perdue**. Ce qui n'est
+pas compris part quand même aux courses, avec son texte d'origine, et figure au
+rapport comme non reconnu. Ne pas savoir lire une ligne n'est pas une raison de
+ne pas acheter l'ingrédient.
+
+Deux limites connues, assumées :
+
+- **Les jaunes et les blancs comptent double.** Une recette demandant
+  « 3 jaunes d'oeuf » et « 3 blancs d'oeuf » fait acheter 6 oeufs au lieu de 3.
+  Acheter trop d'oeufs coûte moins cher que d'en manquer.
+- **Les unités non convertibles restent côte à côte.** « 2 poignées + 150 g »
+  d'emmental n'est pas additionné : la densité manque, et un total faux ne se
+  verrait jamais.
+
+### La génération rend des comptes avant d'écrire
+
+Le bouton n'écrit plus rien directement. Il calcule et affiche : à ajouter, à
+compléter, à retirer, écarté comme fond de placard, déjà sur la liste, non
+reconnu. Chaque ligne dit d'où elle vient (quelle recette, quelle ligne exacte).
+C'est le seul moment où une erreur de lecture se rattrape sans avoir à défaire
+des courses déjà commencées.
+
+Une régénération ne touche **que ce qu'elle a elle-même écrit** (`ShopItem.gen`) :
+
+| Article | Régénération |
+|---|---|
+| Ajouté à la main | jamais touché, et jamais dupliqué |
+| Généré, encore demandé, quantité changée | quantité mise à jour |
+| Généré, plus demandé, jamais coché | retiré |
+| Généré, déjà au panier ou marqué introuvable | conservé, quelqu'un s'en est occupé |
+
+Elle est donc rejouable sans crainte en cours de semaine, y compris depuis un
+téléphone déjà dans le magasin.
+
+### Les couverts
+
+Les quantités suivent le nombre de couverts : une recette pour 6 servie à 4 voit
+ses nombres multipliés par 4/6. Par défaut, les couverts valent la taille du
+foyer ; la modale d'un créneau permet d'y déroger, et **seule la dérogation est
+enregistrée** (`MealValue.pax`), pour qu'un chiffre recopié partout ne se périme
+pas au premier changement de famille. Une recette sans portions connues n'est pas
+mise à l'échelle, et le rapport le dit.
 
 ## Migrations du document d'état
 
@@ -473,10 +560,16 @@ cd frontend && npm test
   chantier à part, non traité ici.
 - La limite `express.json({ limit: '15mb' })` sur `/api/state` reste dimensionnée
   pour ces documents-là. Elle pourra baisser quand ils auront migré.
-- `ingr` reste du texte libre. La tranche 2 le structure, en conservant toujours
-  la ligne d'origine à côté de la forme analysée. Les lignes qui sortent de
-  l'import sont régulières : le moteur d'analyse devra aussi être éprouvé sur des
-  fiches saisies à la main, qui le sont beaucoup moins.
+- Le lecteur d'ingrédients n'a été mesuré que sur des recettes **importées**,
+  dont les lignes sont régulières. Il devra être éprouvé sur des fiches saisies à
+  la main, qui le sont beaucoup moins ; le corpus de mesure
+  (`fixtures/cuisine-reelle.json`) est fait pour grossir dans ce sens.
+- Ce qui n'est pas reconnu se reprend aujourd'hui article par article, en
+  ajoutant un article au foyer. L'écran de reprise en masse, qui présentera
+  toutes les lignes non reconnues du carnet d'un coup, est la tranche 2 b.
+- Les allergènes sont portés par le référentiel mais ne sont **pas encore
+  affichés** : rien ne les lit tant que la tranche 5 (contraintes alimentaires)
+  n'est pas là.
 - Les pages d'exemple servant de tests sont dans `backend/test/fixtures/recipes`,
   au format JSON-LD extrait. Pour en ajouter une :
 

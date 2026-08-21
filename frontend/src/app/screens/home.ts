@@ -16,7 +16,7 @@ import { AvatarComponent } from '../shared/avatar';
           <div class="hello f-script">Bonjour {{ store.me()?.name }}</div>
           <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }} · {{ today().length }} événements, {{ openTasks() }} tâches et le dîner vous attendent</div>
         </div>
-        <button class="btn btn-sage" (click)="store.generateList(0)"><f-icon name="bolt" [size]="20" color="#fff" /> Courses de cette semaine depuis les repas</button>
+        <button class="btn btn-sage" (click)="store.prepareList(0)"><f-icon name="bolt" [size]="20" color="#fff" /> Courses de cette semaine depuis les repas</button>
       </div>
 
       <div class="grid">

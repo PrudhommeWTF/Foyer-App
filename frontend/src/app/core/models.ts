@@ -8,7 +8,26 @@ export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
 
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null; }
-export interface Aisle { id: string; name: string; color: string; position: number; }
+/**
+ * Un rayon du magasin. `kind` est facultatif : il relie un rayon du foyer à un
+ * type connu du référentiel d'articles, pour que « farine » aille à l'épicerie
+ * même si le rayon a été renommé « Sec & conserves ». Sans lui, le nom du rayon
+ * sert de repli.
+ */
+export type Rayon = 'legumes' | 'viande' | 'frais' | 'surgele' | 'boulangerie' | 'epicerie' | 'boisson' | 'entretien';
+export interface Aisle { id: string; name: string; color: string; position: number; kind?: Rayon | null; }
+/**
+ * Article du référentiel propre au foyer. La base intégrée à l'application en
+ * connaît déjà quelques centaines : `articles` ne contient que ce qu'elle
+ * ignore ou nomme mal, et gagne toujours contre elle. C'est ce qu'écrit l'écran
+ * de reprise des ingrédients non reconnus.
+ */
+export interface Article {
+  key: string; name: string; syn: string[]; rayon: Rayon;
+  /** Denrée de fond de placard : proposée, mais exclue de la liste par défaut. */
+  pantry?: boolean;
+  allerg?: string[];
+}
 export interface ShopList { id: string; name: string; color: string; icon: string; }
 /**
  * Un article de courses. `state` a trois valeurs plutôt qu'un booléen : en
@@ -20,6 +39,12 @@ export type ShopState = 'a-prendre' | 'panier' | 'indisponible';
 export interface ShopItem {
   id: string; name: string; qty: string; aisleId: string;
   state: ShopState; listId: string; by?: string | null; at?: string | null;
+  /**
+   * Provenance. `art` porte la clé d'article, `gen` marque ce que la génération
+   * depuis les repas a écrit : une régénération ne peut ainsi remplacer que ce
+   * qu'elle a elle-même produit, et ne touche jamais un ajout fait à la main.
+   */
+  art?: string | null; gen?: boolean | null;
 }
 export interface TaskList { id: string; name: string; color: string; icon: string; }
 export interface TaskItem { id: string; text: string; who: string; due: string; done: boolean; listId: string; prio: Prio; planned?: string | null; }
@@ -37,7 +62,11 @@ export interface FileItem { id: string; name: string; folderId: string; type: Fi
  * absents, prévus au modèle cible.
  */
 export interface MealItem { rid?: string; text?: string; }
-export interface MealValue { items: MealItem[]; }
+export interface MealValue {
+  items: MealItem[];
+  /** Couverts réellement prévus, quand ils diffèrent de la taille du foyer. */
+  pax?: number | null;
+}
 // `photoId` désigne un fichier servi par /api/files : les octets ne sont plus
 // dans le document, qui repartait en entier à chaque enregistrement.
 export interface Recipe {
@@ -71,6 +100,7 @@ export interface HouseholdState {
   members: Member[];
   events: EventItem[];
   aisles: Aisle[];
+  articles: Article[];
   shopLists: ShopList[];
   shop: ShopItem[];
   taskLists: TaskList[];

@@ -24,7 +24,7 @@ export interface ShoppingSnapshot { version: number; items?: ShopItem[]; unchang
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
 export type ShopOp =
-  | (OpBase & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string })
+  | (OpBase & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean })
   | (OpBase & { op: 'set-state'; id: string; state: ShopItem['state'] })
   | (OpBase & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string })
   | (OpBase & { op: 'remove'; id: string });

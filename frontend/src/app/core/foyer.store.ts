@@ -1,6 +1,8 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
 import { HouseholdState, MealItem, MealValue, Member, Notif, ShopItem, ShopState } from './models';
+import { buildArticleIndex } from './ingredients';
+import { PlanReport, buildPlan } from './shopping-plan';
 import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
@@ -300,6 +302,7 @@ export class FoyerStore {
   /** Guard against older/partial state documents missing newer keys. */
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
+    s.articles ||= [];
     s.settings ||= { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true };
     return s;
   }
@@ -454,7 +457,11 @@ export class FoyerStore {
     const idx = items.findIndex((i) => i.id === op.id);
     switch (op.op) {
       case 'add':
-        if (idx < 0) items.push({ id: op.id, name: op.name, qty: op.qty || '', aisleId: op.aisleId, state: 'a-prendre', listId: op.listId, by: op.by ?? null, at: op.at ?? null });
+        if (idx < 0) items.push({
+          id: op.id, name: op.name, qty: op.qty || '', aisleId: op.aisleId, state: 'a-prendre', listId: op.listId,
+          by: op.by ?? null, at: op.at ?? null,
+          ...(op.art ? { art: op.art } : {}), ...(op.gen ? { gen: true } : {}),
+        });
         break;
       case 'set-state':
         if (idx >= 0) items[idx] = { ...items[idx], state: op.state, by: op.by ?? null, at: op.at ?? null };
@@ -682,7 +689,7 @@ export class FoyerStore {
     return s.activeShopList !== 'all' ? s.activeShopList : (this._data()?.shopLists[0]?.id || '');
   }
   /** Rayon de repli d'un article saisi à la volée : « À trier », créé au besoin. */
-  private defaultAisleId(): string {
+  defaultAisleId(): string {
     const aisles = this._data()?.aisles || [];
     return (aisles.find((a) => a.name === 'À trier') || aisles[aisles.length - 1] || aisles[0])?.id || '';
   }
@@ -743,17 +750,17 @@ export class FoyerStore {
 
   // ---- rayons -------------------------------------------------------------
   aislesInOrder(): HouseholdState['aisles'] { return (this._data()?.aisles || []).slice().sort((a, b) => a.position - b.position); }
-  newAisle(): void { this.patch({ aiForm: true, aiEditId: null, aiName: '', aiColor: '#7A9B76' }); }
-  editAisle(id: string): void { const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return; this.patch({ aiForm: true, aiEditId: id, aiName: a.name, aiColor: a.color }); }
+  newAisle(): void { this.patch({ aiForm: true, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '' }); }
+  editAisle(id: string): void { const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return; this.patch({ aiForm: true, aiEditId: id, aiName: a.name, aiColor: a.color, aiKind: a.kind || '' }); }
   saveAisle(): void {
     const s = this.ui(); const name = s.aiName.trim(); if (!name) { this.toast('Donne un nom au rayon'); return; }
     if (s.aiEditId) {
       // Les articles désignent le rayon par son identifiant : renommer ne demande
       // plus de rattraper quoi que ce soit dans la liste.
-      this.mutate((d) => { const i = d.aisles.findIndex((a) => a.id === s.aiEditId); if (i >= 0) d.aisles[i] = { ...d.aisles[i], name, color: s.aiColor }; });
+      this.mutate((d) => { const i = d.aisles.findIndex((a) => a.id === s.aiEditId); if (i >= 0) d.aisles[i] = { ...d.aisles[i], name, color: s.aiColor, kind: s.aiKind || null }; });
       this.toast('Rayon modifié');
     } else {
-      this.mutate((d) => { d.aisles.push({ id: uid('a'), name, color: s.aiColor, position: d.aisles.length }); });
+      this.mutate((d) => { d.aisles.push({ id: uid('a'), name, color: s.aiColor, position: d.aisles.length, ...(s.aiKind ? { kind: s.aiKind } : {}) }); });
       this.toast('Rayon ajouté');
     }
     this.patch({ aiForm: false, aiEditId: null });
@@ -923,7 +930,10 @@ export class FoyerStore {
 
   editMeal(dateStr: string, slot: string): void {
     const v = this._data()?.meals[dateStr + '-' + slot];
-    this.patch({ mealEdit: { dateStr, slot }, mealItems: (v?.items || []).map((i) => ({ ...i })), mealText: '' });
+    this.patch({
+      mealEdit: { dateStr, slot }, mealItems: (v?.items || []).map((i) => ({ ...i })), mealText: '',
+      mealPax: v?.pax ? String(v.pax) : '',
+    });
   }
   /** Un tap sur une recette l'ajoute au menu, un second l'en retire. */
   toggleMealRecipe(rid: string): void {
@@ -944,43 +954,86 @@ export class FoyerStore {
     const items = this.ui().mealItems;
     if (!items.length) { this.toast('Choisis au moins un plat'); return; }
     const key = e.dateStr + '-' + e.slot;
-    this.mutate((d) => { d.meals[key] = { items }; });
+    // Les couverts ne sont enregistrés que s'ils dérogent à la taille du foyer :
+    // un chiffre recopié partout se périmerait au premier changement de famille.
+    const pax = parseInt(this.ui().mealPax, 10);
+    this.mutate((d) => { d.meals[key] = { items, ...(Number.isFinite(pax) && pax > 0 && pax !== this.householdPax() ? { pax } : {}) }; });
     this.patch({ mealEdit: null });
     this.toast(items.length > 1 ? items.length + ' plats enregistrés' : 'Repas enregistré');
   }
   clearMeal(): void { const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot; this.mutate((d) => { delete d.meals[key]; }); this.patch({ mealEdit: null }); this.toast('Repas retiré'); }
+  /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
+  householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
+
+  /** Référentiel d'articles, base intégrée plus les corrections du foyer. */
+  readonly articleIndex = computed(() => buildArticleIndex(this._data()?.articles || []));
+
+  /** Rapport de la dernière génération préparée, affiché avant d'écrire. */
+  readonly genReport = signal<PlanReport | null>(null);
+  /** Fonds de placard que l'utilisateur veut quand même acheter cette fois. */
+  readonly genPantry = signal<Set<string>>(new Set());
+  readonly genWeek = signal(0);
+
   /**
-   * Rough draft of the recipe → planning → list chain: one line of ingredients
-   * becomes one article. The week is passed in explicitly because `weekOffset`
-   * belongs to the meal screen: a button elsewhere must not silently generate
-   * whatever week was last browsed there.
+   * Prépare la liste depuis les repas de la semaine : additionne les
+   * ingrédients, les met à l'échelle des couverts, les range par rayon, et rend
+   * compte **sans rien écrire**.
+   *
+   * La semaine est passée explicitement parce que `weekOffset` appartient à
+   * l'écran Repas : un bouton ailleurs ne doit pas générer en douce la semaine
+   * qu'on y avait laissée.
    */
-  generateList(weekOffset = this.ui().weekOffset): void {
-    const listId = this.activeShopListId();
+  prepareList(weekOffset = this.ui().weekOffset): void {
     const d = this._data(); if (!d) return;
+    const listId = this.activeShopListId();
     if (!listId) { this.toast('Créez d’abord une liste de courses'); return; }
-    const aisleId = this.defaultAisleId();
-    const names = new Set(d.shop.filter((i) => i.listId === listId).map((i) => i.name.toLowerCase()));
-    const add: { op: 'add'; id: string; name: string; qty: string; aisleId: string; listId: string }[] = [];
-    weekDates(weekOffset, this.todayStr()).forEach((day) => {
+    const slots = weekDates(weekOffset, this.todayStr()).flatMap((day) => {
       const ds = dstr(day);
-      this.mealSlots().forEach((sl) => {
-        // Tous les plats du créneau, pas seulement le premier : une entrée et un
-        // dessert ont autant besoin de leurs ingrédients que le plat principal.
-        (d.meals[ds + '-' + sl.key]?.items || []).forEach((it) => {
-          const r = it.rid ? d.recipes.find((x) => x.id === it.rid) : undefined; if (!r) return;
-          r.ingr.forEach((ing) => {
-            const label = cap(ing.trim());
-            if (!label || names.has(label.toLowerCase())) return;
-            names.add(label.toLowerCase());
-            add.push({ op: 'add', id: uid('g'), name: label, qty: '', aisleId, listId });
-          });
-        });
-      });
+      return this.mealSlots().map((sl) => d.meals[ds + '-' + sl.key]).filter((v): v is MealValue => !!v?.items?.length);
     });
-    this.pushShopOps(add);
-    this.patch({ screen: 'courses' });
-    this.toast(add.length + ' ingrédients ajoutés depuis les repas');
+    if (!slots.length) { this.toast('Aucun repas planifié cette semaine'); return; }
+    this.genReport.set(buildPlan({
+      slots: slots.map((value) => ({ value })),
+      recipes: d.recipes, aisles: d.aisles, articles: d.articles, index: this.articleIndex(),
+      existing: d.shop.filter((i) => i.listId === listId),
+      fallbackAisle: this.defaultAisleId(), defaultPax: this.householdPax(),
+    }));
+    this.genPantry.set(new Set());
+    this.genWeek.set(weekOffset);
+    this.patch({ genOpen: true });
+  }
+
+  togglePantryPick(name: string): void {
+    const s = new Set(this.genPantry());
+    if (!s.delete(name)) s.add(name);
+    this.genPantry.set(s);
+  }
+  isPantryPicked(name: string): boolean { return this.genPantry().has(name); }
+
+  /**
+   * Applique le rapport. Ce qui a été ajouté à la main, coché ou marqué
+   * introuvable n'est jamais touché : la régénération ne défait que son propre
+   * ouvrage, c'est ce qui la rend rejouable sans crainte en cours de semaine.
+   */
+  applyList(): void {
+    const rep = this.genReport(); const listId = this.activeShopListId();
+    if (!rep || !listId) return;
+    const ops: ShopOpDraft[] = [];
+    const ajout = [...rep.add, ...rep.pantry.filter((l) => this.genPantry().has(l.name))];
+    for (const l of ajout) {
+      ops.push({ op: 'add', id: uid('g'), name: l.name, qty: l.qty, aisleId: l.aisleId, listId, gen: true, ...(l.art ? { art: l.art } : {}) });
+    }
+    for (const u of rep.update) ops.push({ op: 'edit', id: u.item.id, qty: u.line.qty, aisleId: u.line.aisleId });
+    for (const r of rep.remove) ops.push({ op: 'remove', id: r.id });
+    if (ops.length) this.pushShopOps(ops);
+    this.patch({ genOpen: false, screen: 'courses' });
+    this.genReport.set(null);
+    const bilan = [
+      ajout.length ? ajout.length + (ajout.length > 1 ? ' articles ajoutés' : ' article ajouté') : '',
+      rep.update.length ? rep.update.length + ' mis à jour' : '',
+      rep.remove.length ? rep.remove.length + ' retirés' : '',
+    ].filter(Boolean).join(', ');
+    this.toast(bilan || 'La liste était déjà à jour');
   }
 
   // ---- recipes ----------------------------------------------------------

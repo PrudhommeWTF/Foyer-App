@@ -1,0 +1,1264 @@
+{
+ "recipes": [
+  {
+   "id": "rmt2rf25fh01g",
+   "name": "Couscous Royal",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 19,
+   "portions": 2,
+   "prepMin": 30,
+   "cookMin": 180,
+   "source": "https://www.marmiton.org/recettes/recette_couscous-royal_535913.aspx",
+   "ingr": [
+    "4 merguez végétales ACCRO",
+    "1 barquette d’émincé 100% végétal ACCRO",
+    "100 g de couscous de blé dur",
+    "100 g d'eau",
+    "5 cl d'huile d'olive",
+    "100 g de carottes",
+    "100 g de navets",
+    "80 g de courgettes",
+    "100 g de potiron",
+    "100 g de choux vert",
+    "40 g de pois chiches",
+    "80 g d'aubergines",
+    "80 g de tomates grappes",
+    "50 g d'oignons",
+    "50 g de tomates",
+    "0.25 botte de persil plat",
+    "0.25 botte de coriandre",
+    "25 g de concentré de tomates",
+    "1 g de curcuma",
+    "3 g de gingembre en poudre",
+    "10 g de gingembre frais",
+    "60 cl d'eau",
+    "parures de légumes (carottes, navet, courgettes)"
+   ],
+   "steps": [
+    "Préparation de la semoule : placez la semoule dans un plat creux. Salez. Versez l’huile d’olive et mélangez. Portez l’eau à ébullition, puis versez l’eau bouillante sur la semoule. Couvrez et laissez reposer 5 minutes. Égrenez les graines avec une fourchette. Réservez.",
+    "Préparation des légumes : la veille, faites tremper les pois chiches dans un grand volume d’eau, puis les cuire dans l’eau à feu doux pendant 2 heures. Épluchez les navets et les carottes. Coupez-les en gros bâtonnets de 5 cm. Taillez les aubergines et les courgettes en bâtonnets. Lavez et effeuillez le chou, ensuite coupez-le en quartier. Épluchez et taillez le potiron en morceaux. Réservez toutes les parures de légumes.",
+    "Préparation du bouillon de légumes : épluchez, lavez puis taillez en mirepoix les tomates et les oignons. Dans une casserole, faites chauffer un filet d’huile d’olive. Ajoutez les épices, les oignons et les tomates fraîches. Faites-les suer l’ensemble sans coloration. Mouillez avec l’eau. Ajoutez toutes les parures de légumes, le persil et la coriandre. Portez à ébullition. Laissez cuire à feu très doux durant une heure. Couvrez et laissez reposer 30 minutes hors du feu. Passez le bouillon au chinois fin.",
+    "Cuisson des légumes : faites-cuire les légumes dans le bouillon de légumes. Une fois les légumes cuits, passez le bouillon au chinois et réservez.",
+    "Cuisson des merguez et émincés ACCRO : faites cuire les merguez végétales et les émincés ACCRO pendant 3 minutes 30.",
+    "Finition et présentation du couscous : dans un tajine ou un plat très large, dressez en dôme la semoule. Formez un cratère sur le dôme. Disposez les émincés 100% végétaux ACCRO puis autour de la semoule les légumes en alternant les couleurs et terminez avec les merguez végétales ACCRO. Nappez de bouillon. Servir très chaud."
+   ]
+  },
+  {
+   "id": "rmt2qkd2eav13",
+   "name": "Poulet au curry lait de coco et noix de cajou",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 18,
+   "portions": 3,
+   "prepMin": 10,
+   "cookMin": 15,
+   "source": "https://www.marmiton.org/recettes/recette_poulet-au-curry-lait-de-coco-et-noix-de-cajou_37398.aspx",
+   "ingr": [
+    "3 filets de poulet ou dinde",
+    "20 cl de lait de coco",
+    "1 cuillère à café de curry suivant le goût",
+    "1 cuillère à soupe de sauce soja",
+    "1 poignée de noix de cajou grillées salées (type apéro)",
+    "1 cuillère à soupe de maïzena",
+    "3 cuillères à soupe d'huile",
+    "sel",
+    "poivre"
+   ],
+   "steps": [
+    "Concasser les noix de cajou (j'utilise le culot d'un verre dans une assiette à soupe), on doit obtenir de la poudre et des petits morceaux.",
+    "Couper les filets de poulet en morceaux d'environ 1 à 2 cm cube ou en lanières fines. Les passer dans la maïzena.",
+    "Faire chauffer le curry dans l'huile chaude jusqu'à ce que ses parfums s'exhalent.",
+    "Ajouter le poulet et laisser dorer durant 5 minutes.",
+    "Verser alors la sauce soja puis la crème. Mélanger puis laisser cuire durant 10 minutes. Ajouter les noix de cajou 5 minutes avant la fin de la cuisson. Saler, poivrer."
+   ]
+  },
+  {
+   "id": "rmt2qjgfc28yy",
+   "name": "Risotto au poulet et chorizo",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 16,
+   "portions": 6,
+   "prepMin": 15,
+   "cookMin": 30,
+   "source": "https://www.marmiton.org/recettes/recette_risotto-au-poulet-et-chorizo_36084.aspx",
+   "ingr": [
+    "3 verres de riz",
+    "huile d'olive",
+    "beurre",
+    "2 verres de vin blanc",
+    "parmesan",
+    "1 oignon ou plus suivant les goûts",
+    "1 l de bouillon de volaille",
+    "1 oignon",
+    "2 blancs de poulet en dés",
+    "1 chorizo (fort ou non suivant les goûts)",
+    "1 poivron rouge",
+    "1 poivron vert",
+    "1 poivron jaune",
+    "2 poignées de petits pois"
+   ],
+   "steps": [
+    "Hacher l'oignon, le faire revenir dans le beurre et l'huile.",
+    "Y verser ensuite le riz.",
+    "Quand celui-ci est translucide, ajouter le vin blanc. Quand il s'est évaporé, verser louche par louche le bouillon préalablement chauffé.",
+    "Assaisonner et éteindre le feu.",
+    "Ajouter une noix de beurre et du parmesan.",
+    "Remuer et garder au chaud.",
+    "Faire revenir des lamelles d'oignon dans l'huile d'olive, et y ajouter le poulet, le chorizo en tranche, les poivrons coupés en petits dés et les petits pois. Laisser cuire 10 min environ et lorsque tout est bien doré, ajouter au risotto et mélanger.",
+    "Bon appétit !"
+   ]
+  },
+  {
+   "id": "rmt2qgechkdwq",
+   "name": "Moelleux noisettes/chocolat de Lola sans gluten sans lait",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 15,
+   "portions": 6,
+   "prepMin": 5,
+   "cookMin": 45,
+   "source": "https://www.marmiton.org/recettes/recette_moelleux-noisettes-chocolat-de-lola-sans-gluten-sans-lait_34952.aspx",
+   "ingr": [
+    "200 g de poudre de noisette",
+    "60 g de chocolat",
+    "60 g de beurre fondu (on peut remplacer par de l'huile de pépin de raisin)",
+    "150 g de sucre",
+    "3 oeufs"
+   ],
+   "steps": [
+    "Préchauffer le four à 180°C (thermostat 6).",
+    "Mélanger les œufs, le beurre fondu et le sucre.",
+    "Ajouter la poudre de noisettes et les pépites de chocolat, et c'est prêt à passer au four !",
+    "Pour le cuire utiliser de préférence un moule à cake non adhésif. Ça se démoule tout seul."
+   ]
+  },
+  {
+   "id": "rmt2qg7x0jrco",
+   "name": "Madeleines faciles (sans lait)",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 14,
+   "portions": 12,
+   "prepMin": 15,
+   "cookMin": 20,
+   "source": "https://www.marmiton.org/recettes/recette_madeleines-faciles_13204.aspx",
+   "ingr": [
+    "60 g de beurre",
+    "125 g de farine",
+    "125 g de sucre",
+    "1 cuillère d'eau de fleur d'oranger",
+    "3 jaunes d'oeuf",
+    "3 blancs d'oeuf battus en neige"
+   ],
+   "steps": [
+    "Mélanger le tout et cuire à four moyen (thermostat 3-4/150-170°C) dans un moule à madeleines, pendant 20 mn à 1/2 h (surveiller la cuisson)."
+   ]
+  },
+  {
+   "id": "rmt2qfzp3klxy",
+   "name": "Muffins aux fraises (sans beurre, sans lait)",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 13,
+   "portions": 7,
+   "prepMin": 10,
+   "cookMin": 25,
+   "source": "https://www.marmiton.org/recettes/recette_muffins-aux-fraises-sans-beurre-sans-lait_37474.aspx",
+   "ingr": [
+    "140 g de farine complète",
+    "70 g de sucre",
+    "125 ml de lait de soja ou un \"yaourt\" au soja",
+    "1 oeuf",
+    "150 g de fraises",
+    "0.5 cuillère à café de cannelle",
+    "1 pincée de bicarbonate",
+    "1 pincée de levure chimique"
+   ],
+   "steps": [
+    "Préchauffer le four à 180°C (Thermostat 6) et beurrer les moules à muffins (s'ils ne sont pas en silicone).",
+    "Laver les fraises, les équeuter et les détailler en cubes (plus ou moins gros selon l'envie).",
+    "Mélanger les ingrédients suivants dans deux récipients séparés :",
+    "Mélange 1 : farine, sel, sucre, bicarbonate, levure chimique et cannelle.",
+    "Mélanger au fouet",
+    "Mélange 2 : yaourt ou lait au soja, , extrait de vanille, oeufs .",
+    "Battre ce mélange. Ajouter les fraises.",
+    "Faire un puit dans le mélange 1 et y introduire le mélange 2.",
+    "Homogénéiser rapidement avec une spatule. Inutile de trop battre la pâte, elle doit avoir un aspect grumeleux.",
+    "Verser la pâte dans chaque moule.",
+    "Enfourner sans attendre.",
+    "Cuire 20 à 30 min à 180°C.",
+    "Piquer dans la pâte pour vérifier la cuisson : quand l'aiguille ressort sèche, les muffins sont cuits.",
+    "Laissez refroidir 5 minutes dans leur moule puis démouler sur une grille."
+   ]
+  },
+  {
+   "id": "rmt2qfpljdfz0",
+   "name": "Crêpes (sans lait)",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 12,
+   "portions": 4,
+   "prepMin": 10,
+   "cookMin": 3,
+   "source": "https://www.marmiton.org/recettes/recette_crepes-sans-lait_20827.aspx",
+   "ingr": [
+    "3 oeufs",
+    "400 ml d'eau",
+    "250 g de farine",
+    "3 cuillères à soupe de sucre en poudre",
+    "2 cuillères à soupe d'huile de tournesol",
+    "sel"
+   ],
+   "steps": [
+    "Mélangez tous les ingrédients et faire chauffer dans une poêle à crêpes.",
+    "Faire chauffer une poêle à crêpes et déposer un peu de pâte.",
+    "Retourner la crêpe une fois cuite."
+   ]
+  },
+  {
+   "id": "rmt2qe7j90skm",
+   "name": "Wrap chaud au four",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 11,
+   "portions": 4,
+   "prepMin": 15,
+   "cookMin": 20,
+   "source": "https://www.marmiton.org/recettes/recette_wrap-chaud-au-four_540084.aspx",
+   "ingr": [
+    "4 pièces de tortillas grandes galettes",
+    "400 g de filets de poulet",
+    "1 pièce d'oignon rouge gros",
+    "1 pièce de poivron rouge",
+    "150 g de maïs en conserve (égoutté)",
+    "200 g de coulis de tomate (si possible maison)",
+    "150 g d'emmental râpé",
+    "1 cuillère à soupe d'huile d'olive",
+    "0.5 cuillère à café de cumin en poudre",
+    "0.5 cuillère à café de paprika fumé",
+    "sel",
+    "poivre du moulin"
+   ],
+   "steps": [
+    "Pelez l'oignon et émincez-le finement. Lavez et séchez le poivron. Coupez la queue et ôtez le cœur avec les graines avant de détailler le poivron en fines lamelles. Faites chauffer un peu d'huile d'olive dans une sauteuse et faites-y revenir l'oignon et le poivron.",
+    "Quand les légumes s'assouplissent, ajoutez les filets de poulet préalablement taillés en dés. Saupoudrez d'épices et mélangez bien. Faites cuire à cœur sur feu moyen à fort en remuant régulièrement.",
+    "Ajoutez la moitié du coulis de tomate et le maïs. Mélangez et laissez mijoter un peu (2 à 3 min). Retirez du feu. Goûtez et rectifiez l'assaisonnement avec sel et poivre.",
+    "Répartissez la garniture au centre de chaque wrap en laissant un peu d'espace sur les bords. Saupoudrez la moitié du fromage râpé directement sur la viande pour la gourmandise.",
+    "Rabattez les deux côtés opposés du wrap vers le centre, puis roulez-le fermement pour emprisonner la garniture (comme un burrito).",
+    "Placez les 4 wraps (pliure vers le bas) dans un plat allant au four et préalablement huilé. Nappez le dessus des wraps avec le reste du coulis de tomate et saupoudrez généreusement de fromage.",
+    "Enfournez 15 minutes dans un four préchauffé à 180 °C. Quand le fromage est fondu et légèrement doré, c'est prêt à être dégusté !"
+   ]
+  },
+  {
+   "id": "rmt2qdzpjamcp",
+   "name": "Wrap thon et avocat",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 10,
+   "portions": 4,
+   "prepMin": 15,
+   "cookMin": null,
+   "source": "https://www.marmiton.org/recettes/recette_wrap-thon-et-avocat_540082.aspx",
+   "ingr": [
+    "4 pièces de tortillas grand format",
+    "2 boîtes de thon au naturel",
+    "2 pièces d'avocats mûrs mais trop mous",
+    "3 cuillères à soupe de mayonnaise (si possible maison)",
+    "1 cuillère à café de moutarde de Dijon",
+    "0.5 pièce d'oignon rouge",
+    "0.5 pièce de citron vert (pour le jus)",
+    "1 paquet de jeunes pousses",
+    "sel",
+    "poivre du moulin"
+   ],
+   "steps": [
+    "Égouttez le thon et versez-le dans un saladier. Émiettez-le à la fourchette grossièrement. Ajoutez la mayonnaise, la moutarde et l'oignon rouge préalablement pelé et coupé en brunoise. Mélangez bien et goûtez avant d'assaisonner avec sel et poivre selon vos préférences.",
+    "Coupez les avocats en deux et retirez-en le noyau. Récupérez la chair et écrasez-la grossièrement à la fourchette dans un grand bol tout en l'arrosant de jus de citron vert fraîchement pressé.",
+    "Garnissez les tortillas avec une poignée de jeunes pousses disposée en lit au centre en conservant environ 2 cm de bords libres. Ajoutez la préparation à base de thon puis l'avocat.",
+    "Rabattez deux côtés du wrap avant de le rouler fermement (sans le casser toutefois). Coupez en deux en biseaux et dégustez sans tarder."
+   ]
+  },
+  {
+   "id": "rmt2qc4x0x0ur",
+   "name": "Aubergines farcies (aux légumes ou mixte)",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 9,
+   "portions": 2,
+   "prepMin": 15,
+   "cookMin": 40,
+   "source": "https://www.marmiton.org/recettes/recette_aubergines-farcies-aux-legumes-ou-mixte_17955.aspx",
+   "ingr": [
+    "1 aubergine",
+    "2 oignons",
+    "1 tomate",
+    "1 oeuf",
+    "100 g de chair à saucisse (ou rien, si vous ne voulez qu'avec des légumes)",
+    "Condiments (sel, poivre, persil, ail, basilic, huile d'olive...)",
+    "25 g de gruyère râpé ..."
+   ],
+   "steps": [
+    "Coupez l'aubergine eu deux dans le sens de la longueur. Avec un couteau, fendez la chair de l'aubergine en faisant des \"X\" (c'est pour que çà cuise à l'intérieur).",
+    "Faites coulez un filez d'huile d'olive sur la surface, et enfournez à 250° pendant une demi heure.",
+    "Avec une cuillère à soupe, retirez la chair des aubergines et coupez la finement.",
+    "Faites blanchir les oignons à feu doux pendant un bon quart d'heure sans les faire griller... au bout de 5 min, ajouter de la chair à saucisse si vous aimez la viande (c'est très bon aussi sans…)",
+    "Puis ajouter la tomate coupée en petits dés et l'ail, en laissant à feu très doux.",
+    "Ajoutez la chair d'aubergine et assaisonner. Ajouter le persil et le basilic.",
+    "Et aussi l'oeuf battu.",
+    "Mélangez bien le tout et remplissez les demi-aubergines. recouvrez de gruyère râpé.",
+    "Replacez au four pendant 5 à 10 mn dans le four encore chaud.",
+    "Faites refroidir un peu, c'est bon chaud ou froid.",
+    "A+"
+   ]
+  },
+  {
+   "id": "rmt2qbu4x9q6n",
+   "name": "Tarte à la tomate et à la moutarde",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 8,
+   "portions": 6,
+   "prepMin": 10,
+   "cookMin": 45,
+   "source": "https://www.marmiton.org/recettes/recette_tarte-a-la-tomate-et-a-la-moutarde_20978.aspx",
+   "ingr": [
+    "1 pâte brisée",
+    "4 tomates bien mûres",
+    "herbes de Provence + sel",
+    "moutarde de Dijon",
+    "huile d'olive"
+   ],
+   "steps": [
+    "Précuire la pâte (percée avec une fourchette) 5 min à 450 degrés farenheit (230°C).",
+    "Pendant ce temps, couper les tomates en rondelles de 3 mm d'épaisseur.",
+    "Sortir la pâte précuite du four. badigeonner le fond de moutarde de Dijon (la classique fait l'affaire) ...en mettre suffisamment pour que le fond en pâte ne se voit plus.",
+    "Disposer les tranches de tomates. faire plusieurs épaisseurs.",
+    "saupoudrer d'herbes de Provence + 2 pincées de sel.",
+    "1 cuillère à soupe d'huile d'olive.",
+    "Enfourner pour 20 min à 450 farenheit puis couvrir avec papier d'aluminium pour 20 min supplémentaires. Après ces 20 min, enlever le papier aluminium et laisser cuire encore 5 min porte du four ouverte. Délicieux avec une salade verte."
+   ]
+  },
+  {
+   "id": "rmt2qbd3yg28z",
+   "name": "Tarte aux courgettes",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 7,
+   "portions": 6,
+   "prepMin": 20,
+   "cookMin": 20,
+   "source": "https://www.marmiton.org/recettes/recette_tarte-aux-courgettes-miam-mioum_22886.aspx",
+   "ingr": [
+    "1 pâte brisée",
+    "100 g de lardons",
+    "3 poignées d'emmental râpé",
+    "3 courgettes",
+    "1 oeuf",
+    "20 cl de crème fraîche",
+    "huile",
+    "1 oignon"
+   ],
+   "steps": [
+    "Peler les courgettes et l'oignon, les couper en dés et les faire revenir dans l'huile avec les lardons.",
+    "Dérouler la pâte dans un moule à tartes et la piquer avec une fourchette.",
+    "Mélanger la crème et l'oeuf. Saler et poivrer.",
+    "Disposer sur la pâte les cougettes, l'oignon et les lardons, puis la préparation.",
+    "Saupouder d'emmental et enfourner pendant 20 mn environ à four chaud. (180°C, Th 6)."
+   ]
+  },
+  {
+   "id": "rmt2qaqn69i0v",
+   "name": "Cœur coulant pistache chocolat Noir Nestlé Dessert®",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 6,
+   "portions": 4,
+   "prepMin": 20,
+   "cookMin": 12,
+   "source": "https://www.marmiton.org/recettes/recette_coeur-coulant-pistache-chocolat-noir-nestle-dessert_538736.aspx",
+   "ingr": [
+    "130 g de chocolat NESTLÉ DESSERT Noir",
+    "60 g de beurre",
+    "40 g de farine",
+    "20 g de poudre d’amandes",
+    "70 g de cassonade",
+    "3 oeufs",
+    "60 g de pâte de pistache",
+    "20 g de crème liquide"
+   ],
+   "steps": [
+    "Congeler un cube de pâte de pistache (environ 15 g) pendant au moins 1 heure avant utilisation.",
+    "Préchauffer le four à 180 °C.",
+    "Faire fondre le beurre et le chocolat blanc séparément, puis réserver.",
+    "Battre les œufs avec la cassonade dans un bol.",
+    "Ajouter, en mélangeant bien après chaque ajout : la poudre d’amandes, la farine, le beurre fondu, le chocolat blanc fondu, puis la crème liquide.",
+    "Verser la préparation dans des cercles chemisés de papier cuisson, puis insérer un cube de pâte de pistache congelé au centre de chacun.",
+    "Enfourner pendant 12 minutes, jusqu’à ce que les bords soient cuits mais que le centre reste légèrement tremblant.",
+    "Démouler immédiatement et laisser reposer avant de retirer les cercles.",
+    "Décorer avec des éclats de pistaches et du sucre glace, puis déguster aussitôt."
+   ]
+  },
+  {
+   "id": "rmt2qagn8g9ce",
+   "name": "Muffins myrtilles et chocolat blanc Nestlé Dessert®",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 5,
+   "portions": 9,
+   "prepMin": 30,
+   "cookMin": 20,
+   "source": "https://www.marmiton.org/recettes/recette_muffins-myrtilles-et-chocolat-blanc-nestle-dessert_536434.aspx",
+   "ingr": [
+    "100 g de chocolat NESTLÉ DESSERT Blanc",
+    "150 g de farine",
+    "3 oeufs",
+    "60 g de beurre",
+    "50 g de sucre",
+    "100 ml de lait",
+    "0.5 sachet de levure chimique",
+    "125 g de myrtilles",
+    "25 g de farine",
+    "40 g de beurre",
+    "20 g de sucre",
+    "40 g d'amandes en poudre"
+   ],
+   "steps": [
+    "Préchauffez votre four à 180°C en chaleur tournante.",
+    "Débutez par les muffins : dans un saladier, mélangez les œufs, 150 g de farine, 50 g de sucre, le lait, 60 g de beurre fondu et la levure. Ajoutez les myrtilles et le chocolat blanc haché en pépites. Versez dans un moule à muffins beurré et fariné.",
+    "Préparez le crumble : mélangez 40 g de beurre mou, 40 g d'amandes en poudre, 25 g de farine et 20 g de sucre. Parsemez ce mélange sur les muffins.",
+    "Faites cuire au four 20 minutes."
+   ]
+  },
+  {
+   "id": "rmt2qa3n97zs9",
+   "name": "Cookies aux pépites de chocolat au Lait Nestlé Dessert®",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 4,
+   "portions": 9,
+   "prepMin": 15,
+   "cookMin": 12,
+   "source": "https://www.marmiton.org/recettes/recette_cookies-aux-pepites-de-chocolat-au-lait-nestle-dessert_538717.aspx",
+   "ingr": [
+    "100 g de chocolat NESTLÉ DESSERT Lait",
+    "250 g de farine",
+    "100 g de beurre",
+    "1 jaune d'oeuf",
+    "50 g de sucre roux",
+    "60 g de vergeoise",
+    "2 g de bicarbonates",
+    "2 g de sel",
+    "1 oeuf"
+   ],
+   "steps": [
+    "Mélanger la farine, les sucres, le bicarbonate et le sel. Ajouter l’œuf et le jaune. Mélanger et ajouter le beurre mou coupé en petits morceaux.",
+    "Pétrir et ajouter le chocolat haché en gros morceaux.",
+    "Former un boudin et placer au frais 30 minutes.",
+    "Découper le boudin en 10 tranches de 2 cm d’épaisseur et déposer sur une plaque couverte de papier sulfurisé.",
+    "Faire cuire 12 minutes à 180°C en mode traditionnel."
+   ]
+  },
+  {
+   "id": "rmt2q9duwuuuu",
+   "name": "Croque-monsieur",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 3,
+   "portions": 4,
+   "prepMin": 10,
+   "cookMin": 5,
+   "source": "https://www.marmiton.org/recettes/recette_croque-monsieur_19208.aspx",
+   "ingr": [
+    "8 tranches de pains de mie",
+    "50 g de beurre tendre",
+    "4 tranches de jambon",
+    "8 tranches de toastinettes",
+    "100 g de gruyère râpé",
+    "4 cuillères à soupe de lait",
+    "1 pincée de muscade",
+    "poivre",
+    "sel"
+   ],
+   "steps": [
+    "Beurrez les 8 tranches de pain de mie sur une seule face. Posez 1 tranche de fromage sur chaque tranche de pain de mie. Posez 1 tranche de jambon plié en deux sur 4 tranches de pain de mie. Recouvrez avec les autres tartines (face non beurrée au dessus).",
+    "Dans un bol mélanger le fromage râpé avec le lait, le sel, le poivre et la muscade.",
+    "Répartissez le mélange sur les croque-monsieur.",
+    "Placez sur une plaque au four sous le grill pendant 10 mn."
+   ]
+  },
+  {
+   "id": "rmt2q8tv0x977",
+   "name": "Tarte aux figues",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 2,
+   "portions": 6,
+   "prepMin": 20,
+   "cookMin": 18,
+   "source": "https://www.marmiton.org/recettes/recette_tarte-aux-figues_12010.aspx",
+   "ingr": [
+    "20 figues fraîches",
+    "1 pâte brisée",
+    "150 g de sucre semoule",
+    "100 g de sucre glace",
+    "1 citron",
+    "4 cuillères à soupe de confiture d'abricot"
+   ],
+   "steps": [
+    "Foncer un grand moule à tarte beurré et fariné de pâte brisée, piquer la pâte à la fourchette, y mettre cailloux ou noyaux, passer au four 210 °C 20 mn.",
+    "Garniture : presser le citron, laver les figues, les sécher, couper en deux dans le sens de la hauteur. Les mettre dans un plat creux, saupoudrer de sucre semoule, arroser de citron.",
+    "Macérer 1/2 h en retournant de temps en temps.",
+    "Laisser tiédir la pâte précuite 10 mn. Etendre la confiture d'abricots, poser dessus les figues, face coupée dessous. Saupoudrer de sucre glace, passer au four 230 °C 7 à 8 mn pour caraméliser légèrement le dessus des figues."
+   ]
+  },
+  {
+   "id": "rmt2pufinse4o",
+   "name": "hamburger maison",
+   "level": "Facile",
+   "color": "#7A9B76",
+   "photoId": 1,
+   "portions": 4,
+   "prepMin": 5,
+   "cookMin": 5,
+   "source": "https://www.marmiton.org/recettes/recette_hamburger-maison_32672.aspx",
+   "ingr": [
+    "pain pour hamburger",
+    "viande hachée",
+    "oignon",
+    "cheddar (achat sous vide en grande surface)",
+    "tomate",
+    "salade",
+    "moutarde",
+    "ketchup"
+   ],
+   "steps": [
+    "Faites revenir les oignons à feux doux.",
+    "Ajouter les steaks.",
+    "Une fois saisi, poser une tranche de cheddar sur le steak et laisser fondre.",
+    "Une fois cuit, déposer le steak et le fromage sur une des tranches du pain que vous aurez auparavant tartinée d'un mélange de ketchup et de moutarde.",
+    "Ajouter la salade et de petites rondelles de tomates.",
+    "Vous pouvez maintenant recouvrir la préparation de l'autre tranche (avec ketchup et moutarde)"
+   ]
+  }
+ ],
+ "meals": {
+  "2026-08-21-midi": {
+   "rid": "rmt2pufinse4o"
+  },
+  "2026-08-21-soir": {
+   "rid": "rmt2qkd2eav13"
+  },
+  "2026-08-22-midi": {
+   "rid": "rmt2qc4x0x0ur"
+  },
+  "2026-08-22-soir": {
+   "rid": "rmt2qbd3yg28z"
+  },
+  "2026-08-23-midi": {
+   "rid": "rmt2q9duwuuuu"
+  },
+  "2026-08-23-soir": {
+   "rid": "rmt2qbu4x9q6n"
+  },
+  "2026-08-24-midi": {
+   "rid": "rmt2qe7j90skm"
+  },
+  "2026-08-24-soir": {
+   "rid": "rmt2pufinse4o"
+  },
+  "2026-08-25-midi": {
+   "rid": "rmt2qkd2eav13"
+  },
+  "2026-08-25-soir": {
+   "rid": "rmt2qjgfc28yy"
+  }
+ },
+ "shop": [
+  {
+   "id": "gmt2qpyetn93h",
+   "name": "Pain pour hamburger",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetqm9t",
+   "name": "Viande hachée",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet9ark",
+   "name": "Oignon",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet3p94",
+   "name": "Cheddar (achat sous vide en grande surface)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetrj9n",
+   "name": "Tomate",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet3nni",
+   "name": "Salade",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet1vbs",
+   "name": "Moutarde",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetbrfe",
+   "name": "Ketchup",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet6733",
+   "name": "3 filets de poulet ou dinde",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetie3m",
+   "name": "20 cl de lait de coco",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetvuu0",
+   "name": "1 cuillère à café de curry suivant le goût",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetvumf",
+   "name": "1 cuillère à soupe de sauce soja",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetu6hh",
+   "name": "1 poignée de noix de cajou grillées salées (type apéro)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetkc3i",
+   "name": "1 cuillère à soupe de maïzena",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetnidz",
+   "name": "3 cuillères à soupe d'huile",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetujun",
+   "name": "Sel",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetjpju",
+   "name": "Poivre",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyethgne",
+   "name": "1 aubergine",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetvrrw",
+   "name": "2 oignons",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet8lpf",
+   "name": "1 tomate",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyettxsl",
+   "name": "1 oeuf",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetqoxi",
+   "name": "100 g de chair à saucisse (ou rien, si vous ne voulez qu'avec des légumes)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetevkx",
+   "name": "Condiments (sel, poivre, persil, ail, basilic, huile d'olive...)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyethwi3",
+   "name": "25 g de gruyère râpé ...",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet0yzh",
+   "name": "1 pâte brisée",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetp3qd",
+   "name": "100 g de lardons",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetsi5e",
+   "name": "3 poignées d'emmental râpé",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet3a5q",
+   "name": "3 courgettes",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet0o27",
+   "name": "20 cl de crème fraîche",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetoxtl",
+   "name": "Huile",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetjo3q",
+   "name": "1 oignon",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetm4ts",
+   "name": "8 tranches de pains de mie",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetdzzw",
+   "name": "50 g de beurre tendre",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet19th",
+   "name": "4 tranches de jambon",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetg3mj",
+   "name": "8 tranches de toastinettes",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetilnt",
+   "name": "100 g de gruyère râpé",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyet4u4e",
+   "name": "4 cuillères à soupe de lait",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetugms",
+   "name": "1 pincée de muscade",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetgp3d",
+   "name": "4 tomates bien mûres",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetdtbs",
+   "name": "Herbes de Provence + sel",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetxlsk",
+   "name": "Moutarde de Dijon",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qpyetizm4",
+   "name": "Huile d'olive",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:21:51.221Z"
+  },
+  {
+   "id": "gmt2qqb5r1vdr",
+   "name": "4 pièces de tortillas grandes galettes",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rkvoz",
+   "name": "400 g de filets de poulet",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rnz5f",
+   "name": "1 pièce d'oignon rouge gros",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5remrf",
+   "name": "1 pièce de poivron rouge",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rqqln",
+   "name": "150 g de maïs en conserve (égoutté)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rohko",
+   "name": "200 g de coulis de tomate (si possible maison)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rwd7h",
+   "name": "150 g d'emmental râpé",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rragy",
+   "name": "1 cuillère à soupe d'huile d'olive",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rvtm4",
+   "name": "0.5 cuillère à café de cumin en poudre",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5ra0ow",
+   "name": "0.5 cuillère à café de paprika fumé",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rg22l",
+   "name": "Poivre du moulin",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5re9zn",
+   "name": "3 verres de riz",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5ren0f",
+   "name": "Beurre",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rp8pr",
+   "name": "2 verres de vin blanc",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rtlw3",
+   "name": "Parmesan",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rtdj1",
+   "name": "1 oignon ou plus suivant les goûts",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rnggv",
+   "name": "1 l de bouillon de volaille",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rlxk5",
+   "name": "2 blancs de poulet en dés",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5ru4i2",
+   "name": "1 chorizo (fort ou non suivant les goûts)",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5r0s3t",
+   "name": "1 poivron rouge",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rwnp5",
+   "name": "1 poivron vert",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5raq5l",
+   "name": "1 poivron jaune",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  },
+  {
+   "id": "gmt2qqb5rhng1",
+   "name": "2 poignées de petits pois",
+   "qty": "",
+   "aisleId": "a4",
+   "state": "a-prendre",
+   "listId": "cl1",
+   "by": "me",
+   "at": "2026-08-21T09:22:07.743Z"
+  }
+ ],
+ "aisles": [
+  {
+   "id": "a1",
+   "name": "Fruits & légumes",
+   "color": "#7A9B76",
+   "position": 0
+  },
+  {
+   "id": "a2",
+   "name": "Frais",
+   "color": "#4E93B8",
+   "position": 1
+  },
+  {
+   "id": "a3",
+   "name": "Épicerie",
+   "color": "#F0B24B",
+   "position": 2
+  },
+  {
+   "id": "a4",
+   "name": "À trier",
+   "color": "#8A7E74",
+   "position": 3
+  }
+ ],
+ "shopLists": [
+  {
+   "id": "cl1",
+   "name": "Courses de la semaine",
+   "color": "#7A9B76",
+   "icon": "panier"
+  }
+ ]
+}
