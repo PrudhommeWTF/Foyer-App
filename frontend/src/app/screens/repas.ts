@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
@@ -6,6 +6,9 @@ import { ModalComponent } from '../shared/modal';
 import { MEAL_SLOTS, DOW } from '../core/constants';
 import { weekDates, dstr } from '../core/helpers';
 import { MealValue } from '../core/models';
+
+/** Largeur en deçà de laquelle la semaine se lit en pile plutôt qu'en grille. */
+const GRID_MIN = 760;
 
 @Component({
   selector: 'screen-repas',
@@ -35,46 +38,81 @@ import { MealValue } from '../core/models';
         </button>
       </div>
 
-      <div class="grid-scroll">
-        <div class="grid">
-          <div class="corner"></div>
-          @for (d of wDates(); track $index) {
-            <div class="dhead" [class.today]="isToday(d)">
-              <div class="dow">{{ DOW[$index] }}</div>
-              <div class="dnum f-display">{{ d.getDate() }}</div>
-            </div>
-          }
-
-          @for (slot of store.mealSlots(); track slot.key) {
-            <div class="rlabel">
-              <span class="rlabel-txt">{{ slot.label }}</span>
-            </div>
-            @for (d of wDates(); track dstr(d)) {
-              @let meal = mealAt(d, slot.key);
-              @let names = store.mealNames(meal);
-              <div class="cell" [class.filled]="names.length > 0" [class.today]="isToday(d)" (click)="store.editMeal(dstr(d), slot.key)">
-                <div class="cell-top">
-                  <span class="dot" [style.background]="slot.dot"></span>
-                  <span class="cell-slot">{{ slot.short }}</span>
-                </div>
-                @if (names.length) {
-                  @for (n of names; track $index) {
-                    <div class="cell-name">{{ n }}</div>
-                  }
-                  <div class="cell-tag">
-                    <span class="tag-count">{{ names.length > 1 ? names.length + ' plats' : 'Un plat' }}</span>
-                  </div>
-                } @else {
-                  <div class="cell-empty">
-                    <f-icon name="plus" [size]="16" [color]="'var(--ink3)'" [width]="2.2" />
-                    <span>Libre</span>
-                  </div>
-                }
+      @if (!wide()) {
+        <!-- Sur téléphone, la grille 7 x 2 imposait 900 px de large et défilait
+             horizontalement : illisible d'une main. La semaine devient une pile
+             de jours, chaque créneau une ligne pleine largeur. -->
+        <div class="days">
+          @for (d of wDates(); track dstr(d); let i = $index) {
+            <div class="day" [class.today]="isToday(d)" [class.past]="isPast(d)">
+              <div class="day-head">
+                <span class="day-dow">{{ DOW[i] }}</span>
+                <span class="day-num f-display">{{ d.getDate() }}</span>
+                <span class="day-month">{{ monthOf(d) }}</span>
+                @if (isToday(d)) { <span class="day-today">Aujourd'hui</span> }
               </div>
-            }
+              @for (slot of store.mealSlots(); track slot.key) {
+                @let meal = mealAt(d, slot.key);
+                @let names = store.mealNames(meal);
+                <button class="srow" [class.filled]="names.length > 0" (click)="store.editMeal(dstr(d), slot.key)">
+                  <span class="dot" [style.background]="slot.dot"></span>
+                  <span class="srow-slot">{{ slot.short }}</span>
+                  <span class="srow-body">
+                    @if (names.length) {
+                      @for (n of names; track $index) { <span class="srow-name">{{ n }}</span> }
+                    } @else {
+                      <span class="srow-empty">Libre</span>
+                    }
+                  </span>
+                  @if (meal?.pax) { <span class="srow-pax">{{ meal!.pax }} couv.</span> }
+                  <f-icon name="chevronRight" [size]="16" color="var(--ink3)" [width]="2.2" />
+                </button>
+              }
+            </div>
           }
         </div>
-      </div>
+      } @else {
+        <div class="grid-scroll">
+          <div class="grid">
+            <div class="corner"></div>
+            @for (d of wDates(); track $index) {
+              <div class="dhead" [class.today]="isToday(d)">
+                <div class="dow">{{ DOW[$index] }}</div>
+                <div class="dnum f-display">{{ d.getDate() }}</div>
+              </div>
+            }
+
+            @for (slot of store.mealSlots(); track slot.key) {
+              <div class="rlabel">
+                <span class="rlabel-txt">{{ slot.label }}</span>
+              </div>
+              @for (d of wDates(); track dstr(d)) {
+                @let meal = mealAt(d, slot.key);
+                @let names = store.mealNames(meal);
+                <div class="cell" [class.filled]="names.length > 0" [class.today]="isToday(d)" (click)="store.editMeal(dstr(d), slot.key)">
+                  <div class="cell-top">
+                    <span class="dot" [style.background]="slot.dot"></span>
+                    <span class="cell-slot">{{ slot.short }}</span>
+                  </div>
+                  @if (names.length) {
+                    @for (n of names; track $index) {
+                      <div class="cell-name">{{ n }}</div>
+                    }
+                    <div class="cell-tag">
+                      <span class="tag-count">{{ names.length > 1 ? names.length + ' plats' : 'Un plat' }}</span>
+                    </div>
+                  } @else {
+                    <div class="cell-empty">
+                      <f-icon name="plus" [size]="16" [color]="'var(--ink3)'" [width]="2.2" />
+                      <span>Libre</span>
+                    </div>
+                  }
+                </div>
+              }
+            }
+          </div>
+        </div>
+      }
     </div>
 
     @if (store.ui().mealEdit; as me) {
@@ -145,6 +183,10 @@ import { MealValue } from '../core/models';
     }
   `,
   styles: [`
+    /* Sans cela, l'hôte reste « inline » : sa largeur mesurée vaut zéro, et la
+       bascule grille/pile choisissait toujours la pile, y compris sur écran large. */
+    :host { display: block; }
+
     .pax-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
     .pax { width: 120px; flex: none; }
     .pax-hint { flex: 1; min-width: 180px; font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
@@ -155,8 +197,34 @@ import { MealValue } from '../core/models';
     .week-label { font-size: 19px; font-weight: 700; color: var(--ink); }
     .week-tag { font-size: 12.5px; font-weight: 700; }
 
+    /* ---- semaine en pile, sur téléphone ---- */
+    .days { display: flex; flex-direction: column; gap: 14px; }
+    .day { background: var(--surface); border-radius: var(--r-card); padding: 10px 12px 6px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); }
+    .day.today { border: 2px solid var(--honey); padding: 8px 10px 4px; }
+    /* Un jour passé reste consultable, mais cesse de tirer l'œil. */
+    .day.past { opacity: .55; }
+    .day-head { display: flex; align-items: baseline; gap: 7px; padding: 2px 2px 6px; }
+    .day-dow { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; }
+    .day-num { font-size: 20px; font-weight: 700; color: var(--ink); }
+    .day-month { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
+    .day.today .day-dow, .day.today .day-num, .day.today .day-month { color: #D9930F; }
+    .day-today { margin-left: auto; font-size: 11px; font-weight: 800; color: #D9930F; text-transform: uppercase; letter-spacing: .04em; }
+
+    /* La ligne fait 52 px : elle se vise au pouce, comme une ligne de courses. */
+    .srow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 9px 2px; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
+    .srow + .srow { border-top: 1px solid var(--line); }
+    .srow-slot { font-size: 10.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; width: 38px; flex: none; }
+    .srow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .srow-name { font-size: 14.5px; font-weight: 800; color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
+    .srow-name ~ .srow-name { font-size: 13.5px; font-weight: 700; color: var(--ink2); }
+    .srow-empty { font-size: 13.5px; font-weight: 700; color: var(--ink3); }
+    .srow-pax { font-size: 11px; font-weight: 800; color: var(--sage); flex: none; }
+
     .grid-scroll { overflow-x: auto; }
-    .grid { display: grid; grid-template-columns: 64px repeat(7, minmax(120px, 1fr)); gap: 10px; align-items: stretch; min-width: 900px; }
+    /* La grille ne s'affiche plus qu'au-dessus de 860 px, la pile prenant le
+       relais en dessous : les colonnes sont dimensionnées pour tenir dans une
+       fenêtre de portable, barre latérale comprise, sans défilement latéral. */
+    .grid { display: grid; grid-template-columns: 56px repeat(7, minmax(84px, 1fr)); gap: 10px; align-items: stretch; min-width: 724px; }
     .corner { }
     .dhead { text-align: center; padding: 6px 0; border-radius: 12px; }
     .dhead.today { background: var(--honey); }
@@ -207,11 +275,52 @@ import { MealValue } from '../core/models';
       .recipe-grid { grid-template-columns: 1fr; }
     }
     :host-context(.shell.narrow) .recipe-grid { grid-template-columns: 1fr; }
+    /* Sur téléphone, la barre passe sur deux lignes plutôt que de comprimer le
+       libellé de semaine, et le bouton devient une cible pleine largeur. */
+    :host-context(.shell.narrow) .head-bar { gap: 12px; margin-bottom: 16px; }
+    :host-context(.shell.narrow) .nav { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+    :host-context(.shell.narrow) .nav-label { min-width: 0; flex: 1; }
+    :host-context(.shell.narrow) .head-bar .btn-sage { width: 100%; justify-content: center; }
   `],
 })
-export class RepasScreen {
+export class RepasScreen implements AfterViewInit, OnDestroy {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  private host = inject(ElementRef<HTMLElement>);
+  private ro?: ResizeObserver;
+
+  /**
+   * Vrai quand la grille tient sans défilement latéral. La bascule se décide sur
+   * la largeur réellement disponible et non sur celle de la fenêtre : entre 900
+   * et 1100 px, la barre latérale prend la place, et la grille défilait encore.
+   */
+  readonly wide = signal(false);
+
+  ngAfterViewInit(): void {
+    const el = this.host.nativeElement as HTMLElement;
+    const measure = (w: number): void => this.wide.set(w >= GRID_MIN);
+    if ('ResizeObserver' in window) {
+      this.ro = new ResizeObserver((e) => measure(e[0].contentRect.width));
+      this.ro.observe(el);
+    }
+    measure(el.clientWidth || window.innerWidth);
+  }
+  ngOnDestroy(): void { this.ro?.disconnect(); }
+
+  constructor() {
+    // En pile, un vendredi arrive après quatre jours révolus : « qu'est-ce qu'on
+    // mange ce soir » ne doit pas demander de faire défiler. La semaine courante
+    // s'ouvre donc sur le jour même.
+    effect(() => {
+      const chezSoi = this.store.ui().weekOffset === 0 && !this.wide();
+      void this.wDates();
+      if (!chezSoi) return;
+      setTimeout(() => {
+        const el = (this.host.nativeElement as HTMLElement).querySelector('.day.today');
+        el?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    });
+  }
 
   readonly DOW = DOW;
   readonly dstr = dstr;
@@ -250,6 +359,11 @@ export class RepasScreen {
   });
 
   isToday(d: Date): boolean { return dstr(d) === this.store.todayStr(); }
+
+  /** Un jour déjà passé : affiché en retrait plutôt que masqué, on y revient parfois. */
+  isPast(d: Date): boolean { return dstr(d) < this.store.todayStr(); }
+
+  monthOf(d: Date): string { return d.toLocaleDateString(this.store.locale, { month: 'short' }); }
 
   mealAt(d: Date, slot: string): MealValue | undefined { return this.d().meals[dstr(d) + '-' + slot]; }
 

@@ -16,7 +16,8 @@ module à stockage relationnel.
 | 1 bis | Import d'une recette depuis une URL (schema.org/Recipe), portions et temps séparés | Livrée |
 | 2 a | Lecture des lignes d'ingrédients, référentiel d'articles, génération avec rapport | Livrée |
 | 2 b | Écran de reprise en masse des lignes non reconnues, allergènes affichés | À venir |
-| 3 | Planning iPhone, semaine type des convives, duplication, suggestions | À venir |
+| 3 a | Semaine lisible sur téléphone : la grille devient une pile de jours | Livrée |
+| 3 b | Semaine type des convives, duplication de semaine, suggestions | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires, stock de placard | À venir |
 
@@ -387,6 +388,25 @@ foyer ; la modale d'un créneau permet d'y déroger, et **seule la dérogation e
 enregistrée** (`MealValue.pax`), pour qu'un chiffre recopié partout ne se périme
 pas au premier changement de famille. Une recette sans portions connues n'est pas
 mise à l'échelle, et le rapport le dit.
+
+## La semaine, en grille ou en pile
+
+La grille 7 jours par 2 créneaux demandait 900 px de large : sur téléphone elle
+défilait horizontalement, ce qui est inutilisable d'une main. La semaine se
+présente donc de deux façons, et **c'est la largeur réellement disponible qui
+tranche**, pas celle de la fenêtre : entre 900 et 1100 px la barre latérale
+occupe la place, et la grille défilait encore. Le composant mesure son propre
+hôte (`ResizeObserver`, seuil 760 px) plutôt que de se fier au point de bascule
+du chrome.
+
+En pile, chaque jour est une carte et chaque créneau une ligne de 52 px, visable
+au pouce. Les jours passés restent consultables mais s'effacent, et la semaine
+courante s'ouvre sur le jour même : « qu'est-ce qu'on mange ce soir » ne doit pas
+demander de faire défiler quatre jours révolus.
+
+Un piège qui a coûté une passe de vérification : l'hôte d'un composant Angular
+est **`inline` par défaut**, donc mesuré à zéro. Sans `:host { display: block }`,
+la bascule choisissait la pile à toutes les largeurs, y compris sur grand écran.
 
 ## Migrations du document d'état
 
