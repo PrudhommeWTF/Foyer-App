@@ -34,6 +34,8 @@ export interface UiState {
   mealPax: string;
   /** Rapport de génération de la liste, affiché avant d'écrire quoi que ce soit. */
   genOpen: boolean;
+  /** Recopie d'une période sur la période affichée. `dupBack` = de combien de périodes en arrière. */
+  dupOpen: boolean; dupBack: number; dupMode: 'fill' | 'replace';
 
   // event modal + datepicker
   showEvent: boolean; evEditId: string | null;
@@ -102,7 +104,7 @@ export function initialUi(): UiState {
     screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
-    mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false,
+    mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill',
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
     aisleOrderOpen: false,

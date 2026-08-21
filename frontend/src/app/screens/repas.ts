@@ -6,6 +6,7 @@ import { ModalComponent } from '../shared/modal';
 import { MEAL_SLOTS, DOW } from '../core/constants';
 import { dstr, parseDay } from '../core/helpers';
 import { MealValue } from '../core/models';
+import { CopyReport, planMealCopy } from '../core/meal-copy';
 
 /** Largeur en deçà de laquelle la semaine se lit en pile plutôt qu'en grille. */
 const GRID_MIN = 760;
@@ -38,6 +39,9 @@ const GRID_MIN = 760;
             <button [class.active]="view() === '3'" (click)="setView('3')">3 jours</button>
             <button [class.active]="view() === 'week'" (click)="setView('week')">Semaine</button>
           </div>
+          <button class="btn btn-soft dup-btn" (click)="openDup()">
+            <f-icon name="copy" [size]="17" color="var(--ink2)" [width]="2" /> Recopier
+          </button>
           <button class="btn btn-sage" (click)="store.prepareList(days())">
             <f-icon name="bolt" [size]="20" color="#fff" [width]="2" />
             {{ view() === '3' ? 'Courses de ces 3 jours' : 'Courses de la semaine' }}
@@ -121,6 +125,52 @@ const GRID_MIN = 760;
         </div>
       }
     </div>
+
+    @if (store.ui().dupOpen) {
+      <f-modal title="Recopier des repas ici" [maxWidth]="520" (close)="store.patch({ dupOpen: false })">
+        <div class="hint mb">Les repas seront recopiés sur <b>{{ targetLabel() }}</b>.</div>
+
+        <div class="field-label">Depuis</div>
+        <div class="dup-list mb">
+          @for (c of dupSources(); track c.back) {
+            <button class="dup-row" [class.on]="store.ui().dupBack === c.back" [disabled]="!c.plats"
+                    (click)="store.patch({ dupBack: c.back })">
+              <span class="dup-when">{{ c.label }}</span>
+              <span class="dup-count">{{ c.plats ? c.plats + ' repas' : 'vide' }}</span>
+            </button>
+          }
+        </div>
+
+        <div class="field-label">Comment</div>
+        <div class="seg-wrap">
+          <div class="seg-opt" [class.on]="store.ui().dupMode === 'fill'" (click)="store.patch({ dupMode: 'fill' })">Compléter</div>
+          <div class="seg-opt" [class.on]="store.ui().dupMode === 'replace'" (click)="store.patch({ dupMode: 'replace' })">Remplacer</div>
+        </div>
+
+        @let rep = dupReport();
+        <div class="dup-bilan" [class.warn]="rep.cleared.length > 0">
+          @if (rep.sourceEmpty) {
+            <div>Cette période ne contient aucun repas : il n'y a rien à recopier.</div>
+          } @else if (!rep.writes.length && !rep.cleared.length) {
+            <div>Rien à changer : ces repas sont déjà en place.</div>
+          } @else {
+            @if (rep.writes.length) { <div>{{ phrase(rep.writes.length, 'repas sera recopié', 'repas seront recopiés') }}.</div> }
+            @if (rep.kept.length) { <div>{{ phrase(rep.kept.length, 'créneau déjà garni sera laissé tel quel', 'créneaux déjà garnis seront laissés tels quels') }}.</div> }
+            @if (rep.cleared.length) {
+              <div>{{ phrase(rep.cleared.length, 'créneau déjà garni sera écrasé ou vidé', 'créneaux déjà garnis seront écrasés ou vidés') }}. C'est définitif.</div>
+            }
+          }
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-soft grow" (click)="store.patch({ dupOpen: false })">Annuler</button>
+          <button class="btn grow2" [class.btn-primary]="!rep.cleared.length" [class.btn-danger]="rep.cleared.length > 0"
+                  [disabled]="rep.sourceEmpty" (click)="store.copyMeals(rep)">
+            {{ rep.cleared.length ? 'Recopier et écraser' : 'Recopier' }}
+          </button>
+        </div>
+      </f-modal>
+    }
 
     @if (store.ui().mealEdit; as me) {
       <f-modal [title]="slotLabel()" [maxWidth]="560" (close)="store.patch({ mealEdit: null })">
@@ -207,6 +257,28 @@ const GRID_MIN = 760;
     .nav-label { text-align: center; min-width: 230px; }
     .week-label { font-size: 19px; font-weight: 700; color: var(--ink); }
     .week-tag { font-size: 12.5px; font-weight: 700; }
+
+    /* Ces classes viennent des autres écrans, où elles sont définies localement :
+       les styles d'un composant Angular ne franchissent pas ses frontières. */
+    .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .mb { margin-bottom: 18px; }
+    .seg-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .seg-opt { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); border: 2px solid transparent; }
+    .seg-opt.on { background: var(--primary); color: #fff; }
+    .modal-actions { display: flex; gap: 12px; align-items: center; }
+    .modal-actions .grow { flex: 1; }
+    .modal-actions .grow2 { flex: 1.4; }
+
+    .dup-btn { flex: none; gap: 7px; }
+    .dup-list { display: flex; flex-direction: column; gap: 8px; }
+    .dup-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 13px; border-radius: 13px; border: 2px solid transparent; background: var(--soft); font: inherit; cursor: pointer; text-align: left; }
+    .dup-row.on { background: rgba(229,107,78,.12); border-color: var(--primary); }
+    .dup-row[disabled] { opacity: .45; cursor: default; }
+    .dup-when { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .dup-count { font-size: 12.5px; font-weight: 800; color: var(--ink3); flex: none; }
+    .dup-bilan { background: var(--soft); border-radius: 13px; padding: 12px 14px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.55; margin-bottom: 18px; }
+    .dup-bilan.warn { background: #FCE9E3; color: #C6492F; }
+    .dup-bilan b { color: inherit; }
 
     /* ---- semaine en pile, sur téléphone ---- */
     .days { display: flex; flex-direction: column; gap: 14px; }
@@ -375,6 +447,50 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
   gridMin = computed(() => (this.view() === 'week' ? 724 : 0));
   /** Trois colonnes n'ont rien à gagner à s'étaler sur un écran de 27 pouces. */
   gridMax = computed(() => (this.view() === 'week' ? null : 820));
+
+  /** Périodes candidates à la recopie : les quatre précédentes, de même longueur. */
+  dupSources = computed(() => {
+    const meals = this.d().meals;
+    const slots = this.store.mealSlots().map((s) => s.key);
+    return [1, 2, 3, 4].map((back) => {
+      const days = this.shifted(back);
+      const plats = days.reduce((n, j) => n + slots.filter((s) => meals[j + '-' + s]?.items?.length).length, 0);
+      return { back, plats, label: this.periodLabel(days, back) };
+    });
+  });
+
+  dupReport = computed<CopyReport>(() => planMealCopy(
+    this.d().meals,
+    this.shifted(this.store.ui().dupBack),
+    this.days(),
+    this.store.mealSlots().map((s) => s.key),
+    this.store.ui().dupMode,
+  ));
+
+  openDup(): void { this.store.patch({ dupOpen: true, dupBack: 1, dupMode: 'fill' }); }
+
+  /** « 1 repas sera recopié », « 3 repas seront recopiés » : l'accord se voit. */
+  phrase(n: number, un: string, plusieurs: string): string { return n + ' ' + (n > 1 ? plusieurs : un); }
+
+  /** La période visée, nommée pour se lire au milieu d'une phrase. */
+  targetLabel = computed(() => {
+    const w = this.days();
+    const bornes = this.fmt(w[0]) + ' au ' + this.fmt(w[w.length - 1]);
+    return this.view() === 'week' ? 'la semaine du ' + bornes : 'les 3 jours du ' + bornes;
+  });
+
+  /** La période affichée, décalée de `back` périodes vers le passé. */
+  private shifted(back: number): string[] {
+    const pas = this.days().length * back;
+    return this.days().map((j) => { const d = parseDay(j); d.setDate(d.getDate() - pas); return dstr(d); });
+  }
+
+  private periodLabel(days: string[], back: number): string {
+    const quand = this.view() === 'week'
+      ? (back === 1 ? 'Semaine dernière' : 'Il y a ' + back + ' semaines')
+      : (back === 1 ? 'Les 3 jours précédents' : 'Il y a ' + back * 3 + ' jours');
+    return quand + ' · ' + this.fmt(days[0]) + ' au ' + this.fmt(days[days.length - 1]);
+  }
 
   setView(v: '3' | 'week'): void { this.store.patch({ mealView: v }); }
   goToday(): void { this.store.patch({ mealAnchor: this.store.todayStr() }); }

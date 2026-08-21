@@ -3,6 +3,7 @@ import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api
 import { HouseholdState, MealItem, MealValue, Member, Notif, ShopItem, ShopState } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanReport, buildPlan } from './shopping-plan';
+import { CopyReport, applyMealCopy } from './meal-copy';
 import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
@@ -967,6 +968,20 @@ export class FoyerStore {
     this.patch({ mealEdit: null });
     this.toast(items.length > 1 ? items.length + ' plats enregistrés' : 'Repas enregistré');
   }
+  /**
+   * Écrit une copie de repas déjà calculée. Le rapport est produit par l'écran,
+   * qui seul connaît la période affichée, et il est montré avant d'arriver ici :
+   * cette méthode ne décide de rien, elle applique.
+   */
+  copyMeals(report: CopyReport): void {
+    if (!report.writes.length && !report.cleared.length) { this.toast('Rien à recopier'); return; }
+    this.mutate((d) => { d.meals = applyMealCopy(d.meals, report); });
+    this.patch({ dupOpen: false });
+    const n = report.writes.length;
+    const vides = report.cleared.length - report.writes.filter((w) => report.cleared.includes(w.to)).length;
+    this.toast(n + (n > 1 ? ' repas recopiés' : ' repas recopié') + (vides > 0 ? ', ' + vides + ' créneau(x) vidé(s)' : ''));
+  }
+
   clearMeal(): void { const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot; this.mutate((d) => { delete d.meals[key]; }); this.patch({ mealEdit: null }); this.toast('Repas retiré'); }
   /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
   householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
