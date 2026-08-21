@@ -132,13 +132,34 @@ describe('une seconde recette Marmiton, aux textes moins sages', () => {
   });
 });
 
+describe('une troisième recette Marmiton', () => {
+  const node = fixture('marmiton-croque-monsieur.json');
+
+  it('coupe les espaces que le site laisse traîner en fin d’étape', () => {
+    // Deux des quatre étapes se terminent par une espace dans la source. Elle
+    // ressortirait à l'affichage et fausserait toute comparaison de textes.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.steps.length, 4);
+    assert.ok(recipe.steps.every((s) => s === s.trim()), 'aucune étape ne doit garder d’espace au bord');
+    assert.equal(recipe.steps[1], 'Dans un bol mélanger le fromage râpé avec le lait, le sel, le poivre et la muscade.');
+  });
+
+  it('garde « sel » et « poivre » comme deux lignes distinctes', () => {
+    // Ces lignes sans quantité sont des ingrédients de placard : la tranche 2
+    // devra les écarter de la liste de courses sans les retirer de la recette.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.ingr.length, 9);
+    assert.deepEqual(recipe.ingr.slice(-2), ['poivre', 'sel']);
+  });
+});
+
 describe('toutes les pages réelles du jeu de test', () => {
   // Garde-fou pour les fixtures à venir : ce qui est ajouté dans le dossier doit
   // se lire, sinon le fichier est là sans que personne ne s'en aperçoive.
   const noms = fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
 
   it('le dossier de fixtures n’est pas vide', () => {
-    assert.ok(noms.length >= 2, 'au moins deux pages réelles');
+    assert.ok(noms.length >= 3, 'au moins trois pages réelles');
   });
 
   for (const nom of noms) {

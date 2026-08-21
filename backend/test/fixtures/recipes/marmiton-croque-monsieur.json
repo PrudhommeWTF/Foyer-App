@@ -1,0 +1,49 @@
+{
+ "@type": "Recipe",
+ "@id": "https://www.marmiton.org/recettes/recette_croque-monsieur_19208.aspx#recipe",
+ "mainEntityOfPage": { "@id": "https://www.marmiton.org/recettes/recette_croque-monsieur_19208.aspx" },
+ "name": "Croque-monsieur : la meilleure recette",
+ "recipeCategory": "Plat principal",
+ "image": [
+  "https://assets.afcdn.com/recipe/20170112/28965_w1024h1024c1cx1500cy1000.jpg",
+  "https://assets.afcdn.com/recipe/20170112/28965_w1024h1024c1cx1500cy1000.webp",
+  "https://assets.afcdn.com/recipe/20170112/28965_w1024h768c1cx1500cy1000.jpg",
+  "https://assets.afcdn.com/recipe/20170112/28965_w1024h768c1cx1500cy1000.webp",
+  "https://assets.afcdn.com/recipe/20170112/28965_w1024h576c1cx1500cy1000.jpg",
+  "https://assets.afcdn.com/recipe/20170112/28965_w1024h576c1cx1500cy1000.webp"
+ ],
+ "datePublished": "2006-10-23T11:43:00+02:00",
+ "dateModified": "2025-01-23T17:42:39+01:00",
+ "prepTime": "PT10M",
+ "cookTime": "PT5M",
+ "totalTime": "PT15M",
+ "recipeYield": "4 personnes",
+ "recipeIngredient": [
+  "8 tranches de pains de mie",
+  "50 g de beurre tendre",
+  "4 tranches de jambon",
+  "8 tranches de toastinettes",
+  "100 g de gruyère râpé",
+  "4 cuillères à soupe de lait",
+  "1 pincée de muscade",
+  "poivre",
+  "sel"
+ ],
+ "recipeInstructions": [
+  { "@type": "HowToStep", "text": "Beurrez les 8 tranches de pain de mie sur une seule face. Posez 1 tranche de fromage sur chaque tranche de pain de mie. Posez 1 tranche de jambon plié en deux sur 4 tranches de pain de mie. Recouvrez avec les autres tartines (face non beurrée au dessus)." },
+  { "@type": "HowToStep", "text": "Dans un bol mélanger le fromage râpé avec le lait, le sel, le poivre et la muscade. " },
+  { "@type": "HowToStep", "text": "Répartissez le mélange sur les croque-monsieur. " },
+  { "@type": "HowToStep", "text": "Placez sur une plaque au four sous le grill pendant 10 mn." }
+ ],
+ "author": { "@type": "Person", "name": "pattye" },
+ "description": "Recette Croque-monsieur : la meilleure recette rapide et facile : 4 personnes, 15 min de préparation. Notée 4.6/5 par 107 membres Marmiton.",
+ "keywords": "Croque-monsieur, croque-monsieur, pain de mie, beurre tendre, jambon, toastinette, gruyère râpé, lait, muscade, poivre, sel, Très facile, Bon marché, rapide",
+ "aggregateRating": { "@type": "AggregateRating", "reviewCount": 107, "ratingValue": 4.6, "worstRating": 1, "bestRating": 5 },
+ "video": { "@id": "https://www.marmiton.org/recettes/recette_croque-monsieur_19208.aspx#video" },
+ "nutrition": {
+  "@type": "NutritionInformation",
+  "calories": "626 calories", "servingSize": "245.3 grams",
+  "carbohydrateContent": "22 g", "fatContent": "37 g", "fiberContent": "1.8 g",
+  "proteinContent": "51 g", "saturatedFatContent": "22.3 g", "sodiumContent": "4.9 g", "sugarContent": "2.9 g"
+ }
+}
