@@ -176,3 +176,13 @@ export const SCREEN_TITLES: Record<string, string> = {
   messages: 'Messagerie', contacts: 'Contacts importants', documents: 'Documents', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
 };
+
+/**
+ * Titres courts pour la barre du haut sur téléphone. « Planning des repas » y
+ * passait à la ligne trois fois et repoussait le contenu d'un tiers d'écran ; le
+ * nom de l'onglet suffit à dire où l'on est.
+ */
+export const SCREEN_TITLES_SHORT: Record<string, string> = {
+  calendar: 'Agenda', courses: 'Courses', messages: 'Messages', contacts: 'Contacts',
+  repas: 'Repas', recettes: 'Recettes', planning: 'Emploi du temps',
+};

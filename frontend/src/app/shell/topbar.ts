@@ -4,7 +4,7 @@ import { FinancesStore } from '../core/finances.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { ADD_MENU } from './nav';
-import { SCREEN_TITLES } from '../core/constants';
+import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 
 @Component({
   selector: 'app-topbar',
@@ -59,8 +59,14 @@ import { SCREEN_TITLES } from '../core/constants';
     .topbar { height: 74px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 40px; border-bottom: 1px solid var(--line); background: var(--bg); }
     .mbrand { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: none; border-radius: 11px; background: linear-gradient(135deg, #E56B4E, #D9553A); box-shadow: 0 8px 16px -6px rgba(229,107,78,.6); }
     .title { font-size: 26px; font-weight: 700; color: var(--ink); }
-    .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: none; border-radius: 14px; padding: 10px 16px; width: 280px; box-shadow: var(--sh-float); font-size: 14px; font-weight: 600; color: var(--ink3); cursor: text; font-family: inherit; text-align: left; transition: box-shadow .15s ease; }
+    /* Une seule ligne, toujours : la barre a une hauteur fixe, et un titre qui
+       passe à la ligne déborde par-dessus le contenu. */
+    .title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Le champ de recherche cède la place avant le titre : « Planning des repas »
+       tronqué en « Planning de… » sur un écran qui a la place est un aveu. */
+    .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: none; border-radius: 14px; padding: 10px 16px; flex: 0 1 280px; min-width: 46px; box-shadow: var(--sh-float); font-size: 14px; font-weight: 600; color: var(--ink3); cursor: text; font-family: inherit; text-align: left; transition: box-shadow .15s ease; }
     .search:hover { box-shadow: var(--sh-float), 0 0 0 2px var(--line); }
+    .search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .avatars { display: flex; cursor: pointer; }
     .avatars > * { margin-left: -10px; }
     .icon-btn.lg { width: 44px; height: 44px; border-radius: 14px; }
@@ -85,7 +91,10 @@ export class TopbarComponent {
   private finances = inject(FinancesStore);
   menu = ADD_MENU;
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
-  title = computed(() => SCREEN_TITLES[this.store.ui().screen] || 'Foyer');
+  title = computed(() => {
+    const s = this.store.ui().screen;
+    return (this.store.narrow() ? SCREEN_TITLES_SHORT[s] : '') || SCREEN_TITLES[s] || 'Foyer';
+  });
   unread = this.store.unreadCount;
 
   pick(id: string): void {
