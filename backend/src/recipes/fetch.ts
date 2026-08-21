@@ -28,8 +28,17 @@ const MAX_BYTES = 3 * 1024 * 1024;
 const TIMEOUT_MS = 12000;
 const MAX_REDIRECTS = 4;
 
-/** Se présenter honnêtement : un site a le droit de savoir qui le lit. */
-const USER_AGENT = 'Foyer/1.0 (application familiale auto-hébergée ; import de recette déclenché par l’utilisateur)';
+/**
+ * Se présenter honnêtement : un site a le droit de savoir qui le lit, et de
+ * retrouver le projet derrière.
+ *
+ * En ASCII pur, délibérément. La version précédente portait une apostrophe
+ * typographique (U+2019), invisible à l'œil et supérieure à 255 : « fetch »
+ * refusait de construire la requête, et AUCUN import n'a jamais pu aboutir. Un
+ * en-tête est un détail de protocole, pas un texte d'interface : il n'a aucune
+ * raison de sortir de l'ASCII.
+ */
+const USER_AGENT = 'Foyer/1.0 (+https://github.com/PrudhommeWTF/Foyer-App; self-hosted family app; user-initiated recipe import)';
 
 /**
  * Une adresse IP que le serveur n'a rien à aller chercher : boucle locale,
@@ -148,7 +157,12 @@ export function networkReason(e: unknown): string {
   const err = e as { name?: string; cause?: { code?: string; message?: string; errors?: unknown[] } };
   if (err?.name === 'TimeoutError') return 'le site n’a pas répondu à temps';
   const cause = err?.cause;
-  if (!cause) return 'connexion impossible';
+  if (!cause) {
+    // Aucune cause : la requête n'a même pas atteint le réseau. C'est un défaut
+    // de Foyer, pas une panne du site, et le confondre avec « injoignable » fait
+    // chercher des heures du mauvais côté. Vécu une fois, plus jamais.
+    return 'la requête n’a pas pu être émise (' + ((e as Error)?.message || 'raison inconnue') + ')';
+  }
 
   // Plusieurs adresses essayées, IPv4 puis IPv6 : Node agrège les échecs, et
   // c'est exactement la trace d'une pile IPv6 annoncée mais non routée.
@@ -160,7 +174,8 @@ export function networkReason(e: unknown): string {
   }
   const code = cause.code;
   if (code) return PANNES[code] || code;
-  return cause.message || 'connexion impossible';
+  if (cause.message) return cause.message;
+  return 'connexion impossible';
 }
 
 export interface FetchedPage { url: string; body: Buffer; contentType: string }

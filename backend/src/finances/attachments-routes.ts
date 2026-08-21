@@ -2,6 +2,7 @@
 //
 // The whole router sits behind the session guard: a piece is never reachable by
 // its URL alone, contrary to the ICS feed which trades on a secret token.
+import { contentDisposition } from '../headers';
 import express, { Request, Response, Router } from 'express';
 import * as attachments from './attachments';
 import { getAsset, getContract } from './contracts';
@@ -42,12 +43,6 @@ function owner(req: Request): { kind: attachments.OwnerKind; id: number } {
   if (!exists) fail('L’élément auquel rattacher cette pièce est introuvable.');
   return { kind, id: ownerId };
 }
-
-/**
- * Filename for the browser. Quotes and control characters are stripped rather
- * than escaped: a header is not the place to be clever.
- */
-const headerName = (name: string): string => name.replace(/["\\\r\n]/g, '').slice(0, 120) || 'piece';
 
 export function attachmentsRouter(): Router {
   const r = express.Router();
@@ -92,7 +87,7 @@ export function attachmentsRouter(): Router {
     res.setHeader('Content-Type', meta.mime);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     const disposition = String(req.query['download'] || '') === '1' ? 'attachment' : 'inline';
-    res.setHeader('Content-Disposition', `${disposition}; filename="${headerName(meta.name)}"`);
+    res.setHeader('Content-Disposition', contentDisposition(disposition, meta.name, 'piece'));
     // sendFile streams: a 20 Mo piece never becomes a 20 Mo buffer in this process.
     res.sendFile(file);
   }));

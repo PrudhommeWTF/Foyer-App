@@ -207,6 +207,34 @@ protections, testées dans `backend/test/recipe-fetch.test.ts` :
 S'y ajoutent : `https` et `http` seuls, refus des adresses portant un
 identifiant, et une limitation à 30 imports par tranche de 5 minutes.
 
+### Une leçon payée cher : les en-têtes ne transportent que des octets
+
+Le premier import en production a échoué avec « le site est injoignable depuis le
+serveur ». Le réseau allait très bien : le `User-Agent` du code portait une
+**apostrophe typographique** « ’ » (U+2019), visuellement identique à « ' » mais
+valant 8217. `fetch` refusait de construire la requête, sans jamais toucher au
+réseau, et l'erreur remontait déguisée en panne réseau. **Aucun import n'avait
+jamais pu aboutir, sur aucun site.**
+
+Trois choses en sont sorties, dans `backend/src/headers.ts` :
+
+- **Toute valeur d'en-tête construite à partir d'un texte passe par `headerSafe`**,
+  qui la replie en ASCII. Le `User-Agent` est en ASCII pur, par principe : un
+  en-tête est un détail de protocole, pas un texte d'interface.
+- **Les noms de fichiers accentués voyagent en RFC 6266.** Même sous 255, l'accent
+  ne survit pas : « à » part en octet 0xE0 et revient décodé en UTF-8, donc
+  « Tarte ï¿½ l'oignon ». `contentDisposition()` émet les deux formes, `filename`
+  replié et `filename*=UTF-8''…` encodé, ce que les navigateurs préfèrent. Cela
+  valait aussi pour les pièces jointes du module Finances, corrigées au passage.
+- **Une erreur sans `cause` n'est plus présentée comme une panne réseau.** Node
+  place la raison des vraies pannes dans `error.cause` ; son absence signale que
+  la requête n'a pas pu être émise, ce qui est un défaut de Foyer. Le message le
+  dit désormais.
+
+Les tests de route bouchonnent `fetch` pour rester sans appel sortant, et ne
+pouvaient donc pas voir ce défaut. `backend/test/headers.test.ts` exerce le vrai
+`fetch` et un vrai `res.setHeader` contre un serveur local, dans les deux sens.
+
 ### Exploitation
 
 ```bash
@@ -416,6 +444,7 @@ farine.
 | `backend/test/recipe-import.test.ts` | Lecture du JSON-LD sur une vraie page Marmiton, et sur les formes tordues du standard |
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
+| `backend/test/headers.test.ts` | Valeurs d'en-tête émises et reçues, contre un vrai serveur, sans bouchon |
 | `frontend/src/app/core/helpers.test.ts` | Semaine ancrée sur le jour, lundi en tête, changements d'heure |
 
 ```bash

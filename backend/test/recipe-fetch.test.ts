@@ -139,9 +139,17 @@ describe('ce que le message dit quand le réseau lâche', () => {
     assert.match(echec(undefined, 'TimeoutError'), /n’a pas répondu à temps/);
   });
 
-  it('ne tombe pas quand l’erreur n’a aucune cause', () => {
-    assert.equal(networkReason(new Error('vide')), 'connexion impossible');
-    assert.equal(networkReason(null), 'connexion impossible');
+  it('dénonce une requête que Foyer n’a pas su construire', () => {
+    // Le cas vécu : le User-Agent portait une apostrophe typographique, « fetch »
+    // levait sans jamais toucher au réseau, et le message parlait de site
+    // injoignable. Des heures cherchées du mauvais côté. Une erreur sans cause
+    // n'est pas une panne du site, et doit le dire.
+    assert.match(
+      networkReason(Object.assign(new Error('Cannot convert argument to a ByteString'), { name: 'TypeError' })),
+      /n’a pas pu être émise.*ByteString/,
+    );
+    assert.match(networkReason(new Error('vide')), /n’a pas pu être émise/);
+    assert.match(networkReason(null), /n’a pas pu être émise|connexion impossible/);
   });
 });
 
