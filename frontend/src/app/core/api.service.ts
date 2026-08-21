@@ -177,6 +177,8 @@ export class ApiService {
   icsInfo(): Promise<{ token: string }> { return this.request('calendar/ics'); }
   icsRegenerate(): Promise<{ token: string }> { return this.request('calendar/ics/regenerate', { method: 'POST' }); }
 
+  /** Version que le serveur exécute. Sans appel sortant, contrairement à updateCheck. */
+  systemVersion(): Promise<{ current: string; selfUpdate: boolean; repo: string }> { return this.request('system/version'); }
   updateCheck(): Promise<UpdateInfo> { return this.request('system/update-check'); }
   startSystemUpdate(): Promise<{ started?: boolean; error?: string }> { return this.request('system/update', { method: 'POST' }); }
   updateStatus(): Promise<{ state: string; message?: string; current: string }> { return this.request('system/update-status'); }

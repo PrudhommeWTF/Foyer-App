@@ -38,6 +38,9 @@ export class FoyerStore {
   private _data = signal<HouseholdState | null>(null);
   readonly ui = signal<UiState>(initialUi());
 
+  /** Version exécutée par le serveur, affichée dans Paramètres. */
+  readonly version = signal('');
+
   readonly ready = signal(false);
   readonly authed = signal(false);
   readonly needsSetup = signal(false);
@@ -204,6 +207,9 @@ export class FoyerStore {
       this.isAdmin.set(me.admin);
     } catch { /* ignore */ }
     await this.refreshAccounts();
+    // Quelle version le serveur exécute réellement : la première question quand
+    // un écran ne ressemble pas à ce que la mise à jour annonçait.
+    this.api.systemVersion().then((v) => this.version.set(v.current)).catch(() => { /* sans conséquence */ });
     this.loadSchoolHolidays();
     this.loadIcs();
     this.resumeUpdateIfRunning();

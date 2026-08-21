@@ -323,6 +323,38 @@ respecté lors des mises à jour suivantes.
 Variables : `FOYER_SELF_UPDATE` (`true`/`false`, défaut `true`), `FOYER_GITHUB_REPO`
 (défaut `PrudhommeWTF/Foyer-App`), `FOYER_GITHUB_TOKEN` (optionnel).
 
+### Vérifier qu'une mise à jour est bien active
+
+La version exécutée par le serveur est affichée en bas de *Paramètres*, sous
+« Foyer ». Si l'écran ne correspond pas à ce que la nouvelle version annonçait,
+c'est le premier endroit à regarder : le serveur n'a peut-être pas la version
+qu'on croit.
+
+```bash
+# Version que le serveur exécute réellement
+grep FOYER_VERSION /etc/foyer/foyer.env          # LXC
+docker compose exec foyer printenv FOYER_VERSION # Docker
+
+# Le journal de la dernière auto-mise à jour
+journalctl -u foyer-self-update -n 40 --no-pager
+```
+
+**Le cache du navigateur ne peut pas masquer une mise à jour.** Les fichiers dont
+le nom porte une empreinte de contenu (`main-A1B2C3D4.js`) sont gardés un an, ce
+qui est sans risque puisqu'un nouveau contenu arrive sous un nouveau nom ; mais
+`index.html`, qui les nomme, est servi en `no-store`. Sans cette distinction, un
+iPhone peut continuer d'afficher la version d'avant indéfiniment, alors que le
+serveur est à jour : le symptôme est déroutant, parce qu'il n'y a rien à corriger
+ni d'un côté ni de l'autre.
+
+```bash
+# La règle, telle qu'elle est réellement émise
+curl -sI https://foyer.exemple/ | grep -i cache-control          # no-store
+curl -sI https://foyer.exemple/main-A1B2C3D4.js | grep -i cache  # immutable
+```
+
+Si un reverse-proxy est intercalé, vérifier qu'il ne réécrit pas ces en-têtes.
+
 ## 📦 Déploiement LXC Proxmox (natif, sans Docker)
 
 Installation légère dans un conteneur Debian/Ubuntu (Node.js + build + service **systemd**),
