@@ -30,7 +30,21 @@ export interface FileItem { id: string; name: string; folderId: string; type: Fi
 export interface MealValue { rid?: string; text?: string; }
 // `photoId` désigne un fichier servi par /api/files : les octets ne sont plus
 // dans le document, qui repartait en entier à chaque enregistrement.
-export interface Recipe { id: string; name: string; time: string; level: string; color: string; photoId?: number | null; ingr: string[]; steps: string[]; }
+export interface Recipe {
+  id: string; name: string; level: string; color: string;
+  photoId?: number | null;
+  /**
+   * Portions de la recette d'origine, et temps séparés. Le champ `time` en texte
+   * libre qui les précédait était ambigu et inexploitable : la mise à l'échelle
+   * des courses (recette pour 4, planning à 6) a besoin d'un nombre.
+   */
+  portions?: number | null;
+  prepMin?: number | null;
+  cookMin?: number | null;
+  /** Page d'origine quand la recette vient d'un import. */
+  source?: string | null;
+  ingr: string[]; steps: string[];
+}
 export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: SchedType; }
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }

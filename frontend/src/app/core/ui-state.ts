@@ -66,7 +66,10 @@ export interface UiState {
   // recipes
   recipeForm: boolean; editingId: string | null; confirmDelId: string | null; openRecipeId: string | null;
   fRecipeId: string;
-  fName: string; fTime: string; fLevel: string; fColor: string; fPhotoId: number | null; fPhotoBusy: boolean; fIngr: IngrRow[]; fSteps: IngrRow[];
+  fName: string; fLevel: string; fColor: string; fPhotoId: number | null; fPhotoBusy: boolean; fIngr: IngrRow[]; fSteps: IngrRow[];
+  fPortions: string; fPrepMin: string; fCookMin: string; fSource: string;
+  /** Import depuis une URL : saisie, état d'attente et avertissements du lecteur. */
+  fImportUrl: string; fImportBusy: boolean; fImportWarnings: string[];
 
   // planning
   schedChild: string; schedEdit: boolean; seEditId: string | null;
@@ -103,7 +106,9 @@ export function initialUi(): UiState {
     folderForm: false, foEditId: null, foName: '', foColor: '#E56B4E', folderDelId: null,
     fileForm: false, fiEditId: null, fiName: '', fiFolderId: null, fiType: 'PDF', fiData: null, fileDelId: null,
     recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
-    fRecipeId: '', fName: '', fTime: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
+    fRecipeId: '', fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
+    fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
+    fImportUrl: '', fImportBusy: false, fImportWarnings: [],
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,

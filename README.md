@@ -25,7 +25,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
 | 💰 **Finances** | Comptes (courant, professionnel, épargne, **crédit**) avec **un ou plusieurs titulaires** et soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Crédits immobiliers et à la consommation** : quatre chiffres de l'offre de prêt suffisent, capital restant dû, échéancier, date de fin et intérêts de l'année se calculent. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Grille 7 jours, semaine courante, déjeuner et dîner (petit-déjeuner en option dans *Paramètres → Repas*), recettes ou texte libre. |
-| 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques. Les **photos sont stockées sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement). |
+| 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques, portions et temps de préparation/cuisson. **Import depuis l'adresse d'une page de recette** (Marmiton, 750g, Cuisine AZ, blogs…) par lecture des données structurées `schema.org/Recipe` : titre, portions, durées, ingrédients, étapes et photo remplissent le formulaire, que vous relisez avant d'enregistrer. Les **photos sont stockées sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement). |
 | 🗓️ **Emploi du temps** | Créneaux par membre et par jour, typés (école, sport…). |
 | ⚙️ **Paramètres** | Langue, thème, notifications, membres, export/reset des données. |
 
@@ -96,6 +96,7 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `FOYER_JWT_SECRET` | Secret de signature des sessions (≥ 16 caractères aléatoires) — **obligatoire** : en `NODE_ENV=production`, un secret absent/faible **empêche le démarrage** ; sinon un secret éphémère est généré (sessions perdues au redémarrage) | _(aucun)_ |
 | `FOYER_CORS_ORIGINS` | Origines cross-origin autorisées (liste séparée par des virgules) — laissez vide en mono-conteneur (l'API sert sa propre app) | _(aucune)_ |
 | `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`) | `true` |
+| `FOYER_RECIPE_IMPORT` | Autoriser l'import d'une recette depuis une URL, seule requête sortante du module Cuisine (`true`/`false`) | `true` |
 
 La base SQLite vit dans le volume `foyer-data` (`/data`) et **persiste** entre les
 redémarrages et les mises à jour de l'image.
@@ -370,6 +371,12 @@ La maquette de référence est conservée dans [`docs/`](docs/).
 Architecture de la chaîne recettes → planning → courses, procédures de sauvegarde,
 de migration et de nettoyage des fichiers, diagnostic d'un article qui n'arrive pas
 dans la liste : [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
+
+**Import de recette** : c'est la seule requête sortante du module, déclenchée par
+un geste explicite et journalisée. Le serveur refuse toute adresse pointant sur le
+réseau local (y compris après redirection), borne la taille et la durée, et se
+coupe entièrement avec `FOYER_RECIPE_IMPORT=false`. Aucune recherche par mots-clés
+sur un site tiers : on colle le lien d'une page choisie.
 
 ## 📦 CI / images
 

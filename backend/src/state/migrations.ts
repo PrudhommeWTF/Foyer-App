@@ -21,7 +21,7 @@ import path from 'path';
 import { DetectedType, detectType } from '../storage/blobs';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 2;
+export const STATE_VERSION = 3;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -120,7 +120,49 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       if (created.length) ctx.log(`Rayon(s) recréé(s) depuis des articles orphelins : ${created.join(', ')}.`);
     },
   },
+  {
+    version: 3,
+    label: 'recettes : portions et temps séparés',
+    up: (doc, ctx) => {
+      let lus = 0;
+      let illisibles = 0;
+      for (const r of arr(doc['recipes'])) {
+        if (!('time' in r)) continue;
+        // `time` était un texte libre unique, sans dire s'il valait la
+        // préparation, la cuisson ou le total. Il est repris en préparation,
+        // seule lecture qui ne fabrique pas une cuisson qui n'a jamais existé.
+        if (typeof r['prepMin'] !== 'number') {
+          const min = parseFrenchDuration(r['time']);
+          if (min != null) { r['prepMin'] = min; lus++; }
+          else if (String(r['time'] ?? '').trim() && String(r['time']).trim() !== '—') illisibles++;
+        }
+        delete r['time'];
+      }
+      if (lus) ctx.log(`${lus} durée(s) de recette reprise(s) en temps de préparation.`);
+      if (illisibles) {
+        ctx.log(
+          `${illisibles} durée(s) de recette illisible(s) et donc laissée(s) vides : ` +
+          'rouvrez ces fiches pour saisir les minutes de préparation et de cuisson.',
+        );
+      }
+    },
+  },
 ];
+
+/**
+ * Durée écrite à la française vers minutes : « 45 min », « 1 h 30 », « 1h30 »,
+ * « 2 heures », « 30 ». Rend null sur ce qu'on ne sait pas lire, plutôt qu'un
+ * zéro qui se ferait passer pour une vraie valeur.
+ */
+export function parseFrenchDuration(value: unknown): number | null {
+  const s = String(value ?? '').toLowerCase().replace(',', '.').trim();
+  if (!s) return null;
+  const hm = /^(\d+(?:\.\d+)?)\s*(?:h|heures?)\s*(\d{1,2})?\s*(?:min|mn|minutes?)?$/.exec(s);
+  if (hm) return Math.round(parseFloat(hm[1]) * 60 + (hm[2] ? parseInt(hm[2], 10) : 0));
+  const m = /^(\d+(?:\.\d+)?)\s*(?:min|mn|minutes?)?$/.exec(s);
+  if (m) { const n = Math.round(parseFloat(m[1])); return n > 0 ? n : null; }
+  return null;
+}
 
 export interface MigrationOutcome {
   from: number;

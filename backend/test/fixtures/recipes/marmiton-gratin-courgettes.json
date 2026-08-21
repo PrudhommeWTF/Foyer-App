@@ -1,0 +1,66 @@
+{
+ "@type": "Recipe",
+ "@id": "https://www.marmiton.org/recettes/recette_gratin-de-courgettes-rapide_17071.aspx#recipe",
+ "mainEntityOfPage": {
+  "@id": "https://www.marmiton.org/recettes/recette_gratin-de-courgettes-rapide_17071.aspx"
+ },
+ "name": "Gratin de courgettes rapide : la meilleure recette",
+ "recipeCategory": "Accompagnement",
+ "image": [
+  "https://assets.afcdn.com/recipe/20190529/93185_w1024h1024c1cx2736cy1824cxt0cyt0cxb5472cyb3648.jpg",
+  "https://assets.afcdn.com/recipe/20190529/93185_w1024h1024c1cx2736cy1824cxt0cyt0cxb5472cyb3648.webp",
+  "https://assets.afcdn.com/recipe/20190529/93185_w1024h768c1cx2736cy1824cxt0cyt0cxb5472cyb3648.jpg",
+  "https://assets.afcdn.com/recipe/20190529/93185_w1024h768c1cx2736cy1824cxt0cyt0cxb5472cyb3648.webp",
+  "https://assets.afcdn.com/recipe/20190529/93185_w1024h576c1cx2736cy1824cxt0cyt0cxb5472cyb3648.jpg",
+  "https://assets.afcdn.com/recipe/20190529/93185_w1024h576c1cx2736cy1824cxt0cyt0cxb5472cyb3648.webp"
+ ],
+ "datePublished": "2006-10-23T11:43:00+02:00",
+ "dateModified": "2026-03-30T05:02:05+02:00",
+ "prepTime": "PT15M",
+ "cookTime": "PT15M",
+ "totalTime": "PT30M",
+ "recipeYield": "4 personnes",
+ "recipeIngredient": [
+  "4 courgettes",
+  "3 oignons",
+  "100 g de gruyère râpé",
+  "2 oeufs",
+  "2 cuillères à soupe de crème fraîche",
+  "1 noix de beurre",
+  "sel",
+  "poivre"
+ ],
+ "recipeInstructions": [
+  { "@type": "HowToStep", "text": "Emincer les oignons." },
+  { "@type": "HowToStep", "text": "Les faire fondre dans le beurre." },
+  { "@type": "HowToStep", "text": "Râper 4 courgettes avec leur peau." },
+  { "@type": "HowToStep", "text": "Les ajouter aux oignons." },
+  { "@type": "HowToStep", "text": "Préchauffer le four à 200°C (thermostat 6-7)." },
+  { "@type": "HowToStep", "text": "Mélanger le gruyère râpé, les oeufs, la crème fraîche, puis saler et poivrer." },
+  { "@type": "HowToStep", "text": "Mettre les courgettes dans un plat et verser par dessus la sauce et faire à four chaud pendant 15 min." }
+ ],
+ "author": { "@type": "Person", "name": "mijo" },
+ "description": "Recette Gratin de courgettes rapide : la meilleure recette rapide et facile : 4 personnes, 30 min de préparation. Notée 4.9/5 par 652 membres Marmiton.",
+ "keywords": "Gratin de courgettes rapide, gratin de légumes, courgette, oignon, gruyère râpé, oeuf, crème fraîche, beurre, sel, poivre, Très facile, Bon marché",
+ "aggregateRating": {
+  "@type": "AggregateRating",
+  "reviewCount": 652,
+  "ratingValue": 4.9,
+  "worstRating": 1,
+  "bestRating": 5
+ },
+ "video": { "@id": "https://www.marmiton.org/recettes/recette_gratin-de-courgettes-rapide_17071.aspx#video" },
+ "nutrition": {
+  "@type": "NutritionInformation",
+  "calories": "298 calories",
+  "servingSize": "543.8 grams",
+  "carbohydrateContent": "12.6 g",
+  "fatContent": "18.6 g",
+  "fiberContent": "5.8 g",
+  "proteinContent": "17 g",
+  "saturatedFatContent": "9.8 g",
+  "sodiumContent": "1.7 g",
+  "sugarContent": "11 g"
+ },
+ "suitableForDiet": ["https://schema.org/VegetarianDiet", "https://schema.org/GlutenFreeDiet"]
+}

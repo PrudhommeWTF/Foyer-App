@@ -168,7 +168,7 @@ export class HomeScreen {
 
   dinner = computed(() => {
     const v = this.d().meals[this.store.todayStr() + '-soir'];
-    if (v?.rid) { const r = this.d().recipes.find((x) => x.id === v.rid); if (r) return { name: r.name, meta: `${r.time} · niveau ${r.level.toLowerCase()}` }; }
+    if (v?.rid) { const r = this.d().recipes.find((x) => x.id === v.rid); if (r) return { name: r.name, meta: `${this.store.recipeTime(r)} · niveau ${r.level.toLowerCase()}` }; }
     if (v?.text) return { name: v.text, meta: 'Repas libre' };
     return { name: 'Rien de prévu', meta: 'Ajoutez un repas au planning' };
   });
