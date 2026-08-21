@@ -134,13 +134,30 @@ une fiche. Foyer lit ce balisage, et rien d'autre. Conséquences :
 | Titre (débarrassé des appâts à moteur de recherche) | **Calories et valeurs nutritionnelles** : le foyer ne fait pas de suivi nutritionnel |
 | Portions, temps de préparation, temps de cuisson | **Note du site** : 4,9/5 sur Marmiton n'est pas la note de la famille |
 | Lignes d'ingrédients, telles qu'écrites | **Régimes déclarés, catégorie, mots-clés** : aucun écran ne les lit encore |
-| Étapes, sections dépliées avec leur intertitre | **Auteur** : la source suffit à retrouver la page |
+| Étapes, avec le titre que le site leur donne | **Auteur** : la source suffit à retrouver la page |
 | Photo (rangée dans le magasin d'octets) | |
 
 Ce qui n'est pas compris est **signalé, jamais inventé** : portions absentes,
 temps non détaillés, ingrédients introuvables produisent un avertissement affiché
 dans le formulaire. La relecture du formulaire avant enregistrement tient lieu
 d'écran de reprise manuelle.
+
+### Ce que « générique » veut dire en pratique
+
+Les sites publient la même norme de façons différentes, et le lecteur absorbe
+ces écarts. Constatés sur les pages du jeu de test :
+
+| Écart | Marmiton | Journal des Femmes |
+|---|---|---|
+| Durées | `PT15M` | `PT0H05M` |
+| Image | tableau d'URL, JPEG et WebP mêlés | un seul `ImageObject` |
+| Étapes | `HowToStep` avec `text` seul | `HowToStep` avec un `name` **et** un `text` |
+| Ingrédients | « 100 g **de** gruyère râpé » | « 100 g gruyère » |
+
+Le titre d'étape est conservé devant la consigne (« Cuisson des courgettes :
+Faites-les cuire… ») : c'est un repère utile quand on cuisine en suivant l'écran.
+Il est laissé de côté quand il répète le début de la consigne ou qu'il est en
+réalité la consigne entière.
 
 ### Le temps de repos, que le standard ne sait pas dire
 

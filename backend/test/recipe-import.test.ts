@@ -211,13 +211,76 @@ describe('repérage d’un temps de repos', () => {
   });
 });
 
+describe('une recette d’un autre site que Marmiton', () => {
+  // Le seul test qui prouve que le lecteur est générique, et non calé sur un
+  // site : le Journal des Femmes publie la même norme, autrement.
+  const node = fixture('journaldesfemmes-gratin-courgettes.json');
+  const JDF = 'https://cuisine.journaldesfemmes.fr/recette/222125-gratin-de-courgettes';
+
+  it('lit une durée écrite avec ses heures à zéro', () => {
+    // « PT0H05M » là où Marmiton écrit « PT5M ». Les deux sont valides.
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.equal(recipe.prepMin, 5);
+    assert.equal(recipe.cookMin, 30);
+    assert.equal(recipe.portions, 6);
+  });
+
+  it('trouve l’image quand elle est un objet unique et non une liste', () => {
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.ok(recipe.imageUrl?.endsWith('40034787.jpg'));
+  });
+
+  it('garde le titre de chaque étape devant sa consigne', () => {
+    // Ce site titre ses étapes (« Cuisson des courgettes ») en plus de la
+    // consigne. C'est un repère utile quand on cuisine en suivant l'écran :
+    // le jeter perdrait une information que la page publie.
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.equal(recipe.steps.length, 5);
+    assert.match(recipe.steps[0], /^Préparation des courgettes : Lavez les courgettes/);
+    assert.match(recipe.steps[4], /^Cuisson du gratin : Versez cette préparation/);
+  });
+
+  it('laisse telle quelle l’étape que le site n’a pas titrée', () => {
+    // La quatrième n'a pas de nom : pas de deux-points orphelin devant.
+    const { recipe } = fromRecipeNode(node, JDF);
+    assert.match(recipe.steps[3], /^Dans un saladier, battez les oeufs/);
+  });
+
+  it('ignore les blocs que la page ajoute autour de la recette', () => {
+    // Vidéo, « about », « mentions », note du site : rien de tout cela n'entre.
+    const { recipe, warnings } = fromRecipeNode(node, JDF);
+    assert.equal(recipe.name, 'Gratin de courgettes');
+    assert.equal(recipe.ingr.length, 8);
+    assert.deepEqual(warnings, []);
+  });
+});
+
+describe('titre d’étape', () => {
+  it('n’est pas répété quand la consigne le reprend déjà', () => {
+    assert.deepEqual(
+      parseInstructions([{ name: 'Cuisson', text: 'Cuisson au four pendant 20 min.' }]),
+      ['Cuisson au four pendant 20 min.'],
+    );
+  });
+
+  it('n’est pas mis en tête quand il est en fait la consigne entière', () => {
+    const long = 'Faites revenir les oignons dans le beurre jusqu’à ce qu’ils soient bien dorés, puis réservez.';
+    assert.deepEqual(parseInstructions([{ name: long, text: 'Suite.' }]), ['Suite.']);
+  });
+
+  it('sert de consigne quand il n’y a pas de texte', () => {
+    assert.deepEqual(parseInstructions([{ name: 'Mélanger le tout.' }]), ['Mélanger le tout.']);
+  });
+});
+
 describe('toutes les pages réelles du jeu de test', () => {
   // Garde-fou pour les fixtures à venir : ce qui est ajouté dans le dossier doit
   // se lire, sinon le fichier est là sans que personne ne s'en aperçoive.
   const noms = fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
 
   it('le dossier de fixtures n’est pas vide', () => {
-    assert.ok(noms.length >= 4, 'au moins quatre pages réelles');
+    assert.ok(noms.length >= 5, 'au moins cinq pages réelles');
+    assert.ok(noms.some((n) => !n.startsWith('marmiton-')), 'au moins un autre site que Marmiton');
   });
 
   for (const nom of noms) {

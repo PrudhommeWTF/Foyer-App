@@ -144,7 +144,15 @@ function stepText(node: unknown): string {
   if (typeof node === 'string') return clean(node);
   if (!node || typeof node !== 'object') return '';
   const o = node as Record<string, unknown>;
-  return clean(o['text'] ?? o['name'] ?? o['description']);
+  const body = clean(o['text'] ?? o['description']);
+  const label = clean(o['name']);
+  if (!body) return label;
+  // Certains sites titrent chaque étape (« Cuisson des courgettes ») en plus de
+  // la consigne. C'est un repère utile quand on cuisine en suivant l'écran :
+  // on le garde devant, sauf s'il ne fait que répéter le début de la consigne,
+  // ou s'il est si long qu'il est en réalité la consigne elle-même.
+  if (!label || label.length > 80 || body.toLowerCase().startsWith(label.toLowerCase())) return body;
+  return label + ' : ' + body;
 }
 
 /**
