@@ -45,6 +45,13 @@ jobs:
           npm ci
           npm run build
 
+      # Analyse des lignes d'ingrédients, agrégation, conversion d'unités, dates :
+      # une erreur y est silencieuse (elle fait acheter trois kilos de farine,
+      # elle ne plante pas). Ces tests bloquent la CI.
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
       - name: Lint code mort (frontend)
         working-directory: frontend
         run: npx tsc -p tsconfig.app.json --noUnusedLocals --noUnusedParameters --noEmit

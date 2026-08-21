@@ -56,6 +56,13 @@ export class FoyerStore {
 
   /** Non-null data accessor for use inside authed views. */
   readonly data = computed(() => this._data());
+
+  /**
+   * Meal slots actually shown. Breakfast is opt-in: it is almost never planned
+   * and costs a third of the grid height on a phone. Hiding it keeps whatever
+   * was already recorded, it only stops displaying the row.
+   */
+  readonly mealSlots = computed(() => MEAL_SLOTS.filter((s) => s.key !== 'matin' || !!this._data()?.settings.showBreakfast));
   readonly narrow = signal(false);
 
   // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
@@ -671,24 +678,37 @@ export class FoyerStore {
     this.toast('Repas enregistré');
   }
   clearMeal(): void { const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot; this.mutate((d) => { delete d.meals[key]; }); this.patch({ mealEdit: null }); this.toast('Repas retiré'); }
-  generateList(): void {
+  /**
+   * Rough draft of the recipe → planning → list chain: one line of ingredients
+   * becomes one article. The week is passed in explicitly because `weekOffset`
+   * belongs to the meal screen: a button elsewhere must not silently generate
+   * whatever week was last browsed there.
+   */
+  generateList(weekOffset = this.ui().weekOffset): void {
     const cl = this.activeShopListId();
     const d = this._data(); if (!d) return;
+    // Generated articles land in a real aisle, otherwise they pile up in a group
+    // the interface can neither rename nor delete.
+    const bin = d.aisles.find((a) => a.name === 'À trier')?.name || d.aisles[0]?.name || 'À trier';
     const names = new Set(d.shop.filter((i) => i.listId === cl).map((i) => i.name.toLowerCase()));
     const add: HouseholdState['shop'] = [];
-    weekDates(this.ui().weekOffset).forEach((day) => {
+    weekDates(weekOffset, this.todayStr()).forEach((day) => {
       const ds = dstr(day);
-      MEAL_SLOTS.forEach((sl) => {
+      this.mealSlots().forEach((sl) => {
         const v = d.meals[ds + '-' + sl.key]; if (!v || !v.rid) return;
         const r = d.recipes.find((x) => x.id === v.rid); if (!r) return;
         r.ingr.forEach((ing) => {
-          const short = ing.replace(/^[0-9].*?(de |d’)?/, '').trim();
-          const label = short.charAt(0).toUpperCase() + short.slice(1);
-          if (!names.has(label.toLowerCase())) { names.add(label.toLowerCase()); add.push({ id: uid('g'), name: label, qty: '', cat: 'Depuis le planning repas', done: false, listId: cl }); }
+          const label = cap(ing.trim());
+          if (!label || names.has(label.toLowerCase())) return;
+          names.add(label.toLowerCase());
+          add.push({ id: uid('g'), name: label, qty: '', cat: bin, done: false, listId: cl });
         });
       });
     });
-    this.mutate((s) => { s.shop.push(...add); });
+    this.mutate((s) => {
+      if (!s.aisles.some((a) => a.name === bin)) s.aisles.push({ id: uid('a'), name: bin, color: '#8A7E74' });
+      s.shop.push(...add);
+    });
     this.patch({ screen: 'courses' });
     this.toast(add.length + ' ingrédients ajoutés depuis les repas');
   }

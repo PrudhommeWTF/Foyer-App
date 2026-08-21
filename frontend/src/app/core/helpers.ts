@@ -25,10 +25,14 @@ export function occursOn(ev: EventItem, ds: string): boolean {
   return false;
 }
 
-/** The 7 dates of a meal-planning week, offset from the reference week (13 Jul 2026). */
-export function weekDates(offset: number): Date[] {
-  const base = new Date(2026, 6, 13);
-  base.setDate(base.getDate() + offset * 7);
+/**
+ * The 7 dates (Monday first) of the week containing `anchorIso`, shifted by
+ * `offset` weeks. The anchor is passed in rather than read from the clock: the
+ * household time zone lives in the store, and a pure function stays testable.
+ */
+export function weekDates(offset: number, anchorIso: string): Date[] {
+  const base = parseDay(anchorIso);
+  base.setDate(base.getDate() - ((base.getDay() + 6) % 7) + offset * 7);
   const out: Date[] = [];
   for (let i = 0; i < 7; i++) { const d = new Date(base); d.setDate(base.getDate() + i); out.push(d); }
   return out;

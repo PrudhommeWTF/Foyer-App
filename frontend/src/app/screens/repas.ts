@@ -29,7 +29,7 @@ import { weekDates, dstr } from '../core/helpers';
             <button class="btn btn-soft sm" (click)="store.patch({ weekOffset: 0 })">Cette semaine</button>
           }
         </div>
-        <button class="btn btn-sage" (click)="store.generateList()">
+        <button class="btn btn-sage" (click)="store.generateList(store.ui().weekOffset)">
           <f-icon name="bolt" [size]="20" color="#fff" [width]="2" /> Générer les courses
         </button>
       </div>
@@ -44,7 +44,7 @@ import { weekDates, dstr } from '../core/helpers';
             </div>
           }
 
-          @for (slot of slots; track slot.key) {
+          @for (slot of store.mealSlots(); track slot.key) {
             <div class="rlabel">
               <span class="rlabel-txt">{{ slot.label }}</span>
             </div>
@@ -175,11 +175,10 @@ export class RepasScreen {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
-  readonly slots = MEAL_SLOTS;
   readonly DOW = DOW;
   readonly dstr = dstr;
 
-  wDates = computed(() => weekDates(this.store.ui().weekOffset));
+  wDates = computed(() => weekDates(this.store.ui().weekOffset, this.store.todayStr()));
 
   weekLabel = computed(() => {
     const w = this.wDates();

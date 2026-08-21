@@ -86,7 +86,7 @@ export function initialUi(): UiState {
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
     weekOffset: 0, mealEdit: null, mealMode: 'recipe', mealRid: null, mealText: '',
-    showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: '2026-07-16', evPickStart: true, dpMonth: 0,
+    showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shCat: 'Fruits & légumes', shListId: 'cl1', newShop: '',
     activeShopList: 'cl1', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aisleDelId: null,

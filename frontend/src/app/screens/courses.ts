@@ -101,10 +101,10 @@ interface AisleGroup { id: string | null; name: string; color: string; editable:
             <div class="prog-lbl">articles cochés</div>
             <div class="bar"><div class="bar-fill" [style.width.%]="progress().pct"></div></div>
           </div>
-          <div class="gen-card" (click)="store.generateList()">
+          <div class="gen-card" (click)="store.generateList(0)">
             <f-icon name="bolt" [size]="24" color="#fff" />
             <div class="gen-t">Générer depuis les repas</div>
-            <div class="gen-s">Ajoute tous les ingrédients du planning de la semaine en un clic</div>
+            <div class="gen-s">Ajoute les ingrédients des repas prévus cette semaine</div>
           </div>
         </div>
       </div>

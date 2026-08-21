@@ -26,6 +26,8 @@ export interface Settings {
   dateFmt: string;
   dark: boolean; prefNotifs: boolean;
   academie?: string;
+  /** Show the breakfast row in the meal planner. Off by default: rarely planned. */
+  showBreakfast?: boolean;
 }
 
 export interface HouseholdState {
