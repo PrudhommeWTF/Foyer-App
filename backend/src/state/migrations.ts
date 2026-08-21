@@ -21,7 +21,7 @@ import path from 'path';
 import { DetectedType, detectType } from '../storage/blobs';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -145,6 +145,28 @@ export const STATE_MIGRATIONS: StateMigration[] = [
           'rouvrez ces fiches pour saisir les minutes de préparation et de cuisson.',
         );
       }
+    },
+  },
+  {
+    version: 4,
+    label: 'planning des repas : plusieurs plats par créneau',
+    up: (doc, ctx) => {
+      const meals = doc['meals'];
+      if (!meals || typeof meals !== 'object' || Array.isArray(meals)) return;
+      let convertis = 0;
+      for (const [key, brut] of Object.entries(meals as Record<string, any>)) {
+        if (!brut || typeof brut !== 'object') { meals[key] = { items: [] }; continue; }
+        if (Array.isArray(brut['items'])) continue;  // déjà migré
+        // Le plat unique du créneau devient le premier de la liste. Un créneau
+        // qui ne portait ni recette ni texte ne portait rien : la liste est vide,
+        // ce que l'écran affiche déjà comme « Libre ».
+        const item = brut['rid'] ? { rid: String(brut['rid']) }
+          : brut['text'] ? { text: String(brut['text']) }
+          : null;
+        meals[key] = { items: item ? [item] : [] };
+        if (item) convertis++;
+      }
+      if (convertis) ctx.log(`${convertis} repas repris comme premier plat de leur créneau.`);
     },
   },
 ];

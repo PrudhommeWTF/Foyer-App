@@ -178,13 +178,55 @@ test('les durées à la française se lisent sous leurs formes courantes', () =>
   }
 });
 
+// ---- plusieurs plats par créneau -------------------------------------------
+
+test('un repas unique devient le premier plat de son créneau', () => {
+  const { doc } = run({
+    meals: {
+      '2026-08-21-soir': { rid: 'r1' },
+      '2026-08-22-midi': { text: 'Restes' },
+    },
+  });
+  assert.deepEqual(doc['meals']['2026-08-21-soir'], { items: [{ rid: 'r1' }] });
+  assert.deepEqual(doc['meals']['2026-08-22-midi'], { items: [{ text: 'Restes' }] });
+});
+
+test('un créneau qui ne portait rien devient une liste vide', () => {
+  // L'écran l'affiche « Libre », comme avant : rien n'est perdu, rien n'est inventé.
+  const { doc } = run({ meals: { '2026-08-21-midi': {}, '2026-08-21-soir': null } });
+  assert.deepEqual(doc['meals']['2026-08-21-midi'], { items: [] });
+  assert.deepEqual(doc['meals']['2026-08-21-soir'], { items: [] });
+});
+
+test('un créneau déjà en liste n’est pas retouché', () => {
+  const deja = { items: [{ rid: 'r1' }, { rid: 'r2' }, { text: 'Tarte' }] };
+  const { doc } = run({ meals: { '2026-08-21-soir': deja } });
+  assert.deepEqual(doc['meals']['2026-08-21-soir'], deja);
+});
+
+test('aucun repas du planning ne disparaît', () => {
+  const meals: Record<string, any> = {};
+  for (let i = 1; i <= 14; i++) meals[`2026-08-${String(i).padStart(2, '0')}-soir`] = { rid: 'r' + i };
+  const { doc, outcome } = run({ meals });
+  assert.equal(Object.keys(doc['meals']).length, 14);
+  assert.ok(Object.values(doc['meals']).every((v: any) => v.items.length === 1));
+  assert.ok(outcome.notes.some((n) => /14 repas/.test(n)));
+});
+
+test('un planning absent ou biscornu ne fait pas tomber la migration', () => {
+  for (const meals of [undefined, null, [], 'nope', 42]) {
+    assert.doesNotThrow(() => run({ meals } as Record<string, any>));
+  }
+});
+
 // ---- les garanties transverses ---------------------------------------------
 
 test('rejouer les migrations sur un document déjà migré ne change rien', () => {
   const before = {
-    recipes: [{ id: 'r1', name: 'Gratin', photo: PNG_DATA_URL }],
+    recipes: [{ id: 'r1', name: 'Gratin', photo: PNG_DATA_URL, time: '45 min' }],
     aisles: [{ id: 'a1', name: 'Frais', color: '#4E93B8' }],
     shop: [{ id: 's1', name: 'Beurre', cat: 'Frais', done: true, listId: 'cl1' }],
+    meals: { '2026-08-21-soir': { rid: 'r1' } },
   };
   const { doc } = run(before);
   const snapshot = JSON.stringify(doc);
@@ -225,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 

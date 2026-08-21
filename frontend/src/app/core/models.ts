@@ -27,7 +27,17 @@ export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
 export interface FileItem { id: string; name: string; folderId: string; type: FileType; date: string; data?: string | null; }
-export interface MealValue { rid?: string; text?: string; }
+/**
+ * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
+ * se choisissent séparément. Chacun est soit une recette du carnet, soit un
+ * texte libre (« restes », « pizza », « chez les parents »).
+ *
+ * L'enveloppe `MealValue` existe pour ce qu'elle accueillera ensuite sans
+ * changer de forme une seconde fois : le nombre de couverts réel et les convives
+ * absents, prévus au modèle cible.
+ */
+export interface MealItem { rid?: string; text?: string; }
+export interface MealValue { items: MealItem[]; }
 // `photoId` désigne un fichier servi par /api/files : les octets ne sont plus
 // dans le document, qui repartait en entier à chaque enregistrement.
 export interface Recipe {
