@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
-  ImportError, cleanTitle, findRecipeNode, fromRecipeNode, parseImage,
+  ImportError, cleanTitle, findRecipeNode, findRestHint, fromRecipeNode, parseImage,
   parseIngredients, parseInstructions, parseIsoDuration, parseRecipePage, parseYield,
 } from '../src/recipes/schema-org';
 
@@ -153,13 +153,71 @@ describe('une troisième recette Marmiton', () => {
   });
 });
 
+describe('un dessert sans cuisson, mais avec un long repos', () => {
+  const node = fixture('marmiton-tiramisu-framboises.json');
+
+  it('ne retient que l’appât final d’un titre à deux fois deux-points', () => {
+    // « Tiramisu aux framboises : la recette inratable : la meilleure recette ».
+    // Le sous-titre du milieu appartient à la recette, seul le dernier est du bruit.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.name, 'Tiramisu aux framboises : la recette inratable');
+  });
+
+  it('lit « PT0S » comme une absence de cuisson, pas comme zéro minute', () => {
+    // Un zéro s'afficherait « Cuisson 0 min », ce qui est faux : ce dessert ne
+    // cuit pas du tout.
+    const { recipe } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(recipe.cookMin, null);
+    assert.equal(recipe.prepMin, 25);
+    assert.equal(recipe.portions, 6);
+  });
+
+  it('ne réclame pas de temps quand la préparation seule est connue', () => {
+    const { warnings } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    assert.equal(warnings.some((w) => /temps total/.test(w)), false);
+  });
+
+  it('signale le repos de 24 heures, que les durées ne montrent pas', () => {
+    // La fiche annonce 25 min et se mange le lendemain. Sans ce signalement,
+    // planifier ce dessert pour samedi soir revient à s'y prendre un jour trop tard.
+    const { warnings } = fromRecipeNode(node, 'https://www.marmiton.org/r');
+    const repos = warnings.find((w) => /temps de repos/.test(w));
+    assert.ok(repos, 'le repos doit être signalé');
+    assert.match(repos!, /24 heures/);
+  });
+});
+
+describe('repérage d’un temps de repos', () => {
+  it('reconnaît les formulations courantes', () => {
+    assert.match(findRestHint(['Mettre au réfrigérateur 24 heures avant de servir.'])!, /24 heures/);
+    assert.ok(findRestHint(['Laisser mariner toute la nuit au frais.']));
+    assert.ok(findRestHint(['Préparer la pâte la veille et la laisser reposer.']));
+    assert.ok(findRestHint(['Laisser lever 2 h dans un endroit tiède.']));
+  });
+
+  it('ignore ce qui ne change pas un planning', () => {
+    // Il faut à la fois un mot de repos et une durée longue dans la même phrase.
+    assert.equal(findRestHint(['Laisser reposer 10 min hors du feu.']), null, 'un repos court');
+    assert.equal(findRestHint(['Enfourner 2 heures à 150 degrés.']), null, 'une cuisson longue');
+    assert.equal(findRestHint(['Mélanger et servir aussitôt.']), null);
+    assert.equal(findRestHint([]), null);
+  });
+
+  it('ne se déclenche pas sur les trois autres pages réelles', () => {
+    for (const nom of ['marmiton-gratin-courgettes.json', 'marmiton-carbonara.json', 'marmiton-croque-monsieur.json']) {
+      const { warnings } = fromRecipeNode(fixture(nom), 'https://x/r');
+      assert.equal(warnings.some((w) => /temps de repos/.test(w)), false, nom);
+    }
+  });
+});
+
 describe('toutes les pages réelles du jeu de test', () => {
   // Garde-fou pour les fixtures à venir : ce qui est ajouté dans le dossier doit
   // se lire, sinon le fichier est là sans que personne ne s'en aperçoive.
   const noms = fs.readdirSync(FIXTURES).filter((f) => f.endsWith('.json'));
 
   it('le dossier de fixtures n’est pas vide', () => {
-    assert.ok(noms.length >= 3, 'au moins trois pages réelles');
+    assert.ok(noms.length >= 4, 'au moins quatre pages réelles');
   });
 
   for (const nom of noms) {

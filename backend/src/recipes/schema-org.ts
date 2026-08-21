@@ -213,6 +213,31 @@ export function parseImage(value: unknown): string | null {
   return urls.find((u) => /\.(jpe?g|png)(\?|$)/i.test(u)) ?? urls[0];
 }
 
+/**
+ * Repère un temps de repos annoncé dans les étapes.
+ *
+ * schema.org n'a pas de champ pour cela : un tiramisu qui doit passer 24 heures
+ * au réfrigérateur s'annonce « 25 min » et le repos n'existe que dans la phrase
+ * d'une étape. Quelqu'un qui le planifie pour le dîner de samedi s'y prend le
+ * samedi après-midi, et se trompe d'un jour.
+ *
+ * On ne fabrique donc aucune donnée : on rend la phrase telle qu'elle est écrite,
+ * pour la signaler à l'écran. Il faut à la fois un mot de repos et une durée
+ * longue dans la même phrase : « laisser reposer 10 min » ne change pas un
+ * planning, « au réfrigérateur 24 heures » si.
+ */
+const REPOS = /r[ée]frig[ée]rateur|frigo|au frais|repos|reposer|mariner|lever\b|prendre au froid/i;
+const LONGUE = /\b\d+\s*(?:h\b|heures?|jours?)|une nuit|toute la nuit|la veille\b/i;
+
+export function findRestHint(steps: string[]): string | null {
+  for (const step of steps) {
+    for (const phrase of step.split(/(?<=[.!?])\s+/)) {
+      if (REPOS.test(phrase) && LONGUE.test(phrase)) return phrase.trim();
+    }
+  }
+  return null;
+}
+
 // ---- assemblage ------------------------------------------------------------
 
 /** Construit la recette à partir du nœud, en disant ce qu'elle n'a pas su lire. */
@@ -230,6 +255,14 @@ export function fromRecipeNode(node: Record<string, unknown>, sourceUrl: string)
 
   const portions = parseYield(node['recipeYield']);
   if (portions == null) warnings.push('Nombre de portions absent ou illisible : indiquez-le pour que les courses se mettent à l’échelle.');
+
+  const repos = findRestHint(steps);
+  if (repos) {
+    warnings.push(
+      'Cette recette demande un temps de repos que les durées ne montrent pas : « ' + repos + ' ». ' +
+      'Pensez-y en la plaçant au planning.',
+    );
+  }
 
   const prepMin = parseIsoDuration(node['prepTime']);
   const cookMin = parseIsoDuration(node['cookTime']);

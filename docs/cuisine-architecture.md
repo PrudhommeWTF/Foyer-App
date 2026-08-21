@@ -142,6 +142,22 @@ temps non détaillés, ingrédients introuvables produisent un avertissement aff
 dans le formulaire. La relecture du formulaire avant enregistrement tient lieu
 d'écran de reprise manuelle.
 
+### Le temps de repos, que le standard ne sait pas dire
+
+`schema.org` n'a pas de champ pour le repos. Un tiramisu qui doit passer 24 heures
+au réfrigérateur s'annonce « 25 min », et le repos n'existe que dans la phrase
+d'une étape. Quelqu'un qui le planifie pour le dîner de samedi s'y prend le
+samedi après-midi, et se trompe d'un jour.
+
+L'import repère donc ces phrases et les **signale telles qu'elles sont écrites**,
+sans en tirer de donnée. Il faut un mot de repos (réfrigérateur, reposer, mariner,
+lever, la veille) **et** une durée longue (heures, jours, une nuit) dans la même
+phrase : « laisser reposer 10 min » ne change pas un planning, « au réfrigérateur
+24 heures » si. Une cuisson longue au four ne déclenche rien.
+
+L'étiquette « à préparer la veille » du modèle cible, posée à la main, restera le
+bon endroit pour en faire quelque chose d'exploitable.
+
 ### Les gardes de la sortie réseau
 
 Le serveur va chercher une adresse fournie par un utilisateur, sur un réseau
