@@ -911,32 +911,84 @@ export class FoyerStore {
     this.toast(s.foEditId ? 'Dossier modifié' : 'Dossier créé');
     this.patch({ folderForm: false, foEditId: null });
   }
-  confirmFolderDel(): void {
+  async confirmFolderDel(): Promise<void> {
     const id = this.ui().folderDelId; if (!id) return;
+    const fileIds = (this._data()?.files || []).filter((fl) => fl.folderId === id).map((fl) => fl.fileId).filter((x): x is number => !!x);
     this.mutate((d) => { d.folders = d.folders.filter((f) => f.id !== id); d.files = d.files.filter((fl) => fl.folderId !== id); });
     this.patch({ folderDelId: null, docFolder: this.ui().docFolder === id ? null : this.ui().docFolder });
     this.toast('Dossier supprimé');
+    await this.releaseFiles(fileIds);
   }
-  newFile(): void { const fld = this.ui().docFolder || this._data()?.folders[0]?.id || null; this.patch({ fileForm: true, fiEditId: null, fiName: '', fiFolderId: fld, fiType: 'PDF', fiData: null }); }
-  editFile(id: string): void { const f = this._data()?.files.find((x) => x.id === id); if (!f) return; this.patch({ fileForm: true, fiEditId: id, fiName: f.name, fiFolderId: f.folderId, fiType: f.type, fiData: f.data || null }); }
-  onFileUpload(file: File): void {
-    const type = fileTypeOf(file.name);
-    const rd = new FileReader();
-    rd.onload = (ev) => this.patch({ fiName: this.ui().fiName.trim() || file.name, fiType: type, fiData: ev.target?.result as string });
-    rd.readAsDataURL(file);
-    this.patch({ fiName: this.ui().fiName.trim() || file.name, fiType: type });
+  // L'identifiant de la fiche est tiré à l'ouverture du formulaire : un fichier a
+  // besoin d'un propriétaire pour être rangé, y compris avant le premier
+  // enregistrement. Même raisonnement que pour la photo d'une recette.
+  newFile(): void { const fld = this.ui().docFolder || this._data()?.folders[0]?.id || null; this.patch({ fileForm: true, fiEditId: null, fiId: uid('d'), fiName: '', fiFolderId: fld, fiType: 'PDF', fiFileId: null, fiBusy: false }); }
+  editFile(id: string): void { const f = this._data()?.files.find((x) => x.id === id); if (!f) return; this.patch({ fileForm: true, fiEditId: id, fiId: id, fiName: f.name, fiFolderId: f.folderId, fiType: f.type, fiFileId: f.fileId ?? null, fiBusy: false }); }
+  /**
+   * Les octets partent sur le disque tout de suite, et non dans le document
+   * d'état : c'est toute la raison de ce module. Le fichier qu'un envoi remplace
+   * n'est pas supprimé ici, parce qu'annuler la modale doit laisser la fiche
+   * intacte ; c'est le ménage du démarrage qui retire ce que plus rien ne cite.
+   */
+  async onFileUpload(file: File): Promise<void> {
+    const ownerId = this.ui().fiId; if (!ownerId) return;
+    this.patch({ fiName: this.ui().fiName.trim() || file.name, fiType: fileTypeOf(file.name), fiBusy: true });
+    try {
+      const res = await this.api.uploadFile('document', ownerId, file);
+      this.patch({ fiFileId: res.file.id });
+    } catch (e) {
+      // Le message du serveur nomme la limite ou le format : le relayer tel quel
+      // vaut mieux qu'un « échec » qui ne dit pas quoi faire.
+      this.toast((e as Error).message);
+    } finally {
+      this.patch({ fiBusy: false });
+    }
+  }
+  /**
+   * Le fichier n'est plus dans la page : il est téléchargé avec la session puis
+   * proposé à l'enregistrement. Une balise <a href="api/files/…"> ne porterait
+   * pas l'en-tête d'autorisation et recevrait un 401.
+   */
+  async downloadFile(id: string): Promise<void> {
+    const f = this._data()?.files.find((x) => x.id === id); if (!f?.fileId) return;
+    try {
+      const url = URL.createObjectURL(await this.api.download('files/' + f.fileId));
+      const a = document.createElement('a');
+      a.href = url; a.download = f.name;
+      a.click();
+      // Révoquée au tour suivant : révoquer dans la foulée du clic annule le
+      // téléchargement sur certains navigateurs.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      this.toast((e as Error).message);
+    }
+  }
+  /**
+   * Rend les octets au serveur. Un échec n'est pas une perte : le ménage du
+   * démarrage retire ce que le document ne cite plus. Le faire tout de suite
+   * évite qu'une copie de pièce d'identité reste sur le disque jusque-là.
+   */
+  private async releaseFiles(ids: number[]): Promise<void> {
+    for (const id of ids) await this.api.deleteFile(id).catch(() => undefined);
   }
   saveFile(): void {
     const s = this.ui(); const name = s.fiName.trim(); if (!name) { this.toast('Donne un nom au fichier'); return; } if (!s.fiFolderId) { this.toast('Choisis un dossier'); return; }
     const now = new Date(); const date = now.getDate() + ' ' + ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][now.getMonth()] + ' ' + now.getFullYear();
     this.mutate((d) => {
-      if (s.fiEditId) { const i = d.files.findIndex((f) => f.id === s.fiEditId); if (i >= 0) d.files[i] = { ...d.files[i], name, folderId: s.fiFolderId!, type: s.fiType, data: s.fiData || null }; }
-      else d.files.unshift({ id: uid('d'), name, folderId: s.fiFolderId!, type: s.fiType, data: s.fiData || null, date });
+      if (s.fiEditId) { const i = d.files.findIndex((f) => f.id === s.fiEditId); if (i >= 0) d.files[i] = { ...d.files[i], name, folderId: s.fiFolderId!, type: s.fiType, fileId: s.fiFileId }; }
+      else d.files.unshift({ id: s.fiId, name, folderId: s.fiFolderId!, type: s.fiType, fileId: s.fiFileId, date });
     });
     this.toast(s.fiEditId ? 'Fichier modifié' : 'Fichier ajouté');
     this.patch({ fileForm: false, fiEditId: null });
   }
-  confirmFileDel(): void { const id = this.ui().fileDelId; if (!id) return; this.mutate((d) => { d.files = d.files.filter((f) => f.id !== id); }); this.patch({ fileDelId: null }); this.toast('Fichier supprimé'); }
+  async confirmFileDel(): Promise<void> {
+    const id = this.ui().fileDelId; if (!id) return;
+    const fileId = this._data()?.files.find((f) => f.id === id)?.fileId ?? null;
+    this.mutate((d) => { d.files = d.files.filter((f) => f.id !== id); });
+    this.patch({ fileDelId: null });
+    this.toast('Fichier supprimé');
+    await this.releaseFiles(fileId ? [fileId] : []);
+  }
 
   // ---- meals ------------------------------------------------------------
   // Un créneau porte plusieurs plats, dans l'ordre du service : une entrée, un

@@ -34,12 +34,14 @@ dédiées, et une archive du répertoire de données demeure une sauvegarde comp
 
 Deux choses seulement en sortent, chacune pour une raison précise.
 
-### 1. Les octets des photos ne sont plus dans le document
+### 1. Les octets des fichiers ne sont plus dans le document
 
 Une photo rangée en data-URL dans l'état n'était pas un problème de place, mais
 de **débit** : le document entier repart à chaque enregistrement. Trente recettes
 photographiées, ce sont plusieurs mégaoctets renvoyés en 4G à chaque coche d'un
-article dans un magasin.
+article dans un magasin. Le module **Documents** portait exactement la même
+dette, soldée depuis (migration 5) : les pièces d'identité et les factures de la
+famille voyageaient elles aussi dans chaque enregistrement.
 
 Les octets vivent donc dans le magasin partagé du foyer,
 `backend/src/storage/blobs.ts`, extrait des pièces jointes du module Finances :
@@ -54,6 +56,18 @@ Les octets vivent donc dans le magasin partagé du foyer,
   table ne le réclame.
 - **Type reconnu d'après les octets**, jamais d'après l'extension. Les photos de
   recettes n'acceptent que des images (`JPEG, PNG, WEBP, GIF, HEIC`), pas un PDF.
+- **Ce que chaque propriétaire accepte lui est propre** (`ACCEPTS` dans
+  `storage/routes.ts`). Un dossier de famille reçoit un `.odt`, un `.txt` ou un
+  tableur : refuser ce que le détecteur ne sait pas nommer laisserait ces
+  fichiers en data-URL dans l'état, c'est-à-dire la dette qu'on solde. Ils sont
+  donc rangés sous `application/octet-stream`, et c'est le nom conservé avec la
+  fiche qui porte l'extension. Le détecteur, lui, ne bouge pas : il sert aussi de
+  garde aux pièces du module Finances, où « je ne reconnais pas ces octets » doit
+  rester un refus.
+- **Ce qu'on ne sait pas afficher part en téléchargement.** `GET /api/files/<id>`
+  ne répond `inline` que pour un PDF ou une image ; tout le reste est servi en
+  `attachment`. Rendre des octets déposés par un utilisateur dans l'origine de
+  l'application serait la porte ouverte à une page déposée en pièce jointe.
 
 Le navigateur ne peut pas afficher `/api/files/3` directement : une balise
 `<img>` ne porte pas l'en-tête d'autorisation, et mettre le jeton dans l'URL le
@@ -104,8 +118,9 @@ réseau.
 |---|---|
 | `GET /api/shopping?since=<version>` | Instantané de la liste. Répond `{ version, unchanged: true }` quand rien n'a bougé. |
 | `POST /api/shopping/ops` | Applique un lot (`add`, `set-state`, `edit`, `remove`). Rend les articles, la version, les opérations retenues et celles écartées avec leur raison. |
-| `POST /api/files?owner=recipe&id=<id>&filename=<nom>` | Range une photo. Corps : les octets bruts. |
-| `GET /api/files/<id>` | Sert la photo, en flux. |
+| `POST /api/files?owner=recipe\|document&id=<id>&filename=<nom>` | Range un fichier. Corps : les octets bruts. |
+| `GET /api/files/<id>` | Sert le fichier, en flux (`inline` pour un PDF ou une image, `attachment` sinon). |
+| `DELETE /api/files/<id>` | Rend les octets au disque. Appelé à la suppression d'une fiche : la copie d'une pièce d'identité n'a pas à attendre le ménage du prochain démarrage. |
 | `GET /api/finances/attachments-check` | Diagnostic du magasin, désormais **pour les deux tables**. Chaque ligne signalée porte son détenteur. |
 
 Une opération écartée l'est **définitivement**, pas différée : le client la retire
@@ -602,10 +617,16 @@ Sortie attendue, du genre :
 ```
 [foyer] État : migration 1 appliquée (photos de recettes rangées sur le disque).
 [foyer] État : migration 2 appliquée (liste de courses : rayon par identifiant et état à trois valeurs).
+[foyer] État : migration 5 appliquée (documents rangés sur le disque).
 [foyer] État : 4 photo(s) de recette déplacée(s) hors du document.
+[foyer] État : 12 document(s) déplacé(s) hors du document d'état.
 [foyer] État : Rayon(s) recréé(s) depuis des articles orphelins : Depuis le planning repas.
 [foyer] État : document d'origine sauvegardé dans /var/lib/foyer/backups/state-avant-migration-v0-2026-08-21T01-13-07-630Z.json
 ```
+
+Un message `document(s) illisible(s)` **nomme** les fiches concernées : leurs
+octets restent dans l'état et continuent d'y peser. Rouvrez la fiche dans
+Documents et reposez le fichier, c'est la seule reprise possible.
 
 Un message `photo(s) de recette illisible(s)` signale des fiches à reprendre à la
 main : rouvrez la recette et reposez la photo. Rien n'a été effacé.
@@ -701,7 +722,8 @@ farine.
 | `backend/test/shopping-ops.test.ts` | Rejeu, doublons, deux téléphones simultanés, opérations invalides écartées sans bloquer le lot |
 | `backend/test/shopping-repo.test.ts` | Transaction tout ou rien, journal persistant, un `PUT` périmé n'emporte pas la liste |
 | `backend/test/state-migrations.test.ts` | Rejouabilité, aucune perte, sauvegarde écrite avant transformation |
-| `backend/test/household-files.test.ts` | Déduplication entre les deux tables, balayage des orphelins |
+| `backend/test/household-files.test.ts` | Déduplication entre les deux tables, balayage des orphelins, cohabitation photos de recettes et documents |
+| `backend/test/files-routes.test.ts` | Surface HTTP des fichiers : ce que chaque propriétaire accepte, `inline` contre `attachment`, suppression qui n'emporte pas les octets d'un voisin |
 | `backend/test/recipe-import.test.ts` | Lecture du JSON-LD sur une vraie page Marmiton, et sur les formes tordues du standard |
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
@@ -715,11 +737,10 @@ cd frontend && npm test
 
 ## À savoir pour la suite
 
-- Le module **Documents** range encore ses fichiers en data-URL dans le document
-  (`files[].data`). Le magasin est maintenant disponible pour lui ; c'est un
-  chantier à part, non traité ici.
-- La limite `express.json({ limit: '15mb' })` sur `/api/state` reste dimensionnée
-  pour ces documents-là. Elle pourra baisser quand ils auront migré.
+- La limite `express.json()` sur `/api/state` est passée de 15 Mo à **4 Mo**,
+  maintenant que plus aucun octet de fichier ne transite par le document. Un
+  refus renvoie un message qui nomme la cause probable (une pièce que la
+  migration n'a pas su décoder) plutôt qu'une page HTML d'Express.
 - Le lecteur d'ingrédients n'a été mesuré que sur des recettes **importées**,
   dont les lignes sont régulières. Il devra être éprouvé sur des fiches saisies à
   la main, qui le sont beaucoup moins ; le corpus de mesure

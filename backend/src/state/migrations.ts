@@ -18,20 +18,21 @@
 //     silence.
 import fs from 'fs';
 import path from 'path';
-import { DetectedType, detectType } from '../storage/blobs';
+import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
+import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
 
 export interface MigrationCtx {
   /**
-   * Range une image encodée en data-URL et rend son identifiant, ou null quand
+   * Range des octets encodés en data-URL et rend leur identifiant, ou null quand
    * le contenu est illisible. L'appelant décide alors quoi faire, il n'invente rien.
    */
-  storeDataUrl(ownerId: string, name: string, dataUrl: string): number | null;
+  storeDataUrl(ownerKind: OwnerKind, ownerId: string, name: string, dataUrl: string): number | null;
   log(message: string): void;
 }
 
@@ -59,7 +60,7 @@ export const STATE_MIGRATIONS: StateMigration[] = [
           if ('photo' in r) delete r['photo'];
           continue;
         }
-        const id = ctx.storeDataUrl(String(r['id'] ?? ''), String(r['name'] ?? 'photo'), photo);
+        const id = ctx.storeDataUrl('recipe', String(r['id'] ?? ''), String(r['name'] ?? 'photo'), photo);
         if (id == null) {
           // Illisible : la data-URL reste en place. Une photo qu'on ne sait pas
           // décoder est un problème à signaler, pas à effacer.
@@ -169,6 +170,45 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       if (convertis) ctx.log(`${convertis} repas repris comme premier plat de leur créneau.`);
     },
   },
+  {
+    version: 5,
+    label: 'documents rangés sur le disque',
+    up: (doc, ctx) => {
+      // Même dette que les photos de recettes, un module plus loin : les octets
+      // d'un passeport scanné voyageaient dans chaque enregistrement de l'état,
+      // y compris pour cocher un article de courses depuis un magasin.
+      let moved = 0;
+      const failed: string[] = [];
+      for (const f of arr(doc['files'])) {
+        const data = f['data'];
+        if (typeof data !== 'string' || !data.startsWith('data:')) {
+          if ('data' in f) delete f['data'];
+          continue;
+        }
+        const name = String(f['name'] ?? 'document');
+        const id = ctx.storeDataUrl('document', String(f['id'] ?? ''), name, data);
+        if (id == null) {
+          // Illisible : la data-URL reste en place. Un document qu'on ne sait pas
+          // décoder est un problème à signaler, pas à effacer.
+          failed.push(name);
+          continue;
+        }
+        f['fileId'] = id;
+        delete f['data'];
+        moved++;
+      }
+      if (moved) ctx.log(`${moved} document(s) déplacé(s) hors du document d'état.`);
+      if (failed.length) {
+        // Nommés, et pas seulement comptés : ce sont eux qui continuent de peser
+        // sur chaque enregistrement, et c'est la seule façon de savoir lesquels
+        // rouvrir.
+        ctx.log(
+          `${failed.length} document(s) illisible(s), laissé(s) dans le document d'état : ${failed.slice(0, 5).join(', ')}` +
+          (failed.length > 5 ? ', …' : '') + '. Rouvrez ces fiches et reposez le fichier pour le ranger sur le disque.',
+        );
+      }
+    },
+  },
 ];
 
 /**
@@ -235,16 +275,21 @@ export function writeBackup(dir: string, doc: Doc, fromVersion: number): string 
  * chemin du démarrage. Node décode le base64 de façon permissive et rend des
  * octets pour à peu près n'importe quoi, donc le type reconnu d'après le
  * contenu est le seul juge fiable de « cette photo est lisible ».
+ *
+ * Un document de famille, lui, peut légitimement être un format que le
+ * détecteur ne nomme pas (un .odt, un traitement de texte exotique). Le refuser
+ * le laisserait en data-URL dans l'état, c'est-à-dire exactement la dette qu'on
+ * solde : il est rangé sous le type neutre.
  */
-export function photoStorer(
-  store: (ownerId: string, name: string, buf: Buffer, type: DetectedType) => number,
+export function fileStorer(
+  store: (ownerKind: OwnerKind, ownerId: string, name: string, buf: Buffer, type: DetectedType) => number,
 ): MigrationCtx['storeDataUrl'] {
-  return (ownerId, name, dataUrl) => {
+  return (ownerKind, ownerId, name, dataUrl) => {
     const buf = decodeDataUrl(dataUrl);
     if (!buf || !buf.length) return null;
     const type = detectType(buf);
-    if (!type) return null;
-    return store(ownerId, name, buf, type);
+    if (!type && ownerKind !== 'document') return null;
+    return store(ownerKind, ownerId, name, buf, type ?? GENERIC_TYPE);
   };
 }
 

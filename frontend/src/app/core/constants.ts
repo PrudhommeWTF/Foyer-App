@@ -85,6 +85,9 @@ export const ICONS: Record<string, string> = {
   send: 'M4 12l16-8-6 16-2-6z',
   folder: 'M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+  // Miroir de « upload ». Son absence rendait le bouton de téléchargement des
+  // documents invisible : un carré vide, cliquable, que rien n'expliquait.
+  download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
   logout: 'M9 4H5v16h4M14 8l4 4-4 4M18 12H8',
   clock: 'M12 3a9 9 0 1 0 .01 0M12 7v5l3 2',
   arrowUp: 'M12 19V5M5 12l7-7 7 7',

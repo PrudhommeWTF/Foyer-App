@@ -1,7 +1,7 @@
-// Fichiers rattachés aux entités du document d'état (aujourd'hui : les photos
-// de recettes). Mêmes octets, même déduplication et même balayage que les pièces
-// jointes du module Finances, table distincte parce que le propriétaire est
-// désigné par un identifiant texte.
+// Fichiers rattachés aux entités du document d'état : les photos de recettes et
+// les pièces du module Documents. Mêmes octets, même déduplication et même
+// balayage que les pièces jointes du module Finances, table distincte parce que
+// le propriétaire est désigné par un identifiant texte.
 import type { Database } from 'better-sqlite3';
 import { DetectedType, blobPath, registerHolder, releaseBlob, writeBlob } from './blobs';
 
@@ -18,8 +18,8 @@ export function initFiles(db: Database): void {
 }
 
 /** Ce à quoi un fichier peut être rattaché. Un module suivant ajoute son genre ici. */
-export type OwnerKind = 'recipe';
-export const OWNER_KINDS: OwnerKind[] = ['recipe'];
+export type OwnerKind = 'recipe' | 'document';
+export const OWNER_KINDS: OwnerKind[] = ['recipe', 'document'];
 
 export interface StoredFile {
   id: number;

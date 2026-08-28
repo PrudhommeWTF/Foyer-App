@@ -45,7 +45,9 @@ export interface TaskItem { id: string; text: string; who: string; due: string; 
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
-export interface FileItem { id: string; name: string; folderId: string; type: string; date: string; data?: string | null; }
+// `fileId` désigne un fichier servi par /api/files : les octets ne sont plus
+// dans le document (voir state/migrations.ts, migration 5).
+export interface FileItem { id: string; name: string; folderId: string; type: string; date: string; fileId?: number | null; }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un

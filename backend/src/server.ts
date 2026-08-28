@@ -151,7 +151,26 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '15mb' })); // documents/photos are stored as data URLs
+// Depuis la migration 5 du document d'état, ni les photos de recettes ni les
+// pièces du module Documents ne voyagent dans l'état : les octets vivent sur le
+// disque et sont servis par /api/files. Le plafond peut donc redescendre à ce
+// que pèse réellement un foyer, texte compris, au lieu des 15 Mo qu'il fallait
+// pour un état bourré de data-URL.
+app.use(express.json({ limit: '4mb' }));
+
+// Sans ce garde, un état trop gros ressort en page HTML d'Express, sans dire
+// pourquoi ni quoi faire. Ce cas ne devrait plus se produire : s'il se produit,
+// c'est presque toujours qu'une pièce n'a pas su être décodée à la migration et
+// pèse encore dans l'état, et le journal de démarrage la nomme.
+app.use((err: Error & { type?: string }, _req: Request, res: Response, next: NextFunction) => {
+  if (err?.type !== 'entity.too.large') { next(err); return; }
+  res.status(413).json({
+    error: 'Enregistrement refusé : le document du foyer dépasse la taille maximale (4 Mo). '
+      + 'Les fichiers et les photos sont rangés sur le disque, pas dans l’état : un état de cette taille '
+      + 'signale qu’il en reste, en général une pièce que la migration n’a pas su décoder. '
+      + 'Le journal de démarrage (journalctl -u foyer) nomme les fiches concernées.',
+  });
+});
 
 // Throttle credential endpoints to blunt brute-force / account-enumeration attempts.
 const authLimiter = rateLimit({

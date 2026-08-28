@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { STATE_MIGRATIONS, STATE_VERSION, decodeDataUrl, migrateState, parseFrenchDuration, photoStorer } from '../src/state/migrations';
+import { STATE_MIGRATIONS, STATE_VERSION, decodeDataUrl, fileStorer, migrateState, parseFrenchDuration } from '../src/state/migrations';
 
 /** Une image PNG minuscule mais valide, telle qu'une ancienne fiche en contenait. */
 const PNG_DATA_URL =
@@ -20,13 +20,13 @@ const PNG_DATA_URL =
  * tests plus verts que la réalité.
  */
 const stub = () => {
-  const stored: { ownerId: string; name: string; bytes: number }[] = [];
+  const stored: { kind: string; ownerId: string; name: string; mime: string; bytes: number }[] = [];
   let next = 100;
   return {
     stored,
     ctx: {
-      storeDataUrl: photoStorer((ownerId, name, buf) => {
-        stored.push({ ownerId, name, bytes: buf.length });
+      storeDataUrl: fileStorer((kind, ownerId, name, buf, type) => {
+        stored.push({ kind, ownerId, name, mime: type.mime, bytes: buf.length });
         return next++;
       }),
     },
@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -292,6 +292,69 @@ test('la sauvegarde du document d’origine est écrite avant toute transformati
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---- migration 5 : les documents quittent le document d'état ---------------
+
+/** Un PDF minuscule mais authentique : le type est reconnu d'après les octets. */
+const PDF_DATA_URL = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.7\n' + ' '.repeat(64)).toString('base64');
+/** Un .odt : une archive ZIP, que le détecteur partagé laisse sans nom. */
+const ODT_DATA_URL = 'data:application/octet-stream;base64,' + Buffer.from('PK\u0003\u0004' + 'x'.repeat(64), 'latin1').toString('base64');
+
+test('les documents sont rangés sur le disque et ne laissent qu’un identifiant', () => {
+  const doc = { files: [{ id: 'd1', name: 'Passeport.pdf', folderId: 'f1', type: 'PDF', date: '3 mars 2026', data: PDF_DATA_URL }] };
+  const res = run(doc);
+  assert.equal(res.stored.length, 1);
+  assert.equal(res.stored[0].kind, 'document', 'un document n’est pas rangé comme une photo de recette');
+  assert.equal(res.stored[0].ownerId, 'd1');
+  assert.equal(res.stored[0].name, 'Passeport.pdf');
+  assert.equal(res.stored[0].mime, 'application/pdf');
+  assert.equal(res.doc['files'][0].fileId, 100);
+  assert.equal('data' in res.doc['files'][0], false, 'les octets ne doivent plus être dans l’état');
+  // Le reste de la fiche est intact : c'est elle que l'utilisateur reconnaît.
+  assert.equal(res.doc['files'][0].name, 'Passeport.pdf');
+  assert.equal(res.doc['files'][0].folderId, 'f1');
+  assert.equal(res.doc['files'][0].date, '3 mars 2026');
+});
+
+test('un format que le détecteur ne nomme pas est rangé quand même', () => {
+  // Refuser un .txt ou un traitement de texte exotique le laisserait en data-URL
+  // dans l'état, c'est-à-dire exactement la dette que cette migration solde.
+  const inconnu = 'data:application/octet-stream;base64,' + Buffer.from('note libre'.repeat(20)).toString('base64');
+  const res = run({ files: [{ id: 'd1', name: 'Notes.txt', data: inconnu }, { id: 'd2', name: 'Bail.odt', data: ODT_DATA_URL }] });
+  assert.equal(res.stored.length, 2);
+  assert.equal(res.stored[0].mime, 'application/octet-stream');
+  assert.equal(res.stored[1].mime, 'application/octet-stream');
+  assert.equal(res.doc['files'][0].fileId, 100);
+  assert.equal(res.doc['files'][1].fileId, 101);
+});
+
+test('un document illisible reste dans l’état, nommé plutôt que compté', () => {
+  const res = run({ files: [
+    { id: 'd1', name: 'Cassé.pdf', data: 'data:application/pdf;base64,' },
+    { id: 'd2', name: 'Bon.pdf', data: PDF_DATA_URL },
+  ] });
+  assert.equal(res.stored.length, 1, 'seul le document lisible est rangé');
+  // Rien ne disparaît en silence : la data-URL survit telle quelle.
+  assert.equal(res.doc['files'][0].data, 'data:application/pdf;base64,');
+  assert.equal(res.doc['files'][0].fileId, undefined);
+  const note = res.outcome.notes.find((n) => n.includes('illisible'));
+  assert.ok(note, 'la migration doit signaler ce qu’elle n’a pas su convertir');
+  assert.ok(note!.includes('Cassé.pdf'), 'la fiche à rouvrir doit être nommée');
+});
+
+test('rejouer la migration des documents ne range rien une seconde fois', () => {
+  const doc = { files: [{ id: 'd1', name: 'Passeport.pdf', data: PDF_DATA_URL }] };
+  run(doc);
+  const again = run(doc);
+  assert.equal(again.stored.length, 0);
+  assert.equal(again.doc['files'][0].fileId, 100);
+});
+
+test('une fiche sans fichier perd sa clé vide sans être rangée', () => {
+  const res = run({ files: [{ id: 'd1', name: 'Sans pièce', data: null }] });
+  assert.equal(res.stored.length, 0);
+  assert.equal('data' in res.doc['files'][0], false);
 });
 
 test('les versions de migration sont uniques, ordonnées et cohérentes avec STATE_VERSION', () => {
