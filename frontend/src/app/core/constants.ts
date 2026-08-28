@@ -9,10 +9,11 @@ export const DATEFMT_ORDER: Record<string, DateOrder> = {
 
 export const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
+/** `at` est l'heure proposée à l'agenda quand un repas y est ajouté. */
 export const MEAL_SLOTS = [
-  { key: 'matin', label: 'Petit-déjeuner', short: 'Matin', dot: '#F0B24B' },
-  { key: 'midi', label: 'Déjeuner', short: 'Midi', dot: '#4E93B8' },
-  { key: 'soir', label: 'Dîner', short: 'Soir', dot: '#E56B4E' },
+  { key: 'matin', label: 'Petit-déjeuner', short: 'Matin', dot: '#F0B24B', at: '08:00' },
+  { key: 'midi', label: 'Déjeuner', short: 'Midi', dot: '#4E93B8', at: '12:30' },
+  { key: 'soir', label: 'Dîner', short: 'Soir', dot: '#E56B4E', at: '19:30' },
 ];
 
 export const LIST_ICONS: Record<string, string> = {

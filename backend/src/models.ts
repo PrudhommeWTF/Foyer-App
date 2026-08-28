@@ -3,7 +3,14 @@
 import type { ShopItem } from './shopping/ops';
 
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null; }
-export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null; }
+export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null;
+  /**
+   * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
+   * d'en créer un second pour le même repas, et fait disparaître l'événement
+   * quand le repas est retiré : sans lui, l'agenda garderait un dîner annulé.
+   */
+  mealKey?: string | null;
+}
 /**
  * Un rayon du magasin. `kind` est facultatif : il relie un rayon du foyer à un
  * type connu du référentiel d'articles, pour que « farine » aille à l'épicerie
@@ -28,7 +35,13 @@ export interface ShopList { id: string; name: string; color: string; icon: strin
 // écrit réellement, article par article (voir shopping/ops.ts).
 export type { ShopItem, ShopState } from './shopping/ops';
 export interface TaskList { id: string; name: string; color: string; icon: string; }
-export interface TaskItem { id: string; text: string; who: string; due: string; done: boolean; listId: string; prio: string; planned?: string | null; }
+export interface TaskItem { id: string; text: string; who: string; due: string; done: boolean; listId: string; prio: string; planned?: string | null;
+  /**
+   * Liste de courses que cette tâche ouvre. La tâche reste entièrement à
+   * l'utilisateur (il la coche, la déplace, la supprime) : le lien n'est qu'un
+   * raccourci, et le compte des articles restants, une information de plus.
+   */
+  shopListId?: string | null; }
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }

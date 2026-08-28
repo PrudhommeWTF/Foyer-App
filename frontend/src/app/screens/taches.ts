@@ -77,6 +77,13 @@ import { Prio, TaskItem, TaskList } from '../core/models';
                 <span class="tick" (click)="$event.stopPropagation(); store.toggleTask(t.id)"></span>
                 <div class="t-body">
                   <div class="t-text">{{ t.text }}</div>
+                  @if (t.shopListId) {
+                    <button class="shop-link" (click)="$event.stopPropagation(); store.openShoppingList(t.shopListId!)">
+                      <f-icon name="panier" [size]="14" color="var(--sage)" [width]="2.2" />
+                      {{ store.shopRemaining(t.shopListId!) }} article{{ store.shopRemaining(t.shopListId!) > 1 ? 's' : '' }} à prendre
+                      <f-icon name="chevronRight" [size]="13" color="var(--sage)" [width]="2.4" />
+                    </button>
+                  }
                   <div class="t-meta">
                     <f-avatar [ini]="store.memberIni(t.who)" [color]="store.memberColor(t.who)" [size]="18" />
                     <span class="t-sub">{{ store.memberName(t.who) }} · {{ t.due }}</span>
@@ -242,6 +249,9 @@ import { Prio, TaskItem, TaskList } from '../core/models';
     .tick { width: 24px; height: 24px; flex: none; border-radius: 8px; border: 2px solid var(--line2); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .tick.on { background: var(--sage); border-color: var(--sage); }
     .t-body { flex: 1; min-width: 0; }
+    /* Le lien vers la liste est une cible distincte : ouvrir les courses et
+       modifier la tâche sont deux gestes qu'il ne faut pas confondre. */
+    .shop-link { display: inline-flex; align-items: center; gap: 6px; margin: 5px 0 2px; padding: 5px 9px; border: none; border-radius: 9px; background: var(--soft2); color: var(--sage); font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; }
     .t-text { font-size: 15px; font-weight: 700; color: var(--ink); }
     .t-text.strike { color: var(--ink3); text-decoration: line-through; }
     .t-meta { display: flex; align-items: center; gap: 7px; margin-top: 5px; flex-wrap: wrap; }
