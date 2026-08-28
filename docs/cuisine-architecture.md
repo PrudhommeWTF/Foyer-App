@@ -23,6 +23,7 @@ module à stockage relationnel.
 | 5 | Contraintes alimentaires, stock de placard | À venir |
 | Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
 | Lot 2 | Tâche « faire les courses », repas à l'agenda | Livrée |
+| Lot 3 | Déplacer un repas d'un créneau à l'autre | Livrée |
 
 ## Le principe directeur
 
@@ -495,6 +496,32 @@ points-virgules (ce qu'attend un tableur français, la virgule y séparant les
 décimales) et précédée d'un BOM UTF-8, sans lequel « Épicerie » s'ouvre en
 « Ã‰picerie ». Les guillemets et points-virgules d'un nom d'article sont
 échappés : « lardons "fumés"; 200 g » décalerait sinon toutes les colonnes.
+
+## Déplacer un repas
+
+Le gratin passe de mardi à jeudi : c'est le geste le plus courant après la
+recopie, et il fallait retirer le repas d'un créneau pour le recomposer dans
+l'autre, en perdant les couverts au passage.
+
+**Un créneau occupé échange son repas plutôt que d'être écrasé.** Un déplacement
+n'a aucune raison de détruire, et l'échange est presque toujours ce qu'on
+voulait.
+
+**L'événement d'agenda suit son repas**, jour, heure et titre. Sans cela un dîner
+déplacé resterait annoncé au mauvais jour, ce qui est pire que pas d'agenda du
+tout : c'est précisément là que quelqu'un se fie au calendrier. Le titre est
+recomposé parce qu'il nomme le créneau (« Dîner : … ») ; le laisser tel quel
+après un passage de midi au soir écrirait un mensonge.
+
+Deux gestes, selon l'écran. Sur grand écran, le **glisser-déposer** dans la
+grille, le créneau visé s'éclairant au survol. Sur téléphone, un bouton
+**« Déplacer »** ouvre la liste des créneaux affichés, chacun annoncé avec ce
+qu'il porte déjà : glisser au doigt dans une liste qui défile se rate une fois
+sur trois et déplace le mauvais repas.
+
+La modale du repas s'efface pendant ce choix. Deux modales empilées se
+recouvrent, et les clics partent dans celle du dessus : le premier essai de
+déplacement ne faisait donc rien du tout, sans le moindre message.
 
 ## Les deux liens avec le reste du foyer
 

@@ -5,6 +5,7 @@ import { buildArticleIndex } from './ingredients';
 import { PlanReport, buildPlan } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
 import { mealEventTitle, shoppingTaskLabel } from './links';
+import { moveMeal } from './meal-move';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
@@ -1074,7 +1075,7 @@ export class FoyerStore {
     const value = this.mealFromForm();
     if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
     const slot = MEAL_SLOTS.find((s) => s.key === e.slot);
-    const titre = mealEventTitle(slot?.label || '', value.items.map((it) => this.mealItemName(it)), value.pax);
+    const titre = this.titleFor(value, e.slot);
     const key = e.dateStr + '-' + e.slot;
     const existant = this.mealEvent(key);
     this.mutate((d) => {
@@ -1091,6 +1092,41 @@ export class FoyerStore {
     });
     this.patch({ mealEdit: null });
     this.toast(existant ? 'Repas enregistré, événement mis à jour' : 'Repas enregistré et ajouté à l’agenda');
+  }
+
+  /** Titre d'agenda pour un repas donné, réutilisé quand un repas change de créneau. */
+  private titleFor(value: MealValue, slotKey: string): string {
+    const slot = MEAL_SLOTS.find((x) => x.key === slotKey);
+    return mealEventTitle(slot?.label || '', value.items.map((it) => this.mealItemName(it)), value.pax);
+  }
+
+  /**
+   * Déplace un repas vers un autre créneau. Le repas en cours d'édition est
+   * enregistré au passage : déplacer une modale non enregistrée perdrait les
+   * plats qu'on venait d'y choisir.
+   */
+  moveMealTo(to: string): void {
+    const e = this.ui().mealEdit; if (!e) return;
+    const from = e.dateStr + '-' + e.slot;
+    const value = this.mealFromForm();
+    if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
+    this.applyMove({ ...(this._data()?.meals || {}), [from]: value }, from, to);
+    this.patch({ mealEdit: null, moveOpen: false });
+  }
+
+  /** Déplacement direct, sans passer par la modale : le glisser-déposer. */
+  moveMealBetween(from: string, to: string): void {
+    this.applyMove(this._data()?.meals || {}, from, to);
+  }
+
+  private applyMove(meals: Record<string, MealValue>, from: string, to: string): void {
+    const d = this._data(); if (!d) return;
+    const res = moveMeal(meals, d.events, from, to,
+      (v, slot) => this.titleFor(v, slot),
+      (slot) => MEAL_SLOTS.find((x) => x.key === slot)?.at || '—');
+    if (!res.moved) { this.toast('Rien à déplacer'); return; }
+    this.mutate((dd) => { dd.meals = res.meals; dd.events = res.events; });
+    this.toast(res.swapped ? 'Les deux repas ont été échangés' : 'Repas déplacé');
   }
 
   clearMeal(): void {
