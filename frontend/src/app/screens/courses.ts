@@ -100,6 +100,12 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
           <span class="mini-link" (click)="store.patch({ aisleOrderOpen: true })"><f-icon name="planning" [size]="14" color="var(--ink2)" [width]="2.4" /> Ordre</span>
           <span class="mini-link" (click)="store.newAisle()"><f-icon name="plus" [size]="14" color="#E56B4E" [width]="2.6" /> Rayon</span>
           <span class="mini-link" (click)="store.exportShoppingCsv()"><f-icon name="export" [size]="14" color="var(--ink2)" [width]="2.4" /> Exporter</span>
+          @if (active() !== 'all') {
+            <span class="mini-link" (click)="store.addShoppingTask()">
+              <f-icon name="checklist" [size]="14" color="var(--ink2)" [width]="2.4" />
+              {{ store.shoppingTask(active()) ? 'Dans les tâches' : 'En tâche' }}
+            </span>
+          }
         </span>
       </div>
 

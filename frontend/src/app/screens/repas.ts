@@ -233,6 +233,12 @@ const GRID_MIN = 760;
               <f-icon name="trash" [size]="16" color="#fff" [width]="2.2" /> Retirer
             </button>
           }
+          @if (store.ui().mealItems.length) {
+            <button class="btn btn-soft" (click)="store.addMealToCalendar()">
+              <f-icon name="calendar" [size]="16" color="var(--ink2)" [width]="2" />
+              {{ dejaAgenda() ? 'Mettre à jour l’agenda' : 'À l’agenda' }}
+            </button>
+          }
           <div class="spacer"></div>
           <button class="btn btn-primary" (click)="store.saveMeal()">Enregistrer</button>
         </div>
@@ -511,6 +517,12 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
     const e = this.store.ui().mealEdit;
     if (!e) return '';
     return new Date(e.dateStr + 'T00:00:00').toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' });
+  });
+
+  /** Vrai quand ce créneau a déjà donné un événement : le bouton le dit. */
+  dejaAgenda = computed(() => {
+    const e = this.store.ui().mealEdit;
+    return !!e && !!this.store.mealEvent(e.dateStr + '-' + e.slot);
   });
 
   hasExisting = computed(() => {

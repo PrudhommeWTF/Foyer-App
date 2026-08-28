@@ -22,6 +22,7 @@ module à stockage relationnel.
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires, stock de placard | À venir |
 | Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
+| Lot 2 | Tâche « faire les courses », repas à l'agenda | Livrée |
 
 ## Le principe directeur
 
@@ -494,6 +495,31 @@ points-virgules (ce qu'attend un tableur français, la virgule y séparant les
 décimales) et précédée d'un BOM UTF-8, sans lequel « Épicerie » s'ouvre en
 « Ã‰picerie ». Les guillemets et points-virgules d'un nom d'article sont
 échappés : « lardons "fumés"; 200 g » décalerait sinon toutes les colonnes.
+
+## Les deux liens avec le reste du foyer
+
+Le module Cuisine vivait à côté des autres sans jamais leur parler. Deux liens le
+rattachent, choisis parce qu'ils correspondent à des gestes réels : on fait les
+courses, et on reçoit.
+
+**La tâche « faire les courses »** (`TaskItem.shopListId`) ouvre sa liste et
+affiche le nombre d'articles restant à prendre. Elle appartient ensuite au foyer :
+personne ne la recrée, ne la coche ni ne la supprime à sa place. C'est un
+raccourci, **pas un miroir de la liste** ; le module Finances suit d'ailleurs la
+même règle avec ses tâches d'échéance. Rappuyer sur le bouton n'en crée pas une
+seconde, il mène à celle qui existe.
+
+**Le repas à l'agenda** (`EventItem.mealKey`) rend un repas visible à ceux qui ne
+regardent que le calendrier, ce qui est le cas quand on reçoit. Le bouton
+enregistre le repas **et** crée l'événement : les deux vont ensemble, un
+événement décrivant un repas non enregistré mentirait dès la modale refermée.
+L'heure vient du créneau (`MEAL_SLOTS[].at`), le titre nomme le menu, et les
+couverts n'y figurent que s'ils ont été précisés.
+
+`mealKey` sert deux fois, et c'est ce qui justifie de le stocker : rappuyer met
+l'événement à jour au lieu d'en créer un second, et **retirer le repas retire son
+événement**, un dîner annulé qui resterait à l'agenda étant pire que pas
+d'événement du tout.
 
 ## Migrations du document d'état
 

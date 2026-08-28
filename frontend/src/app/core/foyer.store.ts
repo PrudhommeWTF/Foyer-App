@@ -1,9 +1,10 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
-import { HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState } from './models';
+import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanReport, buildPlan } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
+import { mealEventTitle, shoppingTaskLabel } from './links';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
@@ -978,17 +979,27 @@ export class FoyerStore {
   removeMealItem(index: number): void {
     this.patch({ mealItems: this.ui().mealItems.filter((_, i) => i !== index) });
   }
+  /**
+   * Le repas tel que la modale le décrit. Les couverts ne sont enregistrés que
+   * s'ils dérogent à la taille du foyer : un chiffre recopié partout se
+   * périmerait au premier changement de famille.
+   */
+  private mealFromForm(): MealValue {
+    const pax = parseInt(this.ui().mealPax, 10);
+    return {
+      items: this.ui().mealItems,
+      ...(Number.isFinite(pax) && pax > 0 && pax !== this.householdPax() ? { pax } : {}),
+    };
+  }
+
   saveMeal(): void {
     const e = this.ui().mealEdit; if (!e) return;
-    const items = this.ui().mealItems;
-    if (!items.length) { this.toast('Choisis au moins un plat'); return; }
+    const value = this.mealFromForm();
+    if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
     const key = e.dateStr + '-' + e.slot;
-    // Les couverts ne sont enregistrés que s'ils dérogent à la taille du foyer :
-    // un chiffre recopié partout se périmerait au premier changement de famille.
-    const pax = parseInt(this.ui().mealPax, 10);
-    this.mutate((d) => { d.meals[key] = { items, ...(Number.isFinite(pax) && pax > 0 && pax !== this.householdPax() ? { pax } : {}) }; });
+    this.mutate((d) => { d.meals[key] = value; });
     this.patch({ mealEdit: null });
-    this.toast(items.length > 1 ? items.length + ' plats enregistrés' : 'Repas enregistré');
+    this.toast(value.items.length > 1 ? value.items.length + ' plats enregistrés' : 'Repas enregistré');
   }
   /**
    * Écrit une copie de repas déjà calculée. Le rapport est produit par l'écran,
@@ -1004,7 +1015,94 @@ export class FoyerStore {
     this.toast(n + (n > 1 ? ' repas recopiés' : ' repas recopié') + (vides > 0 ? ', ' + vides + ' créneau(x) vidé(s)' : ''));
   }
 
-  clearMeal(): void { const e = this.ui().mealEdit; if (!e) return; const key = e.dateStr + '-' + e.slot; this.mutate((d) => { delete d.meals[key]; }); this.patch({ mealEdit: null }); this.toast('Repas retiré'); }
+  // ---- liens avec le reste du foyer -------------------------------------
+
+  /** Articles restant à prendre sur une liste. Sert au libellé de la tâche liée. */
+  shopRemaining(listId: string): number {
+    return (this._data()?.shop || []).filter((i) => i.listId === listId && i.state === 'a-prendre').length;
+  }
+
+  /** La tâche qui ouvre cette liste, s'il y en a une encore à faire. */
+  shoppingTask(listId: string): TaskItem | undefined {
+    return (this._data()?.tasks || []).find((t) => t.shopListId === listId && !t.done);
+  }
+
+  /**
+   * Crée la tâche qui ouvre cette liste. Elle appartient ensuite au foyer :
+   * personne ne la recrée, ne la coche ni ne la supprime à sa place. Le lien
+   * n'est qu'un raccourci, pas un miroir de la liste.
+   */
+  addShoppingTask(listId = this.activeShopListId()): void {
+    const d = this._data(); if (!d || !listId) { this.toast('Choisissez une liste de courses'); return; }
+    if (this.shoppingTask(listId)) { this.toast('La tâche existe déjà'); this.patch({ screen: 'taches' }); return; }
+    const taskList = this.activeTaskListId();
+    if (!taskList) { this.toast('Créez d’abord une liste de tâches'); return; }
+    const intitule = shoppingTaskLabel(d.shopLists.find((l) => l.id === listId)?.name || '');
+    this.mutate((dd) => {
+      dd.tasks.unshift({
+        id: uid('t'), text: intitule, who: this.me()?.id || this.members()[0]?.id || '',
+        due: "Aujourd'hui", done: false, listId: taskList, prio: 'med', planned: null, shopListId: listId,
+      });
+    });
+    this.toast('Tâche ajoutée : « ' + intitule + ' »');
+  }
+
+  /** Depuis la tâche, aller à sa liste. C'est tout l'intérêt du lien. */
+  openShoppingList(listId: string): void {
+    this.patch({ screen: 'courses', activeShopList: listId });
+  }
+
+  /** L'événement d'agenda créé depuis ce créneau de repas, s'il existe encore. */
+  mealEvent(key: string): EventItem | undefined {
+    return (this._data()?.events || []).find((e) => e.mealKey === key);
+  }
+
+  /**
+   * Met le repas du créneau en cours d'édition à l'agenda, pour qu'il soit vu
+   * par ceux qui ne regardent que le calendrier. Rappuyer met l'événement à
+   * jour plutôt que d'en créer un second.
+   */
+  /**
+   * Enregistre le repas **et** le met à l'agenda, pour qu'il soit vu de ceux qui
+   * ne regardent que le calendrier. Les deux vont ensemble : un événement qui
+   * décrirait un repas non enregistré mentirait dès la modale refermée.
+   *
+   * Rappuyer met l'événement à jour plutôt que d'en créer un second.
+   */
+  addMealToCalendar(): void {
+    const e = this.ui().mealEdit; if (!e) return;
+    const value = this.mealFromForm();
+    if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
+    const slot = MEAL_SLOTS.find((s) => s.key === e.slot);
+    const titre = mealEventTitle(slot?.label || '', value.items.map((it) => this.mealItemName(it)), value.pax);
+    const key = e.dateStr + '-' + e.slot;
+    const existant = this.mealEvent(key);
+    this.mutate((d) => {
+      d.meals[key] = value;
+      if (existant) {
+        const i = d.events.findIndex((x) => x.id === existant.id);
+        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: slot?.at || '—' };
+      } else {
+        d.events.push({
+          id: uid('e'), date: e.dateStr, title: titre, time: slot?.at || '—',
+          who: this.me()?.id || this.members()[0]?.id || '', recur: 'none', end: null, mealKey: key,
+        });
+      }
+    });
+    this.patch({ mealEdit: null });
+    this.toast(existant ? 'Repas enregistré, événement mis à jour' : 'Repas enregistré et ajouté à l’agenda');
+  }
+
+  clearMeal(): void {
+    const e = this.ui().mealEdit; if (!e) return;
+    const key = e.dateStr + '-' + e.slot;
+    // L'événement qui venait de ce repas part avec lui : garder un dîner annulé
+    // à l'agenda serait pire que de ne l'y avoir jamais mis.
+    const avaitEvenement = !!this.mealEvent(key);
+    this.mutate((d) => { delete d.meals[key]; d.events = d.events.filter((x) => x.mealKey !== key); });
+    this.patch({ mealEdit: null });
+    this.toast(avaitEvenement ? 'Repas retiré, et son événement d’agenda' : 'Repas retiré');
+  }
   /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
   householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
 
