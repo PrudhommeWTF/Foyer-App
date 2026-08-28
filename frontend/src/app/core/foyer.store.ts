@@ -1,12 +1,34 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
-import { HouseholdState, MealItem, MealValue, Member, Notif, ShopItem, ShopState } from './models';
+import { HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanReport, buildPlan } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
+import {
+  ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
+} from './exports';
 import { UiState, initialUi } from './ui-state';
 import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
 import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+
+/**
+ * Octets vers base64, par tranches : `String.fromCharCode(...tableau)` dépasse la
+ * taille d'appel autorisée dès quelques dizaines de milliers d'octets, et une
+ * photo en fait des centaines de milliers.
+ */
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(bin);
+}
+
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const out = new Uint8Array(new ArrayBuffer(bin.length));
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
 
 const READ_NOTIFS_KEY = 'foyer.readNotifs';
 function loadReadNotifs(): Set<string> {
@@ -1351,11 +1373,131 @@ export class FoyerStore {
   }
   exportData(): void {
     const d = this._data(); if (!d) return;
-    const blob = new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'foyer-export.json'; a.click();
-    URL.revokeObjectURL(url);
+    this.download(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }), 'foyer-export.json');
     this.toast('Export des données lancé');
+  }
+
+  // ---- exports du module Cuisine ----------------------------------------
+
+  /** Provoque un téléchargement. Le lien est révoqué : sinon le blob reste en mémoire. */
+  private download(blob: Blob, name: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+    // Différé : Safari n'a pas encore commencé le téléchargement au retour du clic.
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  readonly exportBusy = signal(false);
+
+  /**
+   * Le carnet complet, photos comprises. Sans les photos ce ne serait pas une
+   * sauvegarde : elles vivent sur le disque du serveur, qu'un export JSON ne
+   * transporte pas.
+   */
+  async exportRecipes(): Promise<void> {
+    const d = this._data(); if (!d || this.exportBusy()) return;
+    if (!d.recipes.length) { this.toast('Le carnet est vide'); return; }
+    this.exportBusy.set(true);
+    try {
+      const photos: Record<number, ExportedPhoto | undefined> = {};
+      let manquantes = 0;
+      for (const id of new Set(d.recipes.map((r) => r.photoId).filter((x): x is number => !!x))) {
+        try {
+          const blob = await this.api.download('files/' + id);
+          photos[id] = { name: 'photo-' + id, type: blob.type || 'image/jpeg', data: await blobToBase64(blob) };
+        } catch { manquantes++; }
+      }
+      const bundle = buildBundle(d.recipes, photos);
+      this.download(new Blob([JSON.stringify(bundle)], { type: 'application/json' }), fileName('carnet-de-recettes', 'json'));
+      this.toast(d.recipes.length + ' recettes exportées' + (manquantes ? ', ' + manquantes + ' photo(s) illisible(s)' : ''));
+    } finally { this.exportBusy.set(false); }
+  }
+
+  /** Rapport d'import en attente de validation, affiché avant d'écrire. */
+  readonly importReport = signal<ImportReport | null>(null);
+  readonly importBusy = signal(false);
+
+  /** Lit le fichier choisi et prépare le rapport. N'écrit rien. */
+  async prepareRecipeImport(file: File): Promise<void> {
+    try {
+      const rep = planImport(parseBundle(await file.text()), this._data()?.recipes || []);
+      if (!rep.nouvelles.length && !rep.deja.length && !rep.ignorees.length) {
+        this.toast('Ce fichier ne contient aucune recette'); return;
+      }
+      this.importReport.set(rep);
+      this.patch({ importOpen: true });
+    } catch (e) {
+      this.toast(e instanceof ImportError ? e.message : 'Fichier illisible');
+    }
+  }
+
+  /**
+   * Crée les recettes du rapport. Une photo qui ne remonte pas ne fait pas
+   * perdre sa recette : elle est importée sans image, et le compte est dit.
+   */
+  async applyRecipeImport(): Promise<void> {
+    const rep = this.importReport();
+    if (!rep || !rep.nouvelles.length || this.importBusy()) return;
+    this.importBusy.set(true);
+    let photosOk = 0;
+    try {
+      const ajouts: Recipe[] = [];
+      for (const e of rep.nouvelles) {
+        let photoId: number | null = null;
+        if (e.photo) {
+          try {
+            const file = new File([base64ToBytes(e.photo.data)], e.photo.name, { type: e.photo.type });
+            const res = await this.api.uploadFile('recipe', e.id, file);
+            photoId = res.file.id; photosOk++;
+            this.cachePhoto(res.file.id, file);
+          } catch { /* la recette vaut mieux que sa photo */ }
+        }
+        ajouts.push({
+          id: e.id, name: e.name, level: e.level, color: e.color,
+          photoId,
+          portions: e.portions ?? null, prepMin: e.prepMin ?? null, cookMin: e.cookMin ?? null,
+          source: e.source ?? null,
+          ingr: [...e.ingr], steps: [...e.steps],
+        });
+      }
+      this.mutate((d) => { d.recipes = [...ajouts, ...d.recipes]; });
+      const perdues = rep.photos - photosOk;
+      this.toast(ajouts.length + ' recettes importées' + (perdues > 0 ? ', ' + perdues + ' photo(s) non reprise(s)' : ''));
+    } finally {
+      this.importBusy.set(false);
+      this.importReport.set(null);
+      this.patch({ importOpen: false });
+    }
+  }
+
+  /**
+   * La recette en texte, dans le presse-papier. Le presse-papier n'existe pas en
+   * HTTP simple ni sur les navigateurs anciens : on retombe alors sur un
+   * fichier, plutôt que d'échouer sans rien dire.
+   */
+  async copyRecipeText(r: Recipe): Promise<void> {
+    const texte = recipeToText(r);
+    try {
+      await navigator.clipboard.writeText(texte);
+      this.toast('Recette copiée, prête à être collée');
+    } catch {
+      this.download(new Blob([texte], { type: 'text/plain;charset=utf-8' }), fileName(r.name, 'txt'));
+      this.toast('Recette enregistrée en fichier texte');
+    }
+  }
+
+  /** La liste visible, dans l'ordre des allées, lisible par un tableur français. */
+  exportShoppingCsv(): void {
+    const d = this._data(); if (!d) return;
+    const a = this.ui().activeShopList;
+    const items = a === 'all' ? d.shop : d.shop.filter((i) => i.listId === a);
+    if (!items.length) { this.toast('Cette liste est vide'); return; }
+    const nom = a === 'all' ? 'liste-de-courses' : (d.shopLists.find((l) => l.id === a)?.name || 'liste-de-courses');
+    // Le BOM n'est pas décoratif : sans lui, un tableur ouvre le fichier en
+    // encodage local et « Épicerie » devient « Ã‰picerie ».
+    const csv = '\ufeff' + shopToCsv(items, this.aislesInOrder());
+    this.download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileName(nom, 'csv'));
+    this.toast(items.length + ' articles exportés');
   }
 
   // ---- add menu picks ---------------------------------------------------

@@ -83,7 +83,9 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
     .mi-sub { display: block; font-size: 12px; font-weight: 700; color: var(--ink2); }
     .sep { height: 1px; background: var(--line); margin: 6px 10px; }
     .backdrop { position: fixed; inset: 0; z-index: 44; }
-    @media (max-width: 860px) { .topbar { padding: 0 18px; height: 66px; gap: 10px; } .title { font-size: 21px; } }
+    /* Sur téléphone, quatre boutons et un badge laissent peu de place au titre :
+       « Recettes » y tenait à un pixel près et se tronquait en « Rece… ». */
+    @media (max-width: 860px) { .topbar { padding: 0 14px; height: 66px; gap: 8px; } .title { font-size: 19.5px; } }
   `],
 })
 export class TopbarComponent {
