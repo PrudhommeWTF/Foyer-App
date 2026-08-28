@@ -184,5 +184,5 @@ export const SCREEN_TITLES: Record<string, string> = {
  */
 export const SCREEN_TITLES_SHORT: Record<string, string> = {
   calendar: 'Agenda', courses: 'Courses', messages: 'Messages', contacts: 'Contacts',
-  repas: 'Repas', recettes: 'Recettes', planning: 'Emploi du temps',
+  repas: 'Repas', recettes: 'Recettes', planning: 'Emploi du temps', settings: 'Réglages',
 };

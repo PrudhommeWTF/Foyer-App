@@ -21,6 +21,7 @@ module à stockage relationnel.
 | 3 c | Semaine type des convives, suggestions, anti-répétition | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires, stock de placard | À venir |
+| Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
 
 ## Le principe directeur
 
@@ -462,6 +463,37 @@ semaine en cours, quelle que soit la fenêtre laissée sur le planning.
 Un piège qui a coûté une passe de vérification : l'hôte d'un composant Angular
 est **`inline` par défaut**, donc mesuré à zéro. Sans `:host { display: block }`,
 la bascule choisissait la pile à toutes les largeurs, y compris sur grand écran.
+
+## Sortir les données, et les faire revenir
+
+Trois formats, trois usages sans rapport, et une seule règle commune : ce qui
+sort doit pouvoir revenir, ou bien être lisible par un humain.
+
+**Le carnet en JSON** (`foyer.recettes`, version 1) transporte les recettes **et
+leurs photos**, en base64. Sans les photos ce ne serait pas une sauvegarde : les
+octets vivent sur le disque du serveur, qu'un export du document ne contient pas.
+Le fichier porte son format et sa version, pour qu'un fichier étranger soit
+refusé avec une phrase claire plutôt qu'importé de travers.
+
+À l'import, une recette déjà présente est reconnue à **son identifiant** et
+laissée tranquille : réimporter deux fois la même sauvegarde ne duplique rien,
+sans quoi la sauvegarde deviendrait un piège, relue par précaution et doublant le
+carnet. Une entrée abîmée est écartée avec sa raison, et **le reste du fichier
+passe quand même** : un import tout ou rien perdrait dix-sept recettes pour une
+ligne fautive. Une photo qui ne remonte pas ne fait pas perdre sa recette.
+
+Le rapport s'affiche avant que quoi que ce soit ne soit créé, comme pour les
+courses et la recopie.
+
+**Une recette en texte** part dans le presse-papier, prête à être collée dans un
+message. Le presse-papier n'existe pas en HTTP simple : on retombe alors sur un
+fichier `.txt`, plutôt que d'échouer sans rien dire.
+
+**La liste en CSV** sort dans l'ordre des allées, séparée par des
+points-virgules (ce qu'attend un tableur français, la virgule y séparant les
+décimales) et précédée d'un BOM UTF-8, sans lequel « Épicerie » s'ouvre en
+« Ã‰picerie ». Les guillemets et points-virgules d'un nom d'article sont
+échappés : « lardons "fumés"; 200 g » décalerait sinon toutes les colonnes.
 
 ## Migrations du document d'état
 

@@ -99,6 +99,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
         <span class="acts">
           <span class="mini-link" (click)="store.patch({ aisleOrderOpen: true })"><f-icon name="planning" [size]="14" color="var(--ink2)" [width]="2.4" /> Ordre</span>
           <span class="mini-link" (click)="store.newAisle()"><f-icon name="plus" [size]="14" color="#E56B4E" [width]="2.6" /> Rayon</span>
+          <span class="mini-link" (click)="store.exportShoppingCsv()"><f-icon name="export" [size]="14" color="var(--ink2)" [width]="2.4" /> Exporter</span>
         </span>
       </div>
 

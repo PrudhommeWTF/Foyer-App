@@ -17,9 +17,19 @@ import { RECIPE_PALETTE } from '../core/constants';
           <h1>Carnet de recettes</h1>
           <div class="screen-sub">{{ d().recipes.length }} recettes dans le carnet</div>
         </div>
-        <button class="btn btn-primary" (click)="store.newRecipe()">
-          <f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouvelle recette
-        </button>
+        <div class="head-acts">
+          <button class="btn btn-soft" [disabled]="store.exportBusy()" (click)="store.exportRecipes()">
+            <f-icon name="export" [size]="17" color="var(--ink2)" [width]="2" />
+            {{ store.exportBusy() ? 'Export…' : 'Exporter' }}
+          </button>
+          <button class="btn btn-soft" (click)="fileInput.click()">
+            <f-icon name="upload" [size]="17" color="var(--ink2)" [width]="2" /> Importer
+          </button>
+          <input #fileInput type="file" accept="application/json,.json" hidden (change)="onImportFile($event)" />
+          <button class="btn btn-primary" (click)="store.newRecipe()">
+            <f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouvelle recette
+          </button>
+        </div>
       </div>
 
       <div class="grid">
@@ -85,6 +95,9 @@ import { RECIPE_PALETTE } from '../core/constants';
         </div>
 
         <div class="modal-actions">
+          <button class="btn btn-soft" title="Copier la recette en texte" (click)="store.copyRecipeText(r)">
+            <f-icon name="copy" [size]="16" color="var(--ink2)" />
+          </button>
           <button class="btn btn-soft grow" (click)="store.editRecipe(r.id)">
             <f-icon name="edit" [size]="16" color="var(--ink2)" /> Modifier
           </button>
@@ -213,6 +226,54 @@ import { RECIPE_PALETTE } from '../core/constants';
     }
 
     <!-- Delete confirm -->
+    @if (store.ui().importOpen) {
+      @let rep = store.importReport();
+      @if (rep) {
+        <f-modal title="Importer des recettes" [maxWidth]="520" (close)="store.patch({ importOpen: false })">
+          <div class="imp-bilan">
+            @if (rep.nouvelles.length) {
+              <div><b>{{ rep.nouvelles.length }}</b> {{ rep.nouvelles.length > 1 ? 'recettes seront ajoutées' : 'recette sera ajoutée' }}@if (rep.photos) {, dont <b>{{ rep.photos }}</b> avec photo}.</div>
+            } @else {
+              <div>Aucune recette à ajouter.</div>
+            }
+            @if (rep.deja.length) {
+              <div><b>{{ rep.deja.length }}</b> déjà dans le carnet, {{ rep.deja.length > 1 ? 'laissées telles quelles' : 'laissée telle quelle' }}.</div>
+            }
+          </div>
+
+          @if (rep.nouvelles.length) {
+            <div class="field-label">À ajouter</div>
+            <div class="imp-list">
+              @for (n of rep.nouvelles; track n.id) {
+                <div class="imp-row">
+                  <span class="imp-name">{{ n.name }}</span>
+                  <span class="imp-meta">{{ n.ingr.length }} ingr. · {{ n.steps.length }} {{ n.steps.length > 1 ? 'étapes' : 'étape' }}</span>
+                </div>
+              }
+            </div>
+          }
+
+          @if (rep.ignorees.length) {
+            <div class="imp-warn">
+              <div class="field-label">Entrées écartées</div>
+              @for (i of rep.ignorees; track $index) {
+                <div class="imp-row"><span class="imp-name">{{ i.nom }}</span><span class="imp-meta">{{ i.raison }}</span></div>
+              }
+              <div class="hint">Le reste du fichier est importé quand même.</div>
+            </div>
+          }
+
+          <div class="modal-actions">
+            <button class="btn btn-soft grow" (click)="store.patch({ importOpen: false })">Annuler</button>
+            <button class="btn btn-primary grow2" [disabled]="!rep.nouvelles.length || store.importBusy()"
+                    (click)="store.applyRecipeImport()">
+              {{ store.importBusy() ? 'Import…' : 'Ajouter au carnet' }}
+            </button>
+          </div>
+        </f-modal>
+      }
+    }
+
     @if (store.ui().confirmDelId) {
       <f-modal [maxWidth]="400" (close)="store.patch({ confirmDelId: null })">
         <div class="confirm">
@@ -228,6 +289,16 @@ import { RECIPE_PALETTE } from '../core/constants';
     }
   `,
   styles: [`
+    .head-acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .imp-bilan { background: var(--soft); border-radius: 13px; padding: 12px 14px; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.55; margin-bottom: 16px; }
+    .imp-bilan b { color: var(--ink); font-weight: 800; }
+    .imp-list { display: flex; flex-direction: column; margin-bottom: 18px; max-height: 260px; overflow-y: auto; }
+    .imp-row { display: flex; align-items: baseline; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .imp-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+    .imp-meta { flex: none; font-size: 12px; font-weight: 800; color: var(--ink3); }
+    .imp-warn { background: #FCE9E3; border-radius: 13px; padding: 10px 14px 12px; margin-bottom: 18px; }
+    .imp-warn .imp-row { border-top-color: rgba(198,73,47,.18); }
+    .imp-warn .imp-meta { color: #C6492F; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; align-items: start; }
     :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
     @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
@@ -303,6 +374,14 @@ import { RECIPE_PALETTE } from '../core/constants';
 export class RecettesScreen {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+
+  /** Le champ est réinitialisé : rechoisir le même fichier doit relancer l'import. */
+  onImportFile(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void this.store.prepareRecipeImport(file);
+  }
 
   readonly RECIPE_PALETTE = RECIPE_PALETTE;
   readonly levels = ['Facile', 'Moyen', 'Difficile'] as const;
