@@ -100,7 +100,15 @@ const GRID_MIN = 760;
               @for (d of days(); track d) {
                 @let meal = mealAt(d, slot.key);
                 @let names = store.mealNames(meal);
-                <div class="cell" [class.filled]="names.length > 0" [class.today]="isToday(d)" (click)="store.editMeal(d, slot.key)">
+                <div class="cell" [class.filled]="names.length > 0" [class.today]="isToday(d)"
+                   [class.drop]="dragOver() === d + '-' + slot.key"
+                   [attr.draggable]="names.length > 0"
+                   (dragstart)="onDragStart($event, d + '-' + slot.key)"
+                   (dragover)="onDragOver($event, d + '-' + slot.key)"
+                   (dragleave)="dragOver.set('')"
+                   (drop)="onDrop($event, d + '-' + slot.key)"
+                   (dragend)="dragOver.set('')"
+                   (click)="store.editMeal(d, slot.key)">
                   <div class="cell-top">
                     <span class="dot" [style.background]="slot.dot"></span>
                     <span class="cell-slot">{{ slot.short }}</span>
@@ -125,6 +133,31 @@ const GRID_MIN = 760;
         </div>
       }
     </div>
+
+    @if (store.ui().moveOpen && store.ui().mealEdit) {
+      <f-modal title="Déplacer vers" [maxWidth]="480" (close)="store.patch({ moveOpen: false })">
+        <div class="hint mb">Un créneau déjà occupé échange son repas avec celui-ci : rien n'est perdu.</div>
+        @for (d of days(); track d) {
+          <div class="mv-day">
+            <div class="mv-date">{{ dowOf(d) }} {{ dayNum(d) }} {{ monthOf(d) }}</div>
+            @for (slot of store.mealSlots(); track slot.key) {
+              @let cible = d + '-' + slot.key;
+              @let occupe = store.mealNames(mealAt(d, slot.key));
+              <button class="mv-row" [disabled]="cible === courant()" (click)="store.moveMealTo(cible)">
+                <span class="dot" [style.background]="slot.dot"></span>
+                <span class="mv-slot">{{ slot.short }}</span>
+                <span class="mv-what">
+                  @if (cible === courant()) { <i>ici</i> }
+                  @else if (occupe.length) { {{ occupe.join(' · ') }} }
+                  @else { <i>libre</i> }
+                </span>
+                @if (occupe.length && cible !== courant()) { <span class="mv-swap">échange</span> }
+              </button>
+            }
+          </div>
+        }
+      </f-modal>
+    }
 
     @if (store.ui().dupOpen) {
       <f-modal title="Recopier des repas ici" [maxWidth]="520" (close)="store.patch({ dupOpen: false })">
@@ -172,7 +205,10 @@ const GRID_MIN = 760;
       </f-modal>
     }
 
+    <!-- Masquée pendant le choix du créneau : deux modales empilées se recouvrent,
+         et les clics partent dans celle du dessus. -->
     @if (store.ui().mealEdit; as me) {
+      @if (!store.ui().moveOpen) {
       <f-modal [title]="slotLabel()" [maxWidth]="560" (close)="store.patch({ mealEdit: null })">
         <div class="modal-date">{{ dateLabel() }}</div>
 
@@ -234,6 +270,9 @@ const GRID_MIN = 760;
             </button>
           }
           @if (store.ui().mealItems.length) {
+            <button class="btn btn-soft" (click)="store.patch({ moveOpen: true })">
+              <f-icon name="arrowDown" [size]="16" color="var(--ink2)" [width]="2" /> Déplacer
+            </button>
             <button class="btn btn-soft" (click)="store.addMealToCalendar()">
               <f-icon name="calendar" [size]="16" color="var(--ink2)" [width]="2" />
               {{ dejaAgenda() ? 'Mettre à jour l’agenda' : 'À l’agenda' }}
@@ -243,6 +282,7 @@ const GRID_MIN = 760;
           <button class="btn btn-primary" (click)="store.saveMeal()">Enregistrer</button>
         </div>
       </f-modal>
+      }
     }
   `,
   styles: [`
@@ -274,6 +314,22 @@ const GRID_MIN = 760;
     .modal-actions { display: flex; gap: 12px; align-items: center; }
     .modal-actions .grow { flex: 1; }
     .modal-actions .grow2 { flex: 1.4; }
+
+    /* Le créneau visé s'éclaire pendant le survol : sans retour visuel, on lâche
+       le repas au jugé. */
+    .cell.drop { border-color: var(--primary); background: rgba(229,107,78,.1); }
+    .cell[draggable=true] { cursor: grab; }
+
+    .mv-day { margin-bottom: 14px; }
+    .mv-date { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .mv-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 8px 10px; border: none; border-radius: 11px; background: none; font: inherit; text-align: left; cursor: pointer; }
+    .mv-row + .mv-row { border-top: 1px solid var(--line); border-radius: 0; }
+    .mv-row:hover:not([disabled]) { background: var(--soft); }
+    .mv-row[disabled] { opacity: .5; cursor: default; }
+    .mv-slot { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; width: 38px; flex: none; }
+    .mv-what { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+    .mv-what i { color: var(--ink3); font-style: normal; font-weight: 700; }
+    .mv-swap { flex: none; font-size: 11px; font-weight: 800; color: var(--honey); text-transform: uppercase; }
 
     .dup-btn { flex: none; gap: 7px; }
     .dup-list { display: flex; flex-direction: column; gap: 8px; }
@@ -474,6 +530,37 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
   ));
 
   openDup(): void { this.store.patch({ dupOpen: true, dupBack: 1, dupMode: 'fill' }); }
+
+  /** Créneau en cours d'édition, pour le griser dans la liste des destinations. */
+  courant = computed(() => {
+    const e = this.store.ui().mealEdit;
+    return e ? e.dateStr + '-' + e.slot : '';
+  });
+
+  /** Créneau survolé pendant un glisser-déposer, pour l'éclairer. */
+  readonly dragOver = signal('');
+  private dragged = '';
+
+  onDragStart(ev: DragEvent, key: string): void {
+    this.dragged = key;
+    // Le type est exigé par Firefox, qui refuse le glisser sans données.
+    ev.dataTransfer?.setData('text/plain', key);
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+  }
+
+  onDragOver(ev: DragEvent, key: string): void {
+    if (!this.dragged || this.dragged === key) return;
+    ev.preventDefault();
+    this.dragOver.set(key);
+  }
+
+  onDrop(ev: DragEvent, key: string): void {
+    ev.preventDefault();
+    const from = this.dragged || ev.dataTransfer?.getData('text/plain') || '';
+    this.dragOver.set('');
+    this.dragged = '';
+    if (from && from !== key) this.store.moveMealBetween(from, key);
+  }
 
   /** « 1 repas sera recopié », « 3 repas seront recopiés » : l'accord se voit. */
   phrase(n: number, un: string, plusieurs: string): string { return n + ' ' + (n > 1 ? plusieurs : un); }
