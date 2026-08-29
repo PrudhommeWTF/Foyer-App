@@ -5,6 +5,7 @@ import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { ModalComponent } from '../shared/modal';
 import { PALETTE } from '../core/constants';
+import { ALLERGENES } from '../core/articles';
 import { contactIni } from '../core/helpers';
 
 @Component({
@@ -88,7 +89,40 @@ import { contactIni } from '../core/helpers';
             <button class="swatch" [style.background]="c" [style.box-shadow]="store.ui().mfColor === c ? ('0 0 0 3px var(--surface),0 0 0 6px ' + c) : 'none'" (click)="store.patch({ mfColor: c })"></button>
           }
         </div>
-        <label class="toggle" (click)="store.patch({ mfAdmin: !store.ui().mfAdmin })">
+        <label class="field-label">Allergènes</label>
+        <div class="chips" style="margin-bottom:14px">
+          @for (a of allergenes; track a.key) {
+            <button class="chip" [class.on]="store.ui().mfAllerg.includes(a.key)" (click)="store.toggleMemberAllerg(a.key)">{{ a.name }}</button>
+          }
+        </div>
+
+        <label class="field-label">Aliments refusés</label>
+        <div class="hint">Ce qu'on ne veut pas voir arriver, sans que ce soit une allergie.</div>
+        @if (store.ui().mfRefuse.length) {
+          <div class="chips" style="margin-bottom:8px">
+            @for (k of store.ui().mfRefuse; track k) {
+              <button class="chip on sage" (click)="store.removeMemberRefuse(k)">
+                {{ store.articleName(k) }} <f-icon name="x" [size]="12" color="#fff" [width]="3" />
+              </button>
+            }
+          </div>
+        }
+        <input class="input" [ngModel]="store.ui().mfRefuseQ" (ngModelChange)="store.patch({ mfRefuseQ: $event })" placeholder="Chercher un aliment…" />
+        @if (store.ui().mfRefuseQ.trim()) {
+          <div class="choix">
+            @for (a of store.refuseMatches(); track a.key) {
+              <button class="art" (click)="store.addMemberRefuse(a.key)">{{ a.name }}</button>
+            } @empty {
+              <div class="hint">Aucun aliment ne correspond.</div>
+            }
+          </div>
+        }
+        <div class="hint" style="margin-top:10px">
+          Ces contraintes signalent les plats à risque dans les recettes et le planning. Un ingrédient que
+          l'application n'a pas su reconnaître n'est <b>pas</b> vérifié : l'absence d'alerte ne vaut pas garantie.
+        </div>
+
+        <label class="toggle" style="margin-top:14px" (click)="store.patch({ mfAdmin: !store.ui().mfAdmin })">
           <span>Administrateur du foyer</span>
           <span class="switch" [class.on]="store.ui().mfAdmin"><span class="knob"></span></span>
         </label>
@@ -107,6 +141,15 @@ import { contactIni } from '../core/helpers';
     }
   `,
   styles: [`
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .chip { border: 2px solid var(--line2); background: transparent; color: var(--ink2); border-radius: 11px; padding: 6px 10px; font-family: var(--font-body); font-size: 12.5px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+    .chip.on { background: var(--honey); border-color: var(--honey); color: #fff; }
+    .chip.on.sage { background: var(--sage); border-color: var(--sage); }
+    .hint { font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; margin: 4px 0 8px; }
+    .hint b { color: var(--ink); }
+    .choix { display: flex; flex-direction: column; max-height: 180px; overflow-y: auto; margin-top: 4px; }
+    .art { border: none; background: none; border-top: 1px solid var(--line); padding: 10px 2px; cursor: pointer; text-align: left; font-family: var(--font-body); font-size: 14px; font-weight: 700; color: var(--ink); }
+    .art:hover { background: var(--soft); }
     .row { display: flex; align-items: center; gap: 10px; }
     .between { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 12px; }
     .members { display: flex; flex-direction: column; gap: 8px; }
@@ -129,6 +172,7 @@ import { contactIni } from '../core/helpers';
   `],
 })
 export class FamilyModalComponent {
+  readonly allergenes = Object.entries(ALLERGENES).map(([key, name]) => ({ key, name }));
   store = inject(FoyerStore);
   palette = PALETTE;
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;

@@ -4,6 +4,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { RECIPE_PALETTE } from '../core/constants';
+import { ALLERGENES } from '../core/articles';
 
 @Component({
   selector: 'screen-recettes',
@@ -90,6 +91,30 @@ import { RECIPE_PALETTE } from '../core/constants';
           <a class="source" [href]="r.source" target="_blank" rel="noopener noreferrer">
             <f-icon name="export" [size]="14" color="var(--ink2)" /> Voir la recette d'origine
           </a>
+        }
+
+        @let chk = store.recipeCheck(r);
+        @if (chk.content.allerg.length || chk.conflicts.length || chk.content.unchecked.length) {
+          <div class="diet">
+            @if (chk.conflicts.length) {
+              <div class="d-alert">
+                <f-icon name="urgent" [size]="17" color="var(--primary)" [width]="2.2" />
+                <span><b>Ne convient pas à</b> {{ store.alertLabel(chk.conflicts) }}</span>
+              </div>
+            }
+            @if (chk.content.allerg.length) {
+              <div class="d-line">
+                <span class="d-lbl">Allergènes</span>
+                @for (a of chk.content.allerg; track a) { <span class="d-chip">{{ ALLERGENES[a] }}</span> }
+              </div>
+            }
+            @if (chk.content.unchecked.length) {
+              <div class="d-warn">
+                {{ chk.content.unchecked.length }} ingrédient(s) que l'application ne reconnaît pas n'ont
+                <b>pas été vérifiés</b> : l'absence d'alerte ne vaut pas garantie.
+              </div>
+            }
+          </div>
         }
 
         <div class="section-t">Ingrédients</div>
@@ -301,6 +326,15 @@ import { RECIPE_PALETTE } from '../core/constants';
     }
   `,
   styles: [`
+    .diet { border: 2px solid var(--line2); border-radius: 14px; padding: 12px 14px; margin: 16px 0 4px; }
+    .d-alert { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.45; }
+    .d-alert b { color: var(--primary); }
+    .d-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+    .d-line:first-child { margin-top: 0; }
+    .d-lbl { font-size: 11.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; margin-right: 2px; }
+    .d-chip { background: var(--soft2); color: var(--honey); border-radius: 9px; padding: 4px 9px; font-size: 12px; font-weight: 800; }
+    .d-warn { font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; margin-top: 10px; }
+    .d-warn b { color: var(--ink); }
     .repair { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-bottom: 20px; padding: 13px 15px; border: 2px solid var(--line2); background: var(--surface); border-radius: 16px; cursor: pointer; font-family: var(--font-body); }
     .repair:hover { border-color: var(--honey); }
     .rep-txt { flex: 1; min-width: 0; }
@@ -389,6 +423,7 @@ import { RECIPE_PALETTE } from '../core/constants';
   `],
 })
 export class RecettesScreen {
+  readonly ALLERGENES = ALLERGENES;
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 

@@ -15,12 +15,12 @@ module à stockage relationnel.
 | 1 | Photos sur le disque, liste de courses concurrente, écran Courses pensé magasin | Livrée |
 | 1 bis | Import d'une recette depuis une URL (schema.org/Recipe), portions et temps séparés | Livrée |
 | 2 a | Lecture des lignes d'ingrédients, référentiel d'articles, génération avec rapport | Livrée |
-| 2 b | Écran de reprise en masse des lignes non reconnues | Livrée (allergènes affichés : tranche 5) |
+| 2 b | Écran de reprise en masse des lignes non reconnues | Livrée |
 | 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
 | 3 b | Recopie d'une période sur une autre | Livrée |
 | 3 c | Semaine type des convives, suggestions, anti-répétition | À venir |
 | 4 | Import de recettes, recherche, historique | À venir |
-| 5 | Contraintes alimentaires, stock de placard | À venir |
+| 5 | Contraintes alimentaires : allergènes affichés, aliments refusés, alertes | Livrée (régimes et substitutions : non faits, voir plus bas) |
 | Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
 | Lot 2 | Tâche « faire les courses », repas à l'agenda | Livrée |
 | Lot 3 | Déplacer un repas d'un créneau à l'autre | Livrée |
@@ -146,6 +146,36 @@ geste n'est inventé pour elle, parce qu'il n'y en a pas de juste ; l'écran nom
 la recette d'où elle vient et l'ouvre d'un toucher, seul endroit où elle se
 corrige. Les lignes dont **rien** ne se dégage (« 3 ») sont listées à part, pour
 la même raison.
+
+## Contraintes alimentaires
+
+Tout est **dérivé**, rien n'est saisi deux fois (`core/diet.ts`) : les allergènes
+d'une recette viennent des articles que le lecteur a su rattacher, et une alerte
+naît de la rencontre entre ces articles et ce qu'un membre a déclaré
+(`Member.allerg`, `Member.refuse`). C'est le premier consommateur des allergènes
+du référentiel, qui étaient stockés depuis la tranche 2 a sans que rien ne les lise.
+
+**La règle qui gouverne tout : l'absence d'alerte ne prouve rien.** Une ligne
+d'ingrédient non rattachée ne porte aucun allergène, donc ne déclenche aucune
+alerte, alors qu'elle peut parfaitement en contenir. Chaque résultat porte le
+nombre de lignes non vérifiées, et l'interface a le **devoir** de le montrer :
+une alerte silencieuse qu'on croit exhaustive est plus dangereuse que pas
+d'alerte du tout. La fiche d'une recette le dit, le formulaire d'un membre aussi.
+
+Trois autres décisions :
+
+- **Un membre sans contrainte déclarée ne produit jamais de conflit.** Ne rien
+  savoir de quelqu'un n'est pas une raison de l'alerter. Tant que personne n'a
+  rien déclaré, l'application n'affiche rien de tout cela.
+- **Un plat en texte libre ne prétend rien.** Il n'a pas d'ingrédients à lire.
+- **Le référentiel est prudent, et cette prudence se corrige.** `chocolat` porte
+  « lait » parce que le chocolat pâtissier en contient presque toujours ; sur une
+  recette explicitement sans lait, l'alerte est de trop. Elle se retire en créant
+  l'article du foyer qui convient (écran de reprise), sans toucher à l'application.
+
+Deux choses du plan d'origine **ne sont pas faites**, et leurs raisons sont dans
+« À savoir pour la suite » : les régimes et les substitutions. Les livrer sur le
+référentiel actuel aurait produit des faux négatifs, ce que ce module refuse.
 
 ## Ce que voit l'API
 
@@ -763,6 +793,7 @@ farine.
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
 | `backend/test/headers.test.ts` | Valeurs d'en-tête émises et reçues, contre un vrai serveur, sans bouchon |
+| `frontend/src/app/core/diet.test.ts` | Ce qui doit alerter, ce qui ne doit surtout pas, et ce que le moteur avoue ne pas avoir vérifié |
 | `frontend/src/app/core/ingredient-repair.test.ts` | Regroupement des formes, refus de deviner, article de la base jamais écrasé, et le carnet réel qui atteint 100 % une fois repris |
 | `frontend/src/app/core/helpers.test.ts` | Semaine ancrée sur le jour, lundi en tête, changements d'heure |
 
@@ -785,9 +816,16 @@ cd frontend && npm test
   sont régulières. L'écran de reprise permet de vivre avec ses manques, il ne les
   corrige pas : ce qui rendra le lecteur meilleur, c'est un corpus de fiches
   saisies à la main, que `fixtures/cuisine-reelle.json` est fait pour accueillir.
-- Les allergènes sont portés par le référentiel mais ne sont **pas encore
-  affichés** : rien ne les lit tant que la tranche 5 (contraintes alimentaires)
-  n'est pas là.
+- Les **régimes** (végétarien, sans porc) ne sont pas faits, et pas par oubli :
+  le rayon est une **allée de magasin**, pas une catégorie d'aliment. Poisson et
+  crevettes sont rangés en « Boucherie », thon et sardines en « Épicerie », et
+  `bouillon` porte « bouillon de volaille » en synonyme d'un article générique.
+  Un drapeau « végétarien » posé sur ce référentiel produirait des faux
+  négatifs, c'est-à-dire exactement l'alerte silencieuse qu'on refuse. Il faudra
+  un axe « catégorie d'aliment » distinct du rayon.
+- Les **substitutions** ne sont pas faites non plus : le référentiel ne porte
+  aucune relation de remplacement, et les dériver du rayon proposerait de la
+  crème à qui ne supporte pas le lait. Il faudra une table écrite à la main.
 - Les pages d'exemple servant de tests sont dans `backend/test/fixtures/recipes`,
   au format JSON-LD extrait. Pour en ajouter une :
 

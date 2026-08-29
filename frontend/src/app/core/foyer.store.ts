@@ -7,6 +7,7 @@ import { CopyReport, applyMealCopy } from './meal-copy';
 import { mealEventTitle, shoppingTaskLabel } from './links';
 import { moveMeal } from './meal-move';
 import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
+import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
 import { Allergene } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
@@ -1218,6 +1219,40 @@ export class FoyerStore {
 
   openRepair(): void { this.patch({ repairOpen: true, repForm: '', repSearch: '' }); }
 
+  // ---- contraintes alimentaires ------------------------------------------
+  // Tout est dérivé du référentiel : ce qu'une recette contient vient des
+  // articles que le lecteur a su rattacher. D'où la règle qui gouverne l'affichage :
+  // l'absence d'alerte ne prouve rien, et les lignes non vérifiées sont dites.
+
+  /** Contenu et conflits d'une recette, pour la fiche ouverte comme pour la grille. */
+  recipeCheck(r: Recipe) { return checkRecipe(r, this._data()?.members || [], this.articleIndex()); }
+
+  /** Y a-t-il seulement quelqu'un à alerter ? Sans contrainte déclarée, tout ce qui suit se tait. */
+  readonly anyDiet = computed(() => (this._data()?.members || []).some(hasDiet));
+
+  /** Conflits d'un créneau, pour la pastille de la grille du planning. */
+  mealAlerts(key: string): Conflict[] {
+    if (!this.anyDiet()) return [];
+    const d = this._data(); if (!d) return [];
+    return mealConflicts(d.meals[key]?.items || [], d.recipes, d.members, this.articleIndex());
+  }
+
+  /** « Léa : lait, œufs · Paul : champignon », phrase du survol et de la fiche. */
+  alertLabel(list: Conflict[]): string { return list.map(conflictLabel).join(' · '); }
+
+  toggleMemberAllerg(a: string): void {
+    const cur = this.ui().mfAllerg;
+    this.patch({ mfAllerg: cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a] });
+  }
+  /** Aliments proposés au refus, filtrés sur ce qui est tapé. */
+  readonly refuseMatches = computed(() =>
+    searchArticles(this.articleIndex(), this._data()?.articles || [], this.ui().mfRefuseQ)
+      .filter((a) => !this.ui().mfRefuse.includes(a.key)));
+  addMemberRefuse(key: string): void { this.patch({ mfRefuse: [...this.ui().mfRefuse, key], mfRefuseQ: '' }); }
+  removeMemberRefuse(key: string): void { this.patch({ mfRefuse: this.ui().mfRefuse.filter((k) => k !== key) }); }
+  /** Nom lisible d'un aliment refusé, tel que le référentiel le nomme. */
+  articleName(key: string): string { return this.articleIndex().byKey.get(key)?.name ?? key; }
+
   /** Ouvre la reprise d'une forme. Le nom lu sert de proposition, jamais d'office. */
   repairPick(form: string, mode: 'lier' | 'creer'): void {
     const g = this.repairReport().groups.find((x) => x.form === form); if (!g) return;
@@ -1492,11 +1527,11 @@ export class FoyerStore {
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '' }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '' }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });
