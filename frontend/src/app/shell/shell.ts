@@ -5,6 +5,7 @@ import { TopbarComponent } from './topbar';
 import { TabbarComponent } from './tabbar';
 import { NotificationsComponent } from './notifications';
 import { GenerateModal } from './generate-modal';
+import { RepairModal } from './repair-modal';
 import { FamilyModalComponent } from './family-modal';
 import { ProfileModalComponent } from './profile-modal';
 import { SearchModalComponent } from './search-modal';
@@ -27,7 +28,7 @@ import { SettingsScreen } from '../screens/settings';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     SidebarComponent, TopbarComponent, TabbarComponent, NotificationsComponent,
-    FamilyModalComponent, ProfileModalComponent, SearchModalComponent, GenerateModal,
+    FamilyModalComponent, ProfileModalComponent, SearchModalComponent, GenerateModal, RepairModal,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, MessagesScreen, ContactsScreen,
     DocumentsScreen, FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
   ],
@@ -58,6 +59,7 @@ import { SettingsScreen } from '../screens/settings';
     </div>
 
     @if (store.ui().genOpen) { <app-generate-modal /> }
+    @if (store.ui().repairOpen) { <app-repair-modal /> }
     @if (store.ui().notifOpen) { <app-notifications /> }
     @if (store.ui().searchOpen) { <app-search-modal /> }
     <app-family-modal />

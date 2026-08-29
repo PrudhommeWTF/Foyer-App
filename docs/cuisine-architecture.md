@@ -15,7 +15,7 @@ module à stockage relationnel.
 | 1 | Photos sur le disque, liste de courses concurrente, écran Courses pensé magasin | Livrée |
 | 1 bis | Import d'une recette depuis une URL (schema.org/Recipe), portions et temps séparés | Livrée |
 | 2 a | Lecture des lignes d'ingrédients, référentiel d'articles, génération avec rapport | Livrée |
-| 2 b | Écran de reprise en masse des lignes non reconnues, allergènes affichés | À venir |
+| 2 b | Écran de reprise en masse des lignes non reconnues | Livrée (allergènes affichés : tranche 5) |
 | 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
 | 3 b | Recopie d'une période sur une autre | Livrée |
 | 3 c | Semaine type des convives, suggestions, anti-répétition | À venir |
@@ -111,6 +111,41 @@ Limite connue : l'application n'est pas une *progressive web app*. Si l'onglet e
 fermé et rouvert alors qu'il n'y a pas de réseau, la page ne peut pas se charger
 du tout. La file, elle, est intacte et repart à la première ouverture avec du
 réseau.
+
+## Reprise des ingrédients non reconnus
+
+Le lecteur fait ce qu'il peut avec le français écrit à la main. Ce qui lui
+échappe n'est pas une erreur de code : c'est un mot que le foyer emploie et que
+la base intégrée ignore (« gomasio », « nouilles soba »). L'écran de reprise
+(`shell/repair-modal.ts`, moteur dans `core/ingredient-repair.ts`) donne la vue
+d'ensemble et les deux gestes qui la referment.
+
+**Le taux est affiché en tête et bouge à chaque geste.** Sans lui, on répare sans
+savoir si l'on avance, et on abandonne au troisième. Il compte les **produits**,
+pas les lignes : « thym + laurier » en vaut deux, et compter les lignes ferait
+mentir le taux dès qu'une ligne en porte deux.
+
+**Rien n'est rattaché automatiquement.** Un rattachement faux se propage à tout
+le carnet et à toutes les listes de courses suivantes sans que personne le
+remarque, ce qui est bien pire qu'une ligne restée non reconnue et visible.
+
+Deux gestes, aux conséquences différentes :
+
+| Geste | Ce qu'il écrit | Quand |
+|---|---|---|
+| **Rattacher** | La forme part en synonyme d'un article connu. Un article de la base intégrée est d'abord **recopié côté foyer** : c'est la seule façon de lui ajouter un synonyme sans toucher à l'application, et une correction du foyer gagne toujours contre une mise à jour. | Quand c'est vraiment le même achat (« gousse d'ail » et « ail »). |
+| **Créer l'article** | Un article du foyer, avec son rayon, ses allergènes et son statut de fond de placard. La forme lue part en synonyme si elle diffère du nom choisi. | Quand c'est un produit distinct. |
+
+Le piège du premier geste est **dit dans l'écran** : la liste de courses portera
+le nom de l'article choisi, pas la forme rattachée. Rattacher « nouilles soba » à
+« pâtes » donne une liste qui annonce « Pâtes 350 g », ce qui trompe en magasin.
+
+Une ligne qui n'est **pas un ingrédient** (un intertitre « pour la sauce : », une
+note) remonte quand même, faute de mieux : le lecteur en isole un produit. Aucun
+geste n'est inventé pour elle, parce qu'il n'y en a pas de juste ; l'écran nomme
+la recette d'où elle vient et l'ouvre d'un toucher, seul endroit où elle se
+corrige. Les lignes dont **rien** ne se dégage (« 3 ») sont listées à part, pour
+la même raison.
 
 ## Ce que voit l'API
 
@@ -728,6 +763,7 @@ farine.
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
 | `backend/test/headers.test.ts` | Valeurs d'en-tête émises et reçues, contre un vrai serveur, sans bouchon |
+| `frontend/src/app/core/ingredient-repair.test.ts` | Regroupement des formes, refus de deviner, article de la base jamais écrasé, et le carnet réel qui atteint 100 % une fois repris |
 | `frontend/src/app/core/helpers.test.ts` | Semaine ancrée sur le jour, lundi en tête, changements d'heure |
 
 ```bash
@@ -745,9 +781,10 @@ cd frontend && npm test
   dont les lignes sont régulières. Il devra être éprouvé sur des fiches saisies à
   la main, qui le sont beaucoup moins ; le corpus de mesure
   (`fixtures/cuisine-reelle.json`) est fait pour grossir dans ce sens.
-- Ce qui n'est pas reconnu se reprend aujourd'hui article par article, en
-  ajoutant un article au foyer. L'écran de reprise en masse, qui présentera
-  toutes les lignes non reconnues du carnet d'un coup, est la tranche 2 b.
+- Le lecteur n'a été **réglé** que sur des recettes importées, dont les lignes
+  sont régulières. L'écran de reprise permet de vivre avec ses manques, il ne les
+  corrige pas : ce qui rendra le lecteur meilleur, c'est un corpus de fiches
+  saisies à la main, que `fixtures/cuisine-reelle.json` est fait pour accueillir.
 - Les allergènes sont portés par le référentiel mais ne sont **pas encore
   affichés** : rien ne les lit tant que la tranche 5 (contraintes alimentaires)
   n'est pas là.
