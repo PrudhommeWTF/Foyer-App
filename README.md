@@ -22,7 +22,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
-| 📁 **Documents** | Dossiers, fichiers (upload en data-URL), recherche transverse. |
+| 📁 **Documents** | Dossiers colorés, fichiers, recherche transverse. Les **fichiers sont stockés sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement), et téléchargés avec la session : un PDF ou une image s'ouvre dans l'onglet, le reste est proposé à l'enregistrement. **Tous les formats sont acceptés**, y compris ceux que le serveur ne sait pas nommer. Supprimer une fiche rend les octets au disque tout de suite. |
 | 💰 **Finances** | Comptes (courant, professionnel, épargne, **crédit**) avec **un ou plusieurs titulaires** et soldes, opérations filtrables et paginées, catégories à deux niveaux avec budget de référence, **bilan mensuel et annuel** (comparaison au mois précédent, moyenne, douze derniers mois, dépenses par catégorie), alerte de **mois incomplet**, export CSV. **Import de relevés** (CSV, OFX, CAMT.053, .xlsx) avec déduplication, rapport avant validation et annulation en un clic. **Virements internes** proposés, jamais fusionnés d'office. **Règles de catégorisation** ordonnées, avec aperçu avant application. **Crédits immobiliers et à la consommation** : quatre chiffres de l'offre de prêt suffisent, capital restant dû, échéancier, date de fin et intérêts de l'année se calculent. **Biens et contrats** avec échéances de résiliation, coût réel face au montant annoncé et **pièces jointes** (factures, attestations). **Relevés de compteur** avec consommation par jour et comparaison à l'an dernier. **Pistes d'économies** chiffrées. **Sauvegarde du module** en un fichier JSON. Données en **tables SQLite dédiées**, pas dans le document d'état. |
 | 🍽️ **Repas** | Déjeuner et dîner (petit-déjeuner en option dans *Paramètres → Repas*), en **fenêtre de 3 jours ou de 7 jours**. **Grille sur grand écran, pile de jours sur téléphone** : chaque créneau est une ligne pleine largeur, rien ne défile latéralement, et la semaine s'ouvre sur le jour même. La génération des courses suit la fenêtre affichée. **Recopie d'une période sur une autre** : compléter sans rien détruire, ou remplacer, avec un rapport affiché avant écriture. **Déplacement d'un repas** : glisser-déposer sur grand écran, choix du créneau sur téléphone ; un créneau occupé échange son repas, et l'événement d'agenda suit. **Plusieurs plats par créneau** : entrée, plat, dessert se choisissent séparément, chacun étant une recette du carnet ou un texte libre. **Couverts par créneau** : les quantités de la liste de courses suivent le nombre de convives. **Repas à l'agenda** en un bouton, pour les repas avec invités : l'événement porte le menu et les couverts, se met à jour plutôt que de se dupliquer, et disparaît avec le repas. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients & étapes dynamiques, portions et temps de préparation/cuisson. **Import depuis l'adresse d'une page de recette** (Marmiton, 750g, Cuisine AZ, blogs…) par lecture des données structurées `schema.org/Recipe` : titre, portions, durées, ingrédients, étapes et photo remplissent le formulaire, que vous relisez avant d'enregistrer. Les **photos sont stockées sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement). **Export et réimport du carnet en JSON**, photos comprises : une recette déjà présente n'est pas dupliquée, et le rapport s'affiche avant d'ajouter quoi que ce soit. **Copie d'une recette en texte**, prête à coller dans un message. |
@@ -54,8 +54,10 @@ Foyer-App/
   (`/api/shopping/ops`) : `PUT /api/state` ignore ce champ et conserve celui du serveur.
   Deux personnes cochent en même temps sans que l'une écrase l'autre, et les coches faites
   hors ligne sont rejouées au retour du réseau.
-- Les **fichiers** (pièces jointes Finances, photos de recettes) vivent sur le disque dans
-  `<données>/pieces`, adressés par leur empreinte, jamais en base64 dans le document.
+- Les **fichiers** (pièces jointes Finances, photos de recettes, documents du foyer) vivent
+  sur le disque dans `<données>/pieces`, adressés par leur empreinte, jamais en base64 dans
+  le document. `PUT /api/state` accepte donc au plus **4 Mo** : aucun octet de fichier n'y
+  transite.
   Voir [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
 - Le **frontend** est une SPA. Toute la logique métier (dérivés budget, récurrence agenda,
   génération de courses…) est portée fidèlement depuis la maquette de design.
@@ -395,8 +397,8 @@ déploiements où l'app et l'API vivent sur deux domaines).
 server {
     server_name foyer.exemple.fr;
 
-    # /api/state accepte 15 Mo : la valeur par défaut de 1 Mo ferait échouer
-    # l'enregistrement d'un document, en 413.
+    # /api/state accepte 4 Mo et l'envoi d'un fichier 20 Mo : la valeur par
+    # défaut de 1 Mo ferait échouer le dépôt d'un scan, en 413.
     client_max_body_size 20m;
 
     location / {

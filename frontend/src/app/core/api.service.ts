@@ -211,9 +211,18 @@ export class ApiService {
   }
 
   // ---- fichiers ----------------------------------------------------------
-  uploadFile(owner: 'recipe', ownerId: string, file: File): Promise<{ file: StoredFile; deduplicated: boolean }> {
+  uploadFile(owner: 'recipe' | 'document', ownerId: string, file: File): Promise<{ file: StoredFile; deduplicated: boolean }> {
     const q = `files?owner=${owner}&id=${encodeURIComponent(ownerId)}&filename=${encodeURIComponent(file.name)}`;
     return this.upload(q, file);
+  }
+
+  /**
+   * Rend les octets au serveur. Appelé quand une fiche est supprimée : le ménage
+   * du démarrage rattraperait l'oubli, mais laisserait la copie d'une pièce
+   * d'identité sur le disque jusqu'au prochain redémarrage.
+   */
+  deleteFile(id: number): Promise<void> {
+    return this.request('files/' + id, { method: 'DELETE' });
   }
 
 }

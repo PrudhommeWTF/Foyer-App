@@ -87,6 +87,25 @@ export const ACCEPTED_LABEL = 'PDF, JPEG, PNG, WEBP, GIF ou HEIC';
 export const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/heic'];
 export const ACCEPTED_IMAGE_LABEL = 'JPEG, PNG, WEBP, GIF ou HEIC';
 
+/**
+ * Type de repli des octets qu'on ne sait pas nommer, réservé aux propriétaires
+ * qui l'acceptent (aujourd'hui les documents du foyer). Refuser un .odt, un
+ * .docx ou un .txt parce que le détecteur ne les nomme pas les laisserait en
+ * data-URL dans l'état : ils sont rangés tels quels, et c'est le nom conservé
+ * avec la fiche qui porte l'extension.
+ *
+ * Le détecteur, lui, ne bouge pas : il sert aussi de garde aux pièces du module
+ * Finances, où « je ne reconnais pas ces octets » doit rester un refus.
+ */
+export const GENERIC_TYPE: DetectedType = { mime: 'application/octet-stream', ext: '' };
+
+/**
+ * Ce qu'on accepte d'afficher dans l'onglet. Tout le reste est proposé au
+ * téléchargement : rendre des octets déposés par un utilisateur dans l'origine
+ * de l'application est exactement ce qu'il ne faut pas faire.
+ */
+export const INLINE_MIMES = [...IMAGE_MIMES, 'application/pdf'];
+
 // ---- stockage -------------------------------------------------------------
 /**
  * Chemin d'un fichier, dérivé de sa seule empreinte. Le nom donné par

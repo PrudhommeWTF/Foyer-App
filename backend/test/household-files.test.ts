@@ -170,3 +170,28 @@ describe('détection de type', () => {
     assert.equal(detectType(Buffer.alloc(3)), null);
   });
 });
+
+describe('documents du foyer', () => {
+  it('cohabitent avec les photos de recettes sans se marcher dessus', () => {
+    const photo = files.store('recipe', 'r1', 'gratin.png', PNG, detectType(PNG)!).file;
+    const piece = files.store('document', 'd1', 'Passeport.pdf', PDF, detectType(PDF)!).file;
+    assert.equal(files.listFor('recipe', 'r1').length, 1);
+    assert.equal(files.listFor('document', 'd1').length, 1);
+    // Retirer toutes les pièces d'un document ne touche pas au carnet de recettes.
+    assert.equal(files.removeAllFor('document', 'd1'), 1);
+    assert.equal(files.get(piece.id), null);
+    assert.ok(files.get(photo.id));
+  });
+
+  it('le ménage voit les deux genres à la fois', () => {
+    // Le document d'état cite les deux : un ménage qui n'en connaîtrait qu'un
+    // effacerait les fichiers de l'autre au démarrage suivant.
+    const photo = files.store('recipe', 'r1', 'gratin.png', PNG, detectType(PNG)!).file;
+    const piece = files.store('document', 'd1', 'Passeport.pdf', PDF, detectType(PDF)!).file;
+    const orpheline = files.store('document', 'd2', 'Ancien.pdf', JPEG, detectType(JPEG)!).file;
+    assert.equal(files.pruneUnreferenced(new Set([photo.id, piece.id])), 1);
+    assert.equal(files.get(orpheline.id), null);
+    assert.ok(files.get(photo.id));
+    assert.ok(files.get(piece.id));
+  });
+});

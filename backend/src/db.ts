@@ -9,7 +9,7 @@ import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
 import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
 import * as files from './storage/files';
 import { initShopping } from './shopping/repo';
-import { STATE_VERSION, migrateState, photoStorer } from './state/migrations';
+import { STATE_VERSION, fileStorer, migrateState } from './state/migrations';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db');
@@ -65,11 +65,11 @@ files.initFiles(db);
 initShopping(db);
 migrateHouseholdDocument();
 
-// Photos qu'aucune recette ne cite plus (recette supprimée, photo remplacée,
-// formulaire abandonné). Le ménage se fait ici plutôt qu'à chaque
+// Fichiers qu'aucune entité du document ne cite plus (recette supprimée, photo
+// remplacée, formulaire abandonné). Le ménage se fait ici plutôt qu'à chaque
 // enregistrement : une recette est sauvegardée vingt fois pendant qu'on la
 // modifie, et se tromper de sens effacerait la photo qu'on vient de poser.
-pruneUnreferencedRecipePhotos();
+pruneUnreferencedFiles();
 
 // Both attachment tables are registered by now: the sweep sees the whole disk.
 reportOrphansAtBoot();
@@ -99,7 +99,7 @@ function migrateHouseholdDocument(): void {
   try {
     const doc = JSON.parse(row.state) as Record<string, unknown>;
     const outcome = migrateState(doc, from, {
-      storeDataUrl: photoStorer((ownerId, name, buf, type) => files.store('recipe', ownerId || 'inconnu', name, buf, type).file.id),
+      storeDataUrl: fileStorer((kind, ownerId, name, buf, type) => files.store(kind, ownerId || 'inconnu', name, buf, type).file.id),
     }, path.join(DATA_DIR, 'backups'));
 
     db.transaction(() => {
@@ -137,23 +137,24 @@ function migrateHouseholdDocument(): void {
  * foyer n'a pas été créé : sur une base vierge, « rien n'est référencé » veut
  * dire « rien n'est encore écrit », surtout pas « tout est à effacer ».
  */
-function pruneUnreferencedRecipePhotos(): void {
+function pruneUnreferencedFiles(): void {
   const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
   if (!row) return;
   try {
-    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[] };
+    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[]; files?: { fileId?: number | null }[] };
     const referenced = new Set<number>();
     for (const r of doc.recipes || []) if (typeof r.photoId === 'number') referenced.add(r.photoId);
+    for (const f of doc.files || []) if (typeof f.fileId === 'number') referenced.add(f.fileId);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
       // eslint-disable-next-line no-console
-      console.log(`[foyer] Fichiers : ${removed} photo(s) de recette sans propriétaire retirée(s).`);
+      console.log(`[foyer] Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);
     }
   } catch (e) {
     // Un document illisible est un problème à signaler, pas une raison de
     // supprimer des fichiers au jugé.
     // eslint-disable-next-line no-console
-    console.warn('[foyer] Fichiers : ménage des photos ignoré, document d’état illisible : ' + (e as Error).message);
+    console.warn('[foyer] Fichiers : ménage ignoré, document d’état illisible : ' + (e as Error).message);
   }
 }
 

@@ -64,8 +64,8 @@ import { FileType } from '../core/models';
               <div class="file-name">{{ fl.name }}</div>
               <div class="file-meta">{{ folderName(fl.folderId) }} · {{ fl.date }}</div>
             </div>
-            @if (isDataUrl(fl.data)) {
-              <a class="icon-btn" [href]="fl.data" [download]="fl.name"><f-icon name="download" [size]="16" color="var(--ink2)" /></a>
+            @if (fl.fileId) {
+              <button class="icon-btn" title="Télécharger" (click)="store.downloadFile(fl.id)"><f-icon name="download" [size]="16" color="var(--ink2)" /></button>
             }
             <button class="icon-btn" (click)="store.editFile(fl.id)"><f-icon name="edit" [size]="16" color="var(--ink2)" /></button>
             <button class="icon-btn" (click)="store.patch({ fileDelId: fl.id })"><f-icon name="trash" [size]="16" color="var(--primary)" /></button>
@@ -96,16 +96,16 @@ import { FileType } from '../core/models';
     @if (store.ui().fileForm) {
       <f-modal [title]="store.ui().fiEditId ? 'Modifier le fichier' : 'Ajouter un fichier'" [maxWidth]="500" (close)="store.patch({ fileForm: false })">
         <label class="upload">
-          <input type="file" (change)="onUpload($event)" />
+          <input type="file" [disabled]="store.ui().fiBusy" (change)="onUpload($event)" />
           <div class="upload-ic"><f-icon name="upload" [size]="20" color="var(--ink2)" /></div>
           <div>
             <div class="upload-t">Téléverser un fichier</div>
-            <div class="upload-s">{{ store.ui().fiData ? 'Fichier chargé ✓' : 'PDF, image, document…' }}</div>
+            <div class="upload-s">{{ uploadHint() }}</div>
           </div>
         </label>
 
         <label class="field-label">Nom du fichier</label>
-        <input class="input" [ngModel]="store.ui().fiName" (ngModelChange)="store.patch({ fiName: $event })" placeholder="Ex : Passeport — Léa.pdf" />
+        <input class="input" [ngModel]="store.ui().fiName" (ngModelChange)="store.patch({ fiName: $event })" placeholder="Ex : Passeport de Léa.pdf" />
 
         <label class="field-label" style="margin-top:20px">Dossier</label>
         <div class="seg">
@@ -178,7 +178,6 @@ import { FileType } from '../core/models';
     .file-main { flex: 1; min-width: 0; }
     .file-name { font-weight: 800; font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-meta { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
-    a.icon-btn { text-decoration: none; }
     .file-empty { background: var(--surface); border-radius: 16px; padding: 36px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 14px; box-shadow: var(--sh-card); }
 
     .swatch.active { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink3); }
@@ -228,12 +227,20 @@ export class DocumentsScreen {
   });
   delFileName = computed(() => this.d().files.find((f) => f.id === this.store.ui().fileDelId)?.name ?? '');
 
+  // Le fichier part sur le disque dès qu'il est choisi : l'état de l'envoi est
+  // donc une information que la modale doit montrer, sans quoi « Enregistrer »
+  // sur un envoi en cours perdrait la pièce sans rien dire.
+  uploadHint = computed(() => {
+    const u = this.store.ui();
+    if (u.fiBusy) return 'Envoi en cours…';
+    return u.fiFileId ? 'Fichier enregistré ✓' : 'PDF, image, document…';
+  });
+
   count(folderId: string): number { return this.d().files.filter((f) => f.folderId === folderId).length; }
   folderName(id: string | null): string { return this.d().folders.find((f) => f.id === id)?.name ?? ''; }
-  isDataUrl(data?: string | null): boolean { return typeof data === 'string' && data.startsWith('data:'); }
 
   onUpload(e: Event): void {
     const f = (e.target as HTMLInputElement).files?.[0];
-    if (f) this.store.onFileUpload(f);
+    if (f) void this.store.onFileUpload(f);
   }
 }
