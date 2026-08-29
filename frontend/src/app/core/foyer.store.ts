@@ -6,6 +6,8 @@ import { PlanReport, buildPlan } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
 import { mealEventTitle, shoppingTaskLabel } from './links';
 import { moveMeal } from './meal-move';
+import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
+import { Allergene } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
@@ -1196,6 +1198,60 @@ export class FoyerStore {
 
   /** Référentiel d'articles, base intégrée plus les corrections du foyer. */
   readonly articleIndex = computed(() => buildArticleIndex(this._data()?.articles || []));
+
+  /**
+   * Ce que le lecteur d'ingrédients n'a pas su rattacher, sur tout le carnet.
+   * Recalculé à chaque correction : le taux affiché bouge sous les yeux, ce qui
+   * est le seul retour honnête sur l'effet d'un geste.
+   */
+  readonly repairReport = computed(() => scanRecipes(this._data()?.recipes || [], this.articleIndex()));
+
+  /** Le groupe en cours de reprise, ou null quand on est sur la liste. */
+  readonly repairGroup = computed(() => {
+    const form = this.ui().repForm;
+    return form ? this.repairReport().groups.find((g) => g.form === form) ?? null : null;
+  });
+
+  /** Articles proposés au rattachement, filtrés sur ce qui est tapé. */
+  readonly repairMatches = computed(() =>
+    searchArticles(this.articleIndex(), this._data()?.articles || [], this.ui().repSearch));
+
+  openRepair(): void { this.patch({ repairOpen: true, repForm: '', repSearch: '' }); }
+
+  /** Ouvre la reprise d'une forme. Le nom lu sert de proposition, jamais d'office. */
+  repairPick(form: string, mode: 'lier' | 'creer'): void {
+    const g = this.repairReport().groups.find((x) => x.form === form); if (!g) return;
+    this.patch({ repForm: form, repMode: mode, repSearch: mode === 'lier' ? g.name : '', repName: g.name, repRayon: 'epicerie', repPantry: false, repAllerg: [] });
+  }
+
+  /** Apprend la forme en cours à un article connu. */
+  repairLink(key: string): void {
+    const g = this.repairGroup(); if (!g) return;
+    const nom = this.articleIndex().byKey.get(key)?.name || key;
+    this.mutate((d) => { d.articles = linkForm(d.articles || [], key, g.name, this.articleIndex()); });
+    this.patch({ repForm: '', repSearch: '' });
+    this.toast('« ' + g.name + ' » rattaché à ' + nom);
+  }
+
+  /** Crée l'article manquant, avec la forme qui l'a fait découvrir. */
+  repairCreate(): void {
+    const g = this.repairGroup(); if (!g) return;
+    const s = this.ui(); const name = s.repName.trim();
+    if (!name) { this.toast('Donne un nom à l’article'); return; }
+    this.mutate((d) => {
+      d.articles = createArticle(d.articles || [], { name, rayon: s.repRayon, pantry: s.repPantry, allerg: s.repAllerg as Allergene[] }, g.name, this.articleIndex());
+    });
+    this.patch({ repForm: '' });
+    this.toast('Article « ' + name + ' » créé');
+  }
+
+  toggleRepairAllerg(a: string): void {
+    const cur = this.ui().repAllerg;
+    this.patch({ repAllerg: cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a] });
+  }
+
+  /** Ouvre la recette d'où vient une ligne : seul endroit où un intertitre se corrige. */
+  openRepairRecipe(id: string): void { this.patch({ repairOpen: false, screen: 'recettes', openRecipeId: id }); }
 
   /** Rapport de la dernière génération préparée, affiché avant d'écrire. */
   readonly genReport = signal<PlanReport | null>(null);

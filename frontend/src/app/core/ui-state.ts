@@ -40,6 +40,12 @@ export interface UiState {
   moveOpen: boolean;
   /** Rapport d'import du carnet, affiché avant de créer quoi que ce soit. */
   importOpen: boolean;
+  /**
+   * Reprise des ingrédients non rattachés. `repForm` vide = la liste ; sinon la
+   * forme en cours de reprise, et `repMode` dit lequel des deux gestes est ouvert.
+   */
+  repairOpen: boolean; repForm: string; repMode: 'lier' | 'creer';
+  repSearch: string; repName: string; repRayon: Rayon; repPantry: boolean; repAllerg: string[];
 
   // event modal + datepicker
   showEvent: boolean; evEditId: string | null;
@@ -109,6 +115,7 @@ export function initialUi(): UiState {
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
+    repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
     aisleOrderOpen: false,

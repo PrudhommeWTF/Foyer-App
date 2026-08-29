@@ -32,6 +32,18 @@ import { RECIPE_PALETTE } from '../core/constants';
         </div>
       </div>
 
+      @let rep = store.repairReport();
+      @if (rep.groups.length || rep.unreadable.length) {
+        <button class="repair" (click)="store.openRepair()">
+          <f-icon name="urgent" [size]="18" color="var(--honey)" [width]="2.2" />
+          <span class="rep-txt">
+            <b>{{ rep.total - rep.matched }} ingrédients ne sont rattachés à aucun article</b>
+            <span>Leurs quantités ne s'additionnent pas et leur rayon est deviné. {{ rep.rate }} % du carnet est rattaché.</span>
+          </span>
+          <f-icon name="chevronRight" [size]="18" color="var(--ink3)" [width]="2.2" />
+        </button>
+      }
+
       <div class="grid">
         @for (r of d().recipes; track r.id) {
           <div class="rcard" (click)="store.patch({ openRecipeId: r.id })">
@@ -289,6 +301,11 @@ import { RECIPE_PALETTE } from '../core/constants';
     }
   `,
   styles: [`
+    .repair { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; margin-bottom: 20px; padding: 13px 15px; border: 2px solid var(--line2); background: var(--surface); border-radius: 16px; cursor: pointer; font-family: var(--font-body); }
+    .repair:hover { border-color: var(--honey); }
+    .rep-txt { flex: 1; min-width: 0; }
+    .rep-txt b { display: block; font-size: 14px; font-weight: 800; color: var(--ink); }
+    .rep-txt span { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.4; margin-top: 2px; }
     .head-acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .imp-bilan { background: var(--soft); border-radius: 13px; padding: 12px 14px; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.55; margin-bottom: 16px; }
     .imp-bilan b { color: var(--ink); font-weight: 800; }
