@@ -8,6 +8,8 @@ import { mealEventTitle, shoppingTaskLabel } from './links';
 import { moveMeal } from './meal-move';
 import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
+import { paxLabel, presenceAt, weekSlot } from './presence';
+import { SuggestReport, suggestMeals } from './suggest';
 import { Allergene } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
@@ -1018,8 +1020,13 @@ export class FoyerStore {
     const v = this._data()?.meals[dateStr + '-' + slot];
     this.patch({
       mealEdit: { dateStr, slot }, mealItems: (v?.items || []).map((i) => ({ ...i })), mealText: '',
-      mealPax: v?.pax ? String(v.pax) : '',
+      mealPax: v?.pax ? String(v.pax) : '', mealAway: [...(v?.away || [])],
     });
+  }
+  /** Un tap sur un convive le retire du créneau, un second l'y remet. */
+  toggleMealGuest(id: string): void {
+    const away = this.ui().mealAway;
+    this.patch({ mealAway: away.includes(id) ? away.filter((x) => x !== id) : [...away, id] });
   }
   /** Un tap sur une recette l'ajoute au menu, un second l'en retire. */
   toggleMealRecipe(rid: string): void {
@@ -1041,10 +1048,15 @@ export class FoyerStore {
    * périmerait au premier changement de famille.
    */
   private mealFromForm(): MealValue {
-    const pax = parseInt(this.ui().mealPax, 10);
+    const s = this.ui();
+    const pax = parseInt(s.mealPax, 10);
+    const attendus = this.editingPresence()?.pax ?? this.householdPax();
     return {
-      items: this.ui().mealItems,
-      ...(Number.isFinite(pax) && pax > 0 && pax !== this.householdPax() ? { pax } : {}),
+      items: s.mealItems,
+      // Les couverts ne sont retenus que s'ils dérogent au décompte des présents :
+      // un chiffre recopié partout se périmerait au premier changement de famille.
+      ...(Number.isFinite(pax) && pax > 0 && pax !== attendus ? { pax } : {}),
+      ...(s.mealAway.length ? { away: [...s.mealAway] } : {}),
     };
   }
 
@@ -1197,6 +1209,51 @@ export class FoyerStore {
   /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
   householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
 
+  /** Qui mange à ce créneau, et pour combien de couverts. Voir presence.ts. */
+  presenceOf(dateStr: string, slot: string) {
+    return presenceAt(this._data()?.members || [], dateStr, slot, this._data()?.meals[dateStr + '-' + slot]);
+  }
+  /** « 3 couverts (Léa absente) », affiché sous le créneau. */
+  paxTextOf(dateStr: string, slot: string): string { return paxLabel(this.presenceOf(dateStr, slot)); }
+
+  /**
+   * Présence du créneau **en cours d'édition**, dérogations de la modale
+   * comprises et couverts manuels exclus. Lue depuis le formulaire et non
+   * depuis l'état enregistré : sans cela, retirer un convive ne changerait rien
+   * à l'écran tant qu'on n'a pas enregistré, et le geste paraîtrait sans effet.
+   */
+  readonly editingPresence = computed(() => {
+    const e = this.ui().mealEdit; if (!e) return null;
+    return presenceAt(this._data()?.members || [], e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
+  });
+
+  // ---- semaine type, dans le formulaire d'un membre ------------------------
+  readonly weekDaysShort = [
+    { n: 1, label: 'Lun' }, { n: 2, label: 'Mar' }, { n: 3, label: 'Mer' }, { n: 4, label: 'Jeu' },
+    { n: 5, label: 'Ven' }, { n: 6, label: 'Sam' }, { n: 7, label: 'Dim' },
+  ];
+  isMemberAbsent(day: number, slot: string): boolean { return this.ui().mfAbsent.includes(weekSlot(day, slot)); }
+  toggleMemberAbsent(day: number, slot: string): void {
+    const k = weekSlot(day, slot); const cur = this.ui().mfAbsent;
+    this.patch({ mfAbsent: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] });
+  }
+
+  // ---- suggestions ---------------------------------------------------------
+  /**
+   * Ce qu'on pourrait mettre dans le créneau ouvert, et pourquoi. Rien n'est
+   * calculé tant que la modale est fermée : le carnet entier est relu à chaque
+   * appel, et l'écran Repas se redessine à chaque survol de cellule.
+   */
+  readonly suggestions = computed<SuggestReport | null>(() => {
+    const e = this.ui().mealEdit; const d = this._data();
+    if (!e || !d) return null;
+    return suggestMeals({
+      recipes: d.recipes, meals: d.meals, members: d.members, index: this.articleIndex(),
+      shop: d.shop.filter((i) => i.listId === this.activeShopListId()),
+      dateStr: e.dateStr, slot: e.slot,
+    });
+  });
+
   /** Référentiel d'articles, base intégrée plus les corrections du foyer. */
   readonly articleIndex = computed(() => buildArticleIndex(this._data()?.articles || []));
 
@@ -1234,7 +1291,10 @@ export class FoyerStore {
   mealAlerts(key: string): Conflict[] {
     if (!this.anyDiet()) return [];
     const d = this._data(); if (!d) return [];
-    return mealConflicts(d.meals[key]?.items || [], d.recipes, d.members, this.articleIndex());
+    // Seuls les convives attendus : alerter pour quelqu'un qui n'est pas là ce
+    // soir-là est une fausse alerte, et une de trop suffit à ne plus les lire.
+    const presents = presenceAt(d.members, key.slice(0, 10), key.slice(11), d.meals[key]).present;
+    return mealConflicts(d.meals[key]?.items || [], d.recipes, presents, this.articleIndex());
   }
 
   /** « Léa : lait, œufs · Paul : champignon », phrase du survol et de la fiche. */
@@ -1309,14 +1369,18 @@ export class FoyerStore {
     const d = this._data(); if (!d) return;
     const listId = this.activeShopListId();
     if (!listId) { this.toast('Créez d’abord une liste de courses'); return; }
-    const slots = days.flatMap((ds) =>
-      this.mealSlots().map((sl) => d.meals[ds + '-' + sl.key]).filter((v): v is MealValue => !!v?.items?.length));
+    // Les couverts sont résolus créneau par créneau : la semaine type sait que
+    // Léa déjeune au collège le mardi, et les quantités doivent le savoir aussi.
+    const slots = days.flatMap((ds) => this.mealSlots().flatMap((sl) => {
+      const value = d.meals[ds + '-' + sl.key];
+      return value?.items?.length ? [{ value, pax: this.presenceOf(ds, sl.key).pax }] : [];
+    }));
     if (!slots.length) { this.toast('Aucun repas planifié sur cette période'); return; }
     this.genReport.set(buildPlan({
-      slots: slots.map((value) => ({ value })),
+      slots,
       recipes: d.recipes, aisles: d.aisles, articles: d.articles, index: this.articleIndex(),
       existing: d.shop.filter((i) => i.listId === listId),
-      fallbackAisle: this.defaultAisleId(), defaultPax: this.householdPax(),
+      fallbackAisle: this.defaultAisleId(),
     }));
     this.genPantry.set(new Set());
     this.patch({ genOpen: true });
@@ -1527,11 +1591,11 @@ export class FoyerStore {
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [] }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '', mfAbsent: [...(m.absent || [])] }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse, absent: s.mfAbsent };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });

@@ -1,6 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
+import { paxLabel } from '../core/presence';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { MEAL_SLOTS, DOW } from '../core/constants';
@@ -244,12 +245,54 @@ const GRID_MIN = 760;
           <div class="menu-empty">Aucun plat choisi. Touchez une recette ci-dessous, ou ajoutez un intitulé libre.</div>
         }
 
-        <div class="field-label">Couverts</div>
+        @let sugg = store.suggestions();
+        @if (sugg && !store.ui().mealItems.length && (sugg.suggestions.length || sugg.excluded.length)) {
+          <div class="sugg">
+            <button class="sugg-head" (click)="store.patch({ mealSuggest: !store.ui().mealSuggest })">
+              <f-icon name="bolt" [size]="16" color="var(--sage)" [width]="2.2" />
+              <span>Des idées pour ce créneau</span>
+              <f-icon [name]="store.ui().mealSuggest ? 'chevronDown' : 'chevronRight'" [size]="16" color="var(--ink3)" [width]="2.2" />
+            </button>
+            @if (store.ui().mealSuggest) {
+              @for (sg of sugg.suggestions; track sg.recipe.id) {
+                <button class="sugg-row" (click)="store.toggleMealRecipe(sg.recipe.id)">
+                  <span class="sugg-name">{{ sg.recipe.name }}</span>
+                  <span class="sugg-why">{{ sg.reasons.join(' · ') || 'rien à signaler' }}</span>
+                </button>
+              } @empty {
+                <div class="sugg-none">Tout le carnet est soit servi récemment, soit écarté ci-dessous.</div>
+              }
+              @if (sugg.excluded.length) {
+                <div class="sugg-out">
+                  <b>{{ sugg.excluded.length }}</b> recette(s) écartée(s) : elles ne conviennent pas à {{ excludedWho() }}.
+                </div>
+              }
+              @if (sugg.recent) {
+                <div class="sugg-out">{{ sugg.recent }} recette(s) servie(s) ces quinze derniers jours ne sont pas proposées.</div>
+              }
+            }
+          </div>
+        }
+
+        <div class="field-label">Convives</div>
+        @if (d().members.length) {
+          <div class="guests">
+            @for (m of d().members; track m.id) {
+              @let absent = store.ui().mealAway.includes(m.id);
+              <button class="guest" [class.off]="absent" (click)="store.toggleMealGuest(m.id)"
+                      [title]="absent ? m.name + ' ne mange pas ici' : m.name + ' est attendu'">
+                <span class="g-dot" [style.background]="absent ? 'transparent' : m.color"></span>{{ m.name }}
+              </button>
+            }
+          </div>
+        }
         <div class="pax-row">
           <input class="input pax" type="number" inputmode="numeric" min="1" max="30"
                  [ngModel]="store.ui().mealPax" (ngModelChange)="store.patch({ mealPax: $event })"
-                 [placeholder]="store.householdPax() + ' (le foyer)'" />
-          <span class="pax-hint">Les quantités de la liste de courses suivent ce nombre. Laissez vide pour le foyer entier.</span>
+                 [placeholder]="attendus() + ''" />
+          <span class="pax-hint">
+            {{ paxText() }}. Les quantités de la liste de courses suivent ce nombre ; posez-en un autre pour des invités.
+          </span>
         </div>
 
         <div class="field-label">Ajouter un intitulé libre</div>
@@ -332,6 +375,19 @@ const GRID_MIN = 760;
     /* Le créneau visé s'éclaire pendant le survol : sans retour visuel, on lâche
        le repas au jugé. */
     .cell.drop { border-color: var(--primary); background: rgba(229,107,78,.1); }
+    .sugg { border: 2px solid var(--line2); border-radius: 14px; margin: 16px 0 4px; overflow: hidden; }
+    .sugg-head { display: flex; align-items: center; gap: 9px; width: 100%; border: none; background: var(--soft); padding: 11px 13px; cursor: pointer; font-family: var(--font-body); font-size: 13.5px; font-weight: 800; color: var(--ink); text-align: left; }
+    .sugg-head span { flex: 1; }
+    .sugg-row { display: flex; flex-direction: column; gap: 2px; width: 100%; border: none; background: none; border-top: 1px solid var(--line); padding: 10px 13px; cursor: pointer; text-align: left; font-family: var(--font-body); }
+    .sugg-row:hover { background: var(--soft); }
+    .sugg-name { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .sugg-why { font-size: 12px; font-weight: 700; color: var(--sage); }
+    .sugg-none, .sugg-out { border-top: 1px solid var(--line); padding: 10px 13px; font-size: 12px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .sugg-out b { color: var(--ink); }
+    .guests { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+    .guest { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--line2); background: transparent; border-radius: 11px; padding: 6px 11px; font-family: var(--font-body); font-size: 13px; font-weight: 800; color: var(--ink); cursor: pointer; }
+    .guest.off { color: var(--ink3); text-decoration: line-through; }
+    .g-dot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--line2); }
     .cell-alert { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; font-size: 11px; font-weight: 800; color: var(--primary); line-height: 1.35; overflow-wrap: anywhere; }
     .srow-alert { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 11.5px; font-weight: 800; color: var(--primary); }
     .cell[draggable=true] { cursor: grab; }
@@ -627,6 +683,20 @@ export class RepasScreen implements AfterViewInit, OnDestroy {
     const e = this.store.ui().mealEdit;
     return !!e && !!this.store.mealEvent(e.dateStr + '-' + e.slot);
   });
+
+  /**
+   * Qui bloque les recettes écartées. Nommer les douze recettes une à une
+   * remplissait la modale d'un mur de titres : ce qu'on veut savoir, c'est
+   * combien, et pour qui.
+   */
+  excludedWho = computed(() => {
+    const noms = new Set((this.store.suggestions()?.excluded || []).flatMap((e) => e.why.split(', ')));
+    return [...noms].join(', ');
+  });
+
+  /** Convives attendus, semaine type et dérogations de la modale comprises. */
+  attendus = computed(() => this.store.editingPresence()?.pax ?? this.store.householdPax());
+  paxText = computed(() => { const p = this.store.editingPresence(); return p ? paxLabel(p) : ''; });
 
   hasExisting = computed(() => {
     const e = this.store.ui().mealEdit;

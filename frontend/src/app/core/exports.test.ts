@@ -7,7 +7,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
-  BUNDLE_FORMAT, ImportError, buildBundle, csvCell, fileName, parseBundle, planImport, recipeToText, shopToCsv,
+  BUNDLE_FORMAT, BUNDLE_VERSION, ImportError, buildBundle, csvCell, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
 import { Aisle, Recipe, ShopItem } from './models';
 
@@ -76,7 +76,7 @@ test('un fichier d’une version future est refusé plutôt que mal lu', () => {
 test('une entrée abîmée est écartée, le reste du fichier passe quand même', () => {
   // Un import tout ou rien perdrait dix-sept recettes pour une ligne fautive.
   const bundle = {
-    format: BUNDLE_FORMAT as const, version: 1 as const, exportedAt: '', recipes: [
+    format: BUNDLE_FORMAT, version: BUNDLE_VERSION, exportedAt: '', recipes: [
       { id: 'r1', name: 'Bonne', ingr: ['sel'], steps: [], level: 'Facile', color: '#7A9B76' },
       { id: 'r2', name: '', ingr: ['sel'], steps: [], level: 'Facile', color: '#7A9B76' },
       { id: '', name: 'Sans identifiant', ingr: ['sel'], steps: [], level: 'Facile', color: '#7A9B76' },
@@ -93,7 +93,7 @@ test('une entrée abîmée est écartée, le reste du fichier passe quand même'
 
 test('les valeurs aberrantes sont remplacées, pas recopiées', () => {
   const bundle = {
-    format: BUNDLE_FORMAT as const, version: 1 as const, exportedAt: '', recipes: [
+    format: BUNDLE_FORMAT, version: BUNDLE_VERSION, exportedAt: '', recipes: [
       { id: 'r1', name: 'Bizarre', ingr: ['sel'], steps: [], level: '', color: 'rouge', portions: -3, prepMin: 'douze' },
     ],
   } as never;

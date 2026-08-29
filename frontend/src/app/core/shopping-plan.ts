@@ -48,7 +48,12 @@ export interface PlanReport {
   /** Lignes dont le produit n'a pas été reconnu. Ajoutées quand même, telles quelles. */
   unknown: PlanSource[];
   /** Recettes mises à l'échelle, pour l'afficher. */
-  scaled: { recipe: string; portions: number; pax: number }[];
+  /**
+   * Recettes mises à l'échelle, avec **tous** les nombres de couverts qui les ont
+   * servies. Une même recette peut être planifiée deux fois dans la semaine avec
+   * des convives différents, et n'en annoncer qu'un seul serait un mensonge.
+   */
+  scaled: { recipe: string; portions: number; pax: number[] }[];
   /** Recettes planifiées sans portions connues : quantités laissées telles quelles. */
   unscaled: string[];
 }
@@ -128,9 +133,19 @@ const formatBucket = (b: Bucket): string =>
 
 const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+/** « prévue pour 4, ajustée à 3 puis 2 couverts ». */
+export function scaleLabel(s: { portions: number; pax: number[] }): string {
+  const liste = s.pax.length > 1 ? s.pax.slice(0, -1).join(', ') + ' puis ' + s.pax[s.pax.length - 1] : String(s.pax[0]);
+  return 'prévue pour ' + s.portions + ', ajustée à ' + liste + (s.pax.length > 1 || s.pax[0] > 1 ? ' couverts' : ' couvert');
+}
+
 export interface PlanInput {
-  /** Créneaux retenus : les repas de la semaine choisie. */
-  slots: { value: MealValue; }[];
+  /**
+   * Créneaux retenus, chacun avec ses couverts déjà résolus. Le calcul des
+   * présents appartient à l'appelant (voir presence.ts) : un chiffre unique pour
+   * toute la semaine serait faux dès que quelqu'un déjeune ailleurs le mardi.
+   */
+  slots: { value: MealValue; pax: number }[];
   recipes: Recipe[];
   aisles: Aisle[];
   articles: Article[];
@@ -139,8 +154,6 @@ export interface PlanInput {
   existing: ShopItem[];
   /** Rayon de repli quand rien ne correspond (« À trier »). */
   fallbackAisle: string;
-  /** Couverts par défaut du foyer, quand le créneau n'en fixe pas. */
-  defaultPax: number;
 }
 
 /**
@@ -157,17 +170,20 @@ export function buildPlan(input: PlanInput): PlanReport {
   const seenRecipe = new Set<string>();
 
   for (const slot of input.slots) {
-    const pax = slot.value.pax && slot.value.pax > 0 ? slot.value.pax : input.defaultPax;
+    const pax = slot.pax > 0 ? slot.pax : 1;
     for (const it of slot.value.items || []) {
       const r = it.rid ? recipes.find((x) => x.id === it.rid) : undefined;
       if (!r) continue;
       const portions = r.portions && r.portions > 0 ? r.portions : 0;
       const factor = portions ? pax / portions : 1;
-      if (!seenRecipe.has(r.id)) {
-        seenRecipe.add(r.id);
-        if (!portions) unscaled.push(r.name);
-        else if (Math.abs(factor - 1) > 0.001) scaled.push({ recipe: r.name, portions, pax });
+      if (!portions) {
+        if (!seenRecipe.has(r.id)) { seenRecipe.add(r.id); unscaled.push(r.name); }
+      } else if (Math.abs(factor - 1) > 0.001) {
+        const deja = scaled.find((x) => x.recipe === r.name);
+        if (!deja) scaled.push({ recipe: r.name, portions, pax: [pax] });
+        else if (!deja.pax.includes(pax)) deja.pax.push(pax);
       }
+      seenRecipe.add(r.id);
       for (const line of r.ingr || []) {
         const parsed = parseIngredient(line, index);
         if (!parsed.length) continue;

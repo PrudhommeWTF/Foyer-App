@@ -11,7 +11,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { buildArticleIndex } from './ingredients';
 import { Aisle, MealValue, Recipe, ShopItem } from './models';
-import { PlanInput, PlanReport, aisleForRayon, buildPlan } from './shopping-plan';
+import { PlanInput, PlanReport, aisleForRayon, buildPlan, scaleLabel } from './shopping-plan';
 
 const AISLES: Aisle[] = [
   { id: 'a1', name: 'Fruits & légumes', color: '', position: 0, kind: 'legumes' },
@@ -24,10 +24,11 @@ let seq = 0;
 const recette = (name: string, ingr: string[], portions?: number): Recipe =>
   ({ id: 'r' + ++seq, name, level: 'Facile', color: '#000', ingr, steps: [], ...(portions ? { portions } : {}) });
 
+/** Foyer de quatre par défaut. Les couverts sont résolus par l'appelant (presence.ts). */
 const plan = (recipes: Recipe[], opts: Partial<PlanInput> = {}): PlanReport => buildPlan({
-  slots: recipes.map((r): { value: MealValue } => ({ value: { items: [{ rid: r.id }] } })),
+  slots: recipes.map((r): { value: MealValue; pax: number } => ({ value: { items: [{ rid: r.id }] }, pax: 4 })),
   recipes, aisles: AISLES, articles: [], index: buildArticleIndex(opts.articles || []),
-  existing: [], fallbackAisle: 'a4', defaultPax: 4, ...opts,
+  existing: [], fallbackAisle: 'a4', ...opts,
 });
 
 const ligne = (r: PlanReport, name: string) =>
@@ -67,12 +68,38 @@ test('« 1 pièce de poivron » et « 1 poivron » sont le même poivron', () =>
 test('les quantités suivent le nombre de couverts', () => {
   const r4 = plan([recette('Tarte', ['300 g de farine'], 6)]);
   assert.equal(ligne(r4, 'farine')!.qty, '200 g');
-  assert.deepEqual(r4.scaled, [{ recipe: 'Tarte', portions: 6, pax: 4 }]);
+  assert.deepEqual(r4.scaled, [{ recipe: 'Tarte', portions: 6, pax: [4] }]);
 
   const r8 = plan([recette('Tarte', ['300 g de farine'], 6)], {
-    slots: [{ value: { items: [{ rid: 'r' + seq }], pax: 8 } }],
+    slots: [{ value: { items: [{ rid: 'r' + seq }] }, pax: 8 }],
   });
   assert.equal(ligne(r8, 'farine')!.qty, '400 g');
+});
+
+test('une recette servie deux fois à des tablées différentes les annonce toutes', () => {
+  // Depuis que les couverts se comptent créneau par créneau, n'en annoncer
+  // qu'un serait un mensonge : la semaine type peut faire varier la tablée.
+  const t = recette('Tarte', ['300 g de farine'], 6);
+  const r = buildPlan({
+    slots: [{ value: { items: [{ rid: t.id }] }, pax: 4 }, { value: { items: [{ rid: t.id }] }, pax: 2 }],
+    recipes: [t], aisles: AISLES, articles: [], index: buildArticleIndex([]),
+    existing: [], fallbackAisle: 'a4',
+  });
+  assert.deepEqual(r.scaled, [{ recipe: 'Tarte', portions: 6, pax: [4, 2] }]);
+  assert.equal(scaleLabel(r.scaled[0]), 'prévue pour 6, ajustée à 4 puis 2 couverts');
+  // 300 g pour 6, servie à 4 puis à 2 : 200 + 100.
+  assert.equal(ligne(r, 'farine')!.qty, '300 g');
+});
+
+test('la même tablée deux fois ne se répète pas dans le rapport', () => {
+  const t = recette('Tarte', ['300 g de farine'], 6);
+  const r = buildPlan({
+    slots: [{ value: { items: [{ rid: t.id }] }, pax: 4 }, { value: { items: [{ rid: t.id }] }, pax: 4 }],
+    recipes: [t], aisles: AISLES, articles: [], index: buildArticleIndex([]),
+    existing: [], fallbackAisle: 'a4',
+  });
+  assert.deepEqual(r.scaled[0].pax, [4]);
+  assert.equal(scaleLabel(r.scaled[0]), 'prévue pour 6, ajustée à 4 couverts');
 });
 
 test('sans portions connues, rien n’est mis à l’échelle et c’est dit', () => {
@@ -179,10 +206,10 @@ const etat = JSON.parse(fs.readFileSync(
 
 test('la semaine réellement planifiée donne une liste tenable', () => {
   const slots = Object.values(etat.meals)
-    .map((v): { value: MealValue } => ({ value: { items: v.items || (v.rid ? [{ rid: v.rid }] : []) } }));
+    .map((v): { value: MealValue; pax: number } => ({ value: { items: v.items || (v.rid ? [{ rid: v.rid }] : []) }, pax: 4 }));
   const r = buildPlan({
     slots, recipes: etat.recipes, aisles: etat.aisles, articles: [],
-    index: buildArticleIndex([]), existing: [], fallbackAisle: 'a4', defaultPax: 4,
+    index: buildArticleIndex([]), existing: [], fallbackAisle: 'a4',
   });
 
   // La version précédente recopiait 65 lignes brutes pour ces mêmes repas.

@@ -18,7 +18,7 @@ module à stockage relationnel.
 | 2 b | Écran de reprise en masse des lignes non reconnues | Livrée |
 | 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
 | 3 b | Recopie d'une période sur une autre | Livrée |
-| 3 c | Semaine type des convives, suggestions, anti-répétition | À venir |
+| 3 c | Semaine type des convives, suggestions, anti-répétition | Livrée |
 | 4 | Import de recettes, recherche, historique | À venir |
 | 5 | Contraintes alimentaires : allergènes affichés, aliments refusés, alertes | Livrée (régimes et substitutions : non faits, voir plus bas) |
 | Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
@@ -146,6 +146,52 @@ geste n'est inventé pour elle, parce qu'il n'y en a pas de juste ; l'écran nom
 la recette d'où elle vient et l'ouvre d'un toucher, seul endroit où elle se
 corrige. Les lignes dont **rien** ne se dégage (« 3 ») sont listées à part, pour
 la même raison.
+
+## Qui mange, et pour combien on cuisine
+
+La semaine type (`core/presence.ts`) enregistre les **absences**, pas les
+présences. Dans un foyer, tout le monde est là presque tout le temps : noter les
+exceptions demande cinq gestes là où une grille de présences en demanderait
+vingt et un, et une case oubliée veut alors dire « comme d'habitude » plutôt que
+« personne ne mange ».
+
+Trois niveaux, chacun l'emportant sur le précédent :
+
+| Niveau | Où | Ce qu'il dit |
+|---|---|---|
+| Semaine type | `Member.absent`, en clés « 1-midi » | « Léa déjeune au collège le mardi et le jeudi » |
+| Dérogation du créneau | `MealValue.away` | « ce soir-là, Paul mange chez un ami » |
+| Couverts posés à la main | `MealValue.pax` | « on est huit, il y a des invités » |
+
+Les couverts ne sont **plus** un chiffre unique pour la semaine : `buildPlan`
+reçoit chaque créneau avec les siens, déjà résolus par l'appelant. Le rapport de
+génération annonce tous les nombres qui ont servi (« prévue pour 4, ajustée à 3
+puis 2 couverts ») : une même recette peut être planifiée deux fois dans la
+semaine avec des tablées différentes, et n'en annoncer qu'une serait un mensonge.
+
+La présence sert aussi aux **alertes** : un plat n'est signalé que s'il gêne
+quelqu'un d'attendu ce jour-là. Alerter pour une personne absente est une fausse
+alerte, et une de trop suffit à ne plus les lire.
+
+## Suggestions
+
+Aucun appel à un service extérieur, aucun score (`core/suggest.ts`) : de la
+rotation, des dates, et ce qui est déjà sur la liste de courses. **Une
+suggestion qu'on ne sait pas expliquer ne se discute pas, donc ne se corrige
+pas, donc finit ignorée.** Chaque proposition porte ses raisons en toutes
+lettres, et le tri suit exactement l'ordre de ces raisons plutôt qu'un total
+pondéré : ancienneté d'abord, puis les ingrédients déjà sur la liste, puis la
+durée.
+
+Deux choses ne sont jamais proposées, et les deux exclusions sont **dites**
+plutôt que silencieuses (écarter sans le dire ferait croire à un carnet plus
+pauvre qu'il n'est) :
+
+- une recette servie dans les **quinze derniers jours**, ou déjà planifiée plus
+  tard dans la semaine ;
+- une recette qui ne convient pas à quelqu'un attendu à ce créneau. C'est
+  l'intérêt concret de la semaine type : le carnet s'ouvre les jours d'absence
+  au lieu de rester fermé toute l'année.
 
 ## Contraintes alimentaires
 
@@ -793,6 +839,8 @@ farine.
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
 | `backend/test/headers.test.ts` | Valeurs d'en-tête émises et reçues, contre un vrai serveur, sans bouchon |
+| `frontend/src/app/core/presence.test.ts` | Les trois niveaux de couverts, l'absence par défaut inexistante, le créneau vidé qui compte quand même un couvert |
+| `frontend/src/app/core/suggest.test.ts` | Fenêtre d'anti-répétition au jour près, raisons affichées, exclusions dites, tri sans score |
 | `frontend/src/app/core/diet.test.ts` | Ce qui doit alerter, ce qui ne doit surtout pas, et ce que le moteur avoue ne pas avoir vérifié |
 | `frontend/src/app/core/ingredient-repair.test.ts` | Regroupement des formes, refus de deviner, article de la base jamais écrasé, et le carnet réel qui atteint 100 % une fois repris |
 | `frontend/src/app/core/helpers.test.ts` | Semaine ancrée sur le jour, lundi en tête, changements d'heure |

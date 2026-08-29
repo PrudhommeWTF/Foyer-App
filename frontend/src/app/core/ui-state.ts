@@ -30,8 +30,12 @@ export interface UiState {
   /** Plats retenus pour le créneau en cours d'édition, dans l'ordre du service. */
   mealItems: MealItem[];
   mealText: string;
-  /** Couverts du créneau en cours d'édition. Vide = la taille du foyer. */
+  /** Couverts du créneau en cours d'édition. Vide = le décompte des présents. */
   mealPax: string;
+  /** Convives exceptionnellement absents du créneau en cours d'édition. */
+  mealAway: string[];
+  /** Suggestions dépliées dans la modale d'un créneau. */
+  mealSuggest: boolean;
   /** Rapport de génération de la liste, affiché avant d'écrire quoi que ce soit. */
   genOpen: boolean;
   /** Recopie d'une période sur la période affichée. `dupBack` = de combien de périodes en arrière. */
@@ -103,6 +107,8 @@ export interface UiState {
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfBirthday: string; memberDelId: string | null;
   /** Contraintes alimentaires en cours d'édition, et recherche d'aliment refusé. */
   mfAllerg: string[]; mfRefuse: string[]; mfRefuseQ: string;
+  /** Semaine type : créneaux d'absence du membre en cours d'édition. */
+  mfAbsent: string[];
   profileOpen: boolean; pfTab: 'infos' | 'prefs';
   pfName: string; pfRole: string; pfEmail: string; pfColor: string;
 
@@ -116,7 +122,7 @@ export function initialUi(): UiState {
     screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
-    mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
+    mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
@@ -138,7 +144,7 @@ export function initialUi(): UiState {
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
-    mfAllerg: [], mfRefuse: [], mfRefuseQ: '',
+    mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [],
     profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };
