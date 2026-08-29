@@ -43,6 +43,13 @@ export interface PlanReport {
   remove: ShopItem[];
   /** Fond de placard : proposé, décoché par défaut. */
   pantry: PlanLine[];
+  /**
+   * « J'ai déjà ça », dit récemment : proposé, décoché par défaut, avec la date
+   * du geste. Elle est montrée plutôt que tue, parce que c'est elle qui permet
+   * de juger : trois jours pour de la crème et trois semaines pour de la farine
+   * ne se valent pas, et l'application n'a aucun moyen de le savoir.
+   */
+  stocked: { line: PlanLine; since: string; days: number }[];
   /** Déjà dans la liste par un ajout manuel : laissé tranquille. */
   present: PlanLine[];
   /** Lignes dont le produit n'a pas été reconnu. Ajoutées quand même, telles quelles. */
@@ -133,6 +140,28 @@ const formatBucket = (b: Bucket): string =>
 
 const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
+/**
+ * Durée pendant laquelle un « j'ai déjà ça » continue d'écarter l'article.
+ * Trois semaines : assez pour un paquet de farine, assez court pour qu'un
+ * oubli ne fasse pas rater des courses tout un mois. La date est affichée de
+ * toute façon, et l'article se recoche en un geste.
+ */
+export const STOCK_DAYS = 21;
+
+/**
+ * Clé sous laquelle une ligne se retient dans le stock : celle de son article
+ * quand il est reconnu, sinon son nom normalisé. La même que pour un article de
+ * la liste, sans quoi « j'ai déjà ça » ne retrouverait jamais sa ligne.
+ */
+export const keyOfLine = (l: PlanLine): string => l.art || normaliseName(l.name);
+
+/** Écart en jours entre deux dates ISO, positif quand `to` est après `from`. */
+export function stockAge(from: string, to: string): number {
+  const j = (x: string): number => { const [y, m, d] = x.split('-').map(Number); return Date.UTC(y, (m || 1) - 1, d || 1); };
+  const n = Math.round((j(to) - j(from)) / 86400000);
+  return Number.isFinite(n) ? n : Infinity;
+}
+
 /** « prévue pour 4, ajustée à 3 puis 2 couverts ». */
 export function scaleLabel(s: { portions: number; pax: number[] }): string {
   const liste = s.pax.length > 1 ? s.pax.slice(0, -1).join(', ') + ' puis ' + s.pax[s.pax.length - 1] : String(s.pax[0]);
@@ -154,6 +183,10 @@ export interface PlanInput {
   existing: ShopItem[];
   /** Rayon de repli quand rien ne correspond (« À trier »). */
   fallbackAisle: string;
+  /** « J'ai déjà ça » : clé vers la date du geste. */
+  stock?: Record<string, string>;
+  /** Jour de référence pour périmer les marques, au format ISO. */
+  today?: string;
 }
 
 /**
@@ -193,7 +226,9 @@ export function buildPlan(input: PlanInput): PlanReport {
   }
 
   // ---- confrontation avec la liste existante -------------------------------
-  const report: PlanReport = { add: [], update: [], remove: [], pantry: [], present: [], unknown, scaled, unscaled };
+  const report: PlanReport = { add: [], update: [], remove: [], pantry: [], stocked: [], present: [], unknown, scaled, unscaled };
+  const stock = input.stock || {};
+  const today = input.today || '';
   const keyOfItem = (i: ShopItem): string => i.art || normaliseName(i.name);
   const generated = input.existing.filter((i) => i.gen);
   const manual = input.existing.filter((i) => !i.gen);
@@ -211,6 +246,12 @@ export function buildPlan(input: PlanInput): PlanReport {
     };
     if (b.pantry) { report.pantry.push(line); continue; }
     if (manualKeys.has(key)) { report.present.push(line); continue; }
+    // « J'ai déjà ça », dit assez récemment pour que ce soit encore vrai.
+    const dit = stock[key];
+    if (dit && today) {
+      const days = stockAge(dit, today);
+      if (days >= 0 && days <= STOCK_DAYS) { report.stocked.push({ line, since: dit, days }); continue; }
+    }
     wanted.add(key);
     const deja = generated.find((i) => keyOfItem(i) === key);
     if (!deja) report.add.push(line);
@@ -227,6 +268,7 @@ export function buildPlan(input: PlanInput): PlanReport {
     || a.name.localeCompare(b.name, 'fr');
   report.add.sort(ordre);
   report.pantry.sort(ordre);
+  report.stocked.sort((a, b) => ordre(a.line, b.line));
   return report;
 }
 

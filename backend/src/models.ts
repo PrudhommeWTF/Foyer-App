@@ -79,6 +79,9 @@ export interface Recipe {
   cookMin?: number | null;
   /** Page d'origine quand la recette vient d'un import. */
   source?: string | null;
+  /** Étiquettes libres du foyer, et note de la famille de 1 à 5. */
+  tags?: string[];
+  rating?: number | null;
   ingr: string[]; steps: string[];
 }
 export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: string; }
@@ -97,6 +100,8 @@ export interface HouseholdState {
   events: EventItem[];
   aisles: Aisle[];
   articles: Article[];
+  /** « J'ai déjà ça » : clé d'article vers la date du geste. Voir frontend shopping-plan.ts. */
+  stock?: Record<string, string>;
   shopLists: ShopList[];
   shop: ShopItem[];
   taskLists: TaskList[];

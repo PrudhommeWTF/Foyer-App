@@ -2,14 +2,16 @@ import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
 import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
-import { PlanReport, buildPlan } from './shopping-plan';
+import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
 import { mealEventTitle, shoppingTaskLabel } from './links';
 import { moveMeal } from './meal-move';
 import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
+import { parseQuery, searchRecipes } from './recipe-search';
+import { readRecipeText } from './recipe-text';
 import { paxLabel, presenceAt, weekSlot } from './presence';
-import { SuggestReport, suggestMeals } from './suggest';
+import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { Allergene } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
@@ -1380,9 +1382,10 @@ export class FoyerStore {
       slots,
       recipes: d.recipes, aisles: d.aisles, articles: d.articles, index: this.articleIndex(),
       existing: d.shop.filter((i) => i.listId === listId),
-      fallbackAisle: this.defaultAisleId(),
+      fallbackAisle: this.defaultAisleId(), stock: d.stock, today: this.todayStr(),
     }));
     this.genPantry.set(new Set());
+    this.genHave.set(new Set());
     this.patch({ genOpen: true });
   }
 
@@ -1393,6 +1396,34 @@ export class FoyerStore {
   }
   isPantryPicked(name: string): boolean { return this.genPantry().has(name); }
 
+  // ---- « j'ai déjà ça » ----------------------------------------------------
+  // Le contraire d'un inventaire : rien à tenir au jour le jour, un seul geste,
+  // au moment où la question se pose vraiment. La date est retenue et montrée,
+  // parce que c'est elle qui permet de juger : trois jours pour de la crème et
+  // trois semaines pour de la farine ne se valent pas.
+
+  /** Lignes que l'on vient de déclarer avoir. Écrites seulement à l'application. */
+  readonly genHave = signal<Set<string>>(new Set());
+  toggleHave(line: PlanLine): void {
+    const s = new Set(this.genHave()); const k = keyOfLine(line);
+    if (!s.delete(k)) s.add(k);
+    this.genHave.set(s);
+  }
+  hasHave(line: PlanLine): boolean { return this.genHave().has(keyOfLine(line)); }
+
+  /** Recoche un article qu'on avait dit avoir : la marque disparaît du même geste. */
+  toggleStockPick(line: PlanLine): void {
+    const s = new Set(this.genPantry()); const k = keyOfLine(line);
+    if (!s.delete(k)) s.add(k);
+    this.genPantry.set(s);
+  }
+  isStockPicked(line: PlanLine): boolean { return this.genPantry().has(keyOfLine(line)); }
+
+  /** « il y a 3 jours », « hier », « aujourd'hui ». */
+  stockAgeLabel(days: number): string {
+    return days <= 0 ? "aujourd'hui" : days === 1 ? 'hier' : 'il y a ' + days + ' jours';
+  }
+
   /**
    * Applique le rapport. Ce qui a été ajouté à la main, coché ou marqué
    * introuvable n'est jamais touché : la régénération ne défait que son propre
@@ -1402,13 +1433,32 @@ export class FoyerStore {
     const rep = this.genReport(); const listId = this.activeShopListId();
     if (!rep || !listId) return;
     const ops: ShopOpDraft[] = [];
-    const ajout = [...rep.add, ...rep.pantry.filter((l) => this.genPantry().has(l.name))];
+    // Un article qu'on avait dit avoir et qu'on recoche est acheté : sa marque
+    // saute, sinon il resterait écarté trois semaines alors qu'on n'en a plus.
+    const repris = rep.stocked.filter((x) => this.genPantry().has(keyOfLine(x.line)));
+    const ajout = [
+      ...rep.add.filter((l) => !this.genHave().has(keyOfLine(l))),
+      ...rep.pantry.filter((l) => this.genPantry().has(l.name)),
+      ...repris.map((x) => x.line),
+    ];
     for (const l of ajout) {
       ops.push({ op: 'add', id: uid('g'), name: l.name, qty: l.qty, aisleId: l.aisleId, listId, gen: true, ...(l.art ? { art: l.art } : {}) });
     }
     for (const u of rep.update) ops.push({ op: 'edit', id: u.item.id, qty: u.line.qty, aisleId: u.line.aisleId });
     for (const r of rep.remove) ops.push({ op: 'remove', id: r.id });
     if (ops.length) this.pushShopOps(ops);
+
+    const dits = this.genHave();
+    if (dits.size || repris.length) {
+      const jour = this.todayStr();
+      this.mutate((d) => {
+        const stock = { ...(d.stock || {}) };
+        for (const k of dits) stock[k] = jour;
+        for (const x of repris) delete stock[keyOfLine(x.line)];
+        d.stock = stock;
+      });
+    }
+    this.genHave.set(new Set());
     this.patch({ genOpen: false, screen: 'courses' });
     this.genReport.set(null);
     const bilan = [
@@ -1429,6 +1479,7 @@ export class FoyerStore {
       fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false,
       fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
       fImportUrl: '', fImportBusy: false, fImportWarnings: [],
+      fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '',
       fIngr: [{ id: uid('i'), val: '' }], fSteps: [{ id: uid('p'), val: '' }],
     });
   }
@@ -1439,6 +1490,7 @@ export class FoyerStore {
       fName: r.name, fLevel: r.level, fColor: r.color, fPhotoId: r.photoId ?? null, fPhotoBusy: false,
       fPortions: num(r.portions), fPrepMin: num(r.prepMin), fCookMin: num(r.cookMin), fSource: r.source || '',
       fImportUrl: '', fImportBusy: false, fImportWarnings: [],
+      fTags: [...(r.tags || [])], fTagInput: '', fRating: r.rating || 0, fPasteOpen: false, fPaste: '',
       fIngr: r.ingr.map((v) => ({ id: uid('i'), val: v })), fSteps: r.steps.map((v) => ({ id: uid('p'), val: v })),
     });
   }
@@ -1553,6 +1605,51 @@ export class FoyerStore {
   removeIngr(id: string): void { this.patch({ fIngr: this.ui().fIngr.filter((x) => x.id !== id) }); }
   setStep(id: string, val: string): void { this.patch({ fSteps: this.ui().fSteps.map((x) => (x.id === id ? { ...x, val } : x)) }); }
   removeStep(id: string): void { this.patch({ fSteps: this.ui().fSteps.filter((x) => x.id !== id) }); }
+  // ---- étiquettes, note, recherche et collage ------------------------------
+
+  addTag(): void {
+    const t = this.ui().fTagInput.trim().toLowerCase();
+    if (!t) return;
+    this.patch({ fTags: this.ui().fTags.includes(t) ? this.ui().fTags : [...this.ui().fTags, t], fTagInput: '' });
+  }
+  removeTag(t: string): void { this.patch({ fTags: this.ui().fTags.filter((x) => x !== t) }); }
+  /** Un second tap sur l'étoile courante retire la note : sinon elle serait indélébile. */
+  setRating(n: number): void { this.patch({ fRating: this.ui().fRating === n ? 0 : n }); }
+
+  /** Le carnet filtré par la ligne de recherche. */
+  readonly recipeHits = computed(() =>
+    searchRecipes(this._data()?.recipes || [], parseQuery(this.ui().recipeSearch), this.articleIndex()));
+
+  /** « faite il y a trois semaines », ou null si jamais servie. */
+  lastMadeLabel(id: string): string | null {
+    const jour = lastServed(id, this._data()?.meals || {});
+    if (!jour) return null;
+    const j = daysBetween(jour, this.todayStr());
+    if (j < 0) return 'prévue au planning';
+    return j === 0 ? "faite aujourd'hui" : j === 1 ? 'faite hier' : j < 7 ? 'faite il y a ' + j + ' jours' : 'faite il y a ' + semaines(j);
+  }
+
+  /**
+   * Lit la recette collée et remplit le formulaire. Rien n'est enregistré : ce
+   * qui a été compris se relit dans les champs, et ce qui ne l'a pas été est
+   * dit au-dessus.
+   */
+  applyPaste(): void {
+    const texte = this.ui().fPaste;
+    const r = readRecipeText(texte, this.articleIndex());
+    if (!r.ingr.length && !r.steps.length && !r.name) { this.toast(r.warnings[0] || 'Rien à lire dans ce texte'); return; }
+    this.patch({
+      ...(r.name ? { fName: r.name } : {}),
+      ...(r.portions ? { fPortions: String(r.portions) } : {}),
+      ...(r.prepMin ? { fPrepMin: String(r.prepMin) } : {}),
+      ...(r.cookMin ? { fCookMin: String(r.cookMin) } : {}),
+      fIngr: (r.ingr.length ? r.ingr : ['']).map((v) => ({ id: uid('i'), val: v })),
+      fSteps: (r.steps.length ? r.steps : ['']).map((v) => ({ id: uid('p'), val: v })),
+      fImportWarnings: r.warnings, fPasteOpen: false, fPaste: '',
+    });
+    this.toast(r.ingr.length + ' ingrédients et ' + r.steps.length + ' étapes lus');
+  }
+
   saveRecipe(): void {
     const s = this.ui(); const name = s.fName.trim(); if (!name) { this.toast('Donne un nom à la recette'); return; }
     const ingr = s.fIngr.map((x) => x.val.trim()).filter(Boolean);
@@ -1562,6 +1659,7 @@ export class FoyerStore {
       name, level: s.fLevel, color: s.fColor, photoId: s.fPhotoId,
       portions: int(s.fPortions), prepMin: int(s.fPrepMin), cookMin: int(s.fCookMin),
       source: s.fSource.trim() || null,
+      tags: s.fTags, rating: s.fRating > 0 ? s.fRating : null,
       ingr, steps,
     };
     this.mutate((d) => {
