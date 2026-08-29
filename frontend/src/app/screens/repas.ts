@@ -75,6 +75,13 @@ const GRID_MIN = 760;
                       <span class="srow-empty">Libre</span>
                     }
                   </span>
+                  @let alertes = store.mealAlerts(d + '-' + slot.key);
+                  @if (alertes.length) {
+                    <span class="srow-alert" [title]="store.alertLabel(alertes)">
+                      <f-icon name="urgent" [size]="15" color="var(--primary)" [width]="2.4" />
+                      {{ alertes.length > 1 ? alertes.length : alertes[0].name }}
+                    </span>
+                  }
                   @if (meal?.pax) { <span class="srow-pax">{{ meal!.pax }} couv.</span> }
                   <f-icon name="chevronRight" [size]="16" color="var(--ink3)" [width]="2.2" />
                 </button>
@@ -116,6 +123,13 @@ const GRID_MIN = 760;
                   @if (names.length) {
                     @for (n of names; track $index) {
                       <div class="cell-name">{{ n }}</div>
+                    }
+                    @let alertes = store.mealAlerts(d + '-' + slot.key);
+                    @if (alertes.length) {
+                      <div class="cell-alert" [title]="store.alertLabel(alertes)">
+                        <f-icon name="urgent" [size]="13" color="var(--primary)" [width]="2.6" />
+                        {{ store.alertLabel(alertes) }}
+                      </div>
                     }
                     <div class="cell-tag">
                       <span class="tag-count">{{ names.length > 1 ? names.length + ' plats' : 'Un plat' }}</span>
@@ -318,6 +332,8 @@ const GRID_MIN = 760;
     /* Le créneau visé s'éclaire pendant le survol : sans retour visuel, on lâche
        le repas au jugé. */
     .cell.drop { border-color: var(--primary); background: rgba(229,107,78,.1); }
+    .cell-alert { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; font-size: 11px; font-weight: 800; color: var(--primary); line-height: 1.35; overflow-wrap: anywhere; }
+    .srow-alert { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 11.5px; font-weight: 800; color: var(--primary); }
     .cell[draggable=true] { cursor: grab; }
 
     .mv-day { margin-bottom: 14px; }

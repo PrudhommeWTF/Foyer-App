@@ -6,7 +6,13 @@ export type SchedType = 'ecole' | 'travail' | 'sport' | 'loisir' | 'sante' | 're
 export type ContactCat = 'Urgences' | 'Santé' | 'École' | 'Famille' | 'Maison' | 'Autre';
 export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
 
-export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null; }
+/**
+ * `allerg` et `refuse` portent les contraintes alimentaires : allergènes de la
+ * liste européenne, et clés d'articles du référentiel qu'on ne veut pas voir
+ * arriver. Les deux sont confrontés au contenu des recettes (voir diet.ts).
+ */
+export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
+  allerg?: string[]; refuse?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite

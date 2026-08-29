@@ -297,9 +297,14 @@ const plural = (s: string): string[] => {
   const out = new Set<string>();
   const w = s.split(' ');
   const last = w[w.length - 1];
-  if (/[sxz]$/.test(last)) return [];
-  const p = /(eau|eu)$/.test(last) ? last + 'x' : /al$/.test(last) ? last.slice(0, -2) + 'aux' : last + 's';
-  out.add([...w.slice(0, -1), p].join(' '));
+  // Un mot déjà terminé par s, x ou z ne reprend pas de marque : « Paris » reste
+  // « Paris ». Ce n'est pas une raison de renoncer au pluriel du PREMIER mot,
+  // qui est celui qui porte le sens : sans quoi « champignons de Paris », la
+  // façon dont tout le monde l'écrit, n'était reconnu nulle part.
+  if (!/[sxz]$/.test(last)) {
+    const p = /(eau|eu)$/.test(last) ? last + 'x' : /al$/.test(last) ? last.slice(0, -2) + 'aux' : last + 's';
+    out.add([...w.slice(0, -1), p].join(' '));
+  }
   // « pommes de terre », « blancs d'oeuf » : le pluriel porte sur le premier mot.
   if (w.length > 1 && /^(de|du|des|d'|a|au|aux|en|pour)\b/.test(w[1])) {
     const f = w[0];

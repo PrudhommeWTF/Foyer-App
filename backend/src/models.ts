@@ -2,7 +2,10 @@
 // fields (planned/birthday/academie) are additive and backward-compatible.
 import type { ShopItem } from './shopping/ops';
 
-export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null; }
+// `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
+// frontend/src/app/core/diet.ts pour ce qui en est dérivé.
+export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
+  allerg?: string[]; refuse?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite

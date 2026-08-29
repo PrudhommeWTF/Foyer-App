@@ -160,6 +160,18 @@ test('le référentiel intégré n’a ni doublon ni rayon inventé', () => {
   assert.ok(BASE_INDEX.size > BASE_ARTICLES.length * 2, 'les pluriels ne sont pas indexés');
 });
 
+test('le pluriel porte sur le mot qui compte, même quand l’autre finit par « s »', () => {
+  // « champignon de Paris » : « Paris » ne prend pas de marque, ce qui faisait
+  // renoncer aussi au pluriel du premier mot. « champignons de Paris », la
+  // forme que tout le monde écrit, n'était alors reconnue nulle part.
+  assert.equal(BASE_INDEX.get('champignons de paris'), 'champignon');
+  assert.equal(BASE_INDEX.get('champignon de paris'), 'champignon');
+  assert.equal(parseIngredient('300 g de champignons de Paris', idx)[0].art, 'champignon');
+  // Les formes déjà correctes ne bougent pas.
+  assert.equal(BASE_INDEX.get('pommes de terre'), 'pomme-de-terre');
+  assert.equal(BASE_INDEX.get('gousses d\'ail'), 'ail');
+});
+
 // ---- mesure sur le carnet réel ---------------------------------------------
 
 const etat = JSON.parse(fs.readFileSync(
