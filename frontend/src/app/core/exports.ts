@@ -40,8 +40,11 @@ export interface RecipeBundle {
   recipes: ExportedRecipe[];
 }
 
-export const BUNDLE_FORMAT = 'foyer.recettes';
-export const BUNDLE_VERSION = 1;
+// Typées littéralement : sans cela, `format` vaut `string` et n'apporte plus
+// aucune garantie à la construction du fichier, ce que seul le typage des tests
+// a fini par montrer.
+export const BUNDLE_FORMAT = 'foyer.recettes' as const;
+export const BUNDLE_VERSION = 1 as const;
 
 export function buildBundle(recipes: Recipe[], photos: Record<number, ExportedPhoto | undefined>, now = new Date()): RecipeBundle {
   return {

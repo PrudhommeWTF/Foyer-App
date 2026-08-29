@@ -12,7 +12,13 @@ export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
  * arriver. Les deux sont confrontés au contenu des recettes (voir diet.ts).
  */
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[]; }
+  allerg?: string[]; refuse?: string[];
+  /**
+   * Semaine type : créneaux où le membre ne mange **pas** à la maison, en clés
+   * « 1-midi » (lundi = 1). Ce sont les absences qui sont notées, pas les
+   * présences : une case vide veut dire « comme d'habitude » (voir presence.ts).
+   */
+  absent?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -85,8 +91,10 @@ export interface FileItem { id: string; name: string; folderId: string; type: Fi
 export interface MealItem { rid?: string; text?: string; }
 export interface MealValue {
   items: MealItem[];
-  /** Couverts réellement prévus, quand ils diffèrent de la taille du foyer. */
+  /** Couverts posés à la main. Priment sur le décompte des présents. */
   pax?: number | null;
+  /** Membres exceptionnellement absents de ce créneau, en dérogation à la semaine type. */
+  away?: string[];
 }
 // `photoId` désigne un fichier servi par /api/files : les octets ne sont plus
 // dans le document, qui repartait en entier à chaque enregistrement.

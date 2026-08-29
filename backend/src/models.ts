@@ -5,7 +5,7 @@ import type { ShopItem } from './shopping/ops';
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
 // frontend/src/app/core/diet.ts pour ce qui en est dérivé.
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[]; }
+  allerg?: string[]; refuse?: string[]; absent?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -55,16 +55,14 @@ export interface FileItem { id: string; name: string; folderId: string; type: st
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un
  * texte libre (« restes », « pizza », « chez les parents »).
- *
- * L'enveloppe `MealValue` existe pour ce qu'elle accueillera ensuite sans
- * changer de forme une seconde fois : le nombre de couverts réel et les convives
- * absents, prévus au modèle cible.
  */
 export interface MealItem { rid?: string; text?: string; }
 export interface MealValue {
   items: MealItem[];
-  /** Couverts réellement prévus, quand ils diffèrent de la taille du foyer. */
+  /** Couverts posés à la main. Priment sur le décompte des présents. */
   pax?: number | null;
+  /** Membres exceptionnellement absents de ce créneau (voir frontend presence.ts). */
+  away?: string[];
 }
 // `photoId` désigne une ligne de hh_attachments : les octets ne sont plus dans
 // le document, qui repartait en entier à chaque enregistrement.

@@ -1,0 +1,16 @@
+/* Typage des tests, que tsconfig.app.json exclut volontairement (ils ne sont pas
+   compilés dans l'application). Sans cette passe, un test peut passer un
+   argument mal typé et rester vert en changeant de sens en silence : c'est
+   arrivé sur la résolution des couverts, où un créneau sans couverts déclarés
+   comptait pour une personne au lieu de quatre, sans que rien ne le dise. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/test",
+    "types": ["node"],
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["src/**/*.ts"]
+}

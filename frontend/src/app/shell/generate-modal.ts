@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
-import { PlanLine } from '../core/shopping-plan';
+import { PlanLine, scaleLabel } from '../core/shopping-plan';
 
 interface Groupe { name: string; color: string; lines: PlanLine[]; }
 
@@ -36,7 +36,7 @@ interface Groupe { name: string; color: string; lines: PlanLine[]; }
         @if (rep.scaled.length || rep.unscaled.length) {
           <div class="note">
             @for (s of rep.scaled; track s.recipe) {
-              <div>« {{ s.recipe }} » prévue pour {{ s.portions }}, ajustée à {{ s.pax }} couverts.</div>
+              <div>« {{ s.recipe }} » {{ scaleLabel(s) }}.</div>
             }
             @for (u of rep.unscaled; track u) {
               <div>« {{ u }} » n'indique pas ses portions : quantités reprises telles quelles.</div>
@@ -140,6 +140,7 @@ interface Groupe { name: string; color: string; lines: PlanLine[]; }
   `],
 })
 export class GenerateModal {
+  readonly scaleLabel = scaleLabel;
   store = inject(FoyerStore);
   /** Ligne dont on montre la provenance. Une seule à la fois, pour ne pas noyer. */
   private opened = signal('');

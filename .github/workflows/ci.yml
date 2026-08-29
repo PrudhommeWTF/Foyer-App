@@ -52,6 +52,12 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      # Les tests sont hors de tsconfig.app.json : sans cette passe, un test peut
+      # rester vert en changeant de sens, un argument mal typé valant « absent ».
+      - name: Typage des tests (frontend)
+        working-directory: frontend
+        run: npm run typecheck
+
       - name: Lint code mort (frontend)
         working-directory: frontend
         run: npx tsc -p tsconfig.app.json --noUnusedLocals --noUnusedParameters --noEmit

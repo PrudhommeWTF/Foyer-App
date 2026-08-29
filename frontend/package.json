@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "node scripts/check-tests.js && tsx --test \"src/app/core/**/*.test.ts\""
+    "test": "node scripts/check-tests.js && tsx --test \"src/app/core/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.test.json"
   },
   "private": true,
   "packageManager": "npm@10.9.7",
@@ -24,6 +25,7 @@
     "@angular/build": "^21.2.19",
     "@angular/cli": "^21.2.19",
     "@angular/compiler-cli": "^21.2.0",
+    "@types/node": "^22.20.1",
     "prettier": "^3.8.1",
     "tsx": "^4.20.6",
     "typescript": "~5.9.2"
