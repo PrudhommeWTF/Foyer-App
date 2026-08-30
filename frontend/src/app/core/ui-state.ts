@@ -97,6 +97,12 @@ export interface UiState {
   fPortions: string; fPrepMin: string; fCookMin: string; fSource: string;
   /** Import depuis une URL : saisie, état d'attente et avertissements du lecteur. */
   fImportUrl: string; fImportBusy: boolean; fImportWarnings: string[];
+  /** Étiquettes et note du foyer, dans le formulaire. */
+  fTags: string[]; fTagInput: string; fRating: number;
+  /** Import d'une recette collée en texte : la zone de saisie et son dépliage. */
+  fPasteOpen: boolean; fPaste: string;
+  /** Recherche du carnet : « courgette 20min ». */
+  recipeSearch: string;
 
   // planning
   schedChild: string; schedEdit: boolean; seEditId: string | null;
@@ -141,6 +147,7 @@ export function initialUi(): UiState {
     fRecipeId: '', fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
     fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
     fImportUrl: '', fImportBusy: false, fImportWarnings: [],
+    fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
     schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,

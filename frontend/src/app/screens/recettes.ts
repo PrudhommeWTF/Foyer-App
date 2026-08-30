@@ -33,6 +33,18 @@ import { ALLERGENES } from '../core/articles';
         </div>
       </div>
 
+      <div class="rsearch">
+        <f-icon name="search" [size]="18" color="var(--ink3)" [width]="2.2" />
+        <input [ngModel]="store.ui().recipeSearch" (ngModelChange)="store.patch({ recipeSearch: $event })"
+               placeholder="Chercher : courgette, 20min, végétarien, 4 étoiles…" />
+        @if (store.ui().recipeSearch) {
+          <button class="icon-btn sm" (click)="store.patch({ recipeSearch: '' })"><f-icon name="x" [size]="15" color="var(--ink2)" /></button>
+        }
+      </div>
+      @if (store.ui().recipeSearch.trim()) {
+        <div class="rsearch-n">{{ hits().length }} recette(s) sur {{ d().recipes.length }}</div>
+      }
+
       @let rep = store.repairReport();
       @if (rep.groups.length || rep.unreadable.length) {
         <button class="repair" (click)="store.openRepair()">
@@ -46,7 +58,8 @@ import { ALLERGENES } from '../core/articles';
       }
 
       <div class="grid">
-        @for (r of d().recipes; track r.id) {
+        @for (h of hits(); track h.recipe.id) {
+          @let r = h.recipe;
           <div class="rcard" (click)="store.patch({ openRecipeId: r.id })">
             @let thumb = store.photoUrl(r.photoId);
             <div class="rhead"
@@ -60,12 +73,15 @@ import { ALLERGENES } from '../core/articles';
               @if (r.portions) { <span class="rdot">·</span><span>{{ r.portions }} pers.</span> }
               <span class="rdot">·</span>
               <span>{{ r.level }}</span>
-              <span class="rdot">·</span>
-              <span>{{ r.ingr.length }} ingrédients</span>
+              @if (r.rating) { <span class="rdot">·</span><span class="rstars">{{ etoiles(r.rating) }}</span> }
+              @let fait = store.lastMadeLabel(r.id);
+              @if (fait) { <span class="rdot">·</span><span>{{ fait }}</span> }
             </div>
           </div>
         } @empty {
-          <div class="empty">Aucune recette pour le moment. Ajoutez-en une !</div>
+          <div class="empty">
+            {{ store.ui().recipeSearch.trim() ? 'Aucune recette ne correspond.' : 'Aucune recette pour le moment. Ajoutez-en une !' }}
+          </div>
         }
       </div>
     </div>
@@ -91,6 +107,15 @@ import { ALLERGENES } from '../core/articles';
           <a class="source" [href]="r.source" target="_blank" rel="noopener noreferrer">
             <f-icon name="export" [size]="14" color="var(--ink2)" /> Voir la recette d'origine
           </a>
+        }
+
+        @if (r.tags?.length || r.rating || store.lastMadeLabel(r.id)) {
+          <div class="dtags">
+            @if (r.rating) { <span class="d-star">{{ etoiles(r.rating) }}</span> }
+            @for (t of r.tags || []; track t) { <span class="d-tag">{{ t }}</span> }
+            @let fait = store.lastMadeLabel(r.id);
+            @if (fait) { <span class="d-fait">{{ fait }}</span> }
+          </div>
         }
 
         @let chk = store.recipeCheck(r);
@@ -161,6 +186,21 @@ import { ALLERGENES } from '../core/articles';
               </button>
             </div>
             <div class="hint">Le serveur va lire la page et remplir le formulaire. Relisez avant d'enregistrer.</div>
+
+            <button class="paste-open" (click)="store.patch({ fPasteOpen: !store.ui().fPasteOpen })">
+              <f-icon name="copy" [size]="15" color="var(--ink2)" [width]="2" />
+              <span>… ou coller le texte d'une recette</span>
+              <f-icon [name]="store.ui().fPasteOpen ? 'chevronDown' : 'chevronRight'" [size]="15" color="var(--ink3)" [width]="2.2" />
+            </button>
+            @if (store.ui().fPasteOpen) {
+              <textarea class="input paste" rows="7" [ngModel]="store.ui().fPaste"
+                        (ngModelChange)="store.patch({ fPaste: $event })"
+                        placeholder="Collez ici une recette prise sur un carnet, un message ou une photo (votre téléphone sait extraire le texte d'une image)."></textarea>
+              <div class="import-row">
+                <div class="hint">Rien n'est envoyé : la lecture se fait dans votre navigateur.</div>
+                <button class="btn btn-sage" (click)="store.applyPaste()">Lire</button>
+              </div>
+            }
           </div>
         }
 
@@ -200,6 +240,24 @@ import { ALLERGENES } from '../core/articles';
           @for (l of levels; track l) {
             <button [class.active]="store.ui().fLevel === l" (click)="store.patch({ fLevel: l })">{{ l }}</button>
           }
+        </div>
+
+        <div class="field-label">Note de la famille</div>
+        <div class="stars mb">
+          @for (n of [1, 2, 3, 4, 5]; track n) {
+            <button class="star" [class.on]="store.ui().fRating >= n" (click)="store.setRating(n)"
+                    [attr.aria-label]="n + ' sur 5'">★</button>
+          }
+          @if (store.ui().fRating) { <span class="star-hint">Touchez l'étoile courante pour retirer la note.</span> }
+        </div>
+
+        <div class="field-label">Étiquettes</div>
+        <div class="tags mb">
+          @for (t of store.ui().fTags; track t) {
+            <button class="tag" (click)="store.removeTag(t)">{{ t }} <f-icon name="x" [size]="11" color="#fff" [width]="3" /></button>
+          }
+          <input class="input tag-in" [ngModel]="store.ui().fTagInput" (ngModelChange)="store.patch({ fTagInput: $event })"
+                 (keydown.enter)="store.addTag()" (blur)="store.addTag()" placeholder="végétarien, du dimanche…" />
         </div>
 
         <div class="field-label">Apparence</div>
@@ -326,6 +384,28 @@ import { ALLERGENES } from '../core/articles';
     }
   `,
   styles: [`
+    .rsearch { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 14px; padding: 11px 15px; box-shadow: var(--sh-card); margin-bottom: 14px; }
+    .rsearch input { flex: 1; border: none; background: transparent; font-family: var(--font-body); font-size: 14.5px; font-weight: 600; color: var(--ink); outline: none; }
+    .rsearch input::placeholder { color: var(--ink3); }
+    .rsearch-n { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin: -6px 0 14px 4px; }
+    .rstars { color: var(--honey); letter-spacing: -1px; }
+
+    .paste-open { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; padding: 10px 0 4px; cursor: pointer; font-family: var(--font-body); font-size: 13px; font-weight: 800; color: var(--ink2); text-align: left; }
+    .paste-open span { flex: 1; }
+    .paste { width: 100%; resize: vertical; font-family: var(--font-body); font-size: 13.5px; line-height: 1.5; margin-bottom: 8px; }
+
+    .stars { display: flex; align-items: center; gap: 4px; }
+    .star { border: none; background: none; cursor: pointer; font-size: 26px; line-height: 1; color: var(--line2); padding: 0 2px; }
+    .star.on { color: var(--honey); }
+    .star-hint { font-size: 12px; font-weight: 600; color: var(--ink3); margin-left: 8px; }
+    .tags { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+    .tag { display: inline-flex; align-items: center; gap: 5px; border: none; background: var(--sage); color: #fff; border-radius: 10px; padding: 6px 10px; font-family: var(--font-body); font-size: 12.5px; font-weight: 800; cursor: pointer; }
+    .tag-in { flex: 1; min-width: 150px; }
+
+    .dtags { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 14px; }
+    .d-star { color: var(--honey); font-size: 15px; letter-spacing: -1px; }
+    .d-tag { background: var(--soft2); color: var(--ink2); border-radius: 9px; padding: 4px 9px; font-size: 12px; font-weight: 800; }
+    .d-fait { font-size: 12px; font-weight: 700; color: var(--ink3); }
     .diet { border: 2px solid var(--line2); border-radius: 14px; padding: 12px 14px; margin: 16px 0 4px; }
     .d-alert { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.45; }
     .d-alert b { color: var(--primary); }
@@ -424,6 +504,8 @@ import { ALLERGENES } from '../core/articles';
 })
 export class RecettesScreen {
   readonly ALLERGENES = ALLERGENES;
+  hits = computed(() => this.store.recipeHits());
+  etoiles(n: number): string { return '★'.repeat(n) + '☆'.repeat(5 - n); }
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 

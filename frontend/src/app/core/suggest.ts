@@ -107,6 +107,7 @@ export function suggestMeals(input: SuggestInput): SuggestReport {
     else if (since >= OUBLI_DAYS) reasons.push('pas faite depuis ' + semaines(since));
     if (onList) reasons.push(onList + (onList > 1 ? ' ingrédients déjà sur la liste' : ' ingrédient déjà sur la liste'));
     if (total && total <= RAPIDE_MIN) reasons.push('prête en ' + total + ' min');
+    if ((r.rating || 0) >= 4) reasons.push('bien notée');
     out.push({ recipe: r, since, reasons, onList });
   }
 
@@ -116,6 +117,9 @@ export function suggestMeals(input: SuggestInput): SuggestReport {
     (b.since === null ? 1e9 : b.since) - (a.since === null ? 1e9 : a.since)
     || b.onList - a.onList
     || duree(a.recipe) - duree(b.recipe)
+    // La note vient en dernier, et à dessein : une bonne note qui l'emporterait
+    // sur « pas faite depuis trois semaines » ferait manger toujours la même chose.
+    || (b.recipe.rating || 0) - (a.recipe.rating || 0)
     || a.recipe.name.localeCompare(b.recipe.name));
 
   return { suggestions: out.slice(0, input.limit ?? 6), excluded, recent };

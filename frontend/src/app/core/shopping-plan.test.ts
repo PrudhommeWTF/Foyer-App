@@ -11,7 +11,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { buildArticleIndex } from './ingredients';
 import { Aisle, MealValue, Recipe, ShopItem } from './models';
-import { PlanInput, PlanReport, aisleForRayon, buildPlan, scaleLabel } from './shopping-plan';
+import { PlanInput, PlanReport, aisleForRayon, buildPlan, scaleLabel, STOCK_DAYS, keyOfLine, stockAge } from './shopping-plan';
 
 const AISLES: Aisle[] = [
   { id: 'a1', name: 'Fruits & légumes', color: '', position: 0, kind: 'legumes' },
@@ -74,6 +74,52 @@ test('les quantités suivent le nombre de couverts', () => {
     slots: [{ value: { items: [{ rid: 'r' + seq }] }, pax: 8 }],
   });
   assert.equal(ligne(r8, 'farine')!.qty, '400 g');
+});
+
+// ---- « j'ai déjà ça » -------------------------------------------------------
+
+test('un article qu’on a dit avoir récemment est écarté, avec la date du geste', () => {
+  const r = plan([recette('A', ['300 g de farine', '2 carottes'])], {
+    stock: { farine: '2026-08-20' }, today: '2026-08-29',
+  });
+  assert.equal(ligne(r, 'farine'), undefined, 'il ne doit plus être à acheter');
+  assert.equal(r.stocked.length, 1);
+  assert.equal(r.stocked[0].line.name, 'Farine');
+  assert.equal(r.stocked[0].days, 9);
+  // Le reste de la liste ne bouge pas.
+  assert.ok(ligne(r, 'carotte'));
+});
+
+test('la marque se périme, et l’article revient sans qu’on ait rien à faire', () => {
+  // Un inventaire mal tenu fait rater des achats : celui-ci s'efface tout seul.
+  const vieux = plan([recette('A', ['300 g de farine'])], { stock: { farine: '2026-07-01' }, today: '2026-08-29' });
+  assert.equal(vieux.stocked.length, 0);
+  assert.ok(vieux.add.some((l) => l.name === 'Farine'));
+  // Juste à la limite, elle tient encore.
+  const limite = plan([recette('A', ['300 g de farine'])], { stock: { farine: '2026-08-08' }, today: '2026-08-29' });
+  assert.equal(stockAge('2026-08-08', '2026-08-29'), STOCK_DAYS);
+  assert.equal(limite.stocked.length, 1);
+});
+
+test('une marque datée du futur ne fait rien disparaître', () => {
+  // Une horloge qui recule ou un état restauré ne doit pas vider la liste.
+  const r = plan([recette('A', ['300 g de farine'])], { stock: { farine: '2026-09-30' }, today: '2026-08-29' });
+  assert.equal(r.stocked.length, 0);
+  assert.ok(ligne(r, 'farine'));
+});
+
+test('sans date du jour, aucune marque ne s’applique', () => {
+  const r = plan([recette('A', ['300 g de farine'])], { stock: { farine: '2026-08-28' } });
+  assert.equal(r.stocked.length, 0);
+});
+
+test('la clé d’une ligne est celle de son article, ou son nom quand il est inconnu', () => {
+  // Sans cela, « j'ai déjà ça » ne retrouverait jamais sa ligne au tour suivant.
+  const connu = ligne(plan([recette('A', ['300 g de farine'])]), 'farine')!;
+  assert.equal(keyOfLine(connu), 'farine');
+  const r = plan([recette('A', ['2 c. à s. de gomasio'])]);
+  const inconnu = [...r.add, ...r.pantry].find((l) => /gomasio/i.test(l.name))!;
+  assert.equal(keyOfLine(inconnu), 'gomasio');
 });
 
 test('une recette servie deux fois à des tablées différentes les annonce toutes', () => {

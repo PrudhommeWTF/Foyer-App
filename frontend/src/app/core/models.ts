@@ -111,6 +111,15 @@ export interface Recipe {
   cookMin?: number | null;
   /** Page d'origine quand la recette vient d'un import. */
   source?: string | null;
+  /** Étiquettes libres du foyer : « végétarien », « du dimanche », « des enfants ». */
+  tags?: string[];
+  /**
+   * Note de la famille, de 1 à 5. Elle sert à retrouver ce qu'on a aimé et pèse
+   * dans les suggestions, en dernier critère : une bonne note ne doit pas
+   * l'emporter sur « pas fait depuis trois semaines », sinon on mangerait
+   * toujours la même chose.
+   */
+  rating?: number | null;
   ingr: string[]; steps: string[];
 }
 export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: SchedType; }
@@ -130,6 +139,14 @@ export interface HouseholdState {
   events: EventItem[];
   aisles: Aisle[];
   articles: Article[];
+  /**
+   * « J'ai déjà ça » : clé d'article (ou nom normalisé si non reconnu) vers la
+   * date du geste. Ce n'est pas un inventaire, qui demanderait une tenue
+   * quotidienne et ferait rater des achats dès qu'il est mal tenu : juste la
+   * mémoire de ce qu'on a dit avoir, avec sa date, qui se périme (voir
+   * shopping-plan.ts, STOCK_DAYS).
+   */
+  stock?: Record<string, string>;
   shopLists: ShopList[];
   shop: ShopItem[];
   taskLists: TaskList[];

@@ -48,9 +48,14 @@ interface Groupe { name: string; color: string; lines: PlanLine[]; }
           <div class="grp">
             <div class="grp-head"><span class="dot" [style.background]="g.color"></span>{{ g.name }}</div>
             @for (l of g.lines; track l.name) {
-              <div class="row">
+              <div class="row" [class.have]="store.hasHave(l)">
                 <div class="r-name">{{ l.name }}</div>
                 <div class="r-qty">{{ l.qty }}</div>
+                <button class="why" (click)="store.toggleHave(l)"
+                        [title]="store.hasHave(l) ? 'Finalement, l’ajouter' : 'J’ai déjà ça : ne pas l’acheter'">
+                  <f-icon [name]="store.hasHave(l) ? 'plus' : 'check'" [size]="15"
+                          [color]="store.hasHave(l) ? 'var(--ink3)' : 'var(--sage)'" [width]="2.6" />
+                </button>
                 <button class="why" (click)="toggle(l.name)" [title]="'D’où vient cette ligne'">
                   <f-icon name="eye" [size]="15" color="var(--ink3)" />
                 </button>
@@ -97,6 +102,20 @@ interface Groupe { name: string; color: string; lines: PlanLine[]; }
           </div>
         }
 
+        @if (rep.stocked.length) {
+          <div class="grp">
+            <div class="grp-head"><span class="dot" style="background:#7A9B76"></span>Vous m'aviez dit en avoir</div>
+            <div class="hint">Écartés pour cette fois. Touchez pour en racheter quand même : la note disparaît alors.</div>
+            <div class="pantry">
+              @for (x of rep.stocked; track x.line.name) {
+                <button class="p-chip" [class.on]="store.isStockPicked(x.line)" (click)="store.toggleStockPick(x.line)">
+                  {{ x.line.name }} <span class="p-q">{{ store.stockAgeLabel(x.days) }}</span>
+                </button>
+              }
+            </div>
+          </div>
+        }
+
         @if (rep.unknown.length) {
           <div class="grp warnbox">
             <div class="grp-head"><span class="dot" style="background:#C6492F"></span>Lignes non reconnues</div>
@@ -124,6 +143,8 @@ interface Groupe { name: string; color: string; lines: PlanLine[]; }
     .grp-head { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
     .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
     .row { display: flex; align-items: center; gap: 10px; min-height: 40px; border-top: 1px solid var(--line); }
+    .row.have { opacity: .45; }
+    .row.have .r-name { text-decoration: line-through; }
     .r-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
     .r-qty { font-size: 13px; font-weight: 800; color: var(--ink3); flex: none; }
     .why { border: none; background: none; cursor: pointer; padding: 4px; display: flex; }

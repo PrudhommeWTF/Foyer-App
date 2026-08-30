@@ -19,7 +19,7 @@ module à stockage relationnel.
 | 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
 | 3 b | Recopie d'une période sur une autre | Livrée |
 | 3 c | Semaine type des convives, suggestions, anti-répétition | Livrée |
-| 4 | Import de recettes, recherche, historique | À venir |
+| 4 | Recherche, historique, note, import par texte collé, « j'ai déjà ça » | Livrée (import photo : abandonné, voir plus bas) |
 | 5 | Contraintes alimentaires : allergènes affichés, aliments refusés, alertes | Livrée (régimes et substitutions : non faits, voir plus bas) |
 | Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
 | Lot 2 | Tâche « faire les courses », repas à l'agenda | Livrée |
@@ -192,6 +192,66 @@ pauvre qu'il n'est) :
 - une recette qui ne convient pas à quelqu'un attendu à ce créneau. C'est
   l'intérêt concret de la semaine type : le carnet s'ouvre les jours d'absence
   au lieu de rester fermé toute l'année.
+
+## Retrouver une recette
+
+Une seule ligne de saisie (`core/recipe-search.ts`), pas trois champs. Les
+filtres reconnus sont **extraits de la ligne entière** avant tout découpage,
+parce que « 30 min » et « 4 étoiles » s'écrivent en deux morceaux ; ce qui reste
+est cherché comme du texte, dans le nom, les étiquettes et les **ingrédients
+rattachés**, si bien que « pomme de terre » trouve « 4 patates ».
+
+Deux décisions :
+
+- **Ce qui n'est ni durée ni note reste un mot à chercher.** Mieux vaut un
+  filtre ignoré qu'un filtre inventé.
+- **Une durée demandée écarte les recettes qui ne disent pas la leur.**
+  Affirmer qu'une recette sans durée tient en vingt minutes est le genre de
+  promesse qui se paie à dix-neuf heures trente.
+
+La note de la famille (1 à 5) pèse dans les suggestions, en **dernier critère** :
+une bonne note qui l'emporterait sur « pas faite depuis trois semaines » ferait
+manger toujours la même chose.
+
+## Import d'une recette collée en texte
+
+L'import **depuis une photo n'est pas fait**, et ne le sera pas : il demande de
+la reconnaissance de caractères, lourde à embarquer en local pour un usage rare,
+et interdite à distance par la règle « aucune donnée sortante ». iOS et Android
+savent déjà extraire le texte d'une image ; le collage couvre le même besoin en
+deux gestes, sans rien installer ni rien envoyer.
+
+Le lecteur (`core/recipe-text.ts`) tourne **dans le navigateur** et remplit le
+formulaire, que l'utilisateur relit avant d'enregistrer. Deux lectures :
+
+- **Avec intertitres** (« Ingrédients », « Préparation »), on fait confiance à
+  l'auteur : il a dit lui-même où commence quoi.
+- **Sans intertitre**, le partage est deviné ligne à ligne, et le lecteur
+  **l'annonce** : c'est la lecture qui se trompe le plus.
+
+Un cas ambigu tranché à la vérification : un nom de produit seul en tête de
+collage (« Pâtes », « Crêpes ») est bien plus souvent le titre de la recette
+qu'un ingrédient. Le critère du titre est donc plus large que celui du corps :
+seule une ligne **quantifiée** est refusée comme titre.
+
+## « J'ai déjà ça »
+
+Le brief demandait un stock de placard. Un inventaire complet demande une tenue
+quotidienne, et **mal tenu il fait rater des achats**, ce qui est plus grave que
+de racheter un paquet de farine. Ce qui est livré ne demande aucune discipline :
+au moment du rapport de génération, un geste écarte l'article de cette liste et
+retient la date.
+
+- La marque **se périme** au bout de `STOCK_DAYS` (trois semaines) : assez pour
+  un paquet de farine, assez court pour qu'un oubli ne fasse pas rater des
+  courses tout un mois. L'article revient sans qu'on ait rien à faire.
+- La **date est montrée** (« il y a 3 jours »), parce que c'est elle qui permet
+  de juger : trois jours pour de la crème et trois semaines pour de la farine ne
+  se valent pas, et l'application n'a aucun moyen de le savoir.
+- Recocher un article qu'on avait dit avoir **efface sa marque** du même geste :
+  on vient de dire qu'on n'en a plus.
+- Une marque **datée du futur** (horloge qui recule, état restauré) ne fait rien
+  disparaître.
 
 ## Contraintes alimentaires
 
@@ -839,6 +899,8 @@ farine.
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |
 | `backend/test/headers.test.ts` | Valeurs d'en-tête émises et reçues, contre un vrai serveur, sans bouchon |
+| `frontend/src/app/core/recipe-search.test.ts` | Filtres lus sur la ligne entière, durée qui écarte l'inconnu, ingrédients rattachés cherchés |
+| `frontend/src/app/core/recipe-text.test.ts` | Lecture avec et sans intertitres, puces et numéros retirés, ce qui manque nommé |
 | `frontend/src/app/core/presence.test.ts` | Les trois niveaux de couverts, l'absence par défaut inexistante, le créneau vidé qui compte quand même un couvert |
 | `frontend/src/app/core/suggest.test.ts` | Fenêtre d'anti-répétition au jour près, raisons affichées, exclusions dites, tri sans score |
 | `frontend/src/app/core/diet.test.ts` | Ce qui doit alerter, ce qui ne doit surtout pas, et ce que le moteur avoue ne pas avoir vérifié |

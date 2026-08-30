@@ -124,6 +124,19 @@ test('une recette est proposée le soir où la personne qu’elle gêne n’est 
   assert.equal(suggestMeals({ ...base, meals: {}, members: [lea], recipes }).suggestions.length, 1);
 });
 
+test('une recette bien notée le dit, mais ne double personne pour autant', () => {
+  // La note vient en dernier critère : sinon on mangerait toujours la même
+  // chose, ce qui est exactement ce que l'anti-répétition cherche à éviter.
+  const notee: Recipe = { ...r('a', 'Adorée', [], 60), rating: 5 };
+  const rapide = r('b', 'Rapide', [], 10);
+  const out = suggestMeals({ ...base, recipes: [notee, rapide], meals: {} });
+  assert.deepEqual(out.suggestions.map((s) => s.recipe.name), ['Rapide', 'Adorée']);
+  assert.ok(out.suggestions[1].reasons.includes('bien notée'));
+  // À durée égale, la note départage.
+  const egal = suggestMeals({ ...base, meals: {}, recipes: [r('c', 'Quelconque', [], 10), { ...r('d', 'Aimée', [], 10), rating: 5 }] });
+  assert.deepEqual(egal.suggestions.map((s) => s.recipe.name), ['Aimée', 'Quelconque']);
+});
+
 test('le nombre de propositions est borné, mais les écartées restent comptées', () => {
   const recipes = Array.from({ length: 20 }, (_, i) => r('r' + i, 'Recette ' + i));
   const out = suggestMeals({ ...base, recipes, meals: {}, limit: 3 });
