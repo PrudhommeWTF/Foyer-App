@@ -25,7 +25,12 @@ import { TileState } from '../core/tiles/contract';
         <div class="skel" aria-label="Chargement"><span></span><span></span><span></span></div>
       }
 
-      @if (emptyHint()) { <div class="t-empty">{{ emptyHint() }}</div> }
+      @if (emptyHint()) {
+        <div class="t-empty">{{ emptyHint() }}</div>
+        <!-- Un module jamais servi propose son geste de démarrage : une tuile
+             vide n'est pas une tuile morte. -->
+        @if (startLabel(); as label) { <button class="t-start" (click)="open.emit()">{{ label }}</button> }
+      }
 
       @if (err(); as e) {
         <div class="t-err">
@@ -54,6 +59,10 @@ import { TileState } from '../core/tiles/contract';
     .skel > span:nth-child(3) { width: 55%; animation-delay: .24s; }
 
     .t-empty { color: var(--ink2); font-weight: 700; font-size: 13.5px; padding: 6px 0 2px; }
+    .t-start {
+      margin-top: 12px; border: none; cursor: pointer; border-radius: 10px; padding: 8px 14px;
+      background: var(--soft2); color: var(--ink); font-size: 12.5px; font-weight: 800;
+    }
 
     .t-err { background: var(--soft); border-left: 4px solid var(--primary); border-radius: 12px; padding: 12px 14px; }
     .t-err-msg { font-size: 13.5px; font-weight: 800; color: var(--ink); }
@@ -81,6 +90,7 @@ export class TileComponent {
   // garantit qu'aucune branche ne lit `data` quand il n'y en a pas.
   readonly loading = computed(() => this.state().kind === 'loading');
   readonly emptyHint = computed(() => { const s = this.state(); return s.kind === 'empty' ? s.hint : ''; });
+  readonly startLabel = computed(() => { const s = this.state(); return s.kind === 'empty' ? s.start ?? '' : ''; });
   readonly err = computed(() => { const s = this.state(); return s.kind === 'error' ? s : null; });
   readonly partial = computed(() => { const s = this.state(); return s.kind === 'ok' ? s.partial ?? '' : ''; });
   readonly stale = computed(() => { const s = this.state(); return s.kind === 'ok' ? s.stale ?? '' : ''; });

@@ -93,8 +93,12 @@ export class DashboardStore {
         monthLabel: frMonthLabel(home.month),
         summary: home.summary,
         accounts: home.accounts,
+        currentBalance: home.currentBalance,
         deadlines: home.deadlines,
         dayExtras: this.fin.deadlineExtras(),
+        contracts: home.contracts,
+        savings: home.savings,
+        energy: home.energy,
       },
     };
   }

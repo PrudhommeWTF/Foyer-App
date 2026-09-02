@@ -40,7 +40,7 @@ comme une tuile vide.
 |---|---|---|
 | `loading` | La donnée n'est pas encore là | Un squelette. Jamais un chiffre |
 | `ok` | La donnée est là | Le contenu de la tuile |
-| `empty` | Il n'y a réellement rien, et c'est normal | Une phrase qui le dit sans alarmer |
+| `empty` | Il n'y a réellement rien, et c'est normal | Une phrase qui le dit sans alarmer, et le geste de démarrage quand le module n'a jamais servi |
 | `error` | La donnée est indisponible | Le message, la cause, et « Réessayer » |
 
 Deux nuances se posent sur `ok`, à ne pas confondre :
@@ -54,6 +54,11 @@ Interdits, sans exception : afficher `0` quand la valeur est inconnue, afficher
 la dernière valeur connue sans dire qu'elle est ancienne, masquer une erreur
 derrière un état vide.
 
+Deux vides ne se valent pas, et il faut les distinguer : « aucune tâche
+aujourd'hui » pour un foyer qui en a cent, et « aucune tâche » pour un foyer qui
+n'a jamais ouvert le module. Le second passe `start` à `empty()` et la tuile
+propose son geste de démarrage : une tuile vide n'est pas une tuile morte.
+
 ## Les deux plans de données
 
 L'accueil ne fait **aucune cascade de requêtes**. Il lit deux plans, chargés en
@@ -62,12 +67,14 @@ parallèle :
 | Plan | Source | Requêtes | Tuiles servies |
 |---|---|---|---|
 | `document` | `GET /api/state`, déjà chargé par la session | 0 | Agenda, Tâches, Repas, Courses, Messagerie |
-| `finances` | `GET /api/finances/home?month=AAAA-MM` | 1 | Finances (et les échéances de l'agenda) |
+| `finances` | `GET /api/finances/home?month=AAAA-MM` | 1 | Finances, Échéances, Relevés, Économies (et les échéances de l'agenda) |
 
 `/api/finances/home` est composé **par le module Finances**, dans
 `backend/src/finances/routes.ts`, à côté de son propre `/bootstrap`. Il ne rend
-que ce qui s'affiche : la synthèse du mois, le nombre de comptes déclarés et les
-échéances à venir. Auparavant l'accueil appelait `init()`, c'est-à-dire le
+que ce qui s'affiche : la synthèse du mois, le solde des comptes courants, les
+échéances à venir, les compteurs dont le relevé est attendu, les pistes
+d'économies ouvertes, et le nombre de comptes et de contrats déclarés (zéro
+voulant dire « module jamais servi », jamais « zéro euro »). Auparavant l'accueil appelait `init()`, c'est-à-dire le
 démarrage complet du module (comptes, catégories, soldes, opérations, règles,
 contrats), soit six requêtes en cascade, pour afficher un chiffre.
 
@@ -107,7 +114,9 @@ export const energieTile = {
   source: 'finances',      // le plan dont dépend la tuile
   state: (ctx): TileState<EnergieTileData> => fromSource(ctx.fin, (f, asOf) =>
     f.releves.length ? ok({ releves: f.releves.length }, asOf)
-                     : empty('Aucun relevé enregistré.')),
+      // Deux vides distincts : rien à faire, ou module jamais servi.
+      : f.compteurs ? empty('Compteurs à jour.')
+                    : empty('Aucun compteur suivi.', 'Ajouter un compteur')),
 } satisfies TileProvider<EnergieTileData>;
 ```
 
@@ -273,7 +282,18 @@ Pour éviter toute ambiguïté sur l'état réel du chantier :
 
 - **Pas de contextualisation.** L'ordre des tuiles est celui du registre, il ne
   dépend ni de l'heure ni du type de jour.
-- **Les tuiles manquantes le sont toujours** : contrats et échéances, énergie,
-  économies, emploi du temps, documents.
 - **Les actions rapides manquent toujours.** Cocher une tâche ou un article, oui,
   parce que c'était déjà là. Reporter, saisir en une ligne, annuler : non.
+- **Deux modules restent sans tuile, à dessein.** Les **documents**, parce que le
+  modèle n'a aucune date d'expiration : `FileItem` ne porte qu'une date d'ajout en
+  texte libre, et fabriquer une échéance à partir de ça serait exactement le genre
+  de chiffre plausible et faux que ce chantier existe pour supprimer. Il faudrait
+  d'abord ajouter un champ au module Documents. Les **contacts**, parce qu'un
+  carnet d'adresses n'a rien à dire d'un jour en particulier ; les contacts
+  d'urgence méritent un accès rapide, mais depuis la barre de navigation, pas
+  depuis une tuile qui répéterait la même chose tous les jours.
+- **Dix tuiles, c'est beaucoup** pour un écran qu'on lit debout en cinq secondes.
+  Sur iPhone, un foyer complet fait un peu plus de deux écrans de défilement. La
+  première hauteur porte l'agenda, l'emploi du temps et les tâches, ce qui est le
+  bon ordre par défaut, mais c'est la contextualisation qui réglera vraiment la
+  question, en reléguant ce qui n'a rien à dire au moment où l'on regarde.

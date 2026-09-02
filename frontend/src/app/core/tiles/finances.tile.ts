@@ -5,9 +5,13 @@ export interface FinancesTileData {
   /** Centimes. Dépenses et ressources du mois en cours, virements internes exclus. */
   expense: number;
   income: number;
-  balance: number;
   /** Somme des budgets de référence. Zéro quand aucun n'est posé. */
   budgetTotal: number;
+  /**
+   * Solde des comptes courants. Null quand il n'y en a aucun : la tuile n'écrit
+   * alors pas de ligne, plutôt que d'afficher un solde de zéro euro.
+   */
+  balance: number | null;
 }
 
 /**
@@ -33,7 +37,7 @@ export const financesTile = {
   state: (ctx): TileState<FinancesTileData> => fromSource(ctx.fin, (f, asOf) => {
     // Aucun compte déclaré : le module n'a jamais servi. Ce n'est pas une
     // erreur, et surtout ce n'est pas « zéro euro dépensé ».
-    if (!f.accounts) return empty('Aucun compte déclaré. Commencez par en créer un dans Finances.');
+    if (!f.accounts) return empty('Aucun compte déclaré.', 'Créer un compte');
     const s = f.summary;
     if (!s) {
       return {
@@ -43,7 +47,10 @@ export const financesTile = {
       };
     }
     return ok(
-      { monthLabel: f.monthLabel, expense: s.expense, income: s.income, balance: s.balance, budgetTotal: s.budgetTotal },
+      {
+        monthLabel: f.monthLabel, expense: s.expense, income: s.income,
+        budgetTotal: s.budgetTotal, balance: f.currentBalance,
+      },
       asOf,
       s.incomplete ? incompleteLabel(s.missing) : undefined,
     );

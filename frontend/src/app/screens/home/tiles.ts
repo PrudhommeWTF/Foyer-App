@@ -2,8 +2,12 @@ import { Type } from '@angular/core';
 import { TileId } from '../../core/tiles/registry';
 import { AgendaTile } from './agenda';
 import { CoursesTile } from './courses';
+import { EcheancesTile } from './echeances';
+import { EconomiesTile } from './economies';
+import { EnergieTile } from './energie';
 import { FinancesTile } from './finances';
 import { MessagesTile } from './messages';
+import { PlanningTile } from './planning';
 import { RepasTile } from './repas';
 import { TachesTile } from './taches';
 
@@ -24,9 +28,13 @@ export interface TileRender {
  */
 export const TILE_RENDERERS: Record<TileId, TileRender> = {
   agenda: { component: AgendaTile },
+  planning: { component: PlanningTile },
   taches: { component: TachesTile },
   repas: { component: RepasTile },
-  finances: { component: FinancesTile },
   courses: { component: CoursesTile, span: 'wide' },
+  finances: { component: FinancesTile },
+  echeances: { component: EcheancesTile },
+  energie: { component: EnergieTile },
+  economies: { component: EconomiesTile },
   messages: { component: MessagesTile },
 };

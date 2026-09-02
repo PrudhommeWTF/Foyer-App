@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { NAV_GROUPS } from '../../shell/nav';
 import { buildArticleIndex } from '../ingredients';
 import { HouseholdState } from '../models';
+import type { FinDeadline } from '../finances.api';
 import { DocSnapshot, FinSnapshot, Source, TileContext, TileProvider, TileState, safeState } from './contract';
 import { TILE_PROVIDERS } from './registry';
 
@@ -37,17 +38,36 @@ const fullDoc = (): HouseholdState => ({
     { id: 's2', name: 'Lait', qty: '2 L', aisleId: 'a1', state: 'panier', listId: 'c1' },
   ],
   msgs: [{ who: 'm1', text: 'Je rentre tard', time: '18:04' }],
+  // Le 21 août 2026 est un vendredi : l'emploi du temps est une semaine type.
+  sched: [{ id: 'sc1', who: 'm1', day: 'Vendredi', start: '08:30', end: '16:30', label: 'École', k: 'ecole' }],
   recipes: [{ id: 'r1', name: 'Gratin', level: 'Facile', color: '#7A9B76', prepMin: 15, cookMin: 45, ingr: [], steps: [] }],
   meals: { [TODAY + '-soir']: { items: [{ rid: 'r1' }] } },
 });
 
 const finSnapshot = (over: Partial<FinSnapshot> = {}): FinSnapshot => ({
-  month: '2026-08', monthLabel: 'Août 2026', accounts: 1, deadlines: [], dayExtras: {},
+  month: '2026-08', monthLabel: 'Août 2026', accounts: 1, currentBalance: 152340,
+  deadlines: [echeance()], dayExtras: {}, contracts: 2,
+  savings: { pending: 24000, done: 0, count: 3, openCount: 2 },
+  energy: { contracts: 1, due: [{ contractId: 9, name: 'Électricité', provider: 'EDF', lastOn: '2026-06-10', daysSince: 72 }] },
   summary: {
     month: '2026-08', income: 250000, expense: 180000, balance: 70000, budgetTotal: 200000,
     categories: [], missing: [], incomplete: false,
   },
   ...over,
+});
+
+const echeance = (over: Partial<FinDeadline> = {}): FinDeadline => ({
+  contractId: 4, contractName: 'Assurance auto', provider: 'MAIF',
+  kind: 'preavis', date: '2026-09-01', daysAway: 11, assetId: null, memberIds: [],
+  ...over,
+});
+
+/** Un foyer qui n'a jamais ouvert le module : tout est à zéro déclaré, rien n'est « nul ». */
+const finVierge = (): FinSnapshot => finSnapshot({
+  accounts: 0, currentBalance: null, contracts: 0, deadlines: [],
+  savings: { pending: 0, done: 0, count: 0, openCount: 0 },
+  energy: { contracts: 0, due: [] },
+  summary: null,
 });
 
 /** Le plan « document » tel que l'adaptateur le compose. */
@@ -76,7 +96,7 @@ function stateWhenSourceIs(p: TileProvider, src: 'ready' | 'empty' | 'error' | '
     : fin && src === 'loading' ? loading()
     // « Vide » côté finances, c'est un module jamais servi : aucun compte, donc
     // aucune synthèse. Ce n'est pas zéro euro dépensé.
-    : ready(fin && src === 'empty' ? finSnapshot({ accounts: 0, summary: null }) : finSnapshot());
+    : ready(fin && src === 'empty' ? finVierge() : finSnapshot());
   return p.state(ctx(doc, money));
 }
 
@@ -169,7 +189,7 @@ test('finances : une synthèse absente est une erreur, pas un solde à zéro', (
 });
 
 test('finances : sans compte déclaré, le module n’a jamais servi (vide, pas zéro)', () => {
-  const s = provider('finances').state(ctx(ready(snap(fullDoc())), ready(finSnapshot({ accounts: 0, summary: null }))));
+  const s = provider('finances').state(ctx(ready(snap(fullDoc())), ready(finVierge())));
   assert.equal(s.kind, 'empty');
 });
 
@@ -270,6 +290,109 @@ test('repas : un convive absent ce soir-là ne déclenche pas d’alerte', () =>
   assert.equal(s.kind, 'ok');
   // Une fausse alerte de plus, et plus personne ne lit les vraies.
   if (s.kind === 'ok') assert.equal((s.data as { alerts: string[] }).alerts.length, 0);
+});
+
+test('échéances : les plus proches d’abord, et le préavis est signalé comme coûteux', () => {
+  const fin = finSnapshot({ deadlines: [
+    echeance({ contractId: 1, contractName: 'Mutuelle', kind: 'fin', daysAway: 40 }),
+    echeance({ contractId: 2, contractName: 'Assurance auto', kind: 'preavis', daysAway: 5 }),
+    echeance({ contractId: 3, contractName: 'Box internet', kind: 'renouvellement', daysAway: 20 }),
+  ] });
+  const s = provider('echeances').state(ctx(ready(snap(fullDoc())), ready(fin)));
+  assert.equal(s.kind, 'ok');
+  if (s.kind !== 'ok') return;
+  const lines = (s.data as { lines: { deadline: FinDeadline; label: string; costly: boolean }[] }).lines;
+  assert.deepEqual(lines.map((l) => l.deadline.contractName), ['Assurance auto', 'Box internet', 'Mutuelle']);
+  assert.deepEqual(lines.map((l) => l.costly), [true, false, false]);
+  assert.equal(lines[0].label, 'Dernier jour pour résilier');
+});
+
+test('échéances : une date passée n’encombre plus l’accueil, elle reste dans son module', () => {
+  const fin = finSnapshot({ deadlines: [echeance({ daysAway: -30 })] });
+  const s = provider('echeances').state(ctx(ready(snap(fullDoc())), ready(fin)));
+  assert.equal(s.kind, 'empty', 'plus aucun geste possible : rien à mettre en avant');
+});
+
+test('échéances : au-delà de l’horizon, rien n’appelle un geste aujourd’hui', () => {
+  const fin = finSnapshot({ deadlines: [echeance({ daysAway: 200 })] });
+  assert.equal(provider('echeances').state(ctx(ready(snap(fullDoc())), ready(fin))).kind, 'empty');
+});
+
+test('échéances : sans contrat déclaré, la tuile propose de commencer', () => {
+  const s = provider('echeances').state(ctx(ready(snap(fullDoc())), ready(finVierge())));
+  assert.equal(s.kind, 'empty');
+  if (s.kind === 'empty') assert.ok(s.start, 'un module jamais servi propose son geste de démarrage');
+});
+
+test('énergie : un compteur à jour ne réclame rien', () => {
+  const fin = finSnapshot({ energy: { contracts: 1, due: [] } });
+  const s = provider('energie').state(ctx(ready(snap(fullDoc())), ready(fin)));
+  assert.equal(s.kind, 'empty');
+  if (s.kind === 'empty') assert.ok(!s.start, 'le module sert déjà : rien à démarrer');
+});
+
+test('énergie : sans compteur suivi, la tuile propose de commencer', () => {
+  const s = provider('energie').state(ctx(ready(snap(fullDoc())), ready(finVierge())));
+  assert.equal(s.kind, 'empty');
+  if (s.kind === 'empty') assert.ok(s.start);
+});
+
+test('économies : les pistes ouvertes et ce qu’elles valent par an', () => {
+  const s = provider('economies').state(ctx(ready(snap(fullDoc())), ready(finSnapshot())));
+  assert.equal(s.kind, 'ok');
+  if (s.kind === 'ok') {
+    const d = s.data as { open: number; pending: number };
+    assert.equal(d.open, 2);
+    assert.equal(d.pending, 24000);
+  }
+});
+
+test('économies : tout mené à bien n’est pas « aucune piste »', () => {
+  const finies = finSnapshot({ savings: { pending: 0, done: 30000, count: 2, openCount: 0 } });
+  const a = provider('economies').state(ctx(ready(snap(fullDoc())), ready(finies)));
+  const b = provider('economies').state(ctx(ready(snap(fullDoc())), ready(finVierge())));
+  assert.equal(a.kind, 'empty');
+  assert.equal(b.kind, 'empty');
+  if (a.kind === 'empty' && b.kind === 'empty') {
+    assert.notEqual(a.hint, b.hint);
+    assert.ok(!a.start, 'un module déjà servi ne propose pas de démarrer');
+    assert.ok(b.start);
+  }
+});
+
+test('planning : les créneaux du jour, à l’heure, tous membres confondus', () => {
+  const doc = fullDoc();
+  doc.sched = [
+    { id: 'a', who: 'm1', day: 'Vendredi', start: '17:00', end: '18:00', label: 'Judo', k: 'sport' },
+    { id: 'b', who: 'm1', day: 'Vendredi', start: '08:30', end: '16:30', label: 'École', k: 'ecole' },
+    { id: 'c', who: 'm1', day: 'Lundi', start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' },
+  ];
+  const s = provider('planning').state(ctx(ready(snap(doc)), ready(finSnapshot())));
+  assert.equal(s.kind, 'ok');
+  if (s.kind === 'ok') {
+    const slots = (s.data as { slots: { id: string }[] }).slots;
+    assert.deepEqual(slots.map((x) => x.id), ['b', 'a'], 'un autre jour de la semaine type ne s’invite pas');
+  }
+});
+
+test('planning : une journée sans créneau n’est pas un emploi du temps absent', () => {
+  const doc = fullDoc();
+  doc.sched = [{ id: 'c', who: 'm1', day: 'Dimanche', start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' }];
+  const a = provider('planning').state(ctx(ready(snap(doc)), ready(finSnapshot())));
+  const b = provider('planning').state(ctx(ready(snap(emptyDoc())), ready(finSnapshot())));
+  assert.equal(a.kind, 'empty');
+  assert.equal(b.kind, 'empty');
+  if (a.kind === 'empty' && b.kind === 'empty') {
+    assert.notEqual(a.hint, b.hint);
+    assert.ok(!a.start, 'l’emploi du temps existe : rien à démarrer');
+    assert.ok(b.start);
+  }
+});
+
+test('finances : sans compte courant, aucun solde n’est affiché plutôt qu’un zéro', () => {
+  const s = provider('finances').state(ctx(ready(snap(fullDoc())), ready(finSnapshot({ currentBalance: null }))));
+  assert.equal(s.kind, 'ok');
+  if (s.kind === 'ok') assert.equal((s.data as { balance: number | null }).balance, null);
 });
 
 // ---- péremption ------------------------------------------------------------

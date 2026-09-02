@@ -80,6 +80,17 @@ export interface FinMonthSummary {
   incomplete: boolean;
 }
 
+/** Un compteur dont le relevé est attendu. */
+export interface FinReadingDue {
+  contractId: number;
+  name: string;
+  provider: string;
+  /** Date du dernier relevé, ou null quand le compteur n'a jamais été lu. */
+  lastOn: string | null;
+  /** Jours écoulés depuis. Null quand il n'y a aucun relevé. */
+  daysSince: number | null;
+}
+
 /** La contribution du module Finances à l'accueil. */
 export interface FinHome {
   month: string;
@@ -87,6 +98,11 @@ export interface FinHome {
   accounts: number;
   summary: FinMonthSummary;
   deadlines: FinDeadline[];
+  contracts: number;
+  savings: FinSavingsTotals;
+  /** Solde des comptes courants. Null quand il n'y en a aucun. */
+  currentBalance: number | null;
+  energy: { contracts: number; due: FinReadingDue[] };
 }
 
 export interface FinBootstrap {

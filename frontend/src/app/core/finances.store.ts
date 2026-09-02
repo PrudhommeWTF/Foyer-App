@@ -11,6 +11,7 @@ import {
 import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
 import { CAL_KINDS } from './constants';
+import { deadlineLabel, shortDeadlineLabel } from './deadlines';
 
 /**
  * Finances state. Unlike FoyerStore, which holds the whole household as one
@@ -264,17 +265,9 @@ export class FinancesStore {
     return out;
   }
 
-  /** Libellés des échéances, partagés par les notifications, les tâches et l'écran. */
-  private deadlineLabel(kind: string): string {
-    return kind === 'preavis' ? 'Dernier jour pour résilier'
-      : kind === 'renouvellement' ? 'Reconduction tacite'
-      : 'Fin du contrat';
-  }
-
-  /** Version courte : une case de calendrier fait quelques dizaines de pixels. */
-  private shortDeadlineLabel(kind: string): string {
-    return kind === 'preavis' ? 'Résilier' : kind === 'renouvellement' ? 'Reconduction' : 'Fin';
-  }
+  // Les libellés d'échéance vivent dans core/deadlines.ts : ils sont lus par les
+  // notifications, le calendrier, les tâches et la tuile d'accueil, et une seule
+  // écriture est la seule façon qu'ils disent partout la même chose.
 
   /** Repères de calendrier, un par échéance à venir. */
   private deadlineDayExtras(): Record<string, DayExtra[]> {
@@ -287,7 +280,7 @@ export class FinancesStore {
     for (const d of this.deadlines()) {
       const item: DayExtra = {
         kind: 'echeance',
-        label: `${this.shortDeadlineLabel(d.kind)} : ${d.contractName}`,
+        label: `${shortDeadlineLabel(d.kind)} : ${d.contractName}`,
         color: CAL_KINDS['echeance'].color,
         // Le type est déjà dans le libellé : le complément se réduit au
         // fournisseur, sans quoi il mange la place et tronque l'essentiel.
@@ -320,7 +313,7 @@ export class FinancesStore {
   taskFromDeadline(contractId: number, kind: string, date: string): void {
     const c = this.contracts().find((x) => x.id === contractId);
     if (!c) return;
-    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberIds[0] ?? null);
+    this.foyer.addExternalTask(`${deadlineLabel(kind)} : ${c.name}`, date, c.memberIds[0] ?? null);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }

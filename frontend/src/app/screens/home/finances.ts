@@ -22,7 +22,10 @@ import { HomeTile } from './base';
               : 'Budget de référence dépassé de ' + eur(d.expense - d.budgetTotal) + ' €' }}
           </div>
         } @else {
-          <div class="note">{{ eur(d.income) }} € de ressources, solde {{ d.balance > 0 ? '+' : '' }}{{ eur(d.balance) }} €</div>
+          <div class="note">{{ eur(d.income) }} € de ressources ce mois-ci</div>
+        }
+        @if (d.balance !== null) {
+          <div class="solde">Comptes courants : <b>{{ eur(d.balance) }} €</b></div>
         }
       }
     </f-tile>
@@ -34,6 +37,8 @@ import { HomeTile } from './base';
     .bar { height: 9px; background: var(--line2); border-radius: 8px; margin-top: 12px; overflow: hidden; }
     .bar-fill { height: 100%; background: linear-gradient(90deg, #F0B24B, #E56B4E); border-radius: 8px; }
     .note { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-top: 8px; }
+    .solde { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+    .solde b { color: var(--ink); }
   `],
 })
 export class FinancesTile extends HomeTile<FinancesTileData> {

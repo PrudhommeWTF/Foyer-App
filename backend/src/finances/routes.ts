@@ -10,6 +10,8 @@ import { attachmentsRouter } from './attachments-routes';
 import * as backup from './backup';
 import { contractsRouter } from './contracts-routes';
 import * as contracts from './contracts';
+import * as energy from './energy';
+import * as savings from './savings';
 import { energyRouter } from './energy-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
@@ -236,16 +238,30 @@ export function financesRouter(): Router {
   r.get('/home', handler((req, res) => {
     const month = String(req.query['month'] || '').trim();
     if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
+    const today = new Date().toISOString().slice(0, 10);
+    const all = contracts.listContracts();
+    const accounts = repo.listAccounts();
+    const balances = repo.accountBalances();
+    // Le solde des comptes courants, et lui seul : l'épargne et le crédit
+    // répondent à d'autres questions que « est-ce que je peux dépenser ».
+    const courants = accounts.filter((a) => a.kind === 'courant' && !a.archived);
     res.json({
       home: {
         month,
         // Zéro compte veut dire « module jamais servi ». L'accueil en fait un
         // état vide, surtout pas un solde à zéro.
-        accounts: repo.listAccounts().length,
-        summary: monthSummary(month),
+        accounts: accounts.length,
+        summary: monthSummary(month, today),
         // Les échéances alimentent l'accueil, les notifications et le
         // calendrier : les servir ici évite de charger tout le module pour elles.
-        deadlines: contracts.deadlines(),
+        deadlines: contracts.deadlines(today),
+        contracts: all.length,
+        savings: savings.totals(),
+        currentBalance: courants.length ? courants.reduce((a, c) => a + (balances[c.id] ?? 0), 0) : null,
+        energy: {
+          contracts: all.filter((c) => c.kind === 'energie').length,
+          due: energy.readingsDue(all, energy.lastReadingDates(), today),
+        },
       },
     });
   }));

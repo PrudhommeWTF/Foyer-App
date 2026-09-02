@@ -13,7 +13,7 @@
  * ce qui le rend vérifiable au lanceur de tests intégré à Node, sans avoir à
  * démarrer Angular. Le rendu, lui, vit dans `screens/home/`.
  */
-import type { FinDeadline, FinMonthSummary } from '../finances.api';
+import type { FinDeadline, FinMonthSummary, FinReadingDue, FinSavingsTotals } from '../finances.api';
 import { DayExtra, SchoolHoliday } from '../agenda';
 import { ArticleIndex } from '../ingredients';
 import { HouseholdState } from '../models';
@@ -45,7 +45,9 @@ export type Source<T> =
  *                 rafraîchie (le serveur ne répond plus). `asOf` dit de quand
  *                 elle date.
  *   - `empty`   : il n'y a réellement rien, et c'est normal. `hint` le dit
- *                 sans alarmer.
+ *                 sans alarmer, et `start` propose le geste de démarrage quand le
+ *                 module n'a jamais servi (« Déclarer un contrat »). Une tuile
+ *                 vide n'est pas une tuile morte.
  *   - `error`   : la donnée est indisponible. `message` s'adresse à qui regarde
  *                 l'écran, `detail` à qui lira les journaux.
  *
@@ -55,7 +57,7 @@ export type Source<T> =
 export type TileState<T> =
   | { kind: 'loading' }
   | { kind: 'ok'; data: T; asOf: string; partial?: string; stale?: string }
-  | { kind: 'empty'; hint: string }
+  | { kind: 'empty'; hint: string; start?: string }
   | { kind: 'error'; message: string; detail: string };
 
 /**
@@ -80,10 +82,18 @@ export interface FinSnapshot {
   summary: FinMonthSummary | null;
   /** Comptes déclarés. Zéro veut dire « module jamais servi », pas « zéro euro ». */
   accounts: number;
+  /** Solde des comptes courants. Null quand il n'y en a aucun, jamais zéro par défaut. */
+  currentBalance: number | null;
   /** Échéances de contrat à venir. */
   deadlines: FinDeadline[];
   /** Les mêmes, en repères de calendrier indexés par date, pour la journée composée. */
   dayExtras: Record<string, DayExtra[]>;
+  /** Contrats déclarés, tous types confondus. Zéro veut dire « jamais servi ». */
+  contracts: number;
+  /** Pistes d'économies : combien sont ouvertes, et ce qu'elles représentent par an. */
+  savings: FinSavingsTotals;
+  /** Compteurs d'énergie déclarés, et ceux dont le relevé est attendu. */
+  energy: { contracts: number; due: FinReadingDue[] };
 }
 
 /**
@@ -124,7 +134,8 @@ export function fromSource<S, T>(src: Source<S>, build: (data: S, asOf: string) 
 
 export const ok = <T>(data: T, asOf: string, partial?: string): TileState<T> =>
   partial ? { kind: 'ok', data, asOf, partial } : { kind: 'ok', data, asOf };
-export const empty = <T>(hint: string): TileState<T> => ({ kind: 'empty', hint });
+export const empty = <T>(hint: string, start?: string): TileState<T> =>
+  start ? { kind: 'empty', hint, start } : { kind: 'empty', hint };
 
 /** La source dont dépend une tuile, pour savoir quoi recharger au « Réessayer ». */
 export const sourceOf = (p: TileProvider, ctx: TileContext): Source<unknown> =>

@@ -9,17 +9,25 @@
  */
 import { agendaTile } from './agenda.tile';
 import { coursesTile } from './courses.tile';
+import { echeancesTile } from './echeances.tile';
+import { economiesTile } from './economies.tile';
+import { energieTile } from './energie.tile';
 import { financesTile } from './finances.tile';
 import { messagesTile } from './messages.tile';
+import { planningTile } from './planning.tile';
 import { repasTile } from './repas.tile';
 import { tachesTile } from './taches.tile';
 
 export const TILE_PROVIDERS = [
   agendaTile,
+  planningTile,
   tachesTile,
   repasTile,
-  financesTile,
   coursesTile,
+  financesTile,
+  echeancesTile,
+  energieTile,
+  economiesTile,
   messagesTile,
 ] as const;
 
