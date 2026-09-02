@@ -410,6 +410,10 @@ export class FoyerStore {
         this.updating.set(true);
         this.updateMsg.set(s.message || 'Mise à jour en cours…');
         this.pollUpdateStatus();
+      } else if (s.state === 'error' && s.message) {
+        // Une mise à jour qui a échoué ne doit pas se découvrir en fouillant le
+        // serveur : le panneau Mises à jour l'affiche tant qu'on n'en a pas relancé une.
+        this.updateMsg.set(s.message);
       }
     } catch { /* status unreachable — ignore */ }
   }

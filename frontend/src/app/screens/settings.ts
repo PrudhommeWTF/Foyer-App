@@ -206,6 +206,7 @@ import { ACADEMIES } from '../core/constants';
               } @else {
                 <div class="hint">Vérifiez la présence d'une nouvelle version sur GitHub.</div>
               }
+              @if (store.updateMsg()) { <div class="upd-failed">{{ store.updateMsg() }}</div> }
               <div class="upd-actions">
                 <button class="btn btn-soft grow" [disabled]="store.updateChecking()" (click)="store.checkUpdates()">
                   {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
@@ -298,6 +299,7 @@ import { ACADEMIES } from '../core/constants';
     .upd-badge.new { background: #FDF0DA; color: #D9930F; }
     .upd-cur { font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 8px; }
     .upd-link { display: inline-block; margin-top: 6px; font-size: 12.5px; font-weight: 800; color: var(--primary); }
+    .upd-failed { margin-top: 10px; font-size: 12.5px; font-weight: 700; color: #B8860B; line-height: 1.4; }
     .upd-actions { display: flex; gap: 8px; margin-top: 12px; }
     .upd-actions .grow { flex: 1; }
     @media (max-width: 420px) { .upd-actions { flex-direction: column; } }
