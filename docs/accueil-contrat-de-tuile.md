@@ -255,6 +255,27 @@ d'article** et non par nom, sans quoi « courgette » serait proposé alors que
   qui se fait par lots devant un relevé, pas entre deux portes sur un téléphone.
   Il est à sa place dans l'écran Finances.
 
+## Le contexte
+
+L'ordre des tuiles dépend du moment de la journée et du type de jour. Les règles
+sont **des données**, dans `<données>/accueil.json`, modifiables sans recompiler.
+Le format, les sources de « type de jour » et la procédure de vérification sont
+dans [docs/accueil-contexte.md](accueil-contexte.md).
+
+Ce qui relève du contrat de tuile, et qui n'est pas configurable :
+
+- Le contexte **réordonne et replie**, il ne masque jamais. Une tuile reléguée
+  garde son titre et son compteur, et se déplie d'un tap.
+- L'ordre ne dépend **que** du jour et du moment. Il est figé et refait au seul
+  franchissement d'une frontière : une tuile ne bouge jamais parce qu'une donnée
+  vient d'arriver.
+- Une tuile en `error` n'est **ni repliée ni reléguée**. Ce qui est cassé doit se
+  voir, quelle que soit l'heure.
+- Toute tuile remontée porte sa **raison**, en toutes lettres.
+
+La logique est pure et testée (`core/home-context.ts`) ; le store d'accueil ne
+fait que figer le contexte et appliquer le classement.
+
 ## Écriture à deux
 
 Le document du foyer s'enregistre en entier. Jusqu'ici en « dernier arrivé
@@ -336,8 +357,6 @@ rendant la même chaîne, ce qui arrête net la propagation du signal.
 
 Pour éviter toute ambiguïté sur l'état réel du chantier :
 
-- **Pas de contextualisation.** L'ordre des tuiles est celui du registre, il ne
-  dépend ni de l'heure ni du type de jour.
 - **Deux modules restent sans tuile, à dessein.** Les **documents**, parce que le
   modèle n'a aucune date d'expiration : `FileItem` ne porte qu'une date d'ajout en
   texte libre, et fabriquer une échéance à partir de ça serait exactement le genre
@@ -346,8 +365,6 @@ Pour éviter toute ambiguïté sur l'état réel du chantier :
   carnet d'adresses n'a rien à dire d'un jour en particulier ; les contacts
   d'urgence méritent un accès rapide, mais depuis la barre de navigation, pas
   depuis une tuile qui répéterait la même chose tous les jours.
-- **Dix tuiles, c'est beaucoup** pour un écran qu'on lit debout en cinq secondes.
-  Sur iPhone, un foyer complet fait un peu plus de deux écrans de défilement. La
-  première hauteur porte l'agenda, l'emploi du temps et les tâches, ce qui est le
-  bon ordre par défaut, mais c'est la contextualisation qui réglera vraiment la
-  question, en reléguant ce qui n'a rien à dire au moment où l'on regarde.
+- **Le « jour de garde des enfants » n'est pas modélisable.** Rien dans les
+  données ne le porte, et la semaine type des convives dit autre chose. Il
+  faudrait un champ dédié au module Membres.

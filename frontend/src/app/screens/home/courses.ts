@@ -11,7 +11,7 @@ import { HomeTile } from './base';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TileComponent, IconComponent, QuickAddComponent],
   template: `
-    <f-tile [title]="tile().title" [badge]="badge()" [link]="tile().link" [state]="state()"
+    <f-tile [title]="tile().title" [badge]="badge()" [link]="tile().link" [state]="state()" [raison]="raison()" [collapsed]="collapsed()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
       @if (data(); as d) {
         <div class="shop-grid">

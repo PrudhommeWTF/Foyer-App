@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { TileState } from '../core/tiles/contract';
 
 /**
@@ -18,9 +18,17 @@ import { TileState } from '../core/tiles/contract';
     <div class="card">
       <div class="ch">
         <div class="card-title sm">{{ title() }}@if (badge()) { <span class="badge"> · {{ badge() }}</span> }</div>
-        @if (link()) { <span class="link" (click)="open.emit()">{{ link() }}</span> }
+        @if (folded()) {
+          <!-- Repliée, pas retirée : un tap la rouvre, et elle reste là où elle est. -->
+          <button class="unfold" (click)="unfold()">Déplier</button>
+        } @else if (link()) {
+          <span class="link" (click)="open.emit()">{{ link() }}</span>
+        }
       </div>
 
+      @if (raison() && !folded()) { <div class="t-raison">{{ raison() }}</div> }
+
+      @if (!folded()) {
       @if (loading()) {
         <div class="skel" aria-label="Chargement"><span></span><span></span><span></span></div>
       }
@@ -44,6 +52,7 @@ import { TileState } from '../core/tiles/contract';
       @if (stale()) { <div class="t-stale">{{ stale() }}</div> }
 
       <ng-content />
+      }
     </div>
   `,
   styles: [`
@@ -55,6 +64,11 @@ import { TileState } from '../core/tiles/contract';
     .card-title.sm { font-size: 17px; line-height: 1.25; }
     .badge { color: var(--ink3); font-weight: 700; }
     .link { font-size: 13px; font-weight: 800; color: var(--primary); cursor: pointer; flex: none; padding-top: 2px; }
+    .unfold { flex: none; border: none; cursor: pointer; border-radius: 8px; padding: 4px 10px;
+              background: var(--soft2); color: var(--ink2); font-size: 11.5px; font-weight: 800; }
+    /* La raison est écrite : un écran qui bouge sans dire pourquoi est un écran
+       qu'on cesse de regarder. */
+    .t-raison { font-size: 11.5px; font-weight: 800; color: var(--sage-dark); margin: -6px 0 12px; }
 
     /* Chargement : la structure avant la donnée, jamais un zéro en attendant. */
     .skel { display: flex; flex-direction: column; gap: 10px; }
@@ -85,10 +99,22 @@ export class TileComponent {
   /** Complément du titre : un compte, un mois. Vide quand la tuile n'en a pas. */
   readonly badge = input('');
   readonly link = input('');
+  /** Pourquoi le contexte a remonté cette tuile. Vide quand rien ne l'a bougée. */
+  readonly raison = input('');
+  /** Repliée par le contexte : le titre reste, le contenu se déplie d'un tap. */
+  readonly collapsed = input(false);
   readonly state = input.required<TileState<unknown>>();
 
   readonly open = output<void>();
   readonly retry = output<void>();
+
+  /**
+   * Le dépliage est local et ne se retient pas : c'est un coup d'œil, pas un
+   * réglage. Le contexte reprend la main au prochain changement de moment.
+   */
+  private readonly opened = signal(false);
+  readonly folded = computed(() => this.collapsed() && !this.opened());
+  unfold(): void { this.opened.set(true); }
 
   // Les états sont dérivés plutôt que discriminés dans le gabarit : c'est ce qui
   // garantit qu'aucune branche ne lit `data` quand il n'y en a pas.

@@ -20,6 +20,10 @@ export abstract class HomeTile<T> {
 
   readonly tile = input.required<TileProvider>();
   readonly state = input.required<TileState<T>>();
+  /** Pourquoi le contexte a remonté cette tuile. Vide quand rien ne l'a bougée. */
+  readonly raison = input('');
+  /** Repliée par le contexte. Le cadre décide de la rouvrir, pas la tuile. */
+  readonly collapsed = input(false);
 
   readonly data = computed<T | null>(() => { const s = this.state(); return s.kind === 'ok' ? s.data : null; });
 }

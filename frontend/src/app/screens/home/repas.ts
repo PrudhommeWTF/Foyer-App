@@ -14,7 +14,7 @@ const SLOT = 'soir';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TileComponent, IconComponent, QuickAddComponent],
   template: `
-    <f-tile [title]="tile().title" [link]="tile().link" [state]="state()"
+    <f-tile [title]="tile().title" [link]="tile().link" [state]="state()" [raison]="raison()" [collapsed]="collapsed()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
       @if (data(); as d) {
         <div class="dish f-display">{{ d.name }}</div>

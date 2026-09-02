@@ -34,6 +34,7 @@ import { recipesRouter } from './recipes/routes';
 import { preserveShopping } from './shopping/repo';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
+import { loadRules, rulesPath } from './home/rules';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
@@ -494,6 +495,22 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
   }
   return out;
 }
+
+/**
+ * Les règles de contexte de l'accueil, telles qu'elles s'appliquent réellement.
+ *
+ * Relues à chaque appel : le fichier fait quelques kilo-octets, et pouvoir le
+ * modifier puis recharger la page sans redémarrer le service est précisément ce
+ * qu'on attend d'un réglage tenu dans un fichier.
+ */
+api.get('/home/rules', auth, (_req, res) => {
+  const outcome = loadRules(DATA_DIR);
+  if (outcome.errors.length) {
+    // eslint-disable-next-line no-console
+    console.warn(`[foyer] accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
+  }
+  res.json(outcome);
+});
 
 api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) => {
   const academie = String(req.query['academie'] || '').trim();

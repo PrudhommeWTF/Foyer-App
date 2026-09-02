@@ -18,7 +18,7 @@ import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
 import { UiState, initialUi } from './ui-state';
-import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
 import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { mealItemName, mealNames, recipeTime } from './meals';
@@ -169,6 +169,31 @@ export class FoyerStore {
     this.tick();
     return todayIn(this.timeZone);
   });
+
+  /**
+   * L'heure du foyer, HH:MM. Comme le jour, elle suit l'horloge interne : c'est
+   * elle qui fait passer l'accueil d'un moment de la journée au suivant sans
+   * qu'on recharge quoi que ce soit.
+   */
+  readonly nowHm = computed(() => {
+    this.tick();
+    try {
+      return new Intl.DateTimeFormat('en-GB', { timeZone: this.timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+    } catch {
+      const d = new Date();
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+  });
+
+  /** Le jour est-il férié en France métropolitaine ? Calculé, jamais listé. */
+  isHoliday(ds: string): boolean {
+    return frenchHolidays(parseInt(ds.slice(0, 4), 10)).some((h) => h.date === ds);
+  }
+
+  /** Le jour tombe-t-il dans les vacances scolaires de l'académie configurée ? */
+  isSchoolHoliday(ds: string): boolean {
+    return this.schoolHolidays().some((h) => ds >= h.start && ds <= h.end);
+  }
   /** ISO date → household numeric format (e.g. 24/07/2026). */
   fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
   /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */

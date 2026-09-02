@@ -10,7 +10,7 @@ import { HomeTile } from './base';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [TileComponent],
   template: `
-    <f-tile [title]="tile().title" [link]="tile().link" [state]="state()"
+    <f-tile [title]="tile().title" [link]="tile().link" [state]="state()" [raison]="raison()" [collapsed]="collapsed()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
       @if (data(); as d) {
         <div class="amt f-display">{{ eur(d.pending) }} € <span class="par-an">par an</span></div>
