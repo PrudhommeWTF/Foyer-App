@@ -145,6 +145,20 @@ fi
 rm -f "${DATA_DIR}/version"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "$APP_DIR"
 
+# Le helper root vit hors de $APP_DIR : la mise à jour ne recopiait donc que le
+# backend et l'app compilée, et laissait CE script dans la version posée par
+# install.sh, pour toujours. Autrement dit, aucune correction du script de mise
+# à jour ne pouvait jamais atteindre une machine autrement qu'à la main.
+# Remplacement par renommage et non par écrasement : bash lit son propre fichier
+# au fur et à mesure de l'exécution, réécrire celui qui tourne lui ferait
+# exécuter n'importe quoi. La version installée ici servira à la prochaine fois.
+HELPER=/usr/local/sbin/foyer-self-update.sh
+FRESH="$TMP/src/deploy/lxc/self-update.sh"
+if [ -f "$HELPER" ] && [ -f "$FRESH" ] && ! cmp -s "$FRESH" "$HELPER"; then
+  install -m 0755 -o root -g root "$FRESH" "${HELPER}.nouveau" && mv -f "${HELPER}.nouveau" "$HELPER"
+  echo "Helper de mise à jour actualisé : ${HELPER}"
+fi
+
 step "Redémarrage du service" "Redémarrage du service…"
 systemctl start foyer
 STOPPED=0
