@@ -1,5 +1,6 @@
 import { FileType, MealItem, Prio, Rayon, Recur, SchedType, ShopState } from './models';
-import { dstr } from './helpers';
+import { todayIn } from './helpers';
+import { HOUSEHOLD_TZ } from './constants';
 
 export interface IngrRow { id: string; val: string; }
 
@@ -123,7 +124,7 @@ export interface UiState {
 }
 
 export function initialUi(): UiState {
-  const today = dstr(new Date());
+  const today = todayIn(HOUSEHOLD_TZ);
   return {
     screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',

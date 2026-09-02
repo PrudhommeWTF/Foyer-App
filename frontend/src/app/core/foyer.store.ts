@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
+import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -17,8 +17,10 @@ import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
 import { UiState, initialUi } from './ui-state';
-import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
-import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
+import { CAL_KINDS, DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { eventsOn } from './agenda';
+import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
  * Octets vers base64, par tranches : `String.fromCharCode(...tableau)` dépasse la
@@ -80,6 +82,14 @@ export class FoyerStore {
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
 
+  /**
+   * Quand le document du foyer a été synchronisé avec le serveur, et ce qui
+   * empêche de le refaire. L'accueil s'en sert pour dire « dernière vue connue »
+   * plutôt que de présenter des données figées comme fraîches.
+   */
+  readonly docLoadedAt = signal('');
+  readonly docError = signal('');
+
   // Current user & member login accounts (admin-managed).
   readonly isAdmin = signal(false);
   readonly currentMemberId = signal<string | null>(null);
@@ -123,12 +133,26 @@ export class FoyerStore {
   // ---- regional formatting ----------------------------------------------
   // Foyer cible la France métropolitaine : locale et fuseau sont fixes.
   readonly locale = 'fr-FR';
-  readonly timeZone = 'Europe/Paris';
+  readonly timeZone = HOUSEHOLD_TZ;
+
+  /**
+   * Horloge du foyer.
+   *
+   * Sans elle, `todayStr()` est un `computed` qui appelle `new Date()` : aucun
+   * signal ne change, il ne se réévalue donc jamais, et une application laissée
+   * ouverte la nuit sur un iPad affiche encore la veille au matin.
+   *
+   * Une minute plutôt qu'un réveil calé sur minuit : c'est insensible aux
+   * changements d'heure, et sans effet mesurable, un jour inchangé rendant la
+   * même chaîne, ce qui arrête net la propagation.
+   */
+  private readonly tick = signal(0);
+  private advanceClock(): void { this.tick.update((v) => v + 1); }
+
   /** Real "today" (YYYY-MM-DD) in the household time zone. */
   readonly todayStr = computed(() => {
-    try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: this.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-    } catch { return dstr(new Date()); }
+    this.tick();
+    return todayIn(this.timeZone);
   });
   /** ISO date → household numeric format (e.g. 24/07/2026). */
   fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
@@ -181,10 +205,16 @@ export class FoyerStore {
     window.addEventListener('online', () => { this.shopOffline.set(false); void this.flushShopQueue(); });
     window.addEventListener('offline', () => this.shopOffline.set(true));
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible' || !this.authed()) return;
+      if (document.visibilityState !== 'visible') return;
+      // Un téléphone qui se réveille peut avoir dormi douze heures : l'horloge
+      // est remise à l'heure avant tout le reste, sinon l'écran affiche la veille
+      // le temps d'une minute.
+      this.advanceClock();
+      if (!this.authed()) return;
       void this.flushShopQueue();
       if (this.ui().screen === 'courses') void this.pollShopping();
     });
+    setInterval(() => this.advanceClock(), 60_000);
   }
 
   // ---- lifecycle / auth -------------------------------------------------
@@ -206,11 +236,36 @@ export class FoyerStore {
       try {
         await this.loadState();
         this.authed.set(true);
-      } catch {
-        this.api.token = null;
+      } catch (e) {
+        // Un serveur injoignable n'est pas une session invalide. Jeter le jeton
+        // dans ce cas renvoyait à l'écran de connexion pendant un simple
+        // redémarrage du conteneur, sans rien expliquer. La session est gardée,
+        // l'écran se rend, et chaque tuile dit qu'elle ne peut pas charger.
+        if (isOffline(e)) {
+          this.docError.set((e as Error).message);
+          this.authed.set(true);
+        } else {
+          this.api.token = null;
+        }
       }
     }
     this.ready.set(true);
+  }
+
+  /**
+   * Recharge le document du foyer. C'est ce que fait le « Réessayer » d'une
+   * tuile : la panne est signalée là où elle se voit, et se rattrape sans
+   * recharger l'application ni se reconnecter.
+   */
+  async reloadDocument(): Promise<void> {
+    try {
+      await this.loadState();
+    } catch (e) {
+      const msg = (e as Error).message;
+      this.docError.set(msg);
+      // eslint-disable-next-line no-console
+      console.error('[foyer] accueil : rechargement du document échoué : ' + msg);
+    }
   }
 
   async completeSetup(payload: SetupPayload): Promise<boolean> {
@@ -232,6 +287,8 @@ export class FoyerStore {
   private async loadState(): Promise<void> {
     const { state } = await this.api.getState();
     this._data.set(this.normalise(state));
+    this.docLoadedAt.set(new Date().toISOString());
+    this.docError.set('');
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
@@ -380,6 +437,8 @@ export class FoyerStore {
     this.api.token = null;
     this.authed.set(false);
     this._data.set(null);
+    this.docLoadedAt.set('');
+    this.docError.set('');
     this.ui.set(initialUi());
     this.isAdmin.set(false);
     this.currentMemberId.set(null);
@@ -463,8 +522,10 @@ export class FoyerStore {
     try {
       await this.api.putState(d);
       this.saveState.set('idle');
-    } catch {
+      this.docError.set('');
+    } catch (e) {
       this.saveState.set('error');
+      this.docError.set((e as Error).message);
     }
   }
 
@@ -664,7 +725,7 @@ export class FoyerStore {
 
   // ---- events -----------------------------------------------------------
   eventsForDay(ds: string): HouseholdState['events'] {
-    return (this._data()?.events || []).filter((e) => occursOn(e, ds)).slice().sort((a, b) => a.time.localeCompare(b.time));
+    return eventsOn(this._data()?.events || [], ds);
   }
   openEvent(): void {
     const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
@@ -1004,14 +1065,9 @@ export class FoyerStore {
   // le fromage et l'accompagnement.
 
   /** Intitulé d'un plat : le nom de la recette, ou le texte saisi. */
-  mealItemName(it: MealItem): string {
-    if (it.rid) { const r = this._data()?.recipes.find((x) => x.id === it.rid); return r ? r.name : 'Recette supprimée'; }
-    return it.text || '';
-  }
+  mealItemName(it: MealItem): string { return mealItemName(it, this._data()?.recipes || []); }
   /** Intitulés d'un créneau, dans l'ordre. Vide quand rien n'est prévu. */
-  mealNames(v?: MealValue): string[] {
-    return (v?.items || []).map((it) => this.mealItemName(it)).filter(Boolean);
-  }
+  mealNames(v?: MealValue): string[] { return mealNames(v, this._data()?.recipes || []); }
   /** Une ligne pour les vignettes et l'accueil : « Salade · Gratin · Tiramisu ». */
   mealLabel(v?: MealValue): string | null {
     const names = this.mealNames(v);
@@ -1533,11 +1589,7 @@ export class FoyerStore {
   }
 
   /** Durée totale d'une recette, pour les vignettes et l'accueil. */
-  recipeTime(r: { prepMin?: number | null; cookMin?: number | null }): string {
-    const total = (r.prepMin || 0) + (r.cookMin || 0);
-    if (!total) return '—';
-    return total < 60 ? total + ' min' : Math.floor(total / 60) + ' h' + (total % 60 ? ' ' + (total % 60) : '');
-  }
+  recipeTime(r: { prepMin?: number | null; cookMin?: number | null }): string { return recipeTime(r); }
   // ---- photos ------------------------------------------------------------
   // Une balise <img> ou un background CSS ne porte pas l'en-tête d'autorisation :
   // pointer directement /api/files renverrait 401. Le jeton dans l'URL est exclu

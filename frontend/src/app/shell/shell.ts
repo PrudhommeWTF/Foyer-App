@@ -9,7 +9,7 @@ import { RepairModal } from './repair-modal';
 import { FamilyModalComponent } from './family-modal';
 import { ProfileModalComponent } from './profile-modal';
 import { SearchModalComponent } from './search-modal';
-import { HomeScreen } from '../screens/home';
+import { HomeScreen } from '../screens/home/home';
 import { CalendarScreen } from '../screens/calendar';
 import { CoursesScreen } from '../screens/courses';
 import { TachesScreen } from '../screens/taches';
@@ -34,11 +34,18 @@ import { SettingsScreen } from '../screens/settings';
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
-      @if (!store.narrow()) { <app-sidebar /> }
+      @if (!store.narrow() && store.data()) { <app-sidebar /> }
       <div class="main">
-        <app-topbar />
+        @if (store.data()) { <app-topbar /> }
         <div class="content fscroll" [class.mobile-pad]="store.narrow()">
-          @switch (store.ui().screen) {
+          <!--
+            Sans document du foyer (serveur injoignable au démarrage), toutes les
+            destinations mènent à l'accueil : c'est le seul écran conçu pour dire
+            qu'il ne peut pas charger, et proposer de réessayer. Le reste du
+            châssis se tait plutôt que d'afficher une famille vide.
+          -->
+          @if (!store.data()) { <screen-home /> }
+          @else { @switch (store.ui().screen) {
             @case ('home') { <screen-home /> }
             @case ('calendar') { <screen-calendar /> }
             @case ('courses') { <screen-courses /> }
@@ -52,10 +59,10 @@ import { SettingsScreen } from '../screens/settings';
             @case ('planning') { <screen-planning /> }
             @case ('settings') { <screen-settings /> }
             @default { <screen-home /> }
-          }
+          } }
         </div>
       </div>
-      @if (store.narrow()) { <app-tabbar /> }
+      @if (store.narrow() && store.data()) { <app-tabbar /> }
     </div>
 
     @if (store.ui().genOpen) { <app-generate-modal /> }

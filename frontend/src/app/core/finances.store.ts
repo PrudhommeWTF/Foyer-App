@@ -142,6 +142,13 @@ export function fmtEuros(cents: number): string {
 export function fmtEurosInt(cents: number): string {
   return Math.round(cents / 100).toLocaleString('fr-FR');
 }
+/** « 2026-08 » vers « Août 2026 ». */
+export function frMonthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 /** Parse a typed amount into cents; null when nothing numeric was entered. */
 function parseEuros(v: string): number | null {
   const s = String(v ?? '').replace(/[\s  €]/g, '').replace(',', '.');
@@ -202,6 +209,8 @@ export class FinancesStore {
   readonly applyReport = signal<FinApplyReport | null>(null);
   readonly loaded = signal(false);
   readonly error = signal('');
+  /** Dernière synchronisation réussie du module, pour l'horodatage de l'accueil. */
+  readonly loadedAt = signal('');
 
   readonly ui = signal<FinancesUi>(initialUi(this.currentMonth()));
 
@@ -350,6 +359,7 @@ export class FinancesStore {
       if (b.months.length && !b.months.includes(this.ui().month)) this.patch({ month: b.months[0] });
       this.loaded.set(true);
       this.error.set('');
+      this.loadedAt.set(new Date().toISOString());
       // Rules are loaded up front: an operation's form names the rule that
       // decided its category, and that must not depend on visiting the tab.
       await Promise.all([this.reloadTransactions(), this.reloadSummary(), this.loadRules(), this.loadContracts()]);
@@ -369,7 +379,7 @@ export class FinancesStore {
     this.savings.set([]); this.savingsTotals.set({ pending: 0, done: 0, count: 0, openCount: 0 });
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
-    this.loaded.set(false); this.error.set('');
+    this.loaded.set(false); this.error.set(''); this.loadedAt.set('');
     this.ui.set(initialUi(this.currentMonth()));
   }
 
@@ -407,11 +417,18 @@ export class FinancesStore {
       this.error.set('');
     } catch (e) { this.error.set((e as Error).message); }
   }
-  readonly monthLabel = computed(() => {
-    const [y, m] = this.ui().month.split('-').map(Number);
-    const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  });
+  readonly monthLabel = computed(() => frMonthLabel(this.ui().month));
+
+  /**
+   * Le mois **en cours** du foyer et son libellé, pour l'accueil.
+   *
+   * Ils existent séparément de `monthLabel` et de `summary`, qui suivent le mois
+   * qu'on regarde dans l'écran Finances. Confondre les deux a fait afficher
+   * pendant des semaines les chiffres d'un mois d'archive sur la page d'accueil,
+   * avec une étiquette exacte et un chiffre hors sujet.
+   */
+  readonly homeMonth = computed(() => this.currentMonth());
+  readonly homeMonthLabel = computed(() => frMonthLabel(this.homeMonth()));
   readonly isCurrentMonth = computed(() => this.ui().month === this.currentMonth());
 
   // ---- transactions ------------------------------------------------------
