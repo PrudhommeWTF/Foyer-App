@@ -352,6 +352,32 @@ docker compose exec foyer printenv FOYER_VERSION # Docker
 tail -60 /var/lib/foyer/update.log
 ```
 
+### Le helper de mise à jour se met à jour tout seul
+
+Le script exécuté en root vit dans `/usr/local/sbin/foyer-self-update.sh`, hors
+du répertoire de l'application : une mise à jour ne recopie que le backend et
+l'app compilée. Il se remplace donc lui-même à chaque mise à jour réussie, sinon
+aucune correction du script ne pourrait jamais arriver sur une machine.
+
+La version installée sert à la mise à jour **suivante** (remplacer un script
+pendant qu'il s'exécute n'est pas une chose à faire à moitié : le remplacement
+se fait par renommage, et le processus en cours termine avec l'ancien).
+
+Si votre helper est antérieur à ce mécanisme, une fois suffit pour le rattraper :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/PrudhommeWTF/Foyer-App/main/deploy/lxc/self-update.sh \
+     -o /tmp/foyer-self-update.sh \
+  && install -m 0755 -o root -g root /tmp/foyer-self-update.sh /usr/local/sbin/foyer-self-update.sh \
+  && rm -f /tmp/foyer-self-update.sh
+```
+
+Relancer `deploy/lxc/install.sh` fait la même chose, en plus long.
+
+Les unités systemd (`foyer-update.path`, `foyer-update.service`) restent, elles,
+posées à l'installation : elles ne changent pas d'une version à l'autre, et si
+cela devait arriver un jour il faudra repasser par `install.sh`.
+
 Depuis l'application, l'écran *Paramètres* affiche l'étape qui a échoué et le
 message de la commande fautive (« Échec pendant « Téléchargement du code » :
 fatal: could not read Username… »), et garde le bouton « Vérifier les mises à
