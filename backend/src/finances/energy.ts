@@ -43,6 +43,60 @@ const toReading = (r: Row): Reading => ({
   kwh: r.kwh, kwhHp: r.kwh_hp, kwhHc: r.kwh_hc, cost: r.cost, notes: r.notes,
 });
 
+/**
+ * Au-delà de ce délai, un relevé est attendu.
+ *
+ * Un mois, et non la périodicité de facturation du contrat : celle-ci dit quand
+ * le fournisseur prélève, pas quand il est utile de lire le compteur. Sur un
+ * contrat facturé une fois l'an, attendre un an entre deux relevés reviendrait à
+ * découvrir la dérive quand il est trop tard pour agir, ce qui est exactement ce
+ * que ce module existe pour éviter.
+ */
+export const READING_DUE_DAYS = 30;
+
+/** Un compteur qu'il est temps de relire. */
+export interface ReadingDue {
+  contractId: number;
+  name: string;
+  provider: string;
+  /** Date du dernier relevé, ou null quand le compteur n'a jamais été lu. */
+  lastOn: string | null;
+  /** Jours écoulés depuis. Null quand il n'y a aucun relevé. */
+  daysSince: number | null;
+}
+
+/** Date du dernier relevé, par contrat. */
+export function lastReadingDates(): Map<number, string> {
+  return new Map((database.prepare(
+    'SELECT contract_id AS id, MAX(date) AS last FROM fin_readings GROUP BY contract_id',
+  ).all() as { id: number; last: string }[]).map((r) => [r.id, r.last]));
+}
+
+/**
+ * Les compteurs dont le relevé est attendu, du plus ancien au plus récent.
+ *
+ * Fonction pure : les contrats et les dates lui sont donnés, ce qui la rend
+ * vérifiable sans base de données. Un contrat résilié ne réclame rien.
+ */
+export function readingsDue(
+  contracts: { id: number; name: string; provider: string; kind: string; status: string }[],
+  last: Map<number, string>,
+  today: string,
+): ReadingDue[] {
+  const jours = (from: string): number =>
+    Math.max(0, Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000));
+  return contracts
+    .filter((c) => c.kind === 'energie' && c.status === 'actif')
+    .map((c) => {
+      const lastOn = last.get(c.id) ?? null;
+      return { contractId: c.id, name: c.name, provider: c.provider, lastOn, daysSince: lastOn ? jours(lastOn) : null };
+    })
+    // Jamais relevé, ou relevé il y a trop longtemps. Un compteur posé hier
+    // n'est pas en retard : il n'a simplement pas encore d'histoire.
+    .filter((d) => d.daysSince === null || d.daysSince >= READING_DUE_DAYS)
+    .sort((a, b) => (b.daysSince ?? Number.MAX_SAFE_INTEGER) - (a.daysSince ?? Number.MAX_SAFE_INTEGER));
+}
+
 export function listReadings(contractId: number): Reading[] {
   return (database.prepare('SELECT * FROM fin_readings WHERE contract_id = ? ORDER BY date, id')
     .all(contractId) as Row[]).map(toReading);

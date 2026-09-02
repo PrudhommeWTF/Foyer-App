@@ -16,7 +16,7 @@ Angular 21 · Node/Express · SQLite · Docker
 
 | Module | Description |
 |---|---|
-| 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. |
+| 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. Chaque tuile est fournie par son module et distingue quatre états : chargement, donnée, **rien à afficher** et **panne** (avec sa cause et un « Réessayer »). Une tuile en erreur n'empêche pas les autres de fonctionner, et aucune n'affiche `0` à la place d'une valeur inconnue. La journée montre aussi fériés, vacances scolaires, anniversaires et échéances ; les tâches, ce qui est dû **aujourd'hui** ; le dîner, les couverts et les **alertes alimentaires**. S'y ajoutent l'emploi du temps du jour, les **échéances de contrat** (une résiliation manquée coûte une année), les **relevés de compteur attendus** et les pistes d'économies ouvertes. Un module jamais servi propose son geste de démarrage plutôt qu'un zéro. **Les gestes du quotidien se font depuis l'accueil** : cocher, reporter à demain, créer une tâche ou un article en une ligne, remplacer le dîner, saisir un relevé ou une dépense en espèces, avec **annulation** de quelques secondes sur tout ce qui disparaît. L'ordre des tuiles suit le **moment de la journée et le type de jour** (école, week-end, vacances, férié), selon des règles tenues dans un fichier modifiable sans recompiler ; une tuile déclassée est repliée, jamais retirée, et dit pourquoi elle a bougé. Voir `docs/accueil-contrat-de-tuile.md` et `docs/accueil-contexte.md`. |
 | 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts) et **échéances de contrat**. Partage par **flux ICS** (Google/Apple Agenda). |
 | 🛒 **Courses** | Multi-listes, rayons **réordonnables** (l'ordre des allées de votre magasin), coche **en un tap**, trois états (à prendre, dans le panier, indisponible), articles pris regroupés en bas, suggestions dès les premières lettres, génération depuis le planning repas, **export CSV** lisible par un tableur français, **tâche « faire les courses »** qui ouvre la liste et compte ce qui reste à prendre. **Écriture article par article** : deux téléphones peuvent cocher en même temps sans que l'un écrase l'autre, et les coches faites **hors ligne** repartent au retour du réseau. **Génération depuis les repas** : les ingrédients de la semaine sont lus, additionnés, mis à l'échelle des couverts et rangés par rayon, avec un **rapport affiché avant d'écrire** (à ajouter, à compléter, à retirer, écarté comme fond de placard, non reconnu). Une régénération ne défait jamais un ajout manuel ni un article déjà coché. **« J'ai déjà ça »** : un geste sur une ligne du rapport l'écarte et retient la date ; l'article revient tout seul au bout de trois semaines, et le recocher efface la note. Pas d'inventaire à tenir. |
 | ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
@@ -49,6 +49,11 @@ Foyer-App/
 - Le **backend** stocke l'état du foyer comme un document JSON versionné en **SQLite**
   (`GET/PUT /api/state`), avec authentification **JWT** (mots de passe **bcrypt**).
   Un seul conteneur, idéal pour l'auto-hébergement.
+- Le document s'écrit avec **contrôle de version** : un client annonce la version sur
+  laquelle il a travaillé, le serveur refuse (409) d'écrire par-dessus plus récent et lui
+  renvoie son document, le client y **rejoue** ses modifications et réessaie. À deux sur
+  l'application, personne ne perd son travail parce que l'autre a enregistré une seconde
+  plus tôt.
 - Le module **Finances** fait exception : ses données vivent dans des **tables relationnelles
   dédiées** (`fin_*`, même fichier SQLite), servies par `/api/finances/*` avec des opérations
   granulaires. Milliers d'opérations, agrégats côté serveur, pas de « dernier arrivé gagne ».

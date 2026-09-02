@@ -89,6 +89,8 @@ input, textarea, select, button { font-family: var(--font-body); }
 @keyframes ffade { 0% { opacity: 0; } 100% { opacity: 1; } }
 @keyframes fslide { 0% { transform: translateX(100%); } 100% { transform: translateX(0); } }
 @keyframes ftoastL { 0% { transform: translateY(16px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+/* Squelette de tuile : la structure de l'accueil se dessine avant ses données. */
+@keyframes fskel { 0%, 100% { opacity: .55; } 50% { opacity: .95; } }
 
 /* ============================================================
    Reusable primitives

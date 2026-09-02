@@ -9,6 +9,9 @@ import { dashboard } from './dashboard';
 import { attachmentsRouter } from './attachments-routes';
 import * as backup from './backup';
 import { contractsRouter } from './contracts-routes';
+import * as contracts from './contracts';
+import * as energy from './energy';
+import * as savings from './savings';
 import { energyRouter } from './energy-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
@@ -217,6 +220,51 @@ export function financesRouter(): Router {
       coverage: repo.accountCoverage(),
       months: repo.availableMonths(),
       aliases: repo.listAliases(),
+    });
+  }));
+
+  /**
+   * Ce que le module publie pour l'accueil, en un seul aller-retour.
+   *
+   * Séparé de `/bootstrap` à dessein : l'accueil payait jusqu'ici le démarrage
+   * complet du module (comptes, catégories, soldes, opérations, règles,
+   * contrats) pour afficher un chiffre, sur l'écran le plus ouvert de
+   * l'application. Ici, une seule requête, et rien de plus que ce qui est
+   * affiché.
+   *
+   * Le mois est donné par le client : c'est lui qui connaît le fuseau du foyer,
+   * et c'est ce qui fait que l'accueil bascule seul à minuit.
+   */
+  r.get('/home', handler((req, res) => {
+    const month = String(req.query['month'] || '').trim();
+    if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
+    const today = new Date().toISOString().slice(0, 10);
+    const all = contracts.listContracts();
+    const accounts = repo.listAccounts();
+    const balances = repo.accountBalances();
+    // Le solde des comptes courants, et lui seul : l'épargne et le crédit
+    // répondent à d'autres questions que « est-ce que je peux dépenser ».
+    const courants = accounts.filter((a) => a.kind === 'courant' && !a.archived);
+    res.json({
+      home: {
+        month,
+        // Zéro compte veut dire « module jamais servi ». L'accueil en fait un
+        // état vide, surtout pas un solde à zéro.
+        accounts: accounts.length,
+        summary: monthSummary(month, today),
+        // Les échéances alimentent l'accueil, les notifications et le
+        // calendrier : les servir ici évite de charger tout le module pour elles.
+        deadlines: contracts.deadlines(today),
+        contracts: all.length,
+        savings: savings.totals(),
+        currentBalance: courants.length ? courants.reduce((a, c) => a + (balances[c.id] ?? 0), 0) : null,
+        // De quoi saisir une dépense en espèces sans charger tout le module.
+        currentAccounts: courants.map((c) => ({ id: c.id, name: c.name })),
+        energy: {
+          contracts: all.filter((c) => c.kind === 'energie').length,
+          due: energy.readingsDue(all, energy.lastReadingDates(), today),
+        },
+      },
     });
   }));
 

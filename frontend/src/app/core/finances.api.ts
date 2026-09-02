@@ -80,6 +80,33 @@ export interface FinMonthSummary {
   incomplete: boolean;
 }
 
+/** Un compteur dont le relevé est attendu. */
+export interface FinReadingDue {
+  contractId: number;
+  name: string;
+  provider: string;
+  /** Date du dernier relevé, ou null quand le compteur n'a jamais été lu. */
+  lastOn: string | null;
+  /** Jours écoulés depuis. Null quand il n'y a aucun relevé. */
+  daysSince: number | null;
+}
+
+/** La contribution du module Finances à l'accueil. */
+export interface FinHome {
+  month: string;
+  /** Comptes déclarés. Zéro veut dire « module jamais servi », pas « zéro euro ». */
+  accounts: number;
+  summary: FinMonthSummary;
+  deadlines: FinDeadline[];
+  contracts: number;
+  savings: FinSavingsTotals;
+  /** Solde des comptes courants. Null quand il n'y en a aucun. */
+  currentBalance: number | null;
+  /** Les comptes courants eux-mêmes, pour saisir une dépense sans quitter l'accueil. */
+  currentAccounts: { id: number; name: string }[];
+  energy: { contracts: number; due: FinReadingDue[] };
+}
+
 export interface FinBootstrap {
   accounts: FinAccount[]; categories: FinCategory[]; balances: Record<number, number>;
   ignoredOps: Record<number, number>;
@@ -114,6 +141,17 @@ export class FinancesApi {
   private api = inject(ApiService);
 
   bootstrap(): Promise<FinBootstrap> { return this.api.request('finances/bootstrap'); }
+
+  /**
+   * Ce que le module publie pour l'accueil, en un aller-retour.
+   *
+   * Distinct de `bootstrap` : l'accueil payait le démarrage complet du module
+   * pour afficher un chiffre. Le mois est passé par le client, seul à connaître
+   * le fuseau du foyer, ce qui fait que l'accueil bascule seul à minuit.
+   */
+  home(month: string): Promise<{ home: FinHome }> {
+    return this.api.request('finances/home?month=' + encodeURIComponent(month));
+  }
 
   createAccount(p: AccountPayload): Promise<{ account: FinAccount }> {
     return this.api.request('finances/accounts', { method: 'POST', body: JSON.stringify(p) });

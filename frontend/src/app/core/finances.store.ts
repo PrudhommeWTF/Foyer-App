@@ -3,7 +3,7 @@ import {
   AccountKind, AccountPayload, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
-  FinAttachment, FinDeadline, FinEnergySummary, FinImport, FinImportPreview, FinOwnerKind,
+  FinAttachment, FinDeadline, FinEnergySummary, FinHome, FinImport, FinImportPreview, FinOwnerKind,
   FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
   FinLoanView, FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
@@ -11,6 +11,7 @@ import {
 import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
 import { CAL_KINDS } from './constants';
+import { deadlineLabel, shortDeadlineLabel } from './deadlines';
 
 /**
  * Finances state. Unlike FoyerStore, which holds the whole household as one
@@ -142,6 +143,13 @@ export function fmtEuros(cents: number): string {
 export function fmtEurosInt(cents: number): string {
   return Math.round(cents / 100).toLocaleString('fr-FR');
 }
+/** « 2026-08 » vers « Août 2026 ». */
+export function frMonthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 /** Parse a typed amount into cents; null when nothing numeric was entered. */
 function parseEuros(v: string): number | null {
   const s = String(v ?? '').replace(/[\s  €]/g, '').replace(',', '.');
@@ -202,6 +210,21 @@ export class FinancesStore {
   readonly applyReport = signal<FinApplyReport | null>(null);
   readonly loaded = signal(false);
   readonly error = signal('');
+  /** Dernière synchronisation réussie du module, pour l'horodatage de l'accueil. */
+  readonly loadedAt = signal('');
+
+  /**
+   * Ce que le module publie pour l'accueil, chargé séparément du reste.
+   *
+   * L'accueil déclenchait `init()`, c'est-à-dire le démarrage complet du module
+   * (comptes, catégories, soldes, opérations, règles, contrats), pour afficher
+   * un chiffre sur l'écran le plus ouvert de l'application. `loadHome()` fait
+   * une requête et rapporte exactement ce qui s'affiche, plus les échéances dont
+   * vivent les notifications et le calendrier.
+   */
+  readonly home = signal<FinHome | null>(null);
+  readonly homeError = signal('');
+  readonly homeLoadedAt = signal('');
 
   readonly ui = signal<FinancesUi>(initialUi(this.currentMonth()));
 
@@ -242,17 +265,9 @@ export class FinancesStore {
     return out;
   }
 
-  /** Libellés des échéances, partagés par les notifications, les tâches et l'écran. */
-  private deadlineLabel(kind: string): string {
-    return kind === 'preavis' ? 'Dernier jour pour résilier'
-      : kind === 'renouvellement' ? 'Reconduction tacite'
-      : 'Fin du contrat';
-  }
-
-  /** Version courte : une case de calendrier fait quelques dizaines de pixels. */
-  private shortDeadlineLabel(kind: string): string {
-    return kind === 'preavis' ? 'Résilier' : kind === 'renouvellement' ? 'Reconduction' : 'Fin';
-  }
+  // Les libellés d'échéance vivent dans core/deadlines.ts : ils sont lus par les
+  // notifications, le calendrier, les tâches et la tuile d'accueil, et une seule
+  // écriture est la seule façon qu'ils disent partout la même chose.
 
   /** Repères de calendrier, un par échéance à venir. */
   private deadlineDayExtras(): Record<string, DayExtra[]> {
@@ -265,7 +280,7 @@ export class FinancesStore {
     for (const d of this.deadlines()) {
       const item: DayExtra = {
         kind: 'echeance',
-        label: `${this.shortDeadlineLabel(d.kind)} : ${d.contractName}`,
+        label: `${shortDeadlineLabel(d.kind)} : ${d.contractName}`,
         color: CAL_KINDS['echeance'].color,
         // Le type est déjà dans le libellé : le complément se réduit au
         // fournisseur, sans quoi il mange la place et tronque l'essentiel.
@@ -294,14 +309,82 @@ export class FinancesStore {
       }));
   }
 
-  /** Copier une échéance dans les tâches, à la demande et une seule fois. */
-  taskFromDeadline(contractId: number, kind: string, date: string): void {
-    const c = this.contracts().find((x) => x.id === contractId);
-    if (!c) return;
-    this.foyer.addExternalTask(`${this.deadlineLabel(kind)} : ${c.name}`, date, c.memberIds[0] ?? null);
+  /**
+   * Copier une échéance dans les tâches : « j'ai vu, je m'en occupe ».
+   *
+   * L'échéance porte tout ce qu'il faut. Lire la liste des contrats, comme
+   * auparavant, rendait la main en silence partout où elle n'était pas chargée,
+   * ce qui est précisément le cas depuis l'accueil.
+   */
+  taskFromDeadline(d: FinDeadline): void {
+    this.foyer.addExternalTask(`${deadlineLabel(d.kind)} : ${d.contractName}`, d.date, d.memberIds[0] ?? null);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
+
+  // ---- gestes rapides ------------------------------------------------------
+  // Ils appellent l'API du module, ils ne réimplémentent rien. Ils ne sont pas
+  // optimistes, et c'est délibéré : un total de dépenses qui bouge puis revient
+  // en arrière est pire qu'un total qui arrive une seconde plus tard. Le retour
+  // immédiat est donné par le formulaire, qui se ferme, et par le toast.
+
+  /** Un geste rapide est en cours. Le formulaire s'y accroche pour ne pas partir deux fois. */
+  readonly quickBusy = signal(false);
+
+  /**
+   * Une dépense en espèces, saisie depuis l'accueil. Sans catégorie : la ranger
+   * est le travail des règles et de l'écran Finances, pas d'un geste de cinq
+   * secondes fait dans une file d'attente.
+   */
+  async quickExpense(accountId: number, amount: string, label: string): Promise<void> {
+    if (this.quickBusy()) return;
+    this.quickBusy.set(true);
+    try {
+      const { transaction } = await this.api.createTransaction({
+        accountId, date: this.foyer.todayStr(), amount: '-' + amount.trim().replace(/^[-+]/, ''),
+        kind: 'depense', label: label.trim() || 'Espèces', categoryId: null,
+        notes: '', cleared: true,
+      });
+      await this.loadHome(this.homeMonth());
+      this.foyer.toastWithUndo('Dépense enregistrée', () => void this.undoTransaction(transaction.id));
+    } catch (e) {
+      this.foyer.toast((e as Error).message);
+    } finally {
+      this.quickBusy.set(false);
+    }
+  }
+
+  /**
+   * Retire une opération que l'on vient de créer. C'est la seule suppression
+   * permise depuis l'accueil, et elle ne peut viser que cet identifiant-là.
+   */
+  private async undoTransaction(id: number): Promise<void> {
+    try {
+      await this.api.deleteTransaction(id);
+      await this.loadHome(this.homeMonth());
+      this.foyer.toast('Dépense annulée');
+    } catch (e) {
+      this.foyer.toast('Annulation impossible : ' + (e as Error).message);
+    }
+  }
+
+  /** Un relevé de compteur, saisi depuis l'accueil quand la tuile le réclame. */
+  async quickReading(contractId: number, indexTotal: string): Promise<void> {
+    if (this.quickBusy()) return;
+    this.quickBusy.set(true);
+    try {
+      await this.api.createReading({
+        contractId, date: this.foyer.todayStr(), indexTotal: indexTotal.trim(),
+        indexHp: '', indexHc: '', kwh: '', kwhHp: '', kwhHc: '', cost: '', notes: '',
+      });
+      await this.loadHome(this.homeMonth());
+      this.foyer.toast('Relevé enregistré');
+    } catch (e) {
+      this.foyer.toast((e as Error).message);
+    } finally {
+      this.quickBusy.set(false);
+    }
+  }
 
   /** Current month (YYYY-MM) in the household time zone. */
   private currentMonth(): string { return this.foyer.todayStr().slice(0, 7); }
@@ -350,11 +433,35 @@ export class FinancesStore {
       if (b.months.length && !b.months.includes(this.ui().month)) this.patch({ month: b.months[0] });
       this.loaded.set(true);
       this.error.set('');
+      this.loadedAt.set(new Date().toISOString());
       // Rules are loaded up front: an operation's form names the rule that
       // decided its category, and that must not depend on visiting the tab.
       await Promise.all([this.reloadTransactions(), this.reloadSummary(), this.loadRules(), this.loadContracts()]);
     } catch (e) {
       this.error.set((e as Error).message);
+    }
+  }
+
+  /**
+   * Charge la contribution du module à l'accueil. Appelée par le tableau de
+   * bord, et par lui seul : ouvrir l'écran Finances passe toujours par `init()`.
+   *
+   * Elle alimente au passage `currentSummary` et `deadlines`, dont vivent les
+   * notifications et les repères du calendrier : sans cela, ils ne
+   * fonctionneraient plus qu'après une visite dans l'écran Finances.
+   */
+  async loadHome(month: string): Promise<void> {
+    try {
+      const { home } = await this.api.home(month);
+      this.home.set(home);
+      this.currentSummary.set(home.summary);
+      this.deadlines.set(home.deadlines);
+      this.homeLoadedAt.set(new Date().toISOString());
+      this.homeError.set('');
+    } catch (e) {
+      this.homeError.set((e as Error).message);
+      // eslint-disable-next-line no-console
+      console.error('[foyer] accueil : chargement des finances échoué : ' + (e as Error).message);
     }
   }
 
@@ -369,9 +476,13 @@ export class FinancesStore {
     this.savings.set([]); this.savingsTotals.set({ pending: 0, done: 0, count: 0, openCount: 0 });
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
-    this.loaded.set(false); this.error.set('');
+    this.loaded.set(false); this.error.set(''); this.loadedAt.set('');
+    this.home.set(null); this.homeError.set(''); this.homeLoadedAt.set('');
     this.ui.set(initialUi(this.currentMonth()));
   }
+
+  /** Les repères de calendrier des échéances, publiés tels quels pour l'accueil. */
+  readonly deadlineExtras = computed(() => this.deadlineDayExtras());
 
   private async refreshReference(): Promise<void> {
     const b = await this.api.bootstrap();
@@ -407,11 +518,18 @@ export class FinancesStore {
       this.error.set('');
     } catch (e) { this.error.set((e as Error).message); }
   }
-  readonly monthLabel = computed(() => {
-    const [y, m] = this.ui().month.split('-').map(Number);
-    const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  });
+  readonly monthLabel = computed(() => frMonthLabel(this.ui().month));
+
+  /**
+   * Le mois **en cours** du foyer et son libellé, pour l'accueil.
+   *
+   * Ils existent séparément de `monthLabel` et de `summary`, qui suivent le mois
+   * qu'on regarde dans l'écran Finances. Confondre les deux a fait afficher
+   * pendant des semaines les chiffres d'un mois d'archive sur la page d'accueil,
+   * avec une étiquette exacte et un chiffre hors sujet.
+   */
+  readonly homeMonth = computed(() => this.currentMonth());
+  readonly homeMonthLabel = computed(() => frMonthLabel(this.homeMonth()));
   readonly isCurrentMonth = computed(() => this.ui().month === this.currentMonth());
 
   // ---- transactions ------------------------------------------------------

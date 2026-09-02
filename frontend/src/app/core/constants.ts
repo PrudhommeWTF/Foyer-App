@@ -7,6 +7,13 @@ export const DATEFMT_ORDER: Record<string, DateOrder> = {
   'JJ/MM/AAAA': 'dmy', 'MM/JJ/AAAA': 'mdy', 'AAAA-MM-JJ': 'ymd',
 };
 
+/**
+ * Fuseau du foyer. Foyer cible la France métropolitaine : il est fixe, comme la
+ * locale et la devise. Il est ici plutôt que dans le store parce que le calcul
+ * du jour courant en a besoin avant qu'aucun service ne soit construit.
+ */
+export const HOUSEHOLD_TZ = 'Europe/Paris';
+
 export const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 /** `at` est l'heure proposée à l'agenda quand un repas y est ajouté. */

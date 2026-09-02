@@ -1,5 +1,24 @@
 import { Injectable } from '@angular/core';
 import { HouseholdState, ShopItem } from './models';
+import type { RulesOutcome } from './home-context';
+
+/**
+ * Erreur d'appel qui porte le code HTTP. `status` vaut 0 quand le serveur n'a
+ * pas répondu du tout : réseau coupé, service arrêté, conteneur en train de
+ * redémarrer. C'est ce qui sépare « votre session a expiré » de « le serveur ne
+ * répond pas », et donc ce qui évite de déconnecter quelqu'un parce que le
+ * backend redémarre.
+ */
+export class ApiError extends Error {
+  /** Corps JSON de la réponse, quand il y en a un. Un 409 y porte le document du serveur. */
+  constructor(message: string, readonly status: number, readonly body?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** Vrai quand le serveur n'a pas répondu, par opposition à un refus de sa part. */
+export const isOffline = (e: unknown): boolean => e instanceof ApiError && e.status === 0;
 
 export interface AuthUser { email: string; name: string; memberId: string | null; }
 export interface LoginResult { token: string; user: AuthUser; }
@@ -90,6 +109,24 @@ export class ApiService {
   /** Absolute URL of an API path (base href aware). */
   absolute(path: string): string { return this.base + path; }
 
+  /** Un appel réseau dont l'échec de transport devient une ApiError de statut 0. */
+  private async send(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch {
+      throw new ApiError('Le serveur ne répond pas. Vérifiez que le service Foyer est démarré.', 0);
+    }
+  }
+
+  /** Convertit une réponse en échec, en relayant le message du serveur tel quel. */
+  private async fail(res: Response): Promise<never> {
+    let msg = `Erreur ${res.status}`;
+    let body: unknown;
+    try { body = await res.json(); msg = (body as { error?: string })?.error || msg; }
+    catch { /* corps illisible : le code suffit */ }
+    throw new ApiError(msg, res.status, body);
+  }
+
   /**
    * Fetch a file endpoint with the session token and hand back a blob. Used for
    * the finances CSV export: a plain <a href> would not carry the Authorization
@@ -98,12 +135,8 @@ export class ApiService {
   async download(path: string): Promise<Blob> {
     const headers: Record<string, string> = {};
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await fetch(this.base + path, { headers });
-    if (!res.ok) {
-      let msg = `Erreur ${res.status}`;
-      try { msg = (await res.json()).error || msg; } catch { /* ignore */ }
-      throw new Error(msg);
-    }
+    const res = await this.send(this.base + path, { headers });
+    if (!res.ok) await this.fail(res);
     return res.blob();
   }
 
@@ -114,24 +147,16 @@ export class ApiService {
   async upload<T>(path: string, file: File): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await fetch(this.base + path, { method: 'POST', headers, body: file });
-    if (!res.ok) {
-      let msg = `Erreur ${res.status}`;
-      try { msg = (await res.json()).error || msg; } catch { /* ignore */ }
-      throw new Error(msg);
-    }
+    const res = await this.send(this.base + path, { method: 'POST', headers, body: file });
+    if (!res.ok) await this.fail(res);
     return res.json() as Promise<T>;
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string>) };
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await fetch(this.base + path, { ...init, headers });
-    if (!res.ok) {
-      let msg = `Erreur ${res.status}`;
-      try { msg = (await res.json()).error || msg; } catch { /* ignore */ }
-      throw new Error(msg);
-    }
+    const res = await this.send(this.base + path, { ...init, headers });
+    if (!res.ok) await this.fail(res);
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
@@ -178,6 +203,9 @@ export class ApiService {
   icsRegenerate(): Promise<{ token: string }> { return this.request('calendar/ics/regenerate', { method: 'POST' }); }
 
   /** Version que le serveur exécute. Sans appel sortant, contrairement à updateCheck. */
+  /** Les règles de contexte de l'accueil, telles qu'elles s'appliquent réellement. */
+  homeRules(): Promise<RulesOutcome> { return this.request('home/rules'); }
+
   systemVersion(): Promise<{ current: string; selfUpdate: boolean; repo: string }> { return this.request('system/version'); }
   updateCheck(): Promise<UpdateInfo> { return this.request('system/update-check'); }
   startSystemUpdate(): Promise<{ started?: boolean; error?: string }> { return this.request('system/update', { method: 'POST' }); }
@@ -187,8 +215,13 @@ export class ApiService {
     return this.request('state');
   }
 
-  putState(state: HouseholdState): Promise<{ version: number }> {
-    return this.request('state', { method: 'PUT', body: JSON.stringify({ state }) });
+  /**
+   * Enregistre le document. `version` est celle sur laquelle ce client a
+   * travaillé : le serveur refuse (409) d'écrire par-dessus plus récent, et
+   * renvoie alors son document pour que l'appelant rejoue dessus.
+   */
+  putState(state: HouseholdState, version?: number): Promise<{ version: number }> {
+    return this.request('state', { method: 'PUT', body: JSON.stringify({ state, version }) });
   }
 
   // ---- liste de courses --------------------------------------------------

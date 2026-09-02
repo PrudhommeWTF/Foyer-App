@@ -1,5 +1,6 @@
 import { FileType, MealItem, Prio, Rayon, Recur, SchedType, ShopState } from './models';
-import { dstr } from './helpers';
+import { todayIn } from './helpers';
+import { HOUSEHOLD_TZ } from './constants';
 
 export interface IngrRow { id: string; val: string; }
 
@@ -9,6 +10,8 @@ export interface UiState {
   selDay: string;
   moreOpen: boolean;
   toast: string;
+  /** Le toast en cours propose-t-il de revenir en arrière ? */
+  toastUndo: boolean;
   notifOpen: boolean;
   addMenuOpen: boolean;
   searchOpen: boolean;
@@ -123,9 +126,9 @@ export interface UiState {
 }
 
 export function initialUi(): UiState {
-  const today = dstr(new Date());
+  const today = todayIn(HOUSEHOLD_TZ);
   return {
-    screen: 'home', selDay: today, moreOpen: false, toast: '', notifOpen: false, addMenuOpen: false,
+    screen: 'home', selDay: today, moreOpen: false, toast: '', toastUndo: false, notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,

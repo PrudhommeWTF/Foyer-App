@@ -773,7 +773,7 @@ export class FinancesContractsTab {
    */
   makeTask(event: Event, d: FinDeadline): void {
     event.stopPropagation();
-    this.store.taskFromDeadline(d.contractId, d.kind, d.date);
+    this.store.taskFromDeadline(d);
   }
 
   /** Une valeur absente reste vide : un signe de remplacement ne dit rien de plus. */

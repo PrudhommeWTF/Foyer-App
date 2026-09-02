@@ -124,3 +124,23 @@ export function ageOn(birthday: string, ds: string): number | null {
 
 /** Nombre optionnel vers champ de saisie : null devient vide, pas « null ». */
 export function num(v: number | null | undefined): string { return v == null ? '' : String(v); }
+
+/**
+ * Jour courant dans un fuseau donné, au format AAAA-MM-JJ.
+ *
+ * Le fuseau du foyer, et non celui du navigateur : un téléphone resté à l'heure
+ * d'un autre pays afficherait sinon la veille ou le lendemain. Le repli sur
+ * l'heure locale ne sert qu'aux environnements sans base de fuseaux.
+ */
+export function todayIn(timeZone: string, at: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+  } catch { return dstr(at); }
+}
+
+/** Décalage en jours sur une date ISO. Le calendrier local, pas l'arithmétique en millisecondes. */
+export function addDaysIso(iso: string, n: number): string {
+  const d = parseDay(iso);
+  d.setDate(d.getDate() + n);
+  return dstr(d);
+}

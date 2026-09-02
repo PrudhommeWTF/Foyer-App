@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo } from './api.service';
+import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -12,13 +13,15 @@ import { parseQuery, searchRecipes } from './recipe-search';
 import { readRecipeText } from './recipe-text';
 import { paxLabel, presenceAt, weekSlot } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
-import { Allergene } from './articles';
+import { Allergene, normaliseName } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
 import { UiState, initialUi } from './ui-state';
-import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, occursOn, parseDay, uid, weekDates } from './helpers';
-import { CAL_KINDS, DATEFMT_ORDER, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
+import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
+import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
  * Octets vers base64, par tranches : `String.fromCharCode(...tableau)` dépasse la
@@ -56,11 +59,25 @@ function loadShopQueue(): ShopOp[] {
   try { const v = JSON.parse(localStorage.getItem(SHOP_QUEUE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
-/** Cadence de sondage tant que l'écran Courses est visible. */
-const SHOP_POLL_MS = 5000;
+/** Durée d'un toast simple, et celle d'un toast qui propose de revenir en arrière. */
+const TOAST_MS = 2600;
+const UNDO_MS = 7000;
 
-export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
-export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
+/** Délai avant de retenter un enregistrement que le réseau a fait échouer. */
+const SAVE_RETRY_MS = 8000;
+
+/**
+ * Cadence de sondage de la liste de courses, selon l'écran.
+ *
+ * En magasin, la coche de l'autre doit apparaître tout de suite. Sur l'accueil,
+ * savoir à quinze secondes près ce qui reste à prendre suffit largement, et
+ * c'est l'écran qui reste ouvert toute la journée : la même cadence y serait
+ * payée en batterie sans rien apporter.
+ */
+const SHOP_POLL_MS = 5000;
+const HOME_POLL_MS = 15000;
+
+export type { DayExtra, SchoolHoliday } from './agenda';
 export interface SearchHit { kind: string; icon: string; color: string; title: string; sub: string; screen: string; id?: string; }
 
 type SaveState = 'idle' | 'saving' | 'error';
@@ -79,6 +96,14 @@ export class FoyerStore {
   readonly allowSignup = signal(true);
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
+
+  /**
+   * Quand le document du foyer a été synchronisé avec le serveur, et ce qui
+   * empêche de le refaire. L'accueil s'en sert pour dire « dernière vue connue »
+   * plutôt que de présenter des données figées comme fraîches.
+   */
+  readonly docLoadedAt = signal('');
+  readonly docError = signal('');
 
   // Current user & member login accounts (admin-managed).
   readonly isAdmin = signal(false);
@@ -123,13 +148,52 @@ export class FoyerStore {
   // ---- regional formatting ----------------------------------------------
   // Foyer cible la France métropolitaine : locale et fuseau sont fixes.
   readonly locale = 'fr-FR';
-  readonly timeZone = 'Europe/Paris';
+  readonly timeZone = HOUSEHOLD_TZ;
+
+  /**
+   * Horloge du foyer.
+   *
+   * Sans elle, `todayStr()` est un `computed` qui appelle `new Date()` : aucun
+   * signal ne change, il ne se réévalue donc jamais, et une application laissée
+   * ouverte la nuit sur un iPad affiche encore la veille au matin.
+   *
+   * Une minute plutôt qu'un réveil calé sur minuit : c'est insensible aux
+   * changements d'heure, et sans effet mesurable, un jour inchangé rendant la
+   * même chaîne, ce qui arrête net la propagation.
+   */
+  private readonly tick = signal(0);
+  private advanceClock(): void { this.tick.update((v) => v + 1); }
+
   /** Real "today" (YYYY-MM-DD) in the household time zone. */
   readonly todayStr = computed(() => {
-    try {
-      return new Intl.DateTimeFormat('en-CA', { timeZone: this.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-    } catch { return dstr(new Date()); }
+    this.tick();
+    return todayIn(this.timeZone);
   });
+
+  /**
+   * L'heure du foyer, HH:MM. Comme le jour, elle suit l'horloge interne : c'est
+   * elle qui fait passer l'accueil d'un moment de la journée au suivant sans
+   * qu'on recharge quoi que ce soit.
+   */
+  readonly nowHm = computed(() => {
+    this.tick();
+    try {
+      return new Intl.DateTimeFormat('en-GB', { timeZone: this.timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+    } catch {
+      const d = new Date();
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+  });
+
+  /** Le jour est-il férié en France métropolitaine ? Calculé, jamais listé. */
+  isHoliday(ds: string): boolean {
+    return frenchHolidays(parseInt(ds.slice(0, 4), 10)).some((h) => h.date === ds);
+  }
+
+  /** Le jour tombe-t-il dans les vacances scolaires de l'académie configurée ? */
+  isSchoolHoliday(ds: string): boolean {
+    return this.schoolHolidays().some((h) => ds >= h.start && ds <= h.end);
+  }
   /** ISO date → household numeric format (e.g. 24/07/2026). */
   fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
   /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */
@@ -150,6 +214,15 @@ export class FoyerStore {
   private shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private shopPollTimer: ReturnType<typeof setInterval> | null = null;
 
+  /**
+   * Version du document connue de ce client, et modifications pas encore
+   * acquittées par le serveur. Ensemble, elles permettent de rejouer plutôt que
+   * de perdre quand quelqu'un d'autre a enregistré entre-temps (voir state-sync.ts).
+   */
+  private docVersion = 0;
+  private pending: Mutation[] = [];
+  private saving = false;
+
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -169,22 +242,35 @@ export class FoyerStore {
       for (const id of needed) if (!(id in known)) void this.loadPhoto(id);
     });
 
-    // Le sondage ne tourne que sur l'écran Courses : ailleurs il ne servirait
-    // qu'à vider la batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
+    // Le sondage tourne sur les deux écrans qui montrent la liste : Courses et
+    // l'accueil. Ailleurs il ne servirait qu'à vider la batterie. Il s'arrête
+    // aussi quand l'onglet passe en arrière-plan.
     effect(() => {
-      const onCourses = this.ui().screen === 'courses' && this.authed();
-      if (onCourses) this.startShopPolling(); else this.stopShopPolling();
+      const screen = this.ui().screen;
+      const cadence = !this.authed() ? 0 : screen === 'courses' ? SHOP_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
+      if (cadence) this.startShopPolling(cadence); else this.stopShopPolling();
     });
 
     // Retour du réseau : la file part immédiatement, sans attendre que
     // quelqu'un touche à nouveau l'écran.
-    window.addEventListener('online', () => { this.shopOffline.set(false); void this.flushShopQueue(); });
+    window.addEventListener('online', () => {
+      this.shopOffline.set(false);
+      void this.flushShopQueue();
+      if (this.saveState() === 'error') void this.flush();
+    });
     window.addEventListener('offline', () => this.shopOffline.set(true));
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible' || !this.authed()) return;
+      if (document.visibilityState !== 'visible') return;
+      // Un téléphone qui se réveille peut avoir dormi douze heures : l'horloge
+      // est remise à l'heure avant tout le reste, sinon l'écran affiche la veille
+      // le temps d'une minute.
+      this.advanceClock();
+      if (!this.authed()) return;
       void this.flushShopQueue();
+      if (this.saveState() === 'error') void this.flush();
       if (this.ui().screen === 'courses') void this.pollShopping();
     });
+    setInterval(() => this.advanceClock(), 60_000);
   }
 
   // ---- lifecycle / auth -------------------------------------------------
@@ -206,11 +292,36 @@ export class FoyerStore {
       try {
         await this.loadState();
         this.authed.set(true);
-      } catch {
-        this.api.token = null;
+      } catch (e) {
+        // Un serveur injoignable n'est pas une session invalide. Jeter le jeton
+        // dans ce cas renvoyait à l'écran de connexion pendant un simple
+        // redémarrage du conteneur, sans rien expliquer. La session est gardée,
+        // l'écran se rend, et chaque tuile dit qu'elle ne peut pas charger.
+        if (isOffline(e)) {
+          this.docError.set((e as Error).message);
+          this.authed.set(true);
+        } else {
+          this.api.token = null;
+        }
       }
     }
     this.ready.set(true);
+  }
+
+  /**
+   * Recharge le document du foyer. C'est ce que fait le « Réessayer » d'une
+   * tuile : la panne est signalée là où elle se voit, et se rattrape sans
+   * recharger l'application ni se reconnecter.
+   */
+  async reloadDocument(): Promise<void> {
+    try {
+      await this.loadState();
+    } catch (e) {
+      const msg = (e as Error).message;
+      this.docError.set(msg);
+      // eslint-disable-next-line no-console
+      console.error('[foyer] accueil : rechargement du document échoué : ' + msg);
+    }
   }
 
   async completeSetup(payload: SetupPayload): Promise<boolean> {
@@ -230,8 +341,15 @@ export class FoyerStore {
   }
 
   private async loadState(): Promise<void> {
-    const { state } = await this.api.getState();
+    const { state, version } = await this.api.getState();
     this._data.set(this.normalise(state));
+    this.docVersion = version;
+    // Un rechargement complet repart du document du serveur : ce qui n'était pas
+    // parti est perdu de toute façon, et le garder ferait réapparaître des
+    // modifications que l'utilisateur croit abandonnées.
+    this.pending = [];
+    this.docLoadedAt.set(new Date().toISOString());
+    this.docError.set('');
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
@@ -316,15 +434,7 @@ export class FoyerStore {
   dayExtras(ds: string): DayExtra[] {
     const d = this._data();
     if (!d) return [];
-    const out: DayExtra[] = [];
-    const h = frenchHolidays(parseInt(ds.slice(0, 4), 10)).find((x) => x.date === ds);
-    if (h) out.push({ kind: 'holiday', label: h.name, color: CAL_KINDS['holiday'].color });
-    for (const sh of this.schoolHolidays()) { if (ds >= sh.start && ds <= sh.end) { out.push({ kind: 'school', label: sh.name, color: CAL_KINDS['school'].color }); break; } }
-    for (const m of d.members) { if (isBirthdayOn(m.birthday, ds)) { const a = ageOn(m.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + m.name, color: m.color, sub: a != null ? a + ' ans' : undefined }); } }
-    for (const c of d.contacts) { if (isBirthdayOn(c.birthday, ds)) { const a = ageOn(c.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + c.name, color: CAL_KINDS['birthday'].color, sub: a != null ? a + ' ans' : undefined }); } }
-    for (const t of d.tasks) { if (t.planned === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : undefined }); }
-    out.push(...(this.externalDayExtras()[ds] || []));
-    return out;
+    return dayExtrasOn(ds, { doc: d, schoolHolidays: this.schoolHolidays(), external: this.externalDayExtras() });
   }
 
   async refreshAccounts(): Promise<void> {
@@ -380,6 +490,10 @@ export class FoyerStore {
     this.api.token = null;
     this.authed.set(false);
     this._data.set(null);
+    this.docVersion = 0;
+    this.pending = [];
+    this.docLoadedAt.set('');
+    this.docError.set('');
     this.ui.set(initialUi());
     this.isAdmin.set(false);
     this.currentMemberId.set(null);
@@ -442,12 +556,15 @@ export class FoyerStore {
   // ---- state plumbing ---------------------------------------------------
   patch(p: Partial<UiState>): void { this.ui.update((u) => ({ ...u, ...p })); }
 
-  private mutate(fn: (d: HouseholdState) => void): void {
+  private mutate(fn: Mutation): void {
     const cur = this._data();
     if (!cur) return;
     const next = structuredClone(cur);
     fn(next);
     this._data.set(next);
+    // La mutation est retenue telle quelle : si le serveur refuse l'écriture
+    // parce que l'autre appareil l'a devancé, elle sera rejouée sur sa version.
+    this.pending.push(fn);
     this.scheduleSave();
   }
 
@@ -456,15 +573,71 @@ export class FoyerStore {
     this.saveTimer = setTimeout(() => this.flush(), 700);
   }
 
+  /** Nombre de rejeux avant d'abandonner. Au-delà, c'est que l'autre écrit en boucle. */
+  private static readonly MAX_REBASE = 3;
+
   async flush(): Promise<void> {
-    const d = this._data();
-    if (!d) return;
+    if (!this._data() || this.saving) return;
+    this.saving = true;
     this.saveState.set('saving');
     try {
-      await this.api.putState(d);
-      this.saveState.set('idle');
-    } catch {
-      this.saveState.set('error');
+      for (let essai = 0; essai <= FoyerStore.MAX_REBASE; essai++) {
+        // Ce qui part réellement : le document et les mutations du moment. Ce
+        // qui arrive pendant l'aller-retour reste en attente pour le prochain envoi.
+        const doc = this._data()!;
+        const envoyees = this.pending.length;
+        try {
+              const r = await this.api.putState(doc, this.docVersion);
+          this.docVersion = r.version;
+          this.pending = this.pending.slice(envoyees);
+          this.saveState.set('idle');
+          if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
+          return;
+        } catch (e) {
+          const conflit = e instanceof ApiError ? asConflict(e.status, e.body) : null;
+          if (!conflit) throw e;
+          this.applyConflict(conflit.version, conflit.state);
+        }
+      }
+      this.failSave('Le document change plus vite qu’il ne s’enregistre.');
+    } catch (e) {
+      this.failSave((e as Error).message);
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /**
+   * Un enregistrement a échoué. Ce n'est **pas** un document illisible : les
+   * modifications sont toujours là, en mémoire et en attente, et repartiront
+   * toutes seules. Le dire est le minimum, et réessayer sans qu'on le demande
+   * est ce qui évite d'avoir à y penser.
+   */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private failSave(reason: string): void {
+    this.saveState.set('error');
+    // eslint-disable-next-line no-console
+    console.error('[foyer] enregistrement du document échoué : ' + reason);
+    if (this.retryTimer) return;
+    this.retryTimer = setTimeout(() => { this.retryTimer = null; void this.flush(); }, SAVE_RETRY_MS);
+  }
+
+  /**
+   * Quelqu'un d'autre a enregistré : on repart de sa version et on rejoue
+   * par-dessus ce qui n'était pas encore parti. L'écran bouge, mais dans le bon
+   * sens, et rien de ce qui a été fait des deux côtés n'est perdu.
+   */
+  private applyConflict(version: number, serverState: HouseholdState): void {
+    this.docVersion = version;
+    const rep = rebase(this.normalise(serverState), this.pending);
+    this._data.set(rep.state);
+    this.docLoadedAt.set(new Date().toISOString());
+    if (rep.dropped) {
+      // Le seul cas où du travail se perd : ce qu'on modifiait n'existe plus.
+      // Le taire ferait douter de tout le reste.
+      this.toast(rep.dropped > 1
+        ? rep.dropped + ' modifications n’ont pas pu être reprises : leur cible a été supprimée ailleurs'
+        : 'Une modification n’a pas pu être reprise : sa cible a été supprimée ailleurs');
     }
   }
 
@@ -587,27 +760,62 @@ export class FoyerStore {
     }
   }
 
-  private startShopPolling(): void {
-    if (this.shopPollTimer) return;
+  /** Cadence en cours, pour ne pas relancer la minuterie quand elle est déjà bonne. */
+  private shopPollMs = 0;
+
+  private startShopPolling(cadence: number): void {
+    if (this.shopPollTimer && this.shopPollMs === cadence) return;
+    this.stopShopPolling();
+    this.shopPollMs = cadence;
     void this.flushShopQueue();
     void this.pollShopping();
     this.shopPollTimer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       void this.flushShopQueue();
       void this.pollShopping();
-    }, SHOP_POLL_MS);
+    }, cadence);
   }
 
   private stopShopPolling(): void {
     if (!this.shopPollTimer) return;
     clearInterval(this.shopPollTimer);
     this.shopPollTimer = null;
+    this.shopPollMs = 0;
   }
 
   toast(msg: string): void {
-    this.patch({ toast: msg });
+    this.undoFn = null;
+    this.patch({ toast: msg, toastUndo: false });
     if (this.toastTimer) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.patch({ toast: '' }), 2600);
+    this.toastTimer = setTimeout(() => this.patch({ toast: '', toastUndo: false }), TOAST_MS);
+  }
+
+  /**
+   * Annulation de la dernière action, offerte quelques secondes.
+   *
+   * Elle est due à toute action qui fait **disparaître** ce sur quoi on vient
+   * d'appuyer : cocher une tâche depuis l'accueil la retire de la tuile, la
+   * reporter aussi, remplacer un repas écrase celui qui était prévu. Sans retour
+   * possible, un geste fait de travers oblige à ouvrir le module pour le défaire,
+   * ce qui est exactement ce que l'action rapide cherchait à éviter.
+   *
+   * `undo` n'est pas rangé dans l'état d'interface : c'est une fonction, et
+   * l'état d'interface ne contient que des données.
+   */
+  private undoFn: (() => void) | null = null;
+  toastWithUndo(msg: string, undo: () => void): void {
+    this.undoFn = undo;
+    this.patch({ toast: msg, toastUndo: true });
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => { this.undoFn = null; this.patch({ toast: '', toastUndo: false }); }, UNDO_MS);
+  }
+
+  undoLast(): void {
+    const fn = this.undoFn;
+    this.undoFn = null;
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.patch({ toast: '', toastUndo: false });
+    fn?.();
   }
 
   // ---- member helpers ---------------------------------------------------
@@ -664,7 +872,7 @@ export class FoyerStore {
 
   // ---- events -----------------------------------------------------------
   eventsForDay(ds: string): HouseholdState['events'] {
-    return (this._data()?.events || []).filter((e) => occursOn(e, ds)).slice().sort((a, b) => a.time.localeCompare(b.time));
+    return eventsOn(this._data()?.events || [], ds);
   }
   openEvent(): void {
     const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
@@ -716,11 +924,59 @@ export class FoyerStore {
   }
   setShopState(id: string, state: ShopState): void { this.pushShopOps([{ op: 'set-state', id, state }]); }
 
+  /**
+   * Coche un article depuis une liste où il disparaît aussitôt. Comme pour les
+   * tâches, le retour en arrière est offert quelques secondes.
+   */
+  toggleShopWithUndo(id: string): void {
+    const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
+    const avant = it.state;
+    this.toggleShop(id);
+    this.toastWithUndo(avant === 'panier' ? 'Remis dans la liste' : 'Dans le panier', () => this.setShopState(id, avant));
+  }
+
+  /**
+   * Ce que le foyer pourrait vouloir ajouter, dès les premières lettres.
+   *
+   * Deux sources, dans cet ordre : ce qu'on a déjà acheté (l'orthographe et les
+   * quantités du foyer, pas celles d'un référentiel), puis le référentiel
+   * d'articles pour ce qu'on n'a jamais pris. Un article déjà dans la liste
+   * n'est pas proposé : le geste serait un doublon.
+   */
+  shopSuggestions(query: string, limit = 4): string[] {
+    const q = normText(query);
+    if (q.length < 2) return [];
+    const d = this._data(); if (!d) return [];
+    const idx = this.articleIndex();
+    const listId = this.activeShopListId();
+    // L'identité d'un article est sa clé du référentiel quand il en a une : sans
+    // cela, « courgette » serait proposé alors que « Courgettes » est déjà dans
+    // la liste, et le geste rapide fabriquerait des doublons.
+    const identite = (nom: string): string => idx.forms.get(normaliseName(nom)) || normText(nom);
+    const dejaLa = new Set(d.shop.filter((i) => i.listId === listId).map((i) => identite(i.name)));
+    const out: string[] = [];
+    const push = (nom: string): void => {
+      const id = identite(nom);
+      if (!normText(nom).includes(q) || dejaLa.has(id)) return;
+      dejaLa.add(id);
+      out.push(nom);
+    };
+    for (const it of d.shop) push(it.name.trim());
+    for (const a of searchArticles(idx, d.articles, query, limit * 3)) push(a.name);
+    return out.slice(0, limit);
+  }
+
+  /** Ajoute un article depuis un texte libre, et rend son identifiant. */
+  addShop(name: string): string | null {
+    const t = name.trim(); if (!t) return null;
+    const listId = this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return null; }
+    const id = uid('s');
+    this.pushShopOps([{ op: 'add', id, name: t, qty: '', aisleId: this.defaultAisleId(), listId }]);
+    return id;
+  }
+
   addShopQuick(): void {
-    const t = this.ui().newShop.trim(); if (!t) return;
-    const listId = this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return; }
-    this.pushShopOps([{ op: 'add', id: uid('s'), name: t, qty: '', aisleId: this.defaultAisleId(), listId }]);
-    this.patch({ newShop: '' });
+    if (this.addShop(this.ui().newShop)) this.patch({ newShop: '' });
   }
   activeShopListId(): string {
     const s = this.ui();
@@ -830,10 +1086,54 @@ export class FoyerStore {
   toggleTask(id: string): void { this.mutate((d) => { const t = d.tasks.find((x) => x.id === id); if (t) t.done = !t.done; }); }
   activeTaskListId(): string { const s = this.ui(); return s.activeList !== 'all' ? s.activeList : (this._data()?.taskLists[0]?.id || ''); }
   addTaskQuick(): void {
-    const t = this.ui().newTask.trim(); if (!t) return; const lid = this.activeTaskListId();
-    this.mutate((d) => { d.tasks.unshift({ id: uid('t'), text: t, who: this.members()[0]?.id || 'cam', due: "Aujourd'hui", done: false, listId: lid, prio: 'med' }); });
-    this.patch({ newTask: '' });
+    if (this.addTask(this.ui().newTask)) this.patch({ newTask: '' });
   }
+
+  /**
+   * Crée une tâche à partir d'un texte libre, et rend son identifiant. Utilisée
+   * par la saisie de l'écran Tâches comme par celle de l'accueil : une seule
+   * écriture de ce que « ajouter une tâche » veut dire.
+   */
+  addTask(text: string): string | null {
+    const t = text.trim(); if (!t) return null;
+    const listId = this.activeTaskListId();
+    if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
+    const id = uid('t');
+    this.mutate((d) => {
+      d.tasks.unshift({ id, text: t, who: this.me()?.id || this.members()[0]?.id || 'cam', due: "Aujourd'hui", done: false, listId, prio: 'med' });
+    });
+    return id;
+  }
+
+  /**
+   * Coche une tâche depuis une liste où elle disparaît aussitôt. Le retour en
+   * arrière est offert : sans lui, une coche de travers oblige à ouvrir le
+   * module pour la défaire.
+   */
+  toggleTaskWithUndo(id: string): void {
+    const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return;
+    const etait = t.done;
+    this.toggleTask(id);
+    this.toastWithUndo(etait ? 'Tâche rouverte' : 'Tâche faite', () => this.toggleTask(id));
+  }
+
+  /**
+   * Reporte une tâche au lendemain. C'est la date **planifiée** qui bouge, celle
+   * que le calendrier lit ; l'échéance en texte libre reste ce que
+   * l'utilisateur a écrit, l'application n'a pas à réécrire ses mots.
+   */
+  postponeTask(id: string): void {
+    const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return;
+    const avant = t.planned ?? null;
+    const demain = this.addDays(this.todayStr(), 1);
+    this.mutate((d) => { const x = d.tasks.find((y) => y.id === id); if (x) x.planned = demain; });
+    this.toastWithUndo('Reportée à demain', () => {
+      this.mutate((d) => { const x = d.tasks.find((y) => y.id === id); if (x) x.planned = avant; });
+    });
+  }
+
+  /** Décalage en jours sur une date ISO, dans le calendrier du foyer. */
+  addDays = addDaysIso;
   /**
    * Tâche créée depuis un autre module. C'est une **copie ponctuelle**, assumée :
    * si la date du contrat bouge ensuite, la tâche ne suit pas. Une tâche que
@@ -1004,14 +1304,9 @@ export class FoyerStore {
   // le fromage et l'accompagnement.
 
   /** Intitulé d'un plat : le nom de la recette, ou le texte saisi. */
-  mealItemName(it: MealItem): string {
-    if (it.rid) { const r = this._data()?.recipes.find((x) => x.id === it.rid); return r ? r.name : 'Recette supprimée'; }
-    return it.text || '';
-  }
+  mealItemName(it: MealItem): string { return mealItemName(it, this._data()?.recipes || []); }
   /** Intitulés d'un créneau, dans l'ordre. Vide quand rien n'est prévu. */
-  mealNames(v?: MealValue): string[] {
-    return (v?.items || []).map((it) => this.mealItemName(it)).filter(Boolean);
-  }
+  mealNames(v?: MealValue): string[] { return mealNames(v, this._data()?.recipes || []); }
   /** Une ligne pour les vignettes et l'accueil : « Salade · Gratin · Tiramisu ». */
   mealLabel(v?: MealValue): string | null {
     const names = this.mealNames(v);
@@ -1161,6 +1456,42 @@ export class FoyerStore {
     });
     this.patch({ mealEdit: null });
     this.toast(existant ? 'Repas enregistré, événement mis à jour' : 'Repas enregistré et ajouté à l’agenda');
+  }
+
+  /**
+   * Remplace le repas d'un créneau par une entrée libre : « finalement, pizza ».
+   *
+   * Ce qui était prévu est écrasé, donc le retour en arrière est offert. Les
+   * couverts et les absences du créneau sont conservés : ce sont les convives
+   * qui décident du nombre de parts, pas le plat. Un événement d'agenda déjà
+   * posé sur ce repas voit son titre suivre, faute de quoi le calendrier
+   * annoncerait encore le gratin.
+   */
+  setMealText(dateStr: string, slot: string, text: string): void {
+    const t = text.trim(); if (!t) return;
+    const key = dateStr + '-' + slot;
+    const avant = this._data()?.meals[key];
+    const value: MealValue = {
+      items: [{ text: t }],
+      ...(avant?.pax ? { pax: avant.pax } : {}),
+      ...(avant?.away?.length ? { away: avant.away } : {}),
+    };
+    this.writeMeal(key, slot, dateStr, value);
+    this.toastWithUndo('Repas remplacé', () => this.writeMeal(key, slot, dateStr, avant));
+  }
+
+  /** Écrit un créneau (ou le vide) en gardant son événement d'agenda cohérent. */
+  private writeMeal(key: string, slot: string, dateStr: string, value: MealValue | undefined): void {
+    const titre = value ? this.titleFor(value, slot) : '';
+    this.mutate((d) => {
+      if (value) d.meals[key] = value; else delete d.meals[key];
+      const i = d.events.findIndex((e) => e.mealKey === key);
+      if (i < 0) return;
+      // Sans repas, l'événement n'a plus d'objet : le garder annoncerait un dîner
+      // annulé. C'est la règle que le module s'est déjà donnée en retirant un repas.
+      if (value) d.events[i] = { ...d.events[i], title: titre, date: dateStr };
+      else d.events.splice(i, 1);
+    });
   }
 
   /** Titre d'agenda pour un repas donné, réutilisé quand un repas change de créneau. */
@@ -1533,11 +1864,7 @@ export class FoyerStore {
   }
 
   /** Durée totale d'une recette, pour les vignettes et l'accueil. */
-  recipeTime(r: { prepMin?: number | null; cookMin?: number | null }): string {
-    const total = (r.prepMin || 0) + (r.cookMin || 0);
-    if (!total) return '—';
-    return total < 60 ? total + ' min' : Math.floor(total / 60) + ' h' + (total % 60 ? ' ' + (total % 60) : '');
-  }
+  recipeTime(r: { prepMin?: number | null; cookMin?: number | null }): string { return recipeTime(r); }
   // ---- photos ------------------------------------------------------------
   // Une balise <img> ou un background CSS ne porte pas l'en-tête d'autorisation :
   // pointer directement /api/files renverrait 401. Le jeton dans l'URL est exclu

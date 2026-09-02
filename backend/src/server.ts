@@ -33,6 +33,8 @@ import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
 import { preserveShopping } from './shopping/repo';
 import { buildIcs } from './ics';
+import { conflictOf, isUpToDate } from './state/concurrency';
+import { loadRules, rulesPath } from './home/rules';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
@@ -333,12 +335,21 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
     return;
   }
 
+  // Écriture concurrente : le client annonce la version sur laquelle il a
+  // travaillé, et n'écrit pas par-dessus plus récent que lui. Voir
+  // state/concurrency.ts pour ce que ce refus évite de perdre.
+  const currentState = getHousehold();
+  if (!isUpToDate(req.body?.version, currentState.version)) {
+    res.status(409).json(conflictOf(currentState));
+    return;
+  }
+
   // Non-admins may edit shared household data, but must not tamper with the member
   // roster: no adding/removing members, no changing anyone's admin flag, and no
   // editing a member other than themselves (which would include self-promotion).
   const me = currentMember(req);
   if (!me?.admin) {
-    const current = (getHousehold().state as HouseholdState).members || [];
+    const current = (currentState.state as HouseholdState).members || [];
     const next = Array.isArray(state.members) ? state.members : [];
     const byId = (arr: HouseholdState['members']): Map<string, HouseholdState['members'][number]> =>
       new Map(arr.map((m) => [m.id, m]));
@@ -484,6 +495,22 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
   }
   return out;
 }
+
+/**
+ * Les règles de contexte de l'accueil, telles qu'elles s'appliquent réellement.
+ *
+ * Relues à chaque appel : le fichier fait quelques kilo-octets, et pouvoir le
+ * modifier puis recharger la page sans redémarrer le service est précisément ce
+ * qu'on attend d'un réglage tenu dans un fichier.
+ */
+api.get('/home/rules', auth, (_req, res) => {
+  const outcome = loadRules(DATA_DIR);
+  if (outcome.errors.length) {
+    // eslint-disable-next-line no-console
+    console.warn(`[foyer] accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
+  }
+  res.json(outcome);
+});
 
 api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) => {
   const academie = String(req.query['academie'] || '').trim();
