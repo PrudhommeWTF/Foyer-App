@@ -42,10 +42,10 @@ import { TileState } from '../core/tiles/contract';
     </div>
   `,
   styles: [`
-    .ch { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-    .card-title.sm { font-size: 17px; }
+    .ch { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .card-title.sm { font-size: 17px; line-height: 1.25; }
     .badge { color: var(--ink3); font-weight: 700; }
-    .link { font-size: 13px; font-weight: 800; color: var(--primary); cursor: pointer; flex: none; }
+    .link { font-size: 13px; font-weight: 800; color: var(--primary); cursor: pointer; flex: none; padding-top: 2px; }
 
     /* Chargement : la structure avant la donnée, jamais un zéro en attendant. */
     .skel { display: flex; flex-direction: column; gap: 10px; }

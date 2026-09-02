@@ -9,7 +9,8 @@ import { HouseholdState, ShopItem } from './models';
  * backend redémarre.
  */
 export class ApiError extends Error {
-  constructor(message: string, readonly status: number) {
+  /** Corps JSON de la réponse, quand il y en a un. Un 409 y porte le document du serveur. */
+  constructor(message: string, readonly status: number, readonly body?: unknown) {
     super(message);
     this.name = 'ApiError';
   }
@@ -119,8 +120,10 @@ export class ApiService {
   /** Convertit une réponse en échec, en relayant le message du serveur tel quel. */
   private async fail(res: Response): Promise<never> {
     let msg = `Erreur ${res.status}`;
-    try { msg = (await res.json()).error || msg; } catch { /* corps illisible : le code suffit */ }
-    throw new ApiError(msg, res.status);
+    let body: unknown;
+    try { body = await res.json(); msg = (body as { error?: string })?.error || msg; }
+    catch { /* corps illisible : le code suffit */ }
+    throw new ApiError(msg, res.status, body);
   }
 
   /**
@@ -208,8 +211,13 @@ export class ApiService {
     return this.request('state');
   }
 
-  putState(state: HouseholdState): Promise<{ version: number }> {
-    return this.request('state', { method: 'PUT', body: JSON.stringify({ state }) });
+  /**
+   * Enregistre le document. `version` est celle sur laquelle ce client a
+   * travaillé : le serveur refuse (409) d'écrire par-dessus plus récent, et
+   * renvoie alors son document pour que l'appelant rejoue dessus.
+   */
+  putState(state: HouseholdState, version?: number): Promise<{ version: number }> {
+    return this.request('state', { method: 'PUT', body: JSON.stringify({ state, version }) });
   }
 
   // ---- liste de courses --------------------------------------------------

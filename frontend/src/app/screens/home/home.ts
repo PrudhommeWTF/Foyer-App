@@ -54,8 +54,6 @@ export class HomeScreen {
   store = inject(FoyerStore);
   private dash = inject(DashboardStore);
 
-  constructor() { this.dash.ensureLoaded(); }
-
   /** Sans membre connu (document pas encore chargé), on salue sans nommer personne. */
   readonly hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
 

@@ -3,7 +3,7 @@ import {
   AccountKind, AccountPayload, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
-  FinAttachment, FinDeadline, FinEnergySummary, FinImport, FinImportPreview, FinOwnerKind,
+  FinAttachment, FinDeadline, FinEnergySummary, FinHome, FinImport, FinImportPreview, FinOwnerKind,
   FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
   FinLoanView, FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
@@ -212,6 +212,19 @@ export class FinancesStore {
   /** Dernière synchronisation réussie du module, pour l'horodatage de l'accueil. */
   readonly loadedAt = signal('');
 
+  /**
+   * Ce que le module publie pour l'accueil, chargé séparément du reste.
+   *
+   * L'accueil déclenchait `init()`, c'est-à-dire le démarrage complet du module
+   * (comptes, catégories, soldes, opérations, règles, contrats), pour afficher
+   * un chiffre sur l'écran le plus ouvert de l'application. `loadHome()` fait
+   * une requête et rapporte exactement ce qui s'affiche, plus les échéances dont
+   * vivent les notifications et le calendrier.
+   */
+  readonly home = signal<FinHome | null>(null);
+  readonly homeError = signal('');
+  readonly homeLoadedAt = signal('');
+
   readonly ui = signal<FinancesUi>(initialUi(this.currentMonth()));
 
   constructor() {
@@ -368,6 +381,29 @@ export class FinancesStore {
     }
   }
 
+  /**
+   * Charge la contribution du module à l'accueil. Appelée par le tableau de
+   * bord, et par lui seul : ouvrir l'écran Finances passe toujours par `init()`.
+   *
+   * Elle alimente au passage `currentSummary` et `deadlines`, dont vivent les
+   * notifications et les repères du calendrier : sans cela, ils ne
+   * fonctionneraient plus qu'après une visite dans l'écran Finances.
+   */
+  async loadHome(month: string): Promise<void> {
+    try {
+      const { home } = await this.api.home(month);
+      this.home.set(home);
+      this.currentSummary.set(home.summary);
+      this.deadlines.set(home.deadlines);
+      this.homeLoadedAt.set(new Date().toISOString());
+      this.homeError.set('');
+    } catch (e) {
+      this.homeError.set((e as Error).message);
+      // eslint-disable-next-line no-console
+      console.error('[foyer] accueil : chargement des finances échoué : ' + (e as Error).message);
+    }
+  }
+
   reset(): void {
     this.accounts.set([]); this.categories.set([]); this.balances.set({}); this.ignoredOps.set({}); this.loans.set({});
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
@@ -380,8 +416,12 @@ export class FinancesStore {
     this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set(''); this.loadedAt.set('');
+    this.home.set(null); this.homeError.set(''); this.homeLoadedAt.set('');
     this.ui.set(initialUi(this.currentMonth()));
   }
+
+  /** Les repères de calendrier des échéances, publiés tels quels pour l'accueil. */
+  readonly deadlineExtras = computed(() => this.deadlineDayExtras());
 
   private async refreshReference(): Promise<void> {
     const b = await this.api.bootstrap();

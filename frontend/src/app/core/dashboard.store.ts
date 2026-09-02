@@ -1,8 +1,7 @@
 import { Injectable, computed, effect, inject } from '@angular/core';
-import { FinancesStore } from './finances.store';
+import { FinancesStore, frMonthLabel } from './finances.store';
 import { FoyerStore } from './foyer.store';
-import { HouseholdState } from './models';
-import { FinSnapshot, Source, TileProvider, TileState, safeState } from './tiles/contract';
+import { DocSnapshot, FinSnapshot, Source, TileProvider, TileState, safeState } from './tiles/contract';
 import { TILE_PROVIDERS, TileId } from './tiles/registry';
 
 export interface HomeTileView {
@@ -27,6 +26,8 @@ export class DashboardStore {
 
   /** Dernière panne journalisée par plan, pour ne pas répéter la même ligne. */
   private logged: Record<string, string> = {};
+  /** Mois déjà demandé aux finances, pour ne pas rappeler à chaque battement d'horloge. */
+  private askedMonth = '';
 
   constructor() {
     // Une tuile rouge doit se retrouver dans `docker logs` ou `journalctl -u foyer`
@@ -41,15 +42,23 @@ export class DashboardStore {
         if (line) console.error(`[foyer] accueil : source ${plan} indisponible : ${line}`);
       }
     });
+
+    // Ce que l'accueil demande aux finances suit l'horloge du foyer : au premier
+    // du mois, à minuit, la tuile change de mois toute seule, sans rechargement.
+    // C'est aussi ce qui déclenche le tout premier chargement.
+    effect(() => {
+      if (!this.foyer.authed()) { this.askedMonth = ''; return; }
+      const month = this.foyer.todayStr().slice(0, 7);
+      if (!month || month === this.askedMonth) return;
+      this.askedMonth = month;
+      void this.fin.loadHome(month);
+    });
   }
 
-  /** Charge ce que l'accueil affiche et que la session n'a pas déjà chargé. */
-  ensureLoaded(): void { void this.fin.init(); }
-
-  private docSource(): Source<HouseholdState> {
-    const data = this.foyer.data();
+  private docSource(): Source<DocSnapshot> {
+    const doc = this.foyer.data();
     const err = this.foyer.docError();
-    if (!data) {
+    if (!doc) {
       return err
         ? { status: 'error', message: 'Les données du foyer ne peuvent pas être chargées.', detail: 'Document du foyer : ' + err }
         : { status: 'loading' };
@@ -59,24 +68,33 @@ export class DashboardStore {
     // qu'elle ne se fasse pas passer pour fraîche.
     return {
       status: 'ready',
-      data,
+      data: { doc, schoolHolidays: this.foyer.schoolHolidays(), articles: this.foyer.articleIndex() },
       asOf: this.foyer.docLoadedAt(),
       ...(err ? { stale: 'Le serveur ne répond pas : dernière vue connue.' } : {}),
     };
   }
 
   private finSource(): Source<FinSnapshot> {
-    const err = this.fin.error();
-    if (err) return { status: 'error', message: 'Le module Finances ne répond pas.', detail: 'Finances : ' + err };
-    if (!this.fin.loaded()) return { status: 'loading' };
+    const err = this.fin.homeError();
+    const home = this.fin.home();
+    // Rien à montrer et une panne : c'est une erreur. Quelque chose à montrer et
+    // une panne : c'est une vue datée, et elle le dit. Même règle que le document.
+    if (!home) {
+      return err
+        ? { status: 'error', message: 'Le module Finances ne répond pas.', detail: 'Finances : ' + err }
+        : { status: 'loading' };
+    }
     return {
       status: 'ready',
-      asOf: this.fin.loadedAt(),
+      asOf: this.fin.homeLoadedAt(),
+      ...(err ? { stale: 'Les finances ne se rafraîchissent plus : dernier relevé connu.' } : {}),
       data: {
-        month: this.fin.homeMonth(),
-        monthLabel: this.fin.homeMonthLabel(),
-        summary: this.fin.currentSummary(),
-        accounts: this.fin.accounts().length,
+        month: home.month,
+        monthLabel: frMonthLabel(home.month),
+        summary: home.summary,
+        accounts: home.accounts,
+        deadlines: home.deadlines,
+        dayExtras: this.fin.deadlineExtras(),
       },
     };
   }
@@ -94,7 +112,7 @@ export class DashboardStore {
 
   /** Recharge le plan de données dont dépend la tuile, et lui seul. */
   retry(p: TileProvider): void {
-    if (p.source === 'finances') void this.fin.init(true);
+    if (p.source === 'finances') void this.fin.loadHome(this.foyer.todayStr().slice(0, 7));
     else void this.foyer.reloadDocument();
   }
 }

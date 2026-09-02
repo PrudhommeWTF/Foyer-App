@@ -1,15 +1,20 @@
-import { TaskItem } from '../models';
+import { TaskLine, todayTasks } from '../tasks';
 import { TileProvider, TileState, empty, fromSource, ok } from './contract';
 
 export interface TachesTileData {
-  /** Tâches ouvertes, toutes listes confondues. */
-  open: number;
-  /** Celles qui tiennent sur la tuile. */
-  items: TaskItem[];
+  /** Tâches dues aujourd'hui ou en retard. Zéro n'affiche aucun compteur. */
+  due: number;
+  lines: TaskLine[];
 }
 
 const SHOWN = 5;
 
+/**
+ * Ce qu'il y a à faire aujourd'hui, et non l'arriéré complet.
+ *
+ * La règle de tri et de relégation appartient au module (voir `core/tasks.ts`) :
+ * la tuile ne fait que la demander.
+ */
 export const tachesTile = {
   id: 'taches',
   title: 'Tâches',
@@ -17,11 +22,12 @@ export const tachesTile = {
   link: 'Tout voir',
   source: 'document',
   state: (ctx): TileState<TachesTileData> => fromSource(ctx.doc, (d, asOf) => {
-    const tasks = d.tasks || [];
-    const open = tasks.filter((t) => !t.done);
-    if (open.length) return ok({ open: open.length, items: open.slice(0, SHOWN) }, asOf);
-    // Deux vides bien distincts : « tout est fait » félicite, « aucune tâche »
-    // dit qu'il n'y a jamais rien eu et invite à commencer.
+    const tasks = d.doc.tasks || [];
+    const t = todayTasks(tasks, ctx.today, SHOWN);
+    if (t.lines.length) return ok({ due: t.due, lines: t.lines }, asOf);
+    // Trois vides bien distincts : il n'y a jamais rien eu, tout est fait, ou
+    // il reste des choses mais aucune pour aujourd'hui.
+    if (t.onlyLater) return empty('Rien à faire aujourd’hui. Le reste est planifié plus tard.');
     return empty(tasks.length ? 'Tout est fait 🎉' : 'Aucune tâche pour le moment.');
   }),
 } satisfies TileProvider<TachesTileData>;

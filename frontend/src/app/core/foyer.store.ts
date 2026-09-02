@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -17,9 +18,9 @@ import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
 import { UiState, initialUi } from './ui-state';
-import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
-import { CAL_KINDS, DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
-import { eventsOn } from './agenda';
+import { ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
+import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
@@ -58,11 +59,18 @@ function loadShopQueue(): ShopOp[] {
   try { const v = JSON.parse(localStorage.getItem(SHOP_QUEUE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
-/** Cadence de sondage tant que l'écran Courses est visible. */
+/**
+ * Cadence de sondage de la liste de courses, selon l'écran.
+ *
+ * En magasin, la coche de l'autre doit apparaître tout de suite. Sur l'accueil,
+ * savoir à quinze secondes près ce qui reste à prendre suffit largement, et
+ * c'est l'écran qui reste ouvert toute la journée : la même cadence y serait
+ * payée en batterie sans rien apporter.
+ */
 const SHOP_POLL_MS = 5000;
+const HOME_POLL_MS = 15000;
 
-export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
-export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
+export type { DayExtra, SchoolHoliday } from './agenda';
 export interface SearchHit { kind: string; icon: string; color: string; title: string; sub: string; screen: string; id?: string; }
 
 type SaveState = 'idle' | 'saving' | 'error';
@@ -174,6 +182,15 @@ export class FoyerStore {
   private shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private shopPollTimer: ReturnType<typeof setInterval> | null = null;
 
+  /**
+   * Version du document connue de ce client, et modifications pas encore
+   * acquittées par le serveur. Ensemble, elles permettent de rejouer plutôt que
+   * de perdre quand quelqu'un d'autre a enregistré entre-temps (voir state-sync.ts).
+   */
+  private docVersion = 0;
+  private pending: Mutation[] = [];
+  private saving = false;
+
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -193,11 +210,13 @@ export class FoyerStore {
       for (const id of needed) if (!(id in known)) void this.loadPhoto(id);
     });
 
-    // Le sondage ne tourne que sur l'écran Courses : ailleurs il ne servirait
-    // qu'à vider la batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
+    // Le sondage tourne sur les deux écrans qui montrent la liste : Courses et
+    // l'accueil. Ailleurs il ne servirait qu'à vider la batterie. Il s'arrête
+    // aussi quand l'onglet passe en arrière-plan.
     effect(() => {
-      const onCourses = this.ui().screen === 'courses' && this.authed();
-      if (onCourses) this.startShopPolling(); else this.stopShopPolling();
+      const screen = this.ui().screen;
+      const cadence = !this.authed() ? 0 : screen === 'courses' ? SHOP_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
+      if (cadence) this.startShopPolling(cadence); else this.stopShopPolling();
     });
 
     // Retour du réseau : la file part immédiatement, sans attendre que
@@ -285,8 +304,13 @@ export class FoyerStore {
   }
 
   private async loadState(): Promise<void> {
-    const { state } = await this.api.getState();
+    const { state, version } = await this.api.getState();
     this._data.set(this.normalise(state));
+    this.docVersion = version;
+    // Un rechargement complet repart du document du serveur : ce qui n'était pas
+    // parti est perdu de toute façon, et le garder ferait réapparaître des
+    // modifications que l'utilisateur croit abandonnées.
+    this.pending = [];
     this.docLoadedAt.set(new Date().toISOString());
     this.docError.set('');
     this.patch({ famNameField: state.familyName });
@@ -373,15 +397,7 @@ export class FoyerStore {
   dayExtras(ds: string): DayExtra[] {
     const d = this._data();
     if (!d) return [];
-    const out: DayExtra[] = [];
-    const h = frenchHolidays(parseInt(ds.slice(0, 4), 10)).find((x) => x.date === ds);
-    if (h) out.push({ kind: 'holiday', label: h.name, color: CAL_KINDS['holiday'].color });
-    for (const sh of this.schoolHolidays()) { if (ds >= sh.start && ds <= sh.end) { out.push({ kind: 'school', label: sh.name, color: CAL_KINDS['school'].color }); break; } }
-    for (const m of d.members) { if (isBirthdayOn(m.birthday, ds)) { const a = ageOn(m.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + m.name, color: m.color, sub: a != null ? a + ' ans' : undefined }); } }
-    for (const c of d.contacts) { if (isBirthdayOn(c.birthday, ds)) { const a = ageOn(c.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + c.name, color: CAL_KINDS['birthday'].color, sub: a != null ? a + ' ans' : undefined }); } }
-    for (const t of d.tasks) { if (t.planned === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : undefined }); }
-    out.push(...(this.externalDayExtras()[ds] || []));
-    return out;
+    return dayExtrasOn(ds, { doc: d, schoolHolidays: this.schoolHolidays(), external: this.externalDayExtras() });
   }
 
   async refreshAccounts(): Promise<void> {
@@ -437,6 +453,8 @@ export class FoyerStore {
     this.api.token = null;
     this.authed.set(false);
     this._data.set(null);
+    this.docVersion = 0;
+    this.pending = [];
     this.docLoadedAt.set('');
     this.docError.set('');
     this.ui.set(initialUi());
@@ -501,12 +519,15 @@ export class FoyerStore {
   // ---- state plumbing ---------------------------------------------------
   patch(p: Partial<UiState>): void { this.ui.update((u) => ({ ...u, ...p })); }
 
-  private mutate(fn: (d: HouseholdState) => void): void {
+  private mutate(fn: Mutation): void {
     const cur = this._data();
     if (!cur) return;
     const next = structuredClone(cur);
     fn(next);
     this._data.set(next);
+    // La mutation est retenue telle quelle : si le serveur refuse l'écriture
+    // parce que l'autre appareil l'a devancé, elle sera rejouée sur sa version.
+    this.pending.push(fn);
     this.scheduleSave();
   }
 
@@ -515,17 +536,58 @@ export class FoyerStore {
     this.saveTimer = setTimeout(() => this.flush(), 700);
   }
 
+  /** Nombre de rejeux avant d'abandonner. Au-delà, c'est que l'autre écrit en boucle. */
+  private static readonly MAX_REBASE = 3;
+
   async flush(): Promise<void> {
-    const d = this._data();
-    if (!d) return;
+    if (!this._data() || this.saving) return;
+    this.saving = true;
     this.saveState.set('saving');
     try {
-      await this.api.putState(d);
-      this.saveState.set('idle');
-      this.docError.set('');
+      for (let essai = 0; essai <= FoyerStore.MAX_REBASE; essai++) {
+        // Ce qui part réellement : le document et les mutations du moment. Ce
+        // qui arrive pendant l'aller-retour reste en attente pour le prochain envoi.
+        const doc = this._data()!;
+        const envoyees = this.pending.length;
+        try {
+          const r = await this.api.putState(doc, this.docVersion);
+          this.docVersion = r.version;
+          this.pending = this.pending.slice(envoyees);
+          this.saveState.set('idle');
+          this.docError.set('');
+          return;
+        } catch (e) {
+          const conflit = e instanceof ApiError ? asConflict(e.status, e.body) : null;
+          if (!conflit) throw e;
+          this.applyConflict(conflit.version, conflit.state);
+        }
+      }
+      this.saveState.set('error');
+      this.docError.set('Enregistrement impossible : le document change plus vite qu’il ne s’enregistre.');
     } catch (e) {
       this.saveState.set('error');
       this.docError.set((e as Error).message);
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  /**
+   * Quelqu'un d'autre a enregistré : on repart de sa version et on rejoue
+   * par-dessus ce qui n'était pas encore parti. L'écran bouge, mais dans le bon
+   * sens, et rien de ce qui a été fait des deux côtés n'est perdu.
+   */
+  private applyConflict(version: number, serverState: HouseholdState): void {
+    this.docVersion = version;
+    const rep = rebase(this.normalise(serverState), this.pending);
+    this._data.set(rep.state);
+    this.docLoadedAt.set(new Date().toISOString());
+    if (rep.dropped) {
+      // Le seul cas où du travail se perd : ce qu'on modifiait n'existe plus.
+      // Le taire ferait douter de tout le reste.
+      this.toast(rep.dropped > 1
+        ? rep.dropped + ' modifications n’ont pas pu être reprises : leur cible a été supprimée ailleurs'
+        : 'Une modification n’a pas pu être reprise : sa cible a été supprimée ailleurs');
     }
   }
 
@@ -648,21 +710,27 @@ export class FoyerStore {
     }
   }
 
-  private startShopPolling(): void {
-    if (this.shopPollTimer) return;
+  /** Cadence en cours, pour ne pas relancer la minuterie quand elle est déjà bonne. */
+  private shopPollMs = 0;
+
+  private startShopPolling(cadence: number): void {
+    if (this.shopPollTimer && this.shopPollMs === cadence) return;
+    this.stopShopPolling();
+    this.shopPollMs = cadence;
     void this.flushShopQueue();
     void this.pollShopping();
     this.shopPollTimer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       void this.flushShopQueue();
       void this.pollShopping();
-    }, SHOP_POLL_MS);
+    }, cadence);
   }
 
   private stopShopPolling(): void {
     if (!this.shopPollTimer) return;
     clearInterval(this.shopPollTimer);
     this.shopPollTimer = null;
+    this.shopPollMs = 0;
   }
 
   toast(msg: string): void {

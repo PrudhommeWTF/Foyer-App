@@ -14,6 +14,13 @@ import { HomeTile } from './base';
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
       @if (data(); as d) {
         <div class="agenda">
+          @for (x of d.extras; track $index) {
+            <div class="extra" [style.background]="store.tint(x.color)">
+              <span class="dot" [style.background]="x.color"></span>
+              <span class="extra-label" [style.color]="x.color">{{ x.label }}</span>
+              @if (x.sub) { <span class="extra-sub">{{ x.sub }}</span> }
+            </div>
+          }
           @for (e of d.events; track e.id) {
             <div class="ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)">
               <div class="ev-time f-display">{{ e.time }}</div>
@@ -32,7 +39,11 @@ import { HomeTile } from './base';
   `,
   styles: [`
     :host { display: block; }
-    .agenda { display: flex; flex-direction: column; gap: 12px; }
+    .agenda { display: flex; flex-direction: column; gap: 10px; }
+    .extra { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .extra-label { font-size: 13px; font-weight: 800; }
+    .extra-sub { font-size: 12px; font-weight: 700; color: var(--ink2); margin-left: auto; }
     .ev { display: flex; gap: 14px; padding: 14px; border-radius: 16px; background: var(--soft); }
     .ev-time { font-size: 16px; font-weight: 700; color: var(--ink); min-width: 48px; }
     .ev-title { font-weight: 800; font-size: 15px; color: var(--ink); }

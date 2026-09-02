@@ -20,7 +20,7 @@ export const coursesTile = {
   link: 'Ouvrir la liste',
   source: 'document',
   state: (ctx): TileState<CoursesTileData> => fromSource(ctx.doc, (d, asOf) => {
-    const shop = d.shop || [];
+    const shop = d.doc.shop || [];
     const left = shop.filter((x) => x.state === 'a-prendre');
     if (left.length) return ok({ left: left.length, items: left.slice(0, SHOWN) }, asOf);
     return empty(shop.length ? 'Tout est dans le panier.' : 'Aucun article à acheter.');

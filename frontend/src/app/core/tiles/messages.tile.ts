@@ -12,7 +12,7 @@ export const messagesTile = {
   link: 'Ouvrir',
   source: 'document',
   state: (ctx): TileState<MessagesTileData> => fromSource(ctx.doc, (d, asOf) => {
-    const msgs = d.msgs || [];
+    const msgs = d.doc.msgs || [];
     return msgs.length ? ok({ msgs: msgs.slice(-SHOWN) }, asOf) : empty('Aucun message pour le moment.');
   }),
 } satisfies TileProvider<MessagesTileData>;

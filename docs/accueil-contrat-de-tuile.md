@@ -62,7 +62,20 @@ parallèle :
 | Plan | Source | Requêtes | Tuiles servies |
 |---|---|---|---|
 | `document` | `GET /api/state`, déjà chargé par la session | 0 | Agenda, Tâches, Repas, Courses, Messagerie |
-| `finances` | `/api/finances/*` | 1 (bootstrap du module) | Finances |
+| `finances` | `GET /api/finances/home?month=AAAA-MM` | 1 | Finances (et les échéances de l'agenda) |
+
+`/api/finances/home` est composé **par le module Finances**, dans
+`backend/src/finances/routes.ts`, à côté de son propre `/bootstrap`. Il ne rend
+que ce qui s'affiche : la synthèse du mois, le nombre de comptes déclarés et les
+échéances à venir. Auparavant l'accueil appelait `init()`, c'est-à-dire le
+démarrage complet du module (comptes, catégories, soldes, opérations, règles,
+contrats), soit six requêtes en cascade, pour afficher un chiffre.
+
+Le mois est passé **par le client** : lui seul connaît le fuseau du foyer, et
+c'est ce qui fait que la tuile change de mois toute seule au premier du mois,
+sans rechargement. Ces échéances alimentent aussi les notifications et les
+repères du calendrier : sans elles ici, ils ne fonctionneraient plus qu'après une
+visite dans l'écran Finances.
 
 C'est pour cela qu'il n'y a **pas** d'endpoint `/api/dashboard`. Un agrégateur
 côté serveur renverrait une seconde fois le document du foyer, déjà en mémoire,
@@ -177,6 +190,43 @@ s'affiche pas et toutes les destinations mènent à l'accueil : c'est le seul é
 conçu pour dire qu'il ne peut pas charger, et proposer de réessayer. Le reste se
 tait plutôt que d'afficher une famille vide.
 
+## Écriture à deux
+
+Le document du foyer s'enregistre en entier. Jusqu'ici en « dernier arrivé
+gagne » : le téléphone qui enregistrait à 12 h 00 min 03 s écrasait ce que
+l'autre avait écrit deux secondes plus tôt, avec un document qui ne le contenait
+pas. Une tâche cochée se décochait, un événement disparaissait, et rien ne le
+disait.
+
+Trois pièces règlent cela, et le numéro de version circulait déjà dans les deux
+sens :
+
+1. Le client annonce à `PUT /api/state` la version sur laquelle il a travaillé.
+2. Le serveur refuse (409) d'écrire par-dessus une version plus récente, et
+   renvoie **son** document avec le refus (`backend/src/state/concurrency.ts`).
+3. Le client **rejoue** ses modifications non acquittées sur ce document et
+   réessaie, jusqu'à trois fois (`frontend/src/app/core/state-sync.ts`).
+
+Rejouer plutôt que redemander : « vos modifications ont été perdues, rechargez »
+serait une façon polie de perdre quand même. Une mutation est une fonction qui
+modifie le document, elle se rejoue telle quelle sur une autre version.
+
+Ce que ce mécanisme ne prétend pas résoudre :
+
+- **Deux personnes qui modifient la même chose.** Cocher une tâche que l'autre
+  vient de cocher la décoche, parce que « cocher » est écrit comme une bascule.
+  Il n'y a pas de bonne réponse automatique, et le cas est rare ; perdre
+  l'événement qu'on vient de créer parce que l'autre a coché une tâche, ça, ce
+  n'était pas rare.
+- **Une mutation dont la cible a disparu** (l'autre a supprimé la tâche qu'on
+  modifiait) est comptée et annoncée par un message, pas tue.
+- **Un onglet chargé avant la mise à jour** n'envoie pas de version : le serveur
+  l'accepte plutôt que de le bloquer sans qu'il sache pourquoi. Il retrouve la
+  protection au premier rechargement.
+
+La liste de courses, elle, ne passe pas par là : elle s'écrit article par
+article depuis longtemps, avec sa propre file hors ligne.
+
 ## Diagnostic
 
 Quand une tuile est rouge, elle affiche déjà le module et la cause à l'écran.
@@ -221,16 +271,9 @@ rendant la même chaîne, ce qui arrête net la propagation du signal.
 
 Pour éviter toute ambiguïté sur l'état réel du chantier :
 
-- **Pas d'actions rapides** au-delà de celles qui existaient déjà (cocher une
-  tâche, cocher un article). Ni report, ni saisie libre, ni annulation.
 - **Pas de contextualisation.** L'ordre des tuiles est celui du registre, il ne
   dépend ni de l'heure ni du type de jour.
 - **Les tuiles manquantes le sont toujours** : contrats et échéances, énergie,
   économies, emploi du temps, documents.
-- **La règle des tâches n'a pas changé.** La tuile montre les tâches ouvertes,
-  toutes listes confondues, sans tenir compte de leur date. Elle est honnête,
-  elle n'est pas encore utile.
-- **La concurrence sur le document n'est pas réglée.** `PUT /api/state` réécrit
-  le document entier, dernier arrivé gagne. Deux téléphones qui cochent deux
-  tâches à quelques secondes d'intervalle peuvent encore se perdre l'un l'autre.
-  Les courses, elles, sont protégées (écriture opération par opération).
+- **Les actions rapides manquent toujours.** Cocher une tâche ou un article, oui,
+  parce que c'était déjà là. Reporter, saisir en une ligne, annuler : non.

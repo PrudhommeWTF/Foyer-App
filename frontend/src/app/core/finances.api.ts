@@ -80,6 +80,15 @@ export interface FinMonthSummary {
   incomplete: boolean;
 }
 
+/** La contribution du module Finances à l'accueil. */
+export interface FinHome {
+  month: string;
+  /** Comptes déclarés. Zéro veut dire « module jamais servi », pas « zéro euro ». */
+  accounts: number;
+  summary: FinMonthSummary;
+  deadlines: FinDeadline[];
+}
+
 export interface FinBootstrap {
   accounts: FinAccount[]; categories: FinCategory[]; balances: Record<number, number>;
   ignoredOps: Record<number, number>;
@@ -114,6 +123,17 @@ export class FinancesApi {
   private api = inject(ApiService);
 
   bootstrap(): Promise<FinBootstrap> { return this.api.request('finances/bootstrap'); }
+
+  /**
+   * Ce que le module publie pour l'accueil, en un aller-retour.
+   *
+   * Distinct de `bootstrap` : l'accueil payait le démarrage complet du module
+   * pour afficher un chiffre. Le mois est passé par le client, seul à connaître
+   * le fuseau du foyer, ce qui fait que l'accueil bascule seul à minuit.
+   */
+  home(month: string): Promise<{ home: FinHome }> {
+    return this.api.request('finances/home?month=' + encodeURIComponent(month));
+  }
 
   createAccount(p: AccountPayload): Promise<{ account: FinAccount }> {
     return this.api.request('finances/accounts', { method: 'POST', body: JSON.stringify(p) });

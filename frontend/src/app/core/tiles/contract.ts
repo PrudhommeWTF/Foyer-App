@@ -13,7 +13,9 @@
  * ce qui le rend vérifiable au lanceur de tests intégré à Node, sans avoir à
  * démarrer Angular. Le rendu, lui, vit dans `screens/home/`.
  */
-import type { FinMonthSummary } from '../finances.api';
+import type { FinDeadline, FinMonthSummary } from '../finances.api';
+import { DayExtra, SchoolHoliday } from '../agenda';
+import { ArticleIndex } from '../ingredients';
 import { HouseholdState } from '../models';
 
 /**
@@ -56,6 +58,18 @@ export type TileState<T> =
   | { kind: 'empty'; hint: string }
   | { kind: 'error'; message: string; detail: string };
 
+/**
+ * Ce que le plan « document » publie : le document du foyer, plus ce que les
+ * modules en dérivent et que reconstruire à chaque rendu coûterait cher.
+ */
+export interface DocSnapshot {
+  doc: HouseholdState;
+  /** Vacances scolaires de l'académie du foyer. Vide quand aucune n'est configurée. */
+  schoolHolidays: SchoolHoliday[];
+  /** Référentiel d'articles, pour lire le contenu des recettes (alertes alimentaires). */
+  articles: ArticleIndex;
+}
+
 /** Ce que le module Finances publie pour l'accueil. */
 export interface FinSnapshot {
   /** Mois en cours du foyer, AAAA-MM. Jamais le mois affiché dans l'écran Finances. */
@@ -66,6 +80,10 @@ export interface FinSnapshot {
   summary: FinMonthSummary | null;
   /** Comptes déclarés. Zéro veut dire « module jamais servi », pas « zéro euro ». */
   accounts: number;
+  /** Échéances de contrat à venir. */
+  deadlines: FinDeadline[];
+  /** Les mêmes, en repères de calendrier indexés par date, pour la journée composée. */
+  dayExtras: Record<string, DayExtra[]>;
 }
 
 /**
@@ -75,7 +93,7 @@ export interface FinSnapshot {
 export interface TileContext {
   /** Jour du foyer (Europe/Paris), AAAA-MM-JJ. */
   today: string;
-  doc: Source<HouseholdState>;
+  doc: Source<DocSnapshot>;
   fin: Source<FinSnapshot>;
 }
 
