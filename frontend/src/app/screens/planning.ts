@@ -4,63 +4,150 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { ModalComponent } from '../shared/modal';
-import { SCHED_DAYS, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
+import { WhoComponent } from '../shared/who';
+import { SchedSlot } from '../core/models';
+import { dowLabel, filterSlots, slotsOnDow, whoBadges } from '../core/schedule';
+import { weekdayOf } from '../core/presence';
+import { DOW, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
 
+/** Un jour de la vue, déjà filtré : l'affichage n'a plus qu'à le dessiner. */
+interface DayView { dow: number; label: string; short: string; today: boolean; slots: SchedSlot[]; }
+
+/**
+ * L'emploi du temps de la semaine.
+ *
+ * Deux partis pris, et ce sont eux qui font la différence avec l'écran qu'il
+ * remplace.
+ *
+ * **Aucune sélection veut dire tout le foyer.** Le filtre par membre affine, il
+ * n'est jamais un prérequis à l'affichage. L'écran précédent s'ouvrait filtré
+ * sur un identifiant de maquette qui n'existait dans aucun foyer réel : il
+ * n'affichait donc rien, jamais, tant qu'on n'avait pas cliqué sur une pastille.
+ *
+ * **Des listes triées par heure, pas une grille horaire proportionnelle.** Une
+ * grille où la hauteur vaut la durée demande treize heures de hauteur pour
+ * rester lisible, et gère les chevauchements en rétrécissant les colonnes :
+ * avec quatre membres et trois créneaux à 18h, on obtient des bandes de trois
+ * millimètres. Une liste absorbe les chevauchements sans rien faire, deux
+ * créneaux à 18h étant deux lignes lisibles. Ce qu'on y perd, et c'est assumé :
+ * le sens visuel de la durée et des trous de la journée.
+ */
 @Component({
   selector: 'screen-planning',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent, WhoComponent],
   template: `
     <div class="screen-enter">
       <div class="head-row">
         <div class="members">
           @for (m of d().members; track m.id) {
-            <div class="pill" [class.active]="store.ui().schedChild === m.id" (click)="store.patch({ schedChild: m.id })">
+            <div class="pill" [class.active]="filtered(m.id)" (click)="store.toggleSchedWho(m.id)">
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="24" />
               <span>{{ m.name }}</span>
             </div>
           }
         </div>
-        <button class="btn btn-primary" (click)="store.newSlot(days[0])">
-          <f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau créneau
-        </button>
-      </div>
-
-      <div class="grid">
-        @for (day of days; track day) {
-          <div class="day-card">
-            <div class="day-head">
-              <div class="day-name">{{ day }}</div>
-              <span class="day-count">{{ slotsFor(day).length }}</span>
-            </div>
-            <div class="slots">
-              @for (s of slotsFor(day); track s.id) {
-                <div class="slot" [style.border-left]="'4px solid ' + SCHED_COLORS[s.k]" (click)="store.editSlot(s.id)">
-                  <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
-                  <div class="slot-label">{{ s.label }}</div>
-                  <span class="slot-badge" [style.background]="tintOf(s.k)" [style.color]="SCHED_COLORS[s.k]">
-                    <span class="dot" [style.background]="SCHED_COLORS[s.k]"></span>{{ typeLabel(s.k) }}
-                  </span>
-                </div>
-              } @empty {
-                <div class="free">Libre</div>
-              }
-            </div>
-            <div class="add" (click)="store.newSlot(day)">
-              <f-icon name="plus" [size]="13" color="var(--ink2)" [width]="2.6" /> Ajouter
-            </div>
-          </div>
+        @if (!store.narrow()) {
+          <button class="btn btn-primary" (click)="store.newSlot(store.ui().schedDow)">
+            <f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau créneau
+          </button>
         }
       </div>
+
+      <!-- Le filtre reste visible tant qu'il est actif, et s'efface en un geste :
+           un écran qui paraît vide à cause d'un filtre oublié est un piège. -->
+      @if (store.ui().schedWho.length) {
+        <div class="filter-bar">
+          <f-icon name="users" [size]="16" color="var(--ink2)" [width]="2.2" />
+          <span>Filtré sur {{ filterNames() }}</span>
+          <button class="clear" (click)="store.clearSchedWho()">Tout le foyer</button>
+        </div>
+      }
+
+      @if (orphans(); as n) {
+        <div class="warn-bar">
+          <f-icon name="urgent" [size]="16" color="#C6492F" [width]="2.2" />
+          <span>{{ orphanText() }}</span>
+        </div>
+      }
+
+      @if (!d().sched.length) {
+        <div class="blank">
+          <div class="blank-title">Votre semaine est encore vide.</div>
+          <div class="blank-sub">Ajoutez un premier créneau : école, travail, activité, trajet.</div>
+          <button class="btn btn-primary" (click)="store.newSlot(store.ui().schedDow)">
+            <f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau créneau
+          </button>
+        </div>
+      } @else {
+        <!-- Téléphone : vue jour, précédée du sélecteur de jour. Une semaine
+             complète pour quatre membres n'y tient pas sans devenir illisible.
+             Tablette et large : la semaine entière, un jour par colonne. Une
+             seule boucle dessine les deux, il n'y a qu'une liste à tenir. -->
+        @if (store.narrow()) {
+          <div class="day-strip">
+            @for (v of week(); track v.dow) {
+              <button class="dbtn" [class.on]="v.dow === store.ui().schedDow" [class.today]="v.today"
+                      (click)="store.patch({ schedDow: v.dow })">
+                <span class="dbtn-name">{{ v.short }}</span>
+                <span class="dbtn-count" [class.zero]="!v.slots.length">{{ v.slots.length }}</span>
+              </button>
+            }
+          </div>
+        }
+        <div class="grid" [class.solo]="store.narrow()">
+          @for (v of shown(); track v.dow) {
+            <div class="day-card" [class.is-today]="v.today && !store.narrow()">
+              <div class="day-head">
+                <div class="day-name">{{ v.label }}@if (v.today && store.narrow()) { <span class="tag">aujourd'hui</span> }</div>
+                <span class="day-count">{{ v.slots.length }}</span>
+              </div>
+              <div class="slots">
+                @for (s of v.slots; track s.id) {
+                  <div class="slot" [style.border-left]="'4px solid ' + color(s.k)" (click)="store.editSlot(s.id)">
+                    <div class="slot-top">
+                      <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
+                      <f-who [badges]="badges(s)" />
+                    </div>
+                    <div class="slot-label">{{ s.label }}</div>
+                    <span class="slot-badge" [style.background]="tintOf(s.k)" [style.color]="color(s.k)">
+                      <span class="dot" [style.background]="color(s.k)"></span>{{ typeLabel(s.k) }}
+                    </span>
+                  </div>
+                } @empty {
+                  <!-- « Rien ici » et « rien ici à cause du filtre » ne se disent
+                       pas pareil : le second doit proposer sa propre sortie. -->
+                  <div class="free">{{ store.ui().schedWho.length ? 'Rien pour ce filtre' : 'Libre' }}</div>
+                }
+              </div>
+              <div class="add" (click)="store.newSlot(v.dow)">
+                <f-icon name="plus" [size]="13" color="var(--ink2)" [width]="2.6" /> Ajouter
+              </div>
+            </div>
+          }
+        </div>
+      }
     </div>
 
     @if (store.ui().schedEdit) {
       <f-modal [title]="formTitle()" [maxWidth]="520" (close)="store.patch({ schedEdit: false })">
         <div class="field-label">Jour</div>
         <div class="seg wrap">
-          @for (day of days; track day) {
-            <button [class.active]="store.ui().seDay === day" (click)="store.patch({ seDay: day })">{{ day }}</button>
+          @for (n of days; track n) {
+            <button [class.active]="store.ui().seDow === n" (click)="store.patch({ seDow: n })">{{ label(n) }}</button>
+          }
+        </div>
+
+        <div class="field-label">Qui</div>
+        <div class="who-opts">
+          @for (m of d().members; track m.id) {
+            <div class="who-opt" [class.on]="store.ui().seWho.includes(m.id)"
+                 [style.border-color]="store.ui().seWho.includes(m.id) ? m.color : 'transparent'"
+                 (click)="store.toggleSlotWho(m.id)">
+              <f-avatar [ini]="m.ini" [color]="m.color" [size]="24" />
+              <span>{{ m.name }}</span>
+            </div>
           }
         </div>
 
@@ -102,37 +189,73 @@ import { SCHED_DAYS, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
     }
   `,
   styles: [`
-    .head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 22px; flex-wrap: wrap; }
+    .head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
     .members { display: flex; flex-wrap: wrap; gap: 10px; }
     .pill { display: flex; align-items: center; gap: 9px; padding: 8px 16px 8px 8px; border-radius: 14px; cursor: pointer; background: var(--surface); color: var(--ink); font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px -14px rgba(90,60,40,.6); }
     .pill.active { background: var(--primary); color: #fff; }
     .head-row .btn { flex: none; }
+    :host-context(.shell.narrow) .head-row { margin-bottom: 12px; }
+    :host-context(.shell.narrow) .members { gap: 8px; }
+    :host-context(.shell.narrow) .pill { padding: 6px 12px 6px 6px; font-size: 13px; gap: 7px; }
 
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; align-items: start; }
-    :host-context(.shell.narrow) .grid { grid-template-columns: repeat(2, 1fr); }
-    @media (max-width: 860px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+    .filter-bar, .warn-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-radius: 13px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+    .filter-bar { background: var(--soft2); color: var(--ink2); }
+    .warn-bar { background: color-mix(in srgb, #C6492F 12%, var(--surface)); color: #C6492F; }
+    .filter-bar span, .warn-bar span { flex: 1; min-width: 0; }
+    .clear { border: none; cursor: pointer; background: var(--surface); color: var(--ink); border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 800; font-family: inherit; }
+
+    .blank { background: var(--surface); border-radius: 18px; padding: 34px 20px; text-align: center; box-shadow: 0 12px 28px -22px rgba(90,60,40,.5); }
+    .blank-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink); }
+    .blank-sub { font-size: 13.5px; font-weight: 600; color: var(--ink2); margin: 6px 0 18px; }
+    .blank .btn { display: inline-flex; }
+
+    .day-strip { display: flex; gap: 6px; margin-bottom: 14px; }
+    .dbtn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px; border: none; border-radius: 13px; background: var(--surface); color: var(--ink2); font-family: inherit; cursor: pointer; }
+    .dbtn.on { background: var(--primary); color: #fff; }
+    .dbtn.today:not(.on) { box-shadow: inset 0 0 0 2px var(--primary); }
+    .dbtn-name { font-size: 12px; font-weight: 800; }
+    .dbtn-count { font-size: 10.5px; font-weight: 800; opacity: .8; }
+    .dbtn-count.zero { opacity: .35; }
+
+    /* La semaine se lit d'un coup quand elle tient sur une ligne. En dessous,
+       quatre colonnes valent mieux qu'un remplissage automatique, qui donnait
+       huit colonnes pour sept jours sur un grand écran. */
+    .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; align-items: start; }
+    @media (max-width: 1470px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .grid.solo, :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
+    .grid.solo .day-card { min-height: 0; }
 
     .day-card { background: var(--surface); border-radius: 18px; padding: 14px; box-shadow: 0 12px 28px -22px rgba(90,60,40,.5); min-height: 230px; display: flex; flex-direction: column; }
-    .day-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .day-card.is-today { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
+    .day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
     .day-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink); }
     .day-count { font-size: 11px; font-weight: 800; color: var(--ink3); }
+    .tag { font-family: var(--font-body); font-size: 10.5px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; }
 
     .slots { display: flex; flex-direction: column; gap: 8px; flex: 1; }
     .slot { background: var(--soft); border-radius: 12px; padding: 10px 11px; cursor: pointer; }
-    .slot-time { font-family: var(--font-display); font-size: 12.5px; font-weight: 700; color: var(--ink2); }
-    .slot-label { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-top: 2px; line-height: 1.2; }
+    .slot-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    /* Si la place manque, c'est l'heure qui se coupe, jamais le marqueur
+       d'identité : savoir de qui il s'agit prime sur la minute exacte. */
+    .slot-top f-who { flex: none; }
+    .slot-time { font-family: var(--font-display); font-size: 12.5px; font-weight: 700; color: var(--ink2); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .slot-label { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-top: 3px; line-height: 1.2; }
     .slot-badge { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; padding: 3px 8px; border-radius: 8px; font-size: 10.5px; font-weight: 800; }
     .slot-badge .dot { width: 7px; height: 7px; border-radius: 2px; }
-    .free { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--ink3); font-size: 12px; font-weight: 700; padding: 16px 0; }
+    .free { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--ink3); font-size: 12px; font-weight: 700; padding: 16px 0; text-align: center; }
 
     .add { margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px; border-radius: 11px; background: var(--soft2); color: var(--ink2); font-size: 12px; font-weight: 800; cursor: pointer; }
 
-    .seg.wrap { flex-wrap: wrap; margin-bottom: 20px; }
+    .seg.wrap { flex-wrap: wrap; margin-bottom: 6px; }
     .form-row { display: flex; gap: 12px; margin-bottom: 4px; }
     .field { flex: 1; min-width: 0; }
     .field-label { margin-top: 4px; }
     .input { margin-bottom: 4px; }
+
+    .who-opts { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 8px; }
+    .who-opt { display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 7px; border-radius: 13px; background: var(--soft); color: var(--ink); font-size: 13.5px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
+    .who-opt.on { background: var(--soft2); }
 
     .type-opts { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; }
     .type-opt { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
@@ -140,31 +263,67 @@ import { SCHED_DAYS, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
 
     .modal-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
     .modal-actions .spacer { flex: 1; }
+    /* Sur téléphone, les trois boutons côte à côte poussaient « Enregistrer »
+       hors de l'écran : le geste central du formulaire était injoignable. */
+    :host-context(.shell.narrow) .modal-actions { flex-wrap: wrap; }
+    :host-context(.shell.narrow) .modal-actions .spacer { display: none; }
+    :host-context(.shell.narrow) .modal-actions .btn-soft,
+    :host-context(.shell.narrow) .modal-actions .btn-primary { flex: 1; }
+    :host-context(.shell.narrow) .modal-actions .btn-danger { order: 3; flex: 1 0 100%; }
   `],
 })
 export class PlanningScreen {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
-  days = SCHED_DAYS;
+  days = [1, 2, 3, 4, 5, 6, 7];
   types = SCHED_TYPES;
-  SCHED_COLORS = SCHED_COLORS;
 
-  private byDay = computed(() => {
-    const who = this.store.ui().schedChild;
-    return this.d().sched
-      .filter((s) => s.who === who)
-      .slice()
-      .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  label(dow: number): string { return dowLabel(dow); }
+  filtered(id: string): boolean { return this.store.ui().schedWho.includes(id); }
+
+  /** La semaine entière, filtrée une seule fois pour les deux vues. */
+  readonly week = computed<DayView[]>(() => {
+    const sched = this.d().sched;
+    const who = this.store.ui().schedWho;
+    const today = weekdayOf(this.store.todayStr());
+    return this.days.map((dow) => ({
+      dow,
+      label: dowLabel(dow),
+      short: DOW[dow - 1],
+      today: dow === today,
+      slots: filterSlots(slotsOnDow(sched, dow), who),
+    }));
   });
 
-  slotsFor(day: string) { return this.byDay().filter((s) => s.day === day); }
+  /** Ce que la vue dessine : le jour retenu sur téléphone, la semaine ailleurs. */
+  readonly shown = computed<DayView[]>(() => {
+    if (!this.store.narrow()) return this.week();
+    const dow = this.store.ui().schedDow;
+    return this.week().filter((v) => v.dow === dow);
+  });
+
+  readonly filterNames = computed(() => {
+    const who = this.store.ui().schedWho;
+    return this.d().members.filter((m) => who.includes(m.id)).map((m) => m.name).join(', ');
+  });
+
+  /** Les créneaux que plus personne ne porte, restés d'un membre supprimé. */
+  readonly orphans = computed(() => this.d().sched.filter((s) => !(s.who || []).length).length);
+  readonly orphanText = computed(() => {
+    const n = this.orphans();
+    return n > 1
+      ? n + ' créneaux sont sans membre : ouvrez-les pour leur attribuer quelqu’un.'
+      : '1 créneau est sans membre : ouvrez-le pour lui attribuer quelqu’un.';
+  });
+
+  badges(s: SchedSlot) { return whoBadges(s, this.d().members); }
 
   typeLabel(k: string): string { return SCHED_TYPES.find((t) => t.k === k)?.label || k; }
+  color(k: string): string { return SCHED_COLORS[k] || 'var(--ink3)'; }
 
   tintOf(k: string): string {
-    const c = SCHED_COLORS[k] || 'var(--ink3)';
-    return `color-mix(in srgb, ${c} 14%, var(--surface))`;
+    return `color-mix(in srgb, ${this.color(k)} 14%, var(--surface))`;
   }
 
   formTitle = computed(() => (this.store.ui().seEditId ? 'Modifier le créneau' : 'Nouveau créneau'));

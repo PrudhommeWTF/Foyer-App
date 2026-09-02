@@ -38,8 +38,6 @@ export interface DayFacts {
   holiday: boolean;
   schoolHoliday: boolean;
   sched: SchedSlot[];
-  /** Jour de la semaine du créneau, tel que l'emploi du temps le nomme. */
-  schedDay: string;
 }
 
 /** Le contexte figé qui décide de l'ordre. Rien d'autre n'y entre. */
@@ -73,7 +71,7 @@ export function dayKindsOf(kinds: DayKind[], f: DayFacts): DayKind[] {
       case 'ferie': return f.holiday;
       case 'vacances': return f.schoolHoliday;
       case 'semaine': return (k.jours || []).includes(weekday);
-      case 'emploiDuTemps': return f.sched.some((s) => s.day === f.schedDay && s.k === k.type);
+      case 'emploiDuTemps': return f.sched.some((s) => s.dow === weekday && s.k === k.type);
       default: return false;
     }
   });

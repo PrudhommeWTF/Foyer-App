@@ -84,7 +84,13 @@ export interface Recipe {
   rating?: number | null;
   ingr: string[]; steps: string[];
 }
-export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: string; }
+/**
+ * Un créneau de la semaine type. `who` porte **plusieurs** membres : la messe du
+ * dimanche ou un trajet en voiture concernent tout le monde, et les recopier une
+ * fois par personne était une régression, pas une solution. `dow` numérote le
+ * jour (lundi = 1, dimanche = 7), comme partout ailleurs dans l'application.
+ */
+export interface SchedSlot { id: string; who: string[]; dow: number; start: string; end: string; label: string; k: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {
   dateFmt: string;

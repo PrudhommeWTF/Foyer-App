@@ -39,7 +39,7 @@ const fullDoc = (): HouseholdState => ({
   ],
   msgs: [{ who: 'm1', text: 'Je rentre tard', time: '18:04' }],
   // Le 21 août 2026 est un vendredi : l'emploi du temps est une semaine type.
-  sched: [{ id: 'sc1', who: 'm1', day: 'Vendredi', start: '08:30', end: '16:30', label: 'École', k: 'ecole' }],
+  sched: [{ id: 'sc1', who: ['m1'], dow: 5, start: '08:30', end: '16:30', label: 'École', k: 'ecole' }],
   recipes: [{ id: 'r1', name: 'Gratin', level: 'Facile', color: '#7A9B76', prepMin: 15, cookMin: 45, ingr: [], steps: [] }],
   meals: { [TODAY + '-soir']: { items: [{ rid: 'r1' }] } },
 });
@@ -364,9 +364,9 @@ test('économies : tout mené à bien n’est pas « aucune piste »', () => {
 test('planning : les créneaux du jour, à l’heure, tous membres confondus', () => {
   const doc = fullDoc();
   doc.sched = [
-    { id: 'a', who: 'm1', day: 'Vendredi', start: '17:00', end: '18:00', label: 'Judo', k: 'sport' },
-    { id: 'b', who: 'm1', day: 'Vendredi', start: '08:30', end: '16:30', label: 'École', k: 'ecole' },
-    { id: 'c', who: 'm1', day: 'Lundi', start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' },
+    { id: 'a', who: ['m1'], dow: 5, start: '17:00', end: '18:00', label: 'Judo', k: 'sport' },
+    { id: 'b', who: ['m1'], dow: 5, start: '08:30', end: '16:30', label: 'École', k: 'ecole' },
+    { id: 'c', who: ['m1'], dow: 1, start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' },
   ];
   const s = provider('planning').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
@@ -378,7 +378,7 @@ test('planning : les créneaux du jour, à l’heure, tous membres confondus', (
 
 test('planning : une journée sans créneau n’est pas un emploi du temps absent', () => {
   const doc = fullDoc();
-  doc.sched = [{ id: 'c', who: 'm1', day: 'Dimanche', start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' }];
+  doc.sched = [{ id: 'c', who: ['m1'], dow: 7, start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' }];
   const a = provider('planning').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   const b = provider('planning').state(ctx(ready(snap(emptyDoc())), ready(finSnapshot())));
   assert.equal(a.kind, 'empty');

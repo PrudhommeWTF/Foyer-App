@@ -19,7 +19,7 @@ import {
 } from './exports';
 import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
-import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
@@ -2017,12 +2017,50 @@ export class FoyerStore {
   }
   confirmRecipeDel(): void { const id = this.ui().confirmDelId; if (!id) return; this.mutate((d) => { d.recipes = d.recipes.filter((r) => r.id !== id); }); this.patch({ confirmDelId: null, openRecipeId: this.ui().openRecipeId === id ? null : this.ui().openRecipeId }); this.toast('Recette supprimée'); }
 
-  // ---- planning ---------------------------------------------------------
-  newSlot(day: string): void { this.patch({ screen: 'planning', schedEdit: true, seEditId: null, seDay: day || SCHED_DAYS[0], seStart: '', seEnd: '', seLabel: '', seType: 'ecole', addMenuOpen: false }); }
-  editSlot(id: string): void { const it = this._data()?.sched.find((x) => x.id === id); if (!it) return; this.patch({ schedEdit: true, seEditId: id, seDay: it.day, seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k }); }
+  // ---- emploi du temps --------------------------------------------------
+  //
+  // Le filtre par membre est un **affinage** : vide, il laisse passer tout le
+  // foyer. Il ne s'initialise donc sur personne, et se vide en un geste.
+
+  /** Les membres du filtre, tels que l'écran les coche et les décoche. */
+  toggleSchedWho(id: string): void {
+    const cur = this.ui().schedWho;
+    this.patch({ schedWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
+  clearSchedWho(): void { this.patch({ schedWho: [] }); }
+
+  /** Les membres portés par le créneau en cours d'édition. */
+  toggleSlotWho(id: string): void {
+    const cur = this.ui().seWho;
+    this.patch({ seWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
+
+  /**
+   * Nouveau créneau. Le formulaire s'ouvre déjà rempli des membres du filtre :
+   * quand on vient d'affiner sur Léa, le créneau qu'on ajoute est pour Léa, et
+   * la saisie tombe d'un geste.
+   */
+  newSlot(dow = 0, start = ''): void {
+    const s = this.ui();
+    this.patch({
+      screen: 'planning', schedEdit: true, seEditId: null,
+      seDow: dow >= 1 && dow <= 7 ? dow : s.schedDow,
+      seWho: [...s.schedWho], seStart: start, seEnd: '', seLabel: '', seType: 'ecole', addMenuOpen: false,
+    });
+  }
+  editSlot(id: string): void {
+    const it = this._data()?.sched.find((x) => x.id === id); if (!it) return;
+    this.patch({ schedEdit: true, seEditId: id, seDow: it.dow, seWho: [...(it.who || [])], seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k });
+  }
   saveSlot(): void {
-    const s = this.ui(); const label = s.seLabel.trim(); if (!label) { this.toast('Donne un intitulé'); return; } const start = s.seStart.trim(); if (!start) { this.toast('Indique une heure de début'); return; }
-    const data = { who: s.schedChild, day: s.seDay, start, end: s.seEnd.trim(), label, k: s.seType };
+    const s = this.ui();
+    const label = s.seLabel.trim(); if (!label) { this.toast('Donne un intitulé'); return; }
+    const start = s.seStart.trim(); if (!start) { this.toast('Indique une heure de début'); return; }
+    // Un créneau sans personne ne veut rien dire, et c'est ce qui force la
+    // reprise des créneaux orphelins : les rouvrir demande de leur attribuer
+    // quelqu'un avant de pouvoir enregistrer.
+    if (!s.seWho.length) { this.toast('Choisis au moins un membre'); return; }
+    const data = { who: [...s.seWho], dow: s.seDow, start, end: s.seEnd.trim(), label, k: s.seType };
     this.mutate((d) => {
       if (s.seEditId) { const i = d.sched.findIndex((x) => x.id === s.seEditId); if (i >= 0) d.sched[i] = { ...d.sched[i], ...data }; }
       else d.sched.push({ id: uid('s'), ...data });
@@ -2030,7 +2068,22 @@ export class FoyerStore {
     this.toast(s.seEditId ? 'Créneau modifié' : 'Créneau ajouté');
     this.patch({ schedEdit: false, seEditId: null });
   }
-  delSlot(): void { const id = this.ui().seEditId; if (!id) return; this.mutate((d) => { d.sched = d.sched.filter((x) => x.id !== id); }); this.patch({ schedEdit: false, seEditId: null }); this.toast('Créneau supprimé'); }
+  /**
+   * Supprime le créneau ouvert, avec retour en arrière.
+   *
+   * L'annulation **réinsère le créneau retenu** plutôt que de remettre une copie
+   * de tout l'emploi du temps : à deux sur l'application, une remise en bloc
+   * effacerait ce que l'autre a ajouté entre-temps.
+   */
+  delSlot(): void {
+    const id = this.ui().seEditId; if (!id) return;
+    const slot = this._data()?.sched.find((x) => x.id === id);
+    this.mutate((d) => { d.sched = d.sched.filter((x) => x.id !== id); });
+    this.patch({ schedEdit: false, seEditId: null });
+    if (!slot) { this.toast('Créneau supprimé'); return; }
+    const copie = { ...slot, who: [...(slot.who || [])] };
+    this.toastWithUndo('Créneau supprimé', () => this.mutate((d) => { if (!d.sched.some((x) => x.id === copie.id)) d.sched.push(copie); }));
+  }
 
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
@@ -2050,13 +2103,21 @@ export class FoyerStore {
   confirmMemberDel(): void {
     const id = this.ui().memberDelId; if (!id) return;
     const hadAccount = this.memberHasAccount(id);
-    this.mutate((d) => { d.members = d.members.filter((m) => m.id !== id); });
-    const sc = this.ui().schedChild === id ? (this._data()?.members[0]?.id || 'cam') : this.ui().schedChild;
-    this.patch({ memberDelId: null, schedChild: sc });
+    // Ses créneaux ne partent pas avec lui : ceux qu'il partageait restent
+    // entiers pour les autres, et ceux qui n'étaient qu'à lui deviennent « sans
+    // membre », visibles et réparables. Les effacer serait une perte muette.
+    const seuls = (this._data()?.sched || []).filter((x) => (x.who || []).length === 1 && x.who[0] === id).length;
+    this.mutate((d) => {
+      d.members = d.members.filter((m) => m.id !== id);
+      d.sched = d.sched.map((x) => ((x.who || []).includes(id) ? { ...x, who: x.who.filter((w) => w !== id) } : x));
+    });
+    this.patch({ memberDelId: null, schedWho: this.ui().schedWho.filter((x) => x !== id) });
     if (hadAccount) {
       this.flush().then(() => this.api.deleteMemberAccount(id)).then(() => this.refreshAccounts()).catch(() => { /* ignore */ });
     }
-    this.toast('Membre retiré');
+    this.toast(seuls
+      ? 'Membre retiré, ' + seuls + (seuls > 1 ? ' créneaux sont désormais sans membre' : ' créneau est désormais sans membre')
+      : 'Membre retiré');
   }
   openProfile(): void {
     const m = this.me();

@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 6;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -43,6 +43,9 @@ export interface StateMigration {
 }
 
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+
+/** Les jours tels que `SchedSlot.day` les nommait avant la migration 6. */
+const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 
 export const STATE_MIGRATIONS: StateMigration[] = [
   {
@@ -205,6 +208,63 @@ export const STATE_MIGRATIONS: StateMigration[] = [
         ctx.log(
           `${failed.length} document(s) illisible(s), laissé(s) dans le document d'état : ${failed.slice(0, 5).join(', ')}` +
           (failed.length > 5 ? ', …' : '') + '. Rouvrez ces fiches et reposez le fichier pour le ranger sur le disque.',
+        );
+      }
+    },
+  },
+  {
+    version: 6,
+    label: 'emploi du temps : créneaux à plusieurs membres, jour numéroté',
+    up: (doc, ctx) => {
+      // Deux dettes soldées d'un coup, parce qu'elles touchent les deux mêmes
+      // champs de chaque créneau :
+      //
+      //   - `who` portait **un** membre. Un créneau qui concerne toute la
+      //     famille demandait donc quatre saisies, quatre modifications et
+      //     quatre suppressions.
+      //   - `day` portait le nom français du jour. Le reste de l'application
+      //     compte déjà en lundi = 1 (voir presence.ts) : une chaîne à traduire
+      //     à chaque calcul de date n'avait pas lieu d'être.
+      const connus = new Set(arr(doc['members']).map((m) => String(m['id'])));
+      let orphelins = 0;
+      const sansJour: string[] = [];
+
+      for (const s of arr(doc['sched'])) {
+        // Un membre qui n'existe pas laisse le créneau **sans** membre plutôt
+        // que de l'emporter avec lui : l'écran l'affiche alors « sans membre »,
+        // ce qui se répare en deux gestes. Le supprimer serait une perte muette.
+        if (Array.isArray(s['who'])) {
+          s['who'] = s['who'].filter((x: unknown) => typeof x === 'string' && connus.has(x));
+        } else {
+          const id = typeof s['who'] === 'string' ? s['who'].trim() : '';
+          if (id && !connus.has(id)) orphelins++;
+          s['who'] = id && connus.has(id) ? [id] : [];
+        }
+
+        if (typeof s['dow'] !== 'number' || s['dow'] < 1 || s['dow'] > 7) {
+          const i = JOURS.indexOf(String(s['day'] ?? ''));
+          if (i >= 0) s['dow'] = i + 1;
+          else {
+            // Un nom de jour illisible ne peut venir que d'une retouche à la
+            // main. Le créneau est gardé, posé au lundi, et **nommé** dans le
+            // journal : c'est la seule façon d'aller le remettre au bon jour.
+            s['dow'] = 1;
+            sansJour.push(String(s['label'] ?? '(sans intitulé)'));
+          }
+        }
+        delete s['day'];
+      }
+
+      if (orphelins) {
+        ctx.log(
+          `${orphelins} créneau(x) d'emploi du temps rattaché(s) à un membre inconnu : ils sont conservés ` +
+          'sans membre et signalés dans l\'écran Emploi du temps, où il suffit de leur en attribuer un.',
+        );
+      }
+      if (sansJour.length) {
+        ctx.log(
+          `${sansJour.length} créneau(x) au jour illisible, placé(s) au lundi : ${sansJour.slice(0, 5).join(', ')}` +
+          (sansJour.length > 5 ? ', …' : '') + '. Rouvrez-les pour les remettre au bon jour.',
         );
       }
     },

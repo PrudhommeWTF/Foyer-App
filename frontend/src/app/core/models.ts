@@ -122,7 +122,21 @@ export interface Recipe {
   rating?: number | null;
   ingr: string[]; steps: string[];
 }
-export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: SchedType; }
+/**
+ * Un créneau de la semaine type.
+ *
+ * `who` porte **plusieurs** membres, et c'est le choix de fond du module : un
+ * emploi du temps de foyer n'est pas quatre agendas côte à côte, c'est un
+ * agenda partagé où chaque créneau porte une ou plusieurs personnes. La messe
+ * du dimanche, un trajet en voiture, un repas de famille sont une ligne, pas
+ * quatre. Une liste vide est licite et se lit « sans membre » : c'est ce que
+ * deviennent les créneaux dont le membre a été supprimé, plutôt que de partir
+ * avec lui.
+ *
+ * `dow` numérote le jour, lundi = 1 et dimanche = 7, comme `weekdayOf` et la
+ * semaine type des repas (voir presence.ts).
+ */
+export interface SchedSlot { id: string; who: string[]; dow: number; start: string; end: string; label: string; k: SchedType; }
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {

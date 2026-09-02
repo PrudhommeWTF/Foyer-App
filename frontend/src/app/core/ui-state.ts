@@ -1,5 +1,6 @@
 import { FileType, MealItem, Prio, Rayon, Recur, SchedType, ShopState } from './models';
 import { todayIn } from './helpers';
+import { weekdayOf } from './presence';
 import { HOUSEHOLD_TZ } from './constants';
 
 export interface IngrRow { id: string; val: string; }
@@ -108,8 +109,15 @@ export interface UiState {
   recipeSearch: string;
 
   // planning
-  schedChild: string; schedEdit: boolean; seEditId: string | null;
-  seDay: string; seStart: string; seEnd: string; seLabel: string; seType: SchedType;
+  /**
+   * Filtre par membre de l'emploi du temps. **Vide veut dire tout le foyer**,
+   * jamais rien : la sélection est un affinage, pas un prérequis à l'affichage.
+   */
+  schedWho: string[];
+  /** Jour montré par la vue jour (téléphone), lundi = 1. */
+  schedDow: number;
+  schedEdit: boolean; seEditId: string | null;
+  seDow: number; seWho: string[]; seStart: string; seEnd: string; seLabel: string; seType: SchedType;
 
   // family & profile
   familyOpen: boolean; famNameField: string;
@@ -151,7 +159,8 @@ export function initialUi(): UiState {
     fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
     fImportUrl: '', fImportBusy: false, fImportWarnings: [],
     fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
-    schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
+    schedWho: [], schedDow: weekdayOf(today), schedEdit: false, seEditId: null,
+    seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
     mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [],

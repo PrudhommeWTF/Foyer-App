@@ -26,11 +26,11 @@ const rules = (regles: HomeRules['regles'], seuilRepli = -20): HomeRules =>
   ({ moments: MOMENTS, typesDeJour: JOURS, regles, seuilRepli });
 
 const creneau = (over: Partial<SchedSlot> = {}): SchedSlot =>
-  ({ id: 's1', who: 'm1', day: 'Jeudi', start: '08:30', end: '16:30', label: 'École', k: 'ecole', ...over });
+  ({ id: 's1', who: ['m1'], dow: 4, start: '08:30', end: '16:30', label: 'École', k: 'ecole', ...over });
 
 /** Le 2026-09-03 est un jeudi ; le 2026-09-05, un samedi. */
 const facts = (over: Partial<DayFacts> = {}): DayFacts =>
-  ({ today: '2026-09-03', holiday: false, schoolHoliday: false, sched: [], schedDay: 'Jeudi', ...over });
+  ({ today: '2026-09-03', holiday: false, schoolHoliday: false, sched: [], ...over });
 
 const ORDRE = ['agenda', 'planning', 'taches', 'repas', 'courses', 'finances'];
 const ids = (r: ReturnType<typeof rankTiles>): string[] => r.map((x) => x.id);
@@ -63,7 +63,7 @@ test('le type de jour vient des données, pas d’une liste de dates', () => {
 });
 
 test('un créneau d’un autre jour de la semaine type ne fait pas un jour d’école', () => {
-  assert.deepEqual(dayKindsOf(JOURS, facts({ sched: [creneau({ day: 'Lundi' })] })), []);
+  assert.deepEqual(dayKindsOf(JOURS, facts({ sched: [creneau({ dow: 1 })] })), []);
 });
 
 test('plusieurs types de jour peuvent valoir ensemble', () => {

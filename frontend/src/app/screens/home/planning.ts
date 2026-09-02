@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { AvatarComponent } from '../../shared/avatar';
 import { TileComponent } from '../../shared/tile';
+import { WhoComponent } from '../../shared/who';
 import { SCHED_COLORS } from '../../core/constants';
 import { PlanningTileData } from '../../core/tiles/planning.tile';
+import { SchedSlot } from '../../core/models';
+import { whoBadges } from '../../core/schedule';
 import { HomeTile } from './base';
 
 @Component({
   selector: 'tile-planning',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TileComponent, AvatarComponent],
+  imports: [TileComponent, WhoComponent],
   template: `
     <f-tile [title]="tile().title" [link]="tile().link" [state]="state()" [raison]="raison()" [collapsed]="collapsed()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
@@ -20,10 +22,7 @@ import { HomeTile } from './base';
               <div class="hours">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
               <div class="body">
                 <div class="label">{{ s.label }}</div>
-                <div class="who">
-                  <f-avatar [ini]="store.memberIni(s.who)" [color]="store.memberColor(s.who)" [size]="16" />
-                  <span>{{ store.memberName(s.who) }}</span>
-                </div>
+                <div class="who"><f-who [badges]="badges(s)" [size]="18" /></div>
               </div>
             </div>
           }
@@ -42,4 +41,6 @@ import { HomeTile } from './base';
 })
 export class PlanningTile extends HomeTile<PlanningTileData> {
   color(k: string): string { return SCHED_COLORS[k] || 'var(--ink3)'; }
+  /** Les mêmes marqueurs d'identité que l'écran : une seule source de couleurs. */
+  badges(s: SchedSlot) { return whoBadges(s, this.store.data()?.members || []); }
 }

@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -355,6 +355,75 @@ test('une fiche sans fichier perd sa clé vide sans être rangée', () => {
   const res = run({ files: [{ id: 'd1', name: 'Sans pièce', data: null }] });
   assert.equal(res.stored.length, 0);
   assert.equal('data' in res.doc['files'][0], false);
+});
+
+// ---- emploi du temps -------------------------------------------------------
+
+/** Un foyer minimal : les membres décident quels créneaux sont rattachables. */
+const foyer = (sched: any[]) => ({ members: [{ id: 'me' }, { id: 'm1' }], sched });
+
+test('un créneau à un seul membre devient un créneau à liste de membres', () => {
+  const res = run(foyer([{ id: 's1', who: 'm1', day: 'Mardi', start: '08:00', end: '16:30', label: 'École', k: 'ecole' }]));
+  const slot = res.doc['sched'][0];
+  assert.deepEqual(slot.who, ['m1']);
+  assert.equal(slot.dow, 2);
+  assert.equal('day' in slot, false, 'le nom du jour ne doit plus traîner à côté du numéro');
+  assert.equal(slot.label, 'École');
+});
+
+test('les sept jours se numérotent de lundi à dimanche', () => {
+  const jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  const res = run(foyer(jours.map((day, i) => ({ id: 's' + i, who: 'me', day, start: '09:00', label: day, k: 'autre' }))));
+  assert.deepEqual(res.doc['sched'].map((s: any) => s.dow), [1, 2, 3, 4, 5, 6, 7]);
+});
+
+test('un créneau rattaché à un membre inconnu est conservé sans membre, et signalé', () => {
+  // C'est le cas du foyer réel : le filtre s'initialisait sur « lea », un
+  // identifiant de la maquette, et les créneaux créés lui étaient attribués.
+  const res = run(foyer([{ id: 's1', who: 'lea', day: 'Lundi', start: '07:50', label: 'Car', k: 'ecole' }]));
+  assert.equal(res.doc['sched'].length, 1, 'le créneau ne doit pas partir avec le membre fantôme');
+  assert.deepEqual(res.doc['sched'][0].who, []);
+  assert.deepEqual(res.doc['sched'][0].label, 'Car');
+  assert.ok(res.outcome.notes.some((n) => /membre inconnu/.test(n)));
+});
+
+test('un jour illisible place le créneau au lundi et le nomme dans le journal', () => {
+  const res = run(foyer([{ id: 's1', who: 'me', day: 'Lundu', start: '09:00', label: 'Cabinet', k: 'travail' }]));
+  assert.equal(res.doc['sched'][0].dow, 1);
+  assert.ok(res.outcome.notes.some((n) => /Cabinet/.test(n)), 'le créneau doit être nommé pour être retrouvé');
+});
+
+test('un créneau déjà migré n’est pas retouché', () => {
+  const res = run(foyer([{ id: 's1', who: ['me', 'm1'], dow: 7, start: '10:30', end: '11:30', label: 'Messe', k: 'loisir' }]));
+  assert.deepEqual(res.doc['sched'][0].who, ['me', 'm1']);
+  assert.equal(res.doc['sched'][0].dow, 7);
+});
+
+test('rejouer la migration de l’emploi du temps ne change rien', () => {
+  const premier = run(foyer([
+    { id: 's1', who: 'm1', day: 'Mercredi', start: '14:00', end: '15:00', label: 'Gym', k: 'sport' },
+    { id: 's2', who: 'lea', day: 'Dimanche', start: '10:30', label: 'Messe', k: 'loisir' },
+  ]));
+  const snapshot = JSON.stringify(premier.doc);
+  const second = run(JSON.parse(snapshot));
+  assert.equal(JSON.stringify(second.doc), snapshot, 'la seconde passe doit être un no-op');
+});
+
+test('aucun créneau ne disparaît, quel que soit son état', () => {
+  const res = run(foyer([
+    { id: 's1', who: 'me', day: 'Lundi', start: '09:00', label: 'A', k: 'travail' },
+    { id: 's2', who: 'inconnu', day: 'Mardi', start: '10:00', label: 'B', k: 'autre' },
+    { id: 's3', day: 'Jeudi', start: '11:00', label: 'C', k: 'autre' },
+    { id: 's4', who: ['m1'], dow: 5, start: '12:00', label: 'D', k: 'repas' },
+  ]));
+  assert.deepEqual(res.doc['sched'].map((s: any) => s.label), ['A', 'B', 'C', 'D']);
+  assert.ok(res.doc['sched'].every((s: any) => Array.isArray(s.who) && typeof s.dow === 'number'));
+});
+
+test('un emploi du temps absent ou biscornu ne fait pas tomber la migration', () => {
+  assert.doesNotThrow(() => run({ members: [{ id: 'me' }] }));
+  assert.doesNotThrow(() => run({ members: [{ id: 'me' }], sched: 'oui' }));
+  assert.doesNotThrow(() => run({ sched: [{ id: 's1', who: 'me', day: 'Lundi' }] }));
 });
 
 test('les versions de migration sont uniques, ordonnées et cohérentes avec STATE_VERSION', () => {
