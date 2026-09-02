@@ -137,3 +137,10 @@ export function todayIn(timeZone: string, at: Date = new Date()): string {
     return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
   } catch { return dstr(at); }
 }
+
+/** Décalage en jours sur une date ISO. Le calendrier local, pas l'arithmétique en millisecondes. */
+export function addDaysIso(iso: string, n: number): string {
+  const d = parseDay(iso);
+  d.setDate(d.getDate() + n);
+  return dstr(d);
+}

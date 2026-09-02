@@ -102,6 +102,8 @@ export interface FinHome {
   savings: FinSavingsTotals;
   /** Solde des comptes courants. Null quand il n'y en a aucun. */
   currentBalance: number | null;
+  /** Les comptes courants eux-mêmes, pour saisir une dépense sans quitter l'accueil. */
+  currentAccounts: { id: number; name: string }[];
   energy: { contracts: number; due: FinReadingDue[] };
 }
 

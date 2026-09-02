@@ -46,6 +46,7 @@ const fullDoc = (): HouseholdState => ({
 
 const finSnapshot = (over: Partial<FinSnapshot> = {}): FinSnapshot => ({
   month: '2026-08', monthLabel: 'Août 2026', accounts: 1, currentBalance: 152340,
+  currentAccounts: [{ id: 1, name: 'Compte joint' }],
   deadlines: [echeance()], dayExtras: {}, contracts: 2,
   savings: { pending: 24000, done: 0, count: 3, openCount: 2 },
   energy: { contracts: 1, due: [{ contractId: 9, name: 'Électricité', provider: 'EDF', lastOn: '2026-06-10', daysSince: 72 }] },
@@ -64,7 +65,7 @@ const echeance = (over: Partial<FinDeadline> = {}): FinDeadline => ({
 
 /** Un foyer qui n'a jamais ouvert le module : tout est à zéro déclaré, rien n'est « nul ». */
 const finVierge = (): FinSnapshot => finSnapshot({
-  accounts: 0, currentBalance: null, contracts: 0, deadlines: [],
+  accounts: 0, currentBalance: null, currentAccounts: [], contracts: 0, deadlines: [],
   savings: { pending: 0, done: 0, count: 0, openCount: 0 },
   energy: { contracts: 0, due: [] },
   summary: null,
@@ -393,6 +394,28 @@ test('finances : sans compte courant, aucun solde n’est affiché plutôt qu’
   const s = provider('finances').state(ctx(ready(snap(fullDoc())), ready(finSnapshot({ currentBalance: null }))));
   assert.equal(s.kind, 'ok');
   if (s.kind === 'ok') assert.equal((s.data as { balance: number | null }).balance, null);
+});
+
+test('agenda : demain accompagne aujourd’hui, sans se confondre avec lui', () => {
+  const doc = fullDoc();
+  doc.events = [
+    { id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: 'm1', recur: 'none' },
+    { id: 'e2', date: '2026-08-22', time: '09:00', title: 'Match de foot', who: 'm1', recur: 'none' },
+  ];
+  const s = provider('agenda').state(ctx(ready(snap(doc)), ready(finSnapshot())));
+  assert.equal(s.kind, 'ok');
+  if (s.kind !== 'ok') return;
+  const d = s.data as { events: { id: string }[]; tomorrow: { id: string }[] };
+  assert.deepEqual(d.events.map((e) => e.id), ['e1']);
+  assert.deepEqual(d.tomorrow.map((e) => e.id), ['e2']);
+});
+
+test('agenda : une journée vide mais un lendemain chargé n’est pas « rien de prévu »', () => {
+  const doc = emptyDoc();
+  doc.events = [{ id: 'e2', date: '2026-08-22', time: '09:00', title: 'Match', who: 'm1', recur: 'none' }];
+  // Le soir, ce qui compte est le lendemain : le taire viderait l'écran au
+  // moment précis où il sert le plus.
+  assert.equal(provider('agenda').state(ctx(ready(snap(doc)), ready(finSnapshot()))).kind, 'ok');
 });
 
 // ---- péremption ------------------------------------------------------------

@@ -47,6 +47,10 @@ import { TileState } from '../core/tiles/contract';
     </div>
   `,
   styles: [`
+    /* Sans display, l'hôte reste en ligne : sa boîte déborde sur les tuiles
+       voisines, qui interceptent alors les taps destinés au bas de la carte.
+       Le défaut ne se voyait pas, il empêchait seulement d'appuyer. */
+    :host { display: block; }
     .ch { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
     .card-title.sm { font-size: 17px; line-height: 1.25; }
     .badge { color: var(--ink3); font-weight: 700; }

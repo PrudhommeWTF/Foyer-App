@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { IconComponent } from '../../core/icon';
+import { QuickAddComponent } from '../../shared/quick-add';
 import { TileComponent } from '../../shared/tile';
 import { CoursesTileData } from '../../core/tiles/courses.tile';
 import { HomeTile } from './base';
@@ -8,14 +9,14 @@ import { HomeTile } from './base';
   selector: 'tile-courses',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TileComponent, IconComponent],
+  imports: [TileComponent, IconComponent, QuickAddComponent],
   template: `
     <f-tile [title]="tile().title" [badge]="badge()" [link]="tile().link" [state]="state()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
       @if (data(); as d) {
         <div class="shop-grid">
           @for (it of d.items; track it.id) {
-            <div class="shop-it" (click)="store.toggleShop(it.id)">
+            <div class="shop-it" (click)="store.toggleShopWithUndo(it.id)">
               <span class="tick" [class.on]="it.state === 'panier'">
                 @if (it.state === 'panier') { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }
               </span>
@@ -24,6 +25,11 @@ import { HomeTile } from './base';
             </div>
           }
         </div>
+      }
+      @if (state().kind !== 'error' && state().kind !== 'loading') {
+        <f-quick-add label="Ajouter un article" placeholder="Ex : farine"
+                     [suggestions]="suggestions()" (typed)="query.set($event)"
+                     (submitted)="store.addShop($event)" />
       }
     </f-tile>
   `,
@@ -39,4 +45,8 @@ import { HomeTile } from './base';
 })
 export class CoursesTile extends HomeTile<CoursesTileData> {
   readonly badge = computed(() => { const d = this.data(); return d ? d.left + ' restant' + (d.left > 1 ? 's' : '') : ''; });
+
+  /** Ce qui est tapé, pour que le module propose ce qu'il connaît. */
+  readonly query = signal('');
+  readonly suggestions = computed(() => this.store.shopSuggestions(this.query()));
 }

@@ -12,6 +12,8 @@ export interface FinancesTileData {
    * alors pas de ligne, plutôt que d'afficher un solde de zéro euro.
    */
   balance: number | null;
+  /** Comptes courants où porter une dépense en espèces. Vide = pas de saisie possible. */
+  accounts: { id: number; name: string }[];
 }
 
 /**
@@ -49,7 +51,7 @@ export const financesTile = {
     return ok(
       {
         monthLabel: f.monthLabel, expense: s.expense, income: s.income,
-        budgetTotal: s.budgetTotal, balance: f.currentBalance,
+        budgetTotal: s.budgetTotal, balance: f.currentBalance, accounts: f.currentAccounts,
       },
       asOf,
       s.incomplete ? incompleteLabel(s.missing) : undefined,

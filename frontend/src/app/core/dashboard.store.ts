@@ -63,14 +63,19 @@ export class DashboardStore {
         ? { status: 'error', message: 'Les données du foyer ne peuvent pas être chargées.', detail: 'Document du foyer : ' + err }
         : { status: 'loading' };
     }
-    // Le document est en mémoire : il est montré, mais dit qu'il ne se
-    // rafraîchit plus. Une vue datée vaut mieux qu'un écran vide, à condition
-    // qu'elle ne se fasse pas passer pour fraîche.
+    // Le document est en mémoire : il est montré, mais dit ce qui cloche. Deux
+    // ennuis bien différents : ne plus pouvoir relire (vue datée), et ne plus
+    // pouvoir écrire (modifications en attente). Les confondre ferait croire à
+    // une perte là où il n'y en a pas.
+    const unsaved = this.foyer.saveState() === 'error';
+    const stale = err ? 'Le serveur ne répond pas : dernière vue connue.'
+      : unsaved ? 'Modifications non enregistrées : elles repartiront dès que le serveur répondra.'
+      : '';
     return {
       status: 'ready',
       data: { doc, schoolHolidays: this.foyer.schoolHolidays(), articles: this.foyer.articleIndex() },
       asOf: this.foyer.docLoadedAt(),
-      ...(err ? { stale: 'Le serveur ne répond pas : dernière vue connue.' } : {}),
+      ...(stale ? { stale } : {}),
     };
   }
 
@@ -94,6 +99,7 @@ export class DashboardStore {
         summary: home.summary,
         accounts: home.accounts,
         currentBalance: home.currentBalance,
+        currentAccounts: home.currentAccounts,
         deadlines: home.deadlines,
         dayExtras: this.fin.deadlineExtras(),
         contracts: home.contracts,

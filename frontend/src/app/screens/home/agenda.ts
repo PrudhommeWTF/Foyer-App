@@ -33,6 +33,18 @@ import { HomeTile } from './base';
               </div>
             </div>
           }
+          @if (d.tomorrow.length) {
+            <div class="demain">Demain</div>
+            @for (e of d.tomorrow; track e.id) {
+              <div class="ev next" [style.border-left]="'4px solid ' + store.memberColor(e.who)">
+                <div class="ev-time f-display">{{ e.time }}</div>
+                <div class="ev-body">
+                  <div class="ev-title">{{ e.title }}</div>
+                  <div class="ev-who"><span>{{ store.memberName(e.who) }}</span></div>
+                </div>
+              </div>
+            }
+          }
         </div>
       }
     </f-tile>
@@ -48,6 +60,11 @@ import { HomeTile } from './base';
     .ev-time { font-size: 16px; font-weight: 700; color: var(--ink); min-width: 48px; }
     .ev-title { font-weight: 800; font-size: 15px; color: var(--ink); }
     .ev-who { display: flex; align-items: center; gap: 6px; margin-top: 5px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    /* Demain est là pour être préparé ce soir, pas pour concurrencer aujourd'hui. */
+    .demain { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .08em; margin-top: 4px; }
+    .ev.next { padding: 10px 14px; background: transparent; border-left-style: dashed; }
+    .ev.next .ev-time { font-size: 14px; color: var(--ink2); }
+    .ev.next .ev-title { font-size: 13.5px; color: var(--ink2); }
   `],
 })
 export class AgendaTile extends HomeTile<AgendaTileData> {}

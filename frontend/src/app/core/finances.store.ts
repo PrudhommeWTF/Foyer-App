@@ -309,14 +309,82 @@ export class FinancesStore {
       }));
   }
 
-  /** Copier une échéance dans les tâches, à la demande et une seule fois. */
-  taskFromDeadline(contractId: number, kind: string, date: string): void {
-    const c = this.contracts().find((x) => x.id === contractId);
-    if (!c) return;
-    this.foyer.addExternalTask(`${deadlineLabel(kind)} : ${c.name}`, date, c.memberIds[0] ?? null);
+  /**
+   * Copier une échéance dans les tâches : « j'ai vu, je m'en occupe ».
+   *
+   * L'échéance porte tout ce qu'il faut. Lire la liste des contrats, comme
+   * auparavant, rendait la main en silence partout où elle n'était pas chargée,
+   * ce qui est précisément le cas depuis l'accueil.
+   */
+  taskFromDeadline(d: FinDeadline): void {
+    this.foyer.addExternalTask(`${deadlineLabel(d.kind)} : ${d.contractName}`, d.date, d.memberIds[0] ?? null);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
+
+  // ---- gestes rapides ------------------------------------------------------
+  // Ils appellent l'API du module, ils ne réimplémentent rien. Ils ne sont pas
+  // optimistes, et c'est délibéré : un total de dépenses qui bouge puis revient
+  // en arrière est pire qu'un total qui arrive une seconde plus tard. Le retour
+  // immédiat est donné par le formulaire, qui se ferme, et par le toast.
+
+  /** Un geste rapide est en cours. Le formulaire s'y accroche pour ne pas partir deux fois. */
+  readonly quickBusy = signal(false);
+
+  /**
+   * Une dépense en espèces, saisie depuis l'accueil. Sans catégorie : la ranger
+   * est le travail des règles et de l'écran Finances, pas d'un geste de cinq
+   * secondes fait dans une file d'attente.
+   */
+  async quickExpense(accountId: number, amount: string, label: string): Promise<void> {
+    if (this.quickBusy()) return;
+    this.quickBusy.set(true);
+    try {
+      const { transaction } = await this.api.createTransaction({
+        accountId, date: this.foyer.todayStr(), amount: '-' + amount.trim().replace(/^[-+]/, ''),
+        kind: 'depense', label: label.trim() || 'Espèces', categoryId: null,
+        notes: '', cleared: true,
+      });
+      await this.loadHome(this.homeMonth());
+      this.foyer.toastWithUndo('Dépense enregistrée', () => void this.undoTransaction(transaction.id));
+    } catch (e) {
+      this.foyer.toast((e as Error).message);
+    } finally {
+      this.quickBusy.set(false);
+    }
+  }
+
+  /**
+   * Retire une opération que l'on vient de créer. C'est la seule suppression
+   * permise depuis l'accueil, et elle ne peut viser que cet identifiant-là.
+   */
+  private async undoTransaction(id: number): Promise<void> {
+    try {
+      await this.api.deleteTransaction(id);
+      await this.loadHome(this.homeMonth());
+      this.foyer.toast('Dépense annulée');
+    } catch (e) {
+      this.foyer.toast('Annulation impossible : ' + (e as Error).message);
+    }
+  }
+
+  /** Un relevé de compteur, saisi depuis l'accueil quand la tuile le réclame. */
+  async quickReading(contractId: number, indexTotal: string): Promise<void> {
+    if (this.quickBusy()) return;
+    this.quickBusy.set(true);
+    try {
+      await this.api.createReading({
+        contractId, date: this.foyer.todayStr(), indexTotal: indexTotal.trim(),
+        indexHp: '', indexHc: '', kwh: '', kwhHp: '', kwhHc: '', cost: '', notes: '',
+      });
+      await this.loadHome(this.homeMonth());
+      this.foyer.toast('Relevé enregistré');
+    } catch (e) {
+      this.foyer.toast((e as Error).message);
+    } finally {
+      this.quickBusy.set(false);
+    }
+  }
 
   /** Current month (YYYY-MM) in the household time zone. */
   private currentMonth(): string { return this.foyer.todayStr().slice(0, 7); }

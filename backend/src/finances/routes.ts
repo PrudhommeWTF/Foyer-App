@@ -258,6 +258,8 @@ export function financesRouter(): Router {
         contracts: all.length,
         savings: savings.totals(),
         currentBalance: courants.length ? courants.reduce((a, c) => a + (balances[c.id] ?? 0), 0) : null,
+        // De quoi saisir une dépense en espèces sans charger tout le module.
+        currentAccounts: courants.map((c) => ({ id: c.id, name: c.name })),
         energy: {
           contracts: all.filter((c) => c.kind === 'energie').length,
           due: energy.readingsDue(all, energy.lastReadingDates(), today),

@@ -1,14 +1,18 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { IconComponent } from '../../core/icon';
+import { QuickAddComponent } from '../../shared/quick-add';
 import { TileComponent } from '../../shared/tile';
 import { RepasTileData } from '../../core/tiles/repas.tile';
 import { HomeTile } from './base';
+
+/** Le créneau que l'accueil met en avant. Il vient du fournisseur, pas d'ici. */
+const SLOT = 'soir';
 
 @Component({
   selector: 'tile-repas',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TileComponent, IconComponent],
+  imports: [TileComponent, IconComponent, QuickAddComponent],
   template: `
     <f-tile [title]="tile().title" [link]="tile().link" [state]="state()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
@@ -22,6 +26,11 @@ import { HomeTile } from './base';
           </div>
         }
       }
+      @if (state().kind !== 'error' && state().kind !== 'loading') {
+        <f-quick-add [label]="data() ? 'Finalement, autre chose' : 'Décider maintenant'"
+                     placeholder="Ex : pizza, restes"
+                     (submitted)="store.setMealText(store.todayStr(), slot, $event)" />
+      }
     </f-tile>
   `,
   styles: [`
@@ -34,4 +43,6 @@ import { HomeTile } from './base';
              background: #FCE9E3; color: #C6492F; font-size: 12.5px; font-weight: 800; }
   `],
 })
-export class RepasTile extends HomeTile<RepasTileData> {}
+export class RepasTile extends HomeTile<RepasTileData> {
+  slot = SLOT;
+}

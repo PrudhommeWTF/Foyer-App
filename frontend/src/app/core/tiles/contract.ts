@@ -84,6 +84,8 @@ export interface FinSnapshot {
   accounts: number;
   /** Solde des comptes courants. Null quand il n'y en a aucun, jamais zéro par défaut. */
   currentBalance: number | null;
+  /** Les comptes courants, pour la saisie d'une dépense en espèces. */
+  currentAccounts: { id: number; name: string }[];
   /** Échéances de contrat à venir. */
   deadlines: FinDeadline[];
   /** Les mêmes, en repères de calendrier indexés par date, pour la journée composée. */

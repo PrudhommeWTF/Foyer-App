@@ -199,6 +199,62 @@ s'affiche pas et toutes les destinations mènent à l'accueil : c'est le seul é
 conçu pour dire qu'il ne peut pas charger, et proposer de réessayer. Le reste se
 tait plutôt que d'afficher une famille vide.
 
+## Les actions rapides
+
+Les gestes qu'on fait plusieurs fois par jour n'imposent plus d'ouvrir un
+module. Six règles, tenues par toutes :
+
+1. **Deux taps au maximum, sans changer de page.** Une saisie repliée n'est
+   qu'un bouton : une tuile qui répond « qu'est-ce qu'il y a aujourd'hui » ne
+   doit pas être encombrée d'un champ vide.
+2. **L'action appelle l'API de son module.** Elle ne réimplémente rien. Cocher
+   un article passe par le moteur d'opérations des courses, pas par une écriture
+   du document ; une dépense passe par `POST /api/finances/transactions`.
+3. **Retour immédiat.** Sur le document du foyer, c'est gratuit : la mutation
+   est appliquée en mémoire et part ensuite. Sur les finances, c'est délibérément
+   **non optimiste** : un total de dépenses qui bouge puis revient en arrière est
+   pire qu'un total qui arrive une seconde plus tard. Le retour immédiat y est
+   donné par le formulaire, qui se ferme, et par le message.
+4. **Annulation sur tout ce qui disparaît.** Cocher une tâche la retire de la
+   tuile, la reporter aussi, remplacer un repas écrase celui qui était prévu :
+   les trois offrent « Annuler » pendant sept secondes. Sans cela, un geste fait
+   de travers oblige à ouvrir le module pour le défaire, ce que l'action rapide
+   cherchait justement à éviter.
+5. **Rien de dangereux.** Aucune suppression définitive, aucune validation
+   d'import, aucun réglage. La seule suppression permise est l'annulation d'une
+   dépense qu'on vient de créer, et elle ne peut viser que cet identifiant-là.
+6. **Un échec ne se tait pas.** Un enregistrement qui ne passe pas ne fait pas
+   reculer l'écran : les modifications restent, la tuile affiche « Modifications
+   non enregistrées », et l'envoi est retenté tout seul (au retour du réseau, au
+   réveil de l'onglet, et sur une minuterie).
+
+Le catalogue tenu, tuile par tuile :
+
+| Tuile | Gestes |
+|---|---|
+| Tâches | Cocher, reporter à demain, créer en saisie libre |
+| Courses | Cocher un article, en ajouter un avec suggestion |
+| Repas | Remplacer le dîner par une entrée libre |
+| Échéances | En faire une tâche du foyer (« j'ai vu, je m'en occupe ») |
+| Relevés | Saisir l'index du compteur réclamé |
+| Finances | Saisir une dépense en espèces, et l'annuler |
+
+Les suggestions d'article viennent du module, jamais du composant : la primitive
+`f-quick-add` affiche ce qu'on lui donne. Elles sont dédoublonnées **par clé
+d'article** et non par nom, sans quoi « courgette » serait proposé alors que
+« Courgettes » est déjà dans la liste.
+
+### Trois gestes du brief qui ne sont pas là, et pourquoi
+
+- **Marquer un repas réalisé** et **marquer un événement traité** demandent
+  chacun un champ nouveau (`done`) dans le modèle, dont rien d'autre ne se
+  servirait. Le dépôt interdit le réglage persisté sans consommateur, et une
+  case à cocher qui ne change rien est une coquille. Si ces états doivent
+  exister, c'est d'abord aux modules Repas et Agenda de dire ce qu'ils en font.
+- **Pointer une opération proposée** est un travail de rapprochement bancaire,
+  qui se fait par lots devant un relevé, pas entre deux portes sur un téléphone.
+  Il est à sa place dans l'écran Finances.
+
 ## Écriture à deux
 
 Le document du foyer s'enregistre en entier. Jusqu'ici en « dernier arrivé
@@ -282,8 +338,6 @@ Pour éviter toute ambiguïté sur l'état réel du chantier :
 
 - **Pas de contextualisation.** L'ordre des tuiles est celui du registre, il ne
   dépend ni de l'heure ni du type de jour.
-- **Les actions rapides manquent toujours.** Cocher une tâche ou un article, oui,
-  parce que c'était déjà là. Reporter, saisir en une ligne, annuler : non.
 - **Deux modules restent sans tuile, à dessein.** Les **documents**, parce que le
   modèle n'a aucune date d'expiration : `FileItem` ne porte qu'une date d'ajout en
   texte libre, et fabriquer une échéance à partir de ça serait exactement le genre

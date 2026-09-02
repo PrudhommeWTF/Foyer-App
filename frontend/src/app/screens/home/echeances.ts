@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { inject } from '@angular/core';
 import { TileComponent } from '../../shared/tile';
+import { FinancesStore } from '../../core/finances.store';
 import { inDaysLabel } from '../../core/deadlines';
+import { IconComponent } from '../../core/icon';
 import { EcheancesTileData } from '../../core/tiles/echeances.tile';
 import { HomeTile } from './base';
 
@@ -8,7 +11,7 @@ import { HomeTile } from './base';
   selector: 'tile-echeances',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TileComponent],
+  imports: [TileComponent, IconComponent],
   template: `
     <f-tile [title]="tile().title" [link]="tile().link" [state]="state()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
@@ -21,6 +24,11 @@ import { HomeTile } from './base';
                 <div class="label">{{ l.label }}</div>
                 <div class="who">{{ l.deadline.contractName }}@if (l.deadline.provider) { · {{ l.deadline.provider }} }</div>
               </div>
+              <!-- « J'ai vu, je m'en occupe » : l'échéance devient une tâche du
+                   foyer, qui appartient ensuite à qui la coche. -->
+              <button class="ack" title="En faire une tâche" (click)="fin.taskFromDeadline(l.deadline)">
+                <f-icon name="plus" [size]="14" color="var(--ink2)" [width]="2.6" />
+              </button>
             </div>
           }
         </div>
@@ -38,8 +46,11 @@ import { HomeTile } from './base';
     .line.costly .when { color: var(--primary-darker); }
     .label { font-size: 13.5px; font-weight: 800; color: var(--ink); }
     .who { font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 2px; }
+    .ack { flex: none; align-self: center; border: none; background: none; cursor: pointer; padding: 4px; display: flex; border-radius: 8px; }
+    .ack:hover { background: rgba(0,0,0,.05); }
   `],
 })
 export class EcheancesTile extends HomeTile<EcheancesTileData> {
+  fin = inject(FinancesStore);
   quand = inDaysLabel;
 }
