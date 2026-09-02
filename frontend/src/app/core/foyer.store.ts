@@ -410,21 +410,40 @@ export class FoyerStore {
         this.updating.set(true);
         this.updateMsg.set(s.message || 'Mise à jour en cours…');
         this.pollUpdateStatus();
+      } else if (s.state === 'error' && s.message) {
+        // Une mise à jour qui a échoué ne doit pas se découvrir en fouillant le
+        // serveur : le panneau Mises à jour l'affiche tant qu'on n'en a pas relancé une.
+        this.updateMsg.set(s.message);
       }
     } catch { /* status unreachable — ignore */ }
   }
 
-  /** Poll the server update status every 3 s until it finishes (done/error/timeout). */
+  /**
+   * Poll the server update status every 3 s. A total deadline here would lie:
+   * on a small container `npm ci` plus two builds dépassent dix minutes sans
+   * que rien n'aille mal. C'est le serveur qui déclare une mise à jour
+   * interrompue (voir freshStatus), sur l'absence de progression. Il ne reste
+   * donc à juger ici qu'un seul cas : un backend qui ne répond plus du tout.
+   */
   private pollUpdateStatus(): void {
-    const started = Date.now();
+    let mute = 0;
     const poll = async (): Promise<void> => {
-      if (Date.now() - started > 10 * 60 * 1000) { this.updating.set(false); this.updateMsg.set('Délai dépassé — vérifiez les logs du serveur.'); return; }
       try {
         const s = await this.api.updateStatus();
+        mute = 0;
         if (s.message) this.updateMsg.set(s.message);
-        if (s.state === 'done') { this.updating.set(false); this.toast('Mise à jour installée — rechargement…'); setTimeout(() => location.reload(), 1600); return; }
+        if (s.state === 'done') { this.updating.set(false); this.toast('Mise à jour installée, rechargement…'); setTimeout(() => location.reload(), 1600); return; }
         if (s.state === 'error') { this.updating.set(false); this.toast('Échec : ' + (s.message || 'voir les logs')); return; }
-      } catch { this.updateMsg.set('Redémarrage du service…'); }
+      } catch {
+        // Le service est coupé pendant l'installation : quelques minutes de
+        // silence sont normales, un quart d'heure ne l'est plus.
+        if (++mute > 300) {
+          this.updating.set(false);
+          this.updateMsg.set('Le serveur ne répond plus depuis un quart d’heure. Voir le journal de mise à jour sur le serveur, puis relancez.');
+          return;
+        }
+        this.updateMsg.set('Redémarrage du service…');
+      }
       setTimeout(poll, 3000);
     };
     setTimeout(poll, 3000);

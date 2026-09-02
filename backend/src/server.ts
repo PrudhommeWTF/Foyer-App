@@ -35,6 +35,7 @@ import { preserveShopping } from './shopping/repo';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { loadRules, rulesPath } from './home/rules';
+import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
@@ -591,8 +592,15 @@ api.post('/system/update', auth, requireAdmin, (_req, res) => {
 api.get('/system/update-status', auth, (_req, res) => {
   try {
     const p = path.join(DATA_DIR, 'update-status.json');
-    if (fs.existsSync(p)) { res.json({ ...JSON.parse(fs.readFileSync(p, 'utf-8')), current: currentVersion() }); return; }
-  } catch { /* ignore */ }
+    if (fs.existsSync(p)) {
+      // Une mise à jour interrompue laissait ce fichier sur « running » pour
+      // toujours, et l'interface bloquée sur « Mise à jour en cours… », sans
+      // aucun bouton. Voir update-status.ts.
+      const status = freshStatus(JSON.parse(fs.readFileSync(p, 'utf-8')), Date.now(), path.join(DATA_DIR, 'update.log'));
+      res.json({ ...status, current: currentVersion() });
+      return;
+    }
+  } catch { /* fichier illisible : on repart d'un état neutre plutôt que de bloquer */ }
   res.json({ state: 'idle', current: currentVersion() });
 });
 

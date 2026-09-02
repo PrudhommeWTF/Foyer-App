@@ -332,7 +332,8 @@ Un choix explicite est mémorisé dans `/etc/foyer/foyer.env` (`FOYER_SELF_UPDAT
 respecté lors des mises à jour suivantes.
 
 Variables : `FOYER_SELF_UPDATE` (`true`/`false`, défaut `true`), `FOYER_GITHUB_REPO`
-(défaut `PrudhommeWTF/Foyer-App`), `FOYER_GITHUB_TOKEN` (optionnel).
+(défaut `PrudhommeWTF/Foyer-App`), `FOYER_GITHUB_TOKEN` (optionnel, requis pour un
+dépôt privé : il sert aussi bien à la vérification qu'au téléchargement).
 
 ### Vérifier qu'une mise à jour est bien active
 
@@ -346,9 +347,15 @@ qu'on croit.
 grep FOYER_VERSION /etc/foyer/foyer.env          # LXC
 docker compose exec foyer printenv FOYER_VERSION # Docker
 
-# Le journal de la dernière auto-mise à jour
-journalctl -u foyer-self-update -n 40 --no-pager
+# Le journal de l'auto-mise à jour : le script y écrit TOUT (git, npm, builds).
+# C'est ce fichier qu'il faut lire, pas journalctl, qui ne verra presque rien.
+tail -60 /var/lib/foyer/update.log
 ```
+
+Depuis l'application, l'écran *Paramètres* affiche l'étape qui a échoué et le
+message de la commande fautive (« Échec pendant « Téléchargement du code » :
+fatal: could not read Username… »), et garde le bouton « Vérifier les mises à
+jour » : une tentative ratée ne laisse jamais sans issue.
 
 **Le cache du navigateur ne peut pas masquer une mise à jour.** Les fichiers dont
 le nom porte une empreinte de contenu (`main-A1B2C3D4.js`) sont gardés un an, ce
