@@ -1,6 +1,7 @@
 import { conflictLabel, hasDiet, mealConflicts } from '../diet';
 import { mealNames, recipeTime } from '../meals';
 import { paxLabel, presenceAt } from '../presence';
+import { calendarFacts } from '../schedule';
 import { DocSnapshot, TileProvider, TileState, empty, fromSource, ok } from './contract';
 
 export interface RepasTileData {
@@ -36,7 +37,7 @@ export const repasTile = {
     const names = mealNames(value, d.doc.recipes || []);
     if (!names.length) return empty('Rien de prévu au dîner.');
 
-    const presence = presenceAt(d.doc.members || [], ctx.today, SLOT, value);
+    const presence = presenceAt({ members: d.doc.members || [], sched: d.doc.sched || [], cal: calendarFacts(d.schoolHolidays) }, ctx.today, SLOT, value);
     const alerts = anyDiet(d) ? mealConflicts(value?.items || [], d.doc.recipes || [], presence.present, d.articles) : [];
 
     return ok({

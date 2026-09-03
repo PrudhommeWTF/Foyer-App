@@ -13,10 +13,11 @@
  * silencieuse : écarter sans le dire ferait croire à un carnet plus pauvre
  * qu'il n'est.
  */
-import { MealValue, Member, Recipe, ShopItem } from './models';
+import { MealValue, Member, Recipe, SchedSlot, ShopItem } from './models';
 import { ArticleIndex, parseIngredient } from './ingredients';
 import { conflicts, recipeContent } from './diet';
 import { presenceAt } from './presence';
+import { CalendarFacts } from './schedule';
 import { normaliseName } from './articles';
 
 /** Fenêtre d'anti-répétition, en jours. Deux semaines pleines, plus le jour même. */
@@ -41,6 +42,9 @@ export interface SuggestInput {
   /** Tout le planning, pour savoir quand chaque recette a été servie. */
   meals: Record<string, MealValue>;
   members: Member[];
+  /** L'emploi du temps et les faits calendaires : c'est de là que viennent les absents. */
+  sched: SchedSlot[];
+  cal?: CalendarFacts;
   index: ArticleIndex;
   /** Articles de la liste visée, pour la raison « déjà sur la liste ». */
   shop: ShopItem[];
@@ -76,8 +80,8 @@ export function daysBetween(from: string, to: string): number {
 }
 
 export function suggestMeals(input: SuggestInput): SuggestReport {
-  const { recipes, meals, members, index, shop, dateStr, slot } = input;
-  const presents = presenceAt(members, dateStr, slot, meals[dateStr + '-' + slot]).present;
+  const { recipes, meals, members, sched, cal, index, shop, dateStr, slot } = input;
+  const presents = presenceAt({ members, sched, cal }, dateStr, slot, meals[dateStr + '-' + slot]).present;
 
   // Les noms de la liste sont normalisés une fois : la comparaison a lieu une
   // fois par ingrédient et par recette, ce qui monte vite sur un gros carnet.

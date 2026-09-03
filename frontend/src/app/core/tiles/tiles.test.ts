@@ -253,13 +253,14 @@ test('taches : « rien pour aujourd’hui » n’est pas « tout est fait »', (
   if (s.kind === 'empty') assert.match(s.hint, /aujourd/i);
 });
 
-test('repas : les couverts suivent la semaine type des convives', () => {
+test('repas : les couverts suivent l’emploi du temps des convives', () => {
   const doc = fullDoc();
-  // Le 21 août 2026 est un vendredi (jour 5). Léa n'y dîne pas.
+  // Le 21 août 2026 est un vendredi (jour 5). Léa dîne dehors ce soir-là.
   doc.members = [
     { id: 'me', name: 'Thomas', role: 'Papa', color: '#E56B4E', ini: 'TH' },
-    { id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE', absent: ['5-soir'] },
+    { id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE' },
   ];
+  doc.sched = [{ id: 'x', who: ['m1'], dow: 5, start: '19:00', end: '21:00', label: 'Chez une amie', k: 'loisir', rec: 'weekly', away: true }];
   const s = provider('repas').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
   if (s.kind === 'ok') {
@@ -286,7 +287,8 @@ test('repas : un convive absent ce soir-là ne déclenche pas d’alerte', () =>
   const doc = fullDoc();
   doc.articles = [{ key: 'courgette', name: 'Courgette', syn: [], rayon: 'legumes' }];
   doc.recipes = [{ id: 'r1', name: 'Gratin', level: 'Facile', color: '#7A9B76', ingr: ['3 courgettes'], steps: [] }];
-  doc.members = [{ id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE', refuse: ['courgette'], absent: ['5-soir'] }];
+  doc.members = [{ id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE', refuse: ['courgette'] }];
+  doc.sched = [{ id: 'x', who: ['m1'], dow: 5, start: '19:00', end: '21:00', label: 'Chez une amie', k: 'loisir', rec: 'weekly', away: true }];
   const s = provider('repas').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
   // Une fausse alerte de plus, et plus personne ne lit les vraies.

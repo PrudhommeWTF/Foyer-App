@@ -38,6 +38,7 @@ export interface SchedSlot {
   end: string;        // 'HH:MM', ou '' quand la fin n'est pas connue
   label: string;
   k: SchedType;       // ecole | travail | sport | loisir | sante | repas | autre
+  away?: boolean;     // se passe hors du foyer : c'est de là que viennent les couverts
 
   rec: 'weekly' | 'once';   // toutes les semaines, ou une seule fois
   date?: string;            // pour 'once' : la date de l'unique occurrence
@@ -443,6 +444,32 @@ explicite, rien de plus.
 Les autres champs restent absents. Ils sont facultatifs, et leur absence est déjà
 leur valeur par défaut : aucune période n'est inventée.
 
+## Migration 8
+
+`couverts déduits de l'emploi du temps`
+
+C'est **la seule migration du chantier qui transforme une donnée saisie à la
+main**, et la seule où un comportement visible change.
+
+1. **Chaque case cochée de la grille d'absences devient un créneau.** « Lundi
+   midi, Léa » donne un créneau hebdomadaire « Déjeuner dehors » de 12h à 13h,
+   marqué hors du foyer. Les cases d'un même jour et d'un même repas se
+   regroupent en un seul créneau à plusieurs membres, comme le reste du module.
+   Le champ `absent` est ensuite retiré. Rien n'est perdu : c'était une
+   information saisie à la main, elle change de forme, pas de sens.
+2. **Les créneaux d'école et de travail existants sont marqués hors du foyer.**
+   C'est vrai dans l'immense majorité des cas, et une case cochée à tort se
+   décoche en un geste. Un réglage déjà posé n'est **jamais** retouché, ce qui
+   rend la migration rejouable sans défaire un choix.
+
+Ce que vous verrez après coup : des créneaux nommés « Déjeuner dehors » ou
+« Dîner dehors » dans votre semaine. Ils sont volontairement génériques.
+Renommez-les, ou remplacez-les par les vrais créneaux (école, cabinet) et
+supprimez-les : à ce moment-là, l'emploi du temps portera l'information une seule
+fois, ce qui était tout l'objet de cette tranche.
+
+Le journal compte les conversions et les marquages.
+
 ### Sauvegarde avant migration
 
 À faire une fois, avant de déployer la tranche sur une base qui contient déjà des
@@ -478,6 +505,9 @@ Sortie attendue :
 ```
 [foyer] État : migration 6 appliquée (emploi du temps : créneaux à plusieurs membres, jour numéroté).
 [foyer] État : migration 7 appliquée (emploi du temps : récurrence et périodes de validité).
+[foyer] État : migration 8 appliquée (couverts déduits de l'emploi du temps).
+[foyer] État : 6 absence(s) de la semaine type reprise(s) en 4 créneau(x) « hors du foyer ». …
+[foyer] État : 9 créneau(x) d'école ou de travail marqué(s) « hors du foyer ».
 [foyer] État : document d'origine sauvegardé dans /var/lib/foyer/backups/state-avant-migration-v5-….json
 ```
 
@@ -518,19 +548,70 @@ rejouera au prochain démarrage.
 |---|---|
 | `frontend/src/app/core/schedule.test.ts` | Jours, ordre stable à heure égale, le filtre vide qui laisse tout passer, un créneau partagé qui n'apparaît qu'une fois, les marqueurs d'identité et leur débordement. Le moteur de récurrence : bornes de validité, exceptions, période scolaire, jour férié, occurrence détachée, repli quand les vacances sont inconnues. Et les trous de la journée : seuil, chevauchements, créneau sans fin, heure proposée. |
 | `frontend/src/app/core/sched-copy.test.ts` | Collage sur un et plusieurs jours, non-duplication en fusion, annulation intégrale d'un remplacement, annulation qui ne piétine pas une modification concurrente, réattribution à un autre membre. |
-| `backend/test/state-migrations.test.ts` | La migration 6 : conversion, membre inconnu conservé, jour illisible nommé, rejouabilité, aucun créneau perdu. |
+| `frontend/src/app/core/presence.test.ts` | Les couverts déduits : ce qui retire quelqu'un de la table et ce qui ne le retire pas (fin exclue, créneau sans fin, vacances, période close), et le sens de l'erreur en cas de doute. |
+| `backend/test/state-migrations.test.ts` | Les migrations 6 à 8 : conversion, membre inconnu conservé, jour illisible nommé, absences reprises en créneaux, réglage « hors du foyer » jamais retouché, rejouabilité, aucun créneau perdu. |
 
 La tuile d'accueil est vérifiée sur les deux cas qui comptent : l'école
 disparaît un jour de vacances, et elle **reste affichée** quand les vacances ne
 sont pas connues.
 
-## Intégrations prévues
+## Intégrations
 
-**Tranche 5.** L'emploi du temps sait qui est à la maison à midi et le soir :
-c'est lui qui alimentera le nombre de couverts, via une interface de lecture
-propre, plutôt que la grille d'absences tenue à la main dans la fiche membre
-(`Member.absent`). Le module Cuisine ne lira jamais `sched` directement.
+### Les couverts viennent d'ici
 
-La tuile d'accueil consomme déjà le module et porte les **mêmes** marqueurs
-d'identité, par le même composant `f-who` : il n'y a pas deux façons de dessiner
-un membre.
+Deux sources disaient la même chose : la grille d'absences de chaque membre
+(« lundi midi, Léa ne mange pas ici ») et l'emploi du temps, qui savait déjà
+qu'elle est au collège. La seconde suffit, et se démode moins vite. La grille a
+disparu de la fiche membre, et `Member.absent` du modèle.
+
+Une case **« Hors du foyer »** sur chaque créneau porte désormais l'information.
+Le type du créneau ne fait que la pré-cocher (école, travail, sport, santé) : le
+télétravail et le sport à la maison existent, et c'est la case qui décide, jamais
+le type.
+
+**L'interface de lecture** est `awayAt(sched, date, créneauDeRepas, calendrier)`,
+dans `presence.ts`. Elle rend un ensemble d'identifiants de membres, pas des
+créneaux : ce que Cuisine a besoin de savoir, c'est qui manque, pas pourquoi. Le
+planning des repas passe par elle et ne lit jamais `sched` directement.
+
+**La règle est volontairement stricte** : le créneau doit **couvrir l'heure du
+repas** (début inclus, fin exclue), pas seulement la frôler.
+
+| Situation | Effet |
+|---|---|
+| Collège 08:20 à 17:45 | Retire du déjeuner, pas du dîner |
+| Cabinet 09:00 à 20:30 | Retire du déjeuner **et** du dîner |
+| Course 12:00 à 12:30 | Ne retire pas du déjeuner de 12h30 : la fin est exclue |
+| Créneau sans heure de fin | Ne retire jamais personne |
+| Semaine de vacances, créneau « période scolaire » | N'a pas lieu, donc ne retire personne |
+
+**Le sens de l'erreur est choisi et testé : en cas de doute, on compte présent.**
+Trop de couverts fait un reste au frigo ; pas assez fait quelqu'un qui n'a rien
+dans son assiette.
+
+Les trois niveaux se superposent toujours dans le même ordre, du plus général au
+plus précis : l'emploi du temps, puis la dérogation du créneau de repas
+(`MealValue.away`, pour le soir où Léa mange chez une amie), puis les couverts
+posés à la main (`MealValue.pax`, seul moyen de compter des invités).
+
+**Un cas connu, laissé tel quel :** quand tout le monde est dehors, le compte
+tombe au plancher de un couvert et la phrase liste les quatre absents. C'est le
+plancher historique du module Cuisine, qui évite une liste de courses pour zéro
+personne. La bonne réponse serait que le planning des repas dise « personne à
+midi » plutôt que « 1 couvert », mais c'est sa décision, pas celle de l'emploi du
+temps.
+
+### La tuile d'accueil
+
+Elle affiche les créneaux **du jour et du lendemain**, tous membres confondus.
+Le soir, ce qui compte n'est plus la journée en cours : c'est le cartable à
+préparer pour demain matin. Le lendemain complète la liste, il ne la remplace
+pas : la place restante lui revient.
+
+Elle porte les **mêmes** marqueurs d'identité que l'écran, par le même composant
+`f-who`, et lit les mêmes fonctions du module. L'accueil ne recalcule rien.
+
+### Membres
+
+Source unique des personnes, de leurs couleurs et de leurs initiales. L'emploi du
+temps n'a jamais eu de seconde palette.

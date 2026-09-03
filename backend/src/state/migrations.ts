@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 7;
+export const STATE_VERSION = 8;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -46,6 +46,18 @@ const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
 
 /** Les jours tels que `SchedSlot.day` les nommait avant la migration 6. */
 const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+
+/**
+ * Les créneaux de repas, tels que la migration 8 les pose.
+ *
+ * Les bornes encadrent l'heure de référence du repas (voir MEAL_SLOTS côté
+ * frontend) : c'est cette heure que le moteur de présence cherche à couvrir.
+ */
+const REPAS: Record<string, { start: string; end: string; label: string }> = {
+  matin: { start: '07:30', end: '08:30', label: 'Petit-déjeuner dehors' },
+  midi: { start: '12:00', end: '13:00', label: 'Déjeuner dehors' },
+  soir: { start: '19:00', end: '20:00', label: 'Dîner dehors' },
+};
 
 export const STATE_MIGRATIONS: StateMigration[] = [
   {
@@ -283,6 +295,71 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       for (const s of arr(doc['sched'])) {
         if (s['rec'] !== 'weekly' && s['rec'] !== 'once') s['rec'] = 'weekly';
       }
+    },
+  },
+  {
+    version: 8,
+    label: 'couverts déduits de l\'emploi du temps',
+    up: (doc, ctx) => {
+      // Deux sources disaient la même chose : la grille d'absences de chaque
+      // membre (« lundi midi, Léa ne mange pas ici ») et l'emploi du temps, qui
+      // savait déjà qu'elle est au collège. La seconde suffit, et se démode
+      // moins vite. La grille est donc **convertie en créneaux** plutôt que
+      // jetée : chaque case cochée était une information saisie à la main.
+      const sched = arr(doc['sched']);
+
+      // Les cases d'une même journée et d'un même repas se regroupent : un seul
+      // créneau pour tout le monde, comme le reste du module.
+      const parCase = new Map<string, string[]>();
+      let cases = 0;
+      for (const m of arr(doc['members'])) {
+        for (const cle of arr(m['absent'])) {
+          const [jour, repas] = String(cle).split('-');
+          const dow = parseInt(jour, 10);
+          if (!(dow >= 1 && dow <= 7) || !REPAS[repas]) continue;
+          const k = dow + '-' + repas;
+          if (!parCase.has(k)) parCase.set(k, []);
+          parCase.get(k)!.push(String(m['id']));
+          cases++;
+        }
+        delete m['absent'];
+      }
+
+      for (const [k, membres] of parCase) {
+        const [jour, repas] = k.split('-');
+        const creneau = REPAS[repas];
+        sched.push({
+          id: 'abs-' + k,
+          who: membres,
+          dow: parseInt(jour, 10),
+          start: creneau.start,
+          end: creneau.end,
+          label: creneau.label,
+          k: 'repas',
+          away: true,
+          rec: 'weekly',
+        });
+      }
+      if (parCase.size) {
+        doc['sched'] = sched;
+        ctx.log(
+          `${cases} absence(s) de la semaine type reprise(s) en ${parCase.size} créneau(x) « hors du foyer ». ` +
+          'Ils portent un intitulé générique : renommez-les ou remplacez-les par les vrais créneaux ' +
+          '(école, travail) dans l\'écran Emploi du temps.',
+        );
+      }
+
+      // Les créneaux existants n'avaient pas la notion : l'école et le travail
+      // se passent dehors dans l'immense majorité des cas, et une case cochée à
+      // tort se décoche en un geste. La clé une fois posée n'est plus retouchée,
+      // ce qui rend la migration rejouable sans défaire un réglage.
+      let marques = 0;
+      for (const s of sched) {
+        if ('away' in s) continue;
+        s['away'] = s['k'] === 'ecole' || s['k'] === 'travail';
+        if (s['away']) marques++;
+      }
+      if (marques) ctx.log(`${marques} créneau(x) d'école ou de travail marqué(s) « hors du foyer ».`);
     },
   },
 ];

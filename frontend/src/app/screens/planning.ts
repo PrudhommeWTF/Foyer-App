@@ -244,10 +244,21 @@ interface DayView { dow: number; date: string; label: string; short: string; num
             <div class="type-opt" [class.on]="store.ui().seType === t.k"
                  [style.border-color]="store.ui().seType === t.k ? t.color : 'transparent'"
                  [style.background]="tintOf(t.k)" [style.color]="t.color"
-                 (click)="store.patch({ seType: t.k })">
+                 (click)="store.setSlotType(t.k)">
               <span class="dot" [style.background]="t.color"></span>{{ t.label }}
             </div>
           }
+        </div>
+
+        <!-- C'est cette case, et elle seule, qui décide des couverts. Le type
+             ne fait que la pré-cocher : le télétravail et le sport à la maison
+             existent. -->
+        <div class="away-row" [class.on]="store.ui().seAway" (click)="store.patch({ seAway: !store.ui().seAway })">
+          <span class="box">@if (store.ui().seAway) { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }</span>
+          <span class="away-txt">
+            <b>Hors du foyer</b>
+            <span class="away-hint">Personne n’est attendu à table pendant ce créneau : les repas qu’il couvre comptent un couvert de moins.</span>
+          </span>
         </div>
 
         <!-- Les réglages de période sont repliés : ils ne servent pas à la saisie
@@ -497,6 +508,13 @@ interface DayView { dow: number; date: string; label: string; short: string; num
     .type-opt { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
     .type-opt .dot { width: 9px; height: 9px; border-radius: 3px; }
 
+    .away-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-radius: 13px; background: var(--soft); cursor: pointer; margin-bottom: 4px; }
+    .away-row.on { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
+    .away-row .box { flex: none; width: 19px; height: 19px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 2px var(--soft2); display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
+    .away-row.on .box { background: var(--primary); box-shadow: none; }
+    .away-txt { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; font-weight: 800; color: var(--ink); }
+    .away-hint { font-size: 11.5px; font-weight: 700; color: var(--ink2); line-height: 1.35; }
+
     .modal-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
     .modal-actions .spacer { flex: 1; }
     /* Sur téléphone, les trois boutons côte à côte poussaient « Enregistrer »
@@ -593,9 +611,10 @@ export class PlanningScreen {
 
   /** Ce qui, sur la ligne, dit qu'un créneau n'a pas lieu toute l'année. */
   noteOf(s: SchedSlot): string {
-    if (s.rec === 'once') return s.srcId ? 'ce jour seulement' : 'ponctuel';
-    const parts = [validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']];
-    return parts.filter(Boolean).join(' · ');
+    const quand = s.rec === 'once'
+      ? (s.srcId ? 'ce jour seulement' : 'ponctuel')
+      : [validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']].filter(Boolean).join(' · ');
+    return [quand, s.away ? 'dehors' : ''].filter(Boolean).join(' · ');
   }
 
   /**

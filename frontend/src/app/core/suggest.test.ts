@@ -5,18 +5,19 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { REPEAT_DAYS, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { buildArticleIndex } from './ingredients';
-import { MealValue, Member, Recipe, ShopItem } from './models';
+import { MealValue, Member, Recipe, SchedSlot, ShopItem } from './models';
+import { weekdayOf } from './helpers';
 
 const idx = buildArticleIndex([]);
 const r = (id: string, name: string, ingr: string[] = [], prepMin?: number, cookMin?: number): Recipe =>
   ({ id, name, level: 'Facile', color: '#000', ingr, steps: [], ...(prepMin ? { prepMin } : {}), ...(cookMin ? { cookMin } : {}) });
-const m = (id: string, name: string, allerg: string[] = [], absent: string[] = []): Member =>
-  ({ id, name, role: '', color: '#000', ini: name.slice(0, 2), allerg, absent });
+const m = (id: string, name: string, allerg: string[] = []): Member =>
+  ({ id, name, role: '', color: '#000', ini: name.slice(0, 2), allerg });
 const item = (name: string, state: ShopItem['state'] = 'a-prendre'): ShopItem =>
   ({ id: name, name, qty: '', aisleId: 'a1', listId: 'l1', state });
 
 const JOUR = '2026-08-31';  // un lundi
-const base = { members: [] as Member[], index: idx, shop: [] as ShopItem[], dateStr: JOUR, slot: 'soir' };
+const base = { members: [] as Member[], sched: [] as SchedSlot[], index: idx, shop: [] as ShopItem[], dateStr: JOUR, slot: 'soir' };
 
 test('la dernière fois qu’une recette a été servie se lit dans le planning', () => {
   const meals: Record<string, MealValue> = {
@@ -116,12 +117,16 @@ test('une recette qui ne convient pas à un convive attendu est écartée, et c�
 });
 
 test('une recette est proposée le soir où la personne qu’elle gêne n’est pas là', () => {
-  // C'est tout l'intérêt de la semaine type : le carnet s'ouvre les jours
-  // d'absence au lieu de rester fermé toute l'année.
-  const lea = m('l', 'Lea', ['lait'], ['1-soir']);
+  // C'est tout l'intérêt de la déduction depuis l'emploi du temps : le carnet
+  // s'ouvre les soirs d'absence au lieu de rester fermé toute l'année.
+  const lea = m('l', 'Lea', ['lait']);
   const recipes = [r('a', 'Gratin', ['50 cl de lait'])];
-  assert.equal(suggestMeals({ ...base, meals: {}, members: [m('l', 'Lea', ['lait'])], recipes }).suggestions.length, 0);
-  assert.equal(suggestMeals({ ...base, meals: {}, members: [lea], recipes }).suggestions.length, 1);
+  const dehors: SchedSlot[] = [{
+    id: 'x', who: ['l'], dow: weekdayOf(JOUR), start: '18:00', end: '21:00',
+    label: 'Chez une amie', k: 'loisir', rec: 'weekly', away: true,
+  }];
+  assert.equal(suggestMeals({ ...base, meals: {}, members: [lea], recipes }).suggestions.length, 0);
+  assert.equal(suggestMeals({ ...base, meals: {}, members: [lea], sched: dehors, recipes }).suggestions.length, 1);
 });
 
 test('une recette bien notée le dit, mais ne double personne pour autant', () => {

@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, ShopItem, ShopState, TaskItem } from './models';
+import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
@@ -11,7 +11,7 @@ import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredie
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
 import { parseQuery, searchRecipes } from './recipe-search';
 import { readRecipeText } from './recipe-text';
-import { paxLabel, presenceAt, weekSlot, weekdayOf } from './presence';
+import { paxLabel, presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { Allergene, normaliseName } from './articles';
 import {
@@ -20,8 +20,8 @@ import {
 import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
-import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
-import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, tint, grad } from './constants';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
@@ -1563,9 +1563,16 @@ export class FoyerStore {
   /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
   householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
 
-  /** Qui mange à ce créneau, et pour combien de couverts. Voir presence.ts. */
+  /**
+   * Qui mange à ce créneau, et pour combien de couverts.
+   *
+   * Les absences viennent de l'emploi du temps, plus d'une grille tenue à la
+   * main : le module savait déjà que Léa est au collège le lundi midi. Voir
+   * presence.ts.
+   */
   presenceOf(dateStr: string, slot: string) {
-    return presenceAt(this._data()?.members || [], dateStr, slot, this._data()?.meals[dateStr + '-' + slot]);
+    const d = this._data();
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
   }
   /** « 3 couverts (Léa absente) », affiché sous le créneau. */
   paxTextOf(dateStr: string, slot: string): string { return paxLabel(this.presenceOf(dateStr, slot)); }
@@ -1578,19 +1585,9 @@ export class FoyerStore {
    */
   readonly editingPresence = computed(() => {
     const e = this.ui().mealEdit; if (!e) return null;
-    return presenceAt(this._data()?.members || [], e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
+    const d = this._data();
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
   });
-
-  // ---- semaine type, dans le formulaire d'un membre ------------------------
-  readonly weekDaysShort = [
-    { n: 1, label: 'Lun' }, { n: 2, label: 'Mar' }, { n: 3, label: 'Mer' }, { n: 4, label: 'Jeu' },
-    { n: 5, label: 'Ven' }, { n: 6, label: 'Sam' }, { n: 7, label: 'Dim' },
-  ];
-  isMemberAbsent(day: number, slot: string): boolean { return this.ui().mfAbsent.includes(weekSlot(day, slot)); }
-  toggleMemberAbsent(day: number, slot: string): void {
-    const k = weekSlot(day, slot); const cur = this.ui().mfAbsent;
-    this.patch({ mfAbsent: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] });
-  }
 
   // ---- suggestions ---------------------------------------------------------
   /**
@@ -1602,7 +1599,7 @@ export class FoyerStore {
     const e = this.ui().mealEdit; const d = this._data();
     if (!e || !d) return null;
     return suggestMeals({
-      recipes: d.recipes, meals: d.meals, members: d.members, index: this.articleIndex(),
+      recipes: d.recipes, meals: d.meals, members: d.members, sched: d.sched, cal: this.calendar(), index: this.articleIndex(),
       shop: d.shop.filter((i) => i.listId === this.activeShopListId()),
       dateStr: e.dateStr, slot: e.slot,
     });
@@ -1647,7 +1644,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return [];
     // Seuls les convives attendus : alerter pour quelqu'un qui n'est pas là ce
     // soir-là est une fausse alerte, et une de trop suffit à ne plus les lire.
-    const presents = presenceAt(d.members, key.slice(0, 10), key.slice(11), d.meals[key]).present;
+    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
     return mealConflicts(d.meals[key]?.items || [], d.recipes, presents, this.articleIndex());
   }
 
@@ -2045,6 +2042,13 @@ export class FoyerStore {
   }
   clearSchedWho(): void { this.patch({ schedWho: [] }); }
 
+  /**
+   * Choisit le type du créneau, et repositionne « hors du foyer » sur le défaut
+   * de ce type. Le télétravail existe, donc la case reste décochable ensuite :
+   * c'est elle qui décide, pas le type.
+   */
+  setSlotType(k: SchedType): void { this.patch({ seType: k, seAway: !!SCHED_AWAY_DEFAULT[k] }); }
+
   /** Les membres portés par le créneau en cours d'édition. */
   toggleSlotWho(id: string): void {
     const cur = this.ui().seWho;
@@ -2066,7 +2070,7 @@ export class FoyerStore {
     this.patch({
       screen: 'planning', schedEdit: true, seEditId: null,
       seDow: jour, seWho: [...s.schedWho], seStart: heure, seEnd: '', seLabel: '', seType: 'ecole',
-      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always',
+      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seAway: SCHED_AWAY_DEFAULT['ecole'],
       seMore: false, seOccDate: date, seScope: 'all', seDelOpen: false, addMenuOpen: false,
     });
   }
@@ -2084,7 +2088,7 @@ export class FoyerStore {
     this.patch({
       schedEdit: true, seEditId: id, seDow: it.dow, seWho: [...(it.who || [])],
       seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k,
-      seRec: it.rec === 'once' ? 'once' : 'weekly', seDate: it.date || occ,
+      seRec: it.rec === 'once' ? 'once' : 'weekly', seDate: it.date || occ, seAway: !!it.away,
       seFrom: it.from || '', seUntil: it.until || '', seWhen: it.when || 'always',
       seMore: pose, seOccDate: occ, seScope: 'all', seDelOpen: false,
     });
@@ -2103,7 +2107,7 @@ export class FoyerStore {
     if (s.seRec === 'weekly' && s.seFrom && s.seUntil && s.seUntil < s.seFrom) {
       this.toast('La fin de période est avant son début'); return null;
     }
-    const commun = { who: [...s.seWho], start, end: s.seEnd.trim(), label, k: s.seType };
+    const commun = { who: [...s.seWho], start, end: s.seEnd.trim(), label, k: s.seType, ...(s.seAway ? { away: true } : {}) };
     return s.seRec === 'once'
       ? { ...commun, rec: 'once', dow: weekdayOf(s.seDate), date: s.seDate }
       : {
@@ -2391,11 +2395,11 @@ export class FoyerStore {
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [] }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '', mfAbsent: [...(m.absent || [])] }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse, absent: s.mfAbsent };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });

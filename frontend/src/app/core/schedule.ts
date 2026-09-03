@@ -10,9 +10,8 @@
 // filtre pas, il laisse passer. L'inverse (un écran vide tant qu'on n'a pas
 // cliqué) était la raison pour laquelle le module ne servait à rien.
 import { SCHED_DAYS } from './constants';
-import { frenchHolidays } from './helpers';
+import { frenchHolidays, weekdayOf } from './helpers';
 import { Member, SchedSlot } from './models';
-import { weekdayOf } from './presence';
 
 /** Le nom du jour, pour l'affichage. `dow` va de 1 (lundi) à 7 (dimanche). */
 export function dowLabel(dow: number): string {

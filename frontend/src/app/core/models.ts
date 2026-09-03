@@ -12,13 +12,7 @@ export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
  * arriver. Les deux sont confrontés au contenu des recettes (voir diet.ts).
  */
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[];
-  /**
-   * Semaine type : créneaux où le membre ne mange **pas** à la maison, en clés
-   * « 1-midi » (lundi = 1). Ce sont les absences qui sont notées, pas les
-   * présences : une case vide veut dire « comme d'habitude » (voir presence.ts).
-   */
-  absent?: string[]; }
+  allerg?: string[]; refuse?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -147,6 +141,13 @@ export type SchedWhen = 'always' | 'school' | 'holidays';
 
 export interface SchedSlot {
   id: string; who: string[]; dow: number; start: string; end: string; label: string; k: SchedType;
+  /**
+   * Le créneau se passe **hors du foyer**. C'est de là que vient le nombre de
+   * couverts : personne n'est attendu à table pendant un créneau marqué ainsi
+   * (voir presence.ts). Un créneau à la maison, lui, ne dit rien de plus que
+   * ce qu'il est.
+   */
+  away?: boolean;
   /** Toutes les semaines (le cas majoritaire) ou une seule fois. */
   rec: SchedRec;
   /** Pour `once` : la date de l'unique occurrence. Ignoré sinon. */

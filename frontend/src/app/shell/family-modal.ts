@@ -89,24 +89,7 @@ import { contactIni } from '../core/helpers';
             <button class="swatch" [style.background]="c" [style.box-shadow]="store.ui().mfColor === c ? ('0 0 0 3px var(--surface),0 0 0 6px ' + c) : 'none'" (click)="store.patch({ mfColor: c })"></button>
           }
         </div>
-        <label class="field-label">Semaine type</label>
-        <div class="hint">Cochez les repas qu'il ou elle ne prend <b>pas</b> à la maison. Rien de coché veut dire « là comme d'habitude ».</div>
-        <div class="semaine" [style.grid-template-columns]="'auto repeat(' + store.mealSlots().length + ', 1fr)'">
-          <span></span>
-          @for (sl of store.mealSlots(); track sl.key) { <span class="sem-h">{{ sl.short }}</span> }
-          @for (j of store.weekDaysShort; track j.n) {
-            <span class="sem-j">{{ j.label }}</span>
-            @for (sl of store.mealSlots(); track sl.key) {
-              <button class="sem-c" [class.off]="store.isMemberAbsent(j.n, sl.key)"
-                      (click)="store.toggleMemberAbsent(j.n, sl.key)"
-                      [attr.aria-label]="j.label + ' ' + sl.short + (store.isMemberAbsent(j.n, sl.key) ? ' : absent' : ' : présent')">
-                {{ store.isMemberAbsent(j.n, sl.key) ? '·' : '✓' }}
-              </button>
-            }
-          }
-        </div>
-
-        <label class="field-label" style="margin-top:16px">Allergènes</label>
+        <label class="field-label">Allergènes</label>
         <div class="chips" style="margin-bottom:14px">
           @for (a of allergenes; track a.key) {
             <button class="chip" [class.on]="store.ui().mfAllerg.includes(a.key)" (click)="store.toggleMemberAllerg(a.key)">{{ a.name }}</button>
@@ -158,11 +141,6 @@ import { contactIni } from '../core/helpers';
     }
   `,
   styles: [`
-    .semaine { display: grid; gap: 4px; align-items: center; margin-bottom: 6px; }
-    .sem-h { font-size: 10.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; text-align: center; }
-    .sem-j { font-size: 12px; font-weight: 800; color: var(--ink2); padding-right: 6px; }
-    .sem-c { border: 2px solid var(--line2); background: var(--soft); border-radius: 9px; padding: 7px 0; cursor: pointer; font-family: var(--font-body); font-size: 13px; font-weight: 800; color: var(--sage); }
-    .sem-c.off { background: transparent; color: var(--ink3); border-style: dashed; }
     .chips { display: flex; flex-wrap: wrap; gap: 7px; }
     .chip { border: 2px solid var(--line2); background: transparent; color: var(--ink2); border-radius: 11px; padding: 6px 10px; font-family: var(--font-body); font-size: 12.5px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
     .chip.on { background: var(--honey); border-color: var(--honey); color: #fff; }

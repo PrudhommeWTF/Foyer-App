@@ -5,7 +5,7 @@ import type { ShopItem } from './shopping/ops';
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
 // frontend/src/app/core/diet.ts pour ce qui en est dérivé.
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[]; absent?: string[]; }
+  allerg?: string[]; refuse?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -92,6 +92,8 @@ export interface Recipe {
  */
 export interface SchedSlot {
   id: string; who: string[]; dow: number; start: string; end: string; label: string; k: string;
+  /** Le créneau se passe hors du foyer : c'est de là que vient le compte des couverts. */
+  away?: boolean;
   /** 'weekly' ou 'once'. Voir docs/emploi-du-temps.md pour le modèle complet. */
   rec: string;
   date?: string;

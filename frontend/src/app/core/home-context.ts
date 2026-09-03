@@ -22,7 +22,7 @@
  * docs/accueil-contexte.md.
  */
 import { SchedSlot } from './models';
-import { weekdayOf } from './presence';
+import { weekdayOf } from './helpers';
 
 export interface Moment { id: string; label: string; from: string }
 export type DayWhen = 'ferie' | 'vacances' | 'semaine' | 'emploiDuTemps';

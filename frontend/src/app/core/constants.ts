@@ -130,6 +130,17 @@ export const SCHED_TYPES: { k: SchedType; label: string; color: string }[] = [
   { k: 'repas', label: 'Repas', color: '#F0B24B' },
   { k: 'autre', label: 'Autre', color: '#8A7E74' },
 ];
+/**
+ * Types de créneau qui se passent **hors du foyer**, sauf mention contraire.
+ *
+ * Ce n'est qu'un défaut de formulaire, jamais une déduction faite dans le
+ * moteur : le télétravail et le sport à la maison existent, et c'est la case du
+ * créneau qui décide, pas son type.
+ */
+export const SCHED_AWAY_DEFAULT: Record<string, boolean> = {
+  ecole: true, travail: true, sport: true, sante: true, loisir: false, repas: false, autre: false,
+};
+
 export const SCHED_COLORS: Record<string, string> = {
   ecole: '#4E93B8', travail: '#E56B4E', sport: '#7A9B76', loisir: '#9B6FA8', sante: '#C77DA5', repas: '#F0B24B', autre: '#8A7E74', repos: '#B7ABA0',
 };
