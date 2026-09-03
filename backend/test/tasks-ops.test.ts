@@ -191,3 +191,81 @@ test('une liste de courses supprimée retire le lien, pas la tâche', () => {
   assert.equal('shopListId' in r.items[0], false);
   assert.equal(r.unlinked, 1);
 });
+
+// ---- les séries -------------------------------------------------------------------
+
+const serie = (over: Partial<TaskItem> = {}): TaskItem =>
+  task({ id: 'p1', text: 'Tester l’eau de la piscine', due: '2026-09-05', rec: { freq: 'weekly', every: 1, base: 'done' }, ...over });
+
+test('cocher une série solde l’occurrence, garde une trace et avance à la suivante que le client a calculée', () => {
+  const r = applyOps([serie()], [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14', by: 'me', at: '2026-09-07T10:00:00Z' })], ctx());
+  const t = r.items[0];
+  assert.equal(t.done, false, 'la série reste ouverte');
+  assert.equal(t.due, '2026-09-14');
+  assert.deepEqual(t.history, [{ at: '2026-09-07T10:00:00Z', by: 'me', due: '2026-09-05' }]);
+});
+
+test('deux appareils cochent la même occurrence : la série n’avance qu’une fois', () => {
+  const a = applyOps([serie()], [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14', by: 'me' })], ctx());
+  const b = applyOps(a.items, [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14', by: 'm1' })], ctx());
+  assert.equal(b.items[0].due, '2026-09-14', 'pas une seconde avance');
+  assert.equal(b.items[0].history!.length, 1);
+  assert.equal(b.applied.length, 1, 'acquittée : le client la retire de sa file');
+});
+
+test('sans échéance suivante, la série s’arrête : la tâche est faite', () => {
+  const r = applyOps([serie()], [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: null, by: 'me' })], ctx());
+  assert.equal(r.items[0].done, true);
+  assert.equal(r.items[0].history!.length, 1);
+});
+
+test('défaire la dernière coche d’une série rétablit l’échéance qu’elle soldait, et pas deux fois', () => {
+  const a = applyOps([serie()], [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14', by: 'me' })], ctx());
+  const b = applyOps(a.items, [op({ op: 'reopen', id: 'p1', occ: '2026-09-05' })], ctx());
+  assert.equal(b.items[0].due, '2026-09-05');
+  assert.deepEqual(b.items[0].history, []);
+  const c = applyOps(b.items, [op({ op: 'reopen', id: 'p1', occ: '2026-09-05' })], ctx());
+  assert.equal(c.items[0].due, '2026-09-05', 'rejouée, elle ne remonte pas plus loin');
+});
+
+test('rouvrir une série arrêtée la relance sur sa dernière échéance', () => {
+  const a = applyOps([serie()], [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: null, by: 'me' })], ctx());
+  const b = applyOps(a.items, [op({ op: 'reopen', id: 'p1', occ: '2026-09-05' })], ctx());
+  assert.equal(b.items[0].done, false);
+  assert.equal(b.items[0].due, '2026-09-05');
+});
+
+test('passer une occurrence fait avancer la série sans trace, et n’est pas rejouable', () => {
+  const a = applyOps([serie()], [op({ op: 'skip', id: 'p1', occ: '2026-09-05', next: '2026-09-12' })], ctx());
+  assert.equal(a.items[0].due, '2026-09-12');
+  assert.equal(a.items[0].history, undefined);
+  const b = applyOps(a.items, [op({ op: 'skip', id: 'p1', occ: '2026-09-05', next: '2026-09-12' })], ctx());
+  assert.equal(b.items[0].due, '2026-09-12');
+});
+
+test('une échéance suivante illisible est refusée, la série ne bouge pas', () => {
+  const r = applyOps([serie()], [op({ op: 'done', id: 'p1', occ: '2026-09-05', next: 'lundi prochain' })], ctx());
+  assert.equal(r.skipped.length, 1);
+  assert.equal(r.items[0].due, '2026-09-05');
+});
+
+test('une règle de récurrence est lue et bornée ; une règle illisible est refusée', () => {
+  const r = applyOps([task()], [
+    op({ op: 'edit', id: 't1', rec: { freq: 'weekly', every: 2, days: [7, 1, 1, 9], base: 'due', grace: 3, until: '2027-01-01' } }),
+  ], ctx());
+  assert.deepEqual(r.items[0].rec, { freq: 'weekly', every: 2, days: [1, 7], base: 'due', grace: 3, until: '2027-01-01' });
+  const bad = applyOps(r.items, [op({ op: 'edit', id: 't1', rec: { freq: 'parfois' } }), op({ op: 'edit', id: 't1', rec: { freq: 'daily', until: 'demain' } })], ctx());
+  assert.equal(bad.skipped.length, 2);
+  const off = applyOps(r.items, [op({ op: 'edit', id: 't1', rec: null })], ctx());
+  assert.equal('rec' in off.items[0], false, 'retirer la règle retire la clé');
+});
+
+test('l’historique est borné : une série de tous les jours ne grossit pas sans fin', () => {
+  let items = [serie({ rec: { freq: 'daily', every: 1, base: 'due' }, due: '2026-01-01' })];
+  for (let i = 0; i < 230; i++) {
+    const d = items[0].due!;
+    const n = new Date(d + 'T00:00:00Z'); n.setUTCDate(n.getUTCDate() + 1);
+    items = applyOps(items, [op({ op: 'done', id: 'p1', occ: d, next: n.toISOString().slice(0, 10) })], ctx()).items;
+  }
+  assert.equal(items[0].history!.length, 200);
+});

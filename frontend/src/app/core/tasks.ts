@@ -18,6 +18,7 @@
 //     l'affaire du jour. Elle n'est jamais supprimée ni décomptée.
 import { addDaysIso, normText, parseDay, weekdayOf } from './helpers';
 import { ListKind, TaskItem, TaskList } from './models';
+import { windowEnd } from './recurrence';
 
 /**
  * Au-delà de ce retard, une tâche cesse d'être l'affaire du jour et passe
@@ -72,14 +73,27 @@ export function dailyTasks(tasks: TaskItem[], lists: TaskList[], me: string | nu
   });
 }
 
+/**
+ * Où en est une tâche datée par rapport au jour. La tolérance d'une série
+ * (« vers le 15 avril ») compte : entre l'échéance et la fin de la tolérance,
+ * elle est l'affaire du jour, pas en retard.
+ */
+export function standing(t: TaskItem, today: string): 'late' | 'now' | 'soon' | 'undated' {
+  if (!t.due) return 'undated';
+  if (t.due > today) return 'soon';
+  return windowEnd(t.due, t.rec) < today ? 'late' : 'now';
+}
+/** Jours de retard, tolérance déduite. */
+const lateOf = (t: TaskItem, today: string): number => daysLate(windowEnd(t.due!, t.rec), today);
+
 export function todayTasks(tasks: TaskItem[], today: string, max: number): TodayTasks {
   const open = (tasks || []).filter((t) => !t.done);
-  const late = open.filter((t) => !!t.due && t.due < today)
-    .map((task) => ({ task, late: daysLate(task.due!, today) }))
+  const late = open.filter((t) => standing(t, today) === 'late')
+    .map((task) => ({ task, late: lateOf(task, today) }))
     .sort((a, b) => a.late - b.late);
-  const now = open.filter((t) => t.due === today).map((task) => ({ task, late: 0 }));
+  const now = open.filter((t) => standing(t, today) === 'now').map((task) => ({ task, late: 0 }));
   const undated = open.filter((t) => !t.due).map((task) => ({ task, late: 0 }));
-  const later = open.filter((t) => !!t.due && t.due > today);
+  const later = open.filter((t) => standing(t, today) === 'soon');
 
   const lines: TaskLine[] = [
     ...late.filter((l) => l.late <= RELEGATION_DAYS),
@@ -119,9 +133,9 @@ export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'ta
     return lines.length ? [{ key: 'undated', label: '', lines }] : [];
   }
   const groups: TaskGroup[] = [
-    { key: 'today', label: 'Aujourd’hui', lines: open.filter((t) => t.due === today).sort(byDueThenTime).map((task) => ({ task, late: 0 })) },
-    { key: 'late', label: 'En retard', lines: open.filter((t) => !!t.due && t.due < today).map((task) => ({ task, late: daysLate(task.due!, today) })).sort((a, b) => a.late - b.late) },
-    { key: 'soon', label: 'À venir', lines: open.filter((t) => !!t.due && t.due > today).sort(byDueThenTime).map((task) => ({ task, late: 0 })) },
+    { key: 'today', label: 'Aujourd’hui', lines: open.filter((t) => standing(t, today) === 'now').sort(byDueThenTime).map((task) => ({ task, late: 0 })) },
+    { key: 'late', label: 'En retard', lines: open.filter((t) => standing(t, today) === 'late').map((task) => ({ task, late: lateOf(task, today) })).sort((a, b) => a.late - b.late) },
+    { key: 'soon', label: 'À venir', lines: open.filter((t) => standing(t, today) === 'soon').sort(byDueThenTime).map((task) => ({ task, late: 0 })) },
     { key: 'undated', label: 'Sans date', lines: open.filter((t) => !t.due).sort(newestFirst).map((task) => ({ task, late: 0 })) },
   ];
   return groups.filter((g) => g.lines.length);
@@ -190,8 +204,10 @@ const JOURS = ['', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 
  * L'échéance telle qu'on la lit : « Aujourd’hui », « Demain », « Hier », le jour
  * de la semaine dans les six jours, sinon la date du foyer. L'heure suit.
  */
-export function dueLabel(due: string | null | undefined, time: string | null | undefined, today: string, fmt: (iso: string) => string): string {
+export function dueLabel(due: string | null | undefined, time: string | null | undefined, today: string, fmt: (iso: string) => string, grace = 0): string {
   if (!due) return '';
+  // Avec une tolérance, l'échéance est approximative et se dit comme telle.
+  if (grace > 0) return 'vers le ' + fmt(due) + (time ? ` · ${time}` : '');
   const diff = Math.round((parseDay(due).getTime() - parseDay(today).getTime()) / 86400000);
   const jour = diff === 0 ? 'Aujourd’hui' : diff === 1 ? 'Demain' : diff === -1 ? 'Hier'
     : diff > 1 && diff < 7 ? JOURS[weekdayOf(due)] : fmt(due);

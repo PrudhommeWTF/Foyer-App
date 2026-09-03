@@ -1,8 +1,8 @@
 # Tâches : modèle, écriture, hors ligne, exploitation
 
-Ce document décrit le module Tâches tel qu'il est depuis la tranche 1 du
-chantier « parité FamilyWall et intégration » (l'état des lieux qui l'a
-précédé est dans [`taches-etat-des-lieux.md`](taches-etat-des-lieux.md)).
+Ce document décrit le module Tâches tel qu'il est depuis les tranches 1 et 2
+du chantier « parité FamilyWall et intégration » (l'état des lieux qui les a
+précédées est dans [`taches-etat-des-lieux.md`](taches-etat-des-lieux.md)).
 Il s'adresse à qui exploite l'application : ce que le module garantit, où
 sont les données, comment sauvegarder, migrer, revenir en arrière, et quoi
 lire dans le journal quand quelque chose cloche.
@@ -81,18 +81,108 @@ Ce que ces choix impliquent à l'écran :
 - **La priorité n'existe plus.** La catégorie organise ; un badge rouge
   « Haute » était l'affichage anxiogène que le module refuse.
 
-Les champs prévus pour les tranches suivantes (récurrence, rappel, liens vers
-un contrat ou un document) n'existent pas encore dans le modèle : ils
-arriveront avec ce qui les lit.
+Les champs prévus pour les tranches suivantes (rappel, liens vers un contrat
+ou un document) n'existent pas encore dans le modèle : ils arriveront avec ce
+qui les lit.
+
+## La récurrence
+
+```ts
+interface TaskRec {
+  freq: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  every: number;        // toutes les N unités, 1 par défaut
+  days?: number[];      // hebdomadaire à date fixe : lundi = 1 … dimanche = 7
+  base: 'due' | 'done'; // à date fixe, ou après la réalisation
+  grace?: number;       // tolérance en jours avant d'être en retard
+  until?: string | null;
+}
+// sur la tâche :
+rec?: TaskRec | null;
+history?: { at: string; by: string | null; due: string | null }[];
+```
+
+**Une tâche récurrente est une série, pas une tâche par occurrence.** Elle
+porte son échéance **courante** ; la cocher inscrit une ligne dans `history`
+(quand, par qui, quelle échéance) et avance `due` à l'occurrence suivante. Rien
+ne s'accumule, rien n'est à purger, et l'historique est borné à 200 lignes.
+Une série a toujours une échéance : la saisie en pose une (aujourd'hui) si
+aucune n'est donnée.
+
+### Les deux modes
+
+| Mode | Règle de la suivante | Exemple |
+|---|---|---|
+| **À date fixe** (`base: 'due'`) | La première date de la règle **strictement après** la plus tardive des deux, échéance ou réalisation. Faite avec trois semaines de retard, les occurrences manquées ne sont **pas** rattrapées : elles ne sont plus à faire, et les accumuler serait un reproche. | Les poubelles du mardi, sorties mercredi : la prochaine est le mardi d'après. |
+| **Après la réalisation** (`base: 'done'`) | Un pas de la cadence à partir du jour du geste. Les jours de la semaine n'ont pas de sens ici et sont ignorés. | Le test de la piscine, prévu samedi, fait lundi avec deux jours de retard : la prochaine tombe le lundi d'après, pas le samedi. |
+
+Détails du calcul (`frontend/src/app/core/recurrence.ts`, testé) : le mensuel
+garde le jour du mois, borné à la fin d'un mois plus court (le 31 janvier
+donne le 28 février) ; l'annuel garde le jour et le mois (le 29 février donne
+le 28) ; « toutes les 2 semaines » est calée sur la semaine de l'échéance
+courante ; une fin de série (`until`) dépassée arrête la récurrence, la tâche
+est alors faite.
+
+**Qui calcule.** Le client, et lui seul : la coche envoie `occ` (l'échéance
+soldée) et `next` (la suivante). Le serveur vérifie la forme, pas le calcul.
+C'est cohérent avec le reste de l'application, et ça évite deux moteurs
+identiques dans deux paquets qui ne partagent aucun code.
+
+### La tolérance, pour le saisonnier
+
+`grace` est un nombre de jours après l'échéance pendant lesquels l'occurrence
+est encore l'affaire du jour, pas en retard. L'ouverture de la piscine « vers
+le 15 avril » avec quinze jours de souplesse est due du 15 au 30 avril, et en
+retard à partir du 1er mai. L'échéance s'affiche « vers le 15/04/2026 », et le
+retard se compte depuis la fin de la tolérance. C'est une échéance approximative
+plutôt qu'une fausse précision, sans plage à deux bornes.
+
+### Cette occurrence, ou toute la série
+
+À la modification comme à la suppression d'une série, la question est posée
+en une ligne, une seule fois :
+
+| Geste | Cette occurrence seulement | Toute la série |
+|---|---|---|
+| Modifier | Une **copie ponctuelle** (sans règle) porte la modification, et la série avance à l'occurrence suivante sans ligne d'historique (`skip`). | La série est modifiée en place (`edit`). |
+| Supprimer | La série avance sans ligne d'historique (`skip`) : « passer cette occurrence ». | La série est supprimée (`remove`). |
+
+Une occurrence retouchée n'est donc pas un troisième type d'objet : c'est une
+tâche simple, détachée.
+
+### Concurrence et annulation
+
+- `done` porte `occ` : si l'échéance courante n'est plus celle-là, l'autre
+  appareil a déjà coché cette occurrence, et la coche est **acquittée sans
+  effet**. Deux téléphones ne font jamais avancer la série deux fois.
+- `reopen` porte `occ` : annuler une coche ne rétablit que l'occurrence soldée
+  (la dernière ligne d'historique, si c'est bien elle), et rejouée, elle ne
+  remonte pas plus loin.
+- Annuler un « passer cette occurrence » remet l'échéance d'avant ; annuler la
+  suppression d'une série la remet avec sa règle et son historique.
+- Le journal `hh_task_ops` et la transaction valent pour ces opérations comme
+  pour les autres.
+
+### Vérifier une série sans passer par l'écran
+
+```bash
+DB=/var/lib/foyer/foyer.db
+sqlite3 "$DB" "SELECT json_extract(value, '$.text'), json_extract(value, '$.due'),
+  json_extract(value, '$.rec'), json_array_length(value, '$.history')
+  FROM household, json_each(household.state, '$.tasks') WHERE json_extract(value, '$.rec') IS NOT NULL;"
+```
+
+Aucune migration : les champs sont nouveaux et facultatifs, un document sans
+eux est un document sans série.
 
 ## Les opérations
 
 | Opération | Champs | Effet |
 |---|---|---|
-| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `done`, `doneAt`, `doneBy` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` à l'ajout sert à annuler une suppression. |
-| `edit` | `id` et les champs à changer | Ne touche que les champs nommés. `who` est remplacé, jamais fusionné. |
-| `done` | `id` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). |
-| `reopen` | `id` | Rouverte. |
+| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `rec`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
+| `edit` | `id` et les champs à changer | Ne touche que les champs nommés. `who` est remplacé, jamais fusionné. `rec: null` retire la règle. |
+| `done` | `id`, et sur une série `occ`, `next` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). Sur une série : ligne d'historique et échéance avancée à `next` (null : la série s'arrête, la tâche est faite). |
+| `skip` | `id`, `occ`, `next` | Passe l'occurrence courante d'une série sans trace. |
+| `reopen` | `id`, et sur une série `occ` | Rouverte. Sur une série : rétablit l'occurrence soldée. |
 | `remove` | `id` | Supprimée. |
 
 Chaque opération porte `opId` (généré par le client), `by`, `at`. Une
@@ -157,7 +247,8 @@ refuserait la tâche pour une liste qu'il ne connaît pas encore.
 | `backend/src/server.ts` | `GET /api/live`, et l'appel de `preserveTasks` dans `PUT /api/state`. |
 | `backend/src/state/migrations.ts` | Migration 9. |
 | `frontend/src/app/core/task-ops.ts` | Application locale d'une opération, et son inverse pour « Annuler ». |
-| `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, les suggestions, les dates d'un tap. |
+| `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, la tolérance, les suggestions, les dates d'un tap. |
+| `frontend/src/app/core/recurrence.ts` | Le moteur de récurrence : l'occurrence suivante dans les deux modes, le saut d'occurrence, la fenêtre de tolérance, le libellé de la règle. |
 | `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles. |
 | `frontend/src/app/screens/taches/composer.ts` | La saisie rapide et sa barre d'action, réutilisée par l'accueil et la modale de modification. |
 | `frontend/src/app/screens/taches/taches.ts` | L'écran. |
@@ -273,18 +364,19 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 
 | Fichier | Ce qu'il tient |
 |---|---|
-| `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses. |
+| `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. |
 | `backend/test/tasks-repo.test.ts` | La couture avec la base : version qui n'avance pas pour rien, journal qui survit, deux téléphones sur la même tâche, et un `PUT` périmé qui ne peut ni décocher ni ressusciter. |
 | `backend/test/state-migrations.test.ts` | La migration 9 : chaque conversion, ce qui est nommé au journal, la rejouabilité, aucune tâche perdue. |
-| `frontend/src/app/core/task-ops.test.ts` | L'application locale sans bascule, et l'inverse exact de chaque opération pour « Annuler ». |
+| `frontend/src/app/core/task-ops.test.ts` | L'application locale sans bascule, l'inverse exact de chaque opération pour « Annuler », y compris sur une série (occurrence rétablie, saut annulé, suppression annulée avec règle et historique). |
+| `frontend/src/app/core/recurrence.test.ts` | Les deux modes : la piscine faite en retard qui repart de la réalisation, les poubelles du mardi qui ne rattrapent pas, toutes les N semaines sur certains jours, le mensuel borné, le 29 février, la fin de série, la tolérance, les libellés. |
 | `frontend/src/app/core/tasks.test.ts` | Le compteur et la relégation de l'accueil, ce qui se voit selon le type et la portée des listes, l'ordre des groupes, les suggestions, les catégories, les dates d'un tap, la lecture de l'échéance. |
 | `frontend/src/app/core/tiles/tiles.test.ts` | La tuile d'accueil : trois vides différents, compteur sur le jour seulement. |
 
 Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
-## Ce que la tranche 1 ne fait pas encore
+## Ce qui reste à faire
 
-Récurrence (tranche 2), rappels et notifications (tranche 3), liens vers un
+Rappels et notifications (tranche 3), liens vers un
 contrat ou un document, clôture proposée quand la dernière ligne de courses est
 cochée, date proposée d'après l'emploi du temps, tap sur une tâche depuis le
 calendrier et option ICS (tranche 4), glisser-déposer, sous-tâches et vue « ce

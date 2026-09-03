@@ -14,6 +14,26 @@
 // Ce fichier ne touche ni au disque ni au réseau : c'est ce qui permet de le
 // tester sur les cas tordus (rejeu, ordre inversé, liste supprimée sous les pieds).
 
+/**
+ * Comment une tâche revient. Deux modes, et c'est le choix de fond du module :
+ * `base: 'due'` à date fixe (les poubelles du mardi), `base: 'done'` à partir
+ * de la réalisation (le test de la piscine, une semaine après l'avoir fait,
+ * qu'il ait été fait samedi ou dimanche). `grace` est la tolérance en jours
+ * avant d'être en retard : l'ouverture de la piscine se fait « vers le 15
+ * avril », pas le 15 à midi. Le calcul de l'occurrence suivante vit côté
+ * client (frontend recurrence.ts), qui l'envoie avec la coche.
+ */
+export interface TaskRec {
+  freq: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  every: number;
+  days?: number[];
+  base: 'due' | 'done';
+  grace?: number;
+  until?: string | null;
+}
+/** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
+export interface TaskDone { at: string; by: string | null; due: string | null; }
+
 export interface TaskItem {
   id: string;
   listId: string;
@@ -40,12 +60,15 @@ export interface TaskItem {
    * raccourci, et le compte des articles restants, une information de plus.
    */
   shopListId?: string | null;
+  /** Une série : la tâche porte son échéance courante, et l'historique de ses réalisations. */
+  rec?: TaskRec | null;
+  history?: TaskDone[];
 }
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
-  due?: string | null; time?: string | null; shopListId?: string | null;
+  due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; }
@@ -53,8 +76,17 @@ export type TaskOp =
   /** `done` et compagnie sont acceptés à l'ajout : c'est ce qui permet d'annuler une suppression. */
   | (Base & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null })
   | (Base & TaskFields & { op: 'edit'; id: string })
-  | (Base & { op: 'done'; id: string })
-  | (Base & { op: 'reopen'; id: string })
+  /**
+   * Sur une série, `occ` est l'échéance que la coche solde et `next` la
+   * suivante, calculée par le client. Une coche dont `occ` n'est plus
+   * l'échéance courante arrive après que l'autre appareil a coché la même
+   * occurrence : elle est sans objet, et surtout pas une seconde avance.
+   */
+  | (Base & { op: 'done'; id: string; occ?: string; next?: string | null })
+  /** Passer une occurrence sans la faire : la série avance, sans ligne d'historique. */
+  | (Base & { op: 'skip'; id: string; occ: string; next: string | null })
+  /** Sur une série, `occ` est l'échéance à rétablir : celle de la dernière réalisation. */
+  | (Base & { op: 'reopen'; id: string; occ?: string })
   | (Base & { op: 'remove'; id: string });
 
 export interface OpsContext {
@@ -88,6 +120,30 @@ const trimmed = (v: unknown, max: number): string => str(v).trim().slice(0, max)
 const TEXT_MAX = 300;
 const NOTE_MAX = 2000;
 const CAT_MAX = 40;
+const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
+const HISTORY_MAX = 200;
+
+/** Lit une règle de récurrence. Null pour « aucune », une raison si elle est illisible. */
+function readRec(v: unknown): { rec: TaskRec | null } | { reason: string } {
+  if (v === null || v === undefined || v === '') return { rec: null };
+  if (typeof v !== 'object') return { reason: 'Récurrence illisible.' };
+  const o = v as Record<string, unknown>;
+  const freq = str(o['freq']);
+  if (!FREQS.includes(freq)) return { reason: 'Fréquence de récurrence inconnue : ' + freq };
+  const every = typeof o['every'] === 'number' && Number.isInteger(o['every']) && o['every'] >= 1 && o['every'] <= 99 ? o['every'] : 1;
+  const base = o['base'] === 'done' ? 'done' : 'due';
+  const rec: TaskRec = { freq: freq as TaskRec['freq'], every, base };
+  if (Array.isArray(o['days'])) {
+    const days = [...new Set(o['days'].filter((d) => Number.isInteger(d) && d >= 1 && d <= 7))] as number[];
+    if (days.length) rec.days = days.sort((a, b) => a - b);
+  }
+  if (typeof o['grace'] === 'number' && Number.isInteger(o['grace']) && o['grace'] > 0 && o['grace'] <= 365) rec.grace = o['grace'];
+  if (typeof o['until'] === 'string' && o['until']) {
+    if (!ISO_DAY.test(o['until'])) return { reason: 'Fin de récurrence illisible : ' + o['until'] };
+    rec.until = o['until'];
+  }
+  return { rec };
+}
 
 /** Un tableau d'identifiants de membres connus, dans l'ordre reçu, sans doublon. */
 function whoOf(v: unknown, members: Set<string>): string[] {
@@ -126,6 +182,11 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
   if (o['note'] !== undefined) f.note = trimmed(o['note'], NOTE_MAX);
   if (o['cat'] !== undefined) f.cat = trimmed(o['cat'], CAT_MAX);
   if (o['who'] !== undefined) f.who = whoOf(o['who'], ctx.memberIds);
+  if (o['rec'] !== undefined) {
+    const r = readRec(o['rec']);
+    if ('reason' in r) return { reason: r.reason };
+    f.rec = r.rec;
+  }
   if (o['shopListId'] !== undefined) {
     const id = trimmed(o['shopListId'], 80);
     // Une liste de courses disparue ne fait pas échouer la tâche : le lien tombe.
@@ -141,7 +202,25 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (!next.cat) delete next.cat;
   if (next.time === null || next.time === undefined) delete next.time;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
+  if (!next.rec) { delete next.rec; }
   return next;
+}
+
+/** Les réalisations passées d'une série, telles qu'un ajout peut les restituer. Ce qui n'a pas la forme est ignoré. */
+function readHistory(v: unknown): TaskDone[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((h): h is Record<string, unknown> => !!h && typeof h === 'object')
+    .map((h) => ({ at: trimmed(h['at'], 40), by: trimmed(h['by'], 80) || null, due: ISO_DAY.test(str(h['due'])) ? str(h['due']) : null }))
+    .filter((h) => !!h.at)
+    .slice(-HISTORY_MAX);
+}
+
+/** L'échéance suivante d'une coche ou d'un saut : une date, ou null quand la série s'arrête là. */
+function readNext(v: unknown): { next: string | null } | { reason: string } {
+  if (v === null || v === undefined || v === '') return { next: null };
+  if (ISO_DAY.test(str(v))) return { next: str(v) };
+  return { reason: 'Échéance suivante illisible : ' + str(v) };
 }
 
 /**
@@ -185,9 +264,11 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (!f.text) { skipped.push({ opId, reason: 'Tâche sans intitulé.' }); break; }
         if (!f.listId) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
         const done = o['done'] === true;
+        const history = readHistory(o['history']);
         out.push(assign({
           id, listId: f.listId, text: f.text, who: f.who ?? [], due: f.due ?? null, done, by, at,
           ...(done ? { doneAt: trimmed(o['doneAt'], 40) || at, doneBy: trimmed(o['doneBy'], 80) || by } : {}),
+          ...(history.length ? { history } : {}),
         }, f));
         applied.push(opId);
         break;
@@ -204,14 +285,45 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
       }
       case 'done': {
         if (idx < 0) { applied.push(opId); break; }
+        const t = out[idx];
+        if (t.rec && !t.done) {
+          // Une série : la coche solde l'occurrence courante et fait avancer
+          // l'échéance. Une coche pour une autre occurrence est sans objet.
+          const occ = trimmed(o['occ'], 40);
+          if (occ !== (t.due || '')) { applied.push(opId); break; }
+          const n = readNext(o['next']);
+          if ('reason' in n) { skipped.push({ opId, reason: n.reason }); break; }
+          const history = [...(t.history || []), { at, by, due: t.due }].slice(-HISTORY_MAX);
+          out[idx] = n.next ? { ...t, due: n.next, history } : { ...t, done: true, doneAt: at, doneBy: by, history };
+          applied.push(opId);
+          break;
+        }
         // Déjà faite : on garde qui l'a faite en premier, c'est l'information vraie.
-        if (!out[idx].done) out[idx] = { ...out[idx], done: true, doneAt: at, doneBy: by };
+        if (!t.done) out[idx] = { ...t, done: true, doneAt: at, doneBy: by };
+        applied.push(opId);
+        break;
+      }
+      case 'skip': {
+        if (idx < 0) { applied.push(opId); break; }
+        const t = out[idx];
+        if (!t.rec || t.done || trimmed(o['occ'], 40) !== (t.due || '')) { applied.push(opId); break; }
+        const n = readNext(o['next']);
+        if ('reason' in n) { skipped.push({ opId, reason: n.reason }); break; }
+        out[idx] = n.next ? { ...t, due: n.next } : { ...t, done: true, doneAt: at, doneBy: by };
         applied.push(opId);
         break;
       }
       case 'reopen': {
         if (idx < 0) { applied.push(opId); break; }
-        if (out[idx].done) out[idx] = { ...out[idx], done: false, doneAt: null, doneBy: null };
+        const t = out[idx];
+        const occ = trimmed(o['occ'], 40);
+        const last = t.rec && t.history?.length ? t.history[t.history.length - 1] : null;
+        if (last && occ && (last.due || '') === occ) {
+          // Défaire la dernière coche d'une série : l'échéance qu'elle soldait revient.
+          out[idx] = { ...t, done: false, doneAt: null, doneBy: null, due: last.due, history: t.history!.slice(0, -1) };
+        } else if (t.done) {
+          out[idx] = { ...t, done: false, doneAt: null, doneBy: null };
+        }
         applied.push(opId);
         break;
       }
