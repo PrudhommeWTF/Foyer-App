@@ -3,6 +3,7 @@ import { ApiService } from './api.service';
 import { FinancesStore, frMonthLabel } from './finances.store';
 import { FoyerStore } from './foyer.store';
 import { HomeContext, RulesOutcome, contextOf, rankTiles } from './home-context';
+import { slotsOn } from './schedule';
 import { DocSnapshot, FinSnapshot, Source, TileProvider, TileState, safeState } from './tiles/contract';
 import { TILE_PROVIDERS, TileId } from './tiles/registry';
 
@@ -172,7 +173,7 @@ export class DashboardStore {
       today,
       holiday: this.foyer.isHoliday(today),
       schoolHoliday: this.foyer.isSchoolHoliday(today),
-      sched: this.foyer.data()?.sched || [],
+      schedToday: slotsOn(this.foyer.data()?.sched || [], today, this.foyer.calendar()),
     };
   }
 

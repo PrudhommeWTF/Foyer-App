@@ -6,12 +6,11 @@ import { AvatarComponent } from '../shared/avatar';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
 import { SchedSlot } from '../core/models';
-import { dowLabel, filterSlots, slotsOnDow, whoBadges } from '../core/schedule';
-import { weekdayOf } from '../core/presence';
+import { SchedScope, WHEN_LABELS, dowLabel, filterSlots, slotsOn, validityLabel, whoBadges } from '../core/schedule';
 import { DOW, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
 
-/** Un jour de la vue, déjà filtré : l'affichage n'a plus qu'à le dessiner. */
-interface DayView { dow: number; label: string; short: string; today: boolean; slots: SchedSlot[]; }
+/** Un jour de la vue, déjà filtré et daté : l'affichage n'a plus qu'à le dessiner. */
+interface DayView { dow: number; date: string; label: string; short: string; num: string; today: boolean; slots: SchedSlot[]; }
 
 /**
  * L'emploi du temps de la semaine.
@@ -86,6 +85,19 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
         </div>
       }
 
+      <!-- La semaine affichée. Sans elle, « à partir de cette date » et le filtre
+           des vacances n'auraient aucune date à viser. -->
+      <div class="week-bar">
+        <button class="icon-btn" title="Semaine précédente" (click)="store.shiftSchedWeek(-1)">
+          <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" />
+        </button>
+        <span class="week-label">{{ weekLabel() }}</span>
+        <button class="icon-btn" title="Semaine suivante" (click)="store.shiftSchedWeek(1)">
+          <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" />
+        </button>
+        @if (!onThisWeek()) { <button class="clear" (click)="store.schedToday()">Cette semaine</button> }
+      </div>
+
       @if (!d().sched.length) {
         <div class="blank">
           <div class="blank-title">Votre semaine est encore vide.</div>
@@ -105,6 +117,7 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
               <button class="dbtn" [class.on]="v.dow === store.ui().schedDow" [class.today]="v.today"
                       (click)="store.patch({ schedDow: v.dow })">
                 <span class="dbtn-name">{{ v.short }}</span>
+                <span class="dbtn-num">{{ v.num }}</span>
                 <span class="dbtn-count" [class.zero]="!v.slots.length">{{ v.slots.length }}</span>
               </button>
             }
@@ -114,7 +127,7 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
           @for (v of shown(); track v.dow) {
             <div class="day-card" [class.is-today]="v.today && !store.narrow()">
               <div class="day-head">
-                <div class="day-name">{{ v.label }}@if (v.today && store.narrow()) { <span class="tag">aujourd'hui</span> }</div>
+                <div class="day-name">{{ v.label }} {{ v.num }}@if (v.today) { <span class="tag">aujourd'hui</span> }</div>
                 <span class="day-count">{{ v.slots.length }}</span>
                 <!-- Bouton visible, pas d'appui long à deviner. -->
                 <button class="icon-btn" title="Copier cette journée" (click)="store.copyDay(v.dow)">
@@ -123,15 +136,20 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
               </div>
               <div class="slots">
                 @for (s of v.slots; track s.id) {
-                  <div class="slot" [style.border-left]="'4px solid ' + color(s.k)" (click)="store.editSlot(s.id)">
+                  <div class="slot" [style.border-left]="'4px solid ' + color(s.k)" (click)="store.editSlot(s.id, v.date)">
                     <div class="slot-top">
                       <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
                       <f-who [badges]="badges(s)" />
                     </div>
                     <div class="slot-label">{{ s.label }}</div>
-                    <span class="slot-badge" [style.background]="tintOf(s.k)" [style.color]="color(s.k)">
-                      <span class="dot" [style.background]="color(s.k)"></span>{{ typeLabel(s.k) }}
-                    </span>
+                    <div class="slot-tags">
+                      <span class="slot-badge" [style.background]="tintOf(s.k)" [style.color]="color(s.k)">
+                        <span class="dot" [style.background]="color(s.k)"></span>{{ typeLabel(s.k) }}
+                      </span>
+                      <!-- Une période ou une exception doit se voir sur la ligne :
+                           sinon rien ne distingue « toute l'année » de « jusqu'en juin ». -->
+                      @if (noteOf(s); as note) { <span class="slot-note">{{ note }}</span> }
+                    </div>
                   </div>
                 } @empty {
                   <!-- « Rien ici » et « rien ici à cause du filtre » ne se disent
@@ -157,12 +175,22 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
 
     @if (store.ui().schedEdit) {
       <f-modal [title]="formTitle()" [maxWidth]="520" (close)="store.patch({ schedEdit: false })">
-        <div class="field-label">Jour</div>
-        <div class="seg wrap">
-          @for (n of days; track n) {
-            <button [class.active]="store.ui().seDow === n" (click)="store.patch({ seDow: n })">{{ label(n) }}</button>
-          }
+        <div class="seg">
+          <button [class.active]="store.ui().seRec === 'weekly'" (click)="store.patch({ seRec: 'weekly' })">Toutes les semaines</button>
+          <button [class.active]="store.ui().seRec === 'once'" (click)="store.patch({ seRec: 'once' })">Une seule fois</button>
         </div>
+
+        @if (store.ui().seRec === 'once') {
+          <div class="field-label">Date</div>
+          <input class="input" type="date" [ngModel]="store.ui().seDate" (ngModelChange)="store.patch({ seDate: $event })" />
+        } @else {
+          <div class="field-label">Jour</div>
+          <div class="seg wrap">
+            @for (n of days; track n) {
+              <button [class.active]="store.ui().seDow === n" (click)="store.patch({ seDow: n })">{{ label(n) }}</button>
+            }
+          </div>
+        }
 
         <div class="field-label">Qui</div>
         <div class="who-opts">
@@ -202,15 +230,71 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
           }
         </div>
 
+        <!-- Les réglages de période sont repliés : ils ne servent pas à la saisie
+             courante, et le formulaire ne doit demander que le nécessaire. -->
+        @if (store.ui().seRec === 'weekly') {
+          @if (store.ui().seMore) {
+            <div class="form-row">
+              <div class="field">
+                <div class="field-label">À partir du (option.)</div>
+                <input class="input" type="date" [ngModel]="store.ui().seFrom" (ngModelChange)="store.patch({ seFrom: $event })" />
+              </div>
+              <div class="field">
+                <div class="field-label">Jusqu’au (option.)</div>
+                <input class="input" type="date" [ngModel]="store.ui().seUntil" (ngModelChange)="store.patch({ seUntil: $event })" />
+              </div>
+            </div>
+            <div class="field-label">Seulement</div>
+            <div class="seg wrap">
+              <button [class.active]="store.ui().seWhen === 'always'" (click)="store.patch({ seWhen: 'always' })">Toute l’année</button>
+              <button [class.active]="store.ui().seWhen === 'school'" (click)="store.patch({ seWhen: 'school' })">En période scolaire</button>
+              <button [class.active]="store.ui().seWhen === 'holidays'" (click)="store.patch({ seWhen: 'holidays' })">Pendant les vacances</button>
+            </div>
+          } @else {
+            <div class="more" (click)="store.patch({ seMore: true })">
+              <f-icon name="calendar" [size]="14" color="var(--ink2)" [width]="2.2" /> Période de validité et vacances
+            </div>
+          }
+        }
+
+        <!-- Modifier une occurrence ne doit jamais toucher toute la série sans
+             qu'on l'ait demandé : la question est posée ici, au-dessus du bouton. -->
+        @if (askScope() && !store.ui().seDelOpen) {
+          <div class="field-label">Appliquer</div>
+          <div class="seg wrap">
+            <button [class.active]="store.ui().seScope === 'all'" (click)="store.patch({ seScope: 'all' })">À toute la série</button>
+            <button [class.active]="store.ui().seScope === 'future'" (click)="store.patch({ seScope: 'future' })">À partir du {{ store.fmtNumDate(store.ui().seOccDate) }}</button>
+            <button [class.active]="store.ui().seScope === 'once'" (click)="store.patch({ seScope: 'once' })">Ce jour seulement</button>
+          </div>
+        }
+
+        @if (store.ui().seDelOpen) {
+          <div class="report destructive">
+            <div class="line strong">{{ askScope() ? 'Supprimer quoi ?' : 'Supprimer ce créneau ?' }}</div>
+            <div class="del-opts">
+              @if (askScope()) {
+                <button class="btn btn-danger" (click)="store.delSlot('once')">Ce jour seulement</button>
+                <button class="btn btn-danger" (click)="store.delSlot('future')">À partir du {{ store.fmtNumDate(store.ui().seOccDate) }}</button>
+                <button class="btn btn-danger" (click)="store.delSlot('all')">Toute la série</button>
+              } @else {
+                <button class="btn btn-danger" (click)="store.delSlot('all')">Supprimer</button>
+              }
+              <button class="btn btn-soft" (click)="store.patch({ seDelOpen: false })">Non</button>
+            </div>
+          </div>
+        }
+
+        @if (!store.ui().seDelOpen) {
         <div class="modal-actions">
           @if (store.ui().seEditId) {
             <button class="btn btn-soft" (click)="store.duplicateSlot()"><f-icon name="copy" [size]="16" color="var(--ink)" [width]="2.2" /> Dupliquer</button>
-            <button class="btn btn-danger" (click)="store.delSlot()"><f-icon name="trash" [size]="16" color="#fff" [width]="2.2" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ seDelOpen: true })"><f-icon name="trash" [size]="16" color="#fff" [width]="2.2" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ schedEdit: false })">Annuler</button>
           <button class="btn btn-primary" (click)="store.saveSlot()">Enregistrer</button>
         </div>
+        }
       </f-modal>
     }
 
@@ -300,11 +384,15 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
     .blank-sub { font-size: 13.5px; font-weight: 600; color: var(--ink2); margin: 6px 0 18px; }
     .blank .btn { display: inline-flex; }
 
+    .week-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .week-label { flex: 1; min-width: 0; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink); }
+
     .day-strip { display: flex; gap: 6px; margin-bottom: 14px; }
     .dbtn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px; border: none; border-radius: 13px; background: var(--surface); color: var(--ink2); font-family: inherit; cursor: pointer; }
     .dbtn.on { background: var(--primary); color: #fff; }
     .dbtn.today:not(.on) { box-shadow: inset 0 0 0 2px var(--primary); }
     .dbtn-name { font-size: 12px; font-weight: 800; }
+    .dbtn-num { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
     .dbtn-count { font-size: 10.5px; font-weight: 800; opacity: .8; }
     .dbtn-count.zero { opacity: .35; }
 
@@ -334,7 +422,9 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
     .slot-top f-who { flex: none; }
     .slot-time { font-family: var(--font-display); font-size: 12.5px; font-weight: 700; color: var(--ink2); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .slot-label { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-top: 3px; line-height: 1.2; }
-    .slot-badge { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; padding: 3px 8px; border-radius: 8px; font-size: 10.5px; font-weight: 800; }
+    .slot-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; }
+    .slot-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; font-size: 10.5px; font-weight: 800; }
+    .slot-note { padding: 3px 8px; border-radius: 8px; background: var(--soft2); color: var(--ink2); font-size: 10.5px; font-weight: 800; }
     .slot-badge .dot { width: 7px; height: 7px; border-radius: 2px; }
     .free { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--ink3); font-size: 12px; font-weight: 700; padding: 16px 0; text-align: center; }
 
@@ -343,6 +433,9 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
     .add.paste { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--primary); }
 
     .hint { font-size: 12px; font-weight: 700; color: var(--ink2); margin: 8px 0 16px; line-height: 1.35; }
+    .more { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 4px; padding: 8px 13px; border-radius: 11px; background: var(--soft2); color: var(--ink2); font-size: 12.5px; font-weight: 800; cursor: pointer; }
+    .del-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .del-opts .btn { flex: 1 1 auto; }
     .report { background: var(--soft); border-radius: 13px; padding: 12px 14px; margin: 14px 0 4px; font-size: 13px; font-weight: 700; color: var(--ink2); }
     .report.destructive { background: color-mix(in srgb, #C6492F 10%, var(--surface)); }
     .report .line + .line { margin-top: 5px; }
@@ -379,24 +472,50 @@ export class PlanningScreen {
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
   days = [1, 2, 3, 4, 5, 6, 7];
+  scopes: SchedScope[] = ['all', 'future', 'once'];
   types = SCHED_TYPES;
 
   label(dow: number): string { return dowLabel(dow); }
   filtered(id: string): boolean { return this.store.ui().schedWho.includes(id); }
 
-  /** La semaine entière, filtrée une seule fois pour les deux vues. */
+  /**
+   * La semaine affichée, résolue une seule fois pour les deux vues.
+   *
+   * Elle est **datée** : la semaine type est le modèle, mais sans date on ne
+   * saurait ni si un créneau est encore valide, ni si c'est les vacances, ni où
+   * poser un créneau ponctuel.
+   */
   readonly week = computed<DayView[]>(() => {
     const sched = this.d().sched;
     const who = this.store.ui().schedWho;
-    const today = weekdayOf(this.store.todayStr());
-    return this.days.map((dow) => ({
-      dow,
-      label: dowLabel(dow),
-      short: DOW[dow - 1],
-      today: dow === today,
-      slots: filterSlots(slotsOnDow(sched, dow), who),
+    const cal = this.store.calendar();
+    const today = this.store.todayStr();
+    return this.store.schedWeek().map((date, i) => ({
+      dow: i + 1,
+      date,
+      label: dowLabel(i + 1),
+      short: DOW[i],
+      num: String(parseInt(date.slice(8, 10), 10)),
+      today: date === today,
+      slots: filterSlots(slotsOn(sched, date, cal), who),
     }));
   });
+
+  /** « Semaine du 7 au 13 septembre », ou à cheval sur deux mois. */
+  readonly weekLabel = computed(() => {
+    const jours = this.store.schedWeek();
+    if (!jours.length) return '';
+    const mois = (iso: string) => this.store.fmtLongDate(iso).replace(/^\S+\s/, '');
+    const debut = mois(jours[0]);
+    const fin = mois(jours[6]);
+    const [d1] = debut.split(' ');
+    return debut.slice(debut.indexOf(' ') + 1) === fin.slice(fin.indexOf(' ') + 1)
+      ? 'Semaine du ' + d1 + ' au ' + fin
+      : 'Semaine du ' + debut + ' au ' + fin;
+  });
+
+  /** Vrai quand la semaine affichée est celle d'aujourd'hui. */
+  readonly onThisWeek = computed(() => this.store.schedWeek().includes(this.store.todayStr()));
 
   /** Ce que la vue dessine : le jour retenu sur téléphone, la semaine ailleurs. */
   readonly shown = computed<DayView[]>(() => {
@@ -420,6 +539,23 @@ export class PlanningScreen {
   });
 
   badges(s: SchedSlot) { return whoBadges(s, this.d().members); }
+
+  /**
+   * La question de la portée ne se pose que pour une série déjà enregistrée :
+   * un créneau neuf ou ponctuel n'a pas d'occurrences à distinguer.
+   */
+  readonly askScope = computed(() => {
+    const s = this.store.ui();
+    if (!s.seEditId) return false;
+    return this.d().sched.find((x) => x.id === s.seEditId)?.rec === 'weekly';
+  });
+
+  /** Ce qui, sur la ligne, dit qu'un créneau n'a pas lieu toute l'année. */
+  noteOf(s: SchedSlot): string {
+    if (s.rec === 'once') return s.srcId ? 'ce jour seulement' : 'ponctuel';
+    const parts = [validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']];
+    return parts.filter(Boolean).join(' · ');
+  }
 
   /** Un jour accepte le collage tant qu'il n'est pas celui qu'on a copié. */
   pastableOn(dow: number): boolean {

@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 6;
+export const STATE_VERSION = 7;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -266,6 +266,22 @@ export const STATE_MIGRATIONS: StateMigration[] = [
           `${sansJour.length} créneau(x) au jour illisible, placé(s) au lundi : ${sansJour.slice(0, 5).join(', ')}` +
           (sansJour.length > 5 ? ', …' : '') + '. Rouvrez-les pour les remettre au bon jour.',
         );
+      }
+    },
+  },
+  {
+    version: 7,
+    label: 'emploi du temps : récurrence et périodes de validité',
+    up: (doc) => {
+      // Jusqu'ici un créneau n'avait pas de récurrence **parce que tout était
+      // récurrent** : « tous les lundis, pour toujours ». C'est exactement
+      // `rec: 'weekly'` sans période de validité, donc la conversion ne change
+      // aucun comportement, elle rend la règle explicite.
+      //
+      // Les autres champs (date, from, until, when, skip) restent absents : ils
+      // sont facultatifs, et leur absence est déjà la valeur par défaut.
+      for (const s of arr(doc['sched'])) {
+        if (s['rec'] !== 'weekly' && s['rec'] !== 'once') s['rec'] = 'weekly';
       }
     },
   },

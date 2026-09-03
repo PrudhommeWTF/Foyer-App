@@ -33,7 +33,11 @@ export type PasteMode = 'merge' | 'replace';
  */
 export function signatureOf(s: SchedSlot): string {
   const who = (s.who || []).slice().sort().join('+');
-  return [s.dow, s.start, s.end || '', s.k, (s.label || '').trim().toLowerCase(), who].join('|');
+  // La récurrence en fait partie : « tennis le mardi jusqu'en juin » et « tennis
+  // le mardi toute l'année » ne sont pas le même créneau, et confondre les deux
+  // ferait disparaître le second lors d'une fusion.
+  const quand = [s.rec === 'once' ? 'once:' + (s.date || '') : 'weekly', s.from || '', s.until || '', s.when || 'always'].join(':');
+  return [s.dow, s.start, s.end || '', s.k, (s.label || '').trim().toLowerCase(), who, quand].join('|');
 }
 
 const touches = (s: SchedSlot, scope: readonly string[]): boolean =>
@@ -62,12 +66,18 @@ export interface PasteInput {
   mode: PasteMode;
   /** Réattribue tous les créneaux collés à ce membre, à horaires identiques. */
   remap?: string | null;
+  /**
+   * La date que porte un jour cible, dans la semaine affichée. Un créneau
+   * ponctuel collé ailleurs doit changer de date, sinon il resterait accroché au
+   * jour d'origine tout en prétendant appartenir à un autre.
+   */
+  dateFor: (dow: number) => string;
   newId: () => string;
 }
 
 /** Calcule ce que le collage ferait, sans rien écrire. */
 export function planPaste(input: PasteInput): PastePlan {
-  const { sched, source, targetDows, mode, newId } = input;
+  const { sched, source, targetDows, mode, dateFor, newId } = input;
   const remap = input.remap || null;
   const scope = remap ? [remap] : [...new Set(source.flatMap((s) => s.who || []))];
 
@@ -91,7 +101,17 @@ export function planPaste(input: PasteInput): PastePlan {
   const added: SchedSlot[] = [];
   let duplicates = 0;
   for (const p of utiles) {
-    const slot: SchedSlot = { ...p.src, id: newId(), dow: p.dow, who: remap ? [remap] : [...(p.src.who || [])] };
+    const slot: SchedSlot = {
+      ...p.src, id: newId(), dow: p.dow,
+      who: remap ? [remap] : [...(p.src.who || [])],
+      // Un ponctuel prend la date de son nouveau jour ; la période de validité
+      // d'un hebdomadaire, elle, se recopie telle quelle.
+      ...(p.src.rec === 'once' ? { date: dateFor(p.dow) } : {}),
+    };
+    // Les exceptions et le lien vers la série d'origine ne se copient pas : ce
+    // sont des dates précises, qui ne veulent rien dire sur un autre jour.
+    delete slot.skip;
+    delete slot.srcId;
     const sig = signatureOf(slot);
     // La signature retenue vaut aussi pour la suite du collage : coller deux
     // fois la même journée n'écrit pas deux fois les mêmes créneaux.

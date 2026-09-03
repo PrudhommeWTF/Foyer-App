@@ -38,6 +38,14 @@ export interface SchedSlot {
   end: string;        // 'HH:MM', ou '' quand la fin n'est pas connue
   label: string;
   k: SchedType;       // ecole | travail | sport | loisir | sante | repas | autre
+
+  rec: 'weekly' | 'once';   // toutes les semaines, ou une seule fois
+  date?: string;            // pour 'once' : la date de l'unique occurrence
+  from?: string;            // validité : premier jour inclus
+  until?: string | null;    // validité : dernier jour inclus
+  when?: 'always' | 'school' | 'holidays';
+  skip?: string[];          // occurrences annulées (l'EXDATE d'iCalendar)
+  srcId?: string;           // occurrence détachée : la série dont elle vient
 }
 ```
 
@@ -133,6 +141,21 @@ entre-temps. C'est testé, y compris le cas où quelqu'un recrée à la main, pe
 les quelques secondes de l'annulation, un créneau que le collage venait de
 supprimer.
 
+### Ce que la récurrence change à la copie
+
+- Un créneau **ponctuel** collé ailleurs prend **la date de son nouveau jour**,
+  dans la semaine affichée. Sinon il resterait accroché au jour d'origine tout
+  en prétendant appartenir à un autre.
+- La **période de validité** et le filtre scolaire se recopient tels quels : le
+  car du lundi collé sur le mardi garde « du 1er septembre au 30 juin ».
+- Les **exceptions** ne se copient pas. Une date annulée du lundi n'a aucun sens
+  sur le mardi ; la recopier trouerait la copie à un jour arbitraire.
+- Deux créneaux de **périodes différentes ne sont pas des doublons** : « tennis
+  le mardi jusqu'en juin » et « tennis le mardi toute l'année » sont deux
+  choses, et les confondre ferait disparaître la seconde lors d'une fusion.
+- La copie d'une semaine prend **les occurrences de la semaine affichée** : ce
+  qui n'a pas lieu cette semaine-là ne se copie pas.
+
 ### Copier vers un autre membre
 
 Le champ « Attribuer à » du collage réattribue tous les créneaux collés à un
@@ -175,23 +198,22 @@ du trajet aller.
 Le calcul est séparé de l'écriture pour que le rapport puisse être montré avant,
 comme pour la copie des repas (`meal-copy.ts`) et la génération des courses.
 
-## Le modèle de récurrence retenu
-
-**Livré en tranche 3.** Le modèle est arrêté, il est écrit ici pour que la
-tranche s'y conforme et pour que le choix ne se rediscute pas.
+## Le modèle de récurrence
 
 Trois concepts, pas plus. C'est le squelette d'iCalendar (RRULE + EXDATE +
 RECURRENCE-ID) réduit à ce qu'un foyer utilise réellement.
 
-```ts
-  rec: 'weekly' | 'once';   // toutes les semaines, ou une seule fois
-  date?: string;            // pour 'once' : la date ISO de l'occurrence
-  from?: string;            // validité : premier jour inclus
-  until?: string | null;    // validité : dernier jour inclus
-  when?: 'always' | 'school' | 'holidays';
-  skip?: string[];          // occurrences annulées (l'EXDATE d'iCalendar)
-  srcId?: string;           // occurrence détachée : la série dont elle vient
-```
+### La vue est datée, le modèle ne l'est pas
+
+Point à retenir, parce qu'il surprend : l'emploi du temps **ne contient qu'une
+semaine**, la semaine type. Mais l'écran, lui, affiche une **semaine réelle**,
+avec ses dates et ses flèches de navigation.
+
+Il ne pouvait pas en être autrement : sans date, impossible de savoir si un
+créneau est encore valide, si l'on est en vacances, ni où poser une exception ou
+un créneau ponctuel. La semaine datée est donc une **lecture** du modèle, pas un
+second modèle. Il n'y a toujours pas de « semaine du 12 mars » à stocker ni à
+recopier.
 
 ### Pourquoi pas de bibliothèque
 
@@ -221,6 +243,18 @@ les objets qu'on a déjà. Contrepartie assumée, la même que dans Apple Calend
 ou Google Agenda : renommer la série ensuite ne renomme pas l'occurrence
 détachée.
 
+### Ce que le moteur décide, dans l'ordre
+
+`occursOn(créneau, date, calendrier)` répond oui ou non, et rien d'autre :
+
+1. un créneau **ponctuel** n'a lieu qu'à sa date ;
+2. sinon, le jour de la semaine doit correspondre ;
+3. la date doit tomber dans la **période de validité** (bornes incluses) ;
+4. elle ne doit pas figurer dans les **occurrences annulées** ;
+5. le **filtre calendaire** doit être satisfait.
+
+Trente lignes, testées une par une dans `schedule.test.ts`.
+
 ### Vacances scolaires et jours fériés
 
 Les deux sources existent et ne changent pas : `GET /api/calendar/school-holidays`
@@ -236,6 +270,38 @@ connues (pas de réseau, service en panne, académie non renseignée), le filtre
 **n'est pas appliqué** et les créneaux s'affichent, avec une mention discrète en
 tête de vue. Cacher l'école à 7h50 parce qu'une API est tombée est une faute bien
 pire que d'afficher un créneau en trop un jour de vacances.
+
+## Modifier ou supprimer une occurrence
+
+Une série ne se modifie **jamais en entier sans qu'on l'ait demandé**. Quand un
+créneau hebdomadaire déjà enregistré est ouvert, le formulaire porte un choix
+« Appliquer », juste au-dessus du bouton d'enregistrement.
+
+| Choix | Ce qui se passe |
+|---|---|
+| **À toute la série** (défaut) | Le créneau est réécrit. Ses exceptions sont conservées. |
+| **À partir du …** | La série est **coupée en deux** : l'ancienne se ferme la veille, une nouvelle démarre ce jour-là avec les nouvelles valeurs. |
+| **Ce jour seulement** | La série saute la date, et une occurrence détachée la reprend. |
+
+La suppression pose la même question, mais **sans réponse par défaut** : c'est
+elle qui détruit. Le formulaire déplie trois boutons explicites plutôt qu'une
+modale par-dessus une modale, ce qui reste utilisable au doigt.
+
+Les trois suppressions s'annulent, et l'annulation est aussi ciblée que le
+geste : elle retire la date de la liste des exceptions, ou remet la borne de fin
+à sa valeur d'avant, ou réinsère le créneau. Jamais une copie de l'emploi du
+temps entier.
+
+**Pourquoi la coupure plutôt qu'une modification en place.** C'est ce qui traite
+un changement d'horaire à la rentrée ou un changement d'établissement sans
+effacer l'historique : les semaines passées gardent l'ancien créneau, les
+suivantes portent le nouveau. Quand la coupure ne laisserait rien derrière elle
+(le créneau ne commençait pas avant la date visée), le créneau est simplement
+modifié : produire une série vide n'aurait servi à rien.
+
+**Le compromis assumé de l'occurrence détachée :** renommer la série ensuite ne
+renomme pas l'occurrence qu'on en a détachée. C'est le comportement d'iCalendar,
+et celui d'Apple Calendar comme de Google Agenda.
 
 ## Densité d'affichage
 
@@ -317,6 +383,18 @@ sqlite3 /var/lib/foyer/foyer.db "SELECT state FROM household WHERE id=1;" \
   | jq -r '[.members[] | {id, name}]'
 ```
 
+## Migration 7
+
+`emploi du temps : récurrence et périodes de validité`
+
+Chaque créneau reçoit `rec: 'weekly'`. Ce n'est pas un changement de
+comportement : jusqu'ici un créneau n'avait pas de récurrence **parce que tout
+était récurrent**, « tous les lundis, pour toujours ». La migration rend la règle
+explicite, rien de plus.
+
+Les autres champs restent absents. Ils sont facultatifs, et leur absence est déjà
+leur valeur par défaut : aucune période n'est inventée.
+
 ### Sauvegarde avant migration
 
 À faire une fois, avant de déployer la tranche sur une base qui contient déjà des
@@ -351,6 +429,7 @@ Sortie attendue :
 
 ```
 [foyer] État : migration 6 appliquée (emploi du temps : créneaux à plusieurs membres, jour numéroté).
+[foyer] État : migration 7 appliquée (emploi du temps : récurrence et périodes de validité).
 [foyer] État : document d'origine sauvegardé dans /var/lib/foyer/backups/state-avant-migration-v5-….json
 ```
 
@@ -364,13 +443,20 @@ La migration est rejouable, donc un simple retour de version applicative ne
 suffit pas : le document est déjà à la nouvelle forme. Pour revenir réellement,
 remettez le document sauvegardé et remettez le compteur à sa valeur d'avant.
 
+Le nom du fichier de sauvegarde porte la version de **départ** : c'est elle
+qu'il faut remettre au compteur. Une base qui n'avait jamais vu ces tranches
+donne `…-v5-…` (les migrations 6 et 7 se sont enchaînées) ; une base déjà passée
+en tranche 1 donne `…-v6-…`.
+
 ```bash
 systemctl stop foyer
 DB=/var/lib/foyer/foyer.db
-SAVE=/var/lib/foyer/backups/state-avant-migration-v5-XXXX.json   # celui du journal
+SAVE=$(ls -t /var/lib/foyer/backups/state-avant-migration-*.json | head -1)
+VERSION=$(basename "$SAVE" | sed -E 's/.*-v([0-9]+)-.*/\1/')
+echo "restauration de $SAVE, retour à la version $VERSION"
 
 sqlite3 "$DB" "UPDATE household SET state = readfile('$SAVE') WHERE id = 1;"
-sqlite3 "$DB" "UPDATE hh_meta SET value = '5' WHERE key = 'state_version';"
+sqlite3 "$DB" "UPDATE hh_meta SET value = '$VERSION' WHERE key = 'state_version';"
 
 systemctl start foyer
 ```
@@ -382,12 +468,13 @@ rejouera au prochain démarrage.
 
 | Fichier | Ce qu'il tient |
 |---|---|
-| `frontend/src/app/core/schedule.test.ts` | Jours, ordre stable à heure égale, le filtre vide qui laisse tout passer, un créneau partagé qui n'apparaît qu'une fois, les marqueurs d'identité et leur débordement. |
+| `frontend/src/app/core/schedule.test.ts` | Jours, ordre stable à heure égale, le filtre vide qui laisse tout passer, un créneau partagé qui n'apparaît qu'une fois, les marqueurs d'identité et leur débordement. Et le moteur de récurrence : bornes de validité, exceptions, période scolaire, jour férié, occurrence détachée, repli quand les vacances sont inconnues. |
 | `frontend/src/app/core/sched-copy.test.ts` | Collage sur un et plusieurs jours, non-duplication en fusion, annulation intégrale d'un remplacement, annulation qui ne piétine pas une modification concurrente, réattribution à un autre membre. |
 | `backend/test/state-migrations.test.ts` | La migration 6 : conversion, membre inconnu conservé, jour illisible nommé, rejouabilité, aucun créneau perdu. |
 
-Les tests du moteur de récurrence, des exceptions et des périodes de validité
-s'ajouteront à `schedule.test.ts` à la tranche suivante.
+La tuile d'accueil est vérifiée sur les deux cas qui comptent : l'école
+disparaît un jour de vacances, et elle **reste affichée** quand les vacances ne
+sont pas connues.
 
 ## Intégrations prévues
 

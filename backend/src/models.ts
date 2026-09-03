@@ -90,7 +90,17 @@ export interface Recipe {
  * fois par personne était une régression, pas une solution. `dow` numérote le
  * jour (lundi = 1, dimanche = 7), comme partout ailleurs dans l'application.
  */
-export interface SchedSlot { id: string; who: string[]; dow: number; start: string; end: string; label: string; k: string; }
+export interface SchedSlot {
+  id: string; who: string[]; dow: number; start: string; end: string; label: string; k: string;
+  /** 'weekly' ou 'once'. Voir docs/emploi-du-temps.md pour le modèle complet. */
+  rec: string;
+  date?: string;
+  from?: string;
+  until?: string | null;
+  when?: string;
+  skip?: string[];
+  srcId?: string;
+}
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {
   dateFmt: string;

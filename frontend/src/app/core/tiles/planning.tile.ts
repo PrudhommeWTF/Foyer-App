@@ -1,5 +1,5 @@
 import { SchedSlot } from '../models';
-import { slotsOn } from '../schedule';
+import { calendarFacts, slotsOn } from '../schedule';
 import { TileProvider, TileState, empty, fromSource, ok } from './contract';
 
 export interface PlanningTileData { slots: SchedSlot[]; }
@@ -22,7 +22,9 @@ export const planningTile = {
   state: (ctx): TileState<PlanningTileData> => fromSource(ctx.doc, (d, asOf) => {
     const sched = d.doc.sched || [];
     if (!sched.length) return empty('Aucun emploi du temps.', 'Ajouter un créneau');
-    const slots = slotsOn(sched, ctx.today);
+    // Les vacances de l'académie décident si l'école a lieu : sans elles, la
+    // tuile annoncerait un jour d'école un mardi de Toussaint.
+    const slots = slotsOn(sched, ctx.today, calendarFacts(d.schoolHolidays));
     return slots.length ? ok({ slots: slots.slice(0, SHOWN) }, asOf) : empty('Journée libre.');
   }),
 } satisfies TileProvider<PlanningTileData>;

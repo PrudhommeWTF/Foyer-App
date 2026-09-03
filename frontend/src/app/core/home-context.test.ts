@@ -26,11 +26,11 @@ const rules = (regles: HomeRules['regles'], seuilRepli = -20): HomeRules =>
   ({ moments: MOMENTS, typesDeJour: JOURS, regles, seuilRepli });
 
 const creneau = (over: Partial<SchedSlot> = {}): SchedSlot =>
-  ({ id: 's1', who: ['m1'], dow: 4, start: '08:30', end: '16:30', label: 'École', k: 'ecole', ...over });
+  ({ id: 's1', who: ['m1'], dow: 4, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly', ...over });
 
 /** Le 2026-09-03 est un jeudi ; le 2026-09-05, un samedi. */
 const facts = (over: Partial<DayFacts> = {}): DayFacts =>
-  ({ today: '2026-09-03', holiday: false, schoolHoliday: false, sched: [], ...over });
+  ({ today: '2026-09-03', holiday: false, schoolHoliday: false, schedToday: [], ...over });
 
 const ORDRE = ['agenda', 'planning', 'taches', 'repas', 'courses', 'finances'];
 const ids = (r: ReturnType<typeof rankTiles>): string[] => r.map((x) => x.id);
@@ -59,11 +59,11 @@ test('le type de jour vient des données, pas d’une liste de dates', () => {
   assert.deepEqual(dayKindsOf(JOURS, facts({ holiday: true })).map((d) => d.id), ['ferie']);
   assert.deepEqual(dayKindsOf(JOURS, facts({ schoolHoliday: true })).map((d) => d.id), ['vacances']);
   assert.deepEqual(dayKindsOf(JOURS, facts({ today: '2026-09-05' })).map((d) => d.id), ['weekend']);
-  assert.deepEqual(dayKindsOf(JOURS, facts({ sched: [creneau()] })).map((d) => d.id), ['ecole']);
+  assert.deepEqual(dayKindsOf(JOURS, facts({ schedToday: [creneau()] })).map((d) => d.id), ['ecole']);
 });
 
-test('un créneau d’un autre jour de la semaine type ne fait pas un jour d’école', () => {
-  assert.deepEqual(dayKindsOf(JOURS, facts({ sched: [creneau({ dow: 1 })] })), []);
+test('un jour sans créneau d’école n’est pas un jour d’école', () => {
+  assert.deepEqual(dayKindsOf(JOURS, facts({ schedToday: [creneau({ k: 'sport' })] })), []);
 });
 
 test('plusieurs types de jour peuvent valoir ensemble', () => {
@@ -72,7 +72,7 @@ test('plusieurs types de jour peuvent valoir ensemble', () => {
 });
 
 test('le contexte s’écrit en toutes lettres, pour que l’écran s’explique seul', () => {
-  const ctx = contextOf(rules([]), facts({ sched: [creneau()] }), '17:30');
+  const ctx = contextOf(rules([]), facts({ schedToday: [creneau()] }), '17:30');
   assert.equal(ctx.label, 'Fin d’après-midi · jour d’école');
 });
 
@@ -88,7 +88,7 @@ test('le matin, la journée et l’école passent devant', () => {
     { tuile: 'agenda', moments: ['tot'], poids: 30, raison: 'Le matin, la journée d’abord' },
     { tuile: 'planning', moments: ['tot'], jours: ['ecole'], poids: 25, raison: 'Ce qui part ce matin' },
   ]);
-  const classe = rankTiles(r, ['taches', 'agenda', 'planning', 'repas'], contextOf(r, facts({ sched: [creneau()] }), '07:30'));
+  const classe = rankTiles(r, ['taches', 'agenda', 'planning', 'repas'], contextOf(r, facts({ schedToday: [creneau()] }), '07:30'));
   assert.deepEqual(ids(classe), ['agenda', 'planning', 'taches', 'repas']);
   assert.equal(classe[0].raison, 'Le matin, la journée d’abord', 'une tuile remontée dit pourquoi');
 });

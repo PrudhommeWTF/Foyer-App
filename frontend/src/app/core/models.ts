@@ -136,7 +136,34 @@ export interface Recipe {
  * `dow` numérote le jour, lundi = 1 et dimanche = 7, comme `weekdayOf` et la
  * semaine type des repas (voir presence.ts).
  */
-export interface SchedSlot { id: string; who: string[]; dow: number; start: string; end: string; label: string; k: SchedType; }
+/**
+ * Quand un créneau vaut. Trois concepts, pas plus, inspirés d'iCalendar réduit à
+ * ce qu'un foyer utilise : une règle hebdomadaire, une fenêtre de validité, une
+ * liste d'occurrences annulées. Voir docs/emploi-du-temps.md.
+ */
+export type SchedRec = 'weekly' | 'once';
+/** Filtre calendaire : toujours, seulement en période scolaire, seulement en vacances. */
+export type SchedWhen = 'always' | 'school' | 'holidays';
+
+export interface SchedSlot {
+  id: string; who: string[]; dow: number; start: string; end: string; label: string; k: SchedType;
+  /** Toutes les semaines (le cas majoritaire) ou une seule fois. */
+  rec: SchedRec;
+  /** Pour `once` : la date de l'unique occurrence. Ignoré sinon. */
+  date?: string;
+  /**
+   * Période de validité d'une règle hebdomadaire, bornes incluses. Sans elle,
+   * l'emploi du temps de l'an dernier pollue celui de cette année : les
+   * activités démarrent en septembre et s'arrêtent en juin.
+   */
+  from?: string;
+  until?: string | null;
+  when?: SchedWhen;
+  /** Occurrences annulées, en dates ISO. C'est l'EXDATE d'iCalendar. */
+  skip?: string[];
+  /** Occurrence détachée : la série dont elle vient, pour pouvoir la retrouver. */
+  srcId?: string;
+}
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {

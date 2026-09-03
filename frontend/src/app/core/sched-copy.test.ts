@@ -13,13 +13,16 @@ import { SchedSlot } from './models';
 import { dowLabel } from './schedule';
 
 const slot = (over: Partial<SchedSlot> = {}): SchedSlot =>
-  ({ id: 's1', who: ['m1'], dow: 1, start: '08:00', end: '09:00', label: 'École', k: 'ecole', ...over });
+  ({ id: 's1', who: ['m1'], dow: 1, start: '08:00', end: '09:00', label: 'École', k: 'ecole', rec: 'weekly', ...over });
+
+/** La semaine du lundi 7 septembre 2026, pour dater les créneaux ponctuels. */
+const dateFor = (dow: number) => '2026-09-0' + (6 + dow);
 
 /** Identifiants prévisibles : les tests parlent de « c1 », pas d'un tirage. */
 const compteur = () => { let n = 0; return () => 'c' + (++n); };
 
 const plan = (sched: SchedSlot[], source: SchedSlot[], over: Partial<Parameters<typeof planPaste>[0]> = {}) =>
-  planPaste({ sched, source, targetDows: [2], mode: 'merge', newId: compteur(), ...over });
+  planPaste({ sched, source, targetDows: [2], mode: 'merge', dateFor, newId: compteur(), ...over });
 
 const apply = (sched: SchedSlot[], p: PastePlan) => applyPaste(sched, p);
 const labels = (sched: SchedSlot[]) => sched.map((s) => s.dow + ':' + s.label).sort();
@@ -88,9 +91,9 @@ test('coller deux fois de suite ne double pas la journée', () => {
   // Le geste le plus probable de quelqu'un qui n'est pas sûr d'avoir cliqué.
   const lundi = [slot({ id: 'a', dow: 1, label: 'Car' }), slot({ id: 'b', dow: 1, start: '17:45', label: 'Retour' })];
   let sched = [...lundi];
-  sched = apply(sched, planPaste({ sched, source: lundi, targetDows: [2], mode: 'merge', newId: compteur() }));
+  sched = apply(sched, planPaste({ sched, source: lundi, targetDows: [2], mode: 'merge', dateFor, newId: compteur() }));
   assert.equal(sched.length, 4);
-  const second = planPaste({ sched, source: lundi, targetDows: [2], mode: 'merge', newId: compteur() });
+  const second = planPaste({ sched, source: lundi, targetDows: [2], mode: 'merge', dateFor, newId: compteur() });
   assert.equal(second.added.length, 0);
   assert.equal(second.duplicates, 2);
   assert.equal(apply(sched, second).length, 4, 'la seconde passe ne doit rien ajouter');
@@ -121,7 +124,7 @@ test('un collage en mode remplacer est intégralement annulable', () => {
     slot({ id: 'x', dow: 2, label: 'Piscine' }),
     slot({ id: 'y', dow: 2, start: '18:00', label: 'Tennis' }),
   ];
-  const p = planPaste({ sched: avant, source: [avant[0]], targetDows: [2], mode: 'replace', newId: compteur() });
+  const p = planPaste({ sched: avant, source: [avant[0]], targetDows: [2], mode: 'replace', dateFor, newId: compteur() });
   const apres = apply(avant, p);
   assert.deepEqual(labels(apres), ['1:Car', '2:Car']);
 
@@ -132,7 +135,7 @@ test('un collage en mode remplacer est intégralement annulable', () => {
 
 test('une fusion s’annule aussi, en retirant seulement ce qu’elle a écrit', () => {
   const avant = [slot({ id: 'a', dow: 1 }), slot({ id: 'x', dow: 2, start: '18:00', label: 'Tennis' })];
-  const p = planPaste({ sched: avant, source: [avant[0]], targetDows: [2], mode: 'merge', newId: compteur() });
+  const p = planPaste({ sched: avant, source: [avant[0]], targetDows: [2], mode: 'merge', dateFor, newId: compteur() });
   const apres = apply(avant, p);
   assert.equal(apres.length, 3);
   assert.deepEqual(undoPaste(apres, p).map((s) => s.id).sort(), ['a', 'x']);
@@ -142,7 +145,7 @@ test('l’annulation ne remet pas un créneau que quelqu’un a recréé entre-t
   // Le cas à deux appareils : l'annulation vise des identifiants, elle ne
   // réécrit jamais l'emploi du temps en bloc.
   const avant = [slot({ id: 'a', dow: 1 }), slot({ id: 'x', dow: 2, label: 'Piscine' })];
-  const p = planPaste({ sched: avant, source: [avant[0]], targetDows: [2], mode: 'replace', newId: compteur() });
+  const p = planPaste({ sched: avant, source: [avant[0]], targetDows: [2], mode: 'replace', dateFor, newId: compteur() });
   const apres = apply(avant, p);
   // L'autre téléphone remet « x » pendant les quelques secondes de l'annulation.
   const concurrent = [...apres, slot({ id: 'x', dow: 2, label: 'Piscine' })];
@@ -152,7 +155,7 @@ test('l’annulation ne remet pas un créneau que quelqu’un a recréé entre-t
 
 test('l’annulation ne touche pas ce que l’autre appareil a ajouté', () => {
   const avant = [slot({ id: 'a', dow: 1 })];
-  const p = planPaste({ sched: avant, source: avant, targetDows: [2], mode: 'merge', newId: compteur() });
+  const p = planPaste({ sched: avant, source: avant, targetDows: [2], mode: 'merge', dateFor, newId: compteur() });
   const apres = [...apply(avant, p), slot({ id: 'autre', dow: 5, label: 'Ajouté ailleurs' })];
   const revenu = undoPaste(apres, p);
   assert.ok(revenu.some((s) => s.id === 'autre'), 'la modification concurrente survit à l’annulation');
@@ -181,7 +184,7 @@ test('remplacer emporte les créneaux partagés qui touchent le collage', () => 
 
 test('un jour vide collé en mode remplacer vide la cible, et le dit', () => {
   const mardi = slot({ id: 'x', dow: 2, label: 'Piscine' });
-  const p = planPaste({ sched: [mardi], source: [], targetDows: [2], mode: 'replace', newId: compteur() });
+  const p = planPaste({ sched: [mardi], source: [], targetDows: [2], mode: 'replace', dateFor, newId: compteur() });
   // Une source vide n'a aucun membre : le remplacement ne vise personne.
   assert.equal(p.added.length, 0);
   assert.equal(p.removed.length, 0, 'sans membre au collage, rien n’est visé');
@@ -192,7 +195,7 @@ test('un jour vide collé en mode remplacer vide la cible, et le dit', () => {
 test('coller pour un autre membre garde les horaires et change la personne', () => {
   // Cas réel : une activité qu'un enfant reprend quand l'autre arrête.
   const src = [slot({ id: 'a', dow: 3, who: ['lea'], start: '14:00', end: '15:30', label: 'Gymnastique' })];
-  const p = planPaste({ sched: src, source: src, targetDows: null, mode: 'merge', remap: 'paul', newId: compteur() });
+  const p = planPaste({ sched: src, source: src, targetDows: null, mode: 'merge', remap: 'paul', dateFor, newId: compteur() });
   assert.equal(p.added.length, 1);
   assert.deepEqual(p.added[0].who, ['paul']);
   assert.equal(p.added[0].dow, 3, 'le jour ne bouge pas');
@@ -202,16 +205,52 @@ test('coller pour un autre membre garde les horaires et change la personne', () 
 
 test('coller pour un autre membre le même jour n’est pas pris pour un doublon', () => {
   const src = [slot({ id: 'a', dow: 3, who: ['lea'], label: 'Gym' })];
-  const p = planPaste({ sched: src, source: src, targetDows: [3], mode: 'merge', remap: 'paul', newId: compteur() });
+  const p = planPaste({ sched: src, source: src, targetDows: [3], mode: 'merge', remap: 'paul', dateFor, newId: compteur() });
   assert.equal(p.added.length, 1, 'le même jour est licite dès lors que la personne change');
 });
 
 test('remplacer pour un autre membre ne remplace que sa journée', () => {
   const lea = slot({ id: 'a', dow: 3, who: ['lea'], label: 'Gym' });
   const paul = slot({ id: 'x', dow: 3, who: ['paul'], label: 'Handball' });
-  const p = planPaste({ sched: [lea, paul], source: [lea], targetDows: null, mode: 'replace', remap: 'paul', newId: compteur() });
+  const p = planPaste({ sched: [lea, paul], source: [lea], targetDows: null, mode: 'replace', remap: 'paul', dateFor, newId: compteur() });
   assert.deepEqual(p.removed.map((s) => s.id), ['x']);
   assert.ok(!p.removed.some((s) => s.id === 'a'), 'la journée d’origine n’est jamais touchée');
+});
+
+// ---- récurrence et périodes --------------------------------------------------
+
+test('un créneau ponctuel collé ailleurs prend la date de son nouveau jour', () => {
+  // Sinon il resterait accroché au lundi tout en prétendant être un mardi.
+  const src = [slot({ id: 'a', dow: 1, rec: 'once', date: '2026-09-07', label: 'Médecin', k: 'sante' })];
+  const p = plan(src, src);
+  assert.equal(p.added[0].rec, 'once');
+  assert.equal(p.added[0].dow, 2);
+  assert.equal(p.added[0].date, '2026-09-08');
+});
+
+test('la période de validité se recopie telle quelle', () => {
+  const src = [slot({ id: 'a', dow: 1, from: '2026-09-01', until: '2027-06-30', when: 'school' })];
+  const p = plan(src, src);
+  assert.equal(p.added[0].from, '2026-09-01');
+  assert.equal(p.added[0].until, '2027-06-30');
+  assert.equal(p.added[0].when, 'school');
+});
+
+test('les exceptions ne se copient pas', () => {
+  // Une date annulée du lundi n'a aucun sens sur le mardi : la recopier
+  // trouerait la copie à un jour arbitraire.
+  const src = [slot({ id: 'a', dow: 1, skip: ['2026-09-07'], srcId: 'ancienne' })];
+  const p = plan(src, src);
+  assert.equal(p.added[0].skip, undefined);
+  assert.equal(p.added[0].srcId, undefined);
+});
+
+test('deux créneaux de périodes différentes ne sont pas des doublons', () => {
+  const annee = slot({ id: 'a', dow: 1, label: 'Tennis' });
+  const scolaire = slot({ id: 'b', dow: 2, label: 'Tennis', until: '2027-06-30' });
+  const p = plan([annee, scolaire], [annee]);
+  assert.equal(p.added.length, 1, 'la période fait partie de l’identité du créneau');
+  assert.equal(p.duplicates, 0);
 });
 
 // ---- signature ---------------------------------------------------------------

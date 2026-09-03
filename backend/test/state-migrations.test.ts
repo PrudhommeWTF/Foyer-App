@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -418,6 +418,22 @@ test('aucun créneau ne disparaît, quel que soit son état', () => {
   ]));
   assert.deepEqual(res.doc['sched'].map((s: any) => s.label), ['A', 'B', 'C', 'D']);
   assert.ok(res.doc['sched'].every((s: any) => Array.isArray(s.who) && typeof s.dow === 'number'));
+});
+
+test('un créneau existant devient explicitement hebdomadaire', () => {
+  // Il l'était déjà, implicitement : « tous les lundis, pour toujours ». La
+  // migration rend la règle lisible sans changer le comportement.
+  const res = run(foyer([{ id: 's1', who: 'me', day: 'Lundi', start: '09:00', label: 'Cabinet', k: 'travail' }]));
+  assert.equal(res.doc['sched'][0].rec, 'weekly');
+  assert.equal(res.doc['sched'][0].from, undefined, 'aucune période n’est inventée');
+  assert.equal(res.doc['sched'][0].until, undefined);
+  assert.equal(res.doc['sched'][0].when, undefined);
+});
+
+test('un créneau ponctuel déjà posé garde sa récurrence', () => {
+  const res = run(foyer([{ id: 's1', who: ['me'], dow: 2, rec: 'once', date: '2026-09-08', start: '10:00', label: 'Médecin', k: 'sante' }]));
+  assert.equal(res.doc['sched'][0].rec, 'once');
+  assert.equal(res.doc['sched'][0].date, '2026-09-08');
 });
 
 test('un emploi du temps absent ou biscornu ne fait pas tomber la migration', () => {

@@ -7,11 +7,11 @@
 // pas cliqué. Un filtre vide qui viderait l'écran est un bug, pas un réglage.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { WHO_SHOWN, dowLabel, filterSlots, matchesWho, slotsOn, slotsOnDow, sortSlots, whoBadges } from './schedule';
+import { WHO_SHOWN, calendarFacts, dowLabel, filterSlots, matchesWho, occursOn, slotsOn, sortSlots, validityLabel, whoBadges } from './schedule';
 import { Member, SchedSlot } from './models';
 
 const slot = (over: Partial<SchedSlot> = {}): SchedSlot =>
-  ({ id: 's1', who: ['m1'], dow: 4, start: '08:30', end: '16:30', label: 'École', k: 'ecole', ...over });
+  ({ id: 's1', who: ['m1'], dow: 4, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly', ...over });
 
 const membre = (id: string, name: string, color: string): Member =>
   ({ id, name, role: 'Membre', color, ini: name.slice(0, 2).toUpperCase() });
@@ -46,8 +46,9 @@ test('le mercredi n’est un jour particulier pour personne dans le code', () =>
   // l'autre, activités l'après-midi), et c'est justement pour cela qu'il ne doit
   // être nulle part un cas à part : il se lit exactement comme les six autres.
   const sched = [1, 2, 3, 4, 5, 6, 7].map((dow) => slot({ id: 'j' + dow, dow }));
+  // La semaine du lundi 7 septembre 2026.
   for (const dow of [1, 2, 3, 4, 5, 6, 7]) {
-    assert.deepEqual(slotsOnDow(sched, dow).map((s) => s.id), ['j' + dow]);
+    assert.deepEqual(slotsOn(sched, '2026-09-0' + (6 + dow)).map((s) => s.id), ['j' + dow]);
   }
 });
 
@@ -59,7 +60,7 @@ test('les créneaux sortent dans l’ordre des heures', () => {
     slot({ id: 'matin', start: '07:50', end: '08:20' }),
     slot({ id: 'midi', start: '12:00', end: '13:30' }),
   ];
-  assert.deepEqual(slotsOnDow(sched, 4).map((s) => s.id), ['matin', 'midi', 'soir']);
+  assert.deepEqual(slotsOn(sched, '2026-09-03').map((s) => s.id), ['matin', 'midi', 'soir']);
 });
 
 test('deux créneaux à la même heure gardent un ordre stable', () => {
@@ -152,4 +153,111 @@ test('le débordement se compte au-delà de trois membres', () => {
   const b = whoBadges(slot({ who: ['me', 'm1', 'm2', 'm3'] }), FOYER);
   assert.equal(b.length, 4);
   assert.equal(b.length - WHO_SHOWN, 1, 'quatre membres : trois pastilles et un « +1 »');
+});
+
+// ---- récurrence, périodes et exceptions -------------------------------------
+//
+// La recette de l'utilisateur : « je regarde la semaine des vacances scolaires,
+// les créneaux d'activité et d'école n'y sont pas ». Et son corollaire, moins
+// visible mais plus grave : ils y sont quand même si l'on ne sait pas que ce
+// sont les vacances.
+
+/** Vacances de la Toussaint 2026, et le 11 novembre qui tombe dedans côté férié. */
+const CAL = calendarFacts([{ start: '2026-10-17', end: '2026-11-02' }]);
+/** Source indisponible : la liste est vide, donc rien n'est connu. */
+const CAL_INCONNU = calendarFacts([]);
+
+test('un créneau hebdomadaire a lieu chaque semaine, sans période', () => {
+  const s = slot({ dow: 4 });
+  assert.equal(occursOn(s, '2026-09-03', CAL), true);
+  assert.equal(occursOn(s, '2026-09-10', CAL), true);
+  assert.equal(occursOn(s, '2026-09-04', CAL), false, 'pas le vendredi');
+});
+
+test('un créneau ponctuel n’a lieu qu’à sa date', () => {
+  const s = slot({ rec: 'once', date: '2026-09-03', label: 'Médecin', k: 'sante' });
+  assert.equal(occursOn(s, '2026-09-03', CAL), true);
+  assert.equal(occursOn(s, '2026-09-10', CAL), false, 'un ponctuel ne revient pas la semaine suivante');
+});
+
+test('la période de validité borne la série des deux côtés', () => {
+  // L'activité démarre à la rentrée et s'arrête en juin : sans période, celle de
+  // l'an dernier pollue l'année en cours.
+  const s = slot({ dow: 4, from: '2026-09-10', until: '2027-06-30' });
+  assert.equal(occursOn(s, '2026-09-03', CAL), false, 'avant le début');
+  assert.equal(occursOn(s, '2026-09-10', CAL), true, 'le premier jour est inclus');
+  assert.equal(occursOn(s, '2027-06-24', CAL), true);
+  assert.equal(occursOn(s, '2027-07-01', CAL), false, 'après la fin');
+});
+
+test('une borne de fin au jour même laisse l’occurrence de ce jour', () => {
+  const s = slot({ dow: 4, until: '2026-09-03' });
+  assert.equal(occursOn(s, '2026-09-03', CAL), true, 'la borne est incluse');
+  assert.equal(occursOn(s, '2026-09-10', CAL), false);
+});
+
+test('une exception retire une occurrence sans toucher aux autres', () => {
+  // « Ce jeudi, pas de tennis. »
+  const s = slot({ dow: 4, skip: ['2026-09-10'] });
+  assert.equal(occursOn(s, '2026-09-03', CAL), true);
+  assert.equal(occursOn(s, '2026-09-10', CAL), false);
+  assert.equal(occursOn(s, '2026-09-17', CAL), true, 'la série continue après l’exception');
+});
+
+test('un créneau de période scolaire disparaît pendant les vacances', () => {
+  const s = slot({ dow: 4, when: 'school' });
+  assert.equal(occursOn(s, '2026-09-03', CAL), true);
+  assert.equal(occursOn(s, '2026-10-22', CAL), false, 'vacances de la Toussaint');
+  assert.equal(occursOn(s, '2026-11-05', CAL), true, 'la rentrée le ramène');
+});
+
+test('un créneau de vacances ne paraît que pendant les vacances', () => {
+  const s = slot({ dow: 4, when: 'holidays', label: 'Chez les grands-parents' });
+  assert.equal(occursOn(s, '2026-09-03', CAL), false);
+  assert.equal(occursOn(s, '2026-10-22', CAL), true);
+});
+
+test('un jour férié n’est pas un jour d’école', () => {
+  // Le 11 novembre 2026 est un mercredi férié, hors vacances de la Toussaint.
+  const ecole = slot({ dow: 3, when: 'school' });
+  const vacances = slot({ dow: 3, when: 'holidays' });
+  assert.equal(occursOn(ecole, '2026-11-11', CAL), false);
+  assert.equal(occursOn(vacances, '2026-11-11', CAL), true);
+  // Qui travaille certains fériés laisse son créneau sur « toujours ».
+  assert.equal(occursOn(slot({ dow: 3 }), '2026-11-11', CAL), true);
+});
+
+test('quand les vacances ne sont pas connues, on affiche plutôt que de cacher', () => {
+  // Décision assumée : cacher l'école à 7h50 parce qu'une API est tombée est
+  // une faute bien pire que d'afficher un créneau en trop.
+  const ecole = slot({ dow: 4, when: 'school' });
+  assert.equal(occursOn(ecole, '2026-10-22', CAL_INCONNU), true);
+  // Et l'inverse aussi : un créneau de vacances n'est pas caché non plus.
+  assert.equal(occursOn(slot({ dow: 4, when: 'holidays' }), '2026-09-03', CAL_INCONNU), true);
+});
+
+test('sans aucune connaissance du calendrier, le tri par date reste juste', () => {
+  // Le repli ne doit pas rendre `slotsOn` inutilisable là où personne ne fournit
+  // de calendrier (la tuile d'accueil avant chargement, par exemple).
+  const sched = [slot({ id: 'a', dow: 4, when: 'school' }), slot({ id: 'b', dow: 5 })];
+  assert.deepEqual(slotsOn(sched, '2026-09-03').map((s) => s.id), ['a']);
+});
+
+test('une occurrence détachée remplace celle de sa série', () => {
+  // « Cette fois seulement » : la série saute la date, et un ponctuel la reprend
+  // avec les nouvelles valeurs.
+  const serie = slot({ id: 'serie', dow: 4, start: '17:00', skip: ['2026-09-10'] });
+  const detachee = slot({ id: 'exception', dow: 4, rec: 'once', date: '2026-09-10', start: '18:30', srcId: 'serie' });
+  const jour = slotsOn([serie, detachee], '2026-09-10', CAL);
+  assert.deepEqual(jour.map((s) => s.id), ['exception'], 'une seule des deux, jamais les deux');
+  assert.deepEqual(slotsOn([serie, detachee], '2026-09-17', CAL).map((s) => s.id), ['serie']);
+});
+
+test('la période se lit en français, ou ne se lit pas du tout', () => {
+  const fmt = (iso: string) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+  assert.equal(validityLabel(slot(), fmt), '', 'un créneau sans période n’affiche rien');
+  assert.equal(validityLabel(slot({ from: '2026-09-01' }), fmt), 'à partir du 01/09');
+  assert.equal(validityLabel(slot({ until: '2027-06-30' }), fmt), 'jusqu’au 30/06');
+  assert.equal(validityLabel(slot({ from: '2026-09-01', until: '2027-06-30' }), fmt), 'du 01/09 au 30/06');
+  assert.equal(validityLabel(slot({ rec: 'once', date: '2026-09-10' }), fmt), '10/09');
 });
