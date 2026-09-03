@@ -175,10 +175,10 @@ soir, sans lire une ligne de code.
 
 Dit franchement, pour que vous ne le cherchiez pas :
 
-- **« Jour de garde des enfants »** n'est modélisable par rien aujourd'hui. La
-  semaine type des convives (`Member.absent`) dit qui ne mange pas à la maison,
-  ce qui n'est pas la même chose. Il faudrait un champ dédié, dans le module
-  Membres, pour que la règle existe.
+- **« Jour de garde des enfants »** n'est modélisable par rien aujourd'hui.
+  L'emploi du temps dit qui est hors du foyer à telle heure, ce qui n'est pas la
+  même chose. Il faudrait un champ dédié, dans le module Membres, pour que la
+  règle existe.
 - **Les événements saillants** (une échéance proche, une tâche en retard) ne
   déplacent pas les tuiles. C'est un écart assumé au cahier des charges : un
   ordre qui change quand une donnée arrive est exactement l'écran imprévisible

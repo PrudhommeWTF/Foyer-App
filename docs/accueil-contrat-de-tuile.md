@@ -366,5 +366,5 @@ Pour éviter toute ambiguïté sur l'état réel du chantier :
   d'urgence méritent un accès rapide, mais depuis la barre de navigation, pas
   depuis une tuile qui répéterait la même chose tous les jours.
 - **Le « jour de garde des enfants » n'est pas modélisable.** Rien dans les
-  données ne le porte, et la semaine type des convives dit autre chose. Il
-  faudrait un champ dédié au module Membres.
+  données ne le porte, et l'emploi du temps dit autre chose (qui est dehors, pas
+  qui garde). Il faudrait un champ dédié au module Membres.

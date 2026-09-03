@@ -1,31 +1,56 @@
 /**
  * Qui mange à la maison, et donc pour combien on cuisine.
  *
- * Le choix de fond : la semaine type enregistre les **absences**, pas les
- * présences. Dans un foyer, tout le monde est là presque tout le temps ; noter
- * les exceptions demande cinq gestes là où une grille de présences en
- * demanderait vingt et un, et une case oubliée veut alors dire « comme
- * d'habitude » plutôt que « personne ne mange ».
+ * Le choix de fond a changé, et c'est le sujet de cette tranche : la présence
+ * **se déduit de l'emploi du temps** au lieu d'être ressaisie. Le module savait
+ * déjà que Léa est au collège le lundi midi ; lui redemander dans une grille
+ * d'absences tenue à la main, c'était deux sources de vérité pour un seul fait,
+ * dont la seconde se démodait en silence.
  *
  * Trois niveaux, du plus général au plus précis, chacun l'emportant sur le
  * précédent :
  *
- *   1. la **semaine type** du membre (`Member.absent`), qui vaut toute l'année ;
+ *   1. l'**emploi du temps** : un créneau marqué « hors du foyer » qui couvre
+ *      l'heure du repas retire ceux qu'il concerne ;
  *   2. la **dérogation du créneau** (`MealValue.away`), pour le soir où Léa
  *      mange chez une amie ;
  *   3. les **couverts posés à la main** (`MealValue.pax`), qui priment sur tout
  *      parce qu'ils sont le seul moyen de compter des invités.
+ *
+ * Le sens de l'erreur est choisi : en cas de doute, on compte **présent**. Trop
+ * de couverts fait un reste au frigo ; pas assez fait quelqu'un qui n'a rien
+ * dans son assiette.
  */
-import { MealValue, Member } from './models';
+import { MEAL_SLOTS } from './constants';
+import { MealValue, Member, SchedSlot } from './models';
+import { CalendarFacts, NO_CALENDAR, occursOn } from './schedule';
 
-/** Clé d'une case de la semaine type : « 1-midi ». Lundi vaut 1, dimanche 7. */
-export const weekSlot = (weekday: number, slot: string): string => weekday + '-' + slot;
+/** L'heure de référence d'un créneau de repas, celle que le foyer a réglée. */
+const mealAt = (slot: string): string => MEAL_SLOTS.find((s) => s.key === slot)?.at || '12:00';
 
-/** Jour de la semaine d'une date ISO, lundi = 1. Lu sans fuseau : la clé est le jour écrit. */
-export function weekdayOf(dateStr: string): number {
-  const [y, m, d] = String(dateStr).split('-').map(Number);
-  const jour = new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)).getUTCDay();
-  return jour === 0 ? 7 : jour;
+/**
+ * Les membres que l'emploi du temps place **hors du foyer** à l'heure de ce repas.
+ *
+ * C'est l'interface de lecture du module : le planning des repas passe par elle
+ * et ne fouille jamais dans `sched`. Elle rend un ensemble d'identifiants, pas
+ * des créneaux : ce que Cuisine a besoin de savoir, c'est qui manque, pas
+ * pourquoi.
+ *
+ * La règle est volontairement stricte : le créneau doit **couvrir l'heure du
+ * repas** (début inclus, fin exclue), pas seulement la frôler. Un créneau sans
+ * heure de fin ne retire donc personne, et une course de 12h à 12h30 ne fait pas
+ * sauter le déjeuner de 12h30. C'est le sens d'erreur voulu.
+ */
+export function awayAt(sched: SchedSlot[], date: string, slot: string, cal: CalendarFacts = NO_CALENDAR): Set<string> {
+  const at = mealAt(slot);
+  const out = new Set<string>();
+  for (const s of sched || []) {
+    if (!s.away || !s.end) continue;
+    if (s.start > at || at >= s.end) continue;
+    if (!occursOn(s, date, cal)) continue;
+    for (const id of s.who || []) out.add(id);
+  }
+  return out;
 }
 
 export interface Presence {
@@ -38,23 +63,28 @@ export interface Presence {
   manual: boolean;
 }
 
-/** Un membre est attendu sauf mention contraire : ne rien savoir de lui le compte présent. */
-export const expectedAt = (m: Member, weekday: number, slot: string): boolean =>
-  !(m.absent || []).includes(weekSlot(weekday, slot));
+/** Ce qu'il faut connaître du foyer pour compter les couverts d'un repas. */
+export interface PresenceInput {
+  members: Member[];
+  /** L'emploi du temps, seule source des absences régulières. */
+  sched: SchedSlot[];
+  /** Les faits calendaires, pour que les vacances comptent tout le monde à la maison. */
+  cal?: CalendarFacts;
+}
 
-export function presenceAt(members: Member[], dateStr: string, slot: string, value?: MealValue | null): Presence {
-  const jour = weekdayOf(dateStr);
+export function presenceAt(input: PresenceInput, dateStr: string, slot: string, value?: MealValue | null): Presence {
+  const dehors = awayAt(input.sched || [], dateStr, slot, input.cal);
   const derogation = new Set(value?.away || []);
   const present: Member[] = [];
   const away: Member[] = [];
-  for (const m of members || []) {
-    if (expectedAt(m, jour, slot) && !derogation.has(m.id)) present.push(m);
+  for (const m of input.members || []) {
+    if (!dehors.has(m.id) && !derogation.has(m.id)) present.push(m);
     else away.push(m);
   }
   const pose = value?.pax;
   const manual = !!(pose && pose > 0);
   // Au moins un couvert : une liste de courses pour zéro personne ne veut rien
-  // dire, et le cas arrive dès qu'on marque tout le monde absent par erreur.
+  // dire, et le cas arrive dès qu'un créneau couvre tout le monde par erreur.
   return { present, away, pax: manual ? pose! : Math.max(present.length, 1), manual };
 }
 

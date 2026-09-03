@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
+import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
@@ -11,15 +11,17 @@ import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredie
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
 import { parseQuery, searchRecipes } from './recipe-search';
 import { readRecipeText } from './recipe-text';
-import { paxLabel, presenceAt, weekSlot } from './presence';
+import { paxLabel, presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { Allergene, normaliseName } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
+import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
+import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
-import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
-import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_DAYS, tint, grad } from './constants';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
@@ -1561,9 +1563,16 @@ export class FoyerStore {
   /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
   householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
 
-  /** Qui mange à ce créneau, et pour combien de couverts. Voir presence.ts. */
+  /**
+   * Qui mange à ce créneau, et pour combien de couverts.
+   *
+   * Les absences viennent de l'emploi du temps, plus d'une grille tenue à la
+   * main : le module savait déjà que Léa est au collège le lundi midi. Voir
+   * presence.ts.
+   */
   presenceOf(dateStr: string, slot: string) {
-    return presenceAt(this._data()?.members || [], dateStr, slot, this._data()?.meals[dateStr + '-' + slot]);
+    const d = this._data();
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
   }
   /** « 3 couverts (Léa absente) », affiché sous le créneau. */
   paxTextOf(dateStr: string, slot: string): string { return paxLabel(this.presenceOf(dateStr, slot)); }
@@ -1576,19 +1585,9 @@ export class FoyerStore {
    */
   readonly editingPresence = computed(() => {
     const e = this.ui().mealEdit; if (!e) return null;
-    return presenceAt(this._data()?.members || [], e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
+    const d = this._data();
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
   });
-
-  // ---- semaine type, dans le formulaire d'un membre ------------------------
-  readonly weekDaysShort = [
-    { n: 1, label: 'Lun' }, { n: 2, label: 'Mar' }, { n: 3, label: 'Mer' }, { n: 4, label: 'Jeu' },
-    { n: 5, label: 'Ven' }, { n: 6, label: 'Sam' }, { n: 7, label: 'Dim' },
-  ];
-  isMemberAbsent(day: number, slot: string): boolean { return this.ui().mfAbsent.includes(weekSlot(day, slot)); }
-  toggleMemberAbsent(day: number, slot: string): void {
-    const k = weekSlot(day, slot); const cur = this.ui().mfAbsent;
-    this.patch({ mfAbsent: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] });
-  }
 
   // ---- suggestions ---------------------------------------------------------
   /**
@@ -1600,7 +1599,7 @@ export class FoyerStore {
     const e = this.ui().mealEdit; const d = this._data();
     if (!e || !d) return null;
     return suggestMeals({
-      recipes: d.recipes, meals: d.meals, members: d.members, index: this.articleIndex(),
+      recipes: d.recipes, meals: d.meals, members: d.members, sched: d.sched, cal: this.calendar(), index: this.articleIndex(),
       shop: d.shop.filter((i) => i.listId === this.activeShopListId()),
       dateStr: e.dateStr, slot: e.slot,
     });
@@ -1645,7 +1644,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return [];
     // Seuls les convives attendus : alerter pour quelqu'un qui n'est pas là ce
     // soir-là est une fausse alerte, et une de trop suffit à ne plus les lire.
-    const presents = presenceAt(d.members, key.slice(0, 10), key.slice(11), d.meals[key]).present;
+    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
     return mealConflicts(d.meals[key]?.items || [], d.recipes, presents, this.articleIndex());
   }
 
@@ -2017,29 +2016,390 @@ export class FoyerStore {
   }
   confirmRecipeDel(): void { const id = this.ui().confirmDelId; if (!id) return; this.mutate((d) => { d.recipes = d.recipes.filter((r) => r.id !== id); }); this.patch({ confirmDelId: null, openRecipeId: this.ui().openRecipeId === id ? null : this.ui().openRecipeId }); this.toast('Recette supprimée'); }
 
-  // ---- planning ---------------------------------------------------------
-  newSlot(day: string): void { this.patch({ screen: 'planning', schedEdit: true, seEditId: null, seDay: day || SCHED_DAYS[0], seStart: '', seEnd: '', seLabel: '', seType: 'ecole', addMenuOpen: false }); }
-  editSlot(id: string): void { const it = this._data()?.sched.find((x) => x.id === id); if (!it) return; this.patch({ schedEdit: true, seEditId: id, seDay: it.day, seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k }); }
-  saveSlot(): void {
-    const s = this.ui(); const label = s.seLabel.trim(); if (!label) { this.toast('Donne un intitulé'); return; } const start = s.seStart.trim(); if (!start) { this.toast('Indique une heure de début'); return; }
-    const data = { who: s.schedChild, day: s.seDay, start, end: s.seEnd.trim(), label, k: s.seType };
-    this.mutate((d) => {
-      if (s.seEditId) { const i = d.sched.findIndex((x) => x.id === s.seEditId); if (i >= 0) d.sched[i] = { ...d.sched[i], ...data }; }
-      else d.sched.push({ id: uid('s'), ...data });
+  // ---- emploi du temps --------------------------------------------------
+  //
+  // Le filtre par membre est un **affinage** : vide, il laisse passer tout le
+  // foyer. Il ne s'initialise donc sur personne, et se vide en un geste.
+
+  /**
+   * Ce que le calendrier sait des jours : fériés calculés, vacances de
+   * l'académie. Une liste de vacances vide veut dire **inconnue**, et le moteur
+   * n'applique alors aucun filtre plutôt que de cacher l'école.
+   */
+  readonly calendar = computed<CalendarFacts>(() => calendarFacts(this.schoolHolidays()));
+
+  /** Les sept dates de la semaine affichée, du lundi au dimanche. */
+  readonly schedWeek = computed(() => weekDates(0, this.ui().schedAnchor).map(dstr));
+  /** La date que porte un jour de la semaine affichée. */
+  schedDate(dow: number): string { return this.schedWeek()[dow - 1] || this.todayStr(); }
+  shiftSchedWeek(n: number): void { this.patch({ schedAnchor: addDaysIso(this.ui().schedAnchor, n * 7) }); }
+  schedToday(): void { this.patch({ schedAnchor: this.todayStr(), schedDow: weekdayOf(this.todayStr()) }); }
+
+  /** Les membres du filtre, tels que l'écran les coche et les décoche. */
+  toggleSchedWho(id: string): void {
+    const cur = this.ui().schedWho;
+    this.patch({ schedWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
+  clearSchedWho(): void { this.patch({ schedWho: [] }); }
+
+  /**
+   * Choisit le type du créneau, et repositionne « hors du foyer » sur le défaut
+   * de ce type. Le télétravail existe, donc la case reste décochable ensuite :
+   * c'est elle qui décide, pas le type.
+   */
+  setSlotType(k: SchedType): void { this.patch({ seType: k, seAway: !!SCHED_AWAY_DEFAULT[k] }); }
+
+  /** Les membres portés par le créneau en cours d'édition. */
+  toggleSlotWho(id: string): void {
+    const cur = this.ui().seWho;
+    this.patch({ seWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
+
+  /**
+   * Nouveau créneau. Le formulaire s'ouvre déjà rempli des membres du filtre :
+   * quand on vient d'affiner sur Léa, le créneau qu'on ajoute est pour Léa, et
+   * la saisie tombe d'un geste.
+   */
+  newSlot(dow = 0, start = ''): void {
+    const s = this.ui();
+    const jour = dow >= 1 && dow <= 7 ? dow : s.schedDow;
+    const date = this.schedDate(jour);
+    // Sans heure imposée, on propose celle qui suit le dernier créneau du jour :
+    // une saisie qui commence par la bonne heure est une saisie de moins.
+    const heure = start || nextFreeStart(this.shownOn(jour));
+    this.patch({
+      screen: 'planning', schedEdit: true, seEditId: null,
+      seDow: jour, seWho: [...s.schedWho], seStart: heure, seEnd: '', seLabel: '', seType: 'ecole',
+      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seAway: SCHED_AWAY_DEFAULT['ecole'],
+      seMore: false, seOccDate: date, seScope: 'all', seDelOpen: false, addMenuOpen: false,
     });
-    this.toast(s.seEditId ? 'Créneau modifié' : 'Créneau ajouté');
+  }
+  /**
+   * Ouvre un créneau **à une date donnée**. C'est cette date que viseront
+   * « cette fois seulement » et « à partir de cette date » : sans elle, la
+   * question n'aurait pas de réponse possible.
+   */
+  editSlot(id: string, date = ''): void {
+    const it = this._data()?.sched.find((x) => x.id === id); if (!it) return;
+    const occ = date || (it.rec === 'once' ? it.date || this.todayStr() : this.schedDate(it.dow));
+    // Les réglages de période ne se déplient d'office que s'ils sont utilisés :
+    // les montrer toujours alourdirait la saisie courante pour rien.
+    const pose = !!(it.from || it.until || (it.when && it.when !== 'always'));
+    this.patch({
+      schedEdit: true, seEditId: id, seDow: it.dow, seWho: [...(it.who || [])],
+      seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k,
+      seRec: it.rec === 'once' ? 'once' : 'weekly', seDate: it.date || occ, seAway: !!it.away,
+      seFrom: it.from || '', seUntil: it.until || '', seWhen: it.when || 'always',
+      seMore: pose, seOccDate: occ, seScope: 'all', seDelOpen: false,
+    });
+  }
+
+  /** Le créneau que le formulaire décrit, sans identifiant ni exceptions. */
+  private slotForm(): Omit<SchedSlot, 'id'> | null {
+    const s = this.ui();
+    const label = s.seLabel.trim(); if (!label) { this.toast('Donne un intitulé'); return null; }
+    const start = s.seStart.trim(); if (!start) { this.toast('Indique une heure de début'); return null; }
+    // Un créneau sans personne ne veut rien dire, et c'est ce qui force la
+    // reprise des créneaux orphelins : les rouvrir demande de leur attribuer
+    // quelqu'un avant de pouvoir enregistrer.
+    if (!s.seWho.length) { this.toast('Choisis au moins un membre'); return null; }
+    if (s.seRec === 'once' && !s.seDate) { this.toast('Indique la date du créneau'); return null; }
+    if (s.seRec === 'weekly' && s.seFrom && s.seUntil && s.seUntil < s.seFrom) {
+      this.toast('La fin de période est avant son début'); return null;
+    }
+    const commun = { who: [...s.seWho], start, end: s.seEnd.trim(), label, k: s.seType, ...(s.seAway ? { away: true } : {}) };
+    return s.seRec === 'once'
+      ? { ...commun, rec: 'once', dow: weekdayOf(s.seDate), date: s.seDate }
+      : {
+          ...commun, rec: 'weekly', dow: s.seDow,
+          ...(s.seFrom ? { from: s.seFrom } : {}),
+          ...(s.seUntil ? { until: s.seUntil } : {}),
+          ...(s.seWhen !== 'always' ? { when: s.seWhen } : {}),
+        };
+  }
+
+  saveSlot(): void {
+    const s = this.ui();
+    const forme = this.slotForm();
+    if (!forme) return;
+    const avant = s.seEditId ? this._data()?.sched.find((x) => x.id === s.seEditId) : undefined;
+    const occ = s.seOccDate;
+
+    if (!avant) {
+      this.mutate((d) => { d.sched.push({ id: uid('s'), ...forme }); });
+      this.toast('Créneau ajouté');
+      this.patch({ schedEdit: false, seEditId: null });
+      return;
+    }
+
+    // Un ponctuel n'a pas de série : la question ne se pose pas.
+    const portee = avant.rec === 'once' ? 'all' : s.seScope;
+
+    if (portee === 'all') {
+      // Le créneau est **réécrit** plutôt que fusionné : sans cela, une période
+      // qu'on vient d'effacer dans le formulaire survivrait dans le document.
+      this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === avant.id);
+        if (i >= 0) d.sched[i] = { id: avant.id, ...forme, ...(avant.skip?.length ? { skip: [...avant.skip] } : {}), ...(avant.srcId ? { srcId: avant.srcId } : {}) };
+      });
+      this.toast(avant.rec === 'once' ? 'Créneau modifié' : 'Série modifiée');
+    } else if (portee === 'once') {
+      // « Cette fois seulement » : la série saute la date, et une occurrence
+      // détachée la reprend. C'est le RECURRENCE-ID d'iCalendar, exprimé avec
+      // les objets qu'on a déjà plutôt qu'avec un troisième type.
+      const detachee: SchedSlot = { id: uid('s'), ...forme, rec: 'once', dow: weekdayOf(occ), date: occ, srcId: avant.id };
+      delete detachee.from; delete detachee.until; delete detachee.when;
+      this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === avant.id);
+        if (i >= 0) d.sched[i] = { ...d.sched[i], skip: [...new Set([...(d.sched[i].skip || []), occ])] };
+        d.sched.push(detachee);
+      });
+      this.toast('Modifié pour ce jour seulement');
+    } else {
+      // « À partir de cette date » : la série est coupée en deux. C'est ce qui
+      // traite un changement d'horaire à la rentrée sans effacer l'historique.
+      const veille = addDaysIso(occ, -1);
+      const passe = !avant.from || avant.from <= veille;
+      const suite: SchedSlot = { id: uid('s'), ...forme, from: occ };
+      const gardees = (avant.skip || []).filter((x) => x >= occ);
+      if (gardees.length) suite.skip = gardees;
+      this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === avant.id);
+        if (i < 0) return;
+        if (passe) {
+          d.sched[i] = { ...d.sched[i], until: veille, skip: (d.sched[i].skip || []).filter((x) => x < occ) };
+          d.sched.push(suite);
+        } else {
+          // Rien avant la coupure : couper produirait une série vide.
+          d.sched[i] = { id: avant.id, ...forme, from: occ, ...(gardees.length ? { skip: gardees } : {}) };
+        }
+      });
+      this.toast('Modifié à partir du ' + this.fmtNumDate(occ));
+    }
     this.patch({ schedEdit: false, seEditId: null });
   }
-  delSlot(): void { const id = this.ui().seEditId; if (!id) return; this.mutate((d) => { d.sched = d.sched.filter((x) => x.id !== id); }); this.patch({ schedEdit: false, seEditId: null }); this.toast('Créneau supprimé'); }
+  /**
+   * Duplique le créneau ouvert : le formulaire repasse en création, garni des
+   * mêmes valeurs. Rien n'est écrit tant qu'on n'enregistre pas, et il n'y a donc
+   * pas de copie fantôme si on se ravise.
+   */
+  duplicateSlot(): void {
+    if (!this.ui().seEditId) return;
+    this.patch({ seEditId: null });
+    this.toast('Copie prête, ajustez-la puis enregistrez');
+  }
+
+  /**
+   * Supprime le créneau ouvert, avec retour en arrière.
+   *
+   * L'annulation **réinsère le créneau retenu** plutôt que de remettre une copie
+   * de tout l'emploi du temps : à deux sur l'application, une remise en bloc
+   * effacerait ce que l'autre a ajouté entre-temps.
+   */
+  delSlot(scope: SchedScope = 'all'): void {
+    const s = this.ui();
+    const id = s.seEditId; if (!id) return;
+    const slot = this._data()?.sched.find((x) => x.id === id);
+    const occ = s.seOccDate;
+    this.patch({ schedEdit: false, seEditId: null, seDelOpen: false });
+    if (!slot) { this.toast('Créneau supprimé'); return; }
+
+    const veille = addDaysIso(occ, -1);
+    const rienAvant = slot.rec === 'weekly' && scope === 'future' && !!slot.from && slot.from > veille;
+
+    // Suppression franche : le ponctuel, la série entière, ou une coupure qui ne
+    // laisserait rien derrière elle.
+    if (slot.rec === 'once' || scope === 'all' || rienAvant) {
+      const copie = structuredClone(slot);
+      this.mutate((d) => { d.sched = d.sched.filter((x) => x.id !== id); });
+      this.toastWithUndo(
+        slot.rec === 'weekly' && scope === 'all' ? 'Série supprimée' : 'Créneau supprimé',
+        () => this.mutate((d) => { if (!d.sched.some((x) => x.id === copie.id)) d.sched.push(copie); }),
+      );
+      return;
+    }
+
+    if (scope === 'once') {
+      // « Ce jeudi, pas de tennis. » La série n'est pas touchée.
+      this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === id);
+        if (i >= 0) d.sched[i] = { ...d.sched[i], skip: [...new Set([...(d.sched[i].skip || []), occ])] };
+      });
+      this.toastWithUndo('Retiré pour ce jour seulement', () => this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === id);
+        if (i >= 0) d.sched[i] = { ...d.sched[i], skip: (d.sched[i].skip || []).filter((x) => x !== occ) };
+      }));
+      return;
+    }
+
+    // « À partir de cette date » : la série se ferme, le passé reste lisible.
+    // C'est ainsi qu'une activité s'arrête en juin sans effacer l'année.
+    const avantFin = slot.until ?? null;
+    this.mutate((d) => {
+      const i = d.sched.findIndex((x) => x.id === id);
+      if (i >= 0) d.sched[i] = { ...d.sched[i], until: veille };
+    });
+    this.toastWithUndo('Arrêté après le ' + this.fmtNumDate(veille), () => this.mutate((d) => {
+      const i = d.sched.findIndex((x) => x.id === id);
+      if (i >= 0) d.sched[i] = { ...d.sched[i], until: avantFin };
+    }));
+  }
+
+  /**
+   * Déplace un créneau vers un autre jour de la semaine affichée.
+   *
+   * Une série ne change pas de jour sans qu'on l'ait demandé : l'écran pose la
+   * question avant d'appeler cette méthode, et `scope` porte la réponse. Comme
+   * partout dans ce module, l'annulation est ciblée : elle remet le jour du
+   * créneau par son identifiant, jamais une copie de l'emploi du temps.
+   */
+  moveSlot(id: string, dow: number, scope: SchedScope = 'all'): void {
+    this.patch({ schedMove: null });
+    const slot = this._data()?.sched.find((x) => x.id === id);
+    if (!slot || dow < 1 || dow > 7) return;
+    const cible = this.schedDate(dow);
+
+    if (slot.rec === 'once' || scope === 'all') {
+      if (slot.dow === dow) return;
+      const avantDow = slot.dow;
+      const avantDate = slot.date;
+      this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === id);
+        if (i >= 0) d.sched[i] = { ...d.sched[i], dow, ...(d.sched[i].rec === 'once' ? { date: cible } : {}) };
+      });
+      this.toastWithUndo(
+        'Déplacé au ' + dowLabel(dow).toLowerCase() + (slot.rec === 'weekly' ? ' (toute la série)' : ''),
+        () => this.mutate((d) => {
+          const i = d.sched.findIndex((x) => x.id === id);
+          if (i >= 0) d.sched[i] = { ...d.sched[i], dow: avantDow, ...(avantDate ? { date: avantDate } : {}) };
+        }),
+      );
+      return;
+    }
+
+    // Cette occurrence seulement : la série saute sa date, une occurrence
+    // détachée reprend les mêmes valeurs sur le jour visé.
+    const occ = this.schedDate(slot.dow);
+    const detachee: SchedSlot = {
+      id: uid('s'), who: [...(slot.who || [])], dow, start: slot.start, end: slot.end,
+      label: slot.label, k: slot.k, rec: 'once', date: cible, srcId: slot.id,
+    };
+    this.mutate((d) => {
+      const i = d.sched.findIndex((x) => x.id === id);
+      if (i >= 0) d.sched[i] = { ...d.sched[i], skip: [...new Set([...(d.sched[i].skip || []), occ])] };
+      d.sched.push(detachee);
+    });
+    this.toastWithUndo('Déplacé au ' + dowLabel(dow).toLowerCase() + ' pour ce jour seulement', () => this.mutate((d) => {
+      d.sched = d.sched.filter((x) => x.id !== detachee.id);
+      const i = d.sched.findIndex((x) => x.id === id);
+      if (i >= 0) d.sched[i] = { ...d.sched[i], skip: (d.sched[i].skip || []).filter((x) => x !== occ) };
+    }));
+  }
+
+  /** Les intitulés déjà employés, proposés à la saisie. */
+  readonly labelSuggestions = computed(() => knownLabels(this._data()?.sched || []));
+
+  // ---- copier une journée -----------------------------------------------
+  //
+  // La copie prend **ce que la vue montre**, filtre compris, et le collage
+  // remplace ce que la vue montrerait au même endroit. Sans cette règle, coller
+  // la journée de Léa sur mardi effacerait celle de tout le monde.
+
+  /** Les créneaux d'un jour tels qu'ils sont affichés en ce moment, à sa date. */
+  shownOn(dow: number): SchedSlot[] {
+    return filterSlots(slotsOn(this._data()?.sched || [], this.schedDate(dow), this.calendar()), this.ui().schedWho);
+  }
+
+  private snapshot(slots: SchedSlot[]): SchedSlot[] {
+    return slots.map((s) => ({ ...s, who: [...(s.who || [])] }));
+  }
+
+  copyDay(dow: number): void {
+    const slots = this.shownOn(dow);
+    // Copier une journée vide n'a pas d'usage : même en mode remplacer, un
+    // collage sans membre ne vise personne et ne ferait rien.
+    if (!slots.length) { this.toast('Cette journée est vide, rien à copier'); return; }
+    this.patch({ schedClip: { kind: 'day', dow, slots: this.snapshot(slots) }, schedPasteWho: null });
+    this.toast(dowLabel(dow) + ' copié, ' + slots.length + (slots.length > 1 ? ' créneaux' : ' créneau'));
+  }
+
+  /**
+   * Copie la semaine du ou des membres filtrés, pour la donner à quelqu'un d'autre.
+   *
+   * Sans filtre, l'action n'a pas de sens : recopier la semaine de tout le monde
+   * sur elle-même ne changerait rien. C'est pourquoi l'écran ne la propose que
+   * lorsqu'un filtre est actif.
+   */
+  copyWeek(): void {
+    const who = this.ui().schedWho;
+    if (!who.length) { this.toast('Choisissez d’abord de qui vous copiez la semaine'); return; }
+    // La semaine affichée, occurrence par occurrence : ce qui n'a pas lieu cette
+    // semaine (activité arrêtée, période de vacances) ne se copie pas.
+    const slots = [1, 2, 3, 4, 5, 6, 7].flatMap((dow) => this.shownOn(dow));
+    if (!slots.length) { this.toast('Cette semaine est vide, rien à copier'); return; }
+    this.patch({ schedClip: { kind: 'week', dow: 0, slots: this.snapshot(slots) }, schedPasteWho: null });
+    this.toast('Semaine copiée, ' + slots.length + (slots.length > 1 ? ' créneaux' : ' créneau'));
+  }
+
+  clearClip(): void { this.patch({ schedClip: null, schedPasteOpen: false, schedPasteDows: [], schedPasteWho: null }); }
+
+  openPaste(dow = 0): void {
+    if (!this.ui().schedClip) return;
+    this.patch({ schedPasteOpen: true, schedPasteDows: dow ? [dow] : [] });
+  }
+  togglePasteDow(dow: number): void {
+    const cur = this.ui().schedPasteDows;
+    this.patch({ schedPasteDows: cur.includes(dow) ? cur.filter((x) => x !== dow) : [...cur, dow] });
+  }
+
+  /**
+   * Le collage en deux gestes : copier une journée, taper « Coller » sur une
+   * autre. La prévisualisation ne s'impose que si la cible n'est pas vide, parce
+   * que c'est le seul cas où quelque chose peut se perdre ou entrer en conflit.
+   */
+  pasteOn(dow: number): void {
+    const clip = this.ui().schedClip;
+    if (!clip || clip.kind !== 'day') return;
+    this.patch({ schedPasteDows: [dow], schedPasteWho: null });
+    if (this.shownOn(dow).length) { this.patch({ schedPasteOpen: true }); return; }
+    this.pasteNow();
+  }
+
+  /** Ce que le collage ferait, recalculé à chaque réglage du formulaire. */
+  readonly pastePlan = computed<PastePlan | null>(() => {
+    const s = this.ui();
+    const d = this._data();
+    if (!s.schedClip || !d) return null;
+    return planPaste({
+      sched: d.sched,
+      source: s.schedClip.slots,
+      targetDows: s.schedClip.kind === 'week' ? null : s.schedPasteDows,
+      mode: s.schedPasteMode,
+      remap: s.schedPasteWho,
+      dateFor: (dow) => this.schedDate(dow),
+      newId: () => uid('s'),
+    });
+  });
+
+  pasteNow(): void {
+    // Le plan est figé ici : l'appliquer et l'annuler doivent porter sur les
+    // mêmes identifiants, sans quoi l'annulation raterait sa cible.
+    const plan = this.pastePlan();
+    if (!plan) return;
+    this.patch({ schedPasteOpen: false });
+    if (!plan.added.length && !plan.removed.length) { this.toast(pasteSummary(plan, dowLabel)); return; }
+    this.mutate((d) => { d.sched = applyPastePlan(d.sched, plan); });
+    this.toastWithUndo(pasteSummary(plan, dowLabel), () => this.mutate((d) => { d.sched = undoPaste(d.sched, plan); }));
+  }
 
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [] }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '', mfAbsent: [...(m.absent || [])] }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse, absent: s.mfAbsent };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });
@@ -2050,13 +2410,21 @@ export class FoyerStore {
   confirmMemberDel(): void {
     const id = this.ui().memberDelId; if (!id) return;
     const hadAccount = this.memberHasAccount(id);
-    this.mutate((d) => { d.members = d.members.filter((m) => m.id !== id); });
-    const sc = this.ui().schedChild === id ? (this._data()?.members[0]?.id || 'cam') : this.ui().schedChild;
-    this.patch({ memberDelId: null, schedChild: sc });
+    // Ses créneaux ne partent pas avec lui : ceux qu'il partageait restent
+    // entiers pour les autres, et ceux qui n'étaient qu'à lui deviennent « sans
+    // membre », visibles et réparables. Les effacer serait une perte muette.
+    const seuls = (this._data()?.sched || []).filter((x) => (x.who || []).length === 1 && x.who[0] === id).length;
+    this.mutate((d) => {
+      d.members = d.members.filter((m) => m.id !== id);
+      d.sched = d.sched.map((x) => ((x.who || []).includes(id) ? { ...x, who: x.who.filter((w) => w !== id) } : x));
+    });
+    this.patch({ memberDelId: null, schedWho: this.ui().schedWho.filter((x) => x !== id) });
     if (hadAccount) {
       this.flush().then(() => this.api.deleteMemberAccount(id)).then(() => this.refreshAccounts()).catch(() => { /* ignore */ });
     }
-    this.toast('Membre retiré');
+    this.toast(seuls
+      ? 'Membre retiré, ' + seuls + (seuls > 1 ? ' créneaux sont désormais sans membre' : ' créneau est désormais sans membre')
+      : 'Membre retiré');
   }
   openProfile(): void {
     const m = this.me();

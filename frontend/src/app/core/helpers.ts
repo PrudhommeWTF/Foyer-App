@@ -138,6 +138,20 @@ export function todayIn(timeZone: string, at: Date = new Date()): string {
   } catch { return dstr(at); }
 }
 
+/**
+ * Jour de la semaine d'une date ISO, lundi = 1 et dimanche = 7. Lu sans fuseau :
+ * la clé est le jour écrit.
+ *
+ * Il vit ici, avec les autres fonctions de date, et non dans presence.ts où il
+ * était : la présence aux repas se déduit désormais de l'emploi du temps, et le
+ * garder là-bas ferait tourner en rond les deux modules qui s'appellent.
+ */
+export function weekdayOf(dateStr: string): number {
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const jour = new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)).getUTCDay();
+  return jour === 0 ? 7 : jour;
+}
+
 /** Décalage en jours sur une date ISO. Le calendrier local, pas l'arithmétique en millisecondes. */
 export function addDaysIso(iso: string, n: number): string {
   const d = parseDay(iso);

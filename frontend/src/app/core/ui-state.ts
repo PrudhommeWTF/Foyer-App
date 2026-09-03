@@ -1,5 +1,7 @@
-import { FileType, MealItem, Prio, Rayon, Recur, SchedType, ShopState } from './models';
-import { todayIn } from './helpers';
+import { FileType, MealItem, Prio, Rayon, Recur, SchedRec, SchedType, SchedWhen, ShopState } from './models';
+import { todayIn, weekdayOf } from './helpers';
+import { PasteMode, SchedClip } from './sched-copy';
+import { SchedScope } from './schedule';
 import { HOUSEHOLD_TZ } from './constants';
 
 export interface IngrRow { id: string; val: string; }
@@ -108,16 +110,60 @@ export interface UiState {
   recipeSearch: string;
 
   // planning
-  schedChild: string; schedEdit: boolean; seEditId: string | null;
-  seDay: string; seStart: string; seEnd: string; seLabel: string; seType: SchedType;
+  /**
+   * Filtre par membre de l'emploi du temps. **Vide veut dire tout le foyer**,
+   * jamais rien : la sélection est un affinage, pas un prérequis à l'affichage.
+   */
+  schedWho: string[];
+  /** Jour montré par la vue jour (téléphone), lundi = 1. */
+  schedDow: number;
+  /**
+   * Semaine affichée, par une de ses dates. La semaine type est un modèle, mais
+   * la vue est **datée** : sans date, impossible de savoir si un créneau est
+   * encore valide, si c'est les vacances, ni où poser un créneau ponctuel.
+   */
+  schedAnchor: string;
+  schedEdit: boolean; seEditId: string | null;
+  seDow: number; seWho: string[]; seStart: string; seEnd: string; seLabel: string; seType: SchedType;
+  /** Récurrence et période, dans le formulaire. */
+  seRec: SchedRec; seDate: string; seFrom: string; seUntil: string; seWhen: SchedWhen;
+  /** Le créneau se passe hors du foyer : c'est ce qui retire un couvert. */
+  seAway: boolean;
+  /** Déplie les réglages de période, qui ne servent pas à la saisie courante. */
+  seMore: boolean;
+  /** La date de l'occurrence ouverte : c'est elle que visent « cette fois » et « à partir de ». */
+  seOccDate: string;
+  /** Portée d'une modification de série. */
+  seScope: SchedScope;
+  /** Confirmation de suppression, dépliée dans le formulaire plutôt qu'en modale sur modale. */
+  seDelOpen: boolean;
+  /**
+   * Déplacement en cours par glisser-déposer, quand il reste à savoir s'il vaut
+   * pour l'occurrence ou pour la série. Null le reste du temps.
+   */
+  schedMove: { id: string; dow: number } | null;
+  /**
+   * Presse-papier de l'emploi du temps : ce qui a été copié, **tel que la vue le
+   * montrait**. C'est une photo, pas un lien : modifier l'original après la copie
+   * ne change pas ce qui sera collé, comme n'importe quel presse-papier.
+   */
+  schedClip: SchedClip | null;
+  schedPasteOpen: boolean;
+  /**
+   * Mode de collage, retenu d'une action à l'autre plutôt que redemandé à chaque
+   * fois. Il ne survit pas à une reconnexion, et c'est voulu : « fusionner », qui
+   * ne détruit rien, est le seul défaut acceptable au démarrage.
+   */
+  schedPasteMode: PasteMode;
+  schedPasteDows: number[];
+  /** Réattribution du collage à un autre membre, ou null pour garder l'original. */
+  schedPasteWho: string | null;
 
   // family & profile
   familyOpen: boolean; famNameField: string;
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfBirthday: string; memberDelId: string | null;
   /** Contraintes alimentaires en cours d'édition, et recherche d'aliment refusé. */
   mfAllerg: string[]; mfRefuse: string[]; mfRefuseQ: string;
-  /** Semaine type : créneaux d'absence du membre en cours d'édition. */
-  mfAbsent: string[];
   profileOpen: boolean; pfTab: 'infos' | 'prefs';
   pfName: string; pfRole: string; pfEmail: string; pfColor: string;
 
@@ -151,10 +197,14 @@ export function initialUi(): UiState {
     fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
     fImportUrl: '', fImportBusy: false, fImportWarnings: [],
     fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
-    schedChild: 'lea', schedEdit: false, seEditId: null, seDay: 'Lundi', seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
+    schedWho: [], schedDow: weekdayOf(today), schedAnchor: today, schedEdit: false, seEditId: null,
+    seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
+    seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seAway: true,
+    seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false, schedMove: null,
+    schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
-    mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [],
+    mfAllerg: [], mfRefuse: [], mfRefuseQ: '',
     profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };

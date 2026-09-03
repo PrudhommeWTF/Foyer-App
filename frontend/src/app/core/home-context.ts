@@ -22,7 +22,7 @@
  * docs/accueil-contexte.md.
  */
 import { SchedSlot } from './models';
-import { weekdayOf } from './presence';
+import { weekdayOf } from './helpers';
 
 export interface Moment { id: string; label: string; from: string }
 export type DayWhen = 'ferie' | 'vacances' | 'semaine' | 'emploiDuTemps';
@@ -37,9 +37,12 @@ export interface DayFacts {
   today: string;
   holiday: boolean;
   schoolHoliday: boolean;
-  sched: SchedSlot[];
-  /** Jour de la semaine du créneau, tel que l'emploi du temps le nomme. */
-  schedDay: string;
+  /**
+   * Les créneaux **qui ont lieu aujourd'hui**, occurrence résolue. Pas la semaine
+   * type brute : un mardi de vacances ne doit pas être classé « jour d'école »
+   * parce qu'un créneau d'école existe le mardi en général.
+   */
+  schedToday: SchedSlot[];
 }
 
 /** Le contexte figé qui décide de l'ordre. Rien d'autre n'y entre. */
@@ -73,7 +76,7 @@ export function dayKindsOf(kinds: DayKind[], f: DayFacts): DayKind[] {
       case 'ferie': return f.holiday;
       case 'vacances': return f.schoolHoliday;
       case 'semaine': return (k.jours || []).includes(weekday);
-      case 'emploiDuTemps': return f.sched.some((s) => s.day === f.schedDay && s.k === k.type);
+      case 'emploiDuTemps': return f.schedToday.some((s) => s.k === k.type);
       default: return false;
     }
   });

@@ -12,13 +12,7 @@ export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
  * arriver. Les deux sont confrontés au contenu des recettes (voir diet.ts).
  */
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[];
-  /**
-   * Semaine type : créneaux où le membre ne mange **pas** à la maison, en clés
-   * « 1-midi » (lundi = 1). Ce sont les absences qui sont notées, pas les
-   * présences : une case vide veut dire « comme d'habitude » (voir presence.ts).
-   */
-  absent?: string[]; }
+  allerg?: string[]; refuse?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -122,7 +116,55 @@ export interface Recipe {
   rating?: number | null;
   ingr: string[]; steps: string[];
 }
-export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: SchedType; }
+/**
+ * Un créneau de la semaine type.
+ *
+ * `who` porte **plusieurs** membres, et c'est le choix de fond du module : un
+ * emploi du temps de foyer n'est pas quatre agendas côte à côte, c'est un
+ * agenda partagé où chaque créneau porte une ou plusieurs personnes. La messe
+ * du dimanche, un trajet en voiture, un repas de famille sont une ligne, pas
+ * quatre. Une liste vide est licite et se lit « sans membre » : c'est ce que
+ * deviennent les créneaux dont le membre a été supprimé, plutôt que de partir
+ * avec lui.
+ *
+ * `dow` numérote le jour, lundi = 1 et dimanche = 7, comme `weekdayOf` et la
+ * semaine type des repas (voir presence.ts).
+ */
+/**
+ * Quand un créneau vaut. Trois concepts, pas plus, inspirés d'iCalendar réduit à
+ * ce qu'un foyer utilise : une règle hebdomadaire, une fenêtre de validité, une
+ * liste d'occurrences annulées. Voir docs/emploi-du-temps.md.
+ */
+export type SchedRec = 'weekly' | 'once';
+/** Filtre calendaire : toujours, seulement en période scolaire, seulement en vacances. */
+export type SchedWhen = 'always' | 'school' | 'holidays';
+
+export interface SchedSlot {
+  id: string; who: string[]; dow: number; start: string; end: string; label: string; k: SchedType;
+  /**
+   * Le créneau se passe **hors du foyer**. C'est de là que vient le nombre de
+   * couverts : personne n'est attendu à table pendant un créneau marqué ainsi
+   * (voir presence.ts). Un créneau à la maison, lui, ne dit rien de plus que
+   * ce qu'il est.
+   */
+  away?: boolean;
+  /** Toutes les semaines (le cas majoritaire) ou une seule fois. */
+  rec: SchedRec;
+  /** Pour `once` : la date de l'unique occurrence. Ignoré sinon. */
+  date?: string;
+  /**
+   * Période de validité d'une règle hebdomadaire, bornes incluses. Sans elle,
+   * l'emploi du temps de l'an dernier pollue celui de cette année : les
+   * activités démarrent en septembre et s'arrêtent en juin.
+   */
+  from?: string;
+  until?: string | null;
+  when?: SchedWhen;
+  /** Occurrences annulées, en dates ISO. C'est l'EXDATE d'iCalendar. */
+  skip?: string[];
+  /** Occurrence détachée : la série dont elle vient, pour pouvoir la retrouver. */
+  srcId?: string;
+}
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {

@@ -18,7 +18,7 @@ module à stockage relationnel.
 | 2 b | Écran de reprise en masse des lignes non reconnues | Livrée |
 | 3 a | Semaine lisible sur téléphone : pile de jours, et fenêtre de trois jours | Livrée |
 | 3 b | Recopie d'une période sur une autre | Livrée |
-| 3 c | Semaine type des convives, suggestions, anti-répétition | Livrée |
+| 3 c | Présence des convives, suggestions, anti-répétition | Livrée |
 | 4 | Recherche, historique, note, import par texte collé, « j'ai déjà ça » | Livrée (import photo : abandonné, voir plus bas) |
 | 5 | Contraintes alimentaires : allergènes affichés, aliments refusés, alertes | Livrée (régimes et substitutions : non faits, voir plus bas) |
 | Lot 1 | Exports : carnet en JSON (aller-retour), recette en texte, liste en CSV | Livrée |
@@ -149,19 +149,26 @@ la même raison.
 
 ## Qui mange, et pour combien on cuisine
 
-La semaine type (`core/presence.ts`) enregistre les **absences**, pas les
-présences. Dans un foyer, tout le monde est là presque tout le temps : noter les
-exceptions demande cinq gestes là où une grille de présences en demanderait
-vingt et un, et une case oubliée veut alors dire « comme d'habitude » plutôt que
-« personne ne mange ».
+La présence **se déduit de l'emploi du temps** (`core/presence.ts`). Une grille
+d'absences tenue à la main dans la fiche membre a existé et a été retirée : le
+module Emploi du temps savait déjà que Léa est au collège le mardi midi, et
+redemander la même chose ailleurs faisait deux sources de vérité pour un seul
+fait, dont la seconde se démodait en silence.
 
 Trois niveaux, chacun l'emportant sur le précédent :
 
 | Niveau | Où | Ce qu'il dit |
 |---|---|---|
-| Semaine type | `Member.absent`, en clés « 1-midi » | « Léa déjeune au collège le mardi et le jeudi » |
+| Emploi du temps | `SchedSlot.away`, lu par `awayAt()` | « Léa est au collège de 8h20 à 17h45 » |
 | Dérogation du créneau | `MealValue.away` | « ce soir-là, Paul mange chez un ami » |
 | Couverts posés à la main | `MealValue.pax` | « on est huit, il y a des invités » |
+
+**Cuisine ne lit jamais `sched` directement.** Elle appelle `awayAt(sched, date,
+créneau, calendrier)`, qui rend l'ensemble des membres hors du foyer à l'heure de
+ce repas. Un créneau ne retire quelqu'un que s'il **couvre** l'heure du repas,
+fin exclue : en cas de doute on compte présent, parce que trop de couverts fait
+un reste au frigo quand pas assez fait quelqu'un sans rien dans son assiette.
+Le détail du modèle est dans [`emploi-du-temps.md`](emploi-du-temps.md).
 
 Les couverts ne sont **plus** un chiffre unique pour la semaine : `buildPlan`
 reçoit chaque créneau avec les siens, déjà résolus par l'appelant. Le rapport de
@@ -190,8 +197,8 @@ pauvre qu'il n'est) :
 - une recette servie dans les **quinze derniers jours**, ou déjà planifiée plus
   tard dans la semaine ;
 - une recette qui ne convient pas à quelqu'un attendu à ce créneau. C'est
-  l'intérêt concret de la semaine type : le carnet s'ouvre les jours d'absence
-  au lieu de rester fermé toute l'année.
+  l'intérêt concret de la présence déduite : le carnet s'ouvre les soirs
+  d'absence au lieu de rester fermé toute l'année.
 
 ## Retrouver une recette
 

@@ -5,7 +5,7 @@ import type { ShopItem } from './shopping/ops';
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
 // frontend/src/app/core/diet.ts pour ce qui en est dérivé.
 export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[]; absent?: string[]; }
+  allerg?: string[]; refuse?: string[]; }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -84,7 +84,25 @@ export interface Recipe {
   rating?: number | null;
   ingr: string[]; steps: string[];
 }
-export interface SchedSlot { id: string; who: string; day: string; start: string; end: string; label: string; k: string; }
+/**
+ * Un créneau de la semaine type. `who` porte **plusieurs** membres : la messe du
+ * dimanche ou un trajet en voiture concernent tout le monde, et les recopier une
+ * fois par personne était une régression, pas une solution. `dow` numérote le
+ * jour (lundi = 1, dimanche = 7), comme partout ailleurs dans l'application.
+ */
+export interface SchedSlot {
+  id: string; who: string[]; dow: number; start: string; end: string; label: string; k: string;
+  /** Le créneau se passe hors du foyer : c'est de là que vient le compte des couverts. */
+  away?: boolean;
+  /** 'weekly' ou 'once'. Voir docs/emploi-du-temps.md pour le modèle complet. */
+  rec: string;
+  date?: string;
+  from?: string;
+  until?: string | null;
+  when?: string;
+  skip?: string[];
+  srcId?: string;
+}
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
 export interface Settings {
   dateFmt: string;

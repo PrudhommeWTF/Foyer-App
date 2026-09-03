@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 5;
+export const STATE_VERSION = 8;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -43,6 +43,21 @@ export interface StateMigration {
 }
 
 const arr = (v: unknown): any[] => (Array.isArray(v) ? v : []);
+
+/** Les jours tels que `SchedSlot.day` les nommait avant la migration 6. */
+const JOURS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+
+/**
+ * Les créneaux de repas, tels que la migration 8 les pose.
+ *
+ * Les bornes encadrent l'heure de référence du repas (voir MEAL_SLOTS côté
+ * frontend) : c'est cette heure que le moteur de présence cherche à couvrir.
+ */
+const REPAS: Record<string, { start: string; end: string; label: string }> = {
+  matin: { start: '07:30', end: '08:30', label: 'Petit-déjeuner dehors' },
+  midi: { start: '12:00', end: '13:00', label: 'Déjeuner dehors' },
+  soir: { start: '19:00', end: '20:00', label: 'Dîner dehors' },
+};
 
 export const STATE_MIGRATIONS: StateMigration[] = [
   {
@@ -207,6 +222,144 @@ export const STATE_MIGRATIONS: StateMigration[] = [
           (failed.length > 5 ? ', …' : '') + '. Rouvrez ces fiches et reposez le fichier pour le ranger sur le disque.',
         );
       }
+    },
+  },
+  {
+    version: 6,
+    label: 'emploi du temps : créneaux à plusieurs membres, jour numéroté',
+    up: (doc, ctx) => {
+      // Deux dettes soldées d'un coup, parce qu'elles touchent les deux mêmes
+      // champs de chaque créneau :
+      //
+      //   - `who` portait **un** membre. Un créneau qui concerne toute la
+      //     famille demandait donc quatre saisies, quatre modifications et
+      //     quatre suppressions.
+      //   - `day` portait le nom français du jour. Le reste de l'application
+      //     compte déjà en lundi = 1 (voir presence.ts) : une chaîne à traduire
+      //     à chaque calcul de date n'avait pas lieu d'être.
+      const connus = new Set(arr(doc['members']).map((m) => String(m['id'])));
+      let orphelins = 0;
+      const sansJour: string[] = [];
+
+      for (const s of arr(doc['sched'])) {
+        // Un membre qui n'existe pas laisse le créneau **sans** membre plutôt
+        // que de l'emporter avec lui : l'écran l'affiche alors « sans membre »,
+        // ce qui se répare en deux gestes. Le supprimer serait une perte muette.
+        if (Array.isArray(s['who'])) {
+          s['who'] = s['who'].filter((x: unknown) => typeof x === 'string' && connus.has(x));
+        } else {
+          const id = typeof s['who'] === 'string' ? s['who'].trim() : '';
+          if (id && !connus.has(id)) orphelins++;
+          s['who'] = id && connus.has(id) ? [id] : [];
+        }
+
+        if (typeof s['dow'] !== 'number' || s['dow'] < 1 || s['dow'] > 7) {
+          const i = JOURS.indexOf(String(s['day'] ?? ''));
+          if (i >= 0) s['dow'] = i + 1;
+          else {
+            // Un nom de jour illisible ne peut venir que d'une retouche à la
+            // main. Le créneau est gardé, posé au lundi, et **nommé** dans le
+            // journal : c'est la seule façon d'aller le remettre au bon jour.
+            s['dow'] = 1;
+            sansJour.push(String(s['label'] ?? '(sans intitulé)'));
+          }
+        }
+        delete s['day'];
+      }
+
+      if (orphelins) {
+        ctx.log(
+          `${orphelins} créneau(x) d'emploi du temps rattaché(s) à un membre inconnu : ils sont conservés ` +
+          'sans membre et signalés dans l\'écran Emploi du temps, où il suffit de leur en attribuer un.',
+        );
+      }
+      if (sansJour.length) {
+        ctx.log(
+          `${sansJour.length} créneau(x) au jour illisible, placé(s) au lundi : ${sansJour.slice(0, 5).join(', ')}` +
+          (sansJour.length > 5 ? ', …' : '') + '. Rouvrez-les pour les remettre au bon jour.',
+        );
+      }
+    },
+  },
+  {
+    version: 7,
+    label: 'emploi du temps : récurrence et périodes de validité',
+    up: (doc) => {
+      // Jusqu'ici un créneau n'avait pas de récurrence **parce que tout était
+      // récurrent** : « tous les lundis, pour toujours ». C'est exactement
+      // `rec: 'weekly'` sans période de validité, donc la conversion ne change
+      // aucun comportement, elle rend la règle explicite.
+      //
+      // Les autres champs (date, from, until, when, skip) restent absents : ils
+      // sont facultatifs, et leur absence est déjà la valeur par défaut.
+      for (const s of arr(doc['sched'])) {
+        if (s['rec'] !== 'weekly' && s['rec'] !== 'once') s['rec'] = 'weekly';
+      }
+    },
+  },
+  {
+    version: 8,
+    label: 'couverts déduits de l\'emploi du temps',
+    up: (doc, ctx) => {
+      // Deux sources disaient la même chose : la grille d'absences de chaque
+      // membre (« lundi midi, Léa ne mange pas ici ») et l'emploi du temps, qui
+      // savait déjà qu'elle est au collège. La seconde suffit, et se démode
+      // moins vite. La grille est donc **convertie en créneaux** plutôt que
+      // jetée : chaque case cochée était une information saisie à la main.
+      const sched = arr(doc['sched']);
+
+      // Les cases d'une même journée et d'un même repas se regroupent : un seul
+      // créneau pour tout le monde, comme le reste du module.
+      const parCase = new Map<string, string[]>();
+      let cases = 0;
+      for (const m of arr(doc['members'])) {
+        for (const cle of arr(m['absent'])) {
+          const [jour, repas] = String(cle).split('-');
+          const dow = parseInt(jour, 10);
+          if (!(dow >= 1 && dow <= 7) || !REPAS[repas]) continue;
+          const k = dow + '-' + repas;
+          if (!parCase.has(k)) parCase.set(k, []);
+          parCase.get(k)!.push(String(m['id']));
+          cases++;
+        }
+        delete m['absent'];
+      }
+
+      for (const [k, membres] of parCase) {
+        const [jour, repas] = k.split('-');
+        const creneau = REPAS[repas];
+        sched.push({
+          id: 'abs-' + k,
+          who: membres,
+          dow: parseInt(jour, 10),
+          start: creneau.start,
+          end: creneau.end,
+          label: creneau.label,
+          k: 'repas',
+          away: true,
+          rec: 'weekly',
+        });
+      }
+      if (parCase.size) {
+        doc['sched'] = sched;
+        ctx.log(
+          `${cases} absence(s) de la semaine type reprise(s) en ${parCase.size} créneau(x) « hors du foyer ». ` +
+          'Ils portent un intitulé générique : renommez-les ou remplacez-les par les vrais créneaux ' +
+          '(école, travail) dans l\'écran Emploi du temps.',
+        );
+      }
+
+      // Les créneaux existants n'avaient pas la notion : l'école et le travail
+      // se passent dehors dans l'immense majorité des cas, et une case cochée à
+      // tort se décoche en un geste. La clé une fois posée n'est plus retouchée,
+      // ce qui rend la migration rejouable sans défaire un réglage.
+      let marques = 0;
+      for (const s of sched) {
+        if ('away' in s) continue;
+        s['away'] = s['k'] === 'ecole' || s['k'] === 'travail';
+        if (s['away']) marques++;
+      }
+      if (marques) ctx.log(`${marques} créneau(x) d'école ou de travail marqué(s) « hors du foyer ».`);
     },
   },
 ];

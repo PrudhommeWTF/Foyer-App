@@ -39,7 +39,7 @@ const fullDoc = (): HouseholdState => ({
   ],
   msgs: [{ who: 'm1', text: 'Je rentre tard', time: '18:04' }],
   // Le 21 août 2026 est un vendredi : l'emploi du temps est une semaine type.
-  sched: [{ id: 'sc1', who: 'm1', day: 'Vendredi', start: '08:30', end: '16:30', label: 'École', k: 'ecole' }],
+  sched: [{ id: 'sc1', who: ['m1'], dow: 5, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly' }],
   recipes: [{ id: 'r1', name: 'Gratin', level: 'Facile', color: '#7A9B76', prepMin: 15, cookMin: 45, ingr: [], steps: [] }],
   meals: { [TODAY + '-soir']: { items: [{ rid: 'r1' }] } },
 });
@@ -253,13 +253,14 @@ test('taches : « rien pour aujourd’hui » n’est pas « tout est fait »', (
   if (s.kind === 'empty') assert.match(s.hint, /aujourd/i);
 });
 
-test('repas : les couverts suivent la semaine type des convives', () => {
+test('repas : les couverts suivent l’emploi du temps des convives', () => {
   const doc = fullDoc();
-  // Le 21 août 2026 est un vendredi (jour 5). Léa n'y dîne pas.
+  // Le 21 août 2026 est un vendredi (jour 5). Léa dîne dehors ce soir-là.
   doc.members = [
     { id: 'me', name: 'Thomas', role: 'Papa', color: '#E56B4E', ini: 'TH' },
-    { id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE', absent: ['5-soir'] },
+    { id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE' },
   ];
+  doc.sched = [{ id: 'x', who: ['m1'], dow: 5, start: '19:00', end: '21:00', label: 'Chez une amie', k: 'loisir', rec: 'weekly', away: true }];
   const s = provider('repas').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
   if (s.kind === 'ok') {
@@ -286,7 +287,8 @@ test('repas : un convive absent ce soir-là ne déclenche pas d’alerte', () =>
   const doc = fullDoc();
   doc.articles = [{ key: 'courgette', name: 'Courgette', syn: [], rayon: 'legumes' }];
   doc.recipes = [{ id: 'r1', name: 'Gratin', level: 'Facile', color: '#7A9B76', ingr: ['3 courgettes'], steps: [] }];
-  doc.members = [{ id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE', refuse: ['courgette'], absent: ['5-soir'] }];
+  doc.members = [{ id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE', refuse: ['courgette'] }];
+  doc.sched = [{ id: 'x', who: ['m1'], dow: 5, start: '19:00', end: '21:00', label: 'Chez une amie', k: 'loisir', rec: 'weekly', away: true }];
   const s = provider('repas').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
   // Une fausse alerte de plus, et plus personne ne lit les vraies.
@@ -364,9 +366,9 @@ test('économies : tout mené à bien n’est pas « aucune piste »', () => {
 test('planning : les créneaux du jour, à l’heure, tous membres confondus', () => {
   const doc = fullDoc();
   doc.sched = [
-    { id: 'a', who: 'm1', day: 'Vendredi', start: '17:00', end: '18:00', label: 'Judo', k: 'sport' },
-    { id: 'b', who: 'm1', day: 'Vendredi', start: '08:30', end: '16:30', label: 'École', k: 'ecole' },
-    { id: 'c', who: 'm1', day: 'Lundi', start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' },
+    { id: 'a', who: ['m1'], dow: 5, start: '17:00', end: '18:00', label: 'Judo', k: 'sport', rec: 'weekly' },
+    { id: 'b', who: ['m1'], dow: 5, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly' },
+    { id: 'c', who: ['m1'], dow: 1, start: '09:00', end: '10:00', label: 'Piano', k: 'loisir', rec: 'weekly' },
   ];
   const s = provider('planning').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
@@ -376,9 +378,32 @@ test('planning : les créneaux du jour, à l’heure, tous membres confondus', (
   }
 });
 
+test('planning : un créneau de période scolaire disparaît pendant les vacances', () => {
+  // La recette de l'utilisateur, vue depuis l'accueil : l'école ne doit pas
+  // s'annoncer un jour de vacances.
+  const doc = fullDoc();
+  doc.sched = [{ id: 'e', who: ['m1'], dow: 5, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly', when: 'school' }];
+  const vacances = [{ name: 'Vacances d’été', start: '2026-07-04', end: '2026-08-31', zone: 'B' }];
+  const dedans = provider('planning').state(ctx(ready(snap(doc, vacances)), ready(finSnapshot())));
+  assert.equal(dedans.kind, 'empty', 'le 21 août tombe dans les vacances d’été');
+
+  // Hors vacances, le même créneau reparaît.
+  const dehors = provider('planning').state(ctx(ready(snap(doc, [{ name: 'Toussaint', start: '2026-10-17', end: '2026-11-02', zone: 'B' }])), ready(finSnapshot())));
+  assert.equal(dehors.kind, 'ok');
+});
+
+test('planning : sans vacances connues, l’école s’affiche plutôt que de disparaître', () => {
+  // Cacher l'école à 7h50 parce qu'une API est tombée serait pire que
+  // d'afficher un créneau en trop.
+  const doc = fullDoc();
+  doc.sched = [{ id: 'e', who: ['m1'], dow: 5, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly', when: 'school' }];
+  const s = provider('planning').state(ctx(ready(snap(doc, [])), ready(finSnapshot())));
+  assert.equal(s.kind, 'ok');
+});
+
 test('planning : une journée sans créneau n’est pas un emploi du temps absent', () => {
   const doc = fullDoc();
-  doc.sched = [{ id: 'c', who: 'm1', day: 'Dimanche', start: '09:00', end: '10:00', label: 'Piano', k: 'loisir' }];
+  doc.sched = [{ id: 'c', who: ['m1'], dow: 7, start: '09:00', end: '10:00', label: 'Piano', k: 'loisir', rec: 'weekly' }];
   const a = provider('planning').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   const b = provider('planning').state(ctx(ready(snap(emptyDoc())), ready(finSnapshot())));
   assert.equal(a.kind, 'empty');
