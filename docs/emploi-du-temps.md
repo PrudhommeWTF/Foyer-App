@@ -322,6 +322,54 @@ visuel de la durée et des trous de la journée.
 L'ordre est stable à heure égale (fin la plus tôt, puis intitulé) : sans cela,
 deux enfants qui partent à 7h50 changeraient de place d'un rendu à l'autre.
 
+## Saisie
+
+### Les trous de la journée, et où l'on tape pour créer
+
+La vue en listes absorbe les chevauchements mais fait perdre le sens des **temps
+libres** : on ne voit plus d'un coup d'oeil qu'il y a deux heures entre deux
+créneaux. C'était le coût assumé du choix de densité, et il est en partie rendu.
+
+Entre deux créneaux séparés d'au moins **trente minutes**, une ligne discrète dit
+« 12:00 – 14:00 libre ». Elle sert deux choses à la fois : elle montre le trou, et
+**taper dessus crée un créneau qui démarre à cette heure**, jour et heure déjà
+remplis. C'est la réponse, dans une vue en listes, au « taper directement sur une
+case horaire » d'un calendrier en grille.
+
+Le seuil de trente minutes n'est pas décoratif : cinq minutes entre deux cours ne
+sont pas du temps libre, et les afficher noierait les vrais trous. Un créneau
+sans heure de fin compte comme un **instant** : le car de 7h50 n'occupe pas la
+matinée sous prétexte qu'on n'a pas dit quand il arrive.
+
+« + Ajouter », en bas de chaque journée, propose l'heure qui suit le dernier
+créneau (la fin la plus tardive, pas celle du dernier commencé), ou 8h sur une
+journée vide.
+
+### Déplacer un créneau
+
+**À la souris**, un créneau se glisse d'une journée à l'autre. Si c'est une
+série, une question précède l'écriture : toute la série, ou ce jour seulement.
+Un créneau ponctuel se déplace sans question et **change de date** pour celle de
+son nouveau jour. Les deux s'annulent.
+
+**Sur téléphone, il n'y a pas de glisser-déposer, et c'est délibéré.** Le tactile
+n'a pas de glisser natif ; en fabriquer un revient à se battre avec le
+défilement de la page, pour un geste qui rate une fois sur trois. Le même
+déplacement s'y fait en ouvrant le créneau et en changeant son jour : un chemin
+visible plutôt qu'un geste à deviner. Le brief autorisait explicitement cette
+dégradation, à condition de doubler l'accès par un bouton visible, ce que le
+formulaire fait déjà.
+
+### Suggestions d'intitulés plutôt que modèles
+
+Le champ « Intitulé » propose les intitulés **déjà employés dans le foyer**, les
+plus fréquents d'abord, par une simple liste native.
+
+C'est la réponse sobre aux « modèles de créneaux » du brief, écartée d'un commun
+accord : une bibliothèque de modèles serait une seconde chose à créer, nommer et
+tenir à jour, alors que « École », « Car scolaire » et « Cabinet » reviennent
+tous les jours et sont déjà dans le document.
+
 ## Marqueurs d'identité
 
 Pastille de la couleur du membre **et** ses initiales, jamais la couleur seule :
@@ -468,7 +516,7 @@ rejouera au prochain démarrage.
 
 | Fichier | Ce qu'il tient |
 |---|---|
-| `frontend/src/app/core/schedule.test.ts` | Jours, ordre stable à heure égale, le filtre vide qui laisse tout passer, un créneau partagé qui n'apparaît qu'une fois, les marqueurs d'identité et leur débordement. Et le moteur de récurrence : bornes de validité, exceptions, période scolaire, jour férié, occurrence détachée, repli quand les vacances sont inconnues. |
+| `frontend/src/app/core/schedule.test.ts` | Jours, ordre stable à heure égale, le filtre vide qui laisse tout passer, un créneau partagé qui n'apparaît qu'une fois, les marqueurs d'identité et leur débordement. Le moteur de récurrence : bornes de validité, exceptions, période scolaire, jour férié, occurrence détachée, repli quand les vacances sont inconnues. Et les trous de la journée : seuil, chevauchements, créneau sans fin, heure proposée. |
 | `frontend/src/app/core/sched-copy.test.ts` | Collage sur un et plusieurs jours, non-duplication en fusion, annulation intégrale d'un remplacement, annulation qui ne piétine pas une modification concurrente, réattribution à un autre membre. |
 | `backend/test/state-migrations.test.ts` | La migration 6 : conversion, membre inconnu conservé, jour illisible nommé, rejouabilité, aucun créneau perdu. |
 

@@ -17,7 +17,7 @@ import { Allergene, normaliseName } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
-import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, slotsOn } from './schedule';
+import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
@@ -2060,9 +2060,12 @@ export class FoyerStore {
     const s = this.ui();
     const jour = dow >= 1 && dow <= 7 ? dow : s.schedDow;
     const date = this.schedDate(jour);
+    // Sans heure imposée, on propose celle qui suit le dernier créneau du jour :
+    // une saisie qui commence par la bonne heure est une saisie de moins.
+    const heure = start || nextFreeStart(this.shownOn(jour));
     this.patch({
       screen: 'planning', schedEdit: true, seEditId: null,
-      seDow: jour, seWho: [...s.schedWho], seStart: start, seEnd: '', seLabel: '', seType: 'ecole',
+      seDow: jour, seWho: [...s.schedWho], seStart: heure, seEnd: '', seLabel: '', seType: 'ecole',
       seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always',
       seMore: false, seOccDate: date, seScope: 'all', seDelOpen: false, addMenuOpen: false,
     });
@@ -2237,6 +2240,60 @@ export class FoyerStore {
       if (i >= 0) d.sched[i] = { ...d.sched[i], until: avantFin };
     }));
   }
+
+  /**
+   * Déplace un créneau vers un autre jour de la semaine affichée.
+   *
+   * Une série ne change pas de jour sans qu'on l'ait demandé : l'écran pose la
+   * question avant d'appeler cette méthode, et `scope` porte la réponse. Comme
+   * partout dans ce module, l'annulation est ciblée : elle remet le jour du
+   * créneau par son identifiant, jamais une copie de l'emploi du temps.
+   */
+  moveSlot(id: string, dow: number, scope: SchedScope = 'all'): void {
+    this.patch({ schedMove: null });
+    const slot = this._data()?.sched.find((x) => x.id === id);
+    if (!slot || dow < 1 || dow > 7) return;
+    const cible = this.schedDate(dow);
+
+    if (slot.rec === 'once' || scope === 'all') {
+      if (slot.dow === dow) return;
+      const avantDow = slot.dow;
+      const avantDate = slot.date;
+      this.mutate((d) => {
+        const i = d.sched.findIndex((x) => x.id === id);
+        if (i >= 0) d.sched[i] = { ...d.sched[i], dow, ...(d.sched[i].rec === 'once' ? { date: cible } : {}) };
+      });
+      this.toastWithUndo(
+        'Déplacé au ' + dowLabel(dow).toLowerCase() + (slot.rec === 'weekly' ? ' (toute la série)' : ''),
+        () => this.mutate((d) => {
+          const i = d.sched.findIndex((x) => x.id === id);
+          if (i >= 0) d.sched[i] = { ...d.sched[i], dow: avantDow, ...(avantDate ? { date: avantDate } : {}) };
+        }),
+      );
+      return;
+    }
+
+    // Cette occurrence seulement : la série saute sa date, une occurrence
+    // détachée reprend les mêmes valeurs sur le jour visé.
+    const occ = this.schedDate(slot.dow);
+    const detachee: SchedSlot = {
+      id: uid('s'), who: [...(slot.who || [])], dow, start: slot.start, end: slot.end,
+      label: slot.label, k: slot.k, rec: 'once', date: cible, srcId: slot.id,
+    };
+    this.mutate((d) => {
+      const i = d.sched.findIndex((x) => x.id === id);
+      if (i >= 0) d.sched[i] = { ...d.sched[i], skip: [...new Set([...(d.sched[i].skip || []), occ])] };
+      d.sched.push(detachee);
+    });
+    this.toastWithUndo('Déplacé au ' + dowLabel(dow).toLowerCase() + ' pour ce jour seulement', () => this.mutate((d) => {
+      d.sched = d.sched.filter((x) => x.id !== detachee.id);
+      const i = d.sched.findIndex((x) => x.id === id);
+      if (i >= 0) d.sched[i] = { ...d.sched[i], skip: (d.sched[i].skip || []).filter((x) => x !== occ) };
+    }));
+  }
+
+  /** Les intitulés déjà employés, proposés à la saisie. */
+  readonly labelSuggestions = computed(() => knownLabels(this._data()?.sched || []));
 
   // ---- copier une journée -----------------------------------------------
   //

@@ -137,6 +137,11 @@ export interface UiState {
   /** Confirmation de suppression, dépliée dans le formulaire plutôt qu'en modale sur modale. */
   seDelOpen: boolean;
   /**
+   * Déplacement en cours par glisser-déposer, quand il reste à savoir s'il vaut
+   * pour l'occurrence ou pour la série. Null le reste du temps.
+   */
+  schedMove: { id: string; dow: number } | null;
+  /**
    * Presse-papier de l'emploi du temps : ce qui a été copié, **tel que la vue le
    * montrait**. C'est une photo, pas un lien : modifier l'original après la copie
    * ne change pas ce qui sera collé, comme n'importe quel presse-papier.
@@ -196,7 +201,7 @@ export function initialUi(): UiState {
     schedWho: [], schedDow: weekdayOf(today), schedAnchor: today, schedEdit: false, seEditId: null,
     seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always',
-    seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false,
+    seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false, schedMove: null,
     schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,

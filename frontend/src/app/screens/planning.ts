@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
@@ -6,7 +6,7 @@ import { AvatarComponent } from '../shared/avatar';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
 import { SchedSlot } from '../core/models';
-import { SchedScope, WHEN_LABELS, dowLabel, filterSlots, slotsOn, validityLabel, whoBadges } from '../core/schedule';
+import { FreeGap, SchedScope, WHEN_LABELS, dowLabel, filterSlots, gapsOf, slotsOn, validityLabel, whoBadges } from '../core/schedule';
 import { DOW, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
 
 /** Un jour de la vue, déjà filtré et daté : l'affichage n'a plus qu'à le dessiner. */
@@ -125,7 +125,9 @@ interface DayView { dow: number; date: string; label: string; short: string; num
         }
         <div class="grid" [class.solo]="store.narrow()">
           @for (v of shown(); track v.dow) {
-            <div class="day-card" [class.is-today]="v.today && !store.narrow()">
+            <div class="day-card" [class.is-today]="v.today && !store.narrow()"
+                 [class.drop-target]="dragId() && overDow() === v.dow"
+                 (dragover)="onDragOver($event, v.dow)" (dragleave)="onDragLeave(v.dow)" (drop)="onDrop(v.dow)">
               <div class="day-head">
                 <div class="day-name">{{ v.label }} {{ v.num }}@if (v.today) { <span class="tag">aujourd'hui</span> }</div>
                 <span class="day-count">{{ v.slots.length }}</span>
@@ -136,7 +138,18 @@ interface DayView { dow: number; date: string; label: string; short: string; num
               </div>
               <div class="slots">
                 @for (s of v.slots; track s.id) {
-                  <div class="slot" [style.border-left]="'4px solid ' + color(s.k)" (click)="store.editSlot(s.id, v.date)">
+                  <!-- Le trou qui précède ce créneau. Il rend au passage le sens
+                       des temps libres, que la vue en listes faisait perdre. -->
+                  @if (gapBefore(v, s); as g) {
+                    <div class="gap" (click)="store.newSlot(v.dow, g.start)" [title]="'Ajouter un créneau à ' + g.start">
+                      <span class="gap-line"></span>
+                      <span class="gap-txt"><f-icon name="plus" [size]="11" color="var(--ink3)" [width]="2.6" /> {{ g.start }} – {{ g.end }} libre</span>
+                      <span class="gap-line"></span>
+                    </div>
+                  }
+                  <div class="slot" draggable="true" (dragstart)="onDragStart(s)" (dragend)="onDragEnd()"
+                       [class.dragging]="dragId() === s.id"
+                       [style.border-left]="'4px solid ' + color(s.k)" (click)="store.editSlot(s.id, v.date)">
                     <div class="slot-top">
                       <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
                       <f-who [badges]="badges(s)" />
@@ -216,7 +229,14 @@ interface DayView { dow: number; date: string; label: string; short: string; num
         </div>
 
         <div class="field-label">Intitulé</div>
-        <input class="input" [ngModel]="store.ui().seLabel" (ngModelChange)="store.patch({ seLabel: $event })" placeholder="Ex : Cours de piano" />
+        <!-- Ce qu'on a déjà écrit fait office de modèles : « École », « Car »,
+             « Cabinet » reviennent tous les jours, et une bibliothèque de
+             modèles serait une seconde chose à tenir à jour. -->
+        <input class="input" list="sched-labels" [ngModel]="store.ui().seLabel"
+               (ngModelChange)="store.patch({ seLabel: $event })" placeholder="Ex : Cours de piano" />
+        <datalist id="sched-labels">
+          @for (l of store.labelSuggestions(); track l) { <option [value]="l"></option> }
+        </datalist>
 
         <div class="field-label">Type</div>
         <div class="type-opts">
@@ -295,6 +315,21 @@ interface DayView { dow: number; date: string; label: string; short: string; num
           <button class="btn btn-primary" (click)="store.saveSlot()">Enregistrer</button>
         </div>
         }
+      </f-modal>
+    }
+
+    <!-- Un glisser-déposer ne doit pas décider tout seul du sort d'une série. -->
+    @if (store.ui().schedMove; as mv) {
+      <f-modal [title]="'Déplacer au ' + label(mv.dow).toLowerCase()" [maxWidth]="440" (close)="store.patch({ schedMove: null })">
+        <div class="hint">Ce créneau revient toutes les semaines. Que faut-il déplacer ?</div>
+        <div class="del-opts">
+          <button class="btn btn-primary" (click)="store.moveSlot(mv.id, mv.dow, 'all')">Toute la série</button>
+          <button class="btn btn-soft" (click)="store.moveSlot(mv.id, mv.dow, 'once')">Ce jour seulement</button>
+        </div>
+        <div class="modal-actions">
+          <div class="spacer"></div>
+          <button class="btn btn-soft" (click)="store.patch({ schedMove: null })">Annuler</button>
+        </div>
       </f-modal>
     }
 
@@ -415,6 +450,12 @@ interface DayView { dow: number; date: string; label: string; short: string; num
     .tag { font-family: var(--font-body); font-size: 10.5px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; }
 
     .slots { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .gap { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 1px 0; }
+    .gap-line { flex: 1; height: 1px; background: var(--soft2); }
+    .gap-txt { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
+    .gap:hover .gap-txt { color: var(--primary); }
+    .slot.dragging { opacity: .4; }
+    .day-card.drop-target { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
     .slot { background: var(--soft); border-radius: 12px; padding: 10px 11px; cursor: pointer; }
     .slot-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     /* Si la place manque, c'est l'heure qui se coupe, jamais le marqueur
@@ -556,6 +597,41 @@ export class PlanningScreen {
     const parts = [validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']];
     return parts.filter(Boolean).join(' · ');
   }
+
+  /**
+   * Le glisser-déposer, à la souris.
+   *
+   * Sur téléphone il n'existe pas (le tactile n'a pas de glisser natif, et en
+   * fabriquer un se bat avec le défilement de la page). Ce n'est pas un manque :
+   * le même déplacement s'y fait en ouvrant le créneau et en changeant son jour,
+   * c'est-à-dire par un chemin visible plutôt que par un geste à deviner.
+   */
+  readonly dragId = signal<string | null>(null);
+  readonly overDow = signal(0);
+
+  onDragStart(s: SchedSlot): void { this.dragId.set(s.id); }
+  onDragEnd(): void { this.dragId.set(null); this.overDow.set(0); }
+  onDragOver(e: DragEvent, dow: number): void {
+    if (!this.dragId()) return;
+    e.preventDefault();
+    if (this.overDow() !== dow) this.overDow.set(dow);
+  }
+  onDragLeave(dow: number): void { if (this.overDow() === dow) this.overDow.set(0); }
+  onDrop(dow: number): void {
+    const id = this.dragId();
+    this.onDragEnd();
+    const slot = id ? this.d().sched.find((x) => x.id === id) : null;
+    if (!slot || slot.dow === dow) return;
+    // Une série ne change pas de jour sans qu'on l'ait demandé.
+    if (slot.rec === 'weekly') { this.store.patch({ schedMove: { id: slot.id, dow } }); return; }
+    this.store.moveSlot(slot.id, dow, 'all');
+  }
+
+  /** Le temps libre qui précède un créneau, s'il y en a. */
+  gapBefore(v: DayView, s: SchedSlot): FreeGap | null {
+    return this.gapsFor(v).find((g) => g.end === s.start) || null;
+  }
+  private gapsFor(v: DayView): FreeGap[] { return gapsOf(v.slots); }
 
   /** Un jour accepte le collage tant qu'il n'est pas celui qu'on a copié. */
   pastableOn(dow: number): boolean {

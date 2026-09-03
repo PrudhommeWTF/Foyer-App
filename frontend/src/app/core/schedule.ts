@@ -167,3 +167,75 @@ export function whoBadges(slot: SchedSlot, members: Member[]): WhoBadge[] {
   for (const id of ids) if (!connus.has(id)) out.push({ id, ini: '?', color: '#8A7E74', name: 'Membre supprimé' });
   return out;
 }
+
+// ---- les trous de la journée ------------------------------------------------
+//
+// La vue en listes absorbe les chevauchements, mais elle fait perdre le sens des
+// **trous** : on ne voit plus d'un coup d'oeil qu'il y a trois heures de libre
+// entre deux créneaux. Les calculer les rend visibles, et fait d'eux l'endroit
+// naturel où taper pour créer un créneau à cette heure-là.
+
+/** Un intervalle libre entre deux créneaux d'une même journée. */
+export interface FreeGap { start: string; end: string; minutes: number; }
+
+/** « 08:30 » vers 510. Une heure mal formée rend 0 plutôt que NaN. */
+const toMin = (hhmm: string): number => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0;
+};
+
+/** Heure de démarrage proposée quand la journée est vide et qu'on n'a rien d'autre. */
+export const DEFAULT_START = '08:00';
+
+/**
+ * Les intervalles libres d'une journée, à partir de ses créneaux.
+ *
+ * Un créneau sans heure de fin compte comme un instant : le car scolaire de 7h50
+ * n'occupe pas le reste de la matinée sous prétexte qu'on n'a pas dit quand il
+ * arrive. Les trous plus courts que `minMinutes` sont ignorés : cinq minutes
+ * entre deux cours ne sont pas du temps libre, et les afficher noierait les
+ * vrais trous.
+ */
+export function gapsOf(slots: SchedSlot[], minMinutes = 30): FreeGap[] {
+  const out: FreeGap[] = [];
+  let fin = '';
+  for (const s of sortSlots(slots)) {
+    if (fin && toMin(s.start) - toMin(fin) >= minMinutes) {
+      out.push({ start: fin, end: s.start, minutes: toMin(s.start) - toMin(fin) });
+    }
+    const bout = s.end || s.start;
+    if (!fin || toMin(bout) > toMin(fin)) fin = bout;
+  }
+  return out;
+}
+
+/**
+ * L'heure à proposer pour un nouveau créneau : juste après le dernier de la
+ * journée, ou l'heure de démarrage par défaut quand elle est vide. Une saisie
+ * qui commence par la bonne heure est une saisie de moins.
+ */
+export function nextFreeStart(slots: SchedSlot[]): string {
+  let fin = '';
+  for (const s of slots) {
+    const bout = s.end || s.start;
+    if (!fin || toMin(bout) > toMin(fin)) fin = bout;
+  }
+  return fin || DEFAULT_START;
+}
+
+/**
+ * Les intitulés déjà employés dans le foyer, les plus fréquents d'abord.
+ *
+ * C'est la réponse sobre aux « modèles de créneaux » : une bibliothèque de
+ * modèles serait une seconde chose à tenir à jour, alors que proposer ce qu'on a
+ * déjà écrit coûte une ligne et couvre le même besoin (« École », « Car »,
+ * « Cabinet » reviennent tous les jours).
+ */
+export function knownLabels(sched: SchedSlot[]): string[] {
+  const compte = new Map<string, number>();
+  for (const s of sched || []) {
+    const l = (s.label || '').trim();
+    if (l) compte.set(l, (compte.get(l) || 0) + 1);
+  }
+  return [...compte.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
+}

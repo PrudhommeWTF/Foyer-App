@@ -7,7 +7,7 @@
 // pas cliqué. Un filtre vide qui viderait l'écran est un bug, pas un réglage.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { WHO_SHOWN, calendarFacts, dowLabel, filterSlots, matchesWho, occursOn, slotsOn, sortSlots, validityLabel, whoBadges } from './schedule';
+import { DEFAULT_START, WHO_SHOWN, calendarFacts, dowLabel, filterSlots, gapsOf, knownLabels, matchesWho, nextFreeStart, occursOn, slotsOn, sortSlots, validityLabel, whoBadges } from './schedule';
 import { Member, SchedSlot } from './models';
 
 const slot = (over: Partial<SchedSlot> = {}): SchedSlot =>
@@ -260,4 +260,63 @@ test('la période se lit en français, ou ne se lit pas du tout', () => {
   assert.equal(validityLabel(slot({ until: '2027-06-30' }), fmt), 'jusqu’au 30/06');
   assert.equal(validityLabel(slot({ from: '2026-09-01', until: '2027-06-30' }), fmt), 'du 01/09 au 30/06');
   assert.equal(validityLabel(slot({ rec: 'once', date: '2026-09-10' }), fmt), '10/09');
+});
+
+// ---- trous de la journée et confort de saisie -------------------------------
+
+test('les trous d’une journée se calculent entre les créneaux', () => {
+  const jour = [
+    slot({ id: 'a', start: '08:30', end: '12:00' }),
+    slot({ id: 'b', start: '14:00', end: '16:30' }),
+  ];
+  assert.deepEqual(gapsOf(jour), [{ start: '12:00', end: '14:00', minutes: 120 }]);
+});
+
+test('un créneau sans heure de fin compte comme un instant', () => {
+  // Le car de 7h50 n'occupe pas la matinée sous prétexte qu'on n'a pas dit
+  // quand il arrive.
+  const jour = [slot({ id: 'car', start: '07:50', end: '' }), slot({ id: 'ecole', start: '08:30', end: '16:30' })];
+  assert.deepEqual(gapsOf(jour), [{ start: '07:50', end: '08:30', minutes: 40 }]);
+});
+
+test('deux créneaux qui se chevauchent ne créent pas de trou', () => {
+  const jour = [
+    slot({ id: 'a', start: '08:00', end: '17:45' }),
+    slot({ id: 'b', start: '09:00', end: '12:00' }),
+    slot({ id: 'c', start: '18:30', end: '19:30' }),
+  ];
+  // Le trou part de 17:45 (la fin la plus tardive) et non de 12:00 (la fin du
+  // créneau qui précède dans la liste).
+  assert.deepEqual(gapsOf(jour).map((g) => g.start + '-' + g.end), ['17:45-18:30']);
+});
+
+test('les trous trop courts sont ignorés', () => {
+  // Cinq minutes entre deux cours ne sont pas du temps libre, et les afficher
+  // noierait les vrais trous.
+  const jour = [slot({ id: 'a', start: '08:00', end: '09:00' }), slot({ id: 'b', start: '09:05', end: '10:00' })];
+  assert.deepEqual(gapsOf(jour), []);
+  assert.equal(gapsOf(jour, 5).length, 1, 'le seuil est réglable');
+});
+
+test('une journée vide ou d’un seul créneau n’a pas de trou', () => {
+  assert.deepEqual(gapsOf([]), []);
+  assert.deepEqual(gapsOf([slot()]), []);
+});
+
+test('l’heure proposée suit le dernier créneau de la journée', () => {
+  assert.equal(nextFreeStart([]), DEFAULT_START, 'une journée vide démarre à l’heure par défaut');
+  assert.equal(nextFreeStart([slot({ start: '08:30', end: '16:30' })]), '16:30');
+  // C'est la fin la plus tardive qui compte, pas celle du dernier commencé.
+  assert.equal(nextFreeStart([slot({ start: '08:00', end: '20:30' }), slot({ start: '09:00', end: '12:00' })]), '20:30');
+  assert.equal(nextFreeStart([slot({ start: '07:50', end: '' })]), '07:50');
+});
+
+test('les intitulés déjà employés sortent, les plus fréquents d’abord', () => {
+  const sched = [
+    slot({ id: '1', label: 'Car scolaire' }),
+    slot({ id: '2', label: 'École' }),
+    slot({ id: '3', label: 'École' }),
+    slot({ id: '4', label: '  ' }),
+  ];
+  assert.deepEqual(knownLabels(sched), ['École', 'Car scolaire'], 'un intitulé vide n’est pas une suggestion');
 });
