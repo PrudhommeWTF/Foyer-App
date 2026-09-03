@@ -65,10 +65,115 @@ le JSON du document est légèrement moins lisible à l'oeil nu.
 | Fichier | Rôle |
 |---|---|
 | `frontend/src/app/core/schedule.ts` | Le moteur : tri, jour d'une date, filtre par membre, marqueurs d'identité. Pur, testé dans `schedule.test.ts`. |
+| `frontend/src/app/core/sched-copy.ts` | La copie de journée : signature, plan, application, annulation. Pur, testé dans `sched-copy.test.ts`. |
 | `frontend/src/app/core/foyer.store.ts` | Les gestes : création, modification, suppression avec annulation, filtre. |
 | `frontend/src/app/screens/planning.ts` | L'écran. |
 | `frontend/src/app/shared/who.ts` | `f-who`, les marqueurs d'identité, partagés avec la tuile d'accueil. |
 | `backend/src/state/migrations.ts` | La migration 6, qui amène les documents existants à cette forme. |
+
+## Copier une journée
+
+C'est le geste qui décide si le module sera tenu à jour. Nos journées se
+ressemblent : ressaisir chaque créneau un par un est la raison pour laquelle
+l'emploi du temps n'a jamais été complet.
+
+### Ce qui se copie
+
+**Ce que la vue montre.** La copie prend les créneaux du jour tels qu'ils sont
+affichés, filtre compris. Copier lundi en étant filtré sur Léa copie la journée
+de Léa, pas celle de tout le monde.
+
+Le presse-papier est une photo, pas un lien : modifier l'original après l'avoir
+copié ne change pas ce qui sera collé. Il ne survit pas à un rechargement de
+l'application, comme n'importe quel presse-papier.
+
+### Les deux modes
+
+| | Effet |
+|---|---|
+| **Fusionner** (défaut) | Ajoute ce qui manque, ne touche à rien d'autre. Rien n'est détruit. |
+| **Remplacer** | Le jour visé devient la copie du jour source : ce qu'il portait est supprimé. |
+
+Le mode est **retenu d'une action à l'autre** plutôt que redemandé à chaque
+fois. Il repart sur « fusionner » à chaque ouverture de l'application : c'est le
+seul défaut acceptable, puisque c'est le seul qui ne détruit rien.
+
+**Ce que « remplacer » supprime exactement :** les créneaux que la vue montrerait
+au même endroit, c'est-à-dire ceux qui portent au moins un des membres du
+collage. Sans cette règle, coller la journée de Léa sur mardi effacerait aussi
+celle de tout le monde, ce que personne n'attend.
+
+Conséquence à connaître : un créneau **partagé** (un trajet Léa et Paul) est
+emporté quand on remplace la journée de Léa, et Paul le perd aussi. L'aperçu le
+dit en toutes lettres, et le collage s'annule.
+
+### Ce qui empêche les doublons
+
+Deux créneaux sont « les mêmes » quand ils ont mêmes horaires, même intitulé,
+même type et mêmes membres. Une fusion n'écrit pas ce qui est déjà là, y compris
+au sein d'un même collage : coller deux fois de suite ne double jamais la
+journée.
+
+La casse et les espaces d'un intitulé ne font pas deux créneaux différents.
+
+### Prévisualisation et annulation
+
+L'aperçu est **obligatoire dès que la cible n'est pas vide**, parce que c'est le
+seul cas où quelque chose peut se perdre. Sur un jour vide, le collage part
+directement : il n'y a rien à perdre, et l'aperçu ne ferait que coûter un geste.
+
+Après coup, un message dit ce qui vient d'être fait, exactement (« 5 créneaux
+collés sur mardi, 1 remplacé »), et propose de revenir en arrière pendant
+quelques secondes.
+
+**L'annulation est chirurgicale** : elle retire les identifiants créés et remet
+les créneaux retirés, un par un. Elle ne remet jamais une copie de l'emploi du
+temps entier, ce qui effacerait en silence ce que l'autre appareil a écrit
+entre-temps. C'est testé, y compris le cas où quelqu'un recrée à la main, pendant
+les quelques secondes de l'annulation, un créneau que le collage venait de
+supprimer.
+
+### Copier vers un autre membre
+
+Le champ « Attribuer à » du collage réattribue tous les créneaux collés à un
+membre, aux mêmes horaires. C'est le cas réel de deux enfants inscrits à la même
+activité, ou d'une activité qu'un enfant reprend quand l'autre arrête.
+
+Avec une réattribution, coller sur le **même** jour redevient licite : ce n'est
+plus un doublon puisque la personne change.
+
+### Copier une semaine : ce qui n'existe pas, et pourquoi
+
+Le brief demandait « copier une semaine entière sur une autre semaine ». **Cette
+action n'a pas de cible dans ce module et n'a donc pas été écrite.** L'emploi du
+temps ne contient qu'**une** semaine, la semaine type ; il n'y a pas de semaine
+du 12 mars à recopier sur celle du 19. Fabriquer un bouton qui n'aurait rien à
+faire aurait été une coquille, exactement ce que les conventions du dépôt
+interdisent.
+
+Ce qui existe à la place, et qui répond au besoin sous-jacent : **copier la
+semaine d'un membre vers un autre**. Le bouton n'apparaît que lorsqu'un filtre
+par membre est actif, parce que c'est la seule situation où l'action a un sens.
+
+Si un jour l'emploi du temps devait porter des semaines datées, ce serait un
+autre objet que la semaine type, et une décision à prendre pour elle-même.
+
+### Dupliquer un créneau
+
+Depuis le formulaire d'un créneau, « Dupliquer » repasse en création avec les
+mêmes valeurs. Rien n'est écrit tant qu'on n'enregistre pas : se raviser ne
+laisse pas de copie fantôme. C'est le geste pour créer le trajet retour à partir
+du trajet aller.
+
+### Où vit le code
+
+| Fichier | Rôle |
+|---|---|
+| `frontend/src/app/core/sched-copy.ts` | Le moteur : signature, plan, application, annulation, rapport. Pur, testé. |
+| `frontend/src/app/core/sched-copy.test.ts` | 22 tests, dont la non-duplication en fusion et l'annulation intégrale d'un remplacement. |
+
+Le calcul est séparé de l'écriture pour que le rapport puisse être montré avant,
+comme pour la copie des repas (`meal-copy.ts`) et la génération des courses.
 
 ## Le modèle de récurrence retenu
 
@@ -278,11 +383,11 @@ rejouera au prochain démarrage.
 | Fichier | Ce qu'il tient |
 |---|---|
 | `frontend/src/app/core/schedule.test.ts` | Jours, ordre stable à heure égale, le filtre vide qui laisse tout passer, un créneau partagé qui n'apparaît qu'une fois, les marqueurs d'identité et leur débordement. |
+| `frontend/src/app/core/sched-copy.test.ts` | Collage sur un et plusieurs jours, non-duplication en fusion, annulation intégrale d'un remplacement, annulation qui ne piétine pas une modification concurrente, réattribution à un autre membre. |
 | `backend/test/state-migrations.test.ts` | La migration 6 : conversion, membre inconnu conservé, jour illisible nommé, rejouabilité, aucun créneau perdu. |
 
-Les tests du moteur de récurrence, des exceptions, des périodes de validité et
-des opérations de copie s'ajouteront à `schedule.test.ts` et à un futur
-`sched-copy.test.ts` au fil des tranches.
+Les tests du moteur de récurrence, des exceptions et des périodes de validité
+s'ajouteront à `schedule.test.ts` à la tranche suivante.
 
 ## Intégrations prévues
 

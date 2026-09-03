@@ -1,6 +1,7 @@
 import { FileType, MealItem, Prio, Rayon, Recur, SchedType, ShopState } from './models';
 import { todayIn } from './helpers';
 import { weekdayOf } from './presence';
+import { PasteMode, SchedClip } from './sched-copy';
 import { HOUSEHOLD_TZ } from './constants';
 
 export interface IngrRow { id: string; val: string; }
@@ -118,6 +119,22 @@ export interface UiState {
   schedDow: number;
   schedEdit: boolean; seEditId: string | null;
   seDow: number; seWho: string[]; seStart: string; seEnd: string; seLabel: string; seType: SchedType;
+  /**
+   * Presse-papier de l'emploi du temps : ce qui a été copié, **tel que la vue le
+   * montrait**. C'est une photo, pas un lien : modifier l'original après la copie
+   * ne change pas ce qui sera collé, comme n'importe quel presse-papier.
+   */
+  schedClip: SchedClip | null;
+  schedPasteOpen: boolean;
+  /**
+   * Mode de collage, retenu d'une action à l'autre plutôt que redemandé à chaque
+   * fois. Il ne survit pas à une reconnexion, et c'est voulu : « fusionner », qui
+   * ne détruit rien, est le seul défaut acceptable au démarrage.
+   */
+  schedPasteMode: PasteMode;
+  schedPasteDows: number[];
+  /** Réattribution du collage à un autre membre, ou null pour garder l'original. */
+  schedPasteWho: string | null;
 
   // family & profile
   familyOpen: boolean; famNameField: string;
@@ -161,6 +178,7 @@ export function initialUi(): UiState {
     fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
     schedWho: [], schedDow: weekdayOf(today), schedEdit: false, seEditId: null,
     seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
+    schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
     mfAllerg: [], mfRefuse: [], mfRefuseQ: '', mfAbsent: [],

@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, ShopItem, ShopState, TaskItem } from './models';
+import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, ShopItem, ShopState, TaskItem } from './models';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
@@ -17,6 +17,8 @@ import { Allergene, normaliseName } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
+import { dowLabel, filterSlots, slotsOnDow } from './schedule';
+import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates } from './helpers';
 import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, tint, grad } from './constants';
@@ -2069,6 +2071,17 @@ export class FoyerStore {
     this.patch({ schedEdit: false, seEditId: null });
   }
   /**
+   * Duplique le créneau ouvert : le formulaire repasse en création, garni des
+   * mêmes valeurs. Rien n'est écrit tant qu'on n'enregistre pas, et il n'y a donc
+   * pas de copie fantôme si on se ravise.
+   */
+  duplicateSlot(): void {
+    if (!this.ui().seEditId) return;
+    this.patch({ seEditId: null });
+    this.toast('Copie prête, ajustez-la puis enregistrez');
+  }
+
+  /**
    * Supprime le créneau ouvert, avec retour en arrière.
    *
    * L'annulation **réinsère le créneau retenu** plutôt que de remettre une copie
@@ -2083,6 +2096,96 @@ export class FoyerStore {
     if (!slot) { this.toast('Créneau supprimé'); return; }
     const copie = { ...slot, who: [...(slot.who || [])] };
     this.toastWithUndo('Créneau supprimé', () => this.mutate((d) => { if (!d.sched.some((x) => x.id === copie.id)) d.sched.push(copie); }));
+  }
+
+  // ---- copier une journée -----------------------------------------------
+  //
+  // La copie prend **ce que la vue montre**, filtre compris, et le collage
+  // remplace ce que la vue montrerait au même endroit. Sans cette règle, coller
+  // la journée de Léa sur mardi effacerait celle de tout le monde.
+
+  /** Les créneaux d'un jour tels qu'ils sont affichés en ce moment. */
+  private shownOn(dow: number): SchedSlot[] {
+    return filterSlots(slotsOnDow(this._data()?.sched || [], dow), this.ui().schedWho);
+  }
+
+  private snapshot(slots: SchedSlot[]): SchedSlot[] {
+    return slots.map((s) => ({ ...s, who: [...(s.who || [])] }));
+  }
+
+  copyDay(dow: number): void {
+    const slots = this.shownOn(dow);
+    // Copier une journée vide n'a pas d'usage : même en mode remplacer, un
+    // collage sans membre ne vise personne et ne ferait rien.
+    if (!slots.length) { this.toast('Cette journée est vide, rien à copier'); return; }
+    this.patch({ schedClip: { kind: 'day', dow, slots: this.snapshot(slots) }, schedPasteWho: null });
+    this.toast(dowLabel(dow) + ' copié, ' + slots.length + (slots.length > 1 ? ' créneaux' : ' créneau'));
+  }
+
+  /**
+   * Copie la semaine du ou des membres filtrés, pour la donner à quelqu'un d'autre.
+   *
+   * Sans filtre, l'action n'a pas de sens : recopier la semaine de tout le monde
+   * sur elle-même ne changerait rien. C'est pourquoi l'écran ne la propose que
+   * lorsqu'un filtre est actif.
+   */
+  copyWeek(): void {
+    const who = this.ui().schedWho;
+    if (!who.length) { this.toast('Choisissez d’abord de qui vous copiez la semaine'); return; }
+    const slots = filterSlots(this._data()?.sched || [], who);
+    if (!slots.length) { this.toast('Cette semaine est vide, rien à copier'); return; }
+    this.patch({ schedClip: { kind: 'week', dow: 0, slots: this.snapshot(slots) }, schedPasteWho: null });
+    this.toast('Semaine copiée, ' + slots.length + (slots.length > 1 ? ' créneaux' : ' créneau'));
+  }
+
+  clearClip(): void { this.patch({ schedClip: null, schedPasteOpen: false, schedPasteDows: [], schedPasteWho: null }); }
+
+  openPaste(dow = 0): void {
+    if (!this.ui().schedClip) return;
+    this.patch({ schedPasteOpen: true, schedPasteDows: dow ? [dow] : [] });
+  }
+  togglePasteDow(dow: number): void {
+    const cur = this.ui().schedPasteDows;
+    this.patch({ schedPasteDows: cur.includes(dow) ? cur.filter((x) => x !== dow) : [...cur, dow] });
+  }
+
+  /**
+   * Le collage en deux gestes : copier une journée, taper « Coller » sur une
+   * autre. La prévisualisation ne s'impose que si la cible n'est pas vide, parce
+   * que c'est le seul cas où quelque chose peut se perdre ou entrer en conflit.
+   */
+  pasteOn(dow: number): void {
+    const clip = this.ui().schedClip;
+    if (!clip || clip.kind !== 'day') return;
+    this.patch({ schedPasteDows: [dow], schedPasteWho: null });
+    if (this.shownOn(dow).length) { this.patch({ schedPasteOpen: true }); return; }
+    this.pasteNow();
+  }
+
+  /** Ce que le collage ferait, recalculé à chaque réglage du formulaire. */
+  readonly pastePlan = computed<PastePlan | null>(() => {
+    const s = this.ui();
+    const d = this._data();
+    if (!s.schedClip || !d) return null;
+    return planPaste({
+      sched: d.sched,
+      source: s.schedClip.slots,
+      targetDows: s.schedClip.kind === 'week' ? null : s.schedPasteDows,
+      mode: s.schedPasteMode,
+      remap: s.schedPasteWho,
+      newId: () => uid('s'),
+    });
+  });
+
+  pasteNow(): void {
+    // Le plan est figé ici : l'appliquer et l'annuler doivent porter sur les
+    // mêmes identifiants, sans quoi l'annulation raterait sa cible.
+    const plan = this.pastePlan();
+    if (!plan) return;
+    this.patch({ schedPasteOpen: false });
+    if (!plan.added.length && !plan.removed.length) { this.toast(pasteSummary(plan, dowLabel)); return; }
+    this.mutate((d) => { d.sched = applyPastePlan(d.sched, plan); });
+    this.toastWithUndo(pasteSummary(plan, dowLabel), () => this.mutate((d) => { d.sched = undoPaste(d.sched, plan); }));
   }
 
   // ---- family & profile -------------------------------------------------

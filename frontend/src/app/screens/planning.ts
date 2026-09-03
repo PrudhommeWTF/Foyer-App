@@ -61,7 +61,21 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
         <div class="filter-bar">
           <f-icon name="users" [size]="16" color="var(--ink2)" [width]="2.2" />
           <span>Filtré sur {{ filterNames() }}</span>
+          <!-- Copier une semaine n'a de sens que vers quelqu'un d'autre : sans
+               filtre, ce serait recopier tout le monde sur tout le monde. -->
+          <button class="clear" (click)="store.copyWeek()">Copier la semaine</button>
           <button class="clear" (click)="store.clearSchedWho()">Tout le foyer</button>
+        </div>
+      }
+
+      @if (store.ui().schedClip; as clip) {
+        <div class="clip-bar">
+          <f-icon name="copy" [size]="16" color="var(--ink)" [width]="2.2" />
+          <span>{{ clipText() }}</span>
+          <button class="clear" (click)="store.openPaste()">{{ clip.kind === 'week' ? 'Coller pour…' : 'Coller sur…' }}</button>
+          <button class="clear ghost" (click)="store.clearClip()" title="Abandonner la copie">
+            <f-icon name="x" [size]="15" color="var(--ink2)" [width]="2.4" />
+          </button>
         </div>
       }
 
@@ -102,6 +116,10 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
               <div class="day-head">
                 <div class="day-name">{{ v.label }}@if (v.today && store.narrow()) { <span class="tag">aujourd'hui</span> }</div>
                 <span class="day-count">{{ v.slots.length }}</span>
+                <!-- Bouton visible, pas d'appui long à deviner. -->
+                <button class="icon-btn" title="Copier cette journée" (click)="store.copyDay(v.dow)">
+                  <f-icon name="copy" [size]="15" color="var(--ink2)" [width]="2.2" />
+                </button>
               </div>
               <div class="slots">
                 @for (s of v.slots; track s.id) {
@@ -121,8 +139,15 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
                   <div class="free">{{ store.ui().schedWho.length ? 'Rien pour ce filtre' : 'Libre' }}</div>
                 }
               </div>
-              <div class="add" (click)="store.newSlot(v.dow)">
-                <f-icon name="plus" [size]="13" color="var(--ink2)" [width]="2.6" /> Ajouter
+              <div class="day-foot">
+                <div class="add" (click)="store.newSlot(v.dow)">
+                  <f-icon name="plus" [size]="13" color="var(--ink2)" [width]="2.6" /> Ajouter
+                </div>
+                @if (pastableOn(v.dow)) {
+                  <div class="add paste" (click)="store.pasteOn(v.dow)">
+                    <f-icon name="download" [size]="13" color="var(--primary)" [width]="2.6" /> Coller
+                  </div>
+                }
               </div>
             </div>
           }
@@ -179,11 +204,74 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
 
         <div class="modal-actions">
           @if (store.ui().seEditId) {
+            <button class="btn btn-soft" (click)="store.duplicateSlot()"><f-icon name="copy" [size]="16" color="var(--ink)" [width]="2.2" /> Dupliquer</button>
             <button class="btn btn-danger" (click)="store.delSlot()"><f-icon name="trash" [size]="16" color="#fff" [width]="2.2" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ schedEdit: false })">Annuler</button>
           <button class="btn btn-primary" (click)="store.saveSlot()">Enregistrer</button>
+        </div>
+      </f-modal>
+    }
+
+    @if (store.ui().schedPasteOpen && store.ui().schedClip; as clip) {
+      <f-modal [title]="clip.kind === 'week' ? 'Coller la semaine' : 'Coller ' + label(clip.dow)"
+               [maxWidth]="520" (close)="store.patch({ schedPasteOpen: false })">
+        @if (clip.kind === 'day') {
+          <div class="field-label">Sur quels jours</div>
+          <div class="seg wrap">
+            @for (n of days; track n) {
+              <button [class.active]="store.ui().schedPasteDows.includes(n)" [disabled]="n === clip.dow"
+                      (click)="store.togglePasteDow(n)">{{ label(n) }}</button>
+            }
+          </div>
+        }
+
+        <div class="field-label">Comment</div>
+        <div class="seg">
+          <button [class.active]="store.ui().schedPasteMode === 'merge'" (click)="store.patch({ schedPasteMode: 'merge' })">Fusionner</button>
+          <button [class.active]="store.ui().schedPasteMode === 'replace'" (click)="store.patch({ schedPasteMode: 'replace' })">Remplacer</button>
+        </div>
+        <div class="hint">{{ store.ui().schedPasteMode === 'merge'
+          ? 'Ajoute ce qui manque et ne touche à rien d’autre.'
+          : 'Le jour visé devient la copie du jour source : ce qu’il portait est supprimé.' }}</div>
+
+        <div class="field-label">Attribuer à</div>
+        <div class="who-opts">
+          <div class="who-opt" [class.on]="!store.ui().schedPasteWho" (click)="store.patch({ schedPasteWho: null })">
+            <span>Membres d’origine</span>
+          </div>
+          @for (m of d().members; track m.id) {
+            <div class="who-opt" [class.on]="store.ui().schedPasteWho === m.id"
+                 [style.border-color]="store.ui().schedPasteWho === m.id ? m.color : 'transparent'"
+                 (click)="store.patch({ schedPasteWho: m.id })">
+              <f-avatar [ini]="m.ini" [color]="m.color" [size]="24" />
+              <span>{{ m.name }}</span>
+            </div>
+          }
+        </div>
+
+        <!-- Le rapport avant d'écrire, comme pour la génération des courses :
+             on ne supprime jamais sans avoir dit combien et quoi. -->
+        @if (store.pastePlan(); as plan) {
+          <div class="report" [class.destructive]="plan.removed.length">
+            @if (!plan.added.length && !plan.removed.length) {
+              <div class="line">{{ plan.duplicates ? 'Tout est déjà là : rien à ajouter.' : 'Choisissez au moins un jour cible.' }}</div>
+            } @else {
+              @if (plan.added.length) { <div class="line">{{ plan.added.length }} {{ plan.added.length > 1 ? 'créneaux ajoutés' : 'créneau ajouté' }}</div> }
+              @if (plan.removed.length) { <div class="line strong">{{ plan.removed.length }} {{ plan.removed.length > 1 ? 'créneaux supprimés' : 'créneau supprimé' }} : {{ removedNames() }}</div> }
+              <!-- Un créneau partagé emporte tout le monde avec lui. Le compter
+                   sans le dire laisserait croire qu'on ne touche qu'à une personne. -->
+              @if (sharedRemoved(); as n) { <div class="line strong">{{ sharedText() }}</div> }
+              @if (plan.duplicates) { <div class="line">{{ plan.duplicates }} déjà {{ plan.duplicates > 1 ? 'présents, ignorés' : 'présent, ignoré' }}</div> }
+            }
+          </div>
+        }
+
+        <div class="modal-actions">
+          <div class="spacer"></div>
+          <button class="btn btn-soft" (click)="store.patch({ schedPasteOpen: false })">Annuler</button>
+          <button class="btn btn-primary" [disabled]="nothingToPaste()" (click)="store.pasteNow()">Coller</button>
         </div>
       </f-modal>
     }
@@ -198,8 +286,11 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
     :host-context(.shell.narrow) .members { gap: 8px; }
     :host-context(.shell.narrow) .pill { padding: 6px 12px 6px 6px; font-size: 13px; gap: 7px; }
 
-    .filter-bar, .warn-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-radius: 13px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+    .filter-bar, .warn-bar, .clip-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-radius: 13px; margin-bottom: 14px; font-size: 13px; font-weight: 700; flex-wrap: wrap; }
     .filter-bar { background: var(--soft2); color: var(--ink2); }
+    .clip-bar { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--ink); }
+    .clip-bar span { flex: 1; min-width: 0; }
+    .clear.ghost { background: transparent; padding: 6px 8px; display: inline-flex; }
     .warn-bar { background: color-mix(in srgb, #C6492F 12%, var(--surface)); color: #C6492F; }
     .filter-bar span, .warn-bar span { flex: 1; min-width: 0; }
     .clear { border: none; cursor: pointer; background: var(--surface); color: var(--ink); border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 800; font-family: inherit; }
@@ -228,7 +319,9 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
 
     .day-card { background: var(--surface); border-radius: 18px; padding: 14px; box-shadow: 0 12px 28px -22px rgba(90,60,40,.5); min-height: 230px; display: flex; flex-direction: column; }
     .day-card.is-today { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
-    .day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+    .day-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .day-head .day-name { flex: 1; min-width: 0; }
+    .icon-btn { border: none; background: var(--soft2); border-radius: 9px; padding: 5px 7px; cursor: pointer; display: inline-flex; line-height: 0; }
     .day-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink); }
     .day-count { font-size: 11px; font-weight: 800; color: var(--ink3); }
     .tag { font-family: var(--font-body); font-size: 10.5px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; }
@@ -245,9 +338,18 @@ interface DayView { dow: number; label: string; short: string; today: boolean; s
     .slot-badge .dot { width: 7px; height: 7px; border-radius: 2px; }
     .free { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--ink3); font-size: 12px; font-weight: 700; padding: 16px 0; text-align: center; }
 
-    .add { margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px; border-radius: 11px; background: var(--soft2); color: var(--ink2); font-size: 12px; font-weight: 800; cursor: pointer; }
+    .day-foot { display: flex; gap: 6px; margin-top: 8px; }
+    .add { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px; border-radius: 11px; background: var(--soft2); color: var(--ink2); font-size: 12px; font-weight: 800; cursor: pointer; }
+    .add.paste { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--primary); }
+
+    .hint { font-size: 12px; font-weight: 700; color: var(--ink2); margin: 8px 0 16px; line-height: 1.35; }
+    .report { background: var(--soft); border-radius: 13px; padding: 12px 14px; margin: 14px 0 4px; font-size: 13px; font-weight: 700; color: var(--ink2); }
+    .report.destructive { background: color-mix(in srgb, #C6492F 10%, var(--surface)); }
+    .report .line + .line { margin-top: 5px; }
+    .report .strong { color: #C6492F; font-weight: 800; }
 
     .seg.wrap { flex-wrap: wrap; margin-bottom: 6px; }
+    .seg > button:disabled { opacity: .35; cursor: default; }
     .form-row { display: flex; gap: 12px; margin-bottom: 4px; }
     .field { flex: 1; min-width: 0; }
     .field-label { margin-top: 4px; }
@@ -318,6 +420,57 @@ export class PlanningScreen {
   });
 
   badges(s: SchedSlot) { return whoBadges(s, this.d().members); }
+
+  /** Un jour accepte le collage tant qu'il n'est pas celui qu'on a copié. */
+  pastableOn(dow: number): boolean {
+    const clip = this.store.ui().schedClip;
+    return !!clip && clip.kind === 'day' && clip.dow !== dow;
+  }
+
+  readonly clipText = computed(() => {
+    const clip = this.store.ui().schedClip;
+    if (!clip) return '';
+    const n = clip.slots.length;
+    const quoi = n + (n > 1 ? ' créneaux' : ' créneau');
+    return clip.kind === 'week' ? 'Semaine copiée, ' + quoi : dowLabel(clip.dow) + ' copié, ' + quoi;
+  });
+
+  /** Rien à écrire ni à retirer : le bouton ne doit pas laisser croire le contraire. */
+  readonly nothingToPaste = computed(() => {
+    const plan = this.store.pastePlan();
+    return !plan || (!plan.added.length && !plan.removed.length);
+  });
+
+  /** Les créneaux supprimés qui appartiennent aussi à quelqu'un hors du collage. */
+  private readonly shared = computed(() => {
+    const plan = this.store.pastePlan();
+    if (!plan) return [];
+    return plan.removed.filter((s) => (s.who || []).some((id) => !plan.scope.includes(id)));
+  });
+  readonly sharedRemoved = computed(() => this.shared().length);
+  /**
+   * Tourné sans accord de genre ni de nombre sur les personnes : l'application
+   * ne connaît pas le genre de ses membres, et « Léa perdent » sur le prénom
+   * d'un enfant décrédibilise tout le reste du message.
+   */
+  readonly sharedText = computed(() => {
+    const plan = this.store.pastePlan();
+    const n = this.sharedRemoved();
+    if (!plan || !n) return '';
+    const autres = new Set(this.shared().flatMap((s) => s.who).filter((id) => !plan.scope.includes(id)));
+    const noms = this.d().members.filter((m) => autres.has(m.id)).map((m) => m.name).join(', ') || 'quelqu’un d’autre';
+    return n > 1
+      ? 'dont ' + n + ' partagés avec ' + noms + ' : ils disparaissent pour tout le monde'
+      : 'dont 1 partagé avec ' + noms + ' : il disparaît pour tout le monde';
+  });
+
+  /** Les intitulés de ce que le collage supprimerait : compter ne suffit pas. */
+  readonly removedNames = computed(() => {
+    const plan = this.store.pastePlan();
+    if (!plan) return '';
+    const noms = [...new Set(plan.removed.map((s) => s.label))];
+    return noms.slice(0, 4).join(', ') + (noms.length > 4 ? ', …' : '');
+  });
 
   typeLabel(k: string): string { return SCHED_TYPES.find((t) => t.k === k)?.label || k; }
   color(k: string): string { return SCHED_COLORS[k] || 'var(--ink3)'; }
