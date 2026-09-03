@@ -21,10 +21,11 @@ Conventions durables pour travailler sur **Foyer** (application de gestion famil
 ```
 frontend/src/app/
   core/       # store (foyer.store.ts), api.service.ts, models.ts, ui-state.ts, helpers.ts, constants.ts, icon.ts
-  screens/    # un fichier par écran fonctionnel (home, calendar, courses, taches, budget, …)
+  screens/    # un fichier par écran fonctionnel (calendar, courses, budget, …) ; un dossier quand l'écran a des composants (home/, taches/)
   shell/      # chrome : login, onboarding, sidebar, topbar, tabbar, modales (family, profile, search, notifications), toast
   shared/     # composants réutilisables (avatar, modal)
 backend/src/  # server.ts (Express + routes), db.ts (SQLite), models.ts, seed.ts (EMPTY_STATE + buildInitialState)
+              # shopping/ et tasks/ : sous-arbres du document écrits par opérations ciblées (ops.ts pur, repo.ts transaction + journal, routes.ts)
 deploy/lxc/   # install.sh, proxmox-create.sh, self-update.sh, update.sh, uninstall.sh
 docs/         # maquette de design de référence
 ```

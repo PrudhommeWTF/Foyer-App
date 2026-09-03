@@ -66,10 +66,10 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
       }
 
       <!-- État de la synchronisation. Silencieux quand tout va bien. -->
-      @if (store.shopOffline() || store.shopPending()) {
-        <div class="sync" [class.off]="store.shopOffline()">
-          <f-icon [name]="store.shopOffline() ? 'x' : 'refresh'" [size]="15" [color]="store.shopOffline() ? '#C6492F' : 'var(--ink2)'" [width]="2.4" />
-          @if (store.shopOffline()) {
+      @if (store.syncOffline() || store.shopPending()) {
+        <div class="sync" [class.off]="store.syncOffline()">
+          <f-icon [name]="store.syncOffline() ? 'x' : 'refresh'" [size]="15" [color]="store.syncOffline() ? '#C6492F' : 'var(--ink2)'" [width]="2.4" />
+          @if (store.syncOffline()) {
             <span>Hors ligne. {{ store.shopPending() }} modification(s) en attente, elles partiront au retour du réseau.</span>
           } @else {
             <span>Envoi de {{ store.shopPending() }} modification(s)…</span>

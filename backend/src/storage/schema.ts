@@ -7,16 +7,16 @@
 //     milieu de l'état. Chaque sauvegarde renvoyait le document entier, donc
 //     toutes les photos du carnet, y compris pour cocher un article de courses
 //     en 4G dans un magasin.
-//   - `hh_shop_ops` : les identifiants des opérations de liste déjà appliquées,
-//     pour qu'un rejeu après coupure réseau ne ressuscite pas un article
-//     supprimé entre-temps.
+//   - `hh_shop_ops` et `hh_task_ops` : les identifiants des opérations de
+//     courses et de tâches déjà appliquées, pour qu'un rejeu après coupure
+//     réseau ne ressuscite pas un article ou une tâche supprimés entre-temps.
 //   - `hh_meta` : la version du schéma et celle du document.
 //
 // Les migrations sont versionnées et appliquées au démarrage, chacune dans sa
 // transaction. Ne jamais modifier une migration livrée : en ajouter une.
 import type { Database } from 'better-sqlite3';
 
-export const HH_SCHEMA_VERSION = 1;
+export const HH_SCHEMA_VERSION = 2;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -47,6 +47,19 @@ const MIGRATIONS: Migration[] = [
         -- Les lignes anciennes sont élaguées : ce journal n'est pas un historique,
         -- juste une mémoire courte contre les doublons.
         CREATE TABLE hh_shop_ops (
+          op_id TEXT PRIMARY KEY,
+          applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+  {
+    version: 2,
+    label: 'journal des opérations de tâches',
+    up: (db) => {
+      db.exec(`
+        -- Même rôle que hh_shop_ops, pour les tâches (voir tasks/repo.ts).
+        CREATE TABLE hh_task_ops (
           op_id TEXT PRIMARY KEY,
           applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );

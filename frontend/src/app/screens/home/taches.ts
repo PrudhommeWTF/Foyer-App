@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { AvatarComponent } from '../../shared/avatar';
-import { QuickAddComponent } from '../../shared/quick-add';
+import { TaskItem } from '../../core/models';
+import { whoBadges } from '../../core/schedule';
+import { TaskComposerComponent } from '../taches/composer';
 import { TileComponent } from '../../shared/tile';
+import { WhoComponent } from '../../shared/who';
 import { TachesTileData } from '../../core/tiles/taches.tile';
 import { HomeTile } from './base';
 
@@ -9,7 +11,7 @@ import { HomeTile } from './base';
   selector: 'tile-taches',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TileComponent, AvatarComponent, QuickAddComponent],
+  imports: [TileComponent, WhoComponent, TaskComposerComponent],
   template: `
     <f-tile [title]="tile().title" [badge]="badge()" [link]="tile().link" [state]="state()" [raison]="raison()" [collapsed]="collapsed()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
@@ -17,22 +19,23 @@ import { HomeTile } from './base';
         <div class="tasks">
           @for (l of d.lines; track l.task.id) {
             <div class="task">
-              <span class="tick" (click)="store.toggleTaskWithUndo(l.task.id)"></span>
+              <button class="tick" (click)="store.toggleTask(l.task.id)" [attr.aria-label]="'Cocher ' + l.task.text"></button>
               <span class="ttext">
                 {{ l.task.text }}
+                @if (l.task.time && !l.late) { <span class="late">{{ l.task.time }}</span> }
                 @if (l.late) { <span class="late">depuis {{ lateLabel(l.late) }}</span> }
               </span>
               <!-- Écrit, pas dessiné : un chevron seul demanderait de deviner, et
                    sur téléphone il n'y a pas d'infobulle pour lever le doute. -->
               <button class="later" (click)="store.postponeTask(l.task.id)">demain</button>
-              <f-avatar [ini]="store.memberIni(l.task.who)" [color]="store.memberColor(l.task.who)" [size]="18" />
+              @if (l.task.who.length) { <f-who [badges]="badges(l.task)" [size]="18" /> }
             </div>
           }
         </div>
       }
       @if (state().kind !== 'error' && state().kind !== 'loading') {
-        <f-quick-add label="Nouvelle tâche" placeholder="Ex : rappeler le dentiste"
-                     (submitted)="store.addTask($event)" />
+        <!-- La même saisie que l'écran Tâches : membre, date et heure se règlent ici aussi. -->
+        <app-task-composer opener="Nouvelle tâche" (saved)="store.createTask($event)" />
       }
     </f-tile>
   `,
@@ -40,7 +43,9 @@ import { HomeTile } from './base';
     :host { display: block; }
     .tasks { display: flex; flex-direction: column; gap: 10px; }
     .task { display: flex; align-items: center; gap: 9px; }
-    .ttext { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+    .tick { width: 22px; height: 22px; flex: none; border-radius: 7px; border: 2px solid var(--line2); background: transparent; cursor: pointer; position: relative; padding: 0; }
+    .tick::before { content: ''; position: absolute; inset: -10px; }
+    .ttext { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--ink); min-width: 0; }
     /* Le retard se dit, il ne crie pas : c'est une précision, pas une alarme. */
     .late { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-left: 6px; white-space: nowrap; }
     .later {
@@ -52,6 +57,8 @@ import { HomeTile } from './base';
 export class TachesTile extends HomeTile<TachesTileData> {
   /** Le compteur ne s'affiche que s'il y a quelque chose pour aujourd'hui. */
   readonly badge = computed(() => { const d = this.data(); return d && d.due ? d.due + ' aujourd’hui' : ''; });
+
+  badges(t: TaskItem) { return whoBadges(t, this.store.data()?.members || []); }
 
   lateLabel(days: number): string {
     if (days < 7) return days + (days > 1 ? ' jours' : ' jour');

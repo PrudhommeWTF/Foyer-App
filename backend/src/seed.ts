@@ -16,6 +16,10 @@ const STARTER_AISLES = (): HouseholdState['aisles'] => [
   { id: 'a4', name: 'À trier', color: '#8A7E74', position: 3 },
 ];
 
+/** La liste de tâches de départ : partagée, l'affaire du jour, sans rien dedans. */
+const STARTER_TASK_LIST = (): HouseholdState['taskLists'][number] =>
+  ({ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison', kind: 'taches', scope: 'shared', position: 0 });
+
 /** Blank household used as the default before onboarding writes the real state. */
 export const EMPTY_STATE: HouseholdState = {
   familyName: '',
@@ -25,7 +29,8 @@ export const EMPTY_STATE: HouseholdState = {
   articles: [],
   shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
   shop: [],
-  taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }],
+  taskLists: [STARTER_TASK_LIST()],
+  taskTemplates: [],
   tasks: [],
   msgs: [],
   contacts: [],
@@ -108,7 +113,8 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     articles: [],
     shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
     shop: [],
-    taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }],
+    taskLists: [STARTER_TASK_LIST()],
+    taskTemplates: [],
     tasks: [],
     msgs: [],
     contacts: [],

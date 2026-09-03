@@ -1,6 +1,7 @@
 // Household domain model (backend). Mirrors the frontend models; new optional
 // fields (planned/birthday/academie) are additive and backward-compatible.
 import type { ShopItem } from './shopping/ops';
+import type { TaskItem } from './tasks/ops';
 
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
 // frontend/src/app/core/diet.ts pour ce qui en est dérivé.
@@ -37,14 +38,25 @@ export interface ShopList { id: string; name: string; color: string; icon: strin
 // La forme d'un article et celle de ses mutations vivent avec le moteur qui les
 // écrit réellement, article par article (voir shopping/ops.ts).
 export type { ShopItem, ShopState } from './shopping/ops';
-export interface TaskList { id: string; name: string; color: string; icon: string; }
-export interface TaskItem { id: string; text: string; who: string; due: string; done: boolean; listId: string; prio: string; planned?: string | null;
-  /**
-   * Liste de courses que cette tâche ouvre. La tâche reste entièrement à
-   * l'utilisateur (il la coche, la déplace, la supprime) : le lien n'est qu'un
-   * raccourci, et le compte des articles restants, une information de plus.
-   */
-  shopListId?: string | null; }
+/**
+ * Type d'une liste de tâches. Seules les listes `taches` sont l'affaire du
+ * jour : elles comptent dans « Toutes » et sur l'accueil. Une liste de corvées
+ * ou une checklist (valise, fournitures, idées) vit dans son propre onglet.
+ */
+export type ListKind = 'taches' | 'corvees' | 'checklist';
+export interface TaskList {
+  id: string; name: string; color: string; icon: string;
+  kind: ListKind;
+  /** 'shared', ou l'identifiant du membre pour une liste privée (cachée aux autres, pas chiffrée). */
+  scope: string;
+  position: number;
+  archived?: boolean;
+}
+/** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
+export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }
+// La forme d'une tâche et celle de ses mutations vivent avec le moteur qui les
+// écrit réellement, tâche par tâche (voir tasks/ops.ts).
+export type { TaskItem } from './tasks/ops';
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
@@ -123,6 +135,7 @@ export interface HouseholdState {
   shopLists: ShopList[];
   shop: ShopItem[];
   taskLists: TaskList[];
+  taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
   msgs: Message[];
   contacts: Contact[];

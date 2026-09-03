@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { HouseholdState, ShopItem } from './models';
+import { HouseholdState, ShopItem, TaskItem } from './models';
+import type { TaskOp } from './task-ops';
 import type { RulesOutcome } from './home-context';
 
 /**
@@ -38,8 +39,11 @@ export interface UpdateInfo {
 
 export interface StoredFile { id: number; name: string; mime: string; size: number; createdAt: string; }
 
-/** Instantané de la liste. `unchanged` évite de renvoyer les articles pour rien. */
-export interface ShoppingSnapshot { version: number; items?: ShopItem[]; unchanged?: boolean; }
+/**
+ * Instantané des sous-arbres qui s'écrivent par opérations : courses et tâches.
+ * `unchanged` évite de les renvoyer pour rien.
+ */
+export interface LiveSnapshot { version: number; shop?: ShopItem[]; tasks?: TaskItem[]; unchanged?: boolean; }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
 export type ShopOp =
@@ -55,13 +59,16 @@ export type ShopOp =
  */
 export type ShopOpDraft = ShopOp extends infer T ? (T extends ShopOp ? Omit<T, 'opId' | 'by' | 'at'> : never) : never;
 
-export interface ShoppingApplied {
+/** Ce que le serveur rend d'un lot : l'état résultant, et le sort de chaque opération. */
+export interface OpsApplied<T> {
   version: number;
-  items: ShopItem[];
+  items: T[];
   applied: string[];
   /** Écartées définitivement, avec la raison : le client les retire de sa file. */
   skipped: { opId: string; reason: string }[];
 }
+export type ShoppingApplied = OpsApplied<ShopItem>;
+export type TasksApplied = OpsApplied<TaskItem>;
 
 /** Recette lue sur une page externe, prête à remplir le formulaire. */
 export interface ImportedRecipe {
@@ -224,15 +231,19 @@ export class ApiService {
     return this.request('state', { method: 'PUT', body: JSON.stringify({ state, version }) });
   }
 
-  // ---- liste de courses --------------------------------------------------
-  // Elle ne voyage pas dans `putState` : le serveur ignore ce que ce client
-  // croit savoir de la liste et n'accepte que des opérations ciblées.
-  shopping(since?: number): Promise<ShoppingSnapshot> {
-    return this.request('shopping' + (since != null ? '?since=' + since : ''));
+  // ---- courses et tâches --------------------------------------------------
+  // Ni la liste ni les tâches ne voyagent dans `putState` : le serveur ignore ce
+  // que ce client croit en savoir et n'accepte que des opérations ciblées.
+  live(since?: number): Promise<LiveSnapshot> {
+    return this.request('live' + (since != null ? '?since=' + since : ''));
   }
 
   shoppingOps(ops: ShopOp[]): Promise<ShoppingApplied> {
     return this.request('shopping/ops', { method: 'POST', body: JSON.stringify({ ops }) });
+  }
+
+  taskOps(ops: TaskOp[]): Promise<TasksApplied> {
+    return this.request('tasks/ops', { method: 'POST', body: JSON.stringify({ ops }) });
   }
 
   // ---- import de recette --------------------------------------------------

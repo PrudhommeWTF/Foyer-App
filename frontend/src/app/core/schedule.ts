@@ -153,13 +153,13 @@ export const WHO_SHOWN = 3;
 export interface WhoBadge { id: string; ini: string; color: string; name: string }
 
 /**
- * Les marqueurs d'un créneau, dans l'ordre des membres du foyer pour qu'une même
- * personne soit toujours à la même place d'une ligne à l'autre.
+ * Les marqueurs d'un créneau ou d'une tâche, dans l'ordre des membres du foyer
+ * pour qu'une même personne soit toujours à la même place d'une ligne à l'autre.
  *
  * Un identifiant qui ne correspond à plus aucun membre rend une pastille grise
  * « ? » plutôt que rien : un créneau orphelin doit se voir pour se réparer.
  */
-export function whoBadges(slot: SchedSlot, members: Member[]): WhoBadge[] {
+export function whoBadges(slot: { who: readonly string[] }, members: Member[]): WhoBadge[] {
   const ids = new Set(slot.who || []);
   const out: WhoBadge[] = members.filter((m) => ids.has(m.id)).map((m) => ({ id: m.id, ini: m.ini, color: m.color, name: m.name }));
   const connus = new Set(out.map((b) => b.id));

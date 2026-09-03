@@ -1,7 +1,9 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { EventItem, HouseholdState, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem } from './models';
+import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
+import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
+import { categories, dailyTasks, suggestTexts, visibleLists } from './tasks';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
@@ -57,8 +59,9 @@ function loadReadNotifs(): Set<string> {
  * cela, elles ne vivaient qu'en mémoire et disparaissaient sans un mot.
  */
 const SHOP_QUEUE_KEY = 'foyer.shopQueue';
-function loadShopQueue(): ShopOp[] {
-  try { const v = JSON.parse(localStorage.getItem(SHOP_QUEUE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+const TASK_QUEUE_KEY = 'foyer.taskQueue';
+function loadQueue<T>(key: string): T[] {
+  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
 /** Durée d'un toast simple, et celle d'un toast qui propose de revenir en arrière. */
@@ -69,14 +72,14 @@ const UNDO_MS = 7000;
 const SAVE_RETRY_MS = 8000;
 
 /**
- * Cadence de sondage de la liste de courses, selon l'écran.
+ * Cadence de sondage des courses et des tâches, selon l'écran.
  *
- * En magasin, la coche de l'autre doit apparaître tout de suite. Sur l'accueil,
- * savoir à quinze secondes près ce qui reste à prendre suffit largement, et
- * c'est l'écran qui reste ouvert toute la journée : la même cadence y serait
- * payée en batterie sans rien apporter.
+ * En magasin, ou quand on coche chacun de son côté, la coche de l'autre doit
+ * apparaître tout de suite. Sur l'accueil, savoir à quinze secondes près ce
+ * qui reste suffit largement, et c'est l'écran qui reste ouvert toute la
+ * journée : la même cadence y serait payée en batterie sans rien apporter.
  */
-const SHOP_POLL_MS = 5000;
+const LIVE_POLL_MS = 5000;
 const HOME_POLL_MS = 15000;
 
 export type { DayExtra, SchoolHoliday } from './agenda';
@@ -204,17 +207,22 @@ export class FoyerStore {
     catch { return iso; }
   }
 
-  // ---- synchronisation de la liste de courses ----------------------------
-  /** Version du document connue du client ; sert au sondage différentiel. */
-  private shopVersion = 0;
-  /** Opérations en attente d'acquittement, persistées (voir SHOP_QUEUE_KEY). */
-  private shopQueue = signal<ShopOp[]>(loadShopQueue());
-  /** Nombre de coches pas encore parties. Affiché : sans cela le doute est total. */
+  // ---- synchronisation des courses et des tâches --------------------------
+  /** Version du document connue du sondage ; sert au sondage différentiel. */
+  private liveVersion = 0;
+  /** Opérations en attente d'acquittement, persistées (voir SHOP_QUEUE_KEY, TASK_QUEUE_KEY). */
+  private shopQueue = signal<ShopOp[]>(loadQueue<ShopOp>(SHOP_QUEUE_KEY));
+  private taskQueue = signal<TaskOp[]>(loadQueue<TaskOp>(TASK_QUEUE_KEY));
+  /** Nombre de gestes pas encore partis. Affiché : sans cela le doute est total. */
   readonly shopPending = computed(() => this.shopQueue().length);
-  readonly shopOffline = signal(false);
+  readonly taskPending = computed(() => this.taskQueue().length);
+  /** Le serveur n'a pas répondu au dernier envoi ou sondage. */
+  readonly syncOffline = signal(false);
   private shopFlushing = false;
+  private taskFlushing = false;
   private shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
-  private shopPollTimer: ReturnType<typeof setInterval> | null = null;
+  private taskFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private livePollTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Version du document connue de ce client, et modifications pas encore
@@ -244,23 +252,23 @@ export class FoyerStore {
       for (const id of needed) if (!(id in known)) void this.loadPhoto(id);
     });
 
-    // Le sondage tourne sur les deux écrans qui montrent la liste : Courses et
-    // l'accueil. Ailleurs il ne servirait qu'à vider la batterie. Il s'arrête
-    // aussi quand l'onglet passe en arrière-plan.
+    // Le sondage tourne sur les écrans qui montrent ce qui se coche à deux :
+    // Courses, Tâches et l'accueil. Ailleurs il ne servirait qu'à vider la
+    // batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
     effect(() => {
       const screen = this.ui().screen;
-      const cadence = !this.authed() ? 0 : screen === 'courses' ? SHOP_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
-      if (cadence) this.startShopPolling(cadence); else this.stopShopPolling();
+      const cadence = !this.authed() ? 0 : screen === 'courses' || screen === 'taches' ? LIVE_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
+      if (cadence) this.startLivePolling(cadence); else this.stopLivePolling();
     });
 
-    // Retour du réseau : la file part immédiatement, sans attendre que
+    // Retour du réseau : les files partent immédiatement, sans attendre que
     // quelqu'un touche à nouveau l'écran.
     window.addEventListener('online', () => {
-      this.shopOffline.set(false);
-      void this.flushShopQueue();
+      this.syncOffline.set(false);
+      void this.flushQueues();
       if (this.saveState() === 'error') void this.flush();
     });
-    window.addEventListener('offline', () => this.shopOffline.set(true));
+    window.addEventListener('offline', () => this.syncOffline.set(true));
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible') return;
       // Un téléphone qui se réveille peut avoir dormi douze heures : l'horloge
@@ -268,9 +276,9 @@ export class FoyerStore {
       // le temps d'une minute.
       this.advanceClock();
       if (!this.authed()) return;
-      void this.flushShopQueue();
+      void this.flushQueues();
       if (this.saveState() === 'error') void this.flush();
-      if (this.ui().screen === 'courses') void this.pollShopping();
+      if (this.ui().screen === 'courses' || this.ui().screen === 'taches') void this.pollLive();
     });
     setInterval(() => this.advanceClock(), 60_000);
   }
@@ -346,6 +354,9 @@ export class FoyerStore {
     const { state, version } = await this.api.getState();
     this._data.set(this.normalise(state));
     this.docVersion = version;
+    // Ce qui n'est pas encore parti n'a pas été vu du serveur : le rejouer
+    // par-dessus son document évite qu'une coche faite hors ligne clignote.
+    this.replayQueues();
     // Un rechargement complet repart du document du serveur : ce qui n'était pas
     // parti est perdu de toute façon, et le garder ferait réapparaître des
     // modifications que l'utilisateur croit abandonnées.
@@ -451,7 +462,7 @@ export class FoyerStore {
     setTimeout(poll, 3000);
   }
 
-  /** Derived (non-event) calendar items for a day: holidays, school holidays, birthdays, planned tasks. */
+  /** Derived (non-event) calendar items for a day: holidays, school holidays, birthdays, dated tasks. */
   dayExtras(ds: string): DayExtra[] {
     const d = this._data();
     if (!d) return [];
@@ -472,6 +483,9 @@ export class FoyerStore {
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
     s.articles ||= [];
+    s.tasks ||= [];
+    s.taskLists ||= [];
+    s.taskTemplates ||= [];
     s.settings ||= { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true };
     return s;
   }
@@ -652,6 +666,7 @@ export class FoyerStore {
     this.docVersion = version;
     const rep = rebase(this.normalise(serverState), this.pending);
     this._data.set(rep.state);
+    this.replayQueues();
     this.docLoadedAt.set(new Date().toISOString());
     if (rep.dropped) {
       // Le seul cas où du travail se perd : ce qu'on modifiait n'existe plus.
@@ -662,16 +677,26 @@ export class FoyerStore {
     }
   }
 
-  // ---- liste de courses : opérations, file et sondage ---------------------
+  // ---- courses et tâches : opérations, files et sondage ---------------------
   //
-  // La liste ne part plus dans `putState` : le serveur ignore ce champ. Toute
-  // mutation passe par une opération ciblée, ce qui rend impossible qu'un
-  // téléphone périmé décoche ce que l'autre vient de cocher.
+  // Ni la liste ni les tâches ne partent dans `putState` : le serveur ignore
+  // ces champs. Toute mutation passe par une opération ciblée, ce qui rend
+  // impossible qu'un téléphone périmé décoche ce que l'autre vient de cocher.
   //
   // Trois choses se passent ici, dans cet ordre :
   //   1. l'écran est mis à jour tout de suite, sans attendre le réseau ;
   //   2. l'opération est mise en file, et la file est persistée ;
   //   3. la file part au serveur, dont la réponse fait autorité.
+
+  /** Rejoue les deux files sur le document en mémoire, sans rien envoyer. */
+  private replayQueues(): void {
+    for (const op of this.shopQueue()) this.applyShopLocally(op);
+    for (const op of this.taskQueue()) this.applyTaskLocally(op);
+  }
+
+  private async flushQueues(): Promise<void> {
+    await Promise.all([this.flushShopQueue(), this.flushTaskQueue()]);
+  }
 
   private saveShopQueue(q: ShopOp[]): void {
     this.shopQueue.set(q);
@@ -740,68 +765,81 @@ export class FoyerStore {
     this.shopFlushing = true;
     try {
       const res = await this.api.shoppingOps(batch);
-      this.shopOffline.set(false);
+      this.syncOffline.set(false);
       // Retenues comme écartées, les opérations quittent la file : une
       // opération définitivement refusée qu'on rejouerait tournerait sans fin.
       const settled = new Set([...res.applied, ...res.skipped.map((k) => k.opId)]);
       this.saveShopQueue(this.shopQueue().filter((o) => !settled.has(o.opId)));
-      this.adoptShopping(res.version, res.items);
+      this.adoptShop(res.items);
       if (res.skipped.length) {
         // Le dire : un article qui n'arrive jamais dans la liste sans explication
         // est exactement ce qui fait abandonner l'outil.
         this.toast(res.skipped.length === 1 ? res.skipped[0].reason : res.skipped.length + ' modifications refusées');
       }
     } catch {
-      this.shopOffline.set(true);
+      this.syncOffline.set(true);
     } finally {
       this.shopFlushing = false;
     }
   }
 
-  /** Remplace la liste locale par celle du serveur, qui fait autorité. */
-  private adoptShopping(version: number, items: ShopItem[]): void {
-    this.shopVersion = version;
+  /**
+   * Remplace la liste locale par celle du serveur, qui fait autorité. Les
+   * opérations encore en file n'ont pas été vues du serveur : les rejouer
+   * par-dessus sa réponse évite qu'une coche faite hors ligne clignote.
+   */
+  private adoptShop(items: ShopItem[]): void {
     const cur = this._data(); if (!cur) return;
-    // Les opérations encore en file n'ont pas été vues du serveur : les rejouer
-    // par-dessus sa réponse évite qu'une coche faite hors ligne clignote.
     this._data.set({ ...cur, shop: items });
     for (const op of this.shopQueue()) this.applyShopLocally(op);
   }
 
-  /** Sondage différentiel : sans changement, la réponse tient en trois lignes. */
-  async pollShopping(): Promise<void> {
+  private adoptTasks(items: TaskItem[]): void {
+    const cur = this._data(); if (!cur) return;
+    this._data.set({ ...cur, tasks: items });
+    for (const op of this.taskQueue()) this.applyTaskLocally(op);
+  }
+
+  /**
+   * Sondage différentiel des deux sous-arbres : sans changement, la réponse
+   * tient en trois lignes. La version n'est retenue qu'ici : une réponse à un
+   * lot d'opérations ne dit rien de ce que l'autre appareil a pu écrire ailleurs.
+   */
+  async pollLive(): Promise<void> {
     if (!this.authed()) return;
     try {
-      const snap = await this.api.shopping(this.shopVersion);
-      this.shopOffline.set(false);
-      if (snap.unchanged || !snap.items) { this.shopVersion = snap.version; return; }
-      this.adoptShopping(snap.version, snap.items);
+      const snap = await this.api.live(this.liveVersion);
+      this.syncOffline.set(false);
+      this.liveVersion = snap.version;
+      if (snap.unchanged) return;
+      if (snap.shop) this.adoptShop(snap.shop);
+      if (snap.tasks) this.adoptTasks(snap.tasks);
     } catch {
-      this.shopOffline.set(true);
+      this.syncOffline.set(true);
     }
   }
 
   /** Cadence en cours, pour ne pas relancer la minuterie quand elle est déjà bonne. */
-  private shopPollMs = 0;
+  private livePollMs = 0;
 
-  private startShopPolling(cadence: number): void {
-    if (this.shopPollTimer && this.shopPollMs === cadence) return;
-    this.stopShopPolling();
-    this.shopPollMs = cadence;
-    void this.flushShopQueue();
-    void this.pollShopping();
-    this.shopPollTimer = setInterval(() => {
+  private startLivePolling(cadence: number): void {
+    if (this.livePollTimer && this.livePollMs === cadence) return;
+    this.stopLivePolling();
+    this.livePollMs = cadence;
+    void this.flushQueues();
+    void this.pollLive();
+    this.livePollTimer = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
-      void this.flushShopQueue();
-      void this.pollShopping();
+      void this.flushQueues();
+      void this.pollLive();
     }, cadence);
   }
 
-  private stopShopPolling(): void {
-    if (!this.shopPollTimer) return;
-    clearInterval(this.shopPollTimer);
-    this.shopPollTimer = null;
-    this.shopPollMs = 0;
+  private stopLivePolling(): void {
+    if (!this.livePollTimer) return;
+    clearInterval(this.livePollTimer);
+    this.livePollTimer = null;
+    this.livePollMs = 0;
   }
 
   toast(msg: string): void {
@@ -865,7 +903,7 @@ export class FoyerStore {
     const hits: SearchHit[] = [];
     const push = (h: SearchHit): void => { hits.push(h); };
     for (const c of d.contacts) if (normText(`${c.name} ${c.role} ${c.phone || ''} ${c.email || ''} ${c.cat || ''}`).includes(q)) push({ kind: 'contact', icon: 'phone', color: c.color || '#4E93B8', title: c.name, sub: c.role || 'Contact', screen: 'contacts', id: c.id });
-    for (const t of d.tasks) if (normText(t.text).includes(q)) push({ kind: 'task', icon: 'task', color: '#6E9E5F', title: t.text, sub: 'Tâche' + (t.who ? ' · ' + mname(t.who) : ''), screen: 'taches', id: t.id });
+    for (const t of d.tasks) if (normText(t.text).includes(q)) push({ kind: 'task', icon: 'task', color: '#6E9E5F', title: t.text, sub: 'Tâche' + (t.who.length ? ' · ' + t.who.map(mname).join(', ') : ''), screen: 'taches', id: t.id });
     for (const e of d.events) if (normText(e.title).includes(q)) push({ kind: 'event', icon: 'calendar', color: '#4E93B8', title: e.title, sub: 'Événement · ' + e.date, screen: 'calendar', id: e.id });
     for (const s of d.shop) if (normText(s.name).includes(q)) push({ kind: 'shop', icon: 'panier', color: '#E08D3C', title: s.name, sub: 'Course' + (s.qty ? ' · ' + s.qty : ''), screen: 'courses', id: s.id });
     for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
@@ -1103,103 +1141,239 @@ export class FoyerStore {
     this.toast('Rayon supprimé');
   }
 
-  // ---- tasks ------------------------------------------------------------
-  toggleTask(id: string): void { this.mutate((d) => { const t = d.tasks.find((x) => x.id === id); if (t) t.done = !t.done; }); }
-  activeTaskListId(): string { const s = this.ui(); return s.activeList !== 'all' ? s.activeList : (this._data()?.taskLists[0]?.id || ''); }
-  addTaskQuick(): void {
-    if (this.addTask(this.ui().newTask)) this.patch({ newTask: '' });
+  // ---- tâches : opérations, file et annulation -----------------------------
+  //
+  // Même dispositif que les courses, ci-dessus. Ce qui s'annule s'annule par
+  // l'opération inverse (voir task-ops.ts), jamais par une remise en bloc du
+  // tableau, qui effacerait ce que l'autre appareil vient d'écrire.
+
+  private saveTaskQueue(q: TaskOp[]): void {
+    this.taskQueue.set(q);
+    try { localStorage.setItem(TASK_QUEUE_KEY, JSON.stringify(q)); } catch { /* quota : la file reste en mémoire */ }
+  }
+
+  private applyTaskLocally(op: TaskOp): void {
+    const cur = this._data(); if (!cur) return;
+    this._data.set({ ...cur, tasks: applyTaskOp(cur.tasks, op) });
+  }
+
+  /** Empile une ou plusieurs opérations : affichage immédiat, envoi groupé. */
+  private pushTaskOps(ops: TaskOpDraft[]): void {
+    const by = this.me()?.id ?? null;
+    const at = new Date().toISOString();
+    const full = ops.map((o) => ({ ...o, opId: uid('op'), by, at }) as TaskOp);
+    for (const op of full) this.applyTaskLocally(op);
+    this.saveTaskQueue([...this.taskQueue(), ...full]);
+    if (this.taskFlushTimer) clearTimeout(this.taskFlushTimer);
+    this.taskFlushTimer = setTimeout(() => void this.flushTaskQueue(), 300);
   }
 
   /**
-   * Crée une tâche à partir d'un texte libre, et rend son identifiant. Utilisée
-   * par la saisie de l'écran Tâches comme par celle de l'accueil : une seule
-   * écriture de ce que « ajouter une tâche » veut dire.
+   * Envoie la file. Une liste créée à l'instant part par l'enregistrement du
+   * document : il passe d'abord, sinon le serveur refuserait la tâche pour
+   * une liste qu'il ne connaît pas encore.
    */
-  addTask(text: string): string | null {
-    const t = text.trim(); if (!t) return null;
-    const listId = this.activeTaskListId();
+  async flushTaskQueue(): Promise<void> {
+    if (this.taskFlushing || !this.authed() || !this.taskQueue().length) return;
+    if (this.saving) { setTimeout(() => void this.flushTaskQueue(), 500); return; }
+    if (this.pending.length) { await this.flush(); if (this.saveState() === 'error') return; }
+    const batch = this.taskQueue();
+    if (!batch.length) return;
+    this.taskFlushing = true;
+    try {
+      const res = await this.api.taskOps(batch);
+      this.syncOffline.set(false);
+      const settled = new Set([...res.applied, ...res.skipped.map((k) => k.opId)]);
+      this.saveTaskQueue(this.taskQueue().filter((o) => !settled.has(o.opId)));
+      this.adoptTasks(res.items);
+      if (res.skipped.length) {
+        // Le dire : une coche refusée sans explication est exactement ce qui
+        // ferait douter de toutes les autres.
+        this.toast(res.skipped.length === 1 ? 'Refusé : ' + res.skipped[0].reason : res.skipped.length + ' modifications de tâches refusées');
+      }
+    } catch {
+      this.syncOffline.set(true);
+    } finally {
+      this.taskFlushing = false;
+    }
+  }
+
+  /** Une opération et son annulation, offerte quelques secondes. */
+  private taskOpWithUndo(op: TaskOpDraft, msg: string): void {
+    const back = inverseOf(op, this.task(op.id));
+    this.pushTaskOps([op]);
+    if (back) this.toastWithUndo(msg, () => this.pushTaskOps([back]));
+    else this.toast(msg);
+  }
+
+  private taskOpsWithUndo(ops: TaskOpDraft[], msg: string): void {
+    const backs = ops.map((op) => inverseOf(op, this.task(op.id))).filter((b): b is TaskOpDraft => !!b);
+    this.pushTaskOps(ops);
+    if (backs.length) this.toastWithUndo(msg, () => this.pushTaskOps(backs));
+    else this.toast(msg);
+  }
+
+  task(id: string): TaskItem | undefined { return this._data()?.tasks.find((t) => t.id === id); }
+
+  /** Les listes que ce membre a le droit de voir. */
+  visibleTaskLists(includeArchived = false): TaskList[] {
+    return visibleLists(this._data()?.taskLists || [], this.currentMemberId(), includeArchived);
+  }
+
+  /** La liste où atterrit une saisie : celle qui est ouverte, sinon la première liste « tâches » visible. */
+  activeTaskListId(): string {
+    const lists = this.visibleTaskLists();
+    const a = this.ui().activeList;
+    if (a !== 'all' && lists.some((l) => l.id === a)) return a;
+    return (lists.find((l) => l.kind === 'taches') || lists[0])?.id || '';
+  }
+
+  taskSuggestions(listId: string, typed: string): string[] { return suggestTexts(this._data()?.tasks || [], listId, typed); }
+  taskCategories(): string[] { return categories(this._data()?.tasks || []); }
+
+  /**
+   * Crée une tâche depuis la saisie rapide, et rend son identifiant. Utilisée par
+   * l'écran Tâches comme par l'accueil : une seule écriture de ce que « ajouter
+   * une tâche » veut dire.
+   */
+  createTask(draft: TaskDraft): string | null {
+    const text = draft.text.trim(); if (!text) return null;
+    const listId = draft.listId || this.activeTaskListId();
     if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
     const id = uid('t');
-    this.mutate((d) => {
-      d.tasks.unshift({ id, text: t, who: this.me()?.id || this.members()[0]?.id || 'cam', due: "Aujourd'hui", done: false, listId, prio: 'med' });
-    });
+    this.pushTaskOps([{
+      op: 'add', id, listId, text, who: draft.who, due: draft.due || null, time: draft.due ? draft.time || null : null,
+      cat: draft.cat.trim(), note: draft.note.trim(),
+    }]);
     return id;
   }
 
-  /**
-   * Coche une tâche depuis une liste où elle disparaît aussitôt. Le retour en
-   * arrière est offert : sans lui, une coche de travers oblige à ouvrir le
-   * module pour la défaire.
-   */
-  toggleTaskWithUndo(id: string): void {
-    const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return;
-    const etait = t.done;
-    this.toggleTask(id);
-    this.toastWithUndo(etait ? 'Tâche rouverte' : 'Tâche faite', () => this.toggleTask(id));
+  updateTask(id: string, fields: TaskFields): void { this.pushTaskOps([{ op: 'edit', id, ...fields }]); }
+
+  /** Un tap : faite, ou rouverte. Le retour en arrière est offert. */
+  toggleTask(id: string): void {
+    const t = this.task(id); if (!t) return;
+    this.taskOpWithUndo(t.done ? { op: 'reopen', id } : { op: 'done', id }, t.done ? 'Tâche rouverte' : 'Tâche faite');
   }
 
-  /**
-   * Reporte une tâche au lendemain. C'est la date **planifiée** qui bouge, celle
-   * que le calendrier lit ; l'échéance en texte libre reste ce que
-   * l'utilisateur a écrit, l'application n'a pas à réécrire ses mots.
-   */
-  postponeTask(id: string): void {
-    const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return;
-    const avant = t.planned ?? null;
-    const demain = this.addDays(this.todayStr(), 1);
-    this.mutate((d) => { const x = d.tasks.find((y) => y.id === id); if (x) x.planned = demain; });
-    this.toastWithUndo('Reportée à demain', () => {
-      this.mutate((d) => { const x = d.tasks.find((y) => y.id === id); if (x) x.planned = avant; });
-    });
+  /** Reporte une tâche : à demain par défaut. */
+  postponeTask(id: string, to = this.addDays(this.todayStr(), 1)): void {
+    if (!this.task(id)) return;
+    const demain = to === this.addDays(this.todayStr(), 1);
+    this.taskOpWithUndo({ op: 'edit', id, due: to }, demain ? 'Reportée à demain' : to === this.todayStr() ? 'Reportée à aujourd’hui' : 'Reportée au ' + this.fmtNumDate(to));
+  }
+
+  /** Report en masse, avec une seule annulation pour tout le lot. */
+  postponeTasks(ids: string[], to: string): void {
+    const ops: TaskOpDraft[] = ids.filter((id) => !!this.task(id)).map((id) => ({ op: 'edit', id, due: to }));
+    if (!ops.length) return;
+    const quand = to === this.todayStr() ? 'à aujourd’hui' : to === this.addDays(this.todayStr(), 1) ? 'à demain' : 'au ' + this.fmtNumDate(to);
+    this.taskOpsWithUndo(ops, ops.length + (ops.length > 1 ? ' tâches reportées ' : ' tâche reportée ') + quand);
+  }
+
+  removeTask(id: string): void {
+    if (!this.task(id)) return;
+    this.patch({ taskEdit: null });
+    this.taskOpWithUndo({ op: 'remove', id }, 'Tâche supprimée');
+  }
+
+  /** Une checklist se refait : tout décocher, d'un geste, annulable. */
+  uncheckAll(listId: string): void {
+    const ops: TaskOpDraft[] = (this._data()?.tasks || []).filter((t) => t.listId === listId && t.done).map((t) => ({ op: 'reopen', id: t.id }));
+    if (!ops.length) { this.toast('Rien à décocher'); return; }
+    this.taskOpsWithUndo(ops, ops.length + (ops.length > 1 ? ' cases décochées' : ' case décochée'));
   }
 
   /** Décalage en jours sur une date ISO, dans le calendrier du foyer. */
   addDays = addDaysIso;
+
   /**
    * Tâche créée depuis un autre module. C'est une **copie ponctuelle**, assumée :
    * si la date du contrat bouge ensuite, la tâche ne suit pas. Une tâche que
    * l'utilisateur peut cocher, déplacer et supprimer doit lui appartenir, pas
    * réapparaître parce qu'une table dit autre chose.
    */
-  addExternalTask(text: string, plannedOn: string, memberId: string | null = null): string | null {
+  addExternalTask(text: string, due: string, who: string[] = []): string | null {
     const listId = this.activeTaskListId();
     if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
     const id = uid('t');
-    this.mutate((d) => {
-      d.tasks.unshift({
-        id, text, who: memberId || this.members()[0]?.id || 'cam',
-        due: this.fmtNumDate(plannedOn), done: false, listId, prio: 'high', planned: plannedOn,
-      });
-    });
+    this.pushTaskOps([{ op: 'add', id, listId, text, who, due }]);
     this.toast('Tâche ajoutée');
     return id;
   }
 
-  openTask(): void { this.patch({ showTask: true, taskEditId: null, tTitle: '', tWho: this.members()[0]?.id || 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: this.activeTaskListId(), tPlanned: '' }); }
-  editTaskItem(id: string): void { const t = this._data()?.tasks.find((x) => x.id === id); if (!t) return; this.patch({ showTask: true, taskEditId: id, tTitle: t.text, tWho: t.who, tDue: t.due, tPrio: t.prio || 'med', tListId: t.listId, tPlanned: t.planned || '' }); }
-  saveTask(): void {
-    const s = this.ui(); const t = s.tTitle.trim(); if (!t) { this.toast('Donne un intitulé à la tâche'); return; }
-    const planned = s.tPlanned || null;
-    this.mutate((d) => {
-      if (s.taskEditId) { const i = d.tasks.findIndex((x) => x.id === s.taskEditId); if (i >= 0) d.tasks[i] = { ...d.tasks[i], text: t, who: s.tWho, due: s.tDue, prio: s.tPrio, listId: s.tListId, planned }; }
-      else d.tasks.unshift({ id: uid('t'), text: t, who: s.tWho, due: s.tDue, done: false, prio: s.tPrio, listId: s.tListId, planned });
-    });
-    this.toast(s.taskEditId ? 'Tâche modifiée' : 'Tâche ajoutée');
-    this.patch({ showTask: false, taskEditId: null });
+  openTask(): void { this.patch({ taskNew: true }); }
+  editTaskItem(id: string): void { if (this.task(id)) this.patch({ taskEdit: id }); }
+
+  // ---- listes de tâches et modèles -------------------------------------------
+  // Elles s'éditent par l'enregistrement du document : ce sont des réglages,
+  // pas des coches, et le serveur en tire lui-même les conséquences pour les tâches.
+
+  newTaskList(kind: ListKind = 'taches'): void {
+    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: kind === 'taches' ? 'maison' : 'checklist', lKind: kind, lScope: 'shared' });
   }
-  delTask(): void { const id = this.ui().taskEditId; if (!id) return; this.mutate((d) => { d.tasks = d.tasks.filter((x) => x.id !== id); }); this.patch({ showTask: false, taskEditId: null }); this.toast('Tâche supprimée'); }
-  newTaskList(): void { this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist' }); }
-  editTaskList(id: string): void { const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return; this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist' }); }
+  editTaskList(id: string): void {
+    const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return;
+    this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope });
+  }
   saveTaskList(): void {
     const s = this.ui(); const name = s.lName.trim(); if (!name) { this.toast('Donne un nom à la liste'); return; }
-    if (s.listEditId) { this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon }; }); this.toast('Liste modifiée'); this.patch({ listForm: false, listEditId: null }); }
-    else { const id = uid('l'); this.mutate((d) => { d.taskLists.push({ id, name, color: s.lColor, icon: s.lIcon }); }); this.patch({ listForm: false, activeList: id }); this.toast('Liste créée'); }
+    if (s.listEditId) {
+      this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon, kind: s.lKind, scope: s.lScope }; });
+      this.toast('Liste modifiée');
+      this.patch({ listForm: false, listEditId: null });
+      return;
+    }
+    const id = this.createTaskList(name, s.lColor, s.lIcon, s.lKind, s.lScope);
+    this.patch({ listForm: false, activeList: id });
+    this.toast('Liste créée');
+  }
+  private createTaskList(name: string, color: string, icon: string, kind: ListKind, scope: string): string {
+    const id = uid('l');
+    this.mutate((d) => {
+      const position = d.taskLists.reduce((m, l) => Math.max(m, l.position ?? 0), -1) + 1;
+      d.taskLists.push({ id, name, color, icon, kind, scope, position });
+    });
+    return id;
+  }
+  /** Archiver range une liste sans rien perdre ; c'est réversible, et proposé tout de suite. */
+  archiveTaskList(id: string, archived: boolean): void {
+    this.mutate((d) => { const l = d.taskLists.find((x) => x.id === id); if (l) l.archived = archived; });
+    if (this.ui().activeList === id && archived) this.patch({ activeList: 'all' });
+    this.toastWithUndo(archived ? 'Liste archivée' : 'Liste restaurée', () => this.archiveTaskList(id, !archived));
   }
   confirmTaskListDel(): void {
     const id = this.ui().listDelId; if (!id) return;
+    // Les tâches partent avec la liste : le serveur le fait de son côté, l'écran l'anticipe.
     this.mutate((d) => { d.taskLists = d.taskLists.filter((l) => l.id !== id); d.tasks = d.tasks.filter((t) => t.listId !== id); });
     this.patch({ listDelId: null, activeList: this.ui().activeList === id ? 'all' : this.ui().activeList });
     this.toast('Liste supprimée');
+  }
+
+  /** Le contenu d'une liste devient un modèle : ses intitulés, faits ou non, dans l'ordre. */
+  saveListAsTemplate(listId: string): void {
+    const d = this._data(); const l = d?.taskLists.find((x) => x.id === listId); if (!d || !l) return;
+    const items = d.tasks.filter((t) => t.listId === listId).sort((a, b) => (a.at || '').localeCompare(b.at || '')).map((t) => t.text);
+    if (!items.length) { this.toast('La liste est vide, rien à retenir'); return; }
+    this.mutate((dd) => { dd.taskTemplates.push({ id: uid('tp'), name: l.name, kind: l.kind, color: l.color, icon: l.icon, items }); });
+    this.toast('Modèle « ' + l.name + ' » enregistré, ' + items.length + (items.length > 1 ? ' lignes' : ' ligne'));
+  }
+
+  /**
+   * Une liste neuve à partir d'un modèle. La liste part par le document, ses
+   * lignes par opérations : l'envoi de la file attend que le document soit passé.
+   */
+  createListFromTemplate(tplId: string): void {
+    const tpl = this._data()?.taskTemplates.find((t) => t.id === tplId); if (!tpl) return;
+    const listId = this.createTaskList(tpl.name, tpl.color, tpl.icon, tpl.kind, 'shared');
+    const base = Date.now();
+    this.pushTaskOps(tpl.items.map((text, i) => ({ op: 'add' as const, id: uid('t'), listId, text, who: [], due: null, at: new Date(base + i).toISOString() })));
+    this.patch({ tplOpen: false, activeList: listId });
+    this.toast('Liste « ' + tpl.name + ' » créée');
+  }
+  deleteTemplate(id: string): void {
+    this.mutate((d) => { d.taskTemplates = d.taskTemplates.filter((t) => t.id !== id); });
+    this.toast('Modèle supprimé');
   }
 
   // ---- messages ---------------------------------------------------------
@@ -1424,12 +1598,7 @@ export class FoyerStore {
     const taskList = this.activeTaskListId();
     if (!taskList) { this.toast('Créez d’abord une liste de tâches'); return; }
     const intitule = shoppingTaskLabel(d.shopLists.find((l) => l.id === listId)?.name || '');
-    this.mutate((dd) => {
-      dd.tasks.unshift({
-        id: uid('t'), text: intitule, who: this.me()?.id || this.members()[0]?.id || '',
-        due: "Aujourd'hui", done: false, listId: taskList, prio: 'med', planned: null, shopListId: listId,
-      });
-    });
+    this.pushTaskOps([{ op: 'add', id: uid('t'), listId: taskList, text: intitule, who: [], due: null, shopListId: listId }]);
     this.toast('Tâche ajoutée : « ' + intitule + ' »');
   }
 
@@ -2479,11 +2648,12 @@ export class FoyerStore {
     for (const e of this.eventsForDay(today)) raw.push({ id: `ev-${e.id}-${today}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + "Aujourd'hui" + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: "Aujourd'hui" });
     for (const e of this.eventsForDay(tomorrow)) raw.push({ id: `ev-${e.id}-${tomorrow}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + 'Demain' + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: 'Demain' });
 
-    // Tâches planifiées : à faire aujourd'hui / en retard
-    for (const t of d.tasks) {
-      if (t.done || !t.planned) continue;
-      if (t.planned === today) raw.push({ id: `task-${t.id}-${t.planned}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.who ? ' · ' + mName(t.who) : ''), time: "Aujourd'hui" });
-      else if (t.planned < today) raw.push({ id: `task-${t.id}-${t.planned}`, kind: 'task', title: t.text, desc: 'En retard (prévue le ' + this.fmtNumDate(t.planned) + ')', time: 'En retard' });
+    // Tâches datées de l'affaire du jour : à faire aujourd'hui / en retard
+    for (const t of dailyTasks(d.tasks, d.taskLists, this.currentMemberId())) {
+      if (t.done || !t.due) continue;
+      const qui = t.who.length ? ' · ' + t.who.map(mName).join(', ') : '';
+      if (t.due === today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.time ? ' à ' + t.time : '') + qui, time: "Aujourd'hui" });
+      else if (t.due < today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: 'En retard (prévue le ' + this.fmtNumDate(t.due) + ')' + qui, time: 'En retard' });
     }
 
     // Anniversaires : aujourd'hui + 7 jours (membres & contacts)

@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 8;
+export const STATE_VERSION = 9;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -362,7 +362,90 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       if (marques) ctx.log(`${marques} créneau(x) d'école ou de travail marqué(s) « hors du foyer ».`);
     },
   },
+  {
+    version: 9,
+    label: 'tâches : échéance datée, affectation multiple, listes typées',
+    up: (doc, ctx) => {
+      // Les tâches passent d'un formulaire (échéance en texte libre, un seul
+      // membre obligatoire, priorité) à un modèle comparable : une date ISO, une
+      // liste de membres qui peut être vide, une catégorie. Voir docs/taches.md.
+      const membres = new Set(arr(doc['members']).map((m) => String(m?.['id'] ?? '')));
+
+      arr(doc['taskLists']).forEach((l, i) => {
+        if (!LIST_KINDS.includes(l['kind'])) l['kind'] = 'taches';
+        if (typeof l['scope'] !== 'string' || !l['scope']) l['scope'] = 'shared';
+        if (typeof l['position'] !== 'number') l['position'] = i;
+      });
+      if (!Array.isArray(doc['taskTemplates'])) doc['taskTemplates'] = [];
+
+      let inconnus = 0;
+      let dates = 0;
+      let notes = 0;
+      let puces = 0;
+      const hautes: string[] = [];
+      for (const t of arr(doc['tasks'])) {
+        // Affectation : un seul membre devient une liste ; un membre disparu
+        // laisse la tâche « sans responsable », ce qui est licite.
+        if (typeof t['who'] === 'string') {
+          const w = t['who'];
+          t['who'] = membres.has(w) ? [w] : [];
+          if (w && !membres.has(w)) inconnus++;
+        } else if (!Array.isArray(t['who'])) {
+          t['who'] = [];
+        }
+
+        // Échéance : la date planifiée était la vraie date ; le texte libre est
+        // converti quand il se lit, recopié en note sinon, jamais perdu.
+        if ('planned' in t || typeof t['due'] !== 'string' || (t['due'] && !ISO_DAY.test(t['due']))) {
+          const planned = typeof t['planned'] === 'string' && ISO_DAY.test(t['planned']) ? t['planned'] : null;
+          const libre = typeof t['due'] === 'string' ? t['due'].trim() : '';
+          if (planned) t['due'] = planned;
+          else if (ISO_DAY.test(libre)) t['due'] = libre;
+          else {
+            const lue = readFrenchDate(libre);
+            if (lue) { t['due'] = lue; dates++; }
+            else {
+              t['due'] = null;
+              if (libre && DEFAULT_CHIPS.has(normaliseChip(libre))) puces++;
+              else if (libre) { t['note'] = t['note'] ? libre + '\n' + t['note'] : libre; notes++; }
+            }
+          }
+          delete t['planned'];
+        }
+
+        // La priorité disparaît : un badge rouge « Haute » est exactement
+        // l'affichage anxiogène que le module refuse désormais.
+        if ('prio' in t) {
+          if (t['prio'] === 'high') hautes.push(String(t['text'] ?? t['id']));
+          delete t['prio'];
+        }
+        if (typeof t['done'] !== 'boolean') t['done'] = !!t['done'];
+      }
+
+      if (inconnus) ctx.log(`Tâches : ${inconnus} affectation(s) à un membre disparu retirée(s), les tâches sont sans responsable.`);
+      if (dates) ctx.log(`Tâches : ${dates} échéance(s) écrite(s) en JJ/MM/AAAA converties en date.`);
+      if (notes) ctx.log(`Tâches : ${notes} échéance(s) en texte libre recopiée(s) dans la note de la tâche, sans date.`);
+      if (puces) ctx.log(`Tâches : ${puces} échéance(s) « Aujourd'hui », « Demain » ou « Cette semaine » abandonnée(s), sans rapport avec une date réelle.`);
+      if (hautes.length) ctx.log(`Tâches : la priorité disparaît ; ${hautes.length} tâche(s) étaient « Haute » : ${hautes.join(', ')}.`);
+    },
+  },
 ];
+
+const LIST_KINDS = ['taches', 'corvees', 'checklist'];
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** Les puces d'échéance du formulaire d'avant, posées par défaut sur chaque tâche. */
+const DEFAULT_CHIPS = new Set(['aujourdhui', 'demain', 'cette semaine']);
+const normaliseChip = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’]/g, '');
+
+/** « 05/09/2026 » vers « 2026-09-05 ». Rend null sur tout le reste. */
+export function readFrenchDate(value: string): string | null {
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+  if (!m) return null;
+  const d = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  return `${m[3]}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
 
 /**
  * Durée écrite à la française vers minutes : « 45 min », « 1 h 30 », « 1h30 »,

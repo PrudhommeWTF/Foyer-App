@@ -2,9 +2,10 @@
 //
 // Ces gestes s'exécutent en un tap, souvent debout, sur des données que
 // personne ne relit avant de les perdre. Ce qui est vérifié ici est donc moins
-// « ça marche » que « ça ne détruit rien en silence » : le report garde ce qu'il
-// remplace, le remplacement d'un repas garde les convives, et l'annulation
-// ramène exactement l'état d'avant.
+// « ça marche » que « ça ne détruit rien en silence » : le remplacement d'un
+// repas garde les convives, et l'annulation ramène exactement l'état d'avant.
+// Les gestes sur les tâches (coche, report, annulation) sont des opérations
+// ciblées, vérifiées dans task-ops.test.ts.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { addDaysIso } from './helpers';
@@ -16,7 +17,7 @@ const TODAY = '2026-09-02';
 const doc = (): HouseholdState => ({
   familyName: 'Foyer',
   members: [{ id: 'me', name: 'Thomas', role: 'Papa', color: '#E56B4E', ini: 'TH' }],
-  events: [], aisles: [], articles: [], shopLists: [], shop: [], taskLists: [], tasks: [],
+  events: [], aisles: [], articles: [], shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [],
   msgs: [], contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: 'me' },
   settings: { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true },
@@ -24,24 +25,6 @@ const doc = (): HouseholdState => ({
 
 /** Applique des mutations comme le store le fait, sans Angular. */
 const apply = (d: HouseholdState, ...fns: Mutation[]): HouseholdState => rebase(d, fns).state;
-
-test('reporter à demain déplace la date planifiée, pas l’échéance écrite à la main', () => {
-  const d = doc();
-  d.tasks = [{ id: 't1', text: 'Notaire', who: 'me', due: 'avant vendredi', done: false, listId: 'l1', prio: 'med', planned: TODAY }];
-  const demain = addDaysIso(TODAY, 1);
-  const out = apply(d, (x) => { const t = x.tasks.find((y) => y.id === 't1'); if (t) t.planned = demain; });
-  assert.equal(out.tasks[0].planned, demain);
-  assert.equal(out.tasks[0].due, 'avant vendredi', 'l’application ne réécrit pas les mots de l’utilisateur');
-});
-
-test('annuler un report ramène exactement l’état d’avant, y compris « pas de date »', () => {
-  const d = doc();
-  d.tasks = [{ id: 't1', text: 'Notaire', who: 'me', due: '', done: false, listId: 'l1', prio: 'med' }];
-  const avant = d.tasks[0].planned ?? null;
-  const reporte = apply(d, (x) => { const t = x.tasks.find((y) => y.id === 't1'); if (t) t.planned = addDaysIso(TODAY, 1); });
-  const annule = apply(reporte, (x) => { const t = x.tasks.find((y) => y.id === 't1'); if (t) t.planned = avant; });
-  assert.equal(annule.tasks[0].planned, null, 'une tâche sans date le redevient, elle ne garde pas la date du report');
-});
 
 test('le report traverse un changement de mois', () => {
   assert.equal(addDaysIso('2026-09-30', 1), '2026-10-01');

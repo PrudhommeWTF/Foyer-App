@@ -1,7 +1,6 @@
 // Domain models for the Foyer household state.
 
 export type Recur = 'none' | 'daily' | 'weekday' | 'weekly' | 'monthly';
-export type Prio = 'low' | 'med' | 'high';
 export type SchedType = 'ecole' | 'travail' | 'sport' | 'loisir' | 'sante' | 'repas' | 'autre';
 export type ContactCat = 'Urgences' | 'Santé' | 'École' | 'Famille' | 'Maison' | 'Autre';
 export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
@@ -59,14 +58,56 @@ export interface ShopItem {
    */
   art?: string | null; gen?: boolean | null;
 }
-export interface TaskList { id: string; name: string; color: string; icon: string; }
-export interface TaskItem { id: string; text: string; who: string; due: string; done: boolean; listId: string; prio: Prio; planned?: string | null;
+/**
+ * Type d'une liste de tâches. Seules les listes `taches` sont l'affaire du
+ * jour : elles comptent dans « Toutes » et sur l'accueil. Une liste de corvées
+ * ou une checklist (valise, fournitures, idées) vit dans son propre onglet,
+ * sans peser sur la journée. C'est ce qui range « la tâche qui n'aurait jamais
+ * dû en être une » : une liste d'idées est une checklist, hors du quotidien.
+ */
+export type ListKind = 'taches' | 'corvees' | 'checklist';
+export interface TaskList {
+  id: string; name: string; color: string; icon: string;
+  kind: ListKind;
+  /**
+   * 'shared', ou l'identifiant du membre pour une liste privée. Privée veut
+   * dire **cachée** aux autres membres, pas chiffrée : le document du foyer est
+   * lu en entier par tout compte authentifié.
+   */
+  scope: string;
+  position: number;
+  archived?: boolean;
+}
+/** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
+export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }
+/**
+ * Une tâche. Elle ne voyage plus dans l'enregistrement du document : chaque
+ * geste est une opération ciblée (voir task-ops.ts), ce qui rend impossible
+ * qu'un téléphone périmé décoche ce que l'autre vient de cocher.
+ */
+export interface TaskItem {
+  id: string; listId: string; text: string;
+  note?: string;
+  /** Catégorie libre : « Maison », « Administratif »… Sert à organiser, pas à filtrer le jour. */
+  cat?: string;
+  /** Membres affectés. Vide veut dire « le premier qui passe », et c'est licite. */
+  who: string[];
+  /** Échéance, AAAA-MM-JJ. Null : aucun jour en particulier. */
+  due: string | null;
+  /** Heure de l'échéance, HH:MM. Ignorée sans `due`. */
+  time?: string | null;
+  done: boolean;
+  /** Qui a coché, et quand. Sert à l'afficher, pas à arbitrer. */
+  doneAt?: string | null; doneBy?: string | null;
+  /** Auteur et date de création. */
+  by?: string | null; at?: string | null;
   /**
    * Liste de courses que cette tâche ouvre. La tâche reste entièrement à
    * l'utilisateur (il la coche, la déplace, la supprime) : le lien n'est qu'un
    * raccourci, et le compte des articles restants, une information de plus.
    */
-  shopListId?: string | null; }
+  shopListId?: string | null;
+}
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
@@ -192,6 +233,7 @@ export interface HouseholdState {
   shopLists: ShopList[];
   shop: ShopItem[];
   taskLists: TaskList[];
+  taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
   msgs: Message[];
   contacts: Contact[];

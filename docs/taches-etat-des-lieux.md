@@ -1,7 +1,10 @@
 # Module Tâches : état des lieux et proposition
 
-Document de travail préalable au chantier « parité FamilyWall et intégration ».
-Rien de ce qui est décrit ici n'est encore codé : c'est la base de la décision.
+Document de travail préalable au chantier « parité FamilyWall et intégration »,
+validé sur ses quatre points. La tranche 1 (socle, migration, concurrence, hors
+ligne, saisie rapide) est livrée : ce qu'elle fait réellement est décrit dans
+[`taches.md`](taches.md). Le reste de ce document est l'état des lieux tel
+qu'il a servi à décider, conservé tel quel.
 
 Lecture faite sur `main` au 3 septembre 2026 : `README.md`, `backend/src/`
 (serveur, document d'état, couche courses, migrations), `frontend/src/app/`

@@ -7,8 +7,8 @@ import { Mutation, asConflict, rebase } from './state-sync';
 
 const doc = (): HouseholdState => ({
   familyName: 'Foyer', members: [], events: [], aisles: [], articles: [],
-  shopLists: [], shop: [], taskLists: [], tasks: [
-    { id: 't1', text: 'Sortir le verre', who: 'me', due: '', done: false, listId: 'l1', prio: 'med' },
+  shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [
+    { id: 't1', text: 'Sortir le verre', who: ['me'], due: null, done: false, listId: 'l1' },
   ],
   msgs: [], contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
