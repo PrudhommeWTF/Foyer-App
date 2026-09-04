@@ -35,7 +35,7 @@ import { contactIni } from '../core/helpers';
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="40" />
               <div class="minfo">
                 <div class="mname">{{ m.name }} @if (m.admin) { <span class="admin">admin</span> }</div>
-                <div class="mrole">{{ m.role }}@if (store.memberHasAccount(m.id)) { <span class="acct" [title]="store.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }</div>
+                <div class="mrole">{{ m.role }}@if (store.isAdmin() && store.memberHasAccount(m.id)) { <span class="acct" [title]="store.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }</div>
               </div>
               @if (store.isAdmin()) {
                 <button class="icon-btn sm" title="Gérer l'accès" (click)="store.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="store.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>

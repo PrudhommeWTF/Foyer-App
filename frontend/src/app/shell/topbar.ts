@@ -3,7 +3,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { FinancesStore } from '../core/finances.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
-import { ADD_MENU } from './nav';
+import { ADD_MENU, AJOUTS_ADULTES } from './nav';
 import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 
 @Component({
@@ -42,7 +42,7 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
         </button>
         @if (store.ui().addMenuOpen) {
           <div class="menu fscroll">
-            @for (a of menu; track a.id) {
+            @for (a of menu(); track a.id) {
               @if (a.id === 'recipe') { <div class="sep"></div> }
               <button class="menu-item" (click)="pick(a.id)">
                 <span class="mi-ic" [style.background]="a.tint"><f-icon [name]="a.icon" [size]="20" [color]="a.color" /></span>
@@ -91,7 +91,7 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 export class TopbarComponent {
   store = inject(FoyerStore);
   private finances = inject(FinancesStore);
-  menu = ADD_MENU;
+  menu = computed(() => (this.store.isChild() ? ADD_MENU.filter((a) => !AJOUTS_ADULTES.has(a.id)) : ADD_MENU));
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   title = computed(() => {
     const s = this.store.ui().screen;

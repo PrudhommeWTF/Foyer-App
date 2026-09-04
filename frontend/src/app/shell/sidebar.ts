@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
-import { NAV_GROUPS } from './nav';
+import { navGroupsFor } from './nav';
 
 /**
  * Largeur du menu : un choix d'écran, pas un réglage du foyer. Il reste donc
@@ -29,7 +29,7 @@ const FOLD_KEY = 'foyer.menuReduit';
       </div>
 
       <nav class="nav fscroll">
-        @for (g of groups; track g.title) {
+        @for (g of groups(); track g.title) {
           @if (g.title) {
             <!-- Replié, le titre de groupe n'a plus la place de s'écrire ; un filet
                  garde au moins la coupure, sinon les onze icônes se confondent. -->
@@ -119,7 +119,7 @@ const FOLD_KEY = 'foyer.menuReduit';
 })
 export class SidebarComponent {
   store = inject(FoyerStore);
-  groups = NAV_GROUPS;
+  groups = computed(() => navGroupsFor(this.store.isChild()));
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
   readonly reduit = signal(read());

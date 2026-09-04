@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
-import { MOBILE_TABS, NAV_GROUPS } from './nav';
+import { MOBILE_TABS, navGroupsFor } from './nav';
 
 @Component({
   selector: 'app-tabbar',
@@ -27,7 +27,7 @@ import { MOBILE_TABS, NAV_GROUPS } from './nav';
       <div class="sheet">
         <div class="grab"></div>
         <div class="sheet-grid">
-          @for (it of allItems; track it.id) {
+          @for (it of allItems(); track it.id) {
             <button class="sheet-item" [class.active]="store.ui().screen === it.id" (click)="pick(it.id)">
               <span class="si-ic"><f-icon [name]="it.icon" [size]="22" [color]="store.ui().screen === it.id ? 'var(--primary)' : 'var(--ink2)'" /></span>
               <span>{{ it.label }}</span>
@@ -59,7 +59,7 @@ import { MOBILE_TABS, NAV_GROUPS } from './nav';
 export class TabbarComponent {
   store = inject(FoyerStore);
   tabs = MOBILE_TABS;
-  allItems = NAV_GROUPS.flatMap((g) => g.items);
+  allItems = computed(() => navGroupsFor(this.store.isChild()).flatMap((g) => g.items));
   moreActive(): boolean { return !this.tabs.some((t) => t.id === this.store.ui().screen); }
   pick(id: string): void { this.store.go(id); this.store.patch({ moreOpen: false }); }
 }

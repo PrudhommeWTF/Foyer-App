@@ -24,6 +24,7 @@ import {
 import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
+import { ECRANS_ADULTES } from '../shell/nav';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
@@ -107,7 +108,6 @@ export class FoyerStore {
   readonly ready = signal(false);
   readonly authed = signal(false);
   readonly needsSetup = signal(false);
-  readonly allowSignup = signal(true);
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
 
@@ -333,7 +333,6 @@ export class FoyerStore {
     // First run? The setup wizard must create the household + admin account.
     try {
       const status = await this.api.setupStatus();
-      this.allowSignup.set(status.allowSignup);
       if (status.needsSetup) {
         this.needsSetup.set(true);
         this.api.token = null;
@@ -454,6 +453,10 @@ export class FoyerStore {
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
+      // Le serveur rend un jeton neuf quand celui-ci a passé la moitié de sa
+      // vie : une session active ne se termine donc jamais par une déconnexion
+      // surprise, et un jeton dérobé cesse de servir tout seul.
+      if (me.token) this.api.token = me.token;
       this.myEmail.set(me.email);
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
@@ -467,6 +470,7 @@ export class FoyerStore {
     this.loadIcs();
     this.resumeUpdateIfRunning();
     void this.initPush();
+    this.veilleInactivite();
   }
 
   // ---- rappels par Web Push -------------------------------------------------
@@ -592,7 +596,11 @@ export class FoyerStore {
     try { const r = await this.api.schoolHolidays(ac); this.schoolHolidays.set(r.holidays || []); }
     catch { this.schoolHolidays.set([]); }
   }
-  async loadIcs(): Promise<void> { try { const r = await this.api.icsInfo(); this.icsToken.set(r.token); } catch { /* ignore */ } }
+  /** Le jeton du flux vaut accès sans mot de passe : le serveur ne le sert qu'à un administrateur. */
+  async loadIcs(): Promise<void> {
+    if (!this.isAdmin()) return;
+    try { const r = await this.api.icsInfo(); this.icsToken.set(r.token); } catch { /* ignore */ }
+  }
   async regenerateIcs(): Promise<void> {
     try { const r = await this.api.icsRegenerate(); this.icsToken.set(r.token); this.toast('Nouveau lien de calendrier généré'); }
     catch (e) { this.toast((e as Error).message); }
@@ -607,12 +615,12 @@ export class FoyerStore {
     this.updateChecking.set(false);
   }
 
-  async applyUpdate(): Promise<void> {
+  async applyUpdate(password: string): Promise<void> {
     if (this.updating()) return;
     this.updating.set(true);
     this.updateMsg.set('Démarrage de la mise à jour…');
     try {
-      const r = await this.api.startSystemUpdate();
+      const r = await this.api.startSystemUpdate(password);
       if (r.error) { this.updating.set(false); this.toast(r.error); return; }
     } catch (e) { this.updating.set(false); this.toast((e as Error).message); return; }
     this.pollUpdateStatus();
@@ -676,7 +684,9 @@ export class FoyerStore {
     return dayExtrasOn(ds, { doc: d, schoolHolidays: this.schoolHolidays(), external: this.externalDayExtras() });
   }
 
+  /** Réservée à un administrateur, comme l'écran qui s'en sert. */
   async refreshAccounts(): Promise<void> {
+    if (!this.isAdmin()) return;
     try {
       const { accounts } = await this.api.memberAccounts();
       this.accounts.set(Object.fromEntries(accounts.map((a) => [a.memberId, a.email])));
@@ -714,19 +724,28 @@ export class FoyerStore {
     }
   }
 
-  async register(email: string, password: string, name: string): Promise<boolean> {
-    this.authError.set('');
-    try {
-      const res = await this.api.register(email, password, name);
-      this.api.token = res.token;
-      await this.loadState();
-      this.authed.set(true);
-      this.toast('Bienvenue dans votre foyer');
-      return true;
-    } catch (e) {
-      this.authError.set((e as Error).message);
-      return false;
+  /**
+   * Ferme la session d'un appareil resté inactif.
+   *
+   * Purement local : rien n'est envoyé, et le jeton reste valable côté serveur
+   * jusqu'à son terme. Ce n'est donc pas une révocation, c'est un geste de bon
+   * sens sur un téléphone oublié quelque part, qui coûte un rechargement à qui
+   * revient. Le réglage « Déconnexion après inactivité » le règle, zéro le coupe.
+   */
+  private veilleInactivite(): void {
+    const heures = Number(this.setting('inactivityHours')) || 0;
+    if (heures <= 0) return;
+    const limite = heures * 3600_000;
+    let dernier = Date.now();
+    const bouge = (): void => { dernier = Date.now(); };
+    for (const ev of ['pointerdown', 'keydown', 'visibilitychange'] as const) {
+      addEventListener(ev, bouge, { passive: true });
     }
+    setInterval(() => {
+      if (!this.authed() || Date.now() - dernier < limite) return;
+      this.logout();
+      this.toast(`Session fermée après ${heures} h sans activité.`);
+    }, 60_000);
   }
 
   logout(): void {
@@ -1109,7 +1128,12 @@ export class FoyerStore {
     // Un seul point de passage, plutôt qu'une condition à chaque bouton : c'est
     // ce qui rend impossible d'ouvrir l'écran par une entrée qu'on aurait
     // oublié de cacher. Le serveur refuse de son côté, indépendamment.
-    if (screen === 'settings' && this.isChild()) { this.toast('Les réglages du foyer sont réservés aux adultes.'); return; }
+    if (this.isChild() && ECRANS_ADULTES.has(screen)) {
+      this.toast(screen === 'settings'
+        ? 'Les réglages du foyer sont réservés aux adultes.'
+        : 'Cet écran est réservé aux adultes du foyer.');
+      return;
+    }
     this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false });
   }
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }

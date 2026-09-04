@@ -5,7 +5,7 @@ import { FoyerStore } from './foyer.store';
 import { HomeContext, RulesOutcome, contextOf, manualOrder, rankTiles } from './home-context';
 import { slotsOn } from './schedule';
 import { DocSnapshot, FinSnapshot, Source, TileProvider, TileState, safeState } from './tiles/contract';
-import { TILE_PROVIDERS, TileId } from './tiles/registry';
+import { TILE_PROVIDERS, TUILES_ADULTES, TileId } from './tiles/registry';
 
 export interface HomeTileView {
   provider: TileProvider & { id: TileId };
@@ -70,7 +70,9 @@ export class DashboardStore {
       const month = this.foyer.todayStr().slice(0, 7);
       if (!month || month === this.askedMonth) return;
       this.askedMonth = month;
-      void this.fin.loadHome(month);
+      // Un compte enfant n'a pas accès au module : l'appeler ne rendrait qu'un
+      // 403, et l'accueil afficherait une panne là où il n'y a qu'une frontière.
+      if (!this.foyer.isChild()) void this.fin.loadHome(month);
       void this.loadRules();
     });
   }
@@ -196,7 +198,8 @@ export class DashboardStore {
 
   private readonly states = computed(() => {
     const ctx = { today: this.foyer.todayStr(), doc: this.docSource(), fin: this.finSource() };
-    return TILE_PROVIDERS.map((provider) => ({
+    const visibles = this.foyer.isChild() ? TILE_PROVIDERS.filter((p) => !TUILES_ADULTES.has(p.id)) : TILE_PROVIDERS;
+    return visibles.map((provider) => ({
       provider,
       // eslint-disable-next-line no-console
       state: safeState(provider, ctx, (line, e) => console.error(line, e)),

@@ -201,6 +201,14 @@ function loanViews(): Record<number, loans.LoanView> {
  */
 export type AdminGuard = (req: Request, res: Response, next: NextFunction) => void;
 
+/**
+ * Qui est derrière la requête, pour les lignes de journal. Le garde
+ * d'administration a déjà résolu le membre : on le relit là où il l'a posé,
+ * plutôt que d'apprendre à ce module ce qu'est un foyer.
+ */
+const who = (req: Request): string =>
+  (req as Request & { user?: { email?: string } }).user?.email || '(compte inconnu)';
+
 export function financesRouter(requireAdmin: AdminGuard): Router {
   const r = express.Router();
 
@@ -275,9 +283,17 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
     });
   }));
 
-  /** Sauvegarde du seul module, en un fichier JSON. */
-  r.get('/export.json', handler((_req, res) => {
+  /**
+   * Sauvegarde du seul module, en un fichier JSON.
+   *
+   * Réservée à un administrateur, et journalisée : deux GET sans rôle exigé et
+   * sans trace faisaient de cet endpoint le point d'exfiltration parfait, toutes
+   * les opérations et toutes les références de contrat en un appel, sans que
+   * rien ne l'ait noté.
+   */
+  r.get('/export.json', requireAdmin, handler((req, res) => {
     const dump = backup.exportModule();
+    log.info(`Finances : export complet (JSON) par ${who(req)}.`);
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="foyer-finances-${dump.generatedAt.slice(0, 10)}.json"`);
     res.send(JSON.stringify(dump));
@@ -427,10 +443,12 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
   }));
 
   // ---- export ----
-  r.get('/export.csv', handler((_req, res) => {
+  r.get('/export.csv', requireAdmin, handler((req, res) => {
+    const csv = exportCsv();
+    log.info(`Finances : export complet (CSV) par ${who(req)}, ${csv.split('\r\n').length - 2} ligne(s).`);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="foyer-finances-${new Date().toISOString().slice(0, 10)}.csv"`);
-    res.send(exportCsv());
+    res.send(csv);
   }));
 
   return r;

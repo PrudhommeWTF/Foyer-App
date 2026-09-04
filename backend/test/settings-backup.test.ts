@@ -134,15 +134,15 @@ describe('import : ce qu’il refuse, et ce qu’il écarte', () => {
   });
 
   it('un réglage imposé par l’environnement est écarté, pas écrasé', () => {
-    process.env.FOYER_ALLOW_SIGNUP = 'false';
+    process.env.FOYER_RECIPE_IMPORT = 'false';
     try {
       const rapport = importConfig({
         format: 'foyer.reglages', version: 1, generatedAt: '', household: '',
-        settings: { signupAllowed: true }, prefs: {},
+        settings: { recipeImport: true }, prefs: {},
       }, 'me');
       assert.deepEqual(rapport.applied, []);
-      assert.match(rapport.ecartes[0].reason, /FOYER_ALLOW_SIGNUP/);
-    } finally { delete process.env.FOYER_ALLOW_SIGNUP; }
+      assert.match(rapport.ecartes[0].reason, /FOYER_RECIPE_IMPORT/);
+    } finally { delete process.env.FOYER_RECIPE_IMPORT; }
   });
 
   it('un fichier vide s’importe sans rien casser', () => {

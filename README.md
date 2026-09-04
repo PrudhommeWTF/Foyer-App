@@ -102,8 +102,12 @@ Une image multi-arch (`amd64`, `arm64`) est publiée par la CI. Décommentez la 
 `image:` dans `docker-compose.yml`, ou lancez directement :
 
 ```bash
-docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
-  -e FOYER_JWT_SECRET="une-chaine-aleatoire-longue" \
+# Le port n'est publié que sur la boucle locale : mettez votre reverse-proxy
+# devant. Sans proxy sur cette machine, remplacez par -p 8099:8099 ET ajoutez
+# -e FOYER_TRUST_PROXY=false, sinon la temporisation des tentatives de connexion
+# devient contournable.
+docker run -d --name foyer -p 127.0.0.1:8099:8099 -v foyer-data:/data \
+  -e FOYER_JWT_SECRET="$(openssl rand -hex 32)" \
   ghcr.io/prudhommewtf/foyer-app:latest
 ```
 
@@ -115,7 +119,8 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `FOYER_DATA_DIR` | Dossier de la base SQLite | `./data` (ou `/data` en conteneur) |
 | `FOYER_JWT_SECRET` | Secret de signature des sessions (≥ 16 caractères aléatoires) — **obligatoire** : en `NODE_ENV=production`, un secret absent/faible **empêche le démarrage** ; sinon un secret éphémère est généré (sessions perdues au redémarrage) | _(aucun)_ |
 | `FOYER_CORS_ORIGINS` | Origines cross-origin autorisées (liste séparée par des virgules) — laissez vide en mono-conteneur (l'API sert sa propre app) | _(aucune)_ |
-| `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`). **Réglable depuis l'application** (Paramètres → Accès et comptes) : cette variable, quand elle est posée, l'emporte et grise le champ | _(réglage du foyer)_ |
+| `FOYER_BIND` | Interface d'écoute. Posez `127.0.0.1` quand un reverse-proxy tourne sur la même machine : le service n'est alors joignable que par lui | `0.0.0.0` |
+| `FOYER_TRUST_PROXY` | Combien de maillons de proxy croire pour `X-Forwarded-For`. `false` quand il n'y a aucun proxy devant : l'adresse vue est celle de la connexion, et personne ne peut se faire passer pour une autre | `1` |
 | `FOYER_RECIPE_IMPORT` | Autoriser l'import d'une recette depuis une URL, seule requête sortante du module Cuisine (`true`/`false`). **Réglable depuis l'application** ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
 | `FOYER_VAPID_PUBLIC` / `FOYER_VAPID_PRIVATE` | Paire de clés des rappels Web Push. Sans elles, une paire est générée au premier démarrage et gardée en base (en changer invalide tous les abonnements) | _(générées)_ |
 | `FOYER_VAPID_SUBJECT` | Contact déclaré au service push (`mailto:` ou `https:`). **Une adresse locale est refusée par Apple** (403 `BadJwtToken`) : elle est donc écartée au démarrage, avec un message dans le journal. Sans variable, c'est l'adresse publique du foyer (Paramètres → Notifications) qui sert de contact, et à défaut le dépôt du projet | _(adresse publique du foyer)_ |
@@ -144,9 +149,11 @@ avec quelques réglages par défaut (rayons de courses, une liste de courses, un
 de tâches, des catégories de budget). Une base déjà configurée n'est jamais réinitialisée.
 
 > 🔒 **Avant d'exposer publiquement** : définissez un `FOYER_JWT_SECRET` fort (en production, l'app
-> **refuse de démarrer** sans secret solide), changez le mot de passe admin, puis passez
-> `FOYER_ALLOW_SIGNUP=false`. Placez l'app derrière HTTPS (reverse-proxy type Caddy / Traefik / Nginx),
-> voir [Derrière un reverse-proxy](#-derrière-un-reverse-proxy).
+> **refuse de démarrer** sans secret solide) et changez le mot de passe admin. Il n'y a pas
+> d'inscription libre : un accès s'ouvre depuis la fiche d'un membre, par un administrateur.
+> Placez l'app derrière HTTPS (reverse-proxy type Caddy / Traefik / Nginx),
+> voir [Derrière un reverse-proxy](#-derrière-un-reverse-proxy), et déroulez
+> [la checklist de mise en ligne](docs/mise-en-ligne-checklist.md).
 
 ### 🛡️ Durcissement de sécurité
 

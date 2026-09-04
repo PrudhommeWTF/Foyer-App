@@ -1,4 +1,22 @@
 export interface NavItem { id: string; label: string; icon: string; }
+
+/**
+ * Les écrans qu'un compte enfant n'ouvre pas.
+ *
+ * Le serveur refuse de son côté, indépendamment : cette liste n'est pas la
+ * protection, elle évite d'afficher une porte qui répond 403. Déclarée ici parce
+ * que la barre latérale, la barre du bas et le menu d'ajout doivent filtrer la
+ * même chose, et qu'une seule des trois oubliée laisserait l'entrée visible.
+ */
+export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'documents', 'settings']);
+
+/** Les entrées du menu « + » qui mènent à ces écrans. */
+export const AJOUTS_ADULTES: ReadonlySet<string> = new Set(['tx', 'file']);
+
+/** Les groupes de navigation, tels qu'ils s'affichent pour ce compte. */
+export const navGroupsFor = (enfant: boolean): NavGroup[] => (enfant
+  ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !ECRANS_ADULTES.has(i.id)) })).filter((g) => g.items.length)
+  : NAV_GROUPS);
 export interface NavGroup { title: string; items: NavItem[]; }
 
 export const NAV_GROUPS: NavGroup[] = [

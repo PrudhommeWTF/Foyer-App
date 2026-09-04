@@ -144,8 +144,15 @@ PORT=${PORT}
 FOYER_DATA_DIR=${DATA_DIR}
 FOYER_STATIC_DIR=${APP_DIR}/backend/public
 FOYER_JWT_SECRET=${JWT}
-FOYER_ALLOW_SIGNUP=true
 # Au 1er démarrage, l'assistant de configuration crée le foyer + le compte admin.
+# Les accès suivants s'ouvrent depuis la fiche d'un membre, par un administrateur :
+# il n'y a pas d'inscription libre.
+#
+# Exposition : si un reverse-proxy tourne sur CETTE machine, décommentez la ligne
+# ci-dessous. Le service ne sera plus joignable que par lui, et personne ne pourra
+# se faire passer pour une autre adresse en posant X-Forwarded-For.
+#   FOYER_BIND=127.0.0.1
+# S'il n'y a aucun proxy devant, posez plutôt FOYER_TRUST_PROXY=false.
 # Mise à jour « en un clic » depuis l'interface (helper root via systemd).
 FOYER_SELF_UPDATE=${SELF_UPDATE}
 FOYER_GITHUB_REPO=${FOYER_GITHUB_REPO:-PrudhommeWTF/Foyer-App}
@@ -153,6 +160,15 @@ EOF
   chmod 600 "${ENV_FILE}"
 else
   log "${ENV_FILE} existe déjà — conservé."
+  # L'inscription libre n'existe plus : la route publique de création de comptes
+  # a été retirée, et avec elle le réglage que cette variable pilotait. La ligne
+  # laissée par les versions antérieures ne fait plus rien : on la retire pour ne
+  # pas laisser croire qu'un réglage est encore en vigueur.
+  if grep -q '^FOYER_ALLOW_SIGNUP=' "${ENV_FILE}"; then
+    sed -i '/^FOYER_ALLOW_SIGNUP=/d' "${ENV_FILE}"
+    log "  FOYER_ALLOW_SIGNUP retiré de ${ENV_FILE} : l'inscription libre n'existe plus."
+    log "  Un accès s'ouvre depuis la fiche d'un membre, dans l'écran « Famille »."
+  fi
   # Applique la valeur d'auto-MAJ résolue (respecte l'existant ; override possible
   # avec SELF_UPDATE=true|false bash deploy/lxc/install.sh).
   if grep -q '^FOYER_SELF_UPDATE=' "${ENV_FILE}"; then
@@ -172,6 +188,12 @@ fi
 rm -f "${DATA_DIR}/version"
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}" "${DATA_DIR}"
+# La base porte les finances, l'agenda des enfants et l'adresse du foyer ; le
+# répertoire « pieces » porte les documents scannés. En 0644/0755, tout compte
+# local du conteneur les lit. Le propriétaire seul, et personne d'autre.
+chmod 700 "${DATA_DIR}"
+find "${DATA_DIR}" -type d -exec chmod 700 {} +
+find "${DATA_DIR}" -type f -exec chmod 600 {} +
 
 # --- Service systemd ------------------------------------------------------
 log "Installation du service systemd…"
@@ -193,9 +215,32 @@ Restart=on-failure
 RestartSec=5
 # Durcissement
 NoNewPrivileges=true
-ProtectSystem=full
+ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# AF_NETLINK est nécessaire : glibc s'en sert dans getaddrinfo pour choisir
+# l'adresse source, et sans lui la résolution de noms échoue silencieusement
+# (vacances scolaires, vérification de version, import de recette).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Node compile à la volée : lui interdire d'écrire du code exécutable en mémoire
+# l'empêcherait simplement de démarrer.
+MemoryDenyWriteExecute=false
+# Ce que le service crée n'est lisible que par lui : la base, les instantanés et
+# les documents scannés naissent en 0600, sans dépendre d'un chmod après coup.
+UMask=0077
+# Un fichier .xlsx piégé peut se déplier en plusieurs gigaoctets ; la borne du
+# code le refuse, celle-ci fait redémarrer le service plutôt que d'emporter
+# l'hôte si un autre chemin d'allocation apparaissait un jour.
+MemoryMax=1G
 ReadWritePaths=${DATA_DIR}
 
 [Install]

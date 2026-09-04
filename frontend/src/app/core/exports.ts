@@ -192,9 +192,28 @@ const ETATS: Record<string, string> = {
  * Une valeur de cellule CSV. Le point-virgule sépare les colonnes, parce que
  * c'est ce qu'attend un tableur configuré en français ; la virgule y séparerait
  * les décimales et casserait chaque ligne.
+ *
+ * Une valeur commençant par `=`, `+`, `-`, `@`, une tabulation ou un retour
+ * chariot est lue comme une **formule** par Excel et LibreOffice, guillemets ou
+ * pas : les guillemets délimitent la cellule, ils n'en changent pas le contenu.
+ * Un nom d'article se saisit librement et peut venir d'un autre appareil du
+ * foyer : une apostrophe en tête le fait lire comme du texte, sans apparaître
+ * dans le tableur.
  */
+const FORMULE = /^[=+\-@\t\r]/;
+/**
+ * Un nombre écrit tel quel, signe compris. Il commence par « - » ou « + » sans
+ * être une formule pour autant : un montant négatif est le cas ordinaire d'un
+ * relevé, et le désarmer le ferait lire comme du texte, ce qui casse toutes les
+ * sommes du fichier. La protection doit gêner l'attaque, pas l'usage.
+ */
+const NOMBRE = /^[+-]?\d+(?:[.,]\d+)?$/;
+
+/** Vrai quand la valeur serait interprétée comme une formule à l'ouverture. */
+const estFormule = (s: string): boolean => FORMULE.test(s) && !NOMBRE.test(s);
+
 export function csvCell(v: string): string {
-  const s = String(v ?? '');
+  const s = estFormule(String(v ?? '')) ? "'" + v : String(v ?? '');
   return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 

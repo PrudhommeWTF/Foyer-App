@@ -92,5 +92,6 @@ PURGE_NODE=true bash deploy/lxc/uninstall.sh  # retire aussi Node.js + le dépô
 > build puis redescendre à 512 Mo–1 Go pour le fonctionnement.
 >
 > 🔒 Avant exposition publique : éditez `/etc/foyer/foyer.env` (secret JWT déjà généré),
-> changez le mot de passe admin, passez `FOYER_ALLOW_SIGNUP=false`, et placez un reverse-proxy
-> HTTPS devant (Caddy, Nginx Proxy Manager, Traefik…).
+> changez le mot de passe admin, et placez un reverse-proxy HTTPS devant (Caddy,
+> Nginx Proxy Manager, Traefik…). Il n'y a pas d'inscription libre : un accès
+> s'ouvre depuis la fiche d'un membre, par un administrateur.

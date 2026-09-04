@@ -2,7 +2,6 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { cacheControlFor } from './static-cache';
@@ -10,7 +9,6 @@ import fs from 'fs';
 import path from 'path';
 import {
   countUsers,
-  createUser,
   createUserWithMember,
   deleteUser,
   findUserByEmail,
@@ -24,6 +22,7 @@ import {
   saveHousehold,
   setIcsToken,
   setSchoolHolidaysCache,
+  setPasswordHash,
   updateUserCredentials,
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
@@ -40,6 +39,7 @@ import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
+import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
 import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
 import { setting } from './settings/registry';
@@ -49,6 +49,8 @@ import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finance
 import { LogLevel, log, setLogLevelSource } from './log';
 import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
 import { buildStatus } from './system/status';
+import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './auth/throttle';
+import { aRehacher, hacher, verifier } from './auth/passwords';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -135,12 +137,6 @@ const JWT_SECRET = resolveJwtSecret();
 setLogLevelSource(() => {
   try { return effectiveSetting('logLevel') as LogLevel; } catch { return 'info'; }
 });
-/**
- * Les inscriptions sont un réglage du foyer, modifiable depuis l'application,
- * que `FOYER_ALLOW_SIGNUP` verrouille quand elle est posée. Lu à chaque appel :
- * couper les inscriptions ne doit pas demander de redémarrer le service.
- */
-const allowSignup = (): boolean => effectiveSetting('signupAllowed') === true;
 // The frontend uses a relative base href, so a single build works served at the
 // root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
@@ -148,9 +144,36 @@ const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'p
 
 const app = express();
 
-// Behind a reverse proxy (Caddy/Traefik/Nginx, Proxmox ingress…): trust the first
-// hop so client IPs (rate-limiting) and protocol are read from X-Forwarded-* headers.
-app.set('trust proxy', 1);
+/**
+ * À qui l'on fait confiance pour dire d'où vient une requête.
+ *
+ * `X-Forwarded-For` est un en-tête que **l'appelant** écrit. Le croire n'a de
+ * sens que si un proxy l'a réécrit avant nous. Derrière NGINX Proxy Manager
+ * configuré comme le décrit docs/mise-en-ligne-checklist.md, c'est le cas, et
+ * `1` est la bonne valeur : le dernier maillon est le proxy.
+ *
+ * Joignable directement, en revanche, l'attaquant EST le maillon, et son en-tête
+ * est cru : mesuré, dix tentatives avec « X-Forwarded-For » différent à chaque
+ * coup repartaient toutes à zéro, et la temporisation ne servait plus à rien.
+ * Deux réponses, complémentaires :
+ *
+ *   - `FOYER_BIND=127.0.0.1` : le service n'est joignable que par un proxy local,
+ *     personne d'autre ne peut être le maillon ;
+ *   - `FOYER_TRUST_PROXY=false` : aucun en-tête n'est cru, l'adresse vue est celle
+ *     de la connexion. C'est la bonne valeur quand l'application est exposée
+ *     directement sur le réseau, sans proxy devant.
+ */
+const trustProxy = ((): number | boolean => {
+  const brut = (process.env.FOYER_TRUST_PROXY || '').trim();
+  if (!brut) return 1;
+  if (/^(0|false|no|off)$/i.test(brut)) return false;
+  const n = parseInt(brut, 10);
+  return Number.isInteger(n) && n >= 0 ? n : 1;
+})();
+app.set('trust proxy', trustProxy);
+
+/** L'interface d'écoute. Voir FOYER_TRUST_PROXY ci-dessus pour le rapport entre les deux. */
+const BIND = process.env.FOYER_BIND || '0.0.0.0';
 
 // Security headers. The frontend is a self-hosted SPA that inlines styles and loads
 // Google fonts; images come as data:/blob: URLs. upgrade-insecure-requests is disabled
@@ -161,15 +184,38 @@ app.use(helmet({
     directives: {
       'default-src': ["'self'"],
       'script-src': ["'self'"],
-      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      // Angular pose des styles en ligne ; les polices, elles, sont servies par
+      // le foyer depuis que fonts.googleapis.com a été retiré (voir index.html).
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'font-src': ["'self'", 'data:'],
       'img-src': ["'self'", 'data:', 'blob:'],
       'connect-src': ["'self'"],
       'upgrade-insecure-requests': null,
     },
   },
   crossOriginEmbedderPolicy: false,
+  // Un an, avec les sous-domaines. `preload` n'est pas posé : l'inscription sur
+  // la liste des navigateurs est difficile à défaire, et ce domaine peut servir
+  // à autre chose un jour. L'en-tête ne part que sur HTTPS, les installations
+  // locales en clair ne sont pas gênées.
+  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
 }));
+
+/**
+ * Ce que la page n'a aucune raison de demander au navigateur.
+ *
+ * Foyer n'utilise ni la position, ni la caméra, ni le micro, ni le paiement, ni
+ * l'USB. Le dire fermement retire ces capacités à tout ce qui s'exécuterait dans
+ * la page, y compris à un script qui aurait trouvé le moyen d'y entrer. Helmet
+ * ne pose pas cet en-tête, d'où cette ligne.
+ */
+const PERMISSIONS = [
+  'accelerometer=()', 'autoplay=()', 'camera=()', 'display-capture=()', 'encrypted-media=()',
+  'fullscreen=(self)', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()',
+  'midi=()', 'payment=()', 'picture-in-picture=()', 'publickey-credentials-get=()',
+  'screen-wake-lock=()', 'usb=()', 'xr-spatial-tracking=()',
+].join(', ');
+app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS); next(); });
 
 // CORS: same-origin by default (the API serves its own SPA). Extra origins can be
 // allow-listed via FOYER_CORS_ORIGINS (comma-separated) for split deployments.
@@ -200,17 +246,79 @@ app.use((err: Error & { type?: string }, _req: Request, res: Response, next: Nex
   });
 });
 
-// Throttle credential endpoints to blunt brute-force / account-enumeration attempts.
+/**
+ * Le garde-fou grossier des routes d'identifiants : il borne le débit brut, pas
+ * les tentatives. La vraie temporisation est dans auth/throttle.ts, par compte
+ * visé et par adresse, et c'est elle qui distingue un attaquant d'une famille.
+ *
+ * Les requêtes **réussies ne comptent plus** : sans cela, trente connexions
+ * légitimes dans le quart d'heure fermaient la porte à la trente-et-unième, et
+ * un foyer de cinq personnes sur quatre appareils y arrive.
+ */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 120,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de tentatives, réessayez dans quelques minutes.' },
 });
 
+/**
+ * Un condensat bcrypt de rien du tout, comparé quand le compte n'existe pas.
+ *
+ * Sans lui, un compte inconnu ressortait avant tout calcul et un compte connu
+ * payait la vérification : 2,0 ms contre 81,0 ms, mesurés, écarts nets. Le
+ * message était bien le même dans les deux cas, mais le chronomètre disait
+ * lequel des deux existait, et un attaquant n'avait plus qu'à concentrer son
+ * bourrage sur les adresses qui répondent lentement.
+ *
+ * Le condensat est engendré au démarrage, avec le même coût que les vrais : le
+ * chemin « compte inconnu » coûte désormais exactement ce que coûte le chemin
+ * « mauvais mot de passe ».
+ */
+let leurrePromis: Promise<string> | null = null;
+/**
+ * Calculé une fois, à la première connexion qui en a besoin, et gardé. Le poser
+ * au démarrage laisserait une fenêtre de quelques centaines de millisecondes où
+ * il serait vide, donc où le chemin « compte inconnu » redeviendrait instantané
+ * et trahirait de nouveau l'existence des comptes.
+ */
+const hashLeurre = (): Promise<string> => (leurrePromis ??= hacher('mot de passe qui ne sert a personne'));
+
+/**
+ * Une route asynchrone dont l'échec devient un 500, pas une promesse non
+ * traitée. Express 4 ne connaît pas les gestionnaires asynchrones : sans ce
+ * garde, un rejet inattendu remonte à Node, qui arrête le processus. Un mot de
+ * passe qui ne se hache pas ne doit pas couper l'application du foyer.
+ */
+const route = (fn: (req: AuthedRequest, res: Response) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction): void => {
+    fn(req as AuthedRequest, res).catch((e) => {
+      log.erreur('Erreur inattendue sur une route asynchrone', e);
+      if (res.headersSent) { next(e); return; }
+      res.status(500).json({ error: 'Erreur interne du serveur.' });
+    });
+  };
+
+/**
+ * Les deux compteurs de tentatives : par compte visé, et par adresse. Voir
+ * auth/throttle.ts pour les seuils et la raison de leur écart.
+ */
+const parCompte = new Throttle(SEUILS_COMPTE);
+const parAdresse = new Throttle(SEUILS_ADRESSE);
+
+/** Le flux ICS, servi sans session : borné pour ne pas devenir un robinet. */
+const icsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes sur le flux de calendrier.' },
+});
+
 interface AuthedRequest extends Request {
-  user?: { id: number; email: string; tv: number };
+  user?: { id: number; email: string; tv: number; iat?: number; exp?: number };
 }
 
 function sign(user: { id: number; email: string; token_version: number }): string {
@@ -219,6 +327,19 @@ function sign(user: { id: number; email: string; token_version: number }): strin
   // donnée. C'est à la connexion suivante que la nouvelle valeur s'applique.
   const jours = Number(effectiveSetting('sessionDays')) || 30;
   return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: `${jours}d` });
+}
+
+/**
+ * Ce jeton a-t-il passé la moitié de sa vie ?
+ *
+ * On ne renouvelle pas à chaque appel : un jeton neuf toutes les cinq secondes
+ * ferait tourner l'écriture du stockage du navigateur pour rien. La moitié est
+ * le compromis habituel, et il garantit qu'une session active ne se termine
+ * jamais par une déconnexion surprise.
+ */
+function aRenouveler(u: { iat?: number; exp?: number } | undefined, now = Date.now()): boolean {
+  if (!u?.iat || !u?.exp || u.exp <= u.iat) return false;
+  return now / 1000 > u.iat + (u.exp - u.iat) / 2;
 }
 
 /** Longueur minimale exigée d'un mot de passe, et le message qui va avec. */
@@ -232,9 +353,9 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
     res.status(401).json({ error: 'Non authentifié' });
     return;
   }
-  let payload: { id: number; email: string; tv?: number };
+  let payload: { id: number; email: string; tv?: number; iat?: number; exp?: number };
   try {
-    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number };
+    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; iat?: number; exp?: number };
   } catch {
     res.status(401).json({ error: 'Session expirée' });
     return;
@@ -246,7 +367,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
     res.status(401).json({ error: 'Session révoquée' });
     return;
   }
-  req.user = { id: user.id, email: user.email, tv: user.token_version };
+  req.user = { id: user.id, email: user.email, tv: user.token_version, iat: payload.iat, exp: payload.exp };
   next();
 }
 
@@ -265,16 +386,69 @@ function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): vo
   next();
 }
 
+/**
+ * Un compte connecté ne suffit pas : il faut être **quelqu'un du foyer**.
+ *
+ * Un compte peut exister sans être rattaché à un membre : c'est le cas de tout
+ * compte né de `POST /auth/register`, qui ne demande qu'une adresse et un mot de
+ * passe. Sans ce garde, un tel compte lisait et écrivait le document du foyer
+ * entier, les finances et les pièces jointes, exactement comme un parent : il
+ * suffisait que les inscriptions soient ouvertes pour que n'importe qui, depuis
+ * Internet, obtienne l'agenda des enfants et l'adresse de la maison.
+ *
+ * Couper les inscriptions ferme la porte ; ce garde-ci retire la pièce derrière.
+ * Les deux sont nécessaires : le réglage peut être rallumé, une base peut déjà
+ * porter un compte orphelin, et un membre supprimé laisse son compte derrière lui.
+ *
+ * Deux routes restent ouvertes à un compte sans membre, à dessein : `/me`, pour
+ * que l'application sache quoi afficher plutôt que d'enchaîner les 403 sans rien
+ * expliquer, et `/me/credentials`, pour que la personne puisse changer son mot de
+ * passe sans dépendre de personne.
+ */
+function requireMember(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (!currentMember(req)) {
+    res.status(403).json({
+      error: 'Ce compte n’est rattaché à aucun membre du foyer : il n’a accès à rien. '
+        + 'Demandez à un administrateur du foyer de vous rattacher à un membre depuis l’écran « Famille ».',
+    });
+    return;
+  }
+  next();
+}
+
+/**
+ * Les modules qui ne concernent pas un enfant : Finances et Documents.
+ *
+ * Un compte enfant lisait jusqu'ici tout le module Finances (comptes, soldes,
+ * opérations, contrats avec leurs références client, export complet en un
+ * appel) et tous les documents de famille, pièces d'identité scannées
+ * comprises. Il pouvait aussi en **supprimer**. Masquer les écrans ne changeait
+ * rien : l'API répondait à qui la sollicitait.
+ *
+ * Le cloisonnement est ici, côté serveur, comme celui des réglages. Les écrans
+ * correspondants disparaissent aussi de la navigation, pour ne pas proposer une
+ * porte qui répond 403.
+ */
+function requireAdulte(req: AuthedRequest, res: Response, next: NextFunction): void {
+  const m = currentMember(req);
+  if (!m) { requireMember(req, res, next); return; }
+  if (m.enfant) {
+    res.status(403).json({ error: 'Ce module n’est pas accessible depuis un compte enfant.' });
+    return;
+  }
+  next();
+}
+
 const api = express.Router();
 
 api.get('/health', (_req, res) => res.json({ ok: true }));
 
 // ---- First-run setup (onboarding) ----
 api.get('/setup/status', (_req, res) => {
-  res.json({ needsSetup: countUsers() === 0, allowSignup: allowSignup() });
+  res.json({ needsSetup: countUsers() === 0 });
 });
 
-api.post('/setup', authLimiter, (req: Request, res: Response) => {
+api.post('/setup', authLimiter, route(async (req, res) => {
   if (countUsers() > 0) {
     res.status(409).json({ error: 'La configuration a déjà été effectuée' });
     return;
@@ -318,56 +492,82 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
     members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, birthday: m.birthday, email: m.email || undefined })),
   });
 
-  const adminUser = createUserWithMember(String(admin.email), String(admin.password), String(admin.name).trim(), state.members[0].id);
+  const adminUser = createUserWithMember(String(admin.email), await hacher(String(admin.password)), String(admin.name).trim(), state.members[0].id);
   for (const m of normMembers) {
-    if (m.email && m.password) createUserWithMember(m.email, m.password, m.name, m.id);
+    if (m.email && m.password) createUserWithMember(m.email, await hacher(m.password), m.name, m.id);
   }
   saveHousehold(state);
   res.status(201).json({ token: sign(adminUser), user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
-});
+}));
 
-api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
+api.post('/auth/login', authLimiter, route(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     res.status(400).json({ error: 'Email et mot de passe requis' });
     return;
   }
-  const user = findUserByEmail(String(email));
-  if (!user || !bcrypt.compareSync(String(password), user.password_hash)) {
+  const cible = String(email).trim().toLowerCase();
+  const adresse = req.ip || 'inconnue';
+  const now = Date.now();
+
+  // Le compte visé d'abord : c'est lui qu'un bourrage distribué garde constant
+  // pendant qu'il change d'adresse.
+  const attente = Math.max(parCompte.attente(cible, now), parAdresse.attente(adresse, now));
+  if (attente > 0) {
+    log.attention(`Connexion refusée (temporisation, ${Math.ceil(attente / 1000)} s) pour ${cible} depuis ${adresse}.`);
+    res.status(429).set('Retry-After', String(Math.ceil(attente / 1000))).json({ error: messageAttente(attente) });
+    return;
+  }
+
+  const user = findUserByEmail(cible);
+  // Le compte inconnu paie la même vérification que le compte connu : sans cela
+  // le chronomètre dit lequel des deux existe. Voir HASH_LEURRE.
+  const bon = await verifier(String(password), user ? user.password_hash : await hashLeurre());
+  if (!user || !bon) {
+    parCompte.echec(cible, now);
+    parAdresse.echec(adresse, now);
+    log.attention(`Connexion refusée pour ${cible} depuis ${adresse}.`);
     res.status(401).json({ error: 'Identifiants invalides' });
     return;
   }
+  parCompte.succes(cible);
+  parAdresse.succes(adresse);
+  // Seul instant où le mot de passe en clair est disponible : on en profite pour
+  // refaire un condensat trop faible. Personne n'a rien à faire, et le parc se
+  // met à niveau au fil des connexions. La version du jeton ne bouge pas.
+  if (aRehacher(user.password_hash)) {
+    try { setPasswordHash(user.id, await hacher(String(password))); log.info(`Compte : condensat de ${user.email} remis au coût courant.`); }
+    catch (e) { log.attention('Compte : remise à niveau du condensat impossible', e); }
+  }
+  log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
   res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
-});
+}));
 
-api.post('/auth/register', authLimiter, (req: Request, res: Response) => {
-  if (!allowSignup()) {
-    res.status(403).json({ error: 'Les inscriptions sont désactivées' });
-    return;
-  }
-  const { email, password, name } = req.body || {};
-  if (!email || !password) {
-    res.status(400).json({ error: 'Email et mot de passe requis' });
-    return;
-  }
-  if (findUserByEmail(String(email))) {
-    res.status(409).json({ error: 'Un compte existe déjà avec cet email' });
-    return;
-  }
-  const user = createUser(String(email), String(password), String(name || '').trim() || 'Membre');
-  res.status(201).json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
-});
+// Il n'y a pas d'inscription libre : un accès s'ouvre depuis la fiche d'un
+// membre (`POST /members/:memberId/account`, réservé à un administrateur), ce qui
+// rattache le compte à quelqu'un du foyer. Un formulaire d'inscription public
+// n'aurait produit que des comptes sans membre, c'est-à-dire sans accès à quoi
+// que ce soit, tout en offrant à Internet une route de création de comptes.
 
-api.get('/state', auth, (_req, res) => {
+api.get('/state', auth, requireMember, (_req, res) => {
   res.json(getHousehold());
 });
 
-api.put('/state', auth, (req: AuthedRequest, res: Response) => {
-  const state = req.body?.state as HouseholdState | undefined;
-  if (state == null || typeof state !== 'object') {
-    res.status(400).json({ error: 'État invalide' });
-    return;
+api.put('/state', auth, requireMember, (req: AuthedRequest, res: Response) => {
+  // La charpente est vérifiée avant tout le reste, et le refus nomme le champ :
+  // sans cela, un tableau remplacé par un nombre s'enregistrait sans un mot et
+  // rendait l'écran illisible pour toute la famille. Voir state/validate.ts.
+  try {
+    validateState(req.body?.state);
+  } catch (e) {
+    if (e instanceof StateInvalide) {
+      log.attention(`État refusé (${req.user?.email || 'compte inconnu'}) : ${e.message}`);
+      res.status(400).json({ error: 'Enregistrement refusé : ' + e.message });
+      return;
+    }
+    throw e;
   }
+  const state = req.body.state as HouseholdState;
 
   // Écriture concurrente : le client annonce la version sur laquelle il a
   // travaillé, et n'écrit pas par-dessus plus récent que lui. Voir
@@ -465,7 +665,7 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
  * les cinq secondes tant qu'ils sont visibles, autant que la réponse tienne en
  * trois lignes le reste du temps.
  */
-api.get('/live', auth, (req: Request, res: Response) => {
+api.get('/live', auth, requireMember, (req: Request, res: Response) => {
   const shop = getShopping();
   const since = parseInt(String(req.query['since'] ?? ''), 10);
   if (Number.isInteger(since) && since === shop.version) {
@@ -479,8 +679,19 @@ api.get('/live', auth, (req: Request, res: Response) => {
 api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   const u = req.user ? getUserById(req.user.id) : undefined;
   if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  // L'identifiant du membre vient de la fiche telle qu'elle existe, pas de la
+  // colonne : un membre retiré du foyer laisse son compte derrière lui, et
+  // renvoyer l'identifiant d'une fiche disparue ferait pointer l'application sur
+  // un fantôme. Rien plutôt qu'un mensonge, et l'écran sait alors quoi dire.
   const m = currentMember(req);
-  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin, enfant: !!m?.enfant });
+  res.json({
+    email: u.email, name: u.name, memberId: m?.id ?? null, admin: !!m?.admin, enfant: !!m?.enfant,
+    // Un jeton émis vivait sa durée entière sans jamais tourner : volé le
+    // premier jour, il servait encore le dernier. Passé la moitié de sa vie, on
+    // en rend un neuf, que le client range à la place. Rien à faire pour
+    // l'utilisateur, et la fenêtre d'un jeton dérobé se referme d'elle-même.
+    ...(aRenouveler(req.user) ? { token: sign(u) } : {}),
+  });
 });
 
 /**
@@ -496,10 +707,10 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
  * autres sessions** : c'est le but. La session en cours, elle, reçoit un jeton
  * neuf, sinon on se déconnecterait soi-même en se protégeant.
  */
-api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response) => {
+api.put('/me/credentials', authLimiter, auth, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
-  if (!bcrypt.compareSync(String(req.body?.currentPassword ?? ''), user.password_hash)) {
+  if (!await verifier(String(req.body?.currentPassword ?? ''), user.password_hash)) {
     res.status(403).json({ error: 'Mot de passe actuel incorrect' });
     return;
   }
@@ -521,19 +732,22 @@ api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response
     }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
-  updateUserCredentials(user.id, email, password);
+  updateUserCredentials(user.id, email, password === undefined ? undefined : await hacher(password));
   const frais = getUserById(user.id);
   if (!frais) { res.status(500).json({ error: 'Compte introuvable après modification' }); return; }
-  log.info(`Compte : ${user.email} a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
+  log.info(`Compte : ${user.email} (depuis ${req.ip || 'adresse inconnue'}) a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
   res.json({ email: frais.email, token: sign(frais), othersLoggedOut: password !== undefined });
-});
+}));
 
 // ---- Member login accounts (admin-managed) ----
-api.get('/members/accounts', auth, (_req, res) => {
+// Réservée à un administrateur : cette liste est l'inventaire exact des
+// identifiants à attaquer, et les adresses personnelles de la famille avec.
+// L'écran qui s'en sert est déjà celui de la gestion des accès.
+api.get('/members/accounts', auth, requireAdmin, (_req, res) => {
   res.json({ accounts: listMemberAccounts() });
 });
 
-api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Response) => {
+api.post('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
   const memberId = req.params.memberId;
   const state = getHousehold().state as HouseholdState;
   const member = state.members.find((m) => m.id === memberId);
@@ -544,11 +758,11 @@ api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: R
   if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
   if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
-  createUserWithMember(email, password, member.name, memberId);
+  createUserWithMember(email, await hacher(password), member.name, memberId);
   res.status(201).json({ memberId, email: email.toLowerCase() });
-});
+}));
 
-api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Response) => {
+api.put('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
   const memberId = req.params.memberId;
   const user = getUserByMemberId(memberId);
   if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
@@ -566,9 +780,9 @@ api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Re
     if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
-  updateUserCredentials(user.id, email, password);
+  updateUserCredentials(user.id, email, password === undefined ? undefined : await hacher(password));
   res.json({ memberId, email: (email ?? user.email).toLowerCase() });
-});
+}));
 
 api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
   const memberId = req.params.memberId;
@@ -582,12 +796,12 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, financesRouter(requireAdmin));
+api.use('/finances', auth, requireAdulte, financesRouter(requireAdmin));
 
 // Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
 // plutôt que par enregistrement du document entier, pour que deux
 // administrateurs qui règlent deux choses ne s'écrasent pas.
-api.use('/settings', auth, settingsRouter({
+api.use('/settings', auth, requireMember, settingsRouter({
   memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
   isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
   isChild: (req) => !!currentMember(req as AuthedRequest)?.enfant,
@@ -598,14 +812,17 @@ api.use('/settings', auth, settingsRouter({
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).
-api.use('/files', auth, filesRouter(() => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024));
+api.use('/files', auth, requireMember, filesRouter(
+  () => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024,
+  (req) => !!currentMember(req as AuthedRequest)?.enfant,
+));
 
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
-api.use('/shopping', auth, shoppingRouter());
+api.use('/shopping', auth, requireMember, shoppingRouter());
 
 // Tâches : même dispositif, même raison. Voir tasks/ops.ts.
-api.use('/tasks', auth, tasksRouter());
+api.use('/tasks', auth, requireMember, tasksRouter());
 
 // Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
 //
@@ -615,11 +832,11 @@ api.use('/tasks', auth, tasksRouter());
 // quand c'était une adresse locale, d'où l'intérêt de pouvoir la poser sans
 // éditer un fichier sur le serveur.
 const appUrl = (): string => String(effectiveSetting('publicUrl') || '');
-api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
+api.use('/push', auth, requireMember, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
-api.use('/recipes', auth, recipesRouter(() => effectiveSetting('recipeImport') === true));
+api.use('/recipes', auth, requireMember, recipesRouter(() => effectiveSetting('recipeImport') === true));
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -655,7 +872,7 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
  * modifier puis recharger la page sans redémarrer le service est précisément ce
  * qu'on attend d'un réglage tenu dans un fichier.
  */
-api.get('/home/rules', auth, (_req, res) => {
+api.get('/home/rules', auth, requireMember, (_req, res) => {
   const outcome = loadRules(DATA_DIR);
   if (outcome.errors.length) {
     log.attention(`accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
@@ -663,7 +880,7 @@ api.get('/home/rules', auth, (_req, res) => {
   res.json(outcome);
 });
 
-api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) => {
+api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, res: Response) => {
   const academie = String(req.query['academie'] || '').trim();
   if (!academie) { res.json({ holidays: [], academie: '' }); return; }
   const cache = getSchoolHolidaysCache(academie);
@@ -678,7 +895,12 @@ api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) =
   }
 });
 
-api.get('/calendar/ics', auth, (_req, res) => {
+// Le jeton donne un accès permanent et SANS authentification à tout le
+// calendrier du foyer, horaires des enfants compris, et il survit à la
+// suppression du compte qui l'a lu. Le lire, comme le créer, est un geste
+// d'administration : c'est le canal d'exfiltration le plus discret de
+// l'application.
+api.get('/calendar/ics', auth, requireAdmin, (_req, res) => {
   let token = getIcsToken();
   if (!token) { token = crypto.randomBytes(18).toString('hex'); setIcsToken(token); }
   res.json({ token });
@@ -691,7 +913,10 @@ api.post('/calendar/ics/regenerate', auth, requireAdmin, (_req, res) => {
 });
 
 // Public — consumed by external calendar apps (Google/Apple), so no auth; the token is the secret.
-api.get('/calendar/feed.ics', (req: Request, res: Response) => {
+// Un agenda relit ce flux quelques fois par heure ; personne n'a de raison d'en
+// demander cent. La limite ne rend pas le jeton devinable (144 bits, il ne
+// l'était pas), elle empêche d'en faire un robinet.
+api.get('/calendar/feed.ics', icsLimiter, (req: Request, res: Response) => {
   const token = String(req.query['token'] || '');
   const state = getStateByIcsToken(token) as HouseholdState | null;
   if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
@@ -701,11 +926,11 @@ api.get('/calendar/feed.ics', (req: Request, res: Response) => {
 });
 
 // ---- System / self-update ----
-api.get('/system/version', auth, (_req, res) => {
+api.get('/system/version', auth, requireMember, (_req, res) => {
   res.json({ current: currentVersion(), selfUpdate: selfUpdateEnabled(), repo: GITHUB_REPO });
 });
 
-api.get('/system/update-check', auth, async (_req, res) => {
+api.get('/system/update-check', auth, requireMember, async (_req, res) => {
   const current = currentVersion();
   try {
     const rel = await fetchLatestRelease();
@@ -724,11 +949,26 @@ api.get('/system/update-check', auth, async (_req, res) => {
 // Trigger a self-update. The backend only drops a trigger file; a root-owned
 // systemd path unit (installed when FOYER_SELF_UPDATE=1) performs the actual
 // download/build/restart, so the service keeps its hardening (no sudo).
-api.post('/system/update', auth, requireAdmin, (_req, res) => {
+api.post('/system/update', auth, requireAdmin, route(async (req, res) => {
   if (!selfUpdateEnabled()) {
     res.status(400).json({ error: 'Mise à jour automatique non activée sur ce serveur. Lancez « deploy/lxc/update.sh » manuellement.' });
     return;
   }
+  // Le mot de passe, redemandé ici et nulle part ailleurs.
+  //
+  // Ce bouton fait exécuter du code en root sur la machine : le service dépose
+  // un fichier, une unité systemd root télécharge la dernière version et la
+  // compile. Le dispositif est bien conçu (le service ne détient aucun droit
+  // supplémentaire), mais il fait de « compte administrateur volé » un
+  // « root sur l'hyperviseur invité ». Un jeton dérobé sur un téléphone
+  // déverrouillé ne doit pas suffire : il faut aussi savoir le mot de passe.
+  const moi = req.user ? getUserById(req.user.id) : undefined;
+  if (!moi || !await verifier(String(req.body?.password ?? ''), moi.password_hash)) {
+    log.attention(`Mise à jour refusée : mot de passe incorrect (${req.user?.email || 'compte inconnu'}, depuis ${req.ip}).`);
+    res.status(403).json({ error: 'Mot de passe incorrect. Cette mise à jour installe et exécute du code sur le serveur : elle se confirme par votre mot de passe.' });
+    return;
+  }
+  log.info(`Mise à jour lancée par ${moi.email} depuis ${req.ip}.`);
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(path.join(DATA_DIR, 'update-status.json'), JSON.stringify({ state: 'running', message: 'Mise à jour lancée…', ts: Date.now() }));
@@ -737,7 +977,7 @@ api.post('/system/update', auth, requireAdmin, (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
-});
+}));
 
 /**
  * L'état du service : version, place restante, poids des données, sauvegardes.
@@ -780,9 +1020,12 @@ api.post('/system/backup', auth, requireAdmin, (req: AuthedRequest, res: Respons
   }
 });
 
-api.get('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
+api.get('/system/backup/:name', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
   const p = snapshotPath(DATA_DIR, String(req.params.name));
   if (!p) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
+  // Une base entière quitte la machine : c'est le genre de geste qu'on veut
+  // pouvoir dater après coup, pas reconstituer de mémoire.
+  log.info(`Sauvegarde ${req.params.name} téléchargée par ${req.user?.email || '(compte inconnu)'}.`);
   res.download(p);
 });
 
@@ -792,7 +1035,7 @@ api.delete('/system/backup/:name', auth, requireAdmin, (req: Request, res: Respo
   res.json({ ok: true });
 });
 
-api.get('/system/update-status', auth, (_req, res) => {
+api.get('/system/update-status', auth, requireMember, (_req, res) => {
   try {
     const p = path.join(DATA_DIR, 'update-status.json');
     if (fs.existsSync(p)) {
@@ -819,6 +1062,20 @@ if (fs.existsSync(STATIC_DIR)) {
   }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    // Une adresse qui ressemble à un fichier et qui n'existe pas est une
+    // absence, pas une route de l'application. Répondre index.html avec un 200
+    // faisait conclure à un scanner que /.git/config, /.env et /wp-login.php
+    // existaient tous : rien ne fuyait, mais les journaux du proxy devenaient
+    // illisibles et chaque sonde repartait avec une réponse encourageante.
+    const segments = req.path.split('/').filter(Boolean);
+    const dernier = segments[segments.length - 1] ?? '';
+    // Un segment caché (« /.git/config ») compte autant qu'une extension au
+    // bout : c'est le répertoire qui porte le point, et c'est le chemin que
+    // sondent le plus les robots.
+    if (dernier.includes('.') || segments.some((seg) => seg.startsWith('.'))) {
+      res.status(404).type('text/plain').send('Introuvable');
+      return;
+    }
     // Jamais de cache sur le document : c'est lui qui nomme les fichiers de
     // l'application, donc le garder revient à garder la version d'avant.
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
@@ -826,67 +1083,95 @@ if (fs.existsSync(STATIC_DIR)) {
   });
 }
 
-// ---- Rappels : clés VAPID, affectations, planificateur ----
-// Les clés sont générées une fois et gardées en base : en changer invaliderait
-// tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
-const vapid = initPush(
-  db,
-  { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT },
-  () => String(effectiveSetting('publicUrl') || ''),
-);
-log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}), `
-  + `contact déclaré aux services push : ${vapid.subject.subject}`);
-if (vapid.subject.rejected) {
-  // Le dire au démarrage, pas au premier rappel raté : un refus d'Apple se
-  // présente comme un « HTTP 403 » et n'apprend rien à qui le lit.
-  log.attention(`Notifications : le contact « ${vapid.subject.rejected.value} » a été écarté (${vapid.subject.rejected.reason}). `
-    + `Posez FOYER_VAPID_SUBJECT, ou renseignez l’adresse publique du foyer dans Paramètres, section « Notifications ».`);
-}
-
-const notifLog = (line: string): void => log.info(line);
+export { app, auth, requireAdmin, requireMember };
 
 /**
- * Ce membre veut-il ce genre de rappel sur son téléphone ?
+ * Ce que le service fait en plus de répondre : les rappels et l'écoute réseau.
  *
- * La préférence est personnelle : chacun coupe les siennes sans rien imposer
- * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
+ * Séparé du montage des routes pour une raison précise : les tests de sécurité
+ * doivent pouvoir monter **les vraies routes, avec leurs vrais gardes**, sans
+ * ouvrir de port ni démarrer un planificateur qui enverrait des notifications
+ * pendant la CI. Un garde éprouvé sur une application reconstruite pour le test
+ * n'éprouve que la copie.
  */
-const memberWants = (memberId: string, kind: 'reminder' | 'assigned'): boolean => {
-  const state = getHousehold().state as HouseholdState;
-  // Les deux clés sont écrites en toutes lettres : une clé calculée ne dit rien
-  // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
-  return kind === 'reminder'
-    ? setting('pushReminders', state, memberId)
-    : setting('pushAssigned', state, memberId);
-};
+export function start(): void {
+  // ---- Rappels : clés VAPID, affectations, planificateur ----
+  // Les clés sont générées une fois et gardées en base : en changer invaliderait
+  // tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
+  const vapid = initPush(
+    db,
+    { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT },
+    () => String(effectiveSetting('publicUrl') || ''),
+  );
+  log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}), `
+    + `contact déclaré aux services push : ${vapid.subject.subject}`);
+  if (vapid.subject.rejected) {
+    // Le dire au démarrage, pas au premier rappel raté : un refus d'Apple se
+    // présente comme un « HTTP 403 » et n'apprend rien à qui le lit.
+    log.attention(`Notifications : le contact « ${vapid.subject.rejected.value} » a été écarté (${vapid.subject.rejected.reason}). `
+      + `Posez FOYER_VAPID_SUBJECT, ou renseignez l’adresse publique du foyer dans Paramètres, section « Notifications ».`);
+  }
 
-// Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
-onAssigned((memberId, task, opId) => {
-  // Le foyer a suspendu les rappels, ou ce membre ne veut pas être prévenu des
-  // affectations : rien ne part, et rien n'est noté comme manqué.
-  if (effectiveSetting('pushPaused') === true || !memberWants(memberId, 'assigned')) return;
-  const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
-  void notify(`assign|${opId}|${memberId}`, [memberId], {
-    kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
-    url: appUrl(), taskId: task.id, tag: 'task-' + task.id,
-  }).then((r) => {
-    const m = r.members[0];
-    if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
-  }).catch((e) => notifLog('Notifications : affectation non envoyée : ' + (e as Error).message));
-});
+  const notifLog = (line: string): void => log.info(line);
 
-startScheduler({
-  tasks: () => (getHousehold().state as HouseholdState).tasks || [],
-  accounts: () => accountsOf().map((a) => a.memberId),
-  url: appUrl,
-  rules: () => ({
-    paused: effectiveSetting('pushPaused') === true,
-    quiet: { from: String(effectiveSetting('quietFrom')), to: String(effectiveSetting('quietTo')) },
-  }),
-  wants: memberWants,
-  log: notifLog,
-});
+  /**
+   * Ce membre veut-il ce genre de rappel sur son téléphone ?
+   *
+   * La préférence est personnelle : chacun coupe les siennes sans rien imposer
+   * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
+   */
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned'): boolean => {
+    const state = getHousehold().state as HouseholdState;
+    // Les deux clés sont écrites en toutes lettres : une clé calculée ne dit rien
+    // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
+    return kind === 'reminder'
+      ? setting('pushReminders', state, memberId)
+      : setting('pushAssigned', state, memberId);
+  };
 
-app.listen(PORT, '0.0.0.0', () => {
-  log.info(`API + app disponibles sur http://0.0.0.0:${PORT}`);
-});
+  // Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
+  onAssigned((memberId, task, opId) => {
+    // Le foyer a suspendu les rappels, ou ce membre ne veut pas être prévenu des
+    // affectations : rien ne part, et rien n'est noté comme manqué.
+    if (effectiveSetting('pushPaused') === true || !memberWants(memberId, 'assigned')) return;
+    const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
+    void notify(`assign|${opId}|${memberId}`, [memberId], {
+      kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
+      url: appUrl(), taskId: task.id, tag: 'task-' + task.id,
+    }).then((r) => {
+      const m = r.members[0];
+      if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
+    }).catch((e) => notifLog('Notifications : affectation non envoyée : ' + (e as Error).message));
+  });
+
+  startScheduler({
+    tasks: () => (getHousehold().state as HouseholdState).tasks || [],
+    accounts: () => accountsOf().map((a) => a.memberId),
+    url: appUrl,
+    rules: () => ({
+      paused: effectiveSetting('pushPaused') === true,
+      quiet: { from: String(effectiveSetting('quietFrom')), to: String(effectiveSetting('quietTo')) },
+    }),
+    wants: memberWants,
+    log: notifLog,
+  });
+
+  // Le dire au démarrage plutôt qu'au premier bourrage : cru sur une interface
+  // ouverte, X-Forwarded-For rend la temporisation contournable par quiconque
+  // joint le port directement.
+  if (trustProxy !== false && BIND === '0.0.0.0') {
+    log.attention(
+      'Sécurité : le service écoute sur toutes les interfaces ET fait confiance à X-Forwarded-For. '
+      + 'Quiconque joint le port directement peut donc se faire passer pour l’adresse de son choix, et contourner '
+      + 'la temporisation des tentatives de connexion. Posez FOYER_BIND=127.0.0.1 si un proxy tourne sur la même '
+      + 'machine, filtrez le port au pare-feu sinon, ou posez FOYER_TRUST_PROXY=false s’il n’y a aucun proxy devant.',
+    );
+  }
+
+  app.listen(PORT, BIND, () => {
+    log.info(`API + app disponibles sur http://${BIND}:${PORT}`);
+  });
+}
+
+// Lancé comme service : on démarre. Importé par un test : on ne démarre pas.
+if (require.main === module) start();

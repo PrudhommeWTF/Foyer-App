@@ -228,7 +228,7 @@ export function foreignPrefsChanged(avant: unknown, apres: unknown, memberId: st
  * Ce que l'environnement impose pour cette déclaration, ou `null` quand il ne
  * dit rien.
  *
- * Une variable **vide** (`FOYER_ALLOW_SIGNUP=`) compte pour absente : on la pose
+ * Une variable **vide** (`FOYER_RECIPE_IMPORT=`) compte pour absente : on la pose
  * pour imposer une valeur, pas pour imposer le vide. Pour un booléen, les
  * formes qu'un administrateur écrit réellement sont acceptées des deux côtés
  * (`false`, `FALSE`, `0`, `no`, `off` contre `true`, `1`, `yes`, `on`), parce

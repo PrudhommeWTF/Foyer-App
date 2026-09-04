@@ -26,8 +26,13 @@ const AN = 31536000;
  * Nom de fichier produit par le build avec une empreinte de contenu. Angular
  * écrit `main-NDQ3IISW.js` ; huit caractères au minimum, pour ne pas confondre
  * avec un nom écrit à la main comme `foyer-app.js`.
+ *
+ * Les polices en font partie depuis qu'elles sont servies par le foyer plutôt
+ * que par Google : elles sortent du build empreintes, dans `media/`. Sans elles
+ * ici, chaque ouverture de l'application redemandait 280 Ko au serveur pour
+ * s'entendre répondre « rien n'a changé ».
  */
-const EMPREINTE = /-[A-Za-z0-9_]{8,}\.(?:js|css)$/;
+const EMPREINTE = /-[A-Za-z0-9_]{8,}\.(?:js|css|woff2?)$/;
 
 /** Valeur de l'en-tête Cache-Control à servir pour ce fichier. */
 export function cacheControlFor(fileName: string): string {

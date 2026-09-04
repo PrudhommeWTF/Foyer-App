@@ -7,10 +7,23 @@ services:
     # image: ghcr.io/prudhommewtf/foyer-app:latest
     container_name: foyer
     restart: unless-stopped
+    # Publié sur la boucle locale seulement : le backend n'a aucune raison d'être
+    # joignable depuis le réseau, et l'être rend contournable la temporisation des
+    # tentatives de connexion (X-Forwarded-For est un en-tête que l'appelant
+    # écrit). Mettez votre reverse-proxy devant. Sans proxy sur cette machine,
+    # remplacez par "8099:8099" ET posez FOYER_TRUST_PROXY=false.
     ports:
-      - "8099:8099"
+      - "127.0.0.1:8099:8099"
     volumes:
       - foyer-data:/data
+    # Le code de l'application ne s'écrit pas lui-même : seul /data doit être
+    # inscriptible, et /tmp que Node utilise pour ses fichiers temporaires.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     environment:
       # REQUIRED. Generate a strong secret and put it in a .env file next to this
       # compose file, e.g.:   echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
@@ -19,8 +32,8 @@ services:
       # Extra cross-origin origins (comma-separated). Empty in single-container setups.
       # FOYER_CORS_ORIGINS: "https://foyer.mondomaine.fr"
       # First launch shows the setup wizard (creates household + admin account).
-      # Close registrations once your household is created:
-      FOYER_ALLOW_SIGNUP: "true"
+      # There is no self-registration: further accounts are opened by an admin
+      # from a member's card, which ties the account to someone in the household.
 
 volumes:
   foyer-data:

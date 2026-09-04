@@ -43,6 +43,17 @@ ENV FOYER_STATIC_DIR=/app/public
 # build (voir .github/workflows/docker.yml) ; vide → repli sur package.json.
 ARG FOYER_VERSION=
 ENV FOYER_VERSION=${FOYER_VERSION}
+# Le processus tourne sans privilèges. L'image node fournit déjà l'utilisateur
+# « node » : une exécution de code dans le service donne alors un compte
+# ordinaire, pas root dans le conteneur.
+#
+# L'ordre compte : ce chown doit précéder VOLUME. Une modification du répertoire
+# faite APRÈS la déclaration du volume est perdue, le volume étant initialisé
+# depuis l'état de l'image au moment de la déclaration. Le premier démarrage ne
+# saurait alors pas écrire sa base, et le message serait un EACCES sans contexte.
+RUN mkdir -p /data && chown -R node:node /data /app
+USER node
+
 VOLUME ["/data"]
 EXPOSE 8099
 

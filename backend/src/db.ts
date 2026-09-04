@@ -1,5 +1,4 @@
 import Database from 'better-sqlite3';
-import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { EMPTY_STATE } from './seed';
@@ -159,8 +158,12 @@ export function countUsers(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
 }
 
-export function createUserWithMember(email: string, password: string, name: string, memberId: string): UserRow {
-  const hash = bcrypt.hashSync(password, 10);
+/**
+ * Le condensat arrive déjà calculé : le hachage vit dans auth/passwords.ts, et
+ * il est asynchrone. Cette couche ne fait que du SQL.
+ */
+export function createUserWithMember(email: string, passwordHash: string, name: string, memberId: string): UserRow {
+  const hash = passwordHash;
   const info = db
     .prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)')
     .run(email.toLowerCase(), hash, name, memberId);
@@ -180,13 +183,25 @@ export function listMemberAccounts(): { memberId: string; email: string }[] {
   return db.prepare("SELECT member_id AS memberId, email FROM users WHERE member_id IS NOT NULL").all() as { memberId: string; email: string }[];
 }
 
-export function updateUserCredentials(id: number, email?: string, password?: string): void {
+export function updateUserCredentials(id: number, email?: string, passwordHash?: string): void {
   if (email !== undefined) db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.toLowerCase(), id);
-  if (password !== undefined) {
+  if (passwordHash !== undefined) {
     // Changing the password revokes every previously issued token for this user.
     db.prepare('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?')
-      .run(bcrypt.hashSync(password, 10), id);
+      .run(passwordHash, id);
   }
+}
+
+/**
+ * Remplace le condensat **sans toucher à la version du jeton**.
+ *
+ * Sert à la remise à niveau du coût bcrypt, au moment d'une connexion réussie :
+ * c'est le même mot de passe, mieux rangé. Incrémenter la version ici
+ * déconnecterait toute la famille au fil de ses connexions, ce qui serait une
+ * jolie panne sans le moindre bénéfice.
+ */
+export function setPasswordHash(id: number, passwordHash: string): void {
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
 }
 
 export function deleteUser(id: number): void {
@@ -204,14 +219,6 @@ export interface UserRow {
 
 export function findUserByEmail(email: string): UserRow | undefined {
   return db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as UserRow | undefined;
-}
-
-export function createUser(email: string, password: string, name: string): UserRow {
-  const hash = bcrypt.hashSync(password, 10);
-  const info = db
-    .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
-    .run(email.toLowerCase(), hash, name);
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRow;
 }
 
 export function getHousehold(): { state: unknown; version: number } {

@@ -7,7 +7,7 @@ import express, { Request, Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { detectType, IMAGE_MIMES } from '../storage/blobs';
 import * as files from '../storage/files';
-import { FetchError, fetchPublic } from './fetch';
+import { FetchError, FetchedPage, fetchPublic } from './fetch';
 import { ImportError, parseRecipePage } from './schema-org';
 import { log } from '../log';
 
@@ -22,6 +22,17 @@ import { log } from '../log';
 export type ImportSwitch = () => boolean;
 
 /**
+ * Comment le module va chercher une page. Injecté plutôt qu'appelé en dur, pour
+ * la même raison que le garde d'administration des Finances : le routeur n'a pas
+ * à savoir comment on ouvre une connexion, seulement à demander des octets.
+ *
+ * Le transport réel (`fetchPublic`) ouvre la connexion sur l'adresse déjà
+ * validée, ce qui ferme la réidentification DNS ; ses gardes sont éprouvés dans
+ * recipe-fetch.test.ts, sur le module lui-même.
+ */
+export type PageFetcher = (url: string, accept: string) => Promise<FetchedPage>;
+
+/**
  * Un import est un geste humain : quelques-uns par soirée, jamais une rafale.
  * La limite protège autant le site d'en face que le conteneur.
  */
@@ -33,7 +44,7 @@ const importLimiter = rateLimit({
   message: { error: 'Trop d’imports d’affilée. Réessayez dans quelques minutes.' },
 });
 
-export function recipesRouter(importEnabled: ImportSwitch): Router {
+export function recipesRouter(importEnabled: ImportSwitch, fetcher: PageFetcher = fetchPublic): Router {
   const r = express.Router();
   r.use(express.json({ limit: '8kb' }));
 
@@ -53,7 +64,7 @@ export function recipesRouter(importEnabled: ImportSwitch): Router {
     const recipeId = String(req.body?.recipeId ?? '').slice(0, 80);
 
     try {
-      const page = await fetchPublic(url, 'text/html,application/xhtml+xml');
+      const page = await fetcher(url, 'text/html,application/xhtml+xml');
       if (page.contentType && !/html|xml/.test(page.contentType)) {
         throw new ImportError('Ce lien ne pointe pas sur une page web (' + page.contentType.split(';')[0] + ').');
       }
@@ -64,7 +75,7 @@ export function recipesRouter(importEnabled: ImportSwitch): Router {
       let photoId: number | null = null;
       if (recipe.imageUrl && recipeId) {
         try {
-          photoId = await downloadPhoto(recipe.imageUrl, recipeId, recipe.name);
+          photoId = await downloadPhoto(fetcher, recipe.imageUrl, recipeId, recipe.name);
         } catch (e) {
           warnings.push('La photo n’a pas pu être récupérée : ' + (e as Error).message);
         }
@@ -89,8 +100,8 @@ export function recipesRouter(importEnabled: ImportSwitch): Router {
 }
 
 /** Télécharge l'illustration et la range comme n'importe quelle photo de recette. */
-async function downloadPhoto(imageUrl: string, recipeId: string, recipeName: string): Promise<number | null> {
-  const img = await fetchPublic(imageUrl, 'image/*');
+async function downloadPhoto(fetcher: PageFetcher, imageUrl: string, recipeId: string, recipeName: string): Promise<number | null> {
+  const img = await fetcher(imageUrl, 'image/*');
   const type = detectType(img.body);
   // Le type vient des octets, jamais de l'extension ni de l'en-tête annoncé.
   if (!type || !IMAGE_MIMES.includes(type.mime)) throw new ImportError('format d’image non pris en charge');

@@ -427,7 +427,34 @@ export function availableMonths(): string[] {
 }
 
 // ---- CSV export ----------------------------------------------------------
-const csvCell = (v: unknown): string => `"${String(v ?? '').replace(/"/g, '""')}"`;
+/**
+ * Une cellule CSV, désarmée.
+ *
+ * Les guillemets ne protègent de rien ici : Excel et LibreOffice lisent le
+ * **contenu** de la cellule, et une valeur commençant par `=`, `+`, `-`, `@`,
+ * une tabulation ou un retour chariot y est interprétée comme une formule.
+ * `=cmd|'/C calc'!A1` s'exécute à l'ouverture du fichier.
+ *
+ * Ce n'est pas théorique dans ce module : le libellé d'une opération vient
+ * souvent d'un relevé bancaire importé, donc d'une source qu'on ne maîtrise pas.
+ * Une apostrophe en tête suffit à faire lire la cellule comme du texte ; elle
+ * n'apparaît pas dans le tableur.
+ */
+const FORMULE = /^[=+\-@\t\r]/;
+/**
+ * Un nombre écrit tel quel, signe compris. Il commence par « - » ou « + » sans
+ * être une formule pour autant : un montant négatif est le cas ordinaire d'un
+ * relevé, et le désarmer le ferait lire comme du texte, ce qui casse toutes les
+ * sommes du fichier. La protection doit gêner l'attaque, pas l'usage.
+ */
+const NOMBRE = /^[+-]?\d+(?:[.,]\d+)?$/;
+
+/** Vrai quand la valeur serait interprétée comme une formule à l'ouverture. */
+const estFormule = (s: string): boolean => FORMULE.test(s) && !NOMBRE.test(s);
+const csvCell = (v: unknown): string => {
+  const s = String(v ?? '');
+  return `"${(estFormule(s) ? "'" + s : s).replace(/"/g, '""')}"`;
+};
 
 /**
  * Every transaction as semicolon-separated CSV, UTF-8 with a BOM so French
