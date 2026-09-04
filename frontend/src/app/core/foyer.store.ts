@@ -3,7 +3,8 @@ import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, is
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
-import { categories, dailyTasks, suggestTexts, visibleLists } from './tasks';
+import { categories, dailyTasks, dueLabel, suggestTexts, visibleLists } from './tasks';
+import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
@@ -1241,19 +1242,61 @@ export class FoyerStore {
     const listId = draft.listId || this.activeTaskListId();
     if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
     const id = uid('t');
+    // Une série a toujours une échéance : sans elle, « toutes les semaines » ne veut rien dire.
+    const due = draft.due || (draft.rec ? this.todayStr() : null);
     this.pushTaskOps([{
-      op: 'add', id, listId, text, who: draft.who, due: draft.due || null, time: draft.due ? draft.time || null : null,
-      cat: draft.cat.trim(), note: draft.note.trim(),
+      op: 'add', id, listId, text, who: draft.who, due, time: due ? draft.time || null : null,
+      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec,
     }]);
     return id;
   }
 
-  updateTask(id: string, fields: TaskFields): void { this.pushTaskOps([{ op: 'edit', id, ...fields }]); }
+  /**
+   * Modifie une tâche. Sur une série, « cette occurrence seulement » détache
+   * une copie ponctuelle qui porte la modification, et fait avancer la série :
+   * une occurrence retouchée n'est pas un troisième type d'objet.
+   */
+  updateTask(id: string, fields: TaskFields, scope: 'one' | 'all' = 'all'): void {
+    const t = this.task(id); if (!t) return;
+    if (scope === 'one' && t.rec && t.due) {
+      const next = skipOccurrence(t.rec, t.due, this.todayStr());
+      const { rec: _rec, ...rest } = fields; void _rec;
+      const copy = { ...t, ...rest };
+      this.taskOpsWithUndo([
+        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null },
+        { op: 'skip', id, occ: t.due, next },
+      ], 'Cette occurrence modifiée, la série continue');
+      return;
+    }
+    if (fields.rec && !(fields.due ?? t.due)) fields.due = this.todayStr();
+    this.pushTaskOps([{ op: 'edit', id, ...fields }]);
+  }
 
-  /** Un tap : faite, ou rouverte. Le retour en arrière est offert. */
+  /** « samedi », « 12/09/2026 » : l'échéance suivante telle qu'on la lit. */
+  private nextLabel(iso: string): string { return dueLabel(iso, null, this.todayStr(), (d) => this.fmtNumDate(d)); }
+
+  /**
+   * Un tap : faite, ou rouverte. Sur une série, la coche solde l'occurrence
+   * courante et fait avancer l'échéance à la suivante, calculée ici ; annuler
+   * rétablit l'occurrence soldée. Le retour en arrière est toujours offert.
+   */
   toggleTask(id: string): void {
     const t = this.task(id); if (!t) return;
-    this.taskOpWithUndo(t.done ? { op: 'reopen', id } : { op: 'done', id }, t.done ? 'Tâche rouverte' : 'Tâche faite');
+    if (t.done) { this.taskOpWithUndo({ op: 'reopen', id, ...(t.rec ? { occ: t.due || '' } : {}) }, 'Tâche rouverte'); return; }
+    if (t.rec && t.due) {
+      const next = nextOccurrence(t.rec, t.due, this.todayStr());
+      this.taskOpWithUndo({ op: 'done', id, occ: t.due, next }, next ? 'Faite. Prochaine : ' + this.nextLabel(next) : 'Faite, la série s’arrête là');
+      return;
+    }
+    this.taskOpWithUndo({ op: 'done', id }, 'Tâche faite');
+  }
+
+  /** Passer l'occurrence courante d'une série sans la faire. */
+  skipTask(id: string): void {
+    const t = this.task(id); if (!t?.rec || !t.due || t.done) return;
+    const next = skipOccurrence(t.rec, t.due, this.todayStr());
+    this.patch({ taskEdit: null });
+    this.taskOpWithUndo({ op: 'skip', id, occ: t.due, next }, next ? 'Occurrence passée. Prochaine : ' + this.nextLabel(next) : 'Série terminée');
   }
 
   /** Reporte une tâche : à demain par défaut. */
@@ -1271,10 +1314,12 @@ export class FoyerStore {
     this.taskOpsWithUndo(ops, ops.length + (ops.length > 1 ? ' tâches reportées ' : ' tâche reportée ') + quand);
   }
 
-  removeTask(id: string): void {
-    if (!this.task(id)) return;
+  /** Supprime une tâche, ou seulement l'occurrence courante d'une série. */
+  removeTask(id: string, scope: 'one' | 'all' = 'all'): void {
+    const t = this.task(id); if (!t) return;
+    if (scope === 'one' && t.rec) { this.skipTask(id); return; }
     this.patch({ taskEdit: null });
-    this.taskOpWithUndo({ op: 'remove', id }, 'Tâche supprimée');
+    this.taskOpWithUndo({ op: 'remove', id }, t.rec ? 'Série supprimée' : 'Tâche supprimée');
   }
 
   /** Une checklist se refait : tout décocher, d'un geste, annulable. */

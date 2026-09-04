@@ -80,3 +80,64 @@ test('l’application locale ne modifie jamais le tableau reçu', () => {
   applyTaskOp(src, op({ op: 'done', id: 't1' }));
   assert.equal(src[0].done, false);
 });
+
+// ---- les séries ---------------------------------------------------------------------------
+
+const serie = (over: Partial<TaskItem> = {}): TaskItem =>
+  task({ id: 'p1', text: 'Piscine', due: '2026-09-05', rec: { freq: 'weekly', every: 1, base: 'done' }, ...over });
+
+test('cocher une série solde l’occurrence, garde une trace et avance', () => {
+  const out = applyTaskOp([serie()], op({ op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14' }));
+  assert.equal(out[0].done, false);
+  assert.equal(out[0].due, '2026-09-14');
+  assert.deepEqual(out[0].history, [{ at: '2026-09-02T10:00:00Z', by: 'me', due: '2026-09-05' }]);
+});
+
+test('une coche pour une occurrence qui n’est plus la courante est sans effet', () => {
+  const out = applyTaskOp([serie({ due: '2026-09-14' })], op({ op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14' }));
+  assert.equal(out[0].due, '2026-09-14');
+  assert.equal(out[0].history, undefined);
+});
+
+test('annuler la coche d’une série rétablit l’occurrence soldée, et elle seule', () => {
+  const avant = serie();
+  const coche: TaskOpDraft = { op: 'done', id: 'p1', occ: '2026-09-05', next: '2026-09-14' };
+  const retour = inverseOf(coche, avant);
+  assert.deepEqual(retour, { op: 'reopen', id: 'p1', occ: '2026-09-05' });
+  const apres = applyTaskOp(applyTaskOp([avant], op(coche)), op(retour!));
+  assert.equal(apres[0].due, '2026-09-05');
+  assert.deepEqual(apres[0].history, []);
+});
+
+test('la coche qui arrête une série la marque faite ; annuler la relance', () => {
+  const coche: TaskOpDraft = { op: 'done', id: 'p1', occ: '2026-09-05', next: null };
+  const fini = applyTaskOp([serie()], op(coche));
+  assert.equal(fini[0].done, true);
+  const retour = applyTaskOp(fini, op(inverseOf(coche, serie())!));
+  assert.equal(retour[0].done, false);
+  assert.equal(retour[0].due, '2026-09-05');
+});
+
+test('passer une occurrence avance sans trace ; l’annuler remet l’échéance', () => {
+  const saut: TaskOpDraft = { op: 'skip', id: 'p1', occ: '2026-09-05', next: '2026-09-12' };
+  const apres = applyTaskOp([serie()], op(saut));
+  assert.equal(apres[0].due, '2026-09-12');
+  assert.equal(apres[0].history, undefined);
+  assert.deepEqual(inverseOf(saut, serie()), { op: 'edit', id: 'p1', due: '2026-09-05' });
+});
+
+test('annuler la suppression d’une série remet sa règle et son historique', () => {
+  const avant = serie({ history: [{ at: 'x', by: 'me', due: '2026-08-29' }] });
+  const retour = inverseOf({ op: 'remove', id: 'p1' }, avant)!;
+  const apres = applyTaskOp([], op(retour));
+  assert.deepEqual(apres[0].rec, avant.rec);
+  assert.deepEqual(apres[0].history, avant.history);
+});
+
+test('retirer la règle d’une série la rend ponctuelle, et l’annulation la remet', () => {
+  const avant = serie();
+  const off: TaskOpDraft = { op: 'edit', id: 'p1', rec: null };
+  const apres = applyTaskOp([avant], op(off));
+  assert.equal('rec' in apres[0], false);
+  assert.deepEqual(inverseOf(off, avant), { op: 'edit', id: 'p1', rec: avant.rec });
+});

@@ -159,3 +159,26 @@ test('l’échéance se lit : aujourd’hui, demain, hier, le jour de la semaine
   assert.equal(dueLabel('2026-08-20', null, TODAY, fmt), '20/08/2026');
   assert.equal(dueLabel(null, '18:00', TODAY, fmt), '', 'une heure sans date ne se dit pas');
 });
+
+// ---- la tolérance des séries saisonnières ---------------------------------------------
+
+test('avec une tolérance, une occurrence est l’affaire du jour jusqu’à la fin de la fenêtre, puis en retard', () => {
+  const rec = { freq: 'yearly' as const, every: 1, base: 'due' as const, grace: 15 };
+  const piscine = tache('piscine', { due: '2026-08-25', rec });
+  assert.equal(todayTasks([piscine], TODAY, 5).due, 1, 'à huit jours de l’échéance, dans la fenêtre : due aujourd’hui');
+  assert.deepEqual(groupOpen([piscine], TODAY).map((g) => g.key), ['today']);
+  const tard = tache('piscine', { due: '2026-08-10', rec });
+  const g = groupOpen([tard], TODAY);
+  assert.deepEqual(g.map((x) => x.key), ['late']);
+  assert.equal(g[0].lines[0].late, 8, 'le retard se compte depuis la fin de la tolérance');
+});
+
+test('sans tolérance, rien ne change', () => {
+  assert.deepEqual(groupOpen([tache('a', { due: '2026-09-01', rec: { freq: 'weekly', every: 1, base: 'done' } })], TODAY).map((g) => g.key), ['late']);
+});
+
+test('une échéance avec tolérance se dit « vers le »', () => {
+  const fmt = (iso: string): string => iso.split('-').reverse().join('/');
+  assert.equal(dueLabel('2026-09-02', null, TODAY, fmt, 15), 'vers le 02/09/2026');
+  assert.equal(dueLabel('2026-09-02', '10:00', TODAY, fmt, 15), 'vers le 02/09/2026 · 10:00');
+});

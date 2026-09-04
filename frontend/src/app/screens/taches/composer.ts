@@ -3,12 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { LIST_ICONS } from '../../core/constants';
-import { TaskItem } from '../../core/models';
+import { TaskItem, TaskRec } from '../../core/models';
 import { TaskDraft } from '../../core/task-ops';
 import { dueLabel, quickDates } from '../../core/tasks';
+import { DOW_SHORT, FREQ_LABELS, recLabel } from '../../core/recurrence';
 import { AvatarComponent } from '../../shared/avatar';
 
-type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
+type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note' | 'rec';
+type Scope = 'one' | 'all';
 
 /**
  * La saisie d'une tâche : un champ, et une barre d'action dessous.
@@ -20,7 +22,8 @@ type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
  * déplie un petit panneau et se referme au choix suivant.
  *
  * Le même composant sert à modifier une tâche existante (`task` renseignée) :
- * mêmes réglages, un bouton de plus pour supprimer.
+ * mêmes réglages, un bouton de plus pour supprimer. Sur une série, enregistrer
+ * ou supprimer demande « cette occurrence ou toute la série », en une ligne.
  *
  * Replié derrière un bouton quand `opener` est donné : sur l'accueil, une tuile
  * qui répond « qu'est-ce qu'il y a aujourd'hui » ne doit pas être encombrée
@@ -42,7 +45,7 @@ type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
           <input #field class="input" [placeholder]="task() ? 'Intitulé' : 'Ajouter une tâche…'" enterkeyhint="done"
                  autocomplete="off" autocapitalize="sentences"
                  [ngModel]="text()" (ngModelChange)="text.set($event)"
-                 (focus)="focused.set(true)" (keydown.enter)="submit()" (keydown.escape)="escape()" />
+                 (focus)="focused.set(true)" (keydown.enter)="task() ? askOrDo('save') : submit()" (keydown.escape)="escape()" />
           @if (!task()) {
             <button class="go" [disabled]="!text().trim()" (click)="submit()" aria-label="Ajouter">
               <f-icon name="check" [size]="18" color="#fff" [width]="3" />
@@ -81,6 +84,9 @@ type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
             </button>
             <button class="opt" [class.on]="note().trim()" [class.open]="panel() === 'note'" (click)="toggle('note')">
               <f-icon name="edit" [size]="15" color="currentColor" [width]="2.2" /> Note
+            </button>
+            <button class="opt" [class.on]="rec()" [class.open]="panel() === 'rec'" (click)="toggle('rec')">
+              <f-icon name="refresh" [size]="15" color="currentColor" [width]="2.2" /> {{ rec() ? recText() : 'Répéter' }}
             </button>
           </div>
 
@@ -147,14 +153,60 @@ type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
                           [ngModel]="note()" (ngModelChange)="note.set($event)"></textarea>
               </div>
             }
+            @case ('rec') {
+              <div class="panel">
+                <div class="chips">
+                  <button class="chip" [class.active]="!rec()" (click)="setFreq(null)">Jamais</button>
+                  @for (f of freqs; track f) {
+                    <button class="chip" [class.active]="rec()?.freq === f" (click)="setFreq(f)">{{ freqLabel(f) }}</button>
+                  }
+                </div>
+                @if (rec(); as r) {
+                  <!-- Les deux modes, explicites : c'est le choix qui compte vraiment. -->
+                  <div class="seg sm">
+                    <button [class.active]="r.base === 'due'" (click)="patchRec({ base: 'due' })">À date fixe</button>
+                    <button [class.active]="r.base === 'done'" (click)="patchRec({ base: 'done' })">Après la réalisation</button>
+                  </div>
+                  <div class="hint">{{ r.base === 'done' ? 'La suivante part du jour où c’est fait : faite dimanche avec deux jours de retard, la prochaine tombe le dimanche d’après.' : 'La suivante suit le calendrier, même si celle-ci est faite en retard. Les occurrences manquées ne sont pas rattrapées.' }}</div>
+                  <div class="dt">
+                    <label class="lbl">Toutes les <input class="input sm num" type="number" min="1" max="99" [ngModel]="r.every" (ngModelChange)="patchRec({ every: num($event, 1, 99) })" /> {{ unitLabel(r) }}</label>
+                  </div>
+                  @if (r.freq === 'weekly' && r.base === 'due') {
+                    <div class="chips">
+                      @for (d of dows; track d) {
+                        <button class="chip dow" [class.active]="hasDay(d)" (click)="toggleDay(d)">{{ dowShort(d) }}</button>
+                      }
+                    </div>
+                  }
+                  <div class="dt">
+                    <label class="lbl">Souplesse <input class="input sm num" type="number" min="0" max="365" [ngModel]="r.grace || 0" (ngModelChange)="patchRec({ grace: num($event, 0, 365) || undefined })" /> jours avant d’être en retard</label>
+                    <label class="lbl">Jusqu’au <input class="input sm" type="date" [ngModel]="r.until || ''" (ngModelChange)="patchRec({ until: $event || null })" /></label>
+                  </div>
+                  @if (!due()) { <div class="hint">Une série a toujours une échéance : la première sera aujourd’hui.</div> }
+                }
+              </div>
+            }
           }
 
-          @if (task()) {
-            <div class="foot">
-              <button class="btn btn-soft del" (click)="deleted.emit()" aria-label="Supprimer"><f-icon name="trash" [size]="18" color="var(--primary)" [width]="2.2" /></button>
-              <button class="btn btn-soft grow" (click)="closed.emit()">Annuler</button>
-              <button class="btn btn-primary grow2" [disabled]="!text().trim()" (click)="submit()">Enregistrer</button>
-            </div>
+          @if (task(); as t) {
+            @if (ask()) {
+              <!-- Sur une série, la question est posée simplement, et une seule fois. -->
+              <div class="ask">
+                <div class="ask-q">{{ ask() === 'save' ? 'Appliquer la modification à…' : 'Cette tâche revient. Que faire ?' }}</div>
+                <div class="ask-btns">
+                  <button class="btn btn-soft grow" (click)="answer('one')">{{ ask() === 'save' ? 'Cette occurrence seulement' : 'Passer cette occurrence' }}</button>
+                  <button class="btn btn-primary grow" (click)="answer('all')">{{ ask() === 'save' ? 'Toute la série' : 'Supprimer la série' }}</button>
+                </div>
+                <button class="ask-cancel" (click)="ask.set('')">Revenir</button>
+              </div>
+            } @else {
+              <div class="foot">
+                <button class="btn btn-soft del" (click)="askOrDo('delete')" aria-label="Supprimer"><f-icon name="trash" [size]="18" color="var(--primary)" [width]="2.2" /></button>
+                <button class="btn btn-soft grow" (click)="closed.emit()">Annuler</button>
+                <button class="btn btn-primary grow2" [disabled]="!text().trim()" (click)="askOrDo('save')">Enregistrer</button>
+              </div>
+              @if (t.rec) { <div class="hint">{{ recText() }}</div> }
+            }
           }
         }
       </div>
@@ -188,6 +240,7 @@ type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
     .panel { margin-top: 10px; padding: 12px; border-radius: 14px; background: var(--soft); display: flex; flex-direction: column; gap: 10px; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { min-height: 36px; }
+    .chip.active { background: var(--ink); color: #fff; }
     .lchip { display: inline-flex; align-items: center; gap: 7px; border: 2px solid var(--line2); }
     .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
     .dt { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -202,6 +255,14 @@ type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note';
     .hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     textarea.input { resize: vertical; font: inherit; }
 
+    .seg.sm button { padding: 8px 10px; font-size: 12.5px; }
+    .lbl { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--ink2); flex-wrap: wrap; }
+    .input.sm.num { width: 64px; min-width: 0; flex: none; }
+    .chip.dow { min-width: 44px; justify-content: center; }
+    .ask { margin-top: 18px; padding: 12px; border-radius: 14px; background: var(--soft); display: flex; flex-direction: column; gap: 10px; }
+    .ask-q { font-size: 13px; font-weight: 800; color: var(--ink); }
+    .ask-btns { display: flex; gap: 10px; }
+    .ask-cancel { align-self: center; border: none; background: transparent; color: var(--ink3); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
     .foot { display: flex; gap: 12px; align-items: center; margin-top: 18px; }
     .foot .grow { flex: 1; }
     .foot .grow2 { flex: 1.4; }
@@ -218,8 +279,9 @@ export class TaskComposerComponent {
   /** Libellé du bouton replié. Vide : toujours déplié. */
   readonly opener = input('');
 
-  readonly saved = output<TaskDraft>();
-  readonly deleted = output<void>();
+  /** `scope` ne compte que pour une série modifiée : cette occurrence, ou toute la série. */
+  readonly saved = output<TaskDraft & { scope: Scope }>();
+  readonly deleted = output<Scope>();
   readonly closed = output<void>();
 
   readonly shown = signal(false);
@@ -232,7 +294,12 @@ export class TaskComposerComponent {
   readonly catFree = signal('');
   readonly note = signal('');
   readonly list = signal('');
+  readonly rec = signal<TaskRec | null>(null);
   readonly panel = signal<Panel>('');
+  /** La question « cette occurrence ou toute la série » est ouverte, pour enregistrer ou supprimer. */
+  readonly ask = signal<'' | 'save' | 'delete'>('');
+  readonly freqs: TaskRec['freq'][] = ['daily', 'weekly', 'monthly', 'yearly'];
+  readonly dows = [1, 2, 3, 4, 5, 6, 7];
   private field = viewChild<ElementRef<HTMLInputElement>>('field');
 
   /** La liste ouverte à l'écran. Mémorisée : l'effet ne repart que si elle change vraiment. */
@@ -247,7 +314,7 @@ export class TaskComposerComponent {
       untracked(() => {
         if (t) {
           this.text.set(t.text); this.who.set([...t.who]); this.due.set(t.due); this.time.set(t.time ?? null);
-          this.cat.set(t.cat || ''); this.note.set(t.note || ''); this.list.set(t.listId);
+          this.cat.set(t.cat || ''); this.note.set(t.note || ''); this.list.set(t.listId); this.rec.set(t.rec ? { ...t.rec } : null);
         } else {
           this.list.set(fallback);
         }
@@ -263,7 +330,8 @@ export class TaskComposerComponent {
   readonly listObj = computed(() => this.lists().find((l) => l.id === this.list()) || null);
   readonly cats = computed(() => this.store.taskCategories());
   readonly quick = computed(() => quickDates(this.store.todayStr()));
-  readonly dueText = computed(() => dueLabel(this.due(), this.time(), this.store.todayStr(), (iso) => this.store.fmtNumDate(iso)));
+  readonly dueText = computed(() => dueLabel(this.due(), this.time(), this.store.todayStr(), (iso) => this.store.fmtNumDate(iso), this.rec()?.grace));
+  readonly recText = computed(() => { const r = this.rec(); return r ? recLabel(r, (iso) => this.store.fmtNumDate(iso)) : ''; });
   /** Ce que la liste a déjà vu : pas en modification, où l'intitulé est déjà là. */
   readonly suggestions = computed(() => this.task() ? [] : this.store.taskSuggestions(this.list(), this.text()));
 
@@ -273,6 +341,45 @@ export class TaskComposerComponent {
   toggle(p: Panel): void { this.panel.update((cur) => (cur === p ? '' : p)); }
   setDue(d: string | null): void { this.due.set(d); if (!d) this.time.set(null); }
   useFreeCat(): void { const c = this.catFree().trim(); if (c) { this.cat.set(c); this.catFree.set(''); this.panel.set(''); } }
+
+  freqLabel(f: TaskRec['freq']): string { return FREQ_LABELS[f]; }
+  unitLabel(r: TaskRec): string {
+    const n = r.every > 1;
+    return r.freq === 'daily' ? (n ? 'jours' : 'jour') : r.freq === 'weekly' ? (n ? 'semaines' : 'semaine') : r.freq === 'monthly' ? 'mois' : (n ? 'ans' : 'an');
+  }
+  dowShort(d: number): string { return DOW_SHORT[d]; }
+  num(v: unknown, min: number, max: number): number { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : min; }
+  setFreq(f: TaskRec['freq'] | null): void {
+    if (!f) { this.rec.set(null); return; }
+    const cur = this.rec();
+    this.rec.set({ freq: f, every: cur?.every || 1, base: cur?.base || 'due', ...(cur?.grace ? { grace: cur.grace } : {}), ...(cur?.until ? { until: cur.until } : {}) });
+    if (!this.due()) this.due.set(this.store.todayStr());
+  }
+  patchRec(p: Partial<TaskRec>): void {
+    const cur = this.rec(); if (!cur) return;
+    const next: TaskRec = { ...cur, ...p };
+    if (next.grace === undefined) delete next.grace;
+    if (!next.until) delete next.until;
+    this.rec.set(next);
+  }
+  hasDay(d: number): boolean { return !!this.rec()?.days?.includes(d); }
+  toggleDay(d: number): void {
+    const cur = this.rec(); if (!cur) return;
+    const days = (cur.days || []).includes(d) ? (cur.days || []).filter((x) => x !== d) : [...(cur.days || []), d].sort((a, b) => a - b);
+    const next: TaskRec = { ...cur, days };
+    if (!days.length) delete next.days;
+    this.rec.set(next);
+  }
+
+  /** Enregistrer ou supprimer une série demande la portée ; une tâche simple agit tout de suite. */
+  askOrDo(what: 'save' | 'delete'): void {
+    if (this.task()?.rec) { this.ask.set(what); return; }
+    if (what === 'save') this.submit('all'); else this.deleted.emit('all');
+  }
+  answer(scope: Scope): void {
+    const what = this.ask(); this.ask.set('');
+    if (what === 'save') this.submit(scope); else if (what === 'delete') this.deleted.emit(scope);
+  }
 
   show(): void {
     this.shown.set(true);
@@ -289,10 +396,10 @@ export class TaskComposerComponent {
     this.closed.emit();
   }
 
-  submit(): void {
+  submit(scope: Scope = 'all'): void {
     const text = this.text().trim();
     if (!text) return;
-    this.saved.emit({ text, listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note() });
+    this.saved.emit({ text, listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note(), rec: this.rec(), scope });
     if (this.task()) return;
     // La liste reste, tout le reste repart à zéro : la tâche suivante n'a pas
     // de raison d'hériter de la date ni du membre de la précédente.
@@ -302,6 +409,6 @@ export class TaskComposerComponent {
   }
 
   private reset(): void {
-    this.text.set(''); this.who.set([]); this.due.set(null); this.time.set(null); this.cat.set(''); this.catFree.set(''); this.note.set(''); this.panel.set('');
+    this.text.set(''); this.who.set([]); this.due.set(null); this.time.set(null); this.cat.set(''); this.catFree.set(''); this.note.set(''); this.rec.set(null); this.panel.set('');
   }
 }

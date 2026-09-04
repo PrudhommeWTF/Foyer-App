@@ -7,6 +7,7 @@ import { ListKind, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
 import { KIND_LABELS, KIND_ORDER, TaskGroup, dailyTasks, doneTasks, dueLabel, groupOpen } from '../../core/tasks';
+import { recLabel } from '../../core/recurrence';
 import { ModalComponent } from '../../shared/modal';
 import { WhoComponent } from '../../shared/who';
 import { TaskComposerComponent } from './composer';
@@ -143,6 +144,7 @@ import { TaskComposerComponent } from './composer';
                   @if (l.task.due || l.task.cat || l.task.note || active() === 'all') {
                     <div class="t-meta">
                       @if (l.task.due) { <span class="due" [class.late]="l.late > 0">{{ dueOf(l.task) }}@if (l.late > 0) { <span class="late-n"> · depuis {{ lateLabel(l.late) }}</span> }</span> }
+                      @if (l.task.rec) { <span class="rec" [title]="recOf(l.task)"><f-icon name="refresh" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ recOf(l.task) }}</span> }
                       @if (l.task.cat) { <span class="pill" [style.background]="tint(listColor(l.task.listId))" [style.color]="listColor(l.task.listId)">{{ l.task.cat }}</span> }
                       @if (l.task.note) { <span class="note-mark" [title]="l.task.note"><f-icon name="edit" [size]="12" color="var(--ink3)" [width]="2.2" /> note</span> }
                       @if (active() === 'all') { <span class="list-badge" [style.color]="listColor(l.task.listId)"><span class="dot" [style.background]="listColor(l.task.listId)"></span>{{ listName(l.task.listId) }}</span> }
@@ -186,7 +188,16 @@ import { TaskComposerComponent } from './composer';
     <!-- Modifier une tâche, ou en créer une depuis le menu « + » -->
     @if (editing() || store.ui().taskNew) {
       <f-modal [title]="editing() ? 'Modifier la tâche' : 'Nouvelle tâche'" [maxWidth]="520" (close)="closeTask()">
-        <app-task-composer [task]="editing()" (saved)="saveTask($event)" (deleted)="store.removeTask(editing()!.id)" (closed)="closeTask()" />
+        <app-task-composer [task]="editing()" (saved)="saveTask($event)" (deleted)="store.removeTask(editing()!.id, $event)" (closed)="closeTask()" />
+        @if (editing()?.history?.length) {
+          <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus. -->
+          <div class="hist">
+            <div class="field-label">Réalisations · {{ editing()!.history!.length }}</div>
+            @for (h of lastDone(); track h.at) {
+              <div class="hist-line">{{ store.fmtNumDate(h.at.slice(0, 10)) }}{{ h.by ? ' par ' + store.memberName(h.by) : '' }}@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
+            }
+          </div>
+        }
       </f-modal>
     }
 
@@ -319,6 +330,10 @@ import { TaskComposerComponent } from './composer';
     .late-n { color: var(--ink3); }
     .pill { font-size: 11px; font-weight: 800; padding: 2px 9px; border-radius: 7px; }
     .note-mark { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--ink3); }
+    .rec { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--ink3); }
+    .hist { margin-top: 18px; }
+    .hist-line { font-size: 12.5px; font-weight: 700; color: var(--ink2); padding: 4px 0; }
+    .hist-due { color: var(--ink3); }
     .list-badge { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; background: var(--soft2); padding: 2px 8px; border-radius: 6px; }
     .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
     .later { flex: none; border: none; cursor: pointer; padding: 6px 10px; border-radius: 8px; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 11.5px; font-weight: 800; }
@@ -395,7 +410,9 @@ export class TachesScreen {
   listColor(id: string): string { return this.list(id)?.color || 'var(--primary)'; }
   listName(id: string): string { return this.list(id)?.name || 'Liste supprimée'; }
   badges(t: TaskItem) { return whoBadges(t, this.d().members); }
-  dueOf(t: TaskItem): string { return dueLabel(t.due, t.time, this.store.todayStr(), (iso) => this.store.fmtNumDate(iso)); }
+  dueOf(t: TaskItem): string { return dueLabel(t.due, t.time, this.store.todayStr(), (iso) => this.store.fmtNumDate(iso), t.rec?.grace); }
+  recOf(t: TaskItem): string { return t.rec ? recLabel(t.rec, (iso) => this.store.fmtNumDate(iso)) : ''; }
+  lastDone() { return (this.editing()?.history || []).slice(-5).reverse(); }
   lateLabel(days: number): string {
     if (days < 7) return days + (days > 1 ? ' jours' : ' jour');
     if (days < 60) { const w = Math.round(days / 7); return w + (w > 1 ? ' semaines' : ' semaine'); }
@@ -409,11 +426,11 @@ export class TachesScreen {
   postponeAll(g: TaskGroup, to: string): void { this.store.postponeTasks(g.lines.map((l) => l.task.id), to); }
 
   closeTask(): void { this.store.patch({ taskEdit: null, taskNew: false }); }
-  saveTask(draft: TaskDraft): void {
+  saveTask(draft: TaskDraft & { scope: 'one' | 'all' }): void {
     const t = this.editing();
     if (t) {
-      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim() });
-      this.store.toast('Tâche modifiée');
+      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec }, draft.scope);
+      if (draft.scope === 'all') this.store.toast(t.rec || draft.rec ? 'Série modifiée' : 'Tâche modifiée');
     } else {
       this.store.createTask(draft);
       this.store.toast('Tâche ajoutée');

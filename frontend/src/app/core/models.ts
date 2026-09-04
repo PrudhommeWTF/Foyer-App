@@ -81,6 +81,27 @@ export interface TaskList {
 /** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
 export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }
 /**
+ * Comment une tâche revient. Deux modes, et c'est le choix de fond du module :
+ * `base: 'due'` à date fixe (les poubelles du mardi), `base: 'done'` à partir
+ * de la réalisation (le test de la piscine, une semaine après l'avoir fait,
+ * qu'il ait été fait samedi ou dimanche : sans cela l'application accumule un
+ * retard fictif et devient un reproche). `grace` est la tolérance en jours
+ * avant d'être en retard, pour ce qui se fait « vers le 15 avril ». Le calcul
+ * de l'occurrence suivante vit dans recurrence.ts.
+ */
+export interface TaskRec {
+  freq: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  /** Toutes les N unités. 1 par défaut. */
+  every: number;
+  /** Hebdomadaire à date fixe : les jours, lundi = 1 … dimanche = 7. */
+  days?: number[];
+  base: 'due' | 'done';
+  grace?: number;
+  until?: string | null;
+}
+/** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
+export interface TaskDone { at: string; by: string | null; due: string | null; }
+/**
  * Une tâche. Elle ne voyage plus dans l'enregistrement du document : chaque
  * geste est une opération ciblée (voir task-ops.ts), ce qui rend impossible
  * qu'un téléphone périmé décoche ce que l'autre vient de cocher.
@@ -107,6 +128,13 @@ export interface TaskItem {
    * raccourci, et le compte des articles restants, une information de plus.
    */
   shopListId?: string | null;
+  /**
+   * Une série : la tâche porte son échéance **courante**. La cocher inscrit une
+   * ligne dans `history` et avance `due`. Il n'y a pas une tâche par
+   * occurrence, donc rien qui s'accumule et rien à purger.
+   */
+  rec?: TaskRec | null;
+  history?: TaskDone[];
 }
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
