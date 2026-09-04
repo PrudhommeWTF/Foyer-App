@@ -1,4 +1,5 @@
-import { deadlineLabel, upcomingDeadlines } from '../deadlines';
+import { DEADLINE_HORIZON_DAYS, deadlineLabel, upcomingDeadlines } from '../deadlines';
+import { setting } from '../settings/registry';
 import type { FinDeadline } from '../finances.api';
 import { TileProvider, TileState, empty, fromSource, ok } from './contract';
 
@@ -30,7 +31,13 @@ export const echeancesTile = {
   source: 'finances',
   state: (ctx): TileState<EcheancesTileData> => fromSource(ctx.fin, (f, asOf) => {
     if (!f.contracts) return empty('Aucun contrat déclaré. Les dates de résiliation se surveillent toutes seules ensuite.', 'Déclarer un contrat');
-    const lines = upcomingDeadlines(f.deadlines).slice(0, SHOWN).map((deadline) => ({
+    // L'horizon est un réglage du foyer. Il vit dans le document, que cette
+    // tuile ne lit pas : tant qu'il n'est pas chargé, le défaut s'applique,
+    // plutôt que de faire attendre une tuile qui a déjà ses échéances.
+    const horizon = ctx.doc.status === 'ready'
+      ? setting('deadlineHorizonDays', ctx.doc.data.doc, ctx.doc.data.me)
+      : DEADLINE_HORIZON_DAYS;
+    const lines = upcomingDeadlines(f.deadlines, horizon).slice(0, SHOWN).map((deadline) => ({
       deadline,
       label: deadlineLabel(deadline.kind),
       costly: deadline.kind === 'preavis',

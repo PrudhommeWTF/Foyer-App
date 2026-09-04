@@ -5,6 +5,7 @@ import * as contracts from './contracts';
 import * as savings from './savings';
 import { getAccount, getCategory } from './repo';
 import { isIsoDate, parseCents } from './money';
+import { log } from '../log';
 
 class Invalid extends Error {}
 const fail = (msg: string): never => { throw new Invalid(msg); };
@@ -20,8 +21,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances/contrats : erreur inattendue', e);
+      log.erreur('Finances/contrats : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur dans les contrats : ' + (e as Error).message });
     }
   };

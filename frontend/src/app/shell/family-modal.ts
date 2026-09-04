@@ -122,10 +122,15 @@ import { contactIni } from '../core/helpers';
           l'application n'a pas su reconnaître n'est <b>pas</b> vérifié : l'absence d'alerte ne vaut pas garantie.
         </div>
 
-        <label class="toggle" style="margin-top:14px" (click)="store.patch({ mfAdmin: !store.ui().mfAdmin })">
+        <label class="toggle" style="margin-top:14px" (click)="store.patch({ mfAdmin: !store.ui().mfAdmin, mfEnfant: store.ui().mfAdmin ? store.ui().mfEnfant : false })">
           <span>Administrateur du foyer</span>
           <span class="switch" [class.on]="store.ui().mfAdmin"><span class="knob"></span></span>
         </label>
+        <label class="toggle" style="margin-top:12px" (click)="store.patch({ mfEnfant: !store.ui().mfEnfant, mfAdmin: store.ui().mfEnfant ? store.ui().mfAdmin : false })">
+          <span>Enfant</span>
+          <span class="switch" [class.on]="store.ui().mfEnfant"><span class="knob"></span></span>
+        </label>
+        <div class="hint">Un enfant utilise le foyer normalement, mais n’a pas accès aux Paramètres, ni depuis le menu ni par une adresse directe.</div>
         <button class="btn btn-primary btn-block" style="margin-top:18px" (click)="store.saveMember()">{{ store.ui().mfEditId ? 'Enregistrer' : 'Ajouter au foyer' }}</button>
       </f-modal>
     }

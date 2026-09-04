@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, PushStatus, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, SystemStatus, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
@@ -25,8 +25,9 @@ import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownL
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
-import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
+import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
+import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
@@ -133,6 +134,8 @@ export class FoyerStore {
 
   // Current user & member login accounts (admin-managed).
   readonly isAdmin = signal(false);
+  /** Membre mineur : les Paramètres lui sont fermés, et le serveur refuse aussi. */
+  readonly isChild = signal(false);
   readonly currentMemberId = signal<string | null>(null);
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
 
@@ -165,7 +168,19 @@ export class FoyerStore {
    * and costs a third of the grid height on a phone. Hiding it keeps whatever
    * was already recorded, it only stops displaying the row.
    */
-  readonly mealSlots = computed(() => MEAL_SLOTS.filter((s) => s.key !== 'matin' || !!this._data()?.settings.showBreakfast));
+  /**
+   * Les heures de référence des repas, telles que le foyer les a réglées. Elles
+   * décident de l'heure de l'événement créé quand un repas part à l'agenda, et
+   * de qui est compté à table (voir presence.ts).
+   */
+  readonly mealTimes = computed<Record<string, string>>(() => ({
+    matin: this.setting('mealTimeMorning'),
+    midi: this.setting('mealTimeNoon'),
+    soir: this.setting('mealTimeEvening'),
+  }));
+  readonly mealSlots = computed(() => MEAL_SLOTS
+    .filter((s) => s.key !== 'matin' || this.setting('showBreakfast'))
+    .map((s) => ({ ...s, at: this.mealTimes()[s.key] || s.at })));
   readonly narrow = signal(false);
 
   // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
@@ -220,8 +235,8 @@ export class FoyerStore {
   isSchoolHoliday(ds: string): boolean {
     return this.schoolHolidays().some((h) => ds >= h.start && ds <= h.end);
   }
-  /** ISO date → household numeric format (e.g. 24/07/2026). */
-  fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
+  /** ISO date → date courte française (24/07/2026). */
+  fmtNumDate(iso: string): string { return fmtNumericDate(iso); }
   /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */
   fmtLongDate(iso: string): string {
     try { return cap(parseDay(iso).toLocaleDateString(this.locale, { weekday: 'long', day: 'numeric', month: 'long' })); }
@@ -258,11 +273,10 @@ export class FoyerStore {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private api: ApiService) {
-    // Theme side effect: reflect settings.dark onto <html>.
+    // Theme side effect: reflect the theme setting onto <html>. Le thème est une
+    // préférence personnelle : il suit le membre connecté, pas le foyer.
     effect(() => {
-      const d = this._data();
-      const dark = d ? d.settings.dark : false;
-      document.documentElement.classList.toggle('dark', dark);
+      document.documentElement.classList.toggle('dark', setting('dark', this._data(), this.currentMemberId()));
     });
 
     // Les photos sont téléchargées avec la session dès qu'une recette en cite
@@ -440,6 +454,7 @@ export class FoyerStore {
       const me = await this.api.me();
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
+      this.isChild.set(me.enfant);
     } catch { /* ignore */ }
     await this.refreshAccounts();
     // Quelle version le serveur exécute réellement : la première question quand
@@ -564,7 +579,7 @@ export class FoyerStore {
 
   // ---- calendar overlays -----------------------------------------------
   async loadSchoolHolidays(): Promise<void> {
-    const ac = this._data()?.settings.academie || '';
+    const ac = this.setting('academie');
     if (!ac) { this.schoolHolidays.set([]); return; }
     try { const r = await this.api.schoolHolidays(ac); this.schoolHolidays.set(r.holidays || []); }
     catch { this.schoolHolidays.set([]); }
@@ -670,7 +685,8 @@ export class FoyerStore {
     s.tasks ||= [];
     s.taskLists ||= [];
     s.taskTemplates ||= [];
-    s.settings ||= { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true };
+    s.settings ||= householdDefaults();
+    s.prefs ||= {};
     return s;
   }
 
@@ -718,6 +734,7 @@ export class FoyerStore {
     void clearCachedDoc();
     this.ui.set(initialUi());
     this.isAdmin.set(false);
+    this.isChild.set(false);
     this.currentMemberId.set(null);
     this.accounts.set({});
     this.schoolHolidays.set([]);
@@ -1078,9 +1095,15 @@ export class FoyerStore {
   grad = grad;
 
   // ---- navigation -------------------------------------------------------
-  go(screen: string): void { this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false }); }
-  toggleDark(): void { this.mutate((d) => { d.settings.dark = !d.settings.dark; }); }
-  setThemeMode(mode: 'light' | 'dark'): void { this.mutate((d) => { d.settings.dark = mode === 'dark'; }); }
+  go(screen: string): void {
+    // Un seul point de passage, plutôt qu'une condition à chaque bouton : c'est
+    // ce qui rend impossible d'ouvrir l'écran par une entrée qu'on aurait
+    // oublié de cacher. Le serveur refuse de son côté, indépendamment.
+    if (screen === 'settings' && this.isChild()) { this.toast('Les réglages du foyer sont réservés aux adultes.'); return; }
+    this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false });
+  }
+  toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
+  setThemeMode(mode: 'light' | 'dark'): void { this.setSetting('dark', mode === 'dark'); }
 
   // ---- global search ----------------------------------------------------
   openSearch(): void { this.patch({ searchOpen: true, searchQuery: '' }); }
@@ -1983,7 +2006,7 @@ export class FoyerStore {
     const e = this.ui().mealEdit; if (!e) return;
     const value = this.mealFromForm();
     if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
-    const slot = MEAL_SLOTS.find((s) => s.key === e.slot);
+    const heure = this.mealTimes()[e.slot];
     const titre = this.titleFor(value, e.slot);
     const key = e.dateStr + '-' + e.slot;
     const existant = this.mealEvent(key);
@@ -1991,10 +2014,10 @@ export class FoyerStore {
       d.meals[key] = value;
       if (existant) {
         const i = d.events.findIndex((x) => x.id === existant.id);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: slot?.at || '—' };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: heure || '—' };
       } else {
         d.events.push({
-          id: uid('e'), date: e.dateStr, title: titre, time: slot?.at || '—',
+          id: uid('e'), date: e.dateStr, title: titre, time: heure || '—',
           who: this.me()?.id || this.members()[0]?.id || '', recur: 'none', end: null, mealKey: key,
         });
       }
@@ -2068,7 +2091,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return;
     const res = moveMeal(meals, d.events, from, to,
       (v, slot) => this.titleFor(v, slot),
-      (slot) => MEAL_SLOTS.find((x) => x.key === slot)?.at || '—');
+      (slot) => this.mealTimes()[slot] || '—');
     if (!res.moved) { this.toast('Rien à déplacer'); return; }
     this.mutate((dd) => { dd.meals = res.meals; dd.events = res.events; });
     this.toast(res.swapped ? 'Les deux repas ont été échangés' : 'Repas déplacé');
@@ -2096,7 +2119,7 @@ export class FoyerStore {
    */
   presenceOf(dateStr: string, slot: string) {
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
   }
   /** « 3 couverts (Léa absente) », affiché sous le créneau. */
   paxTextOf(dateStr: string, slot: string): string { return paxLabel(this.presenceOf(dateStr, slot)); }
@@ -2110,7 +2133,7 @@ export class FoyerStore {
   readonly editingPresence = computed(() => {
     const e = this.ui().mealEdit; if (!e) return null;
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
   });
 
   // ---- suggestions ---------------------------------------------------------
@@ -2124,6 +2147,12 @@ export class FoyerStore {
     if (!e || !d) return null;
     return suggestMeals({
       recipes: d.recipes, meals: d.meals, members: d.members, sched: d.sched, cal: this.calendar(), index: this.articleIndex(),
+      mealTimes: this.mealTimes(),
+      seuils: {
+        repeatDays: this.setting('suggestRepeatDays'),
+        oubliDays: this.setting('suggestForgottenDays'),
+        rapideMin: this.setting('suggestQuickMin'),
+      },
       shop: d.shop.filter((i) => i.listId === this.activeShopListId()),
       dateStr: e.dateStr, slot: e.slot,
     });
@@ -2168,7 +2197,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return [];
     // Seuls les convives attendus : alerter pour quelqu'un qui n'est pas là ce
     // soir-là est une fausse alerte, et une de trop suffit à ne plus les lire.
-    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
+    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar(), mealTimes: this.mealTimes() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
     return mealConflicts(d.meals[key]?.items || [], d.recipes, presents, this.articleIndex());
   }
 
@@ -2253,6 +2282,7 @@ export class FoyerStore {
     if (!slots.length) { this.toast('Aucun repas planifié sur cette période'); return; }
     this.genReport.set(buildPlan({
       slots,
+      stockDays: this.setting('stockDays'),
       recipes: d.recipes, aisles: d.aisles, articles: d.articles, index: this.articleIndex(),
       existing: d.shop.filter((i) => i.listId === listId),
       fallbackAisle: this.defaultAisleId(), stock: d.stock, today: this.todayStr(),
@@ -2919,11 +2949,11 @@ export class FoyerStore {
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfEnfant: !!m.enfant, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, enfant: s.mfEnfant, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });
@@ -2952,7 +2982,7 @@ export class FoyerStore {
   }
   openProfile(): void {
     const m = this.me();
-    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
+    this.patch({ profileOpen: true, pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
   }
   saveProfile(): void {
     const s = this.ui(); if (!s.pfName.trim()) { this.toast('Le prénom est requis'); return; }
@@ -2960,8 +2990,6 @@ export class FoyerStore {
     this.mutate((d) => {
       const mi = d.members.findIndex((m) => m.id === id);
       if (mi >= 0) d.members[mi] = { ...d.members[mi], name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor, ini: contactIni(s.pfName.trim()) };
-      // Keep the stored admin profile in sync only when the admin edits their own member.
-      if (id === d.profile.memberId) d.profile = { ...d.profile, name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor };
     });
     this.patch({ profileOpen: false });
     this.toast('Profil mis à jour');
@@ -2991,7 +3019,7 @@ export class FoyerStore {
    */
   readonly notifications = computed<Notif[]>(() => {
     const d = this._data();
-    if (!d || !d.settings.prefNotifs) return [];
+    if (!d || !this.setting('prefNotifs')) return [];
     const today = this.todayStr();
     const read = this.readNotifs();
     const addDays = (iso: string, n: number): string => { const dt = parseDay(iso); dt.setDate(dt.getDate() + n); return dstr(dt); };
@@ -2999,11 +3027,16 @@ export class FoyerStore {
     const mName = (id: string): string => d.members.find((m) => m.id === id)?.name || '';
     const raw: Omit<Notif, 'read'>[] = [];
 
+    // Chaque module a son interrupteur, personnel : la cloche de l'un n'est pas
+    // celle de l'autre, et couper les anniversaires ne doit pas couper l'agenda.
     // Événements aujourd'hui / demain
+    if (this.setting('notifEvents')) {
     for (const e of this.eventsForDay(today)) raw.push({ id: `ev-${e.id}-${today}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + "Aujourd'hui" + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: "Aujourd'hui" });
     for (const e of this.eventsForDay(tomorrow)) raw.push({ id: `ev-${e.id}-${tomorrow}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + 'Demain' + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: 'Demain' });
+    }
 
     // Tâches datées de l'affaire du jour : à faire aujourd'hui / en retard
+    if (this.setting('notifTasks')) {
     for (const t of dailyTasks(d.tasks, d.taskLists, this.currentMemberId())) {
       if (t.done || !t.due) continue;
       const qui = t.who.length ? ' · ' + t.who.map(mName).join(', ') : '';
@@ -3011,8 +3044,10 @@ export class FoyerStore {
       if (t.due === today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.time ? ' à ' + t.time : '') + rappel + qui, time: "Aujourd'hui" });
       else if (t.due < today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: 'En retard (prévue le ' + this.fmtNumDate(t.due) + ')' + qui, time: 'En retard' });
     }
+    }
 
     // Anniversaires : aujourd'hui + 7 jours (membres & contacts)
+    if (this.setting('notifBirthdays')) {
     for (let i = 0; i <= 7; i++) {
       const ds = addDays(today, i);
       const when = i === 0 ? "Aujourd'hui" : i === 1 ? 'Demain' : `Dans ${i} jours`;
@@ -3023,10 +3058,11 @@ export class FoyerStore {
       for (const m of d.members) if (isBirthdayOn(m.birthday, ds)) bday(m.name, m.birthday!, 'm' + m.id);
       for (const c of d.contacts) if (isBirthdayOn(c.birthday, ds)) bday(c.name, c.birthday!, 'c' + c.id);
     }
+    }
 
     // Les alertes de budget viennent du module Finances, dont les données vivent
     // dans des tables dédiées et non dans ce document.
-    raw.push(...this.externalNotifs());
+    if (this.setting('notifFinances')) raw.push(...this.externalNotifs());
 
     return raw.map((n) => ({ ...n, read: read.has(n.id) }));
   });
@@ -3046,9 +3082,205 @@ export class FoyerStore {
   }
 
   // ---- settings ---------------------------------------------------------
-  setSetting<K extends keyof HouseholdState['settings']>(key: K, val: HouseholdState['settings'][K]): void {
-    this.mutate((d) => { (d.settings as any)[key] = val; });
-    if (key === 'academie') this.loadSchoolHolidays();
+  //
+  // Toute lecture et toute écriture d'un réglage passe par le registre
+  // (core/settings/registry.ts) : c'est ce qui rend un réglage mort ou fantôme
+  // détectable en CI. Personne ne touche `settings` directement.
+
+  /**
+   * Ce que le serveur dit des réglages : ce qu'une variable d'environnement
+   * impose, qui a le droit d'écrire, et le journal des modifications. Les
+   * valeurs, elles, viennent du document, pour que la page reste lisible hors
+   * ligne.
+   */
+  readonly settingsInfo = signal<SettingsPayload | null>(null);
+
+  async loadSettingsInfo(): Promise<void> {
+    try { this.settingsInfo.set(await this.api.settings()); }
+    catch { /* hors ligne : la page se contente du document, sans le journal */ }
+  }
+
+  // ---- exploitation ------------------------------------------------------
+
+  readonly systemStatus = signal<SystemStatus | null>(null);
+  readonly backupBusy = signal(false);
+
+  async loadSystemStatus(): Promise<void> {
+    try { this.systemStatus.set(await this.api.systemStatus()); }
+    catch { /* non administrateur, ou hors ligne : la section le dit */ }
+  }
+
+  /**
+   * Un instantané cohérent de la base, sans arrêter le service. Il n'emporte ni
+   * les fichiers ni les photos : l'écran le dit, plutôt que de laisser croire à
+   * une sauvegarde complète.
+   */
+  async makeBackup(): Promise<void> {
+    this.backupBusy.set(true);
+    try {
+      const out = await this.api.makeBackup();
+      await this.loadSystemStatus();
+      this.toast(`Sauvegarde écrite : ${out.snapshot.name}`);
+    } catch (e) {
+      this.toast('Sauvegarde impossible : ' + (e as Error).message);
+    } finally { this.backupBusy.set(false); }
+  }
+
+  async downloadBackup(name: string): Promise<void> {
+    try { this.download(await this.api.downloadBackup(name), name); }
+    catch (e) { this.toast('Téléchargement impossible : ' + (e as Error).message); }
+  }
+
+  async deleteBackup(name: string): Promise<void> {
+    if (!confirm(`Effacer la sauvegarde ${name} ? Elle ne sera pas récupérable.`)) return;
+    try { await this.api.deleteBackup(name); await this.loadSystemStatus(); this.toast('Sauvegarde effacée'); }
+    catch (e) { this.toast('Suppression impossible : ' + (e as Error).message); }
+  }
+
+  /**
+   * Le fichier de configuration : l'exporter, le relire.
+   *
+   * Ce n'est pas une sauvegarde des données, et l'écran le dit. C'est le filet
+   * de sécurité avant de toucher aux réglages, et ce qui évite de tout
+   * reparamétrer de mémoire après une réinstallation.
+   */
+  readonly configBusy = signal(false);
+  readonly configReport = signal<ConfigImportReport | null>(null);
+
+  async exportSettings(): Promise<void> {
+    this.configBusy.set(true);
+    try {
+      this.download(await this.api.exportSettings(), `foyer-reglages-${this.todayStr()}.json`);
+      this.toast('Configuration exportée');
+    } catch (e) {
+      this.toast('Export impossible : ' + (e as Error).message);
+    } finally { this.configBusy.set(false); }
+  }
+
+  async importSettings(file: File): Promise<void> {
+    this.configBusy.set(true);
+    this.configReport.set(null);
+    try {
+      const rapport = await this.api.importSettings(JSON.parse(await file.text()));
+      this.configReport.set(rapport);
+      // Le document local ne sait rien de ce que le serveur vient d'écrire : on
+      // le relit en entier plutôt que de deviner, sinon l'écran montre l'état d'avant.
+      await this.loadState();
+      await this.loadSettingsInfo();
+      this.toast(rapport.applied.length ? `${rapport.applied.length} réglage(s) rétabli(s)` : 'Rien à rétablir : tout était déjà en place');
+    } catch (e) {
+      const err = e as ApiError;
+      this.configReport.set(null);
+      this.toast(err instanceof SyntaxError ? 'Ce fichier n’est pas du JSON lisible.' : 'Import impossible : ' + err.message);
+    } finally { this.configBusy.set(false); }
+  }
+
+  /**
+   * Pourquoi ce réglage n'est pas modifiable ici, ou une chaîne vide quand il
+   * l'est. Un champ grisé sans explication est pire qu'un champ absent : on
+   * croit à une panne.
+   */
+  settingLock(d: SettingDecl): string {
+    const impose = this.settingsInfo()?.overrides[d.key];
+    if (impose !== undefined) {
+      return `Imposé par la variable d’environnement ${d.envOverride} (« ${impose} »). `
+        + 'Pour le changer : éditez /etc/foyer/foyer.env (ou docker-compose.yml), puis redémarrez le service.';
+    }
+    if (d.scope === 'foyer' && !this.isAdmin()) return 'Réglage du foyer : seul un administrateur peut le modifier. Vous le voyez tel qu’il est appliqué.';
+    if (d.scope === 'personnel' && !this.currentMemberId()) return 'Votre compte n’est rattaché à aucun membre du foyer : cette préférence n’a personne à qui s’appliquer.';
+    return '';
+  }
+
+  /**
+   * La valeur d'un réglage, ou son défaut quand le document ne la porte pas.
+   *
+   * Une préférence personnelle est lue dans la table du membre connecté : c'est
+   * le même appel pour les deux portées, l'écran n'a pas à savoir laquelle.
+   */
+  setting<K extends SettingKey>(key: K): SettingValue<K> {
+    return setting(key, this._data(), this.currentMemberId());
+  }
+
+  /**
+   * Lit et écrit un réglage depuis sa **déclaration** plutôt que depuis sa clé.
+   *
+   * La page Paramètres est engendrée : elle parcourt le registre et ne connaît
+   * aucune clé à la compilation. La conversion de type est enfermée ici, à un
+   * seul endroit, et le contrôle de saisie du registre reste le juge.
+   */
+  readDeclared(d: SettingDecl): boolean | number | string {
+    // Un réglage qu'une variable d'environnement écrase ne vaut pas ce que le
+    // document en dit : c'est le serveur qui a raison, et la page doit montrer
+    // ce qui s'applique, pas ce qui est rangé.
+    const info = this.settingsInfo();
+    if (info && info.overrides[d.key] !== undefined) return info.values[d.key];
+    return this.setting(d.key as SettingKey);
+  }
+  writeDeclared(d: SettingDecl, val: boolean | number | string): void {
+    this.setSetting(d.key as SettingKey, val as SettingValue<SettingKey>);
+  }
+
+  /**
+   * Écrit un réglage.
+   *
+   * Application immédiate : l'écran répond tout de suite, puis le serveur
+   * tranche. Un refus **remet la valeur d'avant** et le dit, plutôt que de
+   * laisser croire que le réglage a pris. Le contrôle du registre a lieu deux
+   * fois, ici pour un message instantané et sur le serveur parce que c'est lui
+   * qui décide.
+   *
+   * L'écriture est ciblée (PATCH /api/settings) et non un enregistrement du
+   * document : deux administrateurs qui règlent deux choses ne s'écrasent pas.
+   */
+  setSetting<K extends SettingKey>(key: K, val: SettingValue<K>): void {
+    // Un réglage du foyer engage tout le monde, une préférence n'engage que soi.
+    // Le serveur refuse de toute façon : le dire tout de suite évite un
+    // interrupteur qui bascule puis revient tout seul, ce qui ressemble à une panne.
+    if (declOf(key)?.scope === 'foyer' && !this.isAdmin()) {
+      this.toast('Seul un administrateur du foyer peut modifier les réglages du foyer.');
+      return;
+    }
+    const checked = validate(key, val);
+    if (!checked.ok) { this.toast(checked.error); return; }
+    const avant = this.setting(key);
+    if (avant === checked.value) return;
+    this.writeSetting(key, checked.value as SettingValue<K>, avant);
+  }
+
+  private async writeSetting<K extends SettingKey>(key: K, val: SettingValue<K>, avant: SettingValue<K>): Promise<void> {
+    this.putSettingLocally(key, val);
+    if (key === 'academie') void this.loadSchoolHolidays();
+    try {
+      await this.api.patchSettings({ [key]: val });
+      void this.loadSettingsInfo(); // le journal vient de gagner une ligne
+    } catch (e) {
+      this.putSettingLocally(key, avant);
+      if (key === 'academie') void this.loadSchoolHolidays();
+      const err = e as ApiError;
+      this.toast(err.status === 403
+        ? 'Réglage non enregistré : seul un administrateur du foyer peut le modifier.'
+        : 'Réglage non enregistré : ' + err.message);
+    }
+  }
+
+  /**
+   * Pose la valeur dans le document tenu en mémoire, sans passer par `mutate` :
+   * les réglages ne s'enregistrent plus avec le document, c'est le serveur qui
+   * les détient.
+   */
+  private putSettingLocally(key: string, val: unknown): void {
+    const cur = this._data();
+    if (!cur) return;
+    const next = structuredClone(cur);
+    if (declOf(key)?.scope === 'personnel') {
+      const me = this.currentMemberId();
+      if (!me) return;
+      next.prefs ||= {};
+      next.prefs[me] = { ...(next.prefs[me] || {}), [key]: val } as (typeof next.prefs)[string];
+    } else {
+      (next.settings as Record<string, unknown>)[key] = val;
+    }
+    this._data.set(next);
   }
   exportData(): void {
     const d = this._data(); if (!d) return;

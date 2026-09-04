@@ -11,8 +11,8 @@ const doc = (): HouseholdState => ({
     { id: 't1', text: 'Sortir le verre', who: ['me'], due: null, done: false, listId: 'l1' },
   ],
   msgs: [], contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
-  profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
-  settings: { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true },
+  profile: { memberId: 'm1' },
+  settings: {},
 });
 
 const cocher = (id: string): Mutation => (d) => { const t = d.tasks.find((x) => x.id === id); if (t) t.done = !t.done; };

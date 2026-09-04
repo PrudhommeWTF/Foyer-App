@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HouseholdState, ShopItem, TaskItem } from './models';
 import type { TaskOp } from './task-ops';
 import type { RulesOutcome } from './home-context';
+import { SettingDecl, SettingSection } from './settings/registry';
 
 /**
  * Erreur d'appel qui porte le code HTTP. `status` vaut 0 quand le serveur n'a
@@ -94,6 +95,63 @@ export interface SetupPayload {
   household: { name: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
   members: { name: string; role: string; color: string; email?: string; password?: string; birthday?: string }[];
+}
+
+/** Une modification de réglage, telle que le serveur la retient. */
+export interface SettingsLogLine {
+  id: number; key: string; label: string;
+  before: boolean | number | string | null;
+  after: boolean | number | string;
+  memberId: string | null;
+  at: string;
+}
+
+/** Tout ce qu'il faut pour engendrer la page Paramètres, valeurs comprises. */
+export interface SettingsPayload {
+  sections: SettingSection[];
+  registry: SettingDecl[];
+  values: Record<string, boolean | number | string>;
+  /** Les clés que le document porte réellement ; les autres viennent du défaut. */
+  stored: string[];
+  /** Clé de réglage vers la valeur imposée par une variable d'environnement. */
+  overrides: Record<string, string>;
+  /** Les réglages fixés par la machine. `value` est vide pour un secret : il ne se relit jamais. */
+  deployment: { key: string; value: string; set: boolean }[];
+  version: number;
+  canEdit: boolean;
+  log: SettingsLogLine[];
+}
+
+/** Ce qu'un import de configuration a rétabli, et ce qu'il a dû écarter. */
+export interface ConfigImportReport {
+  applied: string[];
+  ecartes: { key: string; member?: string; reason: string }[];
+  household: string;
+  generatedAt: string;
+}
+
+/** Un instantané de la base, écrit dans le dossier de données. */
+export interface Snapshot { name: string; bytes: number; at: string; }
+
+/** L'état du service, tel que la section Exploitation le montre. */
+export interface SystemStatus {
+  version: string;
+  uptime: number;
+  nodeVersion: string;
+  dataDir: string;
+  dbBytes: number;
+  dataBytes: number;
+  /** Null quand la plateforme ne sait pas le dire : l'écran l'annonce plutôt que d'afficher zéro. */
+  disk: { free: number; total: number } | null;
+  snapshots: Snapshot[];
+  counts: { members: number; events: number; tasks: number; recipes: number; files: number };
+}
+
+export interface SettingsWriteResult {
+  changed: string[];
+  refused: { key: string; error: string }[];
+  values: Record<string, boolean | number | string>;
+  version: number;
 }
 
 const TOKEN_KEY = 'foyer.token';
@@ -199,7 +257,7 @@ export class ApiService {
     return this.request<LoginResult>('auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
   }
 
-  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean }> {
+  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean }> {
     return this.request('me');
   }
 
@@ -219,6 +277,24 @@ export class ApiService {
     return this.request(`members/${encodeURIComponent(memberId)}/account`, { method: 'DELETE' });
   }
 
+  // ---- réglages du foyer ----
+  //
+  // Ils s'écrivent clé par clé plutôt que par enregistrement du document entier :
+  // deux administrateurs qui règlent deux choses à la même seconde ne s'écrasent
+  // donc pas. Le serveur refuse l'écriture à un non-administrateur.
+
+  settings(): Promise<SettingsPayload> { return this.request('settings'); }
+
+  patchSettings(changes: Record<string, boolean | number | string>): Promise<SettingsWriteResult> {
+    return this.request('settings', { method: 'PATCH', body: JSON.stringify({ changes }) });
+  }
+
+  exportSettings(): Promise<Blob> { return this.download('settings/export'); }
+
+  importSettings(config: unknown): Promise<ConfigImportReport> {
+    return this.request('settings/import', { method: 'POST', body: JSON.stringify({ config }) });
+  }
+
   schoolHolidays(academie: string): Promise<{ holidays: { name: string; start: string; end: string; zone: string }[]; academie: string; error?: string }> {
     return this.request('calendar/school-holidays?academie=' + encodeURIComponent(academie));
   }
@@ -230,6 +306,15 @@ export class ApiService {
   homeRules(): Promise<RulesOutcome> { return this.request('home/rules'); }
 
   systemVersion(): Promise<{ current: string; selfUpdate: boolean; repo: string }> { return this.request('system/version'); }
+
+  // ---- exploitation ----
+  systemStatus(): Promise<SystemStatus> { return this.request('system/status'); }
+  makeBackup(): Promise<{ snapshot: Snapshot; deleted: string[] }> { return this.request('system/backup', { method: 'POST' }); }
+  deleteBackup(name: string): Promise<{ ok: boolean }> {
+    return this.request('system/backup/' + encodeURIComponent(name), { method: 'DELETE' });
+  }
+  backupUrl(name: string): string { return this.absolute('system/backup/' + encodeURIComponent(name)); }
+  downloadBackup(name: string): Promise<Blob> { return this.download('system/backup/' + encodeURIComponent(name)); }
   updateCheck(): Promise<UpdateInfo> { return this.request('system/update-check'); }
   startSystemUpdate(): Promise<{ started?: boolean; error?: string }> { return this.request('system/update', { method: 'POST' }); }
   updateStatus(): Promise<{ state: string; message?: string; current: string }> { return this.request('system/update-status'); }

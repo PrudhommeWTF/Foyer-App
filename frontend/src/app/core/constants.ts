@@ -1,12 +1,6 @@
 // Static design constants ported verbatim from the design handoff prototype.
 import { ContactCat, SchedType } from './models';
 
-// Date format setting → numeric order (see Paramètres → Général).
-export type DateOrder = 'dmy' | 'mdy' | 'ymd';
-export const DATEFMT_ORDER: Record<string, DateOrder> = {
-  'JJ/MM/AAAA': 'dmy', 'MM/JJ/AAAA': 'mdy', 'AAAA-MM-JJ': 'ymd',
-};
-
 /**
  * Fuseau du foyer. Foyer cible la France métropolitaine : il est fixe, comme la
  * locale et la devise. Il est ici plutôt que dans le store parce que le calcul
@@ -168,20 +162,8 @@ export const RECUR_LABELS: Record<string, string> = {
   none: '', daily: 'Chaque jour', weekday: 'En semaine', weekly: 'Chaque semaine', monthly: 'Chaque mois',
 };
 
-// French academies (for school-holiday zones). `zone` is informational; the
-// backend queries the official dataset by academy name.
-export interface Academie { name: string; zone: string; }
-export const ACADEMIES: Academie[] = [
-  { name: 'Aix-Marseille', zone: 'B' }, { name: 'Amiens', zone: 'B' }, { name: 'Besançon', zone: 'A' },
-  { name: 'Bordeaux', zone: 'A' }, { name: 'Clermont-Ferrand', zone: 'A' }, { name: 'Corse', zone: 'Corse' },
-  { name: 'Créteil', zone: 'C' }, { name: 'Dijon', zone: 'A' }, { name: 'Grenoble', zone: 'A' },
-  { name: 'Lille', zone: 'B' }, { name: 'Limoges', zone: 'A' }, { name: 'Lyon', zone: 'A' },
-  { name: 'Montpellier', zone: 'C' }, { name: 'Nancy-Metz', zone: 'B' }, { name: 'Nantes', zone: 'B' },
-  { name: 'Nice', zone: 'B' }, { name: 'Normandie', zone: 'B' }, { name: 'Orléans-Tours', zone: 'B' },
-  { name: 'Paris', zone: 'C' }, { name: 'Poitiers', zone: 'A' }, { name: 'Reims', zone: 'B' },
-  { name: 'Rennes', zone: 'B' }, { name: 'Strasbourg', zone: 'B' }, { name: 'Toulouse', zone: 'C' },
-  { name: 'Versailles', zone: 'C' },
-];
+// La liste des académies vit désormais dans le registre des paramètres
+// (core/settings/registry.ts) : valeur admise et libellé au même endroit.
 
 // Calendar overlay item kinds → colour.
 export const CAL_KINDS: Record<string, { color: string; label: string }> = {

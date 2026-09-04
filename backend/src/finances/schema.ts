@@ -6,6 +6,7 @@
 // transaction. `fin_meta.schema_version` records the last applied version, so a
 // second boot is a no-op. Never edit a shipped migration: add a new one.
 import type { Database } from 'better-sqlite3';
+import { log } from '../log';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
 export const FIN_SCHEMA_VERSION = 5;
@@ -342,12 +343,10 @@ export function migrateFinances(db: Database): number {
         m.up(db);
         db.prepare("INSERT INTO fin_meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(m.version));
       })();
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] Finances : migration ${m.version} appliquée (${m.label}).`);
+      log.info(`Finances : migration ${m.version} appliquée (${m.label}).`);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `[foyer] ERREUR : la migration Finances ${m.version} (${m.label}) a échoué : ${(e as Error).message}\n` +
+      log.erreur(
+        `ERREUR : la migration Finances ${m.version} (${m.label}) a échoué : ${(e as Error).message}\n` +
         `        La base reste en version ${currentVersion(db)}, aucune donnée n'a été modifiée.\n` +
         `        Restaurez votre sauvegarde si nécessaire (voir deploy/README.md) et signalez l'erreur.`,
       );

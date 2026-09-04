@@ -1,13 +1,14 @@
 // HTTP surface of the finances module. Mounted at /api/finances behind the same
 // JWT auth as the rest of the API. Operations are granular: nothing here reads or
 // rewrites the household JSON document.
-import express, { Request, Response, Router } from 'express';
+import express, { NextFunction, Request, Response, Router } from 'express';
 import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
 import { dashboard } from './dashboard';
 import { attachmentsRouter } from './attachments-routes';
 import * as backup from './backup';
+import { effectiveSetting } from '../settings/repo';
 import { contractsRouter } from './contracts-routes';
 import * as contracts from './contracts';
 import * as energy from './energy';
@@ -17,6 +18,7 @@ import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
 import * as loans from './loans';
 import { ACCOUNT_KINDS, LoanTerms, TX_KINDS, TxKind } from './types';
+import { log } from '../log';
 
 /** Reject with an explicit French message rather than a bare 400. */
 class Invalid extends Error {}
@@ -71,8 +73,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances : erreur inattendue', e);
+      log.erreur('Finances : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur interne du module Finances : ' + (e as Error).message });
     }
   };
@@ -194,7 +195,13 @@ function loanViews(): Record<number, loans.LoanView> {
   return out;
 }
 
-export function financesRouter(): Router {
+/**
+ * Le garde d'administration, fourni par le serveur : le module n'a pas à savoir
+ * comment un administrateur se reconnaît, seulement à demander la vérification.
+ */
+export type AdminGuard = (req: Request, res: Response, next: NextFunction) => void;
+
+export function financesRouter(requireAdmin: AdminGuard): Router {
   const r = express.Router();
 
   // Import, deduplication and internal transfers live in their own router.
@@ -262,7 +269,7 @@ export function financesRouter(): Router {
         currentAccounts: courants.map((c) => ({ id: c.id, name: c.name })),
         energy: {
           contracts: all.filter((c) => c.kind === 'energie').length,
-          due: energy.readingsDue(all, energy.lastReadingDates(), today),
+          due: energy.readingsDue(all, energy.lastReadingDates(), today, Number(effectiveSetting('readingDueDays'))),
         },
       },
     });
@@ -277,10 +284,12 @@ export function financesRouter(): Router {
   }));
 
   /**
-   * Restauration : elle **écrase** les données du module. D'où la confirmation
-   * explicite dans le corps de la requête, qu'aucun appel accidentel ne portera.
+   * Restauration : elle **écrase** les données du module. D'où deux gardes, et
+   * pas un : réservée à un administrateur du foyer (masquer un bouton n'empêche
+   * personne d'appeler l'API), et confirmation explicite dans le corps de la
+   * requête, qu'aucun appel accidentel ne portera.
    */
-  r.post('/restore', express.json({ limit: '64mb' }), handler((req, res) => {
+  r.post('/restore', requireAdmin, express.json({ limit: '64mb' }), handler((req, res) => {
     const body = req.body || {};
     if (String(body.confirm || '') !== 'REMPLACER') {
       res.status(400).json({

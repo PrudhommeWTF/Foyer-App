@@ -5,6 +5,7 @@
 // « Marie n'a aucun appareil abonné » est une information pour Thomas aussi.
 import express, { Request, Response, Router } from 'express';
 import { addDevice, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, removeDeviceByEndpoint } from './push';
+import { log } from '../log';
 
 export function pushRouter(memberOf: (req: Request) => string | null, appUrl: () => string): Router {
   const r = express.Router();
@@ -27,8 +28,7 @@ export function pushRouter(memberOf: (req: Request) => string | null, appUrl: ()
     const sub = req.body?.subscription;
     if (!isSubscription(sub)) { res.status(400).json({ error: 'Abonnement illisible : le navigateur n’a pas rendu ce qu’on attendait.' }); return; }
     const d = addDevice(me, sub, String(req.body?.ua || req.headers['user-agent'] || ''));
-    // eslint-disable-next-line no-console
-    console.log(`[foyer] Notifications : appareil abonné pour ${me} (${d.ua.slice(0, 60)}).`);
+    log.info(`Notifications : appareil abonné pour ${me} (${d.ua.slice(0, 60)}).`);
     res.status(201).json({ id: d.id, ua: d.ua, createdAt: d.createdAt, lastOkAt: d.lastOkAt, lastError: d.lastError });
   });
 
@@ -55,8 +55,7 @@ export function pushRouter(memberOf: (req: Request) => string | null, appUrl: ()
     const key = 'test|' + Date.now().toString(36);
     const report = await notify(key, [me], { kind: 'test', title: 'Foyer : test', body: 'Si vous lisez ceci, les rappels arrivent sur cet appareil.', url: appUrl() });
     const m = report.members[0];
-    // eslint-disable-next-line no-console
-    console.log(`[foyer] Notifications : test pour ${me} → ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
+    log.info(`Notifications : test pour ${me} → ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
     res.json(m);
   });
 

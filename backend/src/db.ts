@@ -11,6 +11,7 @@ import * as files from './storage/files';
 import { initShopping } from './shopping/repo';
 import { initTasks } from './tasks/repo';
 import { STATE_VERSION, fileStorer, migrateState } from './state/migrations';
+import { log } from './log';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const DB_PATH = process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db');
@@ -111,21 +112,17 @@ function migrateHouseholdDocument(): void {
     })();
 
     for (const m of outcome.applied) {
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] État : migration ${m.version} appliquée (${m.label}).`);
+      log.info(`État : migration ${m.version} appliquée (${m.label}).`);
     }
     for (const note of outcome.notes) {
-      // eslint-disable-next-line no-console
-      console.log('[foyer] État : ' + note);
+      log.info('État : ' + note);
     }
     if (outcome.backupPath) {
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] État : document d'origine sauvegardé dans ${outcome.backupPath}`);
+      log.info(`État : document d'origine sauvegardé dans ${outcome.backupPath}`);
     }
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error(
-      `[foyer] ERREUR : la migration du document d'état a échoué : ${(e as Error).message}\n` +
+    log.erreur(
+      `ERREUR : la migration du document d'état a échoué : ${(e as Error).message}\n` +
       `        Le document reste en version ${stateVersion(db)}, il n'a pas été réécrit.\n` +
       `        Une copie d'origine se trouve dans ${path.join(DATA_DIR, 'backups')} si la sauvegarde avait eu lieu.\n` +
       "        Restaurez-la si nécessaire (voir docs/cuisine-architecture.md) et signalez l'erreur.",
@@ -149,14 +146,12 @@ function pruneUnreferencedFiles(): void {
     for (const f of doc.files || []) if (typeof f.fileId === 'number') referenced.add(f.fileId);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);
+      log.info(`Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);
     }
   } catch (e) {
     // Un document illisible est un problème à signaler, pas une raison de
     // supprimer des fichiers au jugé.
-    // eslint-disable-next-line no-console
-    console.warn('[foyer] Fichiers : ménage ignoré, document d’état illisible : ' + (e as Error).message);
+    log.attention('Fichiers : ménage ignoré, document d’état illisible : ' + (e as Error).message);
   }
 }
 

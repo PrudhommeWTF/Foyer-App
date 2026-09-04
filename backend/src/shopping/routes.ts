@@ -4,6 +4,7 @@
 // La lecture passe par /api/live, commune aux courses et aux tâches.
 import express, { Request, Response, Router } from 'express';
 import { applyShoppingOps } from './repo';
+import { log } from '../log';
 
 /** Un lot vient d'une file hors ligne : quelques dizaines d'opérations, jamais plus. */
 const MAX_OPS_PER_BATCH = 500;
@@ -29,16 +30,14 @@ export function shoppingRouter(): Router {
       // sa file. Le dire dans les journaux, sinon un article qui n'arrive jamais
       // dans la liste reste un mystère côté serveur.
       if (out.skipped.length) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[foyer] Courses : ${out.skipped.length} opération(s) écartée(s). ` +
+        log.attention(
+          `Courses : ${out.skipped.length} opération(s) écartée(s). ` +
           out.skipped.map((s) => `${s.opId || '(sans id)'} : ${s.reason}`).join(' | '),
         );
       }
       res.json(out);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Courses : erreur inattendue en appliquant un lot', e);
+      log.erreur('Courses : erreur inattendue en appliquant un lot', e);
       res.status(500).json({ error: 'Erreur sur la liste de courses : ' + (e as Error).message });
     }
   });

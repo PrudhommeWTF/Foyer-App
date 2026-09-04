@@ -1,4 +1,5 @@
 // Domain models for the Foyer household state.
+import type { HouseholdSettings, MemberPrefs } from './settings/registry';
 
 export type Recur = 'none' | 'daily' | 'weekday' | 'weekly' | 'monthly';
 export type SchedType = 'ecole' | 'travail' | 'sport' | 'loisir' | 'sante' | 'repas' | 'autre';
@@ -10,8 +11,20 @@ export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
  * liste européenne, et clés d'articles du référentiel qu'on ne veut pas voir
  * arriver. Les deux sont confrontés au contenu des recettes (voir diet.ts).
  */
-export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[]; }
+export interface Member {
+  id: string; name: string; role: string; color: string; ini: string; email?: string; birthday?: string | null;
+  /** Administrateur du foyer : seul à pouvoir changer les réglages partagés et gérer les accès. */
+  admin?: boolean;
+  /**
+   * Membre mineur. `role` reste du texte libre (« Maman », « 12 ans »), qui
+   * n'est pas exploitable : ce booléen l'est. Un enfant n'a **rien** dans les
+   * Paramètres, écran comme API, pas même ses préférences : elles vivent dans
+   * un document que tout compte lit, et l'écran n'a pas à devenir un endroit où
+   * l'on bricole le foyer.
+   */
+  enfant?: boolean;
+  allerg?: string[]; refuse?: string[];
+}
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
@@ -259,16 +272,29 @@ export interface SchedSlot {
   srcId?: string;
 }
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
-export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
-export interface Settings {
-  dateFmt: string;
-  dark: boolean; prefNotifs: boolean;
-  academie?: string;
-  /** Show the breakfast row in the meal planner. Off by default: rarely planned. */
-  showBreakfast?: boolean;
-  /** Include open dated tasks in the shared ICS feed. Off by default: the feed is the family calendar. */
-  icsTasks?: boolean;
-}
+/**
+ * Le repli d'identité du document : le membre qui compte quand la session ne dit
+ * pas qui elle est.
+ *
+ * Il portait aussi le nom, le rôle, l'email, le téléphone et la couleur de
+ * l'administrateur, recopiés du membre et tenus à jour pour rien : aucun écran
+ * ne les lisait. Voir la migration 10.
+ */
+export interface Profile { memberId: string; }
+/**
+ * Les réglages du foyer. Leur forme est **dérivée du registre** : un réglage se
+ * déclare dans settings/registry.ts et nulle part ailleurs, et se lit avec
+ * `setting('cle', doc)`. Tout est facultatif, la valeur par défaut prend le
+ * relais, ce qui rend un document ancien lisible sans migration.
+ */
+export type Settings = HouseholdSettings;
+
+/**
+ * Les préférences personnelles, par identifiant de membre. Un membre absent de
+ * la table n'a rien réglé : ses défauts s'appliquent, et il n'y a rien à créer
+ * pour lui.
+ */
+export type Prefs = Record<string, MemberPrefs>;
 
 export interface HouseholdState {
   familyName: string;
@@ -298,4 +324,5 @@ export interface HouseholdState {
   sched: SchedSlot[];
   profile: Profile;
   settings: Settings;
+  prefs?: Prefs;
 }

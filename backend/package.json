@@ -1,7 +1,7 @@
 {
   "name": "foyer-backend",
   "version": "0.0.0",
-  "description": "Foyer — backend API (auth + household state) for the self-hosted family management app",
+  "description": "Foyer \u2014 backend API (auth + household state) for the self-hosted family management app",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/server.js",
@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "test": "node scripts/check-tests.js && tsx --test test/*.test.ts",
-    "typecheck": "tsc -p tsconfig.test.json"
+    "typecheck": "tsc -p tsconfig.test.json",
+    "docs:settings": "tsx scripts/settings-doc.ts > ../docs/parametres.md"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

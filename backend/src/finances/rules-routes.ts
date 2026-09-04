@@ -5,6 +5,7 @@ import { getAccount, getCategory } from './repo';
 import { getContract } from './contracts';
 import { ActionKind, Condition, ConditionField, ConditionOp, MatchMode } from './rules';
 import { isIsoDate } from './money';
+import { log } from '../log';
 
 class Invalid extends Error {}
 const fail = (msg: string): never => { throw new Invalid(msg); };
@@ -25,8 +26,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances/règles : erreur inattendue', e);
+      log.erreur('Finances/règles : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur dans le moteur de règles : ' + (e as Error).message });
     }
   };

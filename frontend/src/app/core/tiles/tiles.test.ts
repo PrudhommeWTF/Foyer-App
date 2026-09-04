@@ -20,8 +20,8 @@ const emptyDoc = (): HouseholdState => ({
   familyName: 'Foyer', members: [], events: [], aisles: [], articles: [],
   shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [], msgs: [], contacts: [],
   folders: [], files: [], meals: {}, recipes: [], sched: [],
-  profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
-  settings: { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true },
+  profile: { memberId: 'm1' },
+  settings: {},
 });
 
 /** Un document qui a de quoi remplir chaque tuile du plan « document ». */

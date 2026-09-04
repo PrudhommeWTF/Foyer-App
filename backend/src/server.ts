@@ -40,9 +40,15 @@ import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
+import { settingsRouter } from './settings/routes';
+import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
+import { setting } from './settings/registry';
 import { loadRules, rulesPath } from './home/rules';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
+import { LogLevel, log, setLogLevelSource } from './log';
+import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
+import { buildStatus } from './system/status';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -121,7 +127,20 @@ function resolveJwtSecret(): string {
   return ephemeral;
 }
 const JWT_SECRET = resolveJwtSecret();
-const ALLOW_SIGNUP = (process.env.FOYER_ALLOW_SIGNUP || 'true') !== 'false';
+
+// Le niveau de journalisation est un réglage du foyer, relu à chaque ligne :
+// « journalctl -f -u foyer » change de verbosité pendant qu'on le regarde, sans
+// redémarrer le service. Le repli sur « info » couvre le démarrage, avant que la
+// base ne soit ouverte.
+setLogLevelSource(() => {
+  try { return effectiveSetting('logLevel') as LogLevel; } catch { return 'info'; }
+});
+/**
+ * Les inscriptions sont un réglage du foyer, modifiable depuis l'application,
+ * que `FOYER_ALLOW_SIGNUP` verrouille quand elle est posée. Lu à chaque appel :
+ * couper les inscriptions ne doit pas demander de redémarrer le service.
+ */
+const allowSignup = (): boolean => effectiveSetting('signupAllowed') === true;
 // The frontend uses a relative base href, so a single build works served at the
 // root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
@@ -195,8 +214,16 @@ interface AuthedRequest extends Request {
 }
 
 function sign(user: { id: number; email: string; token_version: number }): string {
-  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: '30d' });
+  // La durée est un réglage du foyer, lue à chaque connexion : la changer ne
+  // touche pas aux sessions déjà ouvertes, qui gardent la durée qu'on leur a
+  // donnée. C'est à la connexion suivante que la nouvelle valeur s'applique.
+  const jours = Number(effectiveSetting('sessionDays')) || 30;
+  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: `${jours}d` });
 }
+
+/** Longueur minimale exigée d'un mot de passe, et le message qui va avec. */
+const pwdMin = (): number => Number(effectiveSetting('passwordMinLength')) || 6;
+const pwdTropCourt = (): string => `Le mot de passe doit faire au moins ${pwdMin()} caractères`;
 
 function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization || '';
@@ -244,7 +271,7 @@ api.get('/health', (_req, res) => res.json({ ok: true }));
 
 // ---- First-run setup (onboarding) ----
 api.get('/setup/status', (_req, res) => {
-  res.json({ needsSetup: countUsers() === 0, allowSignup: ALLOW_SIGNUP });
+  res.json({ needsSetup: countUsers() === 0, allowSignup: allowSignup() });
 });
 
 api.post('/setup', authLimiter, (req: Request, res: Response) => {
@@ -256,7 +283,7 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
   if (!household?.name?.trim()) { res.status(400).json({ error: 'Le nom du foyer est requis' }); return; }
   if (!admin?.name?.trim()) { res.status(400).json({ error: 'Votre prénom est requis' }); return; }
   if (!admin?.email?.trim() || !EMAIL_RE.test(String(admin.email).trim())) { res.status(400).json({ error: 'Email administrateur invalide' }); return; }
-  if (String(admin.password || '').length < 6) { res.status(400).json({ error: 'Le mot de passe doit faire au moins 6 caractères' }); return; }
+  if (String(admin.password || '').length < pwdMin()) { res.status(400).json({ error: pwdTropCourt() }); return; }
 
   // Normalise members (drop nameless entries) and validate optional per-member credentials.
   const rawMembers = Array.isArray(members) ? members : [];
@@ -277,7 +304,7 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
     const hasPwd = !!m.password;
     if (hasEmail !== hasPwd) { res.status(400).json({ error: `Membre « ${m.name} » : renseignez email ET mot de passe, ou aucun des deux` }); return; }
     if (hasEmail && !EMAIL_RE.test(m.email)) { res.status(400).json({ error: `Email invalide pour « ${m.name} »` }); return; }
-    if (hasPwd && m.password.length < 6) { res.status(400).json({ error: `Mot de passe de « ${m.name} » : 6 caractères minimum` }); return; }
+    if (hasPwd && m.password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe de « ${m.name} » : ${pwdMin()} caractères minimum` }); return; }
   }
 
   // Every login email must be unique (across admin + members) and not already taken.
@@ -314,7 +341,7 @@ api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
 });
 
 api.post('/auth/register', authLimiter, (req: Request, res: Response) => {
-  if (!ALLOW_SIGNUP) {
+  if (!allowSignup()) {
     res.status(403).json({ error: 'Les inscriptions sont désactivées' });
     return;
   }
@@ -351,12 +378,35 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
     return;
   }
 
+  // Les réglages ne s'écrivent plus par ici : ils passent par PATCH
+  // /api/settings, clé par clé et sous contrôle de portée. Ce qu'un client
+  // envoie dans `settings` et `prefs` est donc ignoré, quel que soit son rôle,
+  // ce qui ferme la porte que masquer un onglet laissait grande ouverte.
+  const me = currentMember(req);
+  const avant = currentState.state as HouseholdState;
+  if (!me?.admin && settingsChanged(avant.settings, state.settings)) {
+    res.status(403).json({ error: 'Seul un administrateur du foyer peut modifier les réglages.' });
+    return;
+  }
+  // Les préférences d'un autre membre ne se modifient pas, même par un
+  // administrateur : c'est le pendant de la règle sur la fiche de membre. Un
+  // enfant, lui, n'en écrit aucune, pas même les siennes.
+  if (me?.enfant && foreignPrefsChanged(avant.prefs, state.prefs, null)) {
+    res.status(403).json({ error: 'Les réglages du foyer ne sont pas accessibles depuis ce compte.' });
+    return;
+  }
+  if (foreignPrefsChanged(avant.prefs, state.prefs, me?.id ?? null)) {
+    res.status(403).json({ error: 'Vous ne pouvez modifier que vos propres préférences.' });
+    return;
+  }
+  state.settings = avant.settings;
+  state.prefs = avant.prefs;
+
   // Non-admins may edit shared household data, but must not tamper with the member
   // roster: no adding/removing members, no changing anyone's admin flag, and no
   // editing a member other than themselves (which would include self-promotion).
-  const me = currentMember(req);
   if (!me?.admin) {
-    const current = (currentState.state as HouseholdState).members || [];
+    const current = avant.members || [];
     const next = Array.isArray(state.members) ? state.members : [];
     const byId = (arr: HouseholdState['members']): Map<string, HouseholdState['members'][number]> =>
       new Map(arr.map((m) => [m.id, m]));
@@ -389,9 +439,8 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
   // consequences for the items are applied server-side.
   const kept = preserveShopping(state as unknown as Record<string, unknown>);
   if (kept.movedToFallback || kept.dropped) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[foyer] Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
+    log.info(
+      `Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
       `et ${kept.dropped} retiré(s) avec leur liste, à la suite d'une édition des rayons ou des listes.`,
     );
   }
@@ -399,9 +448,8 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
   // Same rule for the tasks: written op by op, never by whole-document PUT.
   const tasks = preserveTasks(state as unknown as Record<string, unknown>);
   if (tasks.dropped || tasks.unassigned || tasks.unlinked || tasks.orphaned) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[foyer] Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
+    log.info(
+      `Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
       `à un membre disparu retirée(s), ${tasks.unlinked} lien(s) vers une liste de courses ou un document disparus retiré(s), ` +
       `${tasks.orphaned} sous-tâche(s) remontée(s) au premier niveau.`,
     );
@@ -432,7 +480,7 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   const u = req.user ? getUserById(req.user.id) : undefined;
   if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
   const m = currentMember(req);
-  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin });
+  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin, enfant: !!m?.enfant });
 });
 
 // ---- Member login accounts (admin-managed) ----
@@ -449,7 +497,7 @@ api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: R
   const email = String(req.body?.email || '').trim();
   const password = String(req.body?.password || '');
   if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
-  if (password.length < 6) { res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' }); return; }
+  if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
   createUserWithMember(email, password, member.name, memberId);
   res.status(201).json({ memberId, email: email.toLowerCase() });
@@ -470,7 +518,7 @@ api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Re
   }
   if (rawPassword !== undefined && String(rawPassword) !== '') {
     password = String(rawPassword);
-    if (password.length < 6) { res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' }); return; }
+    if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
   updateUserCredentials(user.id, email, password);
@@ -489,11 +537,23 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, financesRouter());
+api.use('/finances', auth, financesRouter(requireAdmin));
+
+// Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
+// plutôt que par enregistrement du document entier, pour que deux
+// administrateurs qui règlent deux choses ne s'écrasent pas.
+api.use('/settings', auth, settingsRouter({
+  memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
+  isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
+  isChild: (req) => !!currentMember(req as AuthedRequest)?.enfant,
+  overrides: () => envOverrides(),
+  deployment: () => deploymentView(),
+  appVersion: currentVersion,
+}));
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).
-api.use('/files', auth, filesRouter());
+api.use('/files', auth, filesRouter(() => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024));
 
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
@@ -503,14 +563,18 @@ api.use('/shopping', auth, shoppingRouter());
 api.use('/tasks', auth, tasksRouter());
 
 // Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
-// L'adresse ouverte au tap est celle que le navigateur a utilisée pour
-// s'abonner : le serveur ne connaît pas son nom public.
-const APP_URL = process.env.FOYER_PUBLIC_URL || '';
-api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, () => APP_URL));
+//
+// L'adresse ouverte au tap vient du réglage « Adresse publique de Foyer », que
+// `FOYER_PUBLIC_URL` verrouille. Vide, c'est le navigateur qui décide, avec
+// l'adresse par laquelle il s'était abonné : elle échoue depuis l'extérieur
+// quand c'était une adresse locale, d'où l'intérêt de pouvoir la poser sans
+// éditer un fichier sur le serveur.
+const appUrl = (): string => String(effectiveSetting('publicUrl') || '');
+api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
-api.use('/recipes', auth, recipesRouter());
+api.use('/recipes', auth, recipesRouter(() => effectiveSetting('recipeImport') === true));
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -549,8 +613,7 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
 api.get('/home/rules', auth, (_req, res) => {
   const outcome = loadRules(DATA_DIR);
   if (outcome.errors.length) {
-    // eslint-disable-next-line no-console
-    console.warn(`[foyer] accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
+    log.attention(`accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
   }
   res.json(outcome);
 });
@@ -631,6 +694,58 @@ api.post('/system/update', auth, requireAdmin, (_req, res) => {
   }
 });
 
+/**
+ * L'état du service : version, place restante, poids des données, sauvegardes.
+ * Réservé aux administrateurs : c'est de l'exploitation, et le chemin des
+ * données n'a pas à circuler plus loin que nécessaire.
+ */
+api.get('/system/status', auth, requireAdmin, (_req, res) => {
+  const state = getHousehold().state as HouseholdState;
+  res.json(buildStatus({
+    version: currentVersion(),
+    dataDir: DATA_DIR,
+    dbPath: process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db'),
+    counts: {
+      members: (state.members || []).length,
+      events: (state.events || []).length,
+      tasks: (state.tasks || []).length,
+      recipes: (state.recipes || []).length,
+      files: (state.files || []).length,
+    },
+  }));
+});
+
+/**
+ * Un instantané cohérent de la base, sans arrêter le service (VACUUM INTO).
+ * Il n'emporte ni les fichiers ni les photos : l'écran le dit et donne la
+ * commande d'archive complète.
+ */
+api.post('/system/backup', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
+  try {
+    const keep = Number(effectiveSetting('backupKeep')) || 7;
+    const out = makeSnapshot(db, DATA_DIR, keep);
+    log.info(`Sauvegarde : ${out.snapshot.name} (${Math.round(out.snapshot.bytes / 1024)} Ko) écrite par ${currentMember(req)?.id || '(membre inconnu)'}`
+      + (out.deleted.length ? `, ${out.deleted.length} ancienne(s) effacée(s)` : '') + '.');
+    res.json(out);
+  } catch (e) {
+    if (e instanceof BackupRefused) { res.status(409).json({ error: e.message }); return; }
+    log.erreur('Sauvegarde impossible', e);
+    res.status(500).json({ error: 'Sauvegarde impossible : ' + (e as Error).message });
+  }
+});
+
+api.get('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
+  const p = snapshotPath(DATA_DIR, String(req.params.name));
+  if (!p) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
+  res.download(p);
+});
+
+api.delete('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
+  if (!removeSnapshot(DATA_DIR, String(req.params.name))) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
+  log.info(`Sauvegarde ${req.params.name} effacée.`);
+  res.json({ ok: true });
+});
+
 api.get('/system/update-status', auth, (_req, res) => {
   try {
     const p = path.join(DATA_DIR, 'update-status.json');
@@ -669,17 +784,34 @@ if (fs.existsSync(STATIC_DIR)) {
 // Les clés sont générées une fois et gardées en base : en changer invaliderait
 // tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
 const vapid = initPush(db, { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT });
-// eslint-disable-next-line no-console
-console.log(`[foyer] Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}).`);
+log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}).`);
 
-const notifLog = (line: string): void => { console.log('[foyer] ' + line); }; // eslint-disable-line no-console
+const notifLog = (line: string): void => log.info(line);
+
+/**
+ * Ce membre veut-il ce genre de rappel sur son téléphone ?
+ *
+ * La préférence est personnelle : chacun coupe les siennes sans rien imposer
+ * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
+ */
+const memberWants = (memberId: string, kind: 'reminder' | 'assigned'): boolean => {
+  const state = getHousehold().state as HouseholdState;
+  // Les deux clés sont écrites en toutes lettres : une clé calculée ne dit rien
+  // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
+  return kind === 'reminder'
+    ? setting('pushReminders', state, memberId)
+    : setting('pushAssigned', state, memberId);
+};
 
 // Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
 onAssigned((memberId, task, opId) => {
+  // Le foyer a suspendu les rappels, ou ce membre ne veut pas être prévenu des
+  // affectations : rien ne part, et rien n'est noté comme manqué.
+  if (effectiveSetting('pushPaused') === true || !memberWants(memberId, 'assigned')) return;
   const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
   void notify(`assign|${opId}|${memberId}`, [memberId], {
     kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
-    url: APP_URL, taskId: task.id, tag: 'task-' + task.id,
+    url: appUrl(), taskId: task.id, tag: 'task-' + task.id,
   }).then((r) => {
     const m = r.members[0];
     if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
@@ -689,11 +821,15 @@ onAssigned((memberId, task, opId) => {
 startScheduler({
   tasks: () => (getHousehold().state as HouseholdState).tasks || [],
   accounts: () => accountsOf().map((a) => a.memberId),
-  url: () => APP_URL,
+  url: appUrl,
+  rules: () => ({
+    paused: effectiveSetting('pushPaused') === true,
+    quiet: { from: String(effectiveSetting('quietFrom')), to: String(effectiveSetting('quietTo')) },
+  }),
+  wants: memberWants,
   log: notifLog,
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  // eslint-disable-next-line no-console
-  console.log(`[foyer] API + app disponibles sur http://0.0.0.0:${PORT}`);
+  log.info(`API + app disponibles sur http://0.0.0.0:${PORT}`);
 });

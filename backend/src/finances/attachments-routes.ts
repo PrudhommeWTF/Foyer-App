@@ -7,6 +7,7 @@ import express, { Request, Response, Router } from 'express';
 import * as attachments from './attachments';
 import { getAsset, getContract } from './contracts';
 import { getTransaction } from './repo';
+import { log } from '../log';
 
 /** 20 Mo : a scanned invoice weighs a few hundred kilobytes, a phone photo a few megabytes. */
 const MAX_UPLOAD = '20mb';
@@ -19,8 +20,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances/pièces jointes : erreur inattendue', e);
+      log.erreur('Finances/pièces jointes : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur sur les pièces jointes : ' + (e as Error).message });
     }
   };

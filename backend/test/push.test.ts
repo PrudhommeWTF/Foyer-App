@@ -6,7 +6,7 @@ import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateHousehold } from '../src/storage/schema';
 import { addDevice, initPush, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, setSender } from '../src/notify/push';
-import { tick } from '../src/notify/scheduler';
+import { SchedulerDeps, tick } from '../src/notify/scheduler';
 import { applyTaskOps, initTasks, onAssigned } from '../src/tasks/repo';
 import { TaskItem } from '../src/tasks/ops';
 
@@ -92,7 +92,17 @@ describe('envoi', () => {
 });
 
 describe('planificateur', () => {
-  const deps = (tasks: TaskItem[], log: string[]) => ({ tasks: () => tasks, accounts: () => ['me', 'm1'], url: () => '', log: (l: string) => log.push(l) });
+  const deps = (tasks: TaskItem[], log: string[], over: Partial<SchedulerDeps> = {}): SchedulerDeps => ({
+    tasks: () => tasks,
+    accounts: () => ['me', 'm1'],
+    url: () => '',
+    // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
+    // ses rappels. Les tests qui éprouvent ces règles les posent eux-mêmes.
+    rules: () => ({ paused: false, quiet: { from: '', to: '' } }),
+    wants: () => true,
+    log: (l: string) => { log.push(l); },
+    ...over,
+  });
 
   it('envoie ce qui est dû, note ce qui est manqué, et ne recommence pas au passage suivant', async () => {
     addDevice('m1', sub('a'), ''); addDevice('me', sub('b'), '');

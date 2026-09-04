@@ -43,7 +43,9 @@ beforeEach(async () => {
   files.initFiles(db);
 
   const app = express();
-  app.use('/api/files', filesRouter());
+  // La limite du foyer, ici généreuse : ce fichier éprouve les types acceptés,
+  // pas la taille. Le plafond du serveur, lui, reste celui du routeur.
+  app.use('/api/files', filesRouter(() => 20 * 1024 * 1024));
   server = http.createServer(app);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = 'http://127.0.0.1:' + (server.address() as { port: number }).port + '/api';
