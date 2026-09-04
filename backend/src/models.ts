@@ -2,6 +2,7 @@
 // fields (planned/birthday/academie) are additive and backward-compatible.
 import type { ShopItem } from './shopping/ops';
 import type { TaskItem } from './tasks/ops';
+import type { HouseholdSettings } from './settings/registry';
 
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
 // frontend/src/app/core/diet.ts pour ce qui en est dérivé.
@@ -116,15 +117,13 @@ export interface SchedSlot {
   srcId?: string;
 }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
-export interface Settings {
-  dateFmt: string;
-  dark: boolean; prefNotifs: boolean;
-  academie?: string;
-  /** Show the breakfast row in the meal planner. Off by default: rarely planned. */
-  showBreakfast?: boolean;
-  /** Include open dated tasks in the shared ICS feed. Off by default: the feed is the family calendar, tasks are opt-in. */
-  icsTasks?: boolean;
-}
+/**
+ * Les réglages du foyer. Leur forme est **dérivée du registre** : un réglage se
+ * déclare dans settings/registry.ts et nulle part ailleurs, et se lit avec
+ * `setting('cle', doc)`. Tout est facultatif, la valeur par défaut prend le
+ * relais, ce qui rend un document ancien lisible sans migration.
+ */
+export type Settings = HouseholdSettings;
 
 export interface HouseholdState {
   familyName: string;

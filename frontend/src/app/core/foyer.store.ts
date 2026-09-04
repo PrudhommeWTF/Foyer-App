@@ -25,8 +25,9 @@ import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownL
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
-import { DATEFMT_ORDER, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
+import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
+import { SettingKey, SettingValue, householdDefaults, setting, validate } from './settings/registry';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
@@ -165,7 +166,7 @@ export class FoyerStore {
    * and costs a third of the grid height on a phone. Hiding it keeps whatever
    * was already recorded, it only stops displaying the row.
    */
-  readonly mealSlots = computed(() => MEAL_SLOTS.filter((s) => s.key !== 'matin' || !!this._data()?.settings.showBreakfast));
+  readonly mealSlots = computed(() => MEAL_SLOTS.filter((s) => s.key !== 'matin' || this.setting('showBreakfast')));
   readonly narrow = signal(false);
 
   // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
@@ -220,8 +221,8 @@ export class FoyerStore {
   isSchoolHoliday(ds: string): boolean {
     return this.schoolHolidays().some((h) => ds >= h.start && ds <= h.end);
   }
-  /** ISO date → household numeric format (e.g. 24/07/2026). */
-  fmtNumDate(iso: string): string { return fmtNumericDate(iso, DATEFMT_ORDER[this._data()?.settings.dateFmt || ''] || 'dmy'); }
+  /** ISO date → date courte française (24/07/2026). */
+  fmtNumDate(iso: string): string { return fmtNumericDate(iso); }
   /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */
   fmtLongDate(iso: string): string {
     try { return cap(parseDay(iso).toLocaleDateString(this.locale, { weekday: 'long', day: 'numeric', month: 'long' })); }
@@ -258,11 +259,9 @@ export class FoyerStore {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private api: ApiService) {
-    // Theme side effect: reflect settings.dark onto <html>.
+    // Theme side effect: reflect the theme setting onto <html>.
     effect(() => {
-      const d = this._data();
-      const dark = d ? d.settings.dark : false;
-      document.documentElement.classList.toggle('dark', dark);
+      document.documentElement.classList.toggle('dark', setting('dark', this._data()));
     });
 
     // Les photos sont téléchargées avec la session dès qu'une recette en cite
@@ -564,7 +563,7 @@ export class FoyerStore {
 
   // ---- calendar overlays -----------------------------------------------
   async loadSchoolHolidays(): Promise<void> {
-    const ac = this._data()?.settings.academie || '';
+    const ac = this.setting('academie');
     if (!ac) { this.schoolHolidays.set([]); return; }
     try { const r = await this.api.schoolHolidays(ac); this.schoolHolidays.set(r.holidays || []); }
     catch { this.schoolHolidays.set([]); }
@@ -670,7 +669,7 @@ export class FoyerStore {
     s.tasks ||= [];
     s.taskLists ||= [];
     s.taskTemplates ||= [];
-    s.settings ||= { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true };
+    s.settings ||= householdDefaults();
     return s;
   }
 
@@ -1079,8 +1078,8 @@ export class FoyerStore {
 
   // ---- navigation -------------------------------------------------------
   go(screen: string): void { this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false }); }
-  toggleDark(): void { this.mutate((d) => { d.settings.dark = !d.settings.dark; }); }
-  setThemeMode(mode: 'light' | 'dark'): void { this.mutate((d) => { d.settings.dark = mode === 'dark'; }); }
+  toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
+  setThemeMode(mode: 'light' | 'dark'): void { this.setSetting('dark', mode === 'dark'); }
 
   // ---- global search ----------------------------------------------------
   openSearch(): void { this.patch({ searchOpen: true, searchQuery: '' }); }
@@ -2991,7 +2990,7 @@ export class FoyerStore {
    */
   readonly notifications = computed<Notif[]>(() => {
     const d = this._data();
-    if (!d || !d.settings.prefNotifs) return [];
+    if (!d || !this.setting('prefNotifs')) return [];
     const today = this.todayStr();
     const read = this.readNotifs();
     const addDays = (iso: string, n: number): string => { const dt = parseDay(iso); dt.setDate(dt.getDate() + n); return dstr(dt); };
@@ -3046,8 +3045,22 @@ export class FoyerStore {
   }
 
   // ---- settings ---------------------------------------------------------
-  setSetting<K extends keyof HouseholdState['settings']>(key: K, val: HouseholdState['settings'][K]): void {
-    this.mutate((d) => { (d.settings as any)[key] = val; });
+  //
+  // Toute lecture et toute écriture d'un réglage passe par le registre
+  // (core/settings/registry.ts) : c'est ce qui rend un réglage mort ou fantôme
+  // détectable en CI. Personne ne touche `settings` directement.
+
+  /** La valeur d'un réglage du foyer, ou son défaut quand le document ne la porte pas. */
+  setting<K extends SettingKey>(key: K): SettingValue<K> { return setting(key, this._data()); }
+
+  /**
+   * Écrit un réglage, après contrôle. Une valeur refusée n'est pas remplacée en
+   * silence : le message du registre est affiché et rien n'est écrit.
+   */
+  setSetting<K extends SettingKey>(key: K, val: SettingValue<K>): void {
+    const checked = validate(key, val);
+    if (!checked.ok) { this.toast(checked.error); return; }
+    this.mutate((d) => { (d.settings as Record<string, unknown>)[key] = checked.value; });
     if (key === 'academie') this.loadSchoolHolidays();
   }
   exportData(): void {

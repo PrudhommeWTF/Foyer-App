@@ -5,6 +5,7 @@
 // comprennent pas. Les lignes se terminent par CRLF, comme l'exige la RFC 5545.
 import { HouseholdState } from './seed';
 import { Deadline } from './finances/contracts';
+import { setting } from './settings/registry';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 const icsDate = (ds: string): string => ds.replace(/-/g, '');
@@ -92,7 +93,7 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): str
   // autre chose que l'application (tolérance, base sur la réalisation), et
   // l'agenda déplace l'entrée quand la coche fait avancer l'échéance, grâce à
   // l'UID stable. Une tâche faite disparaît du flux, comme elle disparaît du jour.
-  if (state.settings?.icsTasks) {
+  if (setting('icsTasks', state)) {
     const listName = (id: string): string => (state.taskLists || []).find((l) => l.id === id)?.name || '';
     for (const t of state.tasks || []) {
       if (t.done || !t.due) continue;

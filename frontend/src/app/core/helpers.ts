@@ -45,13 +45,16 @@ export function contactIni(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-/** Render an ISO date (YYYY-MM-DD) in the household's numeric date order. */
-export function fmtNumericDate(iso: string, order: 'dmy' | 'mdy' | 'ymd'): string {
+/**
+ * Une date ISO (AAAA-MM-JJ) en date courte française : 31/12/2026.
+ *
+ * Le format n'est pas réglable, comme la locale, le fuseau et la devise :
+ * Foyer vise la France métropolitaine, et proposer MM/JJ/AAAA n'y sert
+ * personne. Une date mal formée est rendue telle quelle plutôt que tronquée.
+ */
+export function fmtNumericDate(iso: string): string {
   const [y, m, d] = (iso || '').split('-');
-  if (!y || !m || !d) return iso || '';
-  if (order === 'mdy') return `${m}/${d}/${y}`;
-  if (order === 'ymd') return `${y}-${m}-${d}`;
-  return `${d}/${m}/${y}`;
+  return y && m && d ? `${d}/${m}/${y}` : iso || '';
 }
 
 /** Lowercase + strip accents, for accent/case-insensitive search matching. */

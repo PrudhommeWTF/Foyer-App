@@ -20,7 +20,7 @@ const doc = (): HouseholdState => ({
   events: [], aisles: [], articles: [], shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [],
   msgs: [], contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: 'me' },
-  settings: { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true },
+  settings: { dark: false, prefNotifs: true },
 });
 
 /** Applique des mutations comme le store le fait, sans Angular. */

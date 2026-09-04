@@ -21,7 +21,7 @@ const emptyDoc = (): HouseholdState => ({
   shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [], msgs: [], contacts: [],
   folders: [], files: [], meals: {}, recipes: [], sched: [],
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
-  settings: { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true },
+  settings: { dark: false, prefNotifs: true },
 });
 
 /** Un document qui a de quoi remplir chaque tuile du plan « document ». */

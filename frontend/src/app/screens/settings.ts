@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
-import { ACADEMIES } from '../core/constants';
+import { declOf } from '../core/settings/registry';
 
 @Component({
   selector: 'screen-settings',
@@ -29,22 +29,13 @@ import { ACADEMIES } from '../core/constants';
               <span class="sec-title">Général</span>
             </div>
 
-            <div class="field-label">Format de date</div>
-            <div class="seg wrap">
-              @for (o of dateFmtOpts; track o) {
-                <button [class.active]="d().settings.dateFmt === o" (click)="store.setSetting('dateFmt', o)">{{ o }}</button>
-              }
-            </div>
-            <div class="hint">Aperçu : {{ store.fmtNumDate(store.todayStr()) }}</div>
-
-            <div class="field-label" style="margin-top:16px">Académie (vacances scolaires)</div>
-            <select class="input" [ngModel]="d().settings.academie || ''" (ngModelChange)="store.setSetting('academie', $event)">
-              <option value="">Non définie</option>
-              @for (a of academies; track a.name) {
-                <option [value]="a.name">{{ a.name }} — zone {{ a.zone }}</option>
+            <div class="field-label">{{ academie.label }} (vacances scolaires)</div>
+            <select class="input" [ngModel]="store.setting('academie')" (ngModelChange)="store.setSetting('academie', $event)">
+              @for (o of academie.options || []; track o.value) {
+                <option [value]="o.value">{{ o.label }}</option>
               }
             </select>
-            <div class="hint">Affiche les vacances scolaires de votre zone dans le calendrier.</div>
+            <div class="hint">{{ academie.desc }}</div>
           </div>
 
           <div class="card">
@@ -55,12 +46,12 @@ import { ACADEMIES } from '../core/constants';
               <span class="sec-title">Repas</span>
             </div>
             <div class="prefs">
-              <div class="pref" (click)="store.setSetting('showBreakfast', !d().settings.showBreakfast)">
+              <div class="pref" (click)="store.setSetting('showBreakfast', !store.setting('showBreakfast'))">
                 <div>
-                  <div class="pref-label">Afficher le petit-déjeuner</div>
-                  <div class="pref-desc">Ajoute la ligne du matin au planning des repas. Les repas déjà saisis sont conservés quand elle est masquée.</div>
+                  <div class="pref-label">{{ breakfast.label }}</div>
+                  <div class="pref-desc">{{ breakfast.desc }}</div>
                 </div>
-                <div class="sw" [class.on]="d().settings.showBreakfast"><div class="knob"></div></div>
+                <div class="sw" [class.on]="store.setting('showBreakfast')"><div class="knob"></div></div>
               </div>
             </div>
           </div>
@@ -74,8 +65,8 @@ import { ACADEMIES } from '../core/constants';
             </div>
             <div class="field-label">Thème</div>
             <div class="seg">
-              <button class="grow" [class.active]="!d().settings.dark" (click)="store.setThemeMode('light')">Clair</button>
-              <button class="grow" [class.active]="d().settings.dark" (click)="store.setThemeMode('dark')">Sombre</button>
+              <button class="grow" [class.active]="!store.setting('dark')" (click)="store.setThemeMode('light')">Clair</button>
+              <button class="grow" [class.active]="store.setting('dark')" (click)="store.setThemeMode('dark')">Sombre</button>
             </div>
           </div>
         </div>
@@ -140,15 +131,13 @@ import { ACADEMIES } from '../core/constants';
               <span class="sec-title">Notifications</span>
             </div>
             <div class="prefs">
-              @for (p of prefs; track p.key) {
-                <div class="pref" (click)="store.setSetting(p.key, !d().settings[p.key])">
-                  <div>
-                    <div class="pref-label">{{ p.label }}</div>
-                    <div class="pref-desc">{{ p.desc }}</div>
-                  </div>
-                  <div class="sw" [class.on]="d().settings[p.key]"><div class="knob"></div></div>
+              <div class="pref" (click)="store.setSetting('prefNotifs', !store.setting('prefNotifs'))">
+                <div>
+                  <div class="pref-label">{{ alertes.label }}</div>
+                  <div class="pref-desc">{{ alertes.desc }}</div>
                 </div>
-              }
+                <div class="sw" [class.on]="store.setting('prefNotifs')"><div class="knob"></div></div>
+              </div>
             </div>
 
             <!-- Les rappels sur le téléphone : ce qui marche ici, et ce qui est parti. Le
@@ -231,12 +220,12 @@ import { ACADEMIES } from '../core/constants';
             }
             <!-- Sur demande : le flux est l'agenda de la famille, les tâches n'y entrent que si le foyer le veut. -->
             <div class="prefs" style="margin-top:14px">
-              <div class="pref" (click)="store.setSetting('icsTasks', !d().settings.icsTasks)">
+              <div class="pref" (click)="store.setSetting('icsTasks', !store.setting('icsTasks'))">
                 <div>
-                  <div class="pref-label">Inclure les tâches datées</div>
-                  <div class="pref-desc">Les tâches à faire qui ont une date apparaissent dans les agendas abonnés, préfixées « Tâche : ». Une tâche faite en disparaît ; une série n’y met que sa prochaine occurrence.</div>
+                  <div class="pref-label">{{ icsTasks.label }}</div>
+                  <div class="pref-desc">{{ icsTasks.desc }}</div>
                 </div>
-                <div class="sw" [class.on]="d().settings.icsTasks"><div class="knob"></div></div>
+                <div class="sw" [class.on]="store.setting('icsTasks')"><div class="knob"></div></div>
               </div>
             </div>
           </div>
@@ -392,14 +381,15 @@ import { ACADEMIES } from '../core/constants';
 export class SettingsScreen {
   store = inject(FoyerStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
-  academies = ACADEMIES;
   copied = signal(false);
 
-  dateFmtOpts = ['JJ/MM/AAAA', 'MM/JJ/AAAA', 'AAAA-MM-JJ'];
-
-  prefs: { key: 'prefNotifs'; label: string; desc: string }[] = [
-    { key: 'prefNotifs', label: 'Notifications', desc: 'Afficher les alertes du foyer (agenda, tâches, anniversaires…)' },
-  ];
+  // Libellés, descriptions et valeurs admises viennent du registre : la page ne
+  // les réécrit pas, sans quoi elle finirait par dire autre chose que le code.
+  // Elle sera engendrée en entier à la tranche suivante.
+  academie = declOf('academie')!;
+  breakfast = declOf('showBreakfast')!;
+  icsTasks = declOf('icsTasks')!;
+  alertes = declOf('prefNotifs')!;
 
   constructor() {
     this.store.patch({ famNameField: this.d().familyName });

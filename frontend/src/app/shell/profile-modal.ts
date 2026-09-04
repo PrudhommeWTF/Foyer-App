@@ -39,7 +39,7 @@ import { contactIni } from '../core/helpers';
           </div>
         } @else {
           <div class="prefs">
-            <label class="toggle" (click)="store.setSetting('prefNotifs', !d().settings.prefNotifs)"><span>Notifications</span><span class="switch" [class.on]="d().settings.prefNotifs"><span class="knob"></span></span></label>
+            <label class="toggle" (click)="store.setSetting('prefNotifs', !store.setting('prefNotifs'))"><span>Notifications</span><span class="switch" [class.on]="store.setting('prefNotifs')"><span class="knob"></span></span></label>
           </div>
         }
 

@@ -1,4 +1,5 @@
 // Domain models for the Foyer household state.
+import type { HouseholdSettings } from './settings/registry';
 
 export type Recur = 'none' | 'daily' | 'weekday' | 'weekly' | 'monthly';
 export type SchedType = 'ecole' | 'travail' | 'sport' | 'loisir' | 'sante' | 'repas' | 'autre';
@@ -260,15 +261,13 @@ export interface SchedSlot {
 }
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
-export interface Settings {
-  dateFmt: string;
-  dark: boolean; prefNotifs: boolean;
-  academie?: string;
-  /** Show the breakfast row in the meal planner. Off by default: rarely planned. */
-  showBreakfast?: boolean;
-  /** Include open dated tasks in the shared ICS feed. Off by default: the feed is the family calendar. */
-  icsTasks?: boolean;
-}
+/**
+ * Les réglages du foyer. Leur forme est **dérivée du registre** : un réglage se
+ * déclare dans settings/registry.ts et nulle part ailleurs, et se lit avec
+ * `setting('cle', doc)`. Tout est facultatif, la valeur par défaut prend le
+ * relais, ce qui rend un document ancien lisible sans migration.
+ */
+export type Settings = HouseholdSettings;
 
 export interface HouseholdState {
   familyName: string;
