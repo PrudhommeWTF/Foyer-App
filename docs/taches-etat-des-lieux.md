@@ -2,8 +2,10 @@
 
 Document de travail préalable au chantier « parité FamilyWall et intégration »,
 validé sur ses quatre points. Les tranches 1 (socle, migration, concurrence,
-hors ligne, saisie rapide) et 2 (récurrence) sont livrées : ce qu'elles font
-réellement est décrit dans [`taches.md`](taches.md). Le reste de ce document est l'état des lieux tel
+hors ligne, saisie rapide), 2 (récurrence), 3 (rappels Web Push) et 4
+(intégrations : contrat, document, courses, emploi du temps, agenda et ICS)
+sont livrées : ce qu'elles font réellement est décrit dans
+[`taches.md`](taches.md). Le reste de ce document est l'état des lieux tel
 qu'il a servi à décider, conservé tel quel.
 
 Lecture faite sur `main` au 3 septembre 2026 : `README.md`, `backend/src/`

@@ -317,7 +317,20 @@ export class FinancesStore {
    * ce qui est précisément le cas depuis l'accueil.
    */
   taskFromDeadline(d: FinDeadline): void {
-    this.foyer.addExternalTask(`${deadlineLabel(d.kind)} : ${d.contractName}`, d.date, d.memberIds);
+    this.foyer.addExternalTask(`${deadlineLabel(d.kind)} : ${d.contractName}`, d.date, d.memberIds, { contractId: d.contractId });
+  }
+
+  /**
+   * Depuis une tâche, le contrat en un tap : l'écran Finances, l'onglet
+   * Contrats, la fiche ouverte. Le module se charge au passage s'il ne l'est
+   * pas encore. Un contrat supprimé entre-temps est dit, pas deviné.
+   */
+  async openContract(id: number): Promise<void> {
+    this.foyer.go('finances');
+    this.patch({ tab: 'contrats' });
+    await this.init();
+    if (this.contracts().some((c) => c.id === id)) this.editContract(id);
+    else this.foyer.toast('Ce contrat n’existe plus');
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
@@ -1506,7 +1519,7 @@ export class FinancesStore {
   async taskFromSaving(id: number): Promise<void> {
     const s = this.savings().find((x) => x.id === id);
     if (!s) return;
-    const taskId = this.foyer.addExternalTask(s.title, s.targetDate || this.foyer.todayStr());
+    const taskId = this.foyer.addExternalTask(s.title, s.targetDate || this.foyer.todayStr(), [], { contractId: s.contractId });
     if (!taskId) return;
     try {
       await this.api.linkSavingTask(id, taskId);

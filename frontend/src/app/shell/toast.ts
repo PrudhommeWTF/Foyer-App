@@ -4,7 +4,8 @@ import { FoyerStore } from '../core/foyer.store';
 /**
  * Le retour d'une action. Quand elle a fait disparaître ce sur quoi on vient
  * d'appuyer, elle propose de revenir en arrière : c'est ce qui rend un geste
- * d'un seul tap sans danger.
+ * d'un seul tap sans danger. Le même bouton porte parfois une suite plutôt
+ * qu'un retour (« Clore » la tâche quand la liste de courses est finie).
  */
 @Component({
   selector: 'app-toast',
@@ -14,7 +15,7 @@ import { FoyerStore } from '../core/foyer.store';
     @if (store.ui().toast) {
       <div class="toast">
         <span>{{ store.ui().toast }}</span>
-        @if (store.ui().toastUndo) { <button class="undo" (click)="store.undoLast()">Annuler</button> }
+        @if (store.ui().toastUndo) { <button class="undo" (click)="store.undoLast()">{{ store.ui().toastLabel }}</button> }
       </div>
     }
   `,

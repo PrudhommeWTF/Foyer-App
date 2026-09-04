@@ -143,6 +143,15 @@ export interface TaskItem {
   history?: TaskDone[];
   /** Rappel avant l'échéance. Sans échéance, il n'a pas de sens et n'est pas gardé. */
   remind?: Remind | null;
+  /**
+   * Contrat du module Finances dont la tâche découle (échéance, piste
+   * d'économie). Un raccourci, comme la liste de courses : la tâche reste au
+   * foyer. Les contrats ne vivent pas dans le document ; si celui-ci a disparu,
+   * c'est l'écran Finances qui le dit.
+   */
+  contractId?: number | null;
+  /** Document du foyer (FileItem.id) que la tâche ouvre. Tombe avec le document. */
+  docId?: string | null;
 }
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
@@ -250,6 +259,8 @@ export interface Settings {
   academie?: string;
   /** Show the breakfast row in the meal planner. Off by default: rarely planned. */
   showBreakfast?: boolean;
+  /** Include open dated tasks in the shared ICS feed. Off by default: the feed is the family calendar. */
+  icsTasks?: boolean;
 }
 
 export interface HouseholdState {

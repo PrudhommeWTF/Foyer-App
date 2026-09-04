@@ -6,10 +6,11 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskOp, applyOps, reconcile } from '../src/tasks/ops';
 
-const ctx = (opts: { applied?: string[]; lists?: string[]; members?: string[]; shopLists?: string[] } = {}) => ({
+const ctx = (opts: { applied?: string[]; lists?: string[]; members?: string[]; shopLists?: string[]; docs?: string[] } = {}) => ({
   listIds: new Set(opts.lists ?? ['l1', 'l2']),
   memberIds: new Set(opts.members ?? ['me', 'm1']),
   shopListIds: new Set(opts.shopLists ?? ['cl1']),
+  docIds: new Set(opts.docs ?? ['f1']),
   alreadyApplied: (id: string) => (opts.applied ?? []).includes(id),
 });
 
@@ -268,4 +269,48 @@ test('l’historique est borné : une série de tous les jours ne grossit pas sa
     items = applyOps(items, [op({ op: 'done', id: 'p1', occ: d, next: n.toISOString().slice(0, 10) })], ctx()).items;
   }
   assert.equal(items[0].history!.length, 200);
+});
+
+// ---- liens vers un contrat et un document ---------------------------------------
+
+test('un contrat se lie par son numéro, se délie par null, et un numéro illisible est refusé avec la raison', () => {
+  const r = applyOps([], [op({ op: 'add', id: 't1', listId: 'l1', text: 'Résilier la box', contractId: 7 })], ctx());
+  assert.equal(r.items[0].contractId, 7);
+  const r2 = applyOps(r.items, [op({ op: 'edit', id: 't1', contractId: null })], ctx());
+  assert.equal('contractId' in r2.items[0], false, 'délié : la clé tombe, elle ne reste pas à null');
+  const r3 = applyOps(r.items, [op({ op: 'edit', id: 't1', contractId: 'sept' })], ctx());
+  assert.equal(r3.skipped.length, 1);
+  assert.match(r3.skipped[0].reason, /Contrat illisible/);
+  assert.equal(r3.items[0].contractId, 7, 'la tâche n’a pas bougé');
+  const r4 = applyOps(r.items, [op({ op: 'edit', id: 't1', contractId: -2 })], ctx());
+  assert.equal(r4.skipped.length, 1, 'un numéro négatif n’est pas un contrat');
+});
+
+test('un document inconnu ne fait pas échouer la tâche : le lien tombe, la tâche reste', () => {
+  const r = applyOps([], [
+    op({ op: 'add', id: 't1', listId: 'l1', text: 'Renvoyer le formulaire signé', docId: 'f1' }),
+    op({ op: 'add', id: 't2', listId: 'l1', text: 'Lire le règlement', docId: 'disparu' }),
+  ], ctx());
+  assert.equal(r.applied.length, 2);
+  assert.equal(r.items[0].docId, 'f1');
+  assert.equal('docId' in r.items[1], false);
+});
+
+test('rattrapage : un document supprimé délie les tâches qui l’ouvraient, sans les toucher autrement', () => {
+  const r = reconcile(
+    [task({ docId: 'f1', contractId: 3 }), task({ id: 't2', docId: 'f2' })],
+    new Set(['l1']), new Set(['me']), new Set(['cl1']), new Set(['f1']),
+  );
+  assert.equal(r.unlinked, 1);
+  assert.equal(r.items[0].docId, 'f1');
+  assert.equal(r.items[0].contractId, 3, 'le contrat ne vit pas dans le document : il n’est pas rattrapé ici');
+  assert.equal('docId' in r.items[1], false);
+});
+
+test('annuler une suppression rend la tâche avec ses liens', () => {
+  const r = applyOps([], [op({ op: 'add', id: 't1', listId: 'l1', text: 'Résilier la box', contractId: 7, docId: 'f1', shopListId: 'cl1' })], ctx());
+  const gone = applyOps(r.items, [op({ op: 'remove', id: 't1' })], ctx());
+  assert.equal(gone.items.length, 0);
+  const back = applyOps(gone.items, [op({ op: 'add', ...r.items[0] })], ctx());
+  assert.deepEqual({ c: back.items[0].contractId, d: back.items[0].docId, s: back.items[0].shopListId }, { c: 7, d: 'f1', s: 'cl1' });
 });

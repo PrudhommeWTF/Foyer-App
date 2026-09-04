@@ -6,6 +6,7 @@ import { buildIcs } from '../src/ics';
 import { Deadline } from '../src/finances/contracts';
 import { EMPTY_STATE } from '../src/seed';
 import type { HouseholdState } from '../src/seed';
+import type { TaskItem } from '../src/tasks/ops';
 
 const state = (over: Partial<HouseholdState> = {}): HouseholdState =>
   ({ ...structuredClone(EMPTY_STATE), familyName: 'Foyer Dupont', ...over }) as HouseholdState;
@@ -75,5 +76,57 @@ describe('flux ICS', () => {
     } as Partial<HouseholdState>);
     assert.equal((buildIcs(withEvent).match(/BEGIN:VEVENT/g) || []).length, 1);
     assert.ok(!buildIcs(withEvent).includes('fin-preavis'));
+  });
+});
+
+describe('flux ICS : les tâches datées, sur demande', () => {
+  const tache = (over: Partial<TaskItem> = {}): TaskItem => ({
+    id: 't1', listId: 'l1', text: 'Sortir les poubelles', who: ['m1'], due: '2026-09-08', done: false, ...over,
+  });
+  const avec = (tasks: TaskItem[], icsTasks = true): HouseholdState => state({
+    members: [{ id: 'm1', name: 'Marie', role: 'Maman', color: '#000', ini: 'M' }],
+    taskLists: [{ id: 'l1', name: 'Maison', color: '#000', icon: 'checklist', kind: 'taches', scope: 'shared', position: 0 }],
+    tasks,
+    settings: { ...EMPTY_STATE.settings, icsTasks },
+  });
+
+  it('sans le réglage, aucune tâche ne sort : le flux reste l’agenda de la famille', () => {
+    const ics = buildIcs(avec([tache()], false));
+    assert.ok(!ics.includes('task-t1@foyer'));
+    assert.equal(buildIcs(avec([], false)), buildIcs(state({ settings: { ...EMPTY_STATE.settings, icsTasks: false }, members: avec([], false).members, taskLists: avec([], false).taskLists })), 'le réglage éteint ne change rien au flux');
+  });
+
+  it('avec le réglage, une tâche datée devient une journée entière, avec un identifiant stable', () => {
+    const L = lines(buildIcs(avec([tache()])));
+    assert.ok(L.includes('UID:task-t1@foyer'));
+    assert.ok(L.includes('DTSTART;VALUE=DATE:20260908'));
+    assert.ok(L.includes('DTEND;VALUE=DATE:20260909'));
+    assert.ok(L.includes('SUMMARY:Tâche : Sortir les poubelles'));
+    assert.ok(L.includes('CATEGORIES:Tâche'));
+    assert.ok(L.includes('DESCRIPTION:Maison. Marie'), 'la liste et le membre sont dans la description');
+  });
+
+  it('une heure donne un créneau d’une heure, comme les événements', () => {
+    const L = lines(buildIcs(avec([tache({ time: '19:00' })])));
+    assert.ok(L.includes('DTSTART:20260908T190000'));
+    assert.ok(L.includes('DTEND:20260908T200000'));
+  });
+
+  it('une tâche faite ou sans date ne sort pas ; une série n’y met que son occurrence courante', () => {
+    const ics = buildIcs(avec([
+      tache({ id: 'faite', done: true }),
+      tache({ id: 'sans-date', due: null }),
+      tache({ id: 'serie', rec: { freq: 'weekly', every: 1, base: 'due' }, history: [{ at: '2026-09-01T10:00:00Z', by: 'm1', due: '2026-09-01' }] }),
+    ]));
+    assert.ok(!ics.includes('task-faite@foyer'));
+    assert.ok(!ics.includes('task-sans-date@foyer'));
+    assert.ok(ics.includes('task-serie@foyer'));
+    assert.ok(!ics.includes('RRULE'), 'pas de RRULE : l’agenda suivrait une autre règle que l’application');
+    assert.equal((ics.match(/task-serie@foyer/g) || []).length, 1);
+  });
+
+  it('un intitulé avec virgule ou point-virgule est échappé', () => {
+    const ics = buildIcs(avec([tache({ text: 'Appeler ; puis relancer, vite' })]));
+    assert.ok(ics.includes('SUMMARY:Tâche : Appeler \\; puis relancer\\, vite'));
   });
 });

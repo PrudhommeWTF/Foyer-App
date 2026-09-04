@@ -1,9 +1,11 @@
-// Les intitulés que le module Cuisine dépose dans les autres écrans.
+// Ce que les modules déposent les uns chez les autres : intitulés, et le
+// moment où une liste de courses finie propose de clore sa tâche.
 //
 // Une tâche et un événement sont lus hors contexte, dans une liste où tout le
 // reste vient d'ailleurs : « Faire courses de la semaine » ou « Dîner :  » y
-// sautent aux yeux. Ces deux fonctions sont pures pour que leur formulation soit
+// sautent aux yeux. Ces fonctions sont pures pour que leur formulation soit
 // vérifiée, et non relue à l'œil une fois de temps en temps.
+import { ShopItem, TaskItem } from './models';
 
 /**
  * Intitulé de la tâche qui mène à une liste de courses.
@@ -29,4 +31,18 @@ export function mealEventTitle(slotLabel: string, plats: string[], pax?: number 
   const tete = (slotLabel || 'Repas').trim();
   return (menu ? tete + ' : ' + menu : tete)
     + (pax && pax > 0 ? ' (' + pax + (pax > 1 ? ' couverts)' : ' couvert)') : '');
+}
+
+/**
+ * La tâche à proposer de clore quand le dernier article d'une liste vient
+ * d'être pris : celle qui ouvre cette liste, encore à faire. Null tant qu'il
+ * reste quelque chose à prendre, ou si la liste est vide (rien n'a été fait),
+ * ou si aucune tâche ne la porte. On **propose**, on ne coche pas : la tâche
+ * appartient au foyer, et « tout dans le panier » n'est pas toujours « courses
+ * faites » (il reste à passer en caisse).
+ */
+export function closableShoppingTask(tasks: readonly TaskItem[], shop: readonly ShopItem[], listId: string): TaskItem | null {
+  const items = shop.filter((i) => i.listId === listId);
+  if (!items.length || items.some((i) => i.state === 'a-prendre')) return null;
+  return tasks.find((t) => t.shopListId === listId && !t.done) || null;
 }

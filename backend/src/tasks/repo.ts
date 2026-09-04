@@ -46,6 +46,7 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
       listIds: idsOf(doc, 'taskLists'),
       memberIds: idsOf(doc, 'members'),
       shopListIds: idsOf(doc, 'shopLists'),
+      docIds: idsOf(doc, 'files'),
       alreadyApplied: (opId) => !!journal.get(opId),
     });
 
@@ -86,7 +87,8 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
 
 /**
  * Réinjecte les tâches du serveur dans un document reçu du client, et rattrape
- * ce que l'édition des listes, des membres et des listes de courses implique.
+ * ce que l'édition des listes, des membres, des listes de courses et des
+ * documents implique.
  *
  * C'est le cœur du dispositif anti-écrasement : le champ `tasks` envoyé par un
  * téléphone est ignoré, quel que soit son âge. Un client périmé ne peut donc
@@ -94,7 +96,7 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
  */
 export function preserveTasks(incoming: Record<string, any>): { dropped: number; unassigned: number; unlinked: number } {
   const { doc } = readDoc();
-  const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'));
+  const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'), idsOf(incoming, 'files'));
   incoming['tasks'] = res.items;
   return { dropped: res.dropped, unassigned: res.unassigned, unlinked: res.unlinked };
 }
