@@ -4,6 +4,7 @@ import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
+import { DOC_CACHE_KEY, packDoc, readDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -116,6 +117,19 @@ export class FoyerStore {
    */
   readonly docLoadedAt = signal('');
   readonly docError = signal('');
+  /**
+   * Ce qui est à l'écran vient du dernier document gardé, faute de réseau au
+   * démarrage. Porte la date de cette lecture : l'écran doit pouvoir dire de
+   * quand il date, au lieu de laisser croire que c'est frais.
+   */
+  readonly docStaleAt = signal('');
+  /** « Hors ligne, votre foyer tel qu'il était le 04/09/2026 à 14:12. » Vide quand tout est frais. */
+  readonly staleNotice = computed(() => {
+    const at = this.docStaleAt();
+    if (!at) return '';
+    const quand = staleLabel(at, (iso) => this.fmtNumDate(iso));
+    return 'Hors ligne. Voici votre foyer tel qu’il était' + (quand ? ' ' + quand : '') + '. Vos gestes partiront au retour du réseau.';
+  });
 
   // Current user & member login accounts (admin-managed).
   readonly isAdmin = signal(false);
@@ -292,6 +306,11 @@ export class FoyerStore {
 
   // ---- lifecycle / auth -------------------------------------------------
   async init(): Promise<void> {
+    // Enregistré avant tout le reste, et pour tout le monde : c'est lui qui
+    // garde la coquille, donc ce qui décide qu'un prochain démarrage sans
+    // réseau ouvre quelque chose. L'attacher aux rappels le réservait à ceux
+    // qui les avaient activés.
+    void this.ensureServiceWorker();
     // First run? The setup wizard must create the household + admin account.
     try {
       const status = await this.api.setupStatus();
@@ -315,8 +334,12 @@ export class FoyerStore {
         // redémarrage du conteneur, sans rien expliquer. La session est gardée,
         // l'écran se rend, et chaque tuile dit qu'elle ne peut pas charger.
         if (isOffline(e)) {
-          this.docError.set((e as Error).message);
           this.authed.set(true);
+          // Le réseau manque : plutôt qu'une application vide, le foyer tel
+          // qu'on l'a laissé, avec la date de cette lecture. Sans document
+          // gardé, on garde le message d'erreur, qui reste la vérité.
+          if (this.hydrateFromCache()) this.syncOffline.set(true);
+          else this.docError.set((e as Error).message);
         } else {
           this.api.token = null;
         }
@@ -357,10 +380,50 @@ export class FoyerStore {
     }
   }
 
+  // ---- le dernier document connu, pour un démarrage hors ligne ---------------
+  //
+  // Gardé à chaque lecture réussie et à chaque enregistrement réussi : ce sont
+  // les deux moments où l'on sait ce que le serveur a. Voir offline-doc.ts.
+
+  private persistDoc(): void {
+    const d = this._data(); if (!d) return;
+    const raw = packDoc(d, this.docVersion, new Date().toISOString());
+    if (!raw) {
+      // Trop gros : on retire ce qui traînait plutôt que de laisser un document
+      // périmé prendre la place, et on le dit une fois dans la console.
+      try { localStorage.removeItem(DOC_CACHE_KEY); } catch { /* ignore */ }
+      // eslint-disable-next-line no-console
+      console.warn('[foyer] hors ligne : document trop volumineux pour être gardé, le démarrage hors ligne est indisponible.');
+      return;
+    }
+    try { localStorage.setItem(DOC_CACHE_KEY, raw); } catch { /* quota : le démarrage hors ligne n'aura rien, les files restent prioritaires */ }
+  }
+
+  /**
+   * Le réseau manque au démarrage : montrer le foyer tel qu'on l'a laissé,
+   * daté. Vrai quand il y avait quelque chose à montrer. Les files d'attente
+   * sont rejouées par-dessus, comme après une lecture réussie.
+   */
+  private hydrateFromCache(): boolean {
+    let raw: string | null = null;
+    try { raw = localStorage.getItem(DOC_CACHE_KEY); } catch { return false; }
+    const garde = readDoc<HouseholdState>(raw);
+    if (!garde) return false;
+    this._data.set(this.normalise(garde.state));
+    this.docVersion = garde.version;
+    this.replayQueues();
+    this.pending = [];
+    this.docLoadedAt.set(garde.at);
+    this.docStaleAt.set(garde.at);
+    this.patch({ famNameField: garde.state.familyName });
+    return true;
+  }
+
   private async loadState(): Promise<void> {
     const { state, version } = await this.api.getState();
     this._data.set(this.normalise(state));
     this.docVersion = version;
+    this.docStaleAt.set('');
     // Ce qui n'est pas encore parti n'a pas été vu du serveur : le rejouer
     // par-dessus son document évite qu'une coche faite hors ligne clignote.
     this.replayQueues();
@@ -370,6 +433,7 @@ export class FoyerStore {
     this.pending = [];
     this.docLoadedAt.set(new Date().toISOString());
     this.docError.set('');
+    this.persistDoc();
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
@@ -408,23 +472,36 @@ export class FoyerStore {
     return matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & { standalone?: boolean }).standalone;
   }
 
+  /**
+   * Le service worker, enregistré une fois pour toutes. Il sert deux choses
+   * sans rapport (les rappels et le cache de la coquille), et c'est le même :
+   * un navigateur n'en accepte qu'un par portée.
+   */
+  private swPromise: Promise<ServiceWorkerRegistration | null> | null = null;
+  private ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+    if (this.swPromise) return this.swPromise;
+    if (!('serviceWorker' in navigator)) return (this.swPromise = Promise.resolve(null));
+    this.swPromise = navigator.serviceWorker.register(new URL('sw.js', document.baseURI).href)
+      .then((reg) => { this.swReg = reg; return reg; })
+      .catch((e: Error) => {
+        // eslint-disable-next-line no-console
+        console.warn('[foyer] service worker refusé : ' + e.message + ' (ni rappels, ni démarrage hors ligne)');
+        return null;
+      });
+    return this.swPromise;
+  }
+
   async initPush(): Promise<void> {
     if (!('serviceWorker' in navigator)) { this.pushSupport.set('unsupported'); return; }
-    try {
-      this.swReg = await navigator.serviceWorker.register(new URL('sw.js', document.baseURI).href);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[foyer] rappels : service worker refusé : ' + (e as Error).message);
-      this.pushSupport.set('unsupported');
-      return;
-    }
+    const reg = await this.ensureServiceWorker();
+    if (!reg) { this.pushSupport.set('unsupported'); return; }
     if (!('PushManager' in window) || !('Notification' in window)) {
       this.pushSupport.set(this.isIos() && !this.isStandalone() ? 'install' : 'unsupported');
       return;
     }
     if (Notification.permission === 'denied') { this.pushSupport.set('denied'); }
     else {
-      const sub = await this.swReg.pushManager.getSubscription();
+      const sub = await reg.pushManager.getSubscription();
       this.pushSupport.set(sub ? 'on' : 'off');
       // Un abonnement déjà là est redit au serveur : il a pu changer de membre ou être perdu en base.
       if (sub) this.api.pushSubscribe(sub.toJSON(), navigator.userAgent).catch(() => { /* l'état l'affichera */ });
@@ -635,6 +712,9 @@ export class FoyerStore {
     this.pending = [];
     this.docLoadedAt.set('');
     this.docError.set('');
+    this.docStaleAt.set('');
+    // Le document gardé porte la vie du foyer : il ne survit pas à une déconnexion.
+    try { localStorage.removeItem(DOC_CACHE_KEY); } catch { /* ignore */ }
     this.ui.set(initialUi());
     this.isAdmin.set(false);
     this.currentMemberId.set(null);
@@ -732,6 +812,8 @@ export class FoyerStore {
           this.docVersion = r.version;
           this.pending = this.pending.slice(envoyees);
           this.saveState.set('idle');
+          this.docStaleAt.set('');
+          this.persistDoc();
           if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
           return;
         } catch (e) {

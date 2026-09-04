@@ -64,6 +64,12 @@ Foyer-App/
   en même temps sans que l'une écrase l'autre, et les coches faites hors ligne sont
   rejouées au retour du réseau. Un seul sondage (`GET /api/live`) rafraîchit les deux.
   Voir [`docs/taches.md`](docs/taches.md).
+- **Hors ligne à froid.** Un service worker garde la coquille de l'application et le
+  dernier document lu : Foyer **s'ouvre sans réseau**, montre le foyer tel qu'il était
+  (avec la date, dite en clair), accepte les coches et les envoie au retour du réseau.
+  Le cache ne fige pas la version : le HTML d'entrée passe par le réseau d'abord, donc
+  une mise à jour est prise au premier chargement en ligne.
+  Voir [`docs/hors-ligne.md`](docs/hors-ligne.md).
 - Les **fichiers** (pièces jointes Finances, photos de recettes, documents du foyer) vivent
   sur le disque dans `<données>/pieces`, adressés par leur empreinte, jamais en base64 dans
   le document. `PUT /api/state` accepte donc au plus **4 Mo** : aucun octet de fichier n'y

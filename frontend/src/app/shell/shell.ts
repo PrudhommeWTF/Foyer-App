@@ -39,6 +39,14 @@ import { SettingsScreen } from '../screens/settings';
         @if (store.data()) { <app-topbar /> }
         <div class="content fscroll" [class.mobile-pad]="store.narrow()">
           <!--
+            Ce qui est montré vient du dernier document gardé, faute de réseau au
+            démarrage. Le dire, avec sa date : une application qui s'ouvre sans
+            réseau doit annoncer qu'elle montre le passé, sinon elle ment.
+          -->
+          @if (store.staleNotice(); as avis) {
+            <div class="stale">{{ avis }}</div>
+          }
+          <!--
             Sans document du foyer (serveur injoignable au démarrage), toutes les
             destinations mènent à l'accueil : c'est le seul écran conçu pour dire
             qu'il ne peut pas charger, et proposer de réessayer. Le reste du
@@ -76,6 +84,11 @@ import { SettingsScreen } from '../screens/settings';
     :host { display: block; }
     .shell { display: flex; width: 100%; min-height: 100vh; background: var(--bg); overflow: hidden; }
     .main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; }
+    .stale {
+      display: flex; align-items: center; gap: 9px; margin-bottom: 18px;
+      padding: 10px 14px; border-radius: 12px; background: #FCE9E3; color: #C6492F;
+      font-size: 12.5px; font-weight: 700;
+    }
     .content { flex: 1; overflow-y: auto; padding: 28px 40px; }
     .content.mobile-pad { padding: 20px 16px 90px; }
     @media (max-width: 860px) { .content { padding: 20px 16px 90px; } }
