@@ -1,10 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { DashboardStore } from '../../core/dashboard.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { PALETTE } from '../../core/constants';
 import { contactIni } from '../../core/helpers';
-import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl } from '../../core/settings/registry';
+import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl, declOf } from '../../core/settings/registry';
+import { manualOrder } from '../../core/home-context';
+import { TILE_PROVIDERS } from '../../core/tiles/registry';
 import { AvatarComponent } from '../../shared/avatar';
 import { SettingFieldComponent } from './field';
 
@@ -21,6 +24,7 @@ interface Groupe { id: string; label: string; desc: string; sections: Section[];
 
 const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   compte: { icon: 'key', tint: '#FCE9E3', color: '#E56B4E' },
+  accueil: { icon: 'home', tint: '#FCE9E3', color: '#E56B4E' },
   affichage: { icon: 'settings', tint: '#EDF2EB', color: '#7A9B76' },
   calendriers: { icon: 'calendar', tint: '#E5F0F4', color: '#4E93B8' },
   notifications: { icon: 'bell', tint: '#FCE9E3', color: '#E56B4E' },
@@ -209,6 +213,36 @@ const GESTES = new Set(['compte', 'membres']);
                           <button class="btn btn-soft btn-block" style="margin-top:22px" (click)="store.logout()">
                             <f-icon name="logout" [size]="18" color="var(--ink2)" [width]="2.2" /> Se déconnecter
                           </button>
+                        }
+                        @case ('accueil') {
+                          <div class="hint" style="margin:0 0 12px">
+                            @if (ordreManuel()) {
+                              Vos tuiles restent dans cet ordre, dépliées, quelles que soient l’heure et le jour.
+                              Les règles de contexte (<code>accueil.json</code>) ne les reclassent plus.
+                            } @else {
+                              L’accueil remonte pour l’instant ce qui compte selon l’heure et le jour, et replie le reste
+                              sur son titre. Déplacez une tuile pour figer l’ordre : le vôtre l’emportera, et plus rien ne se repliera.
+                            }
+                          </div>
+                          <div class="tuiles">
+                            @for (t of tuiles(); track t.id; let i = $index) {
+                              <div class="tuile">
+                                <span class="rang">{{ i + 1 }}</span>
+                                <span class="tn">{{ t.title }}</span>
+                                <button class="icon-btn sm" [disabled]="!!verrou() || i === 0" (click)="deplacer(i, -1)" aria-label="Monter cette tuile">
+                                  <f-icon name="arrowUp" [size]="16" color="var(--ink2)" [width]="2.2" />
+                                </button>
+                                <button class="icon-btn sm" [disabled]="!!verrou() || i === tuiles().length - 1" (click)="deplacer(i, 1)" aria-label="Descendre cette tuile">
+                                  <f-icon name="arrowDown" [size]="16" color="var(--ink2)" [width]="2.2" />
+                                </button>
+                              </div>
+                            }
+                          </div>
+                          @if (verrou()) {
+                            <div class="hint">{{ verrou() }}</div>
+                          } @else if (ordreManuel()) {
+                            <button class="reset-sec" (click)="ordreAutomatique()">Revenir à l’ordre automatique</button>
+                          }
                         }
                         @case ('courses') {
                           <!-- L'ordre des rayons et les articles de placard sont des
@@ -507,6 +541,14 @@ const GESTES = new Set(['compte', 'membres']);
     .side .sep { margin: 12px 0 4px; }
     .gt { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; padding: 6px 13px 4px; }
 
+    .tuiles { display: flex; flex-direction: column; gap: 8px; }
+    .tuile { display: flex; align-items: center; gap: 10px; background: var(--soft); border-radius: 13px; padding: 9px 12px; }
+    .rang { font-size: 12px; font-weight: 800; color: var(--ink3); width: 18px; flex: none; }
+    .tn { flex: 1; min-width: 0; font-size: 14px; font-weight: 800; color: var(--ink); }
+    /* Deux flèches qu'on utilise à répétition : 34 px se rate au pouce. */
+    .tuile .icon-btn { width: 40px; height: 40px; }
+    .tuile .icon-btn:disabled { opacity: .3; cursor: not-allowed; }
+
     .moi { display: flex; align-items: center; gap: 14px; background: var(--soft); border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; }
     .moi-b { min-width: 0; }
     .moi-n { font-size: 16px; font-weight: 800; color: var(--ink); }
@@ -636,6 +678,7 @@ const GESTES = new Set(['compte', 'membres']);
 })
 export class SettingsScreen {
   store = inject(FoyerStore);
+  dash = inject(DashboardStore);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   copied = signal(false);
 
@@ -698,6 +741,34 @@ export class SettingsScreen {
     void this.store.loadSystemStatus();
   }
 
+  /**
+   * L'ordre des tuiles de l'accueil, tel qu'il s'applique : celui qu'on a choisi,
+   * complété des tuiles qu'il ne nomme pas encore.
+   */
+  readonly tuiles = computed(() => {
+    // Sans ordre choisi, la liste montre celui de l'accueil **en ce moment**,
+    // règles comprises : déplacer une tuile fige alors ce qu'on avait sous les
+    // yeux, au lieu de rebattre les cartes sur un ordre qu'on n'a jamais vu.
+    const choisi = this.store.setting('homeOrder');
+    const ids = choisi.trim() ? TILE_PROVIDERS.map((p) => p.id) : this.dash.tiles().map((t) => t.provider.id);
+    return manualOrder(choisi, ids)
+      .map((id) => ({ id, title: TILE_PROVIDERS.find((p) => p.id === id)?.title || id }));
+  });
+  readonly ordreManuel = computed(() => !!this.store.setting('homeOrder').trim());
+  /** Pourquoi l'ordre n'est pas modifiable ici, dans les mêmes termes que les autres réglages. */
+  readonly verrou = computed(() => { const d = declOf('homeOrder'); return d ? this.store.settingLock(d) : ''; });
+
+  /** Échange la tuile avec sa voisine, et enregistre l'ordre entier. */
+  deplacer(i: number, sens: 1 | -1): void {
+    const ids = this.tuiles().map((t) => t.id);
+    const j = i + sens;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    this.store.setSetting('homeOrder', ids.join(','));
+  }
+  /** Rendre la main aux règles de contexte : un ordre vide, c'est le défaut. */
+  ordreAutomatique(): void { this.store.setSetting('homeOrder', ''); }
+
   /** Les initiales que le prénom donnerait, celles qu'on retrouve en vidant le champ. */
   iniAuto(): string { return contactIni(this.store.ui().pfName || '?'); }
   /** Ce que la pastille affichera une fois enregistré : la saisie, ou le prénom à défaut. */
@@ -717,18 +788,21 @@ export class SettingsScreen {
     if (ok) { this.mdpActuel.set(''); this.mdpNeuf.set(''); this.mdpConfirme.set(''); }
   }
 
-  champs(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section && d.scope !== 'deploiement'); }
+  /** Ce que la section contient, tous rendus confondus. C'est ce que la remise à zéro touche. */
+  reglages(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section && d.scope !== 'deploiement'); }
+  /** Ce que le champ engendré prend en charge : le reste a son contrôle écrit à la main. */
+  champs(section: string): SettingDecl[] { return this.reglages(section).filter((d) => !d.custom); }
   nomSection(id: string): string { return SECTIONS.find((s) => s.id === id)?.label || id; }
   basculer(id: string): void { this.store.patch({ settingsSection: this.ouvert() === id ? '' : id }); }
   aller(id: string): void { this.q.set(''); this.store.patch({ settingsSection: id }); }
 
   /** Au moins un réglage de la section est modifiable par la personne connectée. */
-  modifiable(section: string): boolean { return this.champs(section).some((d) => !this.store.settingLock(d)); }
+  modifiable(section: string): boolean { return this.reglages(section).some((d) => !this.store.settingLock(d)); }
   toutParDefaut(section: string): boolean {
-    return this.champs(section).every((d) => this.store.readDeclared(d) === d.default);
+    return this.reglages(section).every((d) => this.store.readDeclared(d) === d.default);
   }
   resetSection(section: string): void {
-    for (const d of this.champs(section)) {
+    for (const d of this.reglages(section)) {
       if (!this.store.settingLock(d) && this.store.readDeclared(d) !== d.default) this.store.writeDeclared(d, d.default);
     }
   }

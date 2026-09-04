@@ -5,7 +5,7 @@
 // donc autant des tests de **stabilité** que de pertinence.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { DayFacts, HomeRules, contextOf, dayKindsOf, momentAt, rankTiles } from './home-context';
+import { DayFacts, HomeRules, contextOf, dayKindsOf, manualOrder, momentAt, rankTiles } from './home-context';
 import { SchedSlot } from './models';
 
 const MOMENTS = [
@@ -163,4 +163,27 @@ test('le classement est stable : deux appels identiques rendent le même ordre',
   assert.deepEqual(ids(rankTiles(r, ORDRE, ctx)), ids(rankTiles(r, ORDRE, ctx)));
   // À score égal, c'est l'ordre du registre qui départage, jamais le hasard.
   assert.deepEqual(ids(rankTiles(r, ORDRE, ctx)).slice(0, 2), ['repas', 'courses']);
+});
+
+// L'ordre choisi à la main : il l'emporte sur les règles, mais il ne doit
+// jamais faire disparaître une tuile, ni celle qu'il ne connaît pas encore.
+test('un ordre vide laisse l’ordre du registre', () => {
+  assert.deepEqual(manualOrder('', ORDRE), ORDRE);
+  assert.deepEqual(manualOrder('   ', ORDRE), ORDRE);
+});
+
+test('l’ordre choisi passe devant, le reste suit dans l’ordre du registre', () => {
+  assert.deepEqual(manualOrder('repas,agenda', ORDRE),
+    ['repas', 'agenda', 'planning', 'taches', 'courses', 'finances']);
+});
+
+test('une tuile ajoutée par une mise à jour apparaît, à la fin', () => {
+  // L'ordre a été enregistré avant que la tuile « finances » n'existe.
+  assert.deepEqual(manualOrder('agenda,planning,taches,repas,courses', ORDRE).at(-1), 'finances');
+});
+
+test('une tuile inconnue ou répétée ne fait ni trou ni doublon', () => {
+  assert.deepEqual(manualOrder('budget,repas,repas,agenda', ORDRE),
+    ['repas', 'agenda', 'planning', 'taches', 'courses', 'finances']);
+  assert.equal(new Set(manualOrder('budget,repas', ORDRE)).size, ORDRE.length);
 });
