@@ -744,12 +744,16 @@ autorisations plutôt que par la faiblesse du facteur.
 
 Écrits séparément, pour être ouverts au moment où vous en avez besoin :
 
-- `docs/mise-en-ligne-checklist.md` : à dérouler avant d'ouvrir le domaine
+Tous écrits :
+
+- `docs/mise-en-ligne-checklist.md` : à dérouler avant d'ouvrir le domaine, puis
+  depuis l'extérieur une fois qu'il est ouvert
 - `docs/exploitation-securite.md` : rotation du secret JWT, déconnexion de toutes
   les sessions, procédure en cas de suspicion de compromission
 - `docs/sauvegarde-restauration.md` : sauvegarde et restauration chiffrées, base
-  et pièces jointes comprises
-- `docs/risques-acceptes.md` : ce qui reste risqué après toutes les corrections
+  et pièces jointes comprises, procédure exécutée et vérifiée
+- `docs/risques-acceptes.md` : ce qui reste risqué après toutes les corrections,
+  et ce que l'audit n'a pas couvert
 
 ---
 
@@ -946,7 +950,110 @@ changement de schéma.
 
 ---
 
-## 12. Plan de correction proposé
+## 12. Tranche 3 : ce qui est corrigé
+
+Appliquée le 4 septembre 2026, en trois lots. `SELF_UPDATE` n'a pas été touché,
+comme demandé : l'auto-mise à jour reste activée.
+
+### Lot A, les données et ce qui en sort (M1, M3, M4)
+
+**M1.** Les cellules commençant par `=`, `+`, `-`, `@`, une tabulation ou un
+retour chariot sont désarmées par une apostrophe, dans l'export Finances et dans
+l'export de la liste de courses. Un piège s'est révélé en le faisant : un
+montant négatif commence aussi par un tiret, et le désarmer met **toutes les
+sommes du fichier à zéro**. Un nombre écrit tel quel est donc exempté. Le flux
+ICS échappait déjà correctement selon la RFC 5545 : le rapport se trompait en
+disant qu'il fallait y toucher.
+
+**M4.** `state/validate.ts` vérifie la charpente du document et refuse en nommant
+le champ. Les clés inconnues passent, à dessein.
+
+**M3.** Coût bcrypt porté à 12, hachage et vérification asynchrones. Les deux
+vont ensemble : monter le coût sans passer en asynchrone aurait quadruplé un
+blocage de 81 ms sur une route publique, c'est-à-dire transformé un durcissement
+en levier de déni de service. Les condensats existants restent valides et sont
+refaits silencieusement à la connexion suivante, sans toucher à la version du
+jeton.
+
+### Lot B, l'exposition (M9 à M12, F2, F3, F5)
+
+**F3.** Les polices sont servies par le foyer : six fichiers variables, 280 Ko,
+latin et latin étendu. La politique de sécurité de contenu n'ouvre plus aucun
+domaine tiers, et la page ne fait plus **aucune** requête vers l'extérieur,
+vérifié au navigateur.
+
+**M10.** `Permissions-Policy` ferme les capacités inutilisées, HSTS passe à un
+an sans `preload`.
+
+**F2.** Une adresse qui ressemble à un fichier répond 404. Un segment caché
+compte autant qu'une extension au bout : c'est le répertoire qui porte le point
+dans `/.git/config`, le chemin le plus sondé.
+
+**M9, M11, F5.** Session à 7 jours, mot de passe à 12 caractères minimum,
+renouvellement silencieux du jeton à mi-vie, et déconnexion après inactivité
+(nouveau réglage, 12 h par défaut, purement local).
+
+**M12.** L'auto-mise à jour reste activée. Elle se confirme désormais par le mot
+de passe : cela ferme le cas du jeton dérobé, pas celui du mot de passe connu.
+Voir `docs/risques-acceptes.md`.
+
+### Lot C, la chaîne d'approvisionnement et le conteneur (M5 à M8)
+
+**M7.** Zéro vulnérabilité connue des deux côtés. Angular en 21.2.22, `qs` en
+6.16.0 par un override daté plutôt qu'un passage à Express 5.
+
+**M8.** Audit des dépendances de production et recherche de secrets en CI, tous
+deux bloquants. Le seuil de l'audit est « high » : à « moderate », la CI
+rougirait sur des avis souvent sans chemin d'exploitation ici, et une CI rouge
+en permanence ne se lit plus.
+
+**M6.** Conteneur en utilisateur `node`, système de fichiers en lecture seule
+sauf `/data` et `/tmp`, sans capacités, sans élévation, port publié sur la
+boucle locale seulement.
+
+**M5.** Données en 0600 et répertoire en 0700, `UMask=0077` sur le service, et
+le durcissement systemd complété. `AF_NETLINK` est conservé volontairement :
+sans lui, glibc ne résout plus aucun nom et trois fonctionnalités tombent en
+silence.
+
+### F4, traité pour ce qui protège et écarté pour le reste
+
+Les plages 198.18.0.0/15, 6to4 et NAT64 sont refusées. Les plages de
+documentation ne le sont **pas** : elles ne sont routables nulle part, les
+interdire ne protège de rien, et elles servent d'adresses publiques factices
+dans les tests.
+
+### F1, le second facteur
+
+Non fait, comme annoncé : c'est un chantier à part, et c'est aujourd'hui le
+principal risque résiduel. Voir `docs/risques-acceptes.md`.
+
+### Ce qui a été vérifié
+
+Toute la CI rejouée localement : audits, recherche de secrets, builds,
+**949 tests backend**, **463 frontend**, lint « code mort ». Avant leurs
+corrections respectives : 4 sur 6 pour l'export CSV, 4 sur 12 pour la
+validation, 6 sur 9 pour les mots de passe, 6 sur 10 pour l'exposition.
+
+Au navigateur : les trois polices rendent correctement, aucune requête sortante.
+
+Aux commandes, sur le service en fonctionnement : les sondes de robots
+(`/.git/config`, `/.env`, `/wp-login.php`, `/backup.sql`) répondent toutes 404,
+et les trois en-têtes attendus sont présents.
+
+La procédure de sauvegarde chiffrée a été **exécutée pour de vrai**, avec un
+document scanné : sauvegarde, destruction complète des données, restauration,
+et le fichier revient identique octet pour octet. Deux choses en sont sorties et
+sont documentées : `sqlite3` en ligne de commande n'est pas installé par défaut,
+et un fichier qu'aucune fiche ne référence est effacé au démarrage suivant, ce
+qui fait conclure à tort à une sauvegarde incomplète.
+
+**Ce qui n'a pas pu être vérifié :** le conteneur Docker durci n'a pas été
+construit ni lancé, faute de démon Docker dans l'environnement d'audit.
+
+---
+
+## 13. Plan de correction proposé
 
 À valider avant que je touche au code.
 
@@ -954,8 +1061,7 @@ changement de schéma.
 
 **Tranche 2, les élevées.** Faite : voir la section 11.
 
-**Tranche 3, le reste groupé.** M1 à M12 et F1 à F5, moins F1 (le TOTP) qui
-mérite sa propre décision et son propre chantier.
+**Tranche 3, le reste groupé.** Faite : voir la section 12.
 
 **Ce qui va se passer pour les sessions en cours, à chaque tranche :**
 
