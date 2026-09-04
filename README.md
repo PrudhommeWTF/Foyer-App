@@ -102,8 +102,12 @@ Une image multi-arch (`amd64`, `arm64`) est publiée par la CI. Décommentez la 
 `image:` dans `docker-compose.yml`, ou lancez directement :
 
 ```bash
-docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
-  -e FOYER_JWT_SECRET="une-chaine-aleatoire-longue" \
+# Le port n'est publié que sur la boucle locale : mettez votre reverse-proxy
+# devant. Sans proxy sur cette machine, remplacez par -p 8099:8099 ET ajoutez
+# -e FOYER_TRUST_PROXY=false, sinon la temporisation des tentatives de connexion
+# devient contournable.
+docker run -d --name foyer -p 127.0.0.1:8099:8099 -v foyer-data:/data \
+  -e FOYER_JWT_SECRET="$(openssl rand -hex 32)" \
   ghcr.io/prudhommewtf/foyer-app:latest
 ```
 

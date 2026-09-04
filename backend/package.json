@@ -1,7 +1,7 @@
 {
   "name": "foyer-backend",
   "version": "0.0.0",
-  "description": "Foyer \u2014 backend API (auth + household state) for the self-hosted family management app",
+  "description": "Foyer — backend API (auth + household state) for the self-hosted family management app",
   "license": "MIT",
   "type": "commonjs",
   "main": "dist/server.js",
@@ -33,5 +33,8 @@
     "@types/web-push": "^3.6.4",
     "tsx": "^4.20.6",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }

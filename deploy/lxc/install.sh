@@ -188,6 +188,12 @@ fi
 rm -f "${DATA_DIR}/version"
 
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}" "${DATA_DIR}"
+# La base porte les finances, l'agenda des enfants et l'adresse du foyer ; le
+# répertoire « pieces » porte les documents scannés. En 0644/0755, tout compte
+# local du conteneur les lit. Le propriétaire seul, et personne d'autre.
+chmod 700 "${DATA_DIR}"
+find "${DATA_DIR}" -type d -exec chmod 700 {} +
+find "${DATA_DIR}" -type f -exec chmod 600 {} +
 
 # --- Service systemd ------------------------------------------------------
 log "Installation du service systemd…"
@@ -209,9 +215,32 @@ Restart=on-failure
 RestartSec=5
 # Durcissement
 NoNewPrivileges=true
-ProtectSystem=full
+ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# AF_NETLINK est nécessaire : glibc s'en sert dans getaddrinfo pour choisir
+# l'adresse source, et sans lui la résolution de noms échoue silencieusement
+# (vacances scolaires, vérification de version, import de recette).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Node compile à la volée : lui interdire d'écrire du code exécutable en mémoire
+# l'empêcherait simplement de démarrer.
+MemoryDenyWriteExecute=false
+# Ce que le service crée n'est lisible que par lui : la base, les instantanés et
+# les documents scannés naissent en 0600, sans dépendre d'un chmod après coup.
+UMask=0077
+# Un fichier .xlsx piégé peut se déplier en plusieurs gigaoctets ; la borne du
+# code le refuse, celle-ci fait redémarrer le service plutôt que d'emporter
+# l'hôte si un autre chemin d'allocation apparaissait un jour.
+MemoryMax=1G
 ReadWritePaths=${DATA_DIR}
 
 [Install]
