@@ -3054,14 +3054,54 @@ export class FoyerStore {
   setting<K extends SettingKey>(key: K): SettingValue<K> { return setting(key, this._data()); }
 
   /**
-   * Écrit un réglage, après contrôle. Une valeur refusée n'est pas remplacée en
-   * silence : le message du registre est affiché et rien n'est écrit.
+   * Écrit un réglage.
+   *
+   * Application immédiate : l'écran répond tout de suite, puis le serveur
+   * tranche. Un refus **remet la valeur d'avant** et le dit, plutôt que de
+   * laisser croire que le réglage a pris. Le contrôle du registre a lieu deux
+   * fois, ici pour un message instantané et sur le serveur parce que c'est lui
+   * qui décide.
+   *
+   * L'écriture est ciblée (PATCH /api/settings) et non un enregistrement du
+   * document : deux administrateurs qui règlent deux choses ne s'écrasent pas.
    */
   setSetting<K extends SettingKey>(key: K, val: SettingValue<K>): void {
+    // Le serveur refuse de toute façon : le dire tout de suite évite un
+    // interrupteur qui bascule puis revient tout seul, ce qui ressemble à une panne.
+    if (!this.isAdmin()) { this.toast('Seul un administrateur du foyer peut modifier les réglages.'); return; }
     const checked = validate(key, val);
     if (!checked.ok) { this.toast(checked.error); return; }
-    this.mutate((d) => { (d.settings as Record<string, unknown>)[key] = checked.value; });
-    if (key === 'academie') this.loadSchoolHolidays();
+    const avant = this.setting(key);
+    if (avant === checked.value) return;
+    this.writeSetting(key, checked.value as SettingValue<K>, avant);
+  }
+
+  private async writeSetting<K extends SettingKey>(key: K, val: SettingValue<K>, avant: SettingValue<K>): Promise<void> {
+    this.putSettingLocally(key, val);
+    if (key === 'academie') void this.loadSchoolHolidays();
+    try {
+      await this.api.patchSettings({ [key]: val });
+    } catch (e) {
+      this.putSettingLocally(key, avant);
+      if (key === 'academie') void this.loadSchoolHolidays();
+      const err = e as ApiError;
+      this.toast(err.status === 403
+        ? 'Réglage non enregistré : seul un administrateur du foyer peut le modifier.'
+        : 'Réglage non enregistré : ' + err.message);
+    }
+  }
+
+  /**
+   * Pose la valeur dans le document tenu en mémoire, sans passer par `mutate` :
+   * les réglages ne s'enregistrent plus avec le document, c'est le serveur qui
+   * les détient.
+   */
+  private putSettingLocally(key: string, val: unknown): void {
+    const cur = this._data();
+    if (!cur) return;
+    const next = structuredClone(cur);
+    (next.settings as Record<string, unknown>)[key] = val;
+    this._data.set(next);
   }
   exportData(): void {
     const d = this._data(); if (!d) return;

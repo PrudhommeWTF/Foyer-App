@@ -1,7 +1,7 @@
 // HTTP surface of the finances module. Mounted at /api/finances behind the same
 // JWT auth as the rest of the API. Operations are granular: nothing here reads or
 // rewrites the household JSON document.
-import express, { Request, Response, Router } from 'express';
+import express, { NextFunction, Request, Response, Router } from 'express';
 import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
@@ -194,7 +194,13 @@ function loanViews(): Record<number, loans.LoanView> {
   return out;
 }
 
-export function financesRouter(): Router {
+/**
+ * Le garde d'administration, fourni par le serveur : le module n'a pas à savoir
+ * comment un administrateur se reconnaît, seulement à demander la vérification.
+ */
+export type AdminGuard = (req: Request, res: Response, next: NextFunction) => void;
+
+export function financesRouter(requireAdmin: AdminGuard): Router {
   const r = express.Router();
 
   // Import, deduplication and internal transfers live in their own router.
@@ -277,10 +283,12 @@ export function financesRouter(): Router {
   }));
 
   /**
-   * Restauration : elle **écrase** les données du module. D'où la confirmation
-   * explicite dans le corps de la requête, qu'aucun appel accidentel ne portera.
+   * Restauration : elle **écrase** les données du module. D'où deux gardes, et
+   * pas un : réservée à un administrateur du foyer (masquer un bouton n'empêche
+   * personne d'appeler l'API), et confirmation explicite dans le corps de la
+   * requête, qu'aucun appel accidentel ne portera.
    */
-  r.post('/restore', express.json({ limit: '64mb' }), handler((req, res) => {
+  r.post('/restore', requireAdmin, express.json({ limit: '64mb' }), handler((req, res) => {
     const body = req.body || {};
     if (String(body.confirm || '') !== 'REMPLACER') {
       res.status(400).json({

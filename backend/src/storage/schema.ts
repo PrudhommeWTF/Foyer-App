@@ -12,13 +12,16 @@
 //     réseau ne ressuscite pas un article ou une tâche supprimés entre-temps.
 //   - `hh_push_subs` et `hh_notif_sent` : les appareils abonnés aux rappels et
 //     le journal de ce qui leur a été envoyé (voir notify/push.ts).
+//   - `hh_settings_log` : qui a changé quel réglage, quand, et pour quelle
+//     valeur. À deux administrateurs, savoir qui a changé quoi évite des
+//     discussions inutiles (voir settings/repo.ts).
 //   - `hh_meta` : la version du schéma, celle du document, et les clés VAPID.
 //
 // Les migrations sont versionnées et appliquées au démarrage, chacune dans sa
 // transaction. Ne jamais modifier une migration livrée : en ajouter une.
 import type { Database } from 'better-sqlite3';
 
-export const HH_SCHEMA_VERSION = 3;
+export const HH_SCHEMA_VERSION = 4;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -102,6 +105,30 @@ const MIGRATIONS: Migration[] = [
           sent_at TEXT NOT NULL DEFAULT (datetime('now')),
           PRIMARY KEY (key, member_id)
         );
+      `);
+    },
+  },
+  {
+    version: 4,
+    label: 'journal des modifications de réglages',
+    up: (db) => {
+      db.exec(`
+        -- Qui a changé quel réglage, quand, et de quoi vers quoi. Les valeurs
+        -- sont rangées en JSON : un booléen, un nombre et un texte s'y écrivent
+        -- de la même façon, et se relisent sans deviner leur type.
+        --
+        -- Ce journal n'est pas élagué : quatre personnes qui règlent une
+        -- application familiale n'en produisent pas des milliers de lignes, et
+        -- c'est précisément l'ancienneté d'une ligne qui la rend utile.
+        CREATE TABLE hh_settings_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          key TEXT NOT NULL,
+          before_json TEXT,
+          after_json TEXT NOT NULL,
+          member_id TEXT,
+          at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX idx_hh_settings_log_at ON hh_settings_log(at DESC);
       `);
     },
   },

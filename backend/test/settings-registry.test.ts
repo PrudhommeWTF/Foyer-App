@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { REGISTRY, SECTIONS, SettingDecl, checkValue, householdDefaults, setting, validate } from '../src/settings/registry';
+import { ALL, SECTIONS, SettingDecl, checkValue, householdDefaults, setting, validate } from '../src/settings/registry';
 import { render } from '../scripts/settings-doc';
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -98,7 +98,7 @@ function scan(): { reads: Usage[]; writes: Usage[]; refs: Usage[]; direct: strin
 }
 
 const usage = scan();
-const declared = new Set<string>(REGISTRY.map((d) => d.key));
+const declared = new Set<string>(ALL.map((d) => d.key));
 
 test('registre : les deux copies sont identiques', () => {
   const back = fs.readFileSync(BACK_REGISTRY, 'utf-8');
@@ -110,7 +110,7 @@ test('registre : les deux copies sont identiques', () => {
 
 test('registre : chaque paramètre déclaré est lu quelque part (pas de réglage mort)', () => {
   const lus = new Set(usage.reads.map((u) => u.key));
-  const morts = REGISTRY.filter((d) => !lus.has(d.key)).map((d) => d.key);
+  const morts = ALL.filter((d) => !lus.has(d.key)).map((d) => d.key);
   assert.deepEqual(morts, [],
     'Réglage(s) déclaré(s) que personne ne lit : ' + morts.join(', ') + '.\n' +
     'Un réglage sans consommateur est un mensonge : câblez-le avec setting(\'clé\', doc), ou retirez-le du registre.');
@@ -134,7 +134,7 @@ test('registre : personne ne lit settings sans passer par le registre', () => {
 test('registre : chaque déclaration est complète et cohérente', () => {
   const sections = new Set(SECTIONS.map((s) => s.id));
   const vues = new Set<string>();
-  for (const d of REGISTRY) {
+  for (const d of ALL) {
     assert.ok(!vues.has(d.key), `Clé en double dans le registre : ${d.key}`);
     vues.add(d.key);
     assert.ok(d.label.trim(), `${d.key} : libellé manquant`);
@@ -150,7 +150,7 @@ test('registre : chaque déclaration est complète et cohérente', () => {
 });
 
 test('registre : un document neuf porte exactement les réglages du foyer', () => {
-  const attendu = REGISTRY.filter((d) => d.scope === 'foyer').map((d) => d.key).sort();
+  const attendu = ALL.filter((d) => d.scope === 'foyer').map((d) => d.key).sort();
   assert.deepEqual(Object.keys(householdDefaults()).sort(), attendu);
 });
 

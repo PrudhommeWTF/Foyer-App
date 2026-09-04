@@ -20,7 +20,7 @@ l’interface grise le champ en l’expliquant.
 
 ## Foyer et affichage
 
-Ce que voit tout le monde : identité du foyer, format des dates, thème.
+Ce que voit tout le monde : identité du foyer et thème.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
@@ -59,6 +59,53 @@ Planning des repas, suggestions et génération des courses.
 | `showBreakfast` | Afficher le petit-déjeuner | Foyer | oui / non | désactivé | — | Repas | — |
 
 - **Afficher le petit-déjeuner** (`showBreakfast`) : Ajoute la ligne du matin au planning des repas, et donc à la génération des courses. Les repas déjà saisis sont conservés quand la ligne est masquée.
+
+## Où c’est stocké, et comment le sauvegarder
+
+Les réglages du foyer vivent dans le document JSON (table `household`), et le journal
+des modifications dans la table `hh_settings_log` de la même base. Une archive du
+dossier de données emporte donc les deux : il n’y a pas de sauvegarde séparée à penser.
+
+**Avant toute migration**, service arrêté (la base est en WAL : copier `foyer.db` pendant
+que le service tourne donne une archive corrompue) :
+
+```bash
+# LXC natif
+systemctl stop foyer
+install -d -m 750 /var/backups/foyer
+tar czf "/var/backups/foyer/foyer-$(date +%F-%H%M).tar.gz" -C /var/lib foyer
+cp /etc/foyer/foyer.env "/var/backups/foyer/foyer.env-$(date +%F-%H%M)"
+systemctl start foyer && curl -fsS http://127.0.0.1:8099/api/health
+
+# Docker
+docker compose stop foyer
+docker run --rm -v foyer_data:/data -v "$PWD":/sauvegarde alpine \
+  tar czf "/sauvegarde/foyer-$(date +%F-%H%M).tar.gz" -C /data .
+docker compose start foyer
+```
+
+Restauration et vérification : voir [README, « Sauvegarde et restauration »](../README.md#-sauvegarde-et-restauration).
+
+Les migrations du document sont **rejouables** (chacune ne réagit qu’à l’ancienne forme)
+et **réversibles** : le document d’origine est écrit sur le disque avant la première
+migration en attente. Un réglage nouvellement déclaré n’a besoin d’aucune migration : il
+prend sa valeur par défaut, et le document n’est réécrit que le jour où on le change.
+
+## Qui peut changer quoi
+
+Le contrôle est **côté serveur**, pas dans l’écran :
+
+- `GET /api/settings` : tout membre connecté. Un adulte a le droit de savoir comment le foyer est réglé.
+- `PATCH /api/settings` : **administrateur uniquement**, sinon `403`. Les réglages s’écrivent clé par clé, jamais par enregistrement du document entier, pour que deux administrateurs simultanés ne s’écrasent pas.
+- `PUT /api/state` ignore le bloc `settings` et refuse (`403`) l’enregistrement d’un non-administrateur qui tenterait de le modifier par là.
+
+Chaque écriture est journalisée : qui, quand, quelle clé, de quelle valeur vers quelle valeur.
+Le journal se lit dans la page Paramètres, et en ligne de commande :
+
+```bash
+sqlite3 /var/lib/foyer/foyer.db \
+  "SELECT at, member_id, key, before_json, after_json FROM hh_settings_log ORDER BY id DESC LIMIT 20;"
+```
 
 ## Ajouter un réglage
 

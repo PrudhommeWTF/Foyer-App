@@ -85,7 +85,7 @@ export interface SettingSection {
 
 /** Les sections de la page, dans l'ordre d'affichage. */
 export const SECTIONS: readonly SettingSection[] = [
-  { id: 'affichage', label: 'Foyer et affichage', desc: 'Ce que voit tout le monde : identité du foyer, format des dates, thème.' },
+  { id: 'affichage', label: 'Foyer et affichage', desc: 'Ce que voit tout le monde : identité du foyer et thème.' },
   { id: 'calendriers', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
   { id: 'notifications', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'repas', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
@@ -172,6 +172,16 @@ export const REGISTRY = [
   },
 ] as const satisfies readonly SettingDecl[];
 
+/**
+ * Le registre vu comme une simple liste de déclarations.
+ *
+ * `REGISTRY` porte les types littéraux de chaque entrée, ce qui donne les clés
+ * et les types de valeurs au compilateur. Tout ce qui **parcourt** le registre
+ * (la page, le serveur, la documentation) passe par `ALL` : sinon un champ
+ * facultatif absent d'une entrée ferait échouer la compilation de la boucle.
+ */
+export const ALL: readonly SettingDecl[] = REGISTRY;
+
 type Decl = (typeof REGISTRY)[number];
 type ValueOfType<T> = T extends 'bool' ? boolean : T extends 'int' ? number : string;
 type AllValues = { [D in Decl as D['key']]: ValueOfType<D['type']> };
@@ -183,20 +193,20 @@ export type SettingValue<K extends SettingKey> = AllValues[K];
 /** La forme de `HouseholdState.settings` : tout est facultatif, le défaut prend le relais. */
 export type HouseholdSettings = Partial<Pick<AllValues, Extract<Decl, { scope: 'foyer' }>['key']>>;
 
-const BY_KEY: Record<string, SettingDecl> = Object.fromEntries(REGISTRY.map((d) => [d.key, d]));
+const BY_KEY: Record<string, SettingDecl> = Object.fromEntries(ALL.map((d) => [d.key, d]));
 
 /** La déclaration d'une clé, ou `undefined` si elle n'existe pas. */
 export function declOf(key: string): SettingDecl | undefined { return BY_KEY[key]; }
 
 /** Les paramètres d'une section, dans l'ordre du registre. */
 export function sectionSettings(section: string): SettingDecl[] {
-  return REGISTRY.filter((d) => d.section === section);
+  return ALL.filter((d) => d.section === section);
 }
 
 /** Ce que porte un document neuf : les valeurs par défaut des réglages du foyer. */
 export function householdDefaults(): HouseholdSettings {
   return Object.fromEntries(
-    REGISTRY.filter((d) => d.scope === 'foyer').map((d) => [d.key, d.default]),
+    ALL.filter((d) => d.scope === 'foyer').map((d) => [d.key, d.default]),
   ) as HouseholdSettings;
 }
 

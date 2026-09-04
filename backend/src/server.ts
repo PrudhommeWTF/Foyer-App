@@ -40,6 +40,8 @@ import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
+import { settingsRouter } from './settings/routes';
+import { settingsChanged } from './settings/repo';
 import { loadRules, rulesPath } from './home/rules';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
@@ -351,10 +353,21 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
     return;
   }
 
+  // Les réglages ne s'écrivent plus par ici : ils passent par PATCH
+  // /api/settings, clé par clé et sous contrôle d'administration. Ce qu'un
+  // client envoie dans `settings` est donc ignoré, quel que soit son rôle, ce
+  // qui ferme la porte que masquer un onglet laissait grande ouverte.
+  const me = currentMember(req);
+  const settingsAvant = (currentState.state as HouseholdState).settings;
+  if (!me?.admin && settingsChanged(settingsAvant, state.settings)) {
+    res.status(403).json({ error: 'Seul un administrateur du foyer peut modifier les réglages.' });
+    return;
+  }
+  state.settings = settingsAvant;
+
   // Non-admins may edit shared household data, but must not tamper with the member
   // roster: no adding/removing members, no changing anyone's admin flag, and no
   // editing a member other than themselves (which would include self-promotion).
-  const me = currentMember(req);
   if (!me?.admin) {
     const current = (currentState.state as HouseholdState).members || [];
     const next = Array.isArray(state.members) ? state.members : [];
@@ -489,7 +502,16 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, financesRouter());
+api.use('/finances', auth, financesRouter(requireAdmin));
+
+// Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
+// plutôt que par enregistrement du document entier, pour que deux
+// administrateurs qui règlent deux choses ne s'écrasent pas.
+api.use('/settings', auth, settingsRouter({
+  memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
+  isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
+  envValue: (name) => process.env[name],
+}));
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).

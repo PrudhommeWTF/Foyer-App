@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HouseholdState, ShopItem, TaskItem } from './models';
 import type { TaskOp } from './task-ops';
 import type { RulesOutcome } from './home-context';
+import { SettingDecl, SettingSection } from './settings/registry';
 
 /**
  * Erreur d'appel qui porte le code HTTP. `status` vaut 0 quand le serveur n'a
@@ -94,6 +95,36 @@ export interface SetupPayload {
   household: { name: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
   members: { name: string; role: string; color: string; email?: string; password?: string; birthday?: string }[];
+}
+
+/** Une modification de réglage, telle que le serveur la retient. */
+export interface SettingsLogLine {
+  id: number; key: string; label: string;
+  before: boolean | number | string | null;
+  after: boolean | number | string;
+  memberId: string | null;
+  at: string;
+}
+
+/** Tout ce qu'il faut pour engendrer la page Paramètres, valeurs comprises. */
+export interface SettingsPayload {
+  sections: SettingSection[];
+  registry: SettingDecl[];
+  values: Record<string, boolean | number | string>;
+  /** Les clés que le document porte réellement ; les autres viennent du défaut. */
+  stored: string[];
+  /** Clé de réglage vers la valeur imposée par une variable d'environnement. */
+  overrides: Record<string, string>;
+  version: number;
+  canEdit: boolean;
+  log: SettingsLogLine[];
+}
+
+export interface SettingsWriteResult {
+  changed: string[];
+  refused: { key: string; error: string }[];
+  values: Record<string, boolean | number | string>;
+  version: number;
 }
 
 const TOKEN_KEY = 'foyer.token';
@@ -217,6 +248,18 @@ export class ApiService {
 
   deleteMemberAccount(memberId: string): Promise<{ ok: boolean }> {
     return this.request(`members/${encodeURIComponent(memberId)}/account`, { method: 'DELETE' });
+  }
+
+  // ---- réglages du foyer ----
+  //
+  // Ils s'écrivent clé par clé plutôt que par enregistrement du document entier :
+  // deux administrateurs qui règlent deux choses à la même seconde ne s'écrasent
+  // donc pas. Le serveur refuse l'écriture à un non-administrateur.
+
+  settings(): Promise<SettingsPayload> { return this.request('settings'); }
+
+  patchSettings(changes: Record<string, boolean | number | string>): Promise<SettingsWriteResult> {
+    return this.request('settings', { method: 'PATCH', body: JSON.stringify({ changes }) });
   }
 
   schoolHolidays(academie: string): Promise<{ holidays: { name: string; start: string; end: string; zone: string }[]; academie: string; error?: string }> {
