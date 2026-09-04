@@ -19,8 +19,8 @@ const doc = (): HouseholdState => ({
   members: [{ id: 'me', name: 'Thomas', role: 'Papa', color: '#E56B4E', ini: 'TH' }],
   events: [], aisles: [], articles: [], shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [],
   msgs: [], contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
-  profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: 'me' },
-  settings: { dark: false, prefNotifs: true },
+  profile: { memberId: 'm1' },
+  settings: {},
 });
 
 /** Applique des mutations comme le store le fait, sans Angular. */

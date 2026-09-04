@@ -16,8 +16,8 @@ import express, { Request } from 'express';
 import { migrateHousehold } from '../src/storage/schema';
 import { initDoc, readDoc } from '../src/state/doc';
 import { settingsRouter } from '../src/settings/routes';
-import { householdDefaults } from '../src/settings/registry';
-import { settingsChanged } from '../src/settings/repo';
+import { householdDefaults, memberDefaults } from '../src/settings/registry';
+import { foreignPrefsChanged, settingsChanged } from '../src/settings/repo';
 
 let server: http.Server;
 let base: string;
@@ -35,13 +35,18 @@ const appel = async (method: string, role: string, body?: unknown): Promise<{ st
 };
 
 const reglages = (): Record<string, unknown> => (readDoc().doc['settings'] || {}) as Record<string, unknown>;
+const prefsDe = (id: string): Record<string, unknown> => ((readDoc().doc['prefs'] || {})[id] || {}) as Record<string, unknown>;
 
 beforeEach(async () => {
   db = new Database(':memory:');
   migrateHousehold(db);
   db.exec("CREATE TABLE IF NOT EXISTS household (id INTEGER PRIMARY KEY CHECK (id = 1), state TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL DEFAULT (datetime('now')))");
-  db.prepare('INSERT INTO household (id, state, version) VALUES (1, ?, 1)')
-    .run(JSON.stringify({ familyName: 'Essai', members: [], settings: householdDefaults() }));
+  db.prepare('INSERT INTO household (id, state, version) VALUES (1, ?, 1)').run(JSON.stringify({
+    familyName: 'Essai',
+    members: [{ id: 'm-admin' }, { id: 'm-adulte' }],
+    settings: householdDefaults(),
+    prefs: { 'm-admin': memberDefaults(), 'm-adulte': memberDefaults() },
+  }));
   initDoc(db);
   env = {};
 
@@ -66,25 +71,58 @@ describe('réglages : qui a le droit', () => {
   it('un membre non administrateur peut lire les réglages', async () => {
     const { status, json } = await appel('GET', 'adulte');
     assert.equal(status, 200);
-    assert.equal(json.canEdit, false, 'la lecture est ouverte, l’écriture non');
-    assert.equal(json.values.prefNotifs, true);
+    assert.equal(json.canEdit, false, 'canEdit ne parle que des réglages du foyer');
+    assert.equal(json.values.showBreakfast, false);
     assert.ok(Array.isArray(json.registry) && json.registry.length, 'la page est engendrée depuis ce qui est renvoyé ici');
   });
 
-  it('un membre non administrateur se voit refuser l’écriture, et le document ne bouge pas', async () => {
+  it('un membre non administrateur se voit refuser un réglage du foyer, et le document ne bouge pas', async () => {
     const avant = JSON.stringify(reglages());
-    const { status, json } = await appel('PATCH', 'adulte', { changes: { dark: true } });
+    const { status, json } = await appel('PATCH', 'adulte', { changes: { showBreakfast: true } });
     assert.equal(status, 403);
     assert.match(json.error, /administrateur/i);
     assert.equal(JSON.stringify(reglages()), avant, 'un refus ne doit rien écrire du tout');
   });
 
-  it('un administrateur écrit, et la valeur est bien dans le document', async () => {
-    const { status, json } = await appel('PATCH', 'admin', { changes: { dark: true, showBreakfast: true } });
+  it('un administrateur écrit un réglage du foyer, et la valeur est bien dans le document', async () => {
+    const { status, json } = await appel('PATCH', 'admin', { changes: { showBreakfast: true, academie: 'Rennes' } });
     assert.equal(status, 200);
-    assert.deepEqual(json.changed.sort(), ['dark', 'showBreakfast']);
-    assert.equal(reglages()['dark'], true);
+    assert.deepEqual(json.changed.sort(), ['academie', 'showBreakfast']);
     assert.equal(reglages()['showBreakfast'], true);
+    assert.equal(reglages()['academie'], 'Rennes');
+  });
+});
+
+describe('réglages : les préférences personnelles', () => {
+  it('un membre non administrateur écrit les siennes sans rien demander à personne', async () => {
+    const { status, json } = await appel('PATCH', 'adulte', { changes: { dark: true } });
+    assert.equal(status, 200);
+    assert.deepEqual(json.changed, ['dark']);
+    assert.equal(prefsDe('m-adulte')['dark'], true);
+  });
+
+  it('la préférence de l’un ne touche pas celle de l’autre', async () => {
+    await appel('PATCH', 'adulte', { changes: { dark: true } });
+    assert.equal(prefsDe('m-adulte')['dark'], true);
+    assert.equal(prefsDe('m-admin')['dark'], false, 'le thème de l’un n’impose rien à l’autre');
+  });
+
+  it('chacun lit ses propres valeurs', async () => {
+    await appel('PATCH', 'adulte', { changes: { dark: true } });
+    assert.equal((await appel('GET', 'adulte')).json.values.dark, true);
+    assert.equal((await appel('GET', 'admin')).json.values.dark, false);
+  });
+
+  it('un compte sans fiche de membre ne peut pas écrire de préférence, et on lui dit pourquoi', async () => {
+    const { status, json } = await appel('PATCH', 'anonyme', { changes: { dark: true } });
+    assert.equal(status, 403);
+    assert.match(json.error, /rattaché à aucun membre/);
+  });
+
+  it('un lot mélangeant foyer et personnel est refusé en entier pour un non-administrateur', async () => {
+    const { status } = await appel('PATCH', 'adulte', { changes: { dark: true, showBreakfast: true } });
+    assert.equal(status, 403);
+    assert.equal(prefsDe('m-adulte')['dark'], false, 'la préférence licite du lot n’est pas écrite non plus');
   });
 });
 
@@ -96,10 +134,10 @@ describe('réglages : ce qui est refusé, et ce que le refus explique', () => {
   });
 
   it('une valeur hors domaine est refusée, et rien du lot n’est écrit', async () => {
-    const { status, json } = await appel('PATCH', 'admin', { changes: { dark: true, academie: 'Marseille' } });
+    const { status, json } = await appel('PATCH', 'admin', { changes: { showBreakfast: true, academie: 'Marseille' } });
     assert.equal(status, 422);
     assert.equal(json.refused[0].key, 'academie');
-    assert.equal(reglages()['dark'], false, 'un lot est tout ou rien : le réglage valide du même lot n’est pas écrit');
+    assert.equal(reglages()['showBreakfast'], false, 'un lot est tout ou rien : le réglage valide du même lot n’est pas écrit');
   });
 
   it('un corps mal formé le dit plutôt que de ne rien faire en silence', async () => {
@@ -110,16 +148,16 @@ describe('réglages : ce qui est refusé, et ce que le refus explique', () => {
 
 describe('réglages : deux administrateurs à la fois', () => {
   it('chacun n’écrit que sa clé, aucun ne perd celle de l’autre', async () => {
-    await appel('PATCH', 'admin', { changes: { dark: true } });
+    await appel('PATCH', 'admin', { changes: { academie: 'Rennes' } });
     await appel('PATCH', 'admin', { changes: { showBreakfast: true } });
-    assert.equal(reglages()['dark'], true, 'le premier réglage a survécu au second');
+    assert.equal(reglages()['academie'], 'Rennes', 'le premier réglage a survécu au second');
     assert.equal(reglages()['showBreakfast'], true);
   });
 
   it('réécrire la même valeur ne fait pas tourner la version du document', async () => {
-    await appel('PATCH', 'admin', { changes: { dark: true } });
+    await appel('PATCH', 'admin', { changes: { showBreakfast: true } });
     const version = readDoc().version;
-    const { json } = await appel('PATCH', 'admin', { changes: { dark: true } });
+    const { json } = await appel('PATCH', 'admin', { changes: { showBreakfast: true } });
     assert.deepEqual(json.changed, [], 'rien n’a changé, donc rien n’est écrit');
     assert.equal(readDoc().version, version, 'les autres appareils n’ont aucune raison de se recharger');
   });
@@ -127,19 +165,26 @@ describe('réglages : deux administrateurs à la fois', () => {
 
 describe('réglages : le journal des modifications', () => {
   it('retient qui a changé quoi, et de quelle valeur vers quelle valeur', async () => {
-    await appel('PATCH', 'admin', { changes: { dark: true } });
+    await appel('PATCH', 'admin', { changes: { showBreakfast: true } });
     const { json } = await appel('GET', 'admin');
     const ligne = json.log[0];
-    assert.equal(ligne.key, 'dark');
-    assert.equal(ligne.label, 'Thème sombre', 'le journal est lisible sans connaître les clés');
+    assert.equal(ligne.key, 'showBreakfast');
+    assert.equal(ligne.label, 'Afficher le petit-déjeuner', 'le journal est lisible sans connaître les clés');
     assert.equal(ligne.before, false);
     assert.equal(ligne.after, true);
     assert.equal(ligne.memberId, 'm-admin');
     assert.ok(ligne.at, 'une modification sans date ne réglerait aucune discussion');
   });
 
-  it('une écriture refusée ne laisse aucune trace', async () => {
+  it('une préférence personnelle est journalisée elle aussi, au nom de son membre', async () => {
     await appel('PATCH', 'adulte', { changes: { dark: true } });
+    const { json } = await appel('GET', 'admin');
+    assert.equal(json.log[0].key, 'dark');
+    assert.equal(json.log[0].memberId, 'm-adulte');
+  });
+
+  it('une écriture refusée ne laisse aucune trace', async () => {
+    await appel('PATCH', 'adulte', { changes: { showBreakfast: true } });
     await appel('PATCH', 'admin', { changes: { academie: 'Marseille' } });
     const { json } = await appel('GET', 'admin');
     assert.deepEqual(json.log, []);
@@ -163,15 +208,22 @@ describe('réglages : la porte de PUT /api/state', () => {
     assert.equal(settingsChanged(base, { ...base }), false);
   });
 
-  it('un enregistrement qui change un réglage est détecté', () => {
-    assert.equal(settingsChanged(base, { ...base, dark: true }), true);
+  it('un enregistrement qui change un réglage du foyer est détecté', () => {
+    assert.equal(settingsChanged(base, { ...base, showBreakfast: true }), true);
     assert.equal(settingsChanged(base, { ...base, academie: 'Rennes' }), true);
   });
 
   it('retirer une clé déclarée compte aussi comme une modification', () => {
     const sans = { ...base };
-    delete (sans as Record<string, unknown>)['prefNotifs'];
+    delete (sans as Record<string, unknown>)['showBreakfast'];
     assert.equal(settingsChanged(base, sans), true);
+  });
+
+  it('une préférence personnelle glissée dans « settings » ne fait pas refuser la sauvegarde', () => {
+    // Elle ne s'écrit pas par là de toute façon : le serveur remet le bloc
+    // d'avant. Ce qui compte est de ne pas transformer un vieux client bavard
+    // en compte qui ne peut plus rien enregistrer.
+    assert.equal(settingsChanged(base, { ...base, dark: true }), false);
   });
 
   it('une clé retirée du registre ne fait pas refuser les sauvegardes d’un vieux document', () => {
@@ -184,6 +236,28 @@ describe('réglages : la porte de PUT /api/state', () => {
 
   it('un document sans réglages du tout est comparé au défaut sans planter', () => {
     assert.equal(settingsChanged(undefined, undefined), false);
-    assert.equal(settingsChanged(null, { dark: true }), true);
+    assert.equal(settingsChanged(null, { showBreakfast: true }), true);
+  });
+});
+
+describe('réglages : les préférences des autres, dans PUT /api/state', () => {
+  const prefs = { 'm-admin': { dark: false }, 'm-adulte': { dark: false } };
+
+  it('modifier les siennes est licite', () => {
+    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-adulte': { dark: true } }, 'm-adulte'), false);
+  });
+
+  it('modifier celles d’un autre est détecté, même pour un administrateur', () => {
+    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-adulte': { dark: true } }, 'm-admin'), true);
+  });
+
+  it('en ajouter pour quelqu’un d’autre, ou lui en retirer, est détecté aussi', () => {
+    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-tiers': { dark: true } }, 'm-adulte'), true);
+    assert.equal(foreignPrefsChanged(prefs, { 'm-adulte': { dark: false } }, 'm-adulte'), true);
+  });
+
+  it('un document sans préférences ne bloque rien', () => {
+    assert.equal(foreignPrefsChanged(undefined, undefined, 'm-adulte'), false);
+    assert.equal(foreignPrefsChanged(undefined, { 'm-adulte': { dark: true } }, 'm-adulte'), false);
   });
 });

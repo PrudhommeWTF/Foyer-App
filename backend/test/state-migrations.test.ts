@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -600,5 +600,59 @@ test('migration 9 : aucune tâche n’est perdue', () => {
   const tasks = Array.from({ length: 7 }, (_, i) => ({ id: 't' + i, text: 'x' + i, who: i % 2 ? 'me' : 'nobody', due: i % 3 ? 'bientôt' : '01/01/2027', done: i % 2 === 0, listId: 'l1', prio: 'low' }));
   const { doc } = run(foyerTaches(tasks), 8);
   assert.equal(doc['tasks'].length, 7);
-  assert.equal(STATE_VERSION, 9);
+});
+
+// ---- migration 10 : préférences personnelles, et profil en double ----------
+//
+// Le jour de la mise à jour, **rien ne doit changer à l'oeil** : celui qui avait
+// un thème sombre le garde, et les autres aussi. C'est la condition pour qu'une
+// bascule de portée passe inaperçue au lieu de se remarquer par une régression.
+
+const foyerPartage = (settings: Record<string, unknown>, prefs?: Record<string, unknown>) => ({
+  members: [{ id: 'me', name: 'Thomas' }, { id: 'm1', name: 'Claire' }],
+  settings,
+  ...(prefs ? { prefs } : {}),
+});
+
+test('migration 10 : le thème partagé devient la préférence de chaque membre', () => {
+  const { doc } = run(foyerPartage({ dark: true, prefNotifs: false, academie: 'Rennes' }), 9);
+  assert.deepEqual(doc['prefs'], {
+    me: { dark: true, prefNotifs: false },
+    m1: { dark: true, prefNotifs: false },
+  }, 'chacun garde ce que le foyer avait, donc personne ne voit son affichage changer');
+  assert.deepEqual(doc['settings'], { academie: 'Rennes' }, 'les réglages restés partagés ne bougent pas');
+});
+
+test('migration 10 : une préférence déjà posée n’est pas écrasée par celle du foyer', () => {
+  const { doc } = run(foyerPartage({ dark: true }, { m1: { dark: false } }), 9);
+  assert.equal(doc['prefs']['m1'].dark, false, 'ce que le membre avait déjà choisi gagne');
+  assert.equal(doc['prefs']['me'].dark, true);
+});
+
+test('migration 10 : rejouée sur un document déjà migré, elle ne change rien', () => {
+  const dejaFait = { members: [{ id: 'me' }], settings: { academie: 'Rennes' }, prefs: { me: { dark: true } }, profile: { memberId: 'me' } };
+  const avant = JSON.stringify(dejaFait);
+  run(dejaFait, 9);
+  assert.equal(JSON.stringify(dejaFait), avant);
+});
+
+test('migration 10 : un foyer sans réglages ni profil n’en gagne pas', () => {
+  const nu = { members: [{ id: 'me' }] };
+  run(nu, 9);
+  assert.deepEqual(nu, { members: [{ id: 'me' }] }, 'la migration n’invente pas de clés');
+});
+
+test('migration 10 : le profil en double perd tout sauf le membre qu’il désigne', () => {
+  const doc: Record<string, any> = {
+    members: [{ id: 'me' }],
+    profile: { name: 'Thomas', role: 'Papa', email: 't@ex.fr', phone: '06', color: '#E56B4E', memberId: 'me' },
+  };
+  run(doc, 9);
+  assert.deepEqual(doc['profile'], { memberId: 'me' });
+});
+
+test('migration 10 : un membre sans identifiant ne fabrique pas d’entrée fantôme', () => {
+  const doc: Record<string, any> = { members: [{ name: 'sans id' }, { id: 'me' }], settings: { dark: true } };
+  run(doc, 9);
+  assert.deepEqual(Object.keys(doc['prefs']), ['me']);
 });

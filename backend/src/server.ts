@@ -41,7 +41,7 @@ import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { settingsRouter } from './settings/routes';
-import { settingsChanged } from './settings/repo';
+import { foreignPrefsChanged, settingsChanged } from './settings/repo';
 import { loadRules, rulesPath } from './home/rules';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
@@ -354,22 +354,29 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
   }
 
   // Les réglages ne s'écrivent plus par ici : ils passent par PATCH
-  // /api/settings, clé par clé et sous contrôle d'administration. Ce qu'un
-  // client envoie dans `settings` est donc ignoré, quel que soit son rôle, ce
-  // qui ferme la porte que masquer un onglet laissait grande ouverte.
+  // /api/settings, clé par clé et sous contrôle de portée. Ce qu'un client
+  // envoie dans `settings` et `prefs` est donc ignoré, quel que soit son rôle,
+  // ce qui ferme la porte que masquer un onglet laissait grande ouverte.
   const me = currentMember(req);
-  const settingsAvant = (currentState.state as HouseholdState).settings;
-  if (!me?.admin && settingsChanged(settingsAvant, state.settings)) {
+  const avant = currentState.state as HouseholdState;
+  if (!me?.admin && settingsChanged(avant.settings, state.settings)) {
     res.status(403).json({ error: 'Seul un administrateur du foyer peut modifier les réglages.' });
     return;
   }
-  state.settings = settingsAvant;
+  // Les préférences d'un autre membre ne se modifient pas, même par un
+  // administrateur : c'est le pendant de la règle sur la fiche de membre.
+  if (foreignPrefsChanged(avant.prefs, state.prefs, me?.id ?? null)) {
+    res.status(403).json({ error: 'Vous ne pouvez modifier que vos propres préférences.' });
+    return;
+  }
+  state.settings = avant.settings;
+  state.prefs = avant.prefs;
 
   // Non-admins may edit shared household data, but must not tamper with the member
   // roster: no adding/removing members, no changing anyone's admin flag, and no
   // editing a member other than themselves (which would include self-promotion).
   if (!me?.admin) {
-    const current = (currentState.state as HouseholdState).members || [];
+    const current = avant.members || [];
     const next = Array.isArray(state.members) ? state.members : [];
     const byId = (arr: HouseholdState['members']): Map<string, HouseholdState['members'][number]> =>
       new Map(arr.map((m) => [m.id, m]));

@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ALL, SECTIONS, SettingDecl, checkValue, householdDefaults, setting, validate } from '../src/settings/registry';
+import { ALL, SECTIONS, SettingDecl, checkValue, householdDefaults, memberDefaults, setting, validate } from '../src/settings/registry';
 import { render } from '../scripts/settings-doc';
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -154,6 +154,17 @@ test('registre : un document neuf porte exactement les réglages du foyer', () =
   assert.deepEqual(Object.keys(householdDefaults()).sort(), attendu);
 });
 
+test('registre : les préférences d’un membre neuf sont exactement celles de portée personnelle', () => {
+  const attendu = ALL.filter((d) => d.scope === 'personnel').map((d) => d.key).sort();
+  assert.deepEqual(Object.keys(memberDefaults()).sort(), attendu);
+});
+
+test('registre : aucune clé n’est rangée dans deux endroits à la fois', () => {
+  const foyer = new Set(Object.keys(householdDefaults()));
+  const doublons = Object.keys(memberDefaults()).filter((k) => foyer.has(k));
+  assert.deepEqual(doublons, [], 'une clé à la fois partagée et personnelle rendrait indécidable ce qui s’applique');
+});
+
 // ---- lecture : ce qui protège d'un document ancien, tronqué ou bricolé ------
 
 test('lecture : un document sans réglages rend les valeurs par défaut', () => {
@@ -171,7 +182,26 @@ test('lecture : une valeur d’un type inattendu rend le défaut plutôt que de 
 test('lecture : une valeur valide est rendue telle quelle', () => {
   assert.equal(setting('academie', { settings: { academie: 'Rennes' } }), 'Rennes');
   assert.equal(setting('icsTasks', { settings: { icsTasks: true } }), true);
-  assert.equal(setting('prefNotifs', { settings: { prefNotifs: false } }), false);
+});
+
+// ---- portée personnelle ----------------------------------------------------
+
+test('lecture : une préférence se lit dans la table du membre, pas dans les réglages partagés', () => {
+  const doc = { settings: { dark: true }, prefs: { me: { dark: false } } };
+  assert.equal(setting('dark', doc, 'me'), false, 'la préférence du membre décide, pas une valeur partagée résiduelle');
+  assert.equal(setting('dark', doc, 'autre'), false, 'un membre sans préférence prend le défaut, jamais celle d’un autre');
+});
+
+test('lecture : sans membre, une préférence rend son défaut plutôt que celle de quelqu’un', () => {
+  const doc = { prefs: { me: { prefNotifs: false } } };
+  assert.equal(setting('prefNotifs', doc), true);
+  assert.equal(setting('prefNotifs', doc, 'me'), false);
+});
+
+test('lecture : chacun voit la sienne', () => {
+  const doc = { prefs: { me: { dark: true }, claire: { dark: false } } };
+  assert.equal(setting('dark', doc, 'me'), true);
+  assert.equal(setting('dark', doc, 'claire'), false);
 });
 
 // ---- contrôle de saisie : un test par type, sur les bornes ------------------

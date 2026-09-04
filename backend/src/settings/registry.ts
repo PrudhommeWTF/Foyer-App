@@ -136,9 +136,9 @@ const ACADEMIE_OPTIONS: readonly SettingOption[] = [
 export const REGISTRY = [
   {
     key: 'dark',
-    type: 'bool', scope: 'foyer', section: 'affichage', module: 'Affichage',
+    type: 'bool', scope: 'personnel', section: 'affichage', module: 'Affichage',
     label: 'Thème sombre',
-    desc: 'Bascule toute l’application en couleurs sombres. Partagé par le foyer : le changer ici change l’affichage de tout le monde.',
+    desc: 'Bascule l’application en couleurs sombres, sur tous vos appareils. Propre à vous : votre choix ne change rien à l’affichage des autres membres.',
     default: false,
   },
   {
@@ -158,9 +158,9 @@ export const REGISTRY = [
   },
   {
     key: 'prefNotifs',
-    type: 'bool', scope: 'foyer', section: 'notifications', module: 'Notifications',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Notifications',
     label: 'Alertes dans l’application',
-    desc: 'La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Ne coupe pas les rappels envoyés sur le téléphone.',
+    desc: 'La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Propre à vous, et sans effet sur les rappels envoyés au téléphone.',
     default: true,
   },
   {
@@ -193,6 +193,16 @@ export type SettingValue<K extends SettingKey> = AllValues[K];
 /** La forme de `HouseholdState.settings` : tout est facultatif, le défaut prend le relais. */
 export type HouseholdSettings = Partial<Pick<AllValues, Extract<Decl, { scope: 'foyer' }>['key']>>;
 
+/**
+ * Les préférences d'un membre, rangées sous `HouseholdState.prefs[idDuMembre]`.
+ *
+ * Elles vivent dans le document plutôt que dans une table à part : une archive
+ * du dossier de données reste une sauvegarde complète, et le serveur n'a qu'une
+ * règle à tenir, celle qui existe déjà pour les membres (on ne modifie que la
+ * sienne).
+ */
+export type MemberPrefs = Partial<Pick<AllValues, Extract<Decl, { scope: 'personnel' }>['key']>>;
+
 const BY_KEY: Record<string, SettingDecl> = Object.fromEntries(ALL.map((d) => [d.key, d]));
 
 /** La déclaration d'une clé, ou `undefined` si elle n'existe pas. */
@@ -210,8 +220,24 @@ export function householdDefaults(): HouseholdSettings {
   ) as HouseholdSettings;
 }
 
+/** Les valeurs par défaut des préférences d'un membre. */
+export function memberDefaults(): MemberPrefs {
+  return Object.fromEntries(
+    ALL.filter((d) => d.scope === 'personnel').map((d) => [d.key, d.default]),
+  ) as MemberPrefs;
+}
+
 /** Ce que `setting()` sait lire. Un document du foyer en est un. */
-export interface SettingsSource { settings?: Readonly<Record<string, unknown>> | null; }
+export interface SettingsSource {
+  settings?: Readonly<Record<string, unknown>> | null;
+  prefs?: Readonly<Record<string, Readonly<Record<string, unknown>> | undefined>> | null;
+}
+
+/** Là où la valeur d'une clé est rangée, selon sa portée. */
+function bucket(d: SettingDecl, src: SettingsSource | null | undefined, memberId?: string | null): Readonly<Record<string, unknown>> {
+  if (d.scope !== 'personnel') return src?.settings || {};
+  return (memberId && src?.prefs ? src.prefs[memberId] : undefined) || {};
+}
 
 export type Checked = { ok: true; value: boolean | number | string } | { ok: false; error: string };
 
@@ -267,11 +293,14 @@ export function validate(key: string, raw: unknown): Checked {
  * Une valeur absente, d'un type inattendu ou hors bornes rend le défaut : un
  * document ancien, tronqué ou bricolé à la main ne doit jamais rendre
  * l'application inutilisable ni empêcher de revenir en arrière.
+ *
+ * `memberId` n'est lu que pour les réglages de portée personnelle. Sans lui,
+ * une préférence rend son défaut plutôt que celle de quelqu'un d'autre.
  */
-export function setting<K extends SettingKey>(key: K, src: SettingsSource | null | undefined): SettingValue<K> {
+export function setting<K extends SettingKey>(key: K, src: SettingsSource | null | undefined, memberId?: string | null): SettingValue<K> {
   const d = BY_KEY[key];
-  const raw = src?.settings ? src.settings[key] : undefined;
+  const raw = bucket(d, src, memberId)[key];
   if (raw === undefined || raw === null) return d.default as SettingValue<K>;
-  const checked = validate(key, raw);
+  const checked = checkValue(d, raw);
   return (checked.ok ? checked.value : d.default) as SettingValue<K>;
 }

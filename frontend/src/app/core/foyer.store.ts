@@ -27,7 +27,7 @@ import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
-import { SettingKey, SettingValue, householdDefaults, setting, validate } from './settings/registry';
+import { SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
@@ -259,9 +259,10 @@ export class FoyerStore {
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private api: ApiService) {
-    // Theme side effect: reflect the theme setting onto <html>.
+    // Theme side effect: reflect the theme setting onto <html>. Le thème est une
+    // préférence personnelle : il suit le membre connecté, pas le foyer.
     effect(() => {
-      document.documentElement.classList.toggle('dark', setting('dark', this._data()));
+      document.documentElement.classList.toggle('dark', setting('dark', this._data(), this.currentMemberId()));
     });
 
     // Les photos sont téléchargées avec la session dès qu'une recette en cite
@@ -670,6 +671,7 @@ export class FoyerStore {
     s.taskLists ||= [];
     s.taskTemplates ||= [];
     s.settings ||= householdDefaults();
+    s.prefs ||= {};
     return s;
   }
 
@@ -2951,7 +2953,7 @@ export class FoyerStore {
   }
   openProfile(): void {
     const m = this.me();
-    this.patch({ profileOpen: true, pfTab: 'infos', pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
+    this.patch({ profileOpen: true, pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
   }
   saveProfile(): void {
     const s = this.ui(); if (!s.pfName.trim()) { this.toast('Le prénom est requis'); return; }
@@ -2959,8 +2961,6 @@ export class FoyerStore {
     this.mutate((d) => {
       const mi = d.members.findIndex((m) => m.id === id);
       if (mi >= 0) d.members[mi] = { ...d.members[mi], name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor, ini: contactIni(s.pfName.trim()) };
-      // Keep the stored admin profile in sync only when the admin edits their own member.
-      if (id === d.profile.memberId) d.profile = { ...d.profile, name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor };
     });
     this.patch({ profileOpen: false });
     this.toast('Profil mis à jour');
@@ -3050,8 +3050,15 @@ export class FoyerStore {
   // (core/settings/registry.ts) : c'est ce qui rend un réglage mort ou fantôme
   // détectable en CI. Personne ne touche `settings` directement.
 
-  /** La valeur d'un réglage du foyer, ou son défaut quand le document ne la porte pas. */
-  setting<K extends SettingKey>(key: K): SettingValue<K> { return setting(key, this._data()); }
+  /**
+   * La valeur d'un réglage, ou son défaut quand le document ne la porte pas.
+   *
+   * Une préférence personnelle est lue dans la table du membre connecté : c'est
+   * le même appel pour les deux portées, l'écran n'a pas à savoir laquelle.
+   */
+  setting<K extends SettingKey>(key: K): SettingValue<K> {
+    return setting(key, this._data(), this.currentMemberId());
+  }
 
   /**
    * Écrit un réglage.
@@ -3066,9 +3073,13 @@ export class FoyerStore {
    * document : deux administrateurs qui règlent deux choses ne s'écrasent pas.
    */
   setSetting<K extends SettingKey>(key: K, val: SettingValue<K>): void {
+    // Un réglage du foyer engage tout le monde, une préférence n'engage que soi.
     // Le serveur refuse de toute façon : le dire tout de suite évite un
     // interrupteur qui bascule puis revient tout seul, ce qui ressemble à une panne.
-    if (!this.isAdmin()) { this.toast('Seul un administrateur du foyer peut modifier les réglages.'); return; }
+    if (declOf(key)?.scope === 'foyer' && !this.isAdmin()) {
+      this.toast('Seul un administrateur du foyer peut modifier les réglages du foyer.');
+      return;
+    }
     const checked = validate(key, val);
     if (!checked.ok) { this.toast(checked.error); return; }
     const avant = this.setting(key);
@@ -3100,7 +3111,14 @@ export class FoyerStore {
     const cur = this._data();
     if (!cur) return;
     const next = structuredClone(cur);
-    (next.settings as Record<string, unknown>)[key] = val;
+    if (declOf(key)?.scope === 'personnel') {
+      const me = this.currentMemberId();
+      if (!me) return;
+      next.prefs ||= {};
+      next.prefs[me] = { ...(next.prefs[me] || {}), [key]: val } as (typeof next.prefs)[string];
+    } else {
+      (next.settings as Record<string, unknown>)[key] = val;
+    }
     this._data.set(next);
   }
   exportData(): void {

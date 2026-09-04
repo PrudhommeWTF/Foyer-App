@@ -24,9 +24,9 @@ Ce que voit tout le monde : identité du foyer et thème.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `dark` | Thème sombre | Foyer | oui / non | désactivé | — | Affichage | — |
+| `dark` | Thème sombre | Personnel | oui / non | désactivé | — | Affichage | — |
 
-- **Thème sombre** (`dark`) : Bascule toute l’application en couleurs sombres. Partagé par le foyer : le changer ici change l’affichage de tout le monde.
+- **Thème sombre** (`dark`) : Bascule l’application en couleurs sombres, sur tous vos appareils. Propre à vous : votre choix ne change rien à l’affichage des autres membres.
 
 ## Calendriers de référence
 
@@ -46,9 +46,9 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `prefNotifs` | Alertes dans l’application | Foyer | oui / non | activé | — | Notifications | — |
+| `prefNotifs` | Alertes dans l’application | Personnel | oui / non | activé | — | Notifications | — |
 
-- **Alertes dans l’application** (`prefNotifs`) : La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Ne coupe pas les rappels envoyés sur le téléphone.
+- **Alertes dans l’application** (`prefNotifs`) : La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Propre à vous, et sans effet sur les rappels envoyés au téléphone.
 
 ## Repas et cuisine
 

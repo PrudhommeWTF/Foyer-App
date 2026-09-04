@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 9;
+export const STATE_VERSION = 10;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -429,7 +429,50 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       if (hautes.length) ctx.log(`Tâches : la priorité disparaît ; ${hautes.length} tâche(s) étaient « Haute » : ${hautes.join(', ')}.`);
     },
   },
+  {
+    version: 10,
+    label: 'préférences personnelles, et fin du profil en double',
+    up: (doc, ctx) => {
+      // Le thème et les alertes de la cloche étaient partagés : quand l'un
+      // passait en sombre, tout le monde passait en sombre. Ils deviennent des
+      // préférences personnelles.
+      //
+      // Chaque membre hérite de la valeur du foyer, pour que **rien ne change à
+      // l'oeil** le jour de la mise à jour : celui qui avait un thème sombre le
+      // garde, les autres aussi, et chacun peut ensuite s'en écarter. Rejouable :
+      // un second passage ne trouve plus les clés partagées et ne fait rien.
+      const settings = (doc['settings'] && typeof doc['settings'] === 'object' ? doc['settings'] : null) as Doc | null;
+      const partagees = settings ? PERSONNELLES.filter((k) => settings[k] !== undefined) : [];
+      if (settings && partagees.length) {
+        const prefs = (doc['prefs'] && typeof doc['prefs'] === 'object' ? doc['prefs'] : {}) as Doc;
+        for (const m of arr(doc['members'])) {
+          const id = String(m?.['id'] ?? '');
+          if (!id) continue;
+          const mien = (prefs[id] && typeof prefs[id] === 'object' ? prefs[id] : {}) as Doc;
+          for (const k of partagees) if (mien[k] === undefined) mien[k] = settings[k];
+          prefs[id] = mien;
+        }
+        for (const k of partagees) delete settings[k];
+        doc['prefs'] = prefs;
+        ctx.log(`Réglages : ${partagees.join(', ')} devien(nen)t personnel(s) ; chaque membre garde la valeur qu'avait le foyer (${arr(doc['members']).length} membre(s)).`);
+      }
+
+      // `profile` recopiait le nom, le rôle, l'email, le téléphone et la couleur
+      // du membre administrateur, sans que rien ne les lise : les écrans lisent
+      // le membre. Seul `memberId` sert encore, comme repli quand la session ne
+      // dit pas qui elle est. Le reste part, plutôt que d'être tenu à jour pour rien.
+      const profile = (doc['profile'] && typeof doc['profile'] === 'object' ? doc['profile'] : null) as Doc | null;
+      const restants = profile ? ['name', 'role', 'email', 'phone', 'color'].filter((k) => profile[k] !== undefined) : [];
+      if (profile && restants.length) {
+        for (const k of restants) delete profile[k];
+        ctx.log('Réglages : le profil en double du document est retiré ; les écrans lisent la fiche du membre.');
+      }
+    },
+  },
 ];
+
+/** Les clés que la migration 10 fait passer du foyer au membre. */
+const PERSONNELLES = ['dark', 'prefNotifs'];
 
 const LIST_KINDS = ['taches', 'corvees', 'checklist'];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;

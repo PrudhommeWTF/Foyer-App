@@ -1,9 +1,14 @@
 // Surface HTTP des réglages, montée sous /api/settings.
 //
 // Le contrôle est **ici, côté serveur**, pas dans l'écran : masquer un onglet
-// n'a jamais empêché personne d'appeler l'API. Lire les réglages est ouvert à
-// tout membre connecté (un adulte a le droit de savoir comment le foyer est
-// réglé) ; les écrire est réservé à un administrateur.
+// n'a jamais empêché personne d'appeler l'API.
+//
+//   - lire     : tout membre connecté. Un adulte a le droit de savoir comment
+//                le foyer est réglé, et voit ses propres préférences.
+//   - écrire   : un réglage **du foyer** engage tout le monde, donc
+//                administrateur uniquement ; une **préférence personnelle**
+//                n'engage que soi, donc chacun écrit la sienne, et seulement la
+//                sienne. Le tri se fait clé par clé, à la portée déclarée.
 import express, { Request, Response, Router } from 'express';
 import { ALL, SECTIONS } from './registry';
 import { applySettings, readSettings, settingsLog } from './repo';
@@ -25,21 +30,13 @@ export function settingsRouter(deps: SettingsDeps): Router {
   const r = express.Router();
   r.use(express.json({ limit: MAX_BODY }));
 
-  const admin = (req: Request, res: Response, next: express.NextFunction): void => {
-    if (!deps.isAdmin(req)) {
-      res.status(403).json({ error: 'Seul un administrateur du foyer peut modifier les réglages.' });
-      return;
-    }
-    next();
-  };
-
   /**
    * Tout ce qu'il faut pour engendrer la page : les déclarations, les valeurs
    * effectives, et ce que l'environnement impose. L'interface n'a rien à
    * deviner, et ne peut donc pas laisser croire qu'un réglage sans effet est actif.
    */
   r.get('/', (req: Request, res: Response) => {
-    const { values, stored, version } = readSettings();
+    const { values, stored, version } = readSettings(deps.memberId(req));
     const overrides: Record<string, string> = {};
     for (const d of ALL) {
       if (!d.envOverride) continue;
@@ -58,7 +55,7 @@ export function settingsRouter(deps: SettingsDeps): Router {
     });
   });
 
-  r.patch('/', admin, (req: Request, res: Response) => {
+  r.patch('/', (req: Request, res: Response) => {
     const changes = req.body?.changes;
     if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
       res.status(400).json({ error: 'Réglages attendus dans « changes », sous la forme { clé: valeur }.' });
@@ -70,11 +67,14 @@ export function settingsRouter(deps: SettingsDeps): Router {
       return;
     }
     try {
-      const out = applySettings(changes as Record<string, unknown>, deps.memberId(req));
+      const out = applySettings(changes as Record<string, unknown>, deps.memberId(req), deps.isAdmin(req));
       if (out.refused.length) {
-        // 422 et non 400 : la requête est bien formée, c'est la valeur qui ne va
-        // pas, et l'écran a besoin du message clé par clé pour le placer au bon champ.
-        res.status(422).json({ error: out.refused[0].error, refused: out.refused });
+        // Un droit manquant est un 403, une valeur qui ne va pas un 422 : ce
+        // n'est pas le même geste pour la personne en face, et l'écran n'a pas à
+        // deviner lequel des deux lui est arrivé. Dans les deux cas le message
+        // part clé par clé, pour se placer au bon champ.
+        const droit = out.refused.some((f) => /administrateur|ne se change pas ici|aucun membre/.test(f.error));
+        res.status(droit ? 403 : 422).json({ error: out.refused[0].error, refused: out.refused });
         return;
       }
       if (out.changed.length) {

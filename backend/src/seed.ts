@@ -3,7 +3,7 @@
 // default used before that. Only DATA fields are persisted; ephemeral UI state
 // lives in the frontend.
 import { HouseholdState } from './models';
-import { householdDefaults } from './settings/registry';
+import { householdDefaults, memberDefaults } from './settings/registry';
 
 /**
  * Rayons de départ. Leur `position` donne l'ordre de parcours du magasin, que
@@ -40,8 +40,9 @@ export const EMPTY_STATE: HouseholdState = {
   meals: {},
   recipes: [],
   sched: [],
-  profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
+  profile: { memberId: '' },
   settings: householdDefaults(),
+  prefs: {},
 };
 
 export type { HouseholdState } from './models';
@@ -121,10 +122,12 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     meals: {},
     recipes: [],
     sched: [],
-    profile: { name: admin.name, role: admin.role, email: admin.email || '', phone: '', color: admin.color, memberId: adminId },
+    profile: { memberId: adminId },
     // Les valeurs par défaut viennent du registre ; l'onboarding n'en pose que
-    // deux, celles qu'il a demandées.
-    settings: { ...householdDefaults(), dark: input.household.theme === 'dark', academie: input.household.academie || '' },
+    // deux, celles qu'il a demandées. Le thème est une préférence personnelle :
+    // il va à celui qui vient de le choisir, pas à tout le foyer.
+    settings: { ...householdDefaults(), academie: input.household.academie || '' },
+    prefs: { [adminId]: { ...memberDefaults(), dark: input.household.theme === 'dark' } },
   };
 }
 

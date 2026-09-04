@@ -167,7 +167,7 @@ export interface UiState {
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfBirthday: string; memberDelId: string | null;
   /** Contraintes alimentaires en cours d'édition, et recherche d'aliment refusé. */
   mfAllerg: string[]; mfRefuse: string[]; mfRefuseQ: string;
-  profileOpen: boolean; pfTab: 'infos' | 'prefs';
+  profileOpen: boolean;
   pfName: string; pfRole: string; pfEmail: string; pfColor: string;
 
   // member login account management
@@ -209,7 +209,7 @@ export function initialUi(): UiState {
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
     mfAllerg: [], mfRefuse: [], mfRefuseQ: '',
-    profileOpen: false, pfTab: 'infos', pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
+    profileOpen: false, pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };
 }

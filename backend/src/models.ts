@@ -2,7 +2,7 @@
 // fields (planned/birthday/academie) are additive and backward-compatible.
 import type { ShopItem } from './shopping/ops';
 import type { TaskItem } from './tasks/ops';
-import type { HouseholdSettings } from './settings/registry';
+import type { HouseholdSettings, MemberPrefs } from './settings/registry';
 
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
 // frontend/src/app/core/diet.ts pour ce qui en est dérivé.
@@ -116,7 +116,15 @@ export interface SchedSlot {
   skip?: string[];
   srcId?: string;
 }
-export interface Profile { name: string; role: string; email: string; phone: string; color: string; memberId: string; }
+/**
+ * Le repli d'identité du document : le membre qui compte quand la session ne dit
+ * pas qui elle est.
+ *
+ * Il portait aussi le nom, le rôle, l'email, le téléphone et la couleur de
+ * l'administrateur, recopiés du membre et tenus à jour pour rien : aucun écran
+ * ne les lisait. Voir la migration 10.
+ */
+export interface Profile { memberId: string; }
 /**
  * Les réglages du foyer. Leur forme est **dérivée du registre** : un réglage se
  * déclare dans settings/registry.ts et nulle part ailleurs, et se lit avec
@@ -124,6 +132,13 @@ export interface Profile { name: string; role: string; email: string; phone: str
  * relais, ce qui rend un document ancien lisible sans migration.
  */
 export type Settings = HouseholdSettings;
+
+/**
+ * Les préférences personnelles, par identifiant de membre. Un membre absent de
+ * la table n'a rien réglé : ses défauts s'appliquent, et il n'y a rien à créer
+ * pour lui.
+ */
+export type Prefs = Record<string, MemberPrefs>;
 
 export interface HouseholdState {
   familyName: string;
@@ -147,4 +162,5 @@ export interface HouseholdState {
   sched: SchedSlot[];
   profile: Profile;
   settings: Settings;
+  prefs?: Prefs;
 }

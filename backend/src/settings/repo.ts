@@ -13,17 +13,23 @@ import { ALL, SettingDecl, checkValue, declOf } from './registry';
 
 /** Les réglages tels qu'ils sont stockés, valeurs par défaut comprises. */
 export interface SettingsView {
-  /** La valeur effective de chaque clé déclarée, défaut inclus. */
+  /** La valeur effective de chaque clé déclarée pour ce membre, défaut inclus. */
   values: Record<string, boolean | number | string>;
   /** Les clés que le document porte réellement : le reste vient du défaut. */
   stored: string[];
   version: number;
 }
 
-const settingsOf = (doc: Doc): Record<string, unknown> =>
-  (doc['settings'] && typeof doc['settings'] === 'object' ? doc['settings'] as Record<string, unknown> : {});
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {});
+const settingsOf = (doc: Doc): Record<string, unknown> => obj(doc['settings']);
+const prefsOf = (doc: Doc, memberId: string | null): Record<string, unknown> =>
+  (memberId ? obj(obj(doc['prefs'])[memberId]) : {});
 
-/** La valeur effective d'une déclaration dans un document : la sienne, ou le défaut. */
+/** Là où une clé est rangée dans le document, selon sa portée. */
+const bucketOf = (doc: Doc, d: SettingDecl, memberId: string | null): Record<string, unknown> =>
+  (d.scope === 'personnel' ? prefsOf(doc, memberId) : settingsOf(doc));
+
+/** La valeur effective d'une déclaration : la sienne, ou le défaut. */
 function effective(d: SettingDecl, stored: Record<string, unknown>): boolean | number | string {
   const raw = stored[d.key];
   if (raw === undefined || raw === null) return d.default;
@@ -31,12 +37,21 @@ function effective(d: SettingDecl, stored: Record<string, unknown>): boolean | n
   return checked.ok ? checked.value : d.default;
 }
 
-export function readSettings(): SettingsView {
+/**
+ * Les valeurs telles que **ce membre** les voit : les réglages du foyer, plus
+ * ses préférences à lui. Sans membre, les préférences valent leur défaut, ce
+ * qui est le cas d'un compte sans fiche de membre.
+ */
+export function readSettings(memberId: string | null = null): SettingsView {
   const { doc, version } = readDoc();
-  const stored = settingsOf(doc);
   const values: Record<string, boolean | number | string> = {};
-  for (const d of ALL) values[d.key] = effective(d, stored);
-  return { values, stored: ALL.map((d) => d.key).filter((k) => stored[k] !== undefined), version };
+  const stored: string[] = [];
+  for (const d of ALL) {
+    const bucket = bucketOf(doc, d, memberId);
+    values[d.key] = effective(d, bucket);
+    if (bucket[d.key] !== undefined) stored.push(d.key);
+  }
+  return { values, stored, version };
 }
 
 /** Une clé refusée, et la raison à afficher à côté du champ. */
@@ -58,37 +73,61 @@ export interface ApplyOutcome {
  * choisi ne doit jamais laisser l'application dans un état que personne
  * n'a voulu.
  */
-export function applySettings(changes: Record<string, unknown>, memberId: string | null): ApplyOutcome {
+export function applySettings(changes: Record<string, unknown>, memberId: string | null, isAdmin: boolean): ApplyOutcome {
   const refused: Refus[] = [];
-  const retenues: { key: string; value: boolean | number | string }[] = [];
+  const retenues: { decl: SettingDecl; value: boolean | number | string }[] = [];
   for (const [key, raw] of Object.entries(changes || {})) {
     const d = declOf(key);
     if (!d) { refused.push({ key, error: `Le réglage « ${key} » n’existe pas.` }); continue; }
-    if (d.scope !== 'foyer') { refused.push({ key, error: `Le réglage « ${d.label} » ne se change pas ici.` }); continue; }
+    if (d.scope === 'deploiement') {
+      refused.push({ key, error: `« ${d.label} » est fixé par le serveur et ne se change pas ici.` });
+      continue;
+    }
+    // Un réglage du foyer engage tout le monde : administrateur uniquement. Une
+    // préférence n'engage que soi, et n'a donc rien à demander à personne.
+    if (d.scope === 'foyer' && !isAdmin) {
+      refused.push({ key, error: `« ${d.label} » est un réglage du foyer : seul un administrateur peut le modifier.` });
+      continue;
+    }
+    if (d.scope === 'personnel' && !memberId) {
+      refused.push({ key, error: `« ${d.label} » est une préférence personnelle : votre compte n’est rattaché à aucun membre du foyer.` });
+      continue;
+    }
     const checked = checkValue(d, raw);
     if (!checked.ok) { refused.push({ key, error: checked.error }); continue; }
-    retenues.push({ key, value: checked.value });
+    retenues.push({ decl: d, value: checked.value });
   }
-  if (refused.length) return { changed: [], refused, values: readSettings().values, version: readSettings().version };
+  if (refused.length) {
+    const vue = readSettings(memberId);
+    return { changed: [], refused, values: vue.values, version: vue.version };
+  }
 
   const database = docDb();
   return database.transaction((): ApplyOutcome => {
     const { doc, version } = readDoc();
-    const stored = settingsOf(doc);
     const journal = database.prepare(
       'INSERT INTO hh_settings_log (key, before_json, after_json, member_id) VALUES (?, ?, ?, ?)',
     );
+    const settings = settingsOf(doc);
+    const prefs = obj(doc['prefs']);
+    const miennes = obj(memberId ? prefs[memberId] : undefined);
     const changed: string[] = [];
-    for (const { key, value } of retenues) {
-      const avant = effective(declOf(key)!, stored);
-      if (avant === value && stored[key] !== undefined) continue; // rien à écrire, rien à journaliser
-      journal.run(key, JSON.stringify(avant), JSON.stringify(value), memberId);
-      stored[key] = value;
-      changed.push(key);
+    for (const { decl, value } of retenues) {
+      const bucket = decl.scope === 'personnel' ? miennes : settings;
+      const avant = effective(decl, bucket);
+      if (avant === value && bucket[decl.key] !== undefined) continue; // rien à écrire, rien à journaliser
+      journal.run(decl.key, JSON.stringify(avant), JSON.stringify(value), memberId);
+      bucket[decl.key] = value;
+      changed.push(decl.key);
     }
-    if (!changed.length) return { changed, refused, values: readSettings().values, version };
-    doc['settings'] = stored;
-    return { changed, refused, values: readSettings().values, version: writeDoc(doc) };
+    if (!changed.length) {
+      const vue = readSettings(memberId);
+      return { changed, refused, values: vue.values, version };
+    }
+    doc['settings'] = settings;
+    if (memberId) { prefs[memberId] = miennes; doc['prefs'] = prefs; }
+    const nouvelle = writeDoc(doc);
+    return { changed, refused, values: readSettings(memberId).values, version: nouvelle };
   })();
 }
 
@@ -137,7 +176,22 @@ export function settingsLog(limit = 50): LogLine[] {
  * refuser toutes ses sauvegardes.
  */
 export function settingsChanged(avant: unknown, apres: unknown): boolean {
-  const a = (avant && typeof avant === 'object' ? avant : {}) as Record<string, unknown>;
-  const b = (apres && typeof apres === 'object' ? apres : {}) as Record<string, unknown>;
-  return ALL.some((d) => JSON.stringify(a[d.key]) !== JSON.stringify(b[d.key]));
+  const a = obj(avant);
+  const b = obj(apres);
+  return ALL.filter((d) => d.scope === 'foyer').some((d) => JSON.stringify(a[d.key]) !== JSON.stringify(b[d.key]));
 }
+
+/**
+ * Un enregistrement du document essaie-t-il de changer les préférences de
+ * **quelqu'un d'autre** ?
+ *
+ * Même règle que pour la fiche de membre : chacun n'écrit que la sienne. Sans
+ * ce garde, l'écran des Paramètres serait protégé et le document, non.
+ */
+export function foreignPrefsChanged(avant: unknown, apres: unknown, memberId: string | null): boolean {
+  const a = obj(avant);
+  const b = obj(apres);
+  const ids = new Set([...Object.keys(a), ...Object.keys(b)].filter((id) => id !== memberId));
+  return [...ids].some((id) => JSON.stringify(a[id]) !== JSON.stringify(b[id]));
+}
+
