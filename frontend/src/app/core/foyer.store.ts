@@ -570,8 +570,13 @@ export class FoyerStore {
     this.pushBusy.set(true);
     try {
       const r = await this.api.pushTest();
-      this.toast(r.status === 'sent' ? 'Test envoyé à ' + r.devices + (r.devices > 1 ? ' appareils' : ' appareil') + ', il devrait arriver dans la seconde'
-        : r.status === 'no-device' ? 'Aucun appareil abonné pour vous' : 'Échec : ' + (r.error || r.status));
+      // Un envoi partiel n'est pas un envoi réussi : le dire, en nommant ce qui
+      // a échoué. La liste des appareils, elle, dit lequel.
+      this.toast(
+        r.status === 'sent' ? 'Test envoyé à ' + r.devices + (r.devices > 1 ? ' appareils' : ' appareil') + ', il devrait arriver dans la seconde'
+        : r.status === 'partial' ? `Reçu par ${r.devices} appareil sur ${r.total} : ${r.error || 'les autres ont refusé'}`
+        : r.status === 'no-device' ? 'Aucun appareil abonné pour vous'
+        : 'Échec : ' + (r.error || r.status));
       await this.refreshPushStatus();
     } catch (e) { this.toast((e as Error).message); }
     finally { this.pushBusy.set(false); }

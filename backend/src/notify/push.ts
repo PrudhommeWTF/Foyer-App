@@ -31,8 +31,22 @@ export interface PushPayload {
 /** Ce qu'un envoi à un appareil a donné. `statusCode` vient du service push. */
 export type Sender = (device: PushDevice, payload: PushPayload) => Promise<void>;
 
-export type SendStatus = 'sent' | 'no-device' | 'failed' | 'missed' | 'skipped';
-export interface MemberReport { memberId: string; status: SendStatus; devices: number; error: string | null; }
+/**
+ * Ce qu'un envoi a donné pour un membre.
+ *
+ * `partial` existe parce que le reste mentait : avec deux appareils dont un
+ * seul répond, le journal notait « envoyé » et jetait l'échec de l'autre. Un
+ * téléphone qui ne sonne plus se présentait alors comme un envoi réussi.
+ */
+export type SendStatus = 'sent' | 'partial' | 'no-device' | 'failed' | 'missed' | 'skipped';
+export interface MemberReport {
+  memberId: string;
+  status: SendStatus;
+  /** Appareils atteints, sur `total` abonnés. */
+  devices: number;
+  total: number;
+  error: string | null;
+}
 export interface SendReport { key: string; members: MemberReport[]; }
 
 let database: Database;
@@ -220,6 +234,18 @@ export function reasonOf(e: unknown): string {
   return ' : ' + (m ? m[1] : propre.slice(0, 120));
 }
 
+/**
+ * Ce qu'un envoi incomplet raconte : combien d'appareils ont répondu, et
+ * pourquoi les autres n'ont pas.
+ *
+ * Les raisons identiques sont fusionnées : trois appareils qui refusent tous
+ * pour la même cause tiennent en une ligne, et c'est cette cause qu'on veut lire.
+ */
+export function detailOf(ok: number, total: number, echecs: string[]): string {
+  const raisons = [...new Set(echecs)].join(' ; ');
+  return total > 1 ? `${ok} appareil sur ${total} · ${raisons}` : raisons;
+}
+
 /** Note un rappel manqué (service arrêté trop longtemps), sans l'envoyer. Une fois. */
 export function recordMissed(key: string, memberIds: string[], payload: PushPayload): number {
   let n = 0;
@@ -235,11 +261,11 @@ export function recordMissed(key: string, memberIds: string[], payload: PushPayl
 export async function notify(key: string, memberIds: string[], payload: PushPayload): Promise<SendReport> {
   const members: MemberReport[] = [];
   for (const memberId of [...new Set(memberIds)]) {
-    if (alreadySent(key, memberId)) { members.push({ memberId, status: 'skipped', devices: 0, error: null }); continue; }
+    if (alreadySent(key, memberId)) { members.push({ memberId, status: 'skipped', devices: 0, total: 0, error: null }); continue; }
     const devices = listDevices(memberId);
-    if (!devices.length) { record(key, memberId, payload, 'no-device', null); members.push({ memberId, status: 'no-device', devices: 0, error: null }); continue; }
+    if (!devices.length) { record(key, memberId, payload, 'no-device', null); members.push({ memberId, status: 'no-device', devices: 0, total: 0, error: null }); continue; }
     let ok = 0;
-    let lastError: string | null = null;
+    const echecs: string[] = [];
     for (const d of devices) {
       try {
         await sender(d, payload);
@@ -248,19 +274,23 @@ export async function notify(key: string, memberIds: string[], payload: PushPayl
       } catch (e) {
         const code = (e as { statusCode?: number }).statusCode;
         const msg = code ? `HTTP ${code}${reasonOf(e)}` : (e as Error).message;
-        lastError = msg;
         if (code === 404 || code === 410) {
           // Abonnement mort : l'icône a été retirée, ou l'autorisation révoquée.
           database.prepare('DELETE FROM hh_push_subs WHERE id = ?').run(d.id);
-          lastError = `abonnement expiré (${msg}), appareil retiré`;
+          echecs.push(`abonnement expiré (${msg}), appareil retiré`);
         } else {
           database.prepare('UPDATE hh_push_subs SET last_error = ? WHERE id = ?').run(msg, d.id);
+          echecs.push(msg);
         }
       }
     }
-    const status: SendStatus = ok ? 'sent' : 'failed';
-    record(key, memberId, payload, status, ok ? null : lastError);
-    members.push({ memberId, status, devices: ok, error: ok ? null : lastError });
+    // Un envoi partiel n'est pas un envoi réussi : le dire, avec le compte et
+    // les raisons. C'est la seule façon de voir qu'un appareil est resté muet
+    // quand un autre a répondu.
+    const status: SendStatus = ok === 0 ? 'failed' : echecs.length ? 'partial' : 'sent';
+    const error = echecs.length ? detailOf(ok, devices.length, echecs) : null;
+    record(key, memberId, payload, status, error);
+    members.push({ memberId, status, devices: ok, total: devices.length, error });
   }
   return { key, members };
 }
