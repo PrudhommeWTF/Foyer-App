@@ -184,15 +184,38 @@ app.use(helmet({
     directives: {
       'default-src': ["'self'"],
       'script-src': ["'self'"],
-      'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      'font-src': ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      // Angular pose des styles en ligne ; les polices, elles, sont servies par
+      // le foyer depuis que fonts.googleapis.com a été retiré (voir index.html).
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'font-src': ["'self'", 'data:'],
       'img-src': ["'self'", 'data:', 'blob:'],
       'connect-src': ["'self'"],
       'upgrade-insecure-requests': null,
     },
   },
   crossOriginEmbedderPolicy: false,
+  // Un an, avec les sous-domaines. `preload` n'est pas posé : l'inscription sur
+  // la liste des navigateurs est difficile à défaire, et ce domaine peut servir
+  // à autre chose un jour. L'en-tête ne part que sur HTTPS, les installations
+  // locales en clair ne sont pas gênées.
+  strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
 }));
+
+/**
+ * Ce que la page n'a aucune raison de demander au navigateur.
+ *
+ * Foyer n'utilise ni la position, ni la caméra, ni le micro, ni le paiement, ni
+ * l'USB. Le dire fermement retire ces capacités à tout ce qui s'exécuterait dans
+ * la page, y compris à un script qui aurait trouvé le moyen d'y entrer. Helmet
+ * ne pose pas cet en-tête, d'où cette ligne.
+ */
+const PERMISSIONS = [
+  'accelerometer=()', 'autoplay=()', 'camera=()', 'display-capture=()', 'encrypted-media=()',
+  'fullscreen=(self)', 'geolocation=()', 'gyroscope=()', 'magnetometer=()', 'microphone=()',
+  'midi=()', 'payment=()', 'picture-in-picture=()', 'publickey-credentials-get=()',
+  'screen-wake-lock=()', 'usb=()', 'xr-spatial-tracking=()',
+].join(', ');
+app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS); next(); });
 
 // CORS: same-origin by default (the API serves its own SPA). Extra origins can be
 // allow-listed via FOYER_CORS_ORIGINS (comma-separated) for split deployments.
@@ -295,7 +318,7 @@ const icsLimiter = rateLimit({
 });
 
 interface AuthedRequest extends Request {
-  user?: { id: number; email: string; tv: number };
+  user?: { id: number; email: string; tv: number; iat?: number; exp?: number };
 }
 
 function sign(user: { id: number; email: string; token_version: number }): string {
@@ -304,6 +327,19 @@ function sign(user: { id: number; email: string; token_version: number }): strin
   // donnée. C'est à la connexion suivante que la nouvelle valeur s'applique.
   const jours = Number(effectiveSetting('sessionDays')) || 30;
   return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: `${jours}d` });
+}
+
+/**
+ * Ce jeton a-t-il passé la moitié de sa vie ?
+ *
+ * On ne renouvelle pas à chaque appel : un jeton neuf toutes les cinq secondes
+ * ferait tourner l'écriture du stockage du navigateur pour rien. La moitié est
+ * le compromis habituel, et il garantit qu'une session active ne se termine
+ * jamais par une déconnexion surprise.
+ */
+function aRenouveler(u: { iat?: number; exp?: number } | undefined, now = Date.now()): boolean {
+  if (!u?.iat || !u?.exp || u.exp <= u.iat) return false;
+  return now / 1000 > u.iat + (u.exp - u.iat) / 2;
 }
 
 /** Longueur minimale exigée d'un mot de passe, et le message qui va avec. */
@@ -317,9 +353,9 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
     res.status(401).json({ error: 'Non authentifié' });
     return;
   }
-  let payload: { id: number; email: string; tv?: number };
+  let payload: { id: number; email: string; tv?: number; iat?: number; exp?: number };
   try {
-    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number };
+    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; iat?: number; exp?: number };
   } catch {
     res.status(401).json({ error: 'Session expirée' });
     return;
@@ -331,7 +367,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
     res.status(401).json({ error: 'Session révoquée' });
     return;
   }
-  req.user = { id: user.id, email: user.email, tv: user.token_version };
+  req.user = { id: user.id, email: user.email, tv: user.token_version, iat: payload.iat, exp: payload.exp };
   next();
 }
 
@@ -648,7 +684,14 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   // renvoyer l'identifiant d'une fiche disparue ferait pointer l'application sur
   // un fantôme. Rien plutôt qu'un mensonge, et l'écran sait alors quoi dire.
   const m = currentMember(req);
-  res.json({ email: u.email, name: u.name, memberId: m?.id ?? null, admin: !!m?.admin, enfant: !!m?.enfant });
+  res.json({
+    email: u.email, name: u.name, memberId: m?.id ?? null, admin: !!m?.admin, enfant: !!m?.enfant,
+    // Un jeton émis vivait sa durée entière sans jamais tourner : volé le
+    // premier jour, il servait encore le dernier. Passé la moitié de sa vie, on
+    // en rend un neuf, que le client range à la place. Rien à faire pour
+    // l'utilisateur, et la fenêtre d'un jeton dérobé se referme d'elle-même.
+    ...(aRenouveler(req.user) ? { token: sign(u) } : {}),
+  });
 });
 
 /**
@@ -906,11 +949,26 @@ api.get('/system/update-check', auth, requireMember, async (_req, res) => {
 // Trigger a self-update. The backend only drops a trigger file; a root-owned
 // systemd path unit (installed when FOYER_SELF_UPDATE=1) performs the actual
 // download/build/restart, so the service keeps its hardening (no sudo).
-api.post('/system/update', auth, requireAdmin, (_req, res) => {
+api.post('/system/update', auth, requireAdmin, route(async (req, res) => {
   if (!selfUpdateEnabled()) {
     res.status(400).json({ error: 'Mise à jour automatique non activée sur ce serveur. Lancez « deploy/lxc/update.sh » manuellement.' });
     return;
   }
+  // Le mot de passe, redemandé ici et nulle part ailleurs.
+  //
+  // Ce bouton fait exécuter du code en root sur la machine : le service dépose
+  // un fichier, une unité systemd root télécharge la dernière version et la
+  // compile. Le dispositif est bien conçu (le service ne détient aucun droit
+  // supplémentaire), mais il fait de « compte administrateur volé » un
+  // « root sur l'hyperviseur invité ». Un jeton dérobé sur un téléphone
+  // déverrouillé ne doit pas suffire : il faut aussi savoir le mot de passe.
+  const moi = req.user ? getUserById(req.user.id) : undefined;
+  if (!moi || !await verifier(String(req.body?.password ?? ''), moi.password_hash)) {
+    log.attention(`Mise à jour refusée : mot de passe incorrect (${req.user?.email || 'compte inconnu'}, depuis ${req.ip}).`);
+    res.status(403).json({ error: 'Mot de passe incorrect. Cette mise à jour installe et exécute du code sur le serveur : elle se confirme par votre mot de passe.' });
+    return;
+  }
+  log.info(`Mise à jour lancée par ${moi.email} depuis ${req.ip}.`);
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(path.join(DATA_DIR, 'update-status.json'), JSON.stringify({ state: 'running', message: 'Mise à jour lancée…', ts: Date.now() }));
@@ -919,7 +977,7 @@ api.post('/system/update', auth, requireAdmin, (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
-});
+}));
 
 /**
  * L'état du service : version, place restante, poids des données, sauvegardes.
@@ -1004,6 +1062,20 @@ if (fs.existsSync(STATIC_DIR)) {
   }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    // Une adresse qui ressemble à un fichier et qui n'existe pas est une
+    // absence, pas une route de l'application. Répondre index.html avec un 200
+    // faisait conclure à un scanner que /.git/config, /.env et /wp-login.php
+    // existaient tous : rien ne fuyait, mais les journaux du proxy devenaient
+    // illisibles et chaque sonde repartait avec une réponse encourageante.
+    const segments = req.path.split('/').filter(Boolean);
+    const dernier = segments[segments.length - 1] ?? '';
+    // Un segment caché (« /.git/config ») compte autant qu'une extension au
+    // bout : c'est le répertoire qui porte le point, et c'est le chemin que
+    // sondent le plus les robots.
+    if (dernier.includes('.') || segments.some((seg) => seg.startsWith('.'))) {
+      res.status(404).type('text/plain').send('Introuvable');
+      return;
+    }
     // Jamais de cache sur le document : c'est lui qui nomme les fichiers de
     // l'application, donc le garder revient à garder la version d'avant.
     res.setHeader('Cache-Control', 'no-store, must-revalidate');

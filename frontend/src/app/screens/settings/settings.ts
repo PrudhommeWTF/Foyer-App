@@ -854,10 +854,18 @@ export class SettingsScreen {
     return jour ? `le ${jour}/${mo} à ${(h || '').slice(0, 5)}` : iso;
   }
 
+  /**
+   * La mise à jour installe et exécute du code sur le serveur : le mot de passe
+   * est redemandé, comme pour un changement d'identifiants. Ce n'est pas une
+   * formalité, c'est ce qui sépare « quelqu'un a mon téléphone déverrouillé » de
+   * « quelqu'un exécute ce qu'il veut sur ma machine ».
+   */
   doUpdate(): void {
-    if (confirm('Lancer la mise à jour de Foyer ? Le service va se recompiler et redémarrer (environ 1–2 min).')) {
-      this.store.applyUpdate();
-    }
+    const mdp = prompt(
+      'Lancer la mise à jour de Foyer ? Le service va se recompiler et redémarrer (environ 1 à 2 min).\n\n'
+      + 'Cette opération installe et exécute du code sur le serveur : confirmez avec votre mot de passe.',
+    );
+    if (mdp) this.store.applyUpdate(mdp);
   }
 
   /** « iPhone », « iPad », « Chrome sur Android », « Safari sur Mac » : lisible, pas l'agent complet. */

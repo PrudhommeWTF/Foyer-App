@@ -1,0 +1,17 @@
+Polices embarquées dans Foyer
+=============================
+
+Bricolage Grotesque  — SIL Open Font License 1.1 — https://github.com/ateliertriay/bricolage
+Nunito               — SIL Open Font License 1.1 — https://github.com/googlefonts/nunito
+Caveat               — SIL Open Font License 1.1 — https://github.com/googlefonts/caveat
+
+Ces trois familles sont publiées sous la SIL Open Font License version 1.1, qui
+autorise explicitement l'hébergement local, la redistribution et l'usage
+commercial, à condition que les fichiers ne soient pas vendus seuls et que cette
+mention accompagne les polices.
+
+Texte complet de la licence : https://openfontlicense.org/
+
+Les fichiers .woff2 de ce répertoire proviennent du service Google Fonts et
+n'ont pas été modifiés. Seuls les sous-ensembles « latin » et « latin-ext » sont
+embarqués : l'interface de Foyer est en français et ne s'internationalise pas.

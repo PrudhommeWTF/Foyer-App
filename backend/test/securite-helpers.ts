@@ -44,7 +44,13 @@ export async function demarrer(): Promise<Contexte> {
   process.env.FOYER_DATA_DIR = dir;
   process.env.FOYER_DB_PATH = path.join(dir, 'foyer.db');
   process.env.FOYER_JWT_SECRET = SECRET;
-  process.env.FOYER_STATIC_DIR = path.join(dir, 'public-absent');
+  // Une application compilée minimale : sans elle, le service ne monte pas du
+  // tout le service de fichiers statiques, et les tests qui portent sur la route
+  // de repli éprouveraient la page 404 d'Express au lieu de la nôtre.
+  const statique = path.join(dir, 'public');
+  fs.mkdirSync(statique, { recursive: true });
+  fs.writeFileSync(path.join(statique, 'index.html'), '<!doctype html><title>Foyer</title><div id="app"></div>');
+  process.env.FOYER_STATIC_DIR = statique;
 
   const { app } = await import('../src/server');
   const server = http.createServer(app);

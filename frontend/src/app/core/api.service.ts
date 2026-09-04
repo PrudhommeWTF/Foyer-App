@@ -260,7 +260,8 @@ export class ApiService {
     return this.request<LoginResult>('auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
   }
 
-  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean }> {
+  /** `token` n'est présent que lorsque le serveur en a rendu un neuf. Voir aRenouveler côté serveur. */
+  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean; token?: string }> {
     return this.request('me');
   }
 
@@ -324,7 +325,14 @@ export class ApiService {
   backupUrl(name: string): string { return this.absolute('system/backup/' + encodeURIComponent(name)); }
   downloadBackup(name: string): Promise<Blob> { return this.download('system/backup/' + encodeURIComponent(name)); }
   updateCheck(): Promise<UpdateInfo> { return this.request('system/update-check'); }
-  startSystemUpdate(): Promise<{ started?: boolean; error?: string }> { return this.request('system/update', { method: 'POST' }); }
+  /**
+   * Lance la mise à jour. Le mot de passe est exigé par le serveur : ce bouton
+   * fait exécuter du code en root sur la machine, un jeton dérobé sur un
+   * téléphone déverrouillé ne doit pas suffire.
+   */
+  startSystemUpdate(password: string): Promise<{ started?: boolean; error?: string }> {
+    return this.request('system/update', { method: 'POST', body: JSON.stringify({ password }) });
+  }
   updateStatus(): Promise<{ state: string; message?: string; current: string }> { return this.request('system/update-status'); }
 
   getState(): Promise<{ state: HouseholdState; version: number }> {

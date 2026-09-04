@@ -90,3 +90,14 @@ describe('les en-têtes réellement émis par le serveur', () => {
     assert.equal(await cc('/logo.svg'), 'public, max-age=0, must-revalidate');
   });
 });
+
+describe('les polices servies par le foyer', () => {
+  it('empreintes, donc gardées un an : sans cela, 280 Ko revalidés à chaque ouverture', () => {
+    assert.match(cacheControlFor('media/nunito-latin-LTD77BFG.woff2'), /immutable/);
+    assert.match(cacheControlFor('media/caveat-latin-ext-5S7R5SZN.woff2'), /max-age=31536000/);
+  });
+
+  it('une police sans empreinte reste revalidée : son contenu peut changer', () => {
+    assert.equal(cacheControlFor('nunito.woff2'), 'public, max-age=0, must-revalidate');
+  });
+});

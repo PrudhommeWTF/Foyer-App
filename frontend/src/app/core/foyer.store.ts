@@ -453,6 +453,10 @@ export class FoyerStore {
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
+      // Le serveur rend un jeton neuf quand celui-ci a passé la moitié de sa
+      // vie : une session active ne se termine donc jamais par une déconnexion
+      // surprise, et un jeton dérobé cesse de servir tout seul.
+      if (me.token) this.api.token = me.token;
       this.myEmail.set(me.email);
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
@@ -466,6 +470,7 @@ export class FoyerStore {
     this.loadIcs();
     this.resumeUpdateIfRunning();
     void this.initPush();
+    this.veilleInactivite();
   }
 
   // ---- rappels par Web Push -------------------------------------------------
@@ -610,12 +615,12 @@ export class FoyerStore {
     this.updateChecking.set(false);
   }
 
-  async applyUpdate(): Promise<void> {
+  async applyUpdate(password: string): Promise<void> {
     if (this.updating()) return;
     this.updating.set(true);
     this.updateMsg.set('Démarrage de la mise à jour…');
     try {
-      const r = await this.api.startSystemUpdate();
+      const r = await this.api.startSystemUpdate(password);
       if (r.error) { this.updating.set(false); this.toast(r.error); return; }
     } catch (e) { this.updating.set(false); this.toast((e as Error).message); return; }
     this.pollUpdateStatus();
@@ -717,6 +722,30 @@ export class FoyerStore {
       this.authError.set((e as Error).message);
       return false;
     }
+  }
+
+  /**
+   * Ferme la session d'un appareil resté inactif.
+   *
+   * Purement local : rien n'est envoyé, et le jeton reste valable côté serveur
+   * jusqu'à son terme. Ce n'est donc pas une révocation, c'est un geste de bon
+   * sens sur un téléphone oublié quelque part, qui coûte un rechargement à qui
+   * revient. Le réglage « Déconnexion après inactivité » le règle, zéro le coupe.
+   */
+  private veilleInactivite(): void {
+    const heures = Number(this.setting('inactivityHours')) || 0;
+    if (heures <= 0) return;
+    const limite = heures * 3600_000;
+    let dernier = Date.now();
+    const bouge = (): void => { dernier = Date.now(); };
+    for (const ev of ['pointerdown', 'keydown', 'visibilitychange'] as const) {
+      addEventListener(ev, bouge, { passive: true });
+    }
+    setInterval(() => {
+      if (!this.authed() || Date.now() - dernier < limite) return;
+      this.logout();
+      this.toast(`Session fermée après ${heures} h sans activité.`);
+    }, 60_000);
   }
 
   logout(): void {

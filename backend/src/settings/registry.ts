@@ -423,15 +423,22 @@ export const REGISTRY = [
     key: 'sessionDays',
     type: 'int', scope: 'foyer', section: 'acces', module: 'Accès',
     label: 'Durée de validité d’une session',
-    desc: 'Combien de jours une connexion reste valable avant de redemander le mot de passe. Les sessions déjà ouvertes gardent leur durée : c’est à la connexion suivante que la nouvelle valeur s’applique.',
-    default: 30, min: 1, max: 365,
+    desc: 'Combien de jours une connexion reste valable avant de redemander le mot de passe. Sept jours par défaut : un téléphone perdu n’ouvre pas le foyer pendant un mois. Les sessions déjà ouvertes gardent leur durée : c’est à la connexion suivante que la nouvelle valeur s’applique.',
+    default: 7, min: 1, max: 365,
+  },
+  {
+    key: 'inactivityHours',
+    type: 'int', scope: 'foyer', section: 'acces', module: 'Accès',
+    label: 'Déconnexion après inactivité',
+    desc: 'Ferme la session sur un appareil resté inactif ce nombre d’heures : un téléphone oublié quelque part ne laisse pas le foyer ouvert. La déconnexion se fait dans le navigateur, sans rien envoyer. Zéro pour ne jamais déconnecter.',
+    default: 12, min: 0, max: 720,
   },
   {
     key: 'passwordMinLength',
     type: 'int', scope: 'foyer', section: 'acces', module: 'Accès',
     label: 'Longueur minimale d’un mot de passe',
-    desc: 'S’applique à la création d’un accès et à tout changement de mot de passe. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.',
-    default: 6, min: 6, max: 64,
+    desc: 'S’applique à la création d’un accès et à tout changement de mot de passe. Douze caractères par défaut : préférez trois mots choisis au hasard à un mot court et tordu, c’est plus solide et cela se retient. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.',
+    default: 12, min: 8, max: 64,
   },
 
   // ---- exploitation -------------------------------------------------------
