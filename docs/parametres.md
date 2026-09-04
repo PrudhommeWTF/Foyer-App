@@ -131,6 +131,33 @@ et **réversibles** : le document d’origine est écrit sur le disque avant la 
 migration en attente. Un réglage nouvellement déclaré n’a besoin d’aucune migration : il
 prend sa valeur par défaut, et le document n’est réécrit que le jour où on le change.
 
+## Emporter et remettre la configuration
+
+Vos réglages seuls, dans un fichier JSON lisible. Ce n’est **pas** une sauvegarde des
+données : c’est le filet de sécurité avant de toucher aux réglages, et ce qui évite de
+tout reparamétrer de mémoire après une réinstallation.
+
+Depuis l’application : Paramètres → Exploitation → Configuration. En ligne de commande :
+
+```bash
+# Exporter (compte administrateur)
+TOKEN=$(curl -sS -X POST http://127.0.0.1:8099/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vous@exemple.fr","password":"..."}' | jq -r .token)
+curl -sS http://127.0.0.1:8099/api/settings/export \
+  -H "Authorization: Bearer $TOKEN" -o foyer-reglages.json
+
+# Réimporter
+jq '{config: .}' foyer-reglages.json | curl -sS -X POST \
+  http://127.0.0.1:8099/api/settings/import \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d @-
+```
+
+Le fichier porte **toutes** les clés, valeurs par défaut comprises : sans cela, réimporter
+ne ramènerait pas l’état d’avant. L’import est rejouable, et n’échoue jamais en bloc : une
+clé disparue, une valeur hors domaine, un membre qui n’existe plus ou un réglage imposé par
+l’environnement sont écartés **en le disant**, le reste passe.
+
 ## Qui peut changer quoi
 
 Le contrôle est **côté serveur**, pas dans l’écran :

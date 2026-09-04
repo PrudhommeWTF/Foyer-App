@@ -122,6 +122,14 @@ export interface SettingsPayload {
   log: SettingsLogLine[];
 }
 
+/** Ce qu'un import de configuration a rétabli, et ce qu'il a dû écarter. */
+export interface ConfigImportReport {
+  applied: string[];
+  ecartes: { key: string; member?: string; reason: string }[];
+  household: string;
+  generatedAt: string;
+}
+
 export interface SettingsWriteResult {
   changed: string[];
   refused: { key: string; error: string }[];
@@ -262,6 +270,12 @@ export class ApiService {
 
   patchSettings(changes: Record<string, boolean | number | string>): Promise<SettingsWriteResult> {
     return this.request('settings', { method: 'PATCH', body: JSON.stringify({ changes }) });
+  }
+
+  exportSettings(): Promise<Blob> { return this.download('settings/export'); }
+
+  importSettings(config: unknown): Promise<ConfigImportReport> {
+    return this.request('settings/import', { method: 'POST', body: JSON.stringify({ config }) });
   }
 
   schoolHolidays(academie: string): Promise<{ holidays: { name: string; start: string; end: string; zone: string }[]; academie: string; error?: string }> {

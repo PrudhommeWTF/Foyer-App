@@ -47,6 +47,10 @@ export function readSettings(memberId: string | null = null): SettingsView {
   const values: Record<string, boolean | number | string> = {};
   const stored: string[] = [];
   for (const d of ALL) {
+    // Les réglages de déploiement ne vivent pas dans le document : ils sont
+    // servis à part (voir deploymentView). Les mêler ici les ferait passer pour
+    // des valeurs du foyer, vides de surcroît.
+    if (d.scope === 'deploiement') continue;
     const bucket = bucketOf(doc, d, memberId);
     values[d.key] = effective(d, bucket);
     if (bucket[d.key] !== undefined) stored.push(d.key);
@@ -79,7 +83,17 @@ export interface ApplyOutcome {
  * choisi ne doit jamais laisser l'application dans un état que personne
  * n'a voulu.
  */
-export function applySettings(changes: Record<string, unknown>, memberId: string | null, isAdmin: boolean): ApplyOutcome {
+export function applySettings(
+  changes: Record<string, unknown>,
+  memberId: string | null,
+  isAdmin: boolean,
+  /**
+   * Qui inscrire au journal. Vaut `memberId` sauf à l'import d'une
+   * configuration, où l'administrateur restaure les préférences d'un autre : le
+   * journal doit nommer celui qui a fait le geste, pas celui qui le subit.
+   */
+  author: string | null = memberId,
+): ApplyOutcome {
   const refused: Refus[] = [];
   const retenues: { decl: SettingDecl; value: boolean | number | string }[] = [];
   for (const [key, raw] of Object.entries(changes || {})) {
@@ -130,7 +144,7 @@ export function applySettings(changes: Record<string, unknown>, memberId: string
       const bucket = decl.scope === 'personnel' ? miennes : settings;
       const avant = effective(decl, bucket);
       if (avant === value && bucket[decl.key] !== undefined) continue; // rien à écrire, rien à journaliser
-      journal.run(decl.key, JSON.stringify(avant), JSON.stringify(value), memberId);
+      journal.run(decl.key, JSON.stringify(avant), JSON.stringify(value), author);
       bucket[decl.key] = value;
       changed.push(decl.key);
     }

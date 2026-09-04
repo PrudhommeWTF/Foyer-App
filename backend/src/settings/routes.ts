@@ -12,6 +12,7 @@
 import express, { Request, Response, Router } from 'express';
 import { ALL, SECTIONS } from './registry';
 import { applySettings, effectiveSetting, readSettings, settingsLog } from './repo';
+import { ImportRefused, exportConfig, importConfig } from './backup';
 
 /** Un lot vient d'un écran, pas d'une file : quelques clés, jamais des centaines. */
 const MAX_KEYS = 100;
@@ -19,6 +20,8 @@ const MAX_BODY = '64kb';
 const LOG_MAX = 200;
 
 export interface SettingsDeps {
+  /** La version de l'application, recopiée dans le fichier de configuration. */
+  appVersion: () => string;
   /** Le membre du foyer derrière la requête, ou null. */
   memberId: (req: Request) => string | null;
   isAdmin: (req: Request) => boolean;
@@ -56,6 +59,41 @@ export function settingsRouter(deps: SettingsDeps): Router {
       canEdit: deps.isAdmin(req),
       log: settingsLog(LOG_MAX),
     });
+  });
+
+  const admin = (req: Request, res: Response, next: express.NextFunction): void => {
+    if (!deps.isAdmin(req)) {
+      res.status(403).json({ error: 'Action réservée à un administrateur du foyer.' });
+      return;
+    }
+    next();
+  };
+
+  /**
+   * La configuration en un fichier lisible : de quoi la remettre après une
+   * réinstallation, ou revenir en arrière après une modification qui a cassé
+   * quelque chose. Ce n'est pas une sauvegarde des données : voir README.
+   */
+  r.get('/export', admin, (_req: Request, res: Response) => {
+    const dump = exportConfig(deps.appVersion());
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="foyer-reglages-${dump.generatedAt.slice(0, 10)}.json"`);
+    res.send(JSON.stringify(dump, null, 2));
+  });
+
+  r.post('/import', admin, (req: Request, res: Response) => {
+    try {
+      const report = importConfig(req.body?.config, deps.memberId(req));
+      // eslint-disable-next-line no-console
+      console.log(`[foyer] Réglages : configuration réimportée par ${deps.memberId(req) || '(membre inconnu)'} ; `
+        + `${report.applied.length} réglage(s) rétabli(s), ${report.ecartes.length} écarté(s).`);
+      res.json(report);
+    } catch (e) {
+      if (e instanceof ImportRefused) { res.status(422).json({ error: e.message }); return; }
+      // eslint-disable-next-line no-console
+      console.error('[foyer] Réglages : erreur inattendue à l’import d’une configuration', e);
+      res.status(500).json({ error: 'Erreur en important la configuration : ' + (e as Error).message });
+    }
   });
 
   r.patch('/', (req: Request, res: Response) => {

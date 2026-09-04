@@ -524,6 +524,7 @@ api.use('/settings', auth, settingsRouter({
   isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
   overrides: () => envOverrides(),
   deployment: () => deploymentView(),
+  appVersion: currentVersion,
 }));
 
 // Recipe photos and other household files: bytes on disk, never in the state

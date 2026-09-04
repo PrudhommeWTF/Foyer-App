@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
@@ -3061,6 +3061,44 @@ export class FoyerStore {
   async loadSettingsInfo(): Promise<void> {
     try { this.settingsInfo.set(await this.api.settings()); }
     catch { /* hors ligne : la page se contente du document, sans le journal */ }
+  }
+
+  /**
+   * Le fichier de configuration : l'exporter, le relire.
+   *
+   * Ce n'est pas une sauvegarde des données, et l'écran le dit. C'est le filet
+   * de sécurité avant de toucher aux réglages, et ce qui évite de tout
+   * reparamétrer de mémoire après une réinstallation.
+   */
+  readonly configBusy = signal(false);
+  readonly configReport = signal<ConfigImportReport | null>(null);
+
+  async exportSettings(): Promise<void> {
+    this.configBusy.set(true);
+    try {
+      this.download(await this.api.exportSettings(), `foyer-reglages-${this.todayStr()}.json`);
+      this.toast('Configuration exportée');
+    } catch (e) {
+      this.toast('Export impossible : ' + (e as Error).message);
+    } finally { this.configBusy.set(false); }
+  }
+
+  async importSettings(file: File): Promise<void> {
+    this.configBusy.set(true);
+    this.configReport.set(null);
+    try {
+      const rapport = await this.api.importSettings(JSON.parse(await file.text()));
+      this.configReport.set(rapport);
+      // Le document local ne sait rien de ce que le serveur vient d'écrire : on
+      // le relit en entier plutôt que de deviner, sinon l'écran montre l'état d'avant.
+      await this.loadState();
+      await this.loadSettingsInfo();
+      this.toast(rapport.applied.length ? `${rapport.applied.length} réglage(s) rétabli(s)` : 'Rien à rétablir : tout était déjà en place');
+    } catch (e) {
+      const err = e as ApiError;
+      this.configReport.set(null);
+      this.toast(err instanceof SyntaxError ? 'Ce fichier n’est pas du JSON lisible.' : 'Import impossible : ' + err.message);
+    } finally { this.configBusy.set(false); }
   }
 
   /**

@@ -57,6 +57,7 @@ beforeEach(async () => {
     isAdmin: (req) => role(req) === 'admin',
     overrides: () => envOverrides(env),
     deployment: () => deploymentView(env),
+    appVersion: () => '1.2.3',
   }));
   server = http.createServer(app);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -75,6 +76,7 @@ describe('réglages : qui a le droit', () => {
     assert.equal(json.canEdit, false, 'canEdit ne parle que des réglages du foyer');
     assert.equal(json.values.showBreakfast, false);
     assert.ok(Array.isArray(json.registry) && json.registry.length, 'la page est engendrée depuis ce qui est renvoyé ici');
+    assert.equal('envPort' in json.values, false, 'un réglage de déploiement ne se mêle pas aux valeurs du document');
   });
 
   it('un membre non administrateur se voit refuser un réglage du foyer, et le document ne bouge pas', async () => {

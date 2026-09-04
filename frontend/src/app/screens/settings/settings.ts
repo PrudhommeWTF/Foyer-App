@@ -285,6 +285,33 @@ const GESTES: Section[] = [
               </div>
             }
 
+                          <div class="extra-t">Configuration</div>
+                          <div class="hint" style="margin:0 0 10px">Vos réglages seuls, dans un fichier lisible. À exporter avant de toucher à quoi que ce soit, et à réimporter après une réinstallation pour ne pas tout reparamétrer de mémoire. Ce n’est pas une sauvegarde des données du foyer.</div>
+                          <button class="data-row" [disabled]="store.configBusy()" (click)="store.exportSettings()">
+                            <f-icon name="export" [size]="18" color="var(--ink2)" [width]="2" />
+                            <span>Exporter la configuration</span>
+                          </button>
+                          @if (store.isAdmin()) {
+                            <button class="data-row" [disabled]="store.configBusy()" (click)="fichier.click()">
+                              <f-icon name="upload" [size]="18" color="var(--ink2)" [width]="2" />
+                              <span>{{ store.configBusy() ? 'Lecture du fichier…' : 'Importer une configuration' }}</span>
+                            </button>
+                            <input #fichier type="file" accept="application/json,.json" hidden (change)="importer($event)" />
+                          }
+                          @if (store.configReport(); as r) {
+                            <div class="rapport">
+                              <div class="rap-t">Configuration exportée {{ quand(r.generatedAt.replace('T', ' ')) }}{{ r.household ? ', foyer « ' + r.household + ' »' : '' }}</div>
+                              @if (r.applied.length) {
+                                <div class="rap-l">{{ r.applied.length }} réglage(s) rétabli(s) : {{ r.applied.join(', ') }}</div>
+                              } @else {
+                                <div class="rap-l">Aucun réglage à rétablir : tout était déjà en place.</div>
+                              }
+                              @for (e of r.ecartes; track e.key + (e.member || '')) {
+                                <div class="rap-ko">{{ e.key }}{{ e.member ? ' (' + e.member + ')' : '' }} : {{ e.reason }}</div>
+                              }
+                            </div>
+                          }
+
                           <div class="extra-t">Données</div>
                           <button class="data-row" (click)="store.exportData()">
                             <f-icon name="export" [size]="18" color="var(--ink2)" [width]="2" />
@@ -362,6 +389,12 @@ const GESTES: Section[] = [
     .log:last-of-type { border-bottom: none; }
     .log-k { font-size: 13px; font-weight: 800; color: var(--ink); }
     .log-m { font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.45; }
+
+    .rapport { background: var(--soft); border-radius: 13px; padding: 12px 14px; margin-bottom: 10px; }
+    .rap-t { font-size: 12px; font-weight: 800; color: var(--ink); margin-bottom: 5px; }
+    .rap-l { font-size: 12px; font-weight: 700; color: var(--ink2); line-height: 1.5; }
+    .rap-ko { font-size: 11.5px; font-weight: 700; color: #C6492F; line-height: 1.5; margin-top: 3px; }
+    .data-row:disabled { opacity: .6; cursor: not-allowed; }
 
     .field-label { margin: 0 0 10px; }
     .field-label + .seg, .field-label + .fam-row, .field-label + .members { margin-bottom: 20px; }
@@ -487,6 +520,14 @@ export class SettingsScreen {
     if (v === null) return 'rien';
     if (typeof v === 'boolean') return v ? 'activé' : 'désactivé';
     return v === '' ? 'aucune' : String(v);
+  }
+
+  /** Le fichier choisi part au serveur, et l'input se vide pour qu'on puisse rejouer le même. */
+  importer(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const f = input.files?.[0];
+    if (f) void this.store.importSettings(f);
+    input.value = '';
   }
 
   /** « le 04/09 à 16:53 ». La date complète n'apporte rien dans un journal court. */
