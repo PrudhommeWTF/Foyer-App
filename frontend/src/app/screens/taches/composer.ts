@@ -79,11 +79,14 @@ type Scope = 'one' | 'all';
                 </span>
               } @else { <f-icon name="users" [size]="15" color="currentColor" [width]="2.2" /> Personne }
             </button>
-            <button class="opt" [class.on]="due()" [class.open]="panel() === 'date'" (click)="toggle('date')">
-              <f-icon name="calendar" [size]="15" color="currentColor" [width]="2.2" /> {{ due() ? dueText() : 'Date' }}
-              @if (due() && remind()) { <f-icon name="bell" [size]="13" color="currentColor" [width]="2.4" /> }
-            </button>
-            <button class="opt" [class.open]="panel() === 'list'" (click)="toggle('list')">
+            @if (!isSub()) {
+              <button class="opt" [class.on]="due()" [class.open]="panel() === 'date'" (click)="toggle('date')">
+                <f-icon name="calendar" [size]="15" color="currentColor" [width]="2.2" /> {{ due() ? dueText() : 'Date' }}
+                @if (due() && remind()) { <f-icon name="bell" [size]="13" color="currentColor" [width]="2.4" /> }
+              </button>
+            }
+            @if (isSub()) { <span class="opt sub-note"><f-icon name="checklist" [size]="15" color="currentColor" [width]="2.2" /> Sous-tâche de « {{ parentText() }} »</span> }
+            <button class="opt" [class.open]="panel() === 'list'" [disabled]="isSub()" (click)="toggle('list')">
               @if (listObj(); as l) {
                 <f-icon [path]="listIcon(l.icon)" [size]="15" [color]="l.color" [width]="2.2" /> {{ l.name }}
               } @else { <f-icon name="checklist" [size]="15" color="currentColor" [width]="2.2" /> Liste }
@@ -99,9 +102,11 @@ type Scope = 'one' | 'all';
                 <f-icon name="documents" [size]="15" color="currentColor" [width]="2.2" /> <span class="clip">{{ docObj()?.name || 'Document' }}</span>
               </button>
             }
-            <button class="opt" [class.on]="rec()" [class.open]="panel() === 'rec'" (click)="toggle('rec')">
-              <f-icon name="refresh" [size]="15" color="currentColor" [width]="2.2" /> {{ rec() ? recText() : 'Répéter' }}
-            </button>
+            @if (!isSub()) {
+              <button class="opt" [class.on]="rec()" [class.open]="panel() === 'rec'" (click)="toggle('rec')">
+                <f-icon name="refresh" [size]="15" color="currentColor" [width]="2.2" /> {{ rec() ? recText() : 'Répéter' }}
+              </button>
+            }
           </div>
 
           @switch (panel()) {
@@ -285,6 +290,8 @@ type Scope = 'one' | 'all';
     .opt.on { color: var(--ink); border-color: var(--ink3); }
     .opt.open { background: var(--soft); border-color: var(--ink); color: var(--ink); }
     .clip { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .opt:disabled { opacity: .55; cursor: default; }
+    .sub-note { color: var(--ink2); }
     .avail .clash { color: #C6492F; }
     .avs { display: inline-flex; }
     .avs > :not(:first-child) { margin-left: -6px; }
@@ -390,6 +397,17 @@ export class TaskComposerComponent {
   readonly quick = computed(() => quickDates(this.store.todayStr()));
   readonly dueText = computed(() => dueLabel(this.due(), this.time(), this.store.todayStr(), (iso) => this.store.fmtNumDate(iso), this.rec()?.grace));
   readonly recText = computed(() => { const r = this.rec(); return r ? recLabel(r, (iso) => this.store.fmtNumDate(iso)) : ''; });
+  /**
+   * Une sous-tâche se modifie ici comme une autre, mais sans date, sans
+   * répétition et sans changer de liste : ces trois-là sont l'affaire du parent,
+   * et le serveur les écarterait. Un bouton qui ne fait rien serait pire que
+   * l'absence de bouton.
+   */
+  readonly isSub = computed(() => !!this.task()?.parentId);
+  readonly parentText = computed(() => {
+    const p = this.task()?.parentId;
+    return (p && this.store.task(p)?.text) || 'la tâche parente';
+  });
   /** Ce que la liste a déjà vu : pas en modification, où l'intitulé est déjà là. */
   readonly suggestions = computed(() => this.task() ? [] : this.store.taskSuggestions(this.list(), this.text()));
   readonly files = computed(() => this.store.data()?.files || []);

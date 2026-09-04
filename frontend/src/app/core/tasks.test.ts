@@ -5,7 +5,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskList } from './models';
-import { RELEGATION_DAYS, categories, dailyTasks, dueLabel, groupOpen, quickDates, suggestTexts, todayTasks, visibleLists } from './tasks';
+import { RELEGATION_DAYS, REORDERABLE, assignedTo, categories, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, quickDates, reorder, subProgress, subtasksOf, suggestTexts, todayTasks, visibleLists } from './tasks';
 
 const TODAY = '2026-09-02';
 
@@ -181,4 +181,91 @@ test('une échéance avec tolérance se dit « vers le »', () => {
   const fmt = (iso: string): string => iso.split('-').reverse().join('/');
   assert.equal(dueLabel('2026-09-02', null, TODAY, fmt, 15), 'vers le 02/09/2026');
   assert.equal(dueLabel('2026-09-02', '10:00', TODAY, fmt, 15), 'vers le 02/09/2026 · 10:00');
+});
+
+// ---- sous-tâches : un détail du parent, jamais une ligne perdue -------------------
+
+test('les sous-tâches viennent sous leur parent, et ne font pas de ligne à elles seules', () => {
+  const g = groupOpen([
+    tache('parent', { due: TODAY }),
+    tache('s1', { parentId: 'parent', pos: 1 }),
+    tache('s2', { parentId: 'parent', pos: 0 }),
+  ], TODAY);
+  assert.deepEqual(g.map((x) => x.key), ['today']);
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['parent']);
+  assert.deepEqual(g[0].lines[0].subs.map((s) => s.id), ['s2', 's1'], 'dans l’ordre manuel');
+});
+
+test('une sous-tâche ouverte sous un parent coché redevient une ligne : rien ne se cache sous une ligne barrée', () => {
+  const tasks = [tache('parent', { done: true }), tache('s1', { parentId: 'parent' }), tache('s2', { parentId: 'parent', done: true })];
+  const g = groupOpen(tasks, TODAY);
+  assert.deepEqual(g.flatMap((x) => x.lines.map((l) => l.task.id)), ['s1'], 'la sous-tâche restée ouverte se voit');
+  assert.deepEqual(doneTasks(tasks).map((t) => t.id), ['parent'], 'la sous-tâche faite reste sous son parent');
+});
+
+test('dans « À moi », une sous-tâche dont le parent n’est pas là fait sa propre ligne', () => {
+  const tous = [tache('parent', { who: [] }), tache('s1', { parentId: 'parent', who: ['me'] })];
+  const mien = assignedTo(tous, 'me');
+  assert.deepEqual(mien.map((t) => t.id), ['s1']);
+  assert.deepEqual(groupOpen(mien, TODAY).flatMap((g) => g.lines.map((l) => l.task.id)), ['s1']);
+});
+
+test('assignedTo ne rend rien sans membre courant, et ne prend pas les tâches sans responsable', () => {
+  const tous = [tache('a', { who: ['me'] }), tache('b', { who: [] }), tache('c', { who: ['autre'] }), tache('d', { who: ['autre', 'me'] })];
+  assert.deepEqual(assignedTo(tous, 'me').map((t) => t.id), ['a', 'd']);
+  assert.deepEqual(assignedTo(tous, null), []);
+});
+
+test('les compteurs comptent des choses à faire, pas des détails : une sous-tâche ne compte pas', () => {
+  const tasks = [tache('parent'), tache('s1', { parentId: 'parent' }), tache('s2', { parentId: 'parent' }), tache('fait', { done: true })];
+  assert.equal(openCount(tasks), 1);
+  assert.equal(todayTasks(tasks, TODAY, 5).lines.length, 1, 'l’accueil non plus');
+});
+
+test('l’avancement se dit en fait sur total, et rien quand il n’y a pas de sous-tâche', () => {
+  assert.deepEqual(subProgress([tache('a', { done: true }), tache('b')]), { done: 1, total: 2 });
+  assert.equal(subProgress([]), null);
+});
+
+test('subtasksOf ne rend que les enfants directs de la tâche visée', () => {
+  const tasks = [tache('p'), tache('s1', { parentId: 'p' }), tache('autre'), tache('s2', { parentId: 'autre' })];
+  assert.deepEqual(subtasksOf(tasks, 'p').map((t) => t.id), ['s1']);
+  assert.deepEqual(subtasksOf(tasks, 'inconnu'), []);
+});
+
+// ---- ordre manuel ------------------------------------------------------------------
+
+test('l’ordre manuel décide sans date : la checklist et le groupe « Sans date »', () => {
+  const check = groupOpen([tache('a', { pos: 2 }), tache('b', { pos: 0 }), tache('c', { pos: 1 })], TODAY, 'checklist');
+  assert.deepEqual(check[0].lines.map((l) => l.task.id), ['b', 'c', 'a']);
+  const sans = groupOpen([tache('a', { pos: 2 }), tache('b', { pos: 0 })], TODAY);
+  assert.deepEqual(sans[0].lines.map((l) => l.task.id), ['b', 'a']);
+});
+
+test('sans position, une tâche passe après celles qui en ont une, dans l’ordre habituel', () => {
+  const g = groupOpen([tache('neuve', { at: '2026-09-02T10:00:00Z' }), tache('rangee', { pos: 0 }), tache('vieille', { at: '2026-09-01T10:00:00Z' })], TODAY);
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['rangee', 'neuve', 'vieille']);
+});
+
+test('la date et l’heure passent devant l’ordre manuel, qui départage le reste', () => {
+  const g = groupOpen([
+    tache('sans-b', { due: TODAY, pos: 1 }),
+    tache('a-18h', { due: TODAY, time: '18:00', pos: 9 }),
+    tache('sans-a', { due: TODAY, pos: 0 }),
+  ], TODAY);
+  // Une heure posée passe avant ce qui n'en a pas, quelle que soit la position :
+  // la position ne range que ce qu'aucune heure ne range déjà.
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['a-18h', 'sans-a', 'sans-b']);
+});
+
+test('reorder déplace un élément et laisse le tableau intact quand les indices ne veulent rien dire', () => {
+  assert.deepEqual(reorder(['a', 'b', 'c'], 2, 0), ['c', 'a', 'b']);
+  assert.deepEqual(reorder(['a', 'b', 'c'], 0, 2), ['b', 'c', 'a']);
+  assert.deepEqual(reorder(['a', 'b', 'c'], 1, 1), ['a', 'b', 'c']);
+  assert.deepEqual(reorder(['a', 'b', 'c'], 0, 9), ['a', 'b', 'c']);
+  assert.deepEqual(reorder(['a', 'b', 'c'], -1, 0), ['a', 'b', 'c']);
+});
+
+test('seuls les groupes qu’aucune date ne range déjà se réordonnent à la main', () => {
+  assert.deepEqual(REORDERABLE, ['undated']);
 });

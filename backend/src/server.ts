@@ -398,11 +398,12 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
 
   // Same rule for the tasks: written op by op, never by whole-document PUT.
   const tasks = preserveTasks(state as unknown as Record<string, unknown>);
-  if (tasks.dropped || tasks.unassigned || tasks.unlinked) {
+  if (tasks.dropped || tasks.unassigned || tasks.unlinked || tasks.orphaned) {
     // eslint-disable-next-line no-console
     console.log(
       `[foyer] Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
-      `à un membre disparu retirée(s), ${tasks.unlinked} lien(s) vers une liste de courses disparue retiré(s).`,
+      `à un membre disparu retirée(s), ${tasks.unlinked} lien(s) vers une liste de courses ou un document disparus retiré(s), ` +
+      `${tasks.orphaned} sous-tâche(s) remontée(s) au premier niveau.`,
     );
   }
 

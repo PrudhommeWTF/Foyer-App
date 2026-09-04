@@ -63,6 +63,8 @@ interface TaskItem {
   shopListId?: string | null; // lien vers une liste de courses
   contractId?: number | null; // contrat du module Finances (échéance, piste d'économie)
   docId?: string | null;      // document du foyer (FileItem.id)
+  parentId?: string | null;   // sous-tâche : un seul niveau, dans la liste du parent
+  pos?: number;               // ordre manuel, posé au glisser-déposer
   rec?; history?; remind?;    // voir « La récurrence » et « Rappels »
 }
 ```
@@ -83,6 +85,9 @@ Ce que ces choix impliquent à l'écran :
   d'un mois derrière le jour même, sans jamais le décompter.
 - **La priorité n'existe plus.** La catégorie organise ; un badge rouge
   « Haute » était l'affichage anxiogène que le module refuse.
+- **Une sous-tâche est un détail, pas une tâche de plus.** Elle ne compte dans
+  aucun compteur, ne monte pas sur l'accueil, et ne fait pas de ligne à elle
+  seule. Voir « Sous-tâches » plus bas.
 
 ## La récurrence
 
@@ -177,7 +182,7 @@ eux est un document sans série.
 
 | Opération | Champs | Effet |
 |---|---|---|
-| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `contractId`, `docId`, `rec`, `remind`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
+| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `contractId`, `docId`, `parentId`, `pos`, `rec`, `remind`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
 | `edit` | `id` et les champs à changer | Ne touche que les champs nommés. `who` est remplacé, jamais fusionné. `rec: null` retire la règle. |
 | `done` | `id`, et sur une série `occ`, `next` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). Sur une série : ligne d'historique et échéance avancée à `next` (null : la série s'arrête, la tâche est faite). |
 | `skip` | `id`, `occ`, `next` | Passe l'occurrence courante d'une série sans trace. |
@@ -191,7 +196,9 @@ quelqu'un l'a supprimée pendant que l'autre était hors ligne.
 Ce qui est **refusé**, avec la raison renvoyée au client et écrite au journal :
 une tâche sans intitulé, une liste inconnue, une date qui n'est pas
 `AAAA-MM-JJ`, une heure qui n'est pas `HH:MM`, un numéro de contrat qui n'en
-est pas un, une opération inconnue. Un membre inconnu dans `who` est
+est pas un, une position qui n'est pas un nombre, un parent inconnu, d'une
+autre liste, déjà sous-tâche, ou qui créerait un second niveau, une opération
+inconnue. Un membre inconnu dans `who` est
 simplement retiré. Un lien vers une liste de courses ou un document disparus
 tombe, la tâche reste.
 
@@ -347,6 +354,72 @@ Le canal ne demande **aucune migration du document** : le schéma du foyer
 passe en version 3 (deux tables), appliqué au démarrage, sans toucher aux
 tâches.
 
+## Sous-tâches
+
+**Un seul niveau, dans la liste du parent.** Une sous-tâche ne peut pas en avoir
+elle-même, et une tâche qui en porte ne peut pas en devenir une : le serveur
+refuse les deux, avec la raison. C'est ce qui empêche l'arborescence que le
+module ne veut pas, et qui rend l'écran lisible sur un téléphone.
+
+Une sous-tâche porte un **intitulé, des membres, une coche**, et rien d'autre :
+ni date, ni heure, ni récurrence, ni rappel. Le serveur les écarte si un client
+les envoie, et la saisie ne les propose pas (la barre d'action perd « Date » et
+« Répéter », et dit de quel parent la sous-tâche relève). Sans cette règle, un
+rappel sonnerait pour une ligne que l'écran ne montre jamais seule.
+
+Ce qui en découle :
+
+- Le parent affiche son **avancement** (« 2/5 ») ; les sous-tâches se cochent
+  là où elles sont, sous lui.
+- **Cocher la dernière sous-tâche propose de clore le parent** (toast
+  « Clore »), sans le cocher : même règle que la liste de courses finie.
+- **Cocher un parent coche ses sous-tâches ouvertes**, en un lot annulable d'un
+  geste. Les laisser ouvertes sous une ligne barrée les rendrait invisibles.
+- **Sur une série, l'occurrence suivante repart avec ses cases** : cocher un
+  parent qui se répète rouvre ses sous-tâches, puisqu'elles seront à refaire.
+- **Supprimer un parent emporte ses sous-tâches**, en un lot dont une seule
+  annulation rend tout. Côté serveur, une sous-tâche restée sans parent
+  (ajoutée par un autre appareil au même moment, ou dont la liste du parent a
+  été supprimée) **remonte au premier niveau** au lieu de disparaître.
+- Une sous-tâche **ouverte sous un parent coché** (l'autre appareil a coché le
+  parent seul) redevient une ligne à part entière : rien ne se cache sous une
+  ligne barrée.
+
+## Ordre manuel
+
+`pos` est posé par le glisser-déposer. Il décide **là où aucune date ne
+décide** : une checklist, le groupe « Sans date », et les sous-tâches d'un
+parent. Ailleurs, la date et l'heure passent devant et `pos` départage. La
+poignée n'apparaît donc que dans les groupes où l'ordre tient : la montrer sur
+« À venir », où la date range déjà, ferait un geste sans effet.
+
+Le glisser-déposer est écrit à la main (`frontend/src/app/shared/reorder.ts`),
+sans le CDK d'Angular : cent lignes de `pointer events` contre un paquet de
+plus. Deux règles y décident de tout sur téléphone :
+
+- **On tire par une poignée, jamais par la ligne.** Seule la poignée porte
+  `touch-action: none` ; la liste continue de défiler au doigt et la ligne reste
+  tapable.
+- **La poignée est un bouton**, et les flèches haut et bas la déplacent aussi :
+  l'ordre reste réglable au clavier, et pour qui ne peut pas faire un
+  glissement précis.
+
+Un déplacement renumérote de 0 à n et n'envoie que les positions qui changent.
+Deux appareils qui réordonnent en même temps ne perdent aucune tâche : le
+dernier lot reçu fait foi sur les positions qu'il touche.
+
+## La vue « À moi »
+
+Une puce à côté de « Toutes », visible dès qu'un membre est reconnu. Elle
+rassemble **ce qui m'est affecté**, dans toutes les listes que je vois (tâches,
+corvées, checklists), et les **sous-tâches de mes tâches**, pour que je voie ce
+qu'elles demandent. Une sous-tâche à mon nom dont le parent est à quelqu'un
+d'autre y fait sa propre ligne.
+
+Une tâche **sans responsable** n'y est pas : « le premier qui passe » n'est à
+personne en particulier, et « Toutes » la montre déjà. La vue n'a pas de saisie :
+elle rassemble, elle ne range pas.
+
 ## Liens avec le reste du foyer
 
 Le principe est le même partout : une tâche liée **reste une tâche**. Elle se
@@ -442,9 +515,10 @@ curl -s "http://localhost:3000/api/calendar/feed.ics?token=$TOKEN" | grep -c '^S
 | `backend/src/notify/routes.ts` | `/api/push` : état, abonnement, test. |
 | `frontend/public/sw.js`, `manifest.webmanifest` | Le service worker (notifications seulement) et le manifeste d'installation. |
 | `frontend/src/app/core/task-ops.ts` | Application locale d'une opération, et son inverse pour « Annuler ». |
-| `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, la tolérance, les suggestions, les dates d'un tap. |
+| `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, la tolérance, les suggestions, les dates d'un tap, l'imbrication des sous-tâches, l'ordre manuel, ce qui m'est affecté. |
 | `frontend/src/app/core/recurrence.ts` | Le moteur de récurrence : l'occurrence suivante dans les deux modes, le saut d'occurrence, la fenêtre de tolérance, le libellé de la règle. |
 | `frontend/src/app/core/availability.ts` | La disponibilité lue dans l'emploi du temps : créneaux du jour, conflit à une heure, jour le plus libre. Pur, lecture seule. |
+| `frontend/src/app/shared/reorder.ts` | Le glisser-déposer, à la poignée, au doigt comme au clavier. Sans dépendance. |
 | `frontend/src/app/core/links.ts` | Les intitulés déposés entre modules, et la tâche à proposer de clore quand la liste de courses est finie. |
 | `backend/src/ics.ts` | Le flux ICS, dont les tâches datées quand `settings.icsTasks` est activé. |
 | `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles, les liens (document, tâche depuis un document, clôture proposée depuis les courses). |
@@ -565,6 +639,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 |---|---|
 | `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses, d'un document. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. Les liens : contrat lié, délié, refusé s'il est illisible ; document inconnu qui tombe sans faire échouer ; suppression annulée qui rend les liens. |
 | `backend/test/ics.test.ts` | Le flux : rien sans le réglage, journée entière ou créneau d'une heure, identifiant stable, une tâche faite ou sans date absente, une série sans `RRULE` et une seule fois, échappement. |
+| `backend/test/tasks-ops.test.ts` (sous-tâches et ordre) | Un seul niveau tenu des deux côtés, parent inconnu ou d'une autre liste refusé avec la raison, date et rappel écartés d'une sous-tâche, promotion au premier niveau à la suppression du parent et au rattrapage, position bornée et arrondie, deux appareils qui réordonnent sans rien perdre. |
 | `backend/test/tasks-repo.test.ts` | La couture avec la base : version qui n'avance pas pour rien, journal qui survit, deux téléphones sur la même tâche, et un `PUT` périmé qui ne peut ni décocher ni ressusciter. |
 | `backend/test/state-migrations.test.ts` | La migration 9 : chaque conversion, ce qui est nommé au journal, la rejouabilité, aucune tâche perdue. |
 | `backend/test/reminders.test.ts` | L'heure du rappel dans les quatre réglages, sans heure, à cheval sur minuit, l'heure murale du foyer été comme hiver, la fenêtre de rattrapage, les destinataires, la clé d'idempotence, les affectations. |
@@ -574,12 +649,15 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 | `frontend/src/app/core/tasks.test.ts` | Le compteur et la relégation de l'accueil, ce qui se voit selon le type et la portée des listes, l'ordre des groupes, les suggestions, les catégories, les dates d'un tap, la lecture de l'échéance. |
 | `frontend/src/app/core/availability.test.ts` | Rien sans membre affecté, les créneaux du jour des membres affectés, le conflit à une heure (fin de créneau et créneau sans fin exclus), le jour le plus libre, rien quand tous se valent. |
 | `frontend/src/app/core/links.test.ts` | La clôture proposée seulement quand plus rien n'est à prendre, sur la bonne liste, jamais sur une liste vide ni une tâche faite. |
+| `frontend/src/app/core/tasks.test.ts` (tranche 5) | Les sous-tâches sous leur parent et dans leur ordre, celle qui reste ouverte sous un parent coché, celle dont le parent n'est pas là, les compteurs qui ne comptent pas les détails, l'ordre manuel là où il décide et là où il départage, `reorder` sur des indices absurdes. |
 | `frontend/src/app/core/tiles/tiles.test.ts` | La tuile d'accueil : trois vides différents, compteur sur le jour seulement. |
 
 Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
 ## Ce qui reste à faire
 
-Tranche 5 (confort) : glisser-déposer pour ordonner, sous-tâches à un niveau,
-vue « ce qui m'est affecté ». Et, hors tranche, le chargement hors ligne à
-froid (cache PWA), qui reste un choix à faire séparément.
+Le chantier de parité et d'intégration est terminé. Reste, hors tranche, le
+chargement **hors ligne à froid** (cache PWA) : aujourd'hui, les gestes faits
+sans réseau repartent au retour, mais l'application doit avoir été ouverte
+avant. C'est un choix à faire séparément, parce qu'un cache d'application
+change la façon dont les mises à jour arrivent.

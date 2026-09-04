@@ -16,6 +16,13 @@
 //   - Le retard **récent** passe devant, le retard **ancien** est relégué
 //     derrière le jour même : une tâche en retard de trois mois n'est pas
 //     l'affaire du jour. Elle n'est jamais supprimée ni décomptée.
+//   - Une **sous-tâche** est un détail de son parent : elle ne compte pas dans
+//     les compteurs et ne fait pas de ligne à elle seule. Sauf quand son parent
+//     n'est pas dans ce qu'on regarde (la vue « À moi ») : elle redevient alors
+//     une ligne, plutôt que de disparaître.
+//   - L'**ordre manuel** (`pos`, posé au glisser-déposer) décide là où aucune
+//     date ne décide : une checklist, les tâches sans date, les sous-tâches.
+//     Ailleurs, la date et l'heure passent devant et l'ordre manuel départage.
 import { addDaysIso, normText, parseDay, weekdayOf } from './helpers';
 import { ListKind, Remind, TaskItem, TaskList } from './models';
 import { windowEnd } from './recurrence';
@@ -31,6 +38,8 @@ export interface TaskLine {
   task: TaskItem;
   /** Jours de retard. Zéro pour une tâche du jour ou sans date. */
   late: number;
+  /** Les sous-tâches de cette ligne, dans leur ordre. Vide quand il n'y en a pas. */
+  subs: TaskItem[];
 }
 
 export interface TodayTasks {
@@ -45,6 +54,55 @@ export interface TodayTasks {
 export function daysLate(due: string, today: string): number {
   const ms = parseDay(today).getTime() - parseDay(due).getTime();
   return Math.max(0, Math.round(ms / 86400000));
+}
+
+/**
+ * Une tâche fait-elle une ligne à part entière ici ?
+ *
+ * Une sous-tâche se range sous son parent, sauf dans deux cas où s'y ranger la
+ * rendrait invisible : son parent n'est pas dans ce qu'on regarde (la vue
+ * « À moi »), ou il est coché alors qu'elle ne l'est pas (un autre appareil a
+ * coché le parent seul). Elle redevient alors une ligne, plutôt que de
+ * disparaître sous une ligne barrée.
+ */
+const isRoot = (t: TaskItem, byId: Map<string, TaskItem>): boolean => {
+  if (!t.parentId) return true;
+  const parent = byId.get(t.parentId);
+  return !parent || (parent.done && !t.done);
+};
+/** L'ordre manuel d'abord ; sans lui, la tâche passe après celles qui en ont un. */
+const byPos = (a: TaskItem, b: TaskItem): number => (a.pos ?? Number.MAX_SAFE_INTEGER) - (b.pos ?? Number.MAX_SAFE_INTEGER);
+
+/** Les sous-tâches d'une tâche, dans leur ordre : l'ordre manuel, puis la saisie. */
+export function subtasksOf(tasks: TaskItem[], parentId: string): TaskItem[] {
+  return (tasks || []).filter((t) => t.parentId === parentId).sort((a, b) => byPos(a, b) || (a.at || '').localeCompare(b.at || ''));
+}
+
+/** Combien de sous-tâches faites sur combien. Null quand il n'y en a pas : rien à afficher. */
+export function subProgress(subs: TaskItem[]): { done: number; total: number } | null {
+  return subs.length ? { done: subs.filter((s) => s.done).length, total: subs.length } : null;
+}
+
+/** Ce qui reste ouvert, sans compter les sous-tâches : un compteur dit des choses à faire, pas des détails. */
+export function openCount(tasks: TaskItem[]): number {
+  return (tasks || []).filter((t) => !t.done && !t.parentId).length;
+}
+
+/** Ce qui m'est affecté, sous-tâches comprises : une sous-tâche à mon nom est à moi. */
+export function assignedTo(tasks: TaskItem[], me: string | null): TaskItem[] {
+  return me ? (tasks || []).filter((t) => (t.who || []).includes(me)) : [];
+}
+
+/**
+ * Le nouvel ordre après un glisser-déposer : l'élément de `from` va en `to`,
+ * les autres se décalent. Rend le tableau inchangé si les indices ne veulent
+ * rien dire, plutôt qu'un ordre inventé.
+ */
+export function reorder<T>(items: readonly T[], from: number, to: number): T[] {
+  const out = items.slice();
+  if (from < 0 || to < 0 || from >= out.length || to >= out.length || from === to) return out;
+  out.splice(to, 0, out.splice(from, 1)[0]);
+  return out;
 }
 
 // ---- ce qui se voit ----------------------------------------------------------
@@ -87,12 +145,14 @@ export function standing(t: TaskItem, today: string): 'late' | 'now' | 'soon' | 
 const lateOf = (t: TaskItem, today: string): number => daysLate(windowEnd(t.due!, t.rec), today);
 
 export function todayTasks(tasks: TaskItem[], today: string, max: number): TodayTasks {
-  const open = (tasks || []).filter((t) => !t.done);
+  // Les sous-tâches ne montent pas sur l'accueil : elles n'ont pas de date, et
+  // les compter ferait passer une tâche en cinq points pour cinq tâches.
+  const open = (tasks || []).filter((t) => !t.done && !t.parentId);
   const late = open.filter((t) => standing(t, today) === 'late')
-    .map((task) => ({ task, late: lateOf(task, today) }))
+    .map((task) => ({ task, late: lateOf(task, today), subs: [] }))
     .sort((a, b) => a.late - b.late);
-  const now = open.filter((t) => standing(t, today) === 'now').map((task) => ({ task, late: 0 }));
-  const undated = open.filter((t) => !t.due).map((task) => ({ task, late: 0 }));
+  const now = open.filter((t) => standing(t, today) === 'now').map((task) => ({ task, late: 0, subs: [] }));
+  const undated = open.filter((t) => !t.due).sort(byPos).map((task) => ({ task, late: 0, subs: [] }));
   const later = open.filter((t) => standing(t, today) === 'soon');
 
   const lines: TaskLine[] = [
@@ -116,7 +176,7 @@ export type TaskGroupKey = 'today' | 'late' | 'soon' | 'undated';
 export interface TaskGroup { key: TaskGroupKey; label: string; lines: TaskLine[] }
 
 const byDueThenTime = (a: TaskItem, b: TaskItem): number =>
-  (a.due || '').localeCompare(b.due || '') || (a.time || '99').localeCompare(b.time || '99');
+  (a.due || '').localeCompare(b.due || '') || (a.time || '99').localeCompare(b.time || '99') || byPos(a, b);
 /** Les plus récentes d'abord : ce qu'on vient de saisir est ce qu'on cherche. */
 const newestFirst = (a: TaskItem, b: TaskItem): number => (b.at || '').localeCompare(a.at || '');
 
@@ -125,25 +185,35 @@ const newestFirst = (a: TaskItem, b: TaskItem): number => (b.at || '').localeCom
  * retard (récent en tête), puis ce qui vient, puis ce qui n'a pas de date.
  * Une checklist se lit dans l'ordre où elle a été écrite : un seul groupe, sans
  * titre, du premier au dernier.
+ *
+ * Les sous-tâches viennent sous leur parent au lieu de faire une ligne. Celle
+ * dont le parent n'est pas dans `tasks` en fait une : c'est ce qui rend la vue
+ * « À moi » juste, et ce qui empêche une sous-tâche de disparaître.
  */
 export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'taches'): TaskGroup[] {
-  const open = (tasks || []).filter((t) => !t.done);
+  const byId = new Map((tasks || []).map((t) => [t.id, t]));
+  const line = (task: TaskItem, late = 0): TaskLine => ({ task, late, subs: subtasksOf(tasks, task.id) });
+  const open = (tasks || []).filter((t) => !t.done && isRoot(t, byId));
   if (kind === 'checklist') {
-    const lines = open.slice().sort((a, b) => (a.at || '').localeCompare(b.at || '')).map((task) => ({ task, late: 0 }));
+    const lines = open.slice().sort((a, b) => byPos(a, b) || (a.at || '').localeCompare(b.at || '')).map((t) => line(t));
     return lines.length ? [{ key: 'undated', label: '', lines }] : [];
   }
   const groups: TaskGroup[] = [
-    { key: 'today', label: 'Aujourd’hui', lines: open.filter((t) => standing(t, today) === 'now').sort(byDueThenTime).map((task) => ({ task, late: 0 })) },
-    { key: 'late', label: 'En retard', lines: open.filter((t) => standing(t, today) === 'late').map((task) => ({ task, late: lateOf(task, today) })).sort((a, b) => a.late - b.late) },
-    { key: 'soon', label: 'À venir', lines: open.filter((t) => standing(t, today) === 'soon').sort(byDueThenTime).map((task) => ({ task, late: 0 })) },
-    { key: 'undated', label: 'Sans date', lines: open.filter((t) => !t.due).sort(newestFirst).map((task) => ({ task, late: 0 })) },
+    { key: 'today', label: 'Aujourd’hui', lines: open.filter((t) => standing(t, today) === 'now').sort(byDueThenTime).map((t) => line(t)) },
+    { key: 'late', label: 'En retard', lines: open.filter((t) => standing(t, today) === 'late').map((t) => line(t, lateOf(t, today))).sort((a, b) => a.late - b.late) },
+    { key: 'soon', label: 'À venir', lines: open.filter((t) => standing(t, today) === 'soon').sort(byDueThenTime).map((t) => line(t)) },
+    { key: 'undated', label: 'Sans date', lines: open.filter((t) => !t.due).sort((a, b) => byPos(a, b) || newestFirst(a, b)).map((t) => line(t)) },
   ];
   return groups.filter((g) => g.lines.length);
 }
 
-/** Les tâches faites, la plus récente d'abord. */
+/** Les groupes dont l'ordre se règle à la main : ceux qu'aucune date ne range déjà. */
+export const REORDERABLE: TaskGroupKey[] = ['undated'];
+
+/** Les tâches faites, la plus récente d'abord. Les sous-tâches restent sous leur parent. */
 export function doneTasks(tasks: TaskItem[]): TaskItem[] {
-  return (tasks || []).filter((t) => t.done).slice().sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
+  const byId = new Map((tasks || []).map((t) => [t.id, t]));
+  return (tasks || []).filter((t) => t.done && isRoot(t, byId)).slice().sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || ''));
 }
 
 // ---- la saisie ------------------------------------------------------------------

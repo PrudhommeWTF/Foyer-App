@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { FinancesStore } from '../../core/finances.store';
@@ -7,9 +7,10 @@ import { LIST_ICONS, PALETTE, tint } from '../../core/constants';
 import { ListKind, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
-import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, TaskGroup, dailyTasks, doneTasks, dueLabel, groupOpen } from '../../core/tasks';
+import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
 import { recLabel } from '../../core/recurrence';
 import { ModalComponent } from '../../shared/modal';
+import { ReorderDirective } from '../../shared/reorder';
 import { WhoComponent } from '../../shared/who';
 import { TaskComposerComponent } from './composer';
 
@@ -29,7 +30,7 @@ import { TaskComposerComponent } from './composer';
   selector: 'screen-taches',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, WhoComponent, TaskComposerComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ReorderDirective, WhoComponent, TaskComposerComponent],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -41,6 +42,15 @@ import { TaskComposerComponent } from './composer';
           Toutes
           <span class="cc" [style.color]="active() === 'all' ? 'rgba(255,255,255,.8)' : 'var(--ink3)'">{{ allOpen() }}</span>
         </div>
+        @if (store.currentMemberId()) {
+          <div class="chip-l" [class.active]="active() === 'me'" (click)="store.patch({ activeList: 'me' })"
+               [style.background]="active() === 'me' ? 'var(--ink)' : 'var(--soft)'"
+               [style.color]="active() === 'me' ? '#fff' : 'var(--ink)'">
+            <f-icon name="users" [size]="16" [color]="active() === 'me' ? '#fff' : 'var(--ink2)'" [width]="2" />
+            À moi
+            <span class="cc" [style.color]="active() === 'me' ? 'rgba(255,255,255,.8)' : 'var(--ink3)'">{{ meOpen() }}</span>
+          </div>
+        }
         @for (l of lists(); track l.id) {
           <div class="chip-l" [class.active]="active() === l.id" [class.archived]="l.archived" (click)="store.patch({ activeList: l.id })"
                [style.background]="active() === l.id ? l.color : 'var(--soft)'"
@@ -102,20 +112,22 @@ import { TaskComposerComponent } from './composer';
           }
         } @else {
           <div class="ident">
-            <div class="ident-ic" style="background:var(--primary)"><f-icon name="taches" [size]="18" color="#fff" [width]="2" /></div>
+            <div class="ident-ic" [style.background]="active() === 'me' ? 'var(--ink)' : 'var(--primary)'">
+              <f-icon [name]="active() === 'me' ? 'users' : 'taches'" [size]="18" color="#fff" [width]="2" />
+            </div>
             <div>
-              <div class="ident-name">Toutes les tâches</div>
-              <div class="ident-sub">L’affaire du jour, toutes listes confondues</div>
+              <div class="ident-name">{{ active() === 'me' ? 'À moi' : 'Toutes les tâches' }}</div>
+              <div class="ident-sub">{{ active() === 'me' ? 'Ce qui m’est affecté, toutes listes confondues' : 'L’affaire du jour, toutes listes confondues' }}</div>
             </div>
           </div>
         }
       </div>
 
-      <!-- Saisie rapide -->
-      @if (lists().length) {
-        <div class="compose"><app-task-composer (saved)="store.createTask($event)" /></div>
-      } @else {
+      <!-- Saisie rapide. Pas dans « À moi » : cette vue rassemble, elle ne range pas. -->
+      @if (!lists().length) {
         <div class="empty">Créez une liste pour commencer.</div>
+      } @else if (active() !== 'me') {
+        <div class="compose"><app-task-composer (saved)="store.createTask($event)" /></div>
       }
 
       <!-- Ce qui reste à faire, par groupe -->
@@ -129,9 +141,16 @@ import { TaskComposerComponent } from './composer';
               }
             </div>
           }
-          <div class="list">
+          <div class="list" [fReorder]="ids(g)" (reordered)="store.reorderTasks($event)">
             @for (l of g.lines; track l.task.id) {
+              <div [attr.data-rid]="l.task.id">
               <div class="task" [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.editTaskItem(l.task.id)">
+                @if (canOrder(g)) {
+                  <!-- On tire par la poignée, jamais par la ligne : sinon la liste ne défile plus. -->
+                  <button class="grip" data-grip (click)="$event.stopPropagation()" [attr.aria-label]="'Déplacer ' + l.task.text">
+                    <f-icon name="planning" [size]="15" color="var(--ink3)" [width]="2.2" />
+                  </button>
+                }
                 <button class="tick" (click)="$event.stopPropagation(); store.toggleTask(l.task.id)" [attr.aria-label]="'Cocher ' + l.task.text"></button>
                 <div class="t-body">
                   <div class="t-text">{{ l.task.text }}</div>
@@ -159,14 +178,15 @@ import { TaskComposerComponent } from './composer';
                       }
                     </div>
                   }
-                  @if (l.task.due || l.task.cat || l.task.note || active() === 'all') {
+                  @if (l.subs.length || l.task.due || l.task.cat || l.task.note || active() === 'all' || active() === 'me') {
                     <div class="t-meta">
+                      @if (l.subs.length) { <span class="rec"><f-icon name="checklist" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ progress(l.subs) }}</span> }
                       @if (l.task.due) { <span class="due" [class.late]="l.late > 0">{{ dueOf(l.task) }}@if (l.late > 0) { <span class="late-n"> · depuis {{ lateLabel(l.late) }}</span> }</span> }
                       @if (l.task.rec) { <span class="rec" [title]="recOf(l.task)"><f-icon name="refresh" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ recOf(l.task) }}</span> }
                       @if (l.task.remind && l.task.due) { <span class="rec" title="Rappel"><f-icon name="bell" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ remindOf(l.task) }}</span> }
                       @if (l.task.cat) { <span class="pill" [style.background]="tint(listColor(l.task.listId))" [style.color]="listColor(l.task.listId)">{{ l.task.cat }}</span> }
                       @if (l.task.note) { <span class="note-mark" [title]="l.task.note"><f-icon name="edit" [size]="12" color="var(--ink3)" [width]="2.2" /> note</span> }
-                      @if (active() === 'all') { <span class="list-badge" [style.color]="listColor(l.task.listId)"><span class="dot" [style.background]="listColor(l.task.listId)"></span>{{ listName(l.task.listId) }}</span> }
+                      @if (active() === 'all' || active() === 'me') { <span class="list-badge" [style.color]="listColor(l.task.listId)"><span class="dot" [style.background]="listColor(l.task.listId)"></span>{{ listName(l.task.listId) }}</span> }
                     </div>
                   }
                 </div>
@@ -174,6 +194,24 @@ import { TaskComposerComponent } from './composer';
                   <button class="later" (click)="$event.stopPropagation(); store.postponeTask(l.task.id)">demain</button>
                 }
                 @if (l.task.who.length) { <f-who [badges]="badges(l.task)" [size]="22" /> }
+              </div>
+              <!-- Les sous-tâches, sous leur parent : un détail se coche là où il est. -->
+              @if (l.subs.length) {
+                <div class="subs" [fReorder]="subIds(l.subs)" (reordered)="store.reorderTasks($event)">
+                  @for (sb of l.subs; track sb.id) {
+                    <div class="sub" [attr.data-rid]="sb.id">
+                      <button class="grip sm" data-grip [attr.aria-label]="'Déplacer ' + sb.text">
+                        <f-icon name="planning" [size]="13" color="var(--ink3)" [width]="2.2" />
+                      </button>
+                      <button class="tick sm" [class.on]="sb.done" (click)="store.toggleTask(sb.id)" [attr.aria-label]="(sb.done ? 'Rouvrir ' : 'Cocher ') + sb.text">
+                        @if (sb.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
+                      </button>
+                      <button class="sub-text" [class.strike]="sb.done" (click)="store.editTaskItem(sb.id)">{{ sb.text }}</button>
+                      @if (sb.who.length) { <f-who [badges]="badges(sb)" [size]="18" /> }
+                    </div>
+                  }
+                </div>
+              }
               </div>
             }
           </div>
@@ -208,6 +246,33 @@ import { TaskComposerComponent } from './composer';
     @if (editing() || store.ui().taskNew) {
       <f-modal [title]="editing() ? 'Modifier la tâche' : 'Nouvelle tâche'" [maxWidth]="520" (close)="closeTask()">
         <app-task-composer [task]="editing()" (saved)="saveTask($event)" (deleted)="store.removeTask(editing()!.id, $event)" (closed)="closeTask()" />
+        @if (editing(); as t) {
+          @if (!t.parentId) {
+            <!-- Un seul niveau : une sous-tâche n'a pas de bloc à elle. -->
+            <div class="subs-edit">
+              <div class="field-label">Sous-tâches{{ editSubs().length ? ' · ' + progress(editSubs()) : '' }}</div>
+              <div class="sub-list" [fReorder]="subIds(editSubs())" (reordered)="store.reorderTasks($event)">
+                @for (sb of editSubs(); track sb.id) {
+                  <div class="sub-edit" [attr.data-rid]="sb.id">
+                    <button class="grip sm" data-grip [attr.aria-label]="'Déplacer ' + sb.text">
+                      <f-icon name="planning" [size]="13" color="var(--ink3)" [width]="2.2" />
+                    </button>
+                    <button class="tick sm" [class.on]="sb.done" (click)="store.toggleTask(sb.id)" [attr.aria-label]="(sb.done ? 'Rouvrir ' : 'Cocher ') + sb.text">
+                      @if (sb.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
+                    </button>
+                    <span class="sub-text" [class.strike]="sb.done">{{ sb.text }}</span>
+                    <button class="icon-btn sm" (click)="store.removeTask(sb.id)" [attr.aria-label]="'Supprimer ' + sb.text">
+                      <f-icon name="trash" [size]="14" color="var(--primary)" [width]="2" />
+                    </button>
+                  </div>
+                }
+              </div>
+              <input class="input sub-add" placeholder="Ajouter une sous-tâche…" enterkeyhint="done" autocomplete="off"
+                     [ngModel]="subText()" (ngModelChange)="subText.set($event)" (keydown.enter)="addSub(t.id)" />
+              <div class="plan-hint">Une sous-tâche porte un intitulé et des membres, pas de date ni de rappel : ceux du parent suffisent.</div>
+            </div>
+          }
+        }
         @if (editing()?.history?.length) {
           <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus. -->
           <div class="hist">
@@ -359,6 +424,19 @@ import { TaskComposerComponent } from './composer';
     .list-badge { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; background: var(--soft2); padding: 2px 8px; border-radius: 6px; }
     .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
     .later { flex: none; border: none; cursor: pointer; padding: 6px 10px; border-radius: 8px; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 11.5px; font-weight: 800; }
+    /* La poignée seule bloque le défilement : le reste de la ligne reste tapable et scrollable. */
+    .grip { flex: none; border: none; background: transparent; cursor: grab; padding: 4px; margin-left: -4px; border-radius: 7px; touch-action: none; display: flex; align-items: center; }
+    .grip:active { cursor: grabbing; background: var(--soft2); }
+    .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
+    .subs { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 0 30px; }
+    .sub { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 12px; padding: 8px 12px; }
+    .tick.sm { width: 18px; height: 18px; border-radius: 6px; }
+    .sub-text { flex: 1; min-width: 0; text-align: left; border: none; background: transparent; cursor: pointer; padding: 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink2); overflow-wrap: anywhere; }
+    .sub-text.strike { color: var(--ink3); text-decoration: line-through; }
+    .subs-edit { margin-top: 20px; }
+    .sub-list { display: flex; flex-direction: column; gap: 6px; }
+    .sub-edit { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 12px; padding: 8px 12px; }
+    .sub-add { margin-top: 10px; padding: 9px 12px; font-size: 13.5px; }
     .t-sub.muted { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 3px; }
     .empty { color: var(--ink3); font-weight: 700; font-size: 13.5px; padding: 16px 0; }
     .done-toggle { display: flex; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; padding: 6px 0 12px; }
@@ -398,6 +476,7 @@ export class TachesScreen {
   readonly kinds = KIND_ORDER;
 
   active = computed(() => this.store.ui().activeList);
+  readonly subText = signal('');
   /** Les listes visibles, dans l'ordre des types puis des positions. */
   lists = computed(() => {
     const all = this.store.visibleTaskLists(this.store.ui().showArchived);
@@ -408,11 +487,29 @@ export class TachesScreen {
   activeObj = computed(() => this.d().taskLists.find((l) => l.id === this.active()) || null);
   /** L'affaire du jour : ce que « Toutes » montre et compte. */
   private daily = computed(() => dailyTasks(this.d().tasks, this.d().taskLists, this.store.currentMemberId()));
-  allOpen = computed(() => this.daily().filter((t) => !t.done).length);
+  allOpen = computed(() => openCount(this.daily()));
+  /** Ce qui m'est affecté, dans toutes les listes que je vois : une affectation est une affectation. */
+  private assigned = computed(() => {
+    const visibles = new Set(this.store.visibleTaskLists(true).map((l) => l.id));
+    return assignedTo(this.d().tasks.filter((t) => visibles.has(t.listId)), this.store.currentMemberId());
+  });
+  /**
+   * Ce que la vue montre : mes tâches, **et** les sous-tâches de celles-ci. Sans
+   * elles, une tâche à moi paraîtrait vide de ce qu'elle demande. Une sous-tâche
+   * à mon nom dont le parent n'est pas à moi reste une ligne à part entière.
+   */
+  private mine = computed(() => {
+    const miens = this.assigned();
+    const ids = new Set(miens.map((t) => t.id));
+    return [...miens, ...this.d().tasks.filter((t) => t.parentId && ids.has(t.parentId) && !ids.has(t.id))];
+  });
+  meOpen = computed(() => this.assigned().filter((t) => !t.done).length);
 
   private scoped = computed<TaskItem[]>(() => {
     const a = this.active();
-    return a === 'all' ? this.daily() : this.d().tasks.filter((t) => t.listId === a);
+    if (a === 'all') return this.daily();
+    if (a === 'me') return this.mine();
+    return this.d().tasks.filter((t) => t.listId === a);
   });
   groups = computed<TaskGroup[]>(() => groupOpen(this.scoped(), this.store.todayStr(), this.activeObj()?.kind || 'taches'));
   done = computed(() => doneTasks(this.scoped()));
@@ -428,7 +525,7 @@ export class TachesScreen {
       : k === 'corvees' ? 'Des cases à cocher, lisibles par un enfant. Hors de « Toutes » et de l’accueil.'
       : 'Valise, fournitures, idées : une liste qu’on refait. Hors de « Toutes » et de l’accueil.';
   }
-  undoneCount(listId: string): number { return this.d().tasks.filter((t) => t.listId === listId && !t.done).length; }
+  undoneCount(listId: string): number { return openCount(this.d().tasks.filter((t) => t.listId === listId)); }
   private list(id: string): TaskList | undefined { return this.d().taskLists.find((l) => l.id === id); }
   listColor(id: string): string { return this.list(id)?.color || 'var(--primary)'; }
   listName(id: string): string { return this.list(id)?.name || 'Liste supprimée'; }
@@ -450,7 +547,17 @@ export class TachesScreen {
   }
   postponeAll(g: TaskGroup, to: string): void { this.store.postponeTasks(g.lines.map((l) => l.task.id), to); }
 
-  closeTask(): void { this.store.patch({ taskEdit: null, taskNew: false }); }
+  /** L'ordre se règle à la main là où aucune date ne le règle déjà. */
+  canOrder(g: TaskGroup): boolean { return REORDERABLE.includes(g.key); }
+  ids(g: TaskGroup): string[] { return g.lines.map((l) => l.task.id); }
+  subIds(subs: TaskItem[]): string[] { return subs.map((sb) => sb.id); }
+  progress(subs: TaskItem[]): string { const p = subProgress(subs); return p ? p.done + '/' + p.total : ''; }
+  editSubs(): TaskItem[] { const t = this.editing(); return t ? subtasksOf(this.d().tasks, t.id) : []; }
+  addSub(parentId: string): void {
+    if (this.store.addSubtask(parentId, this.subText())) this.subText.set('');
+  }
+
+  closeTask(): void { this.subText.set(''); this.store.patch({ taskEdit: null, taskNew: false }); }
   saveTask(draft: TaskDraft & { scope: 'one' | 'all' }): void {
     const t = this.editing();
     if (t) {

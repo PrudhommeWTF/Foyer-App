@@ -3,7 +3,7 @@ import { ApiError, ApiService, PushStatus, SetupPayload, ShopOp, ShopOpDraft, Up
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
-import { REMIND_LABELS, categories, dailyTasks, dueLabel, suggestTexts, visibleLists } from './tasks';
+import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -1407,12 +1407,75 @@ export class FoyerStore {
   toggleTask(id: string): void {
     const t = this.task(id); if (!t) return;
     if (t.done) { this.taskOpWithUndo({ op: 'reopen', id, ...(t.rec ? { occ: t.due || '' } : {}) }, 'Tâche rouverte'); return; }
+    const subs = this.subtasks(id);
     if (t.rec && t.due) {
       const next = nextOccurrence(t.rec, t.due, this.todayStr());
-      this.taskOpWithUndo({ op: 'done', id, occ: t.due, next }, next ? 'Faite. Prochaine : ' + this.nextLabel(next) : 'Faite, la série s’arrête là');
+      const msg = next ? 'Faite. Prochaine : ' + this.nextLabel(next) : 'Faite, la série s’arrête là';
+      // Une série qui avance repart avec ses cases : les sous-tâches d'une
+      // occurrence soldée sont celles de la suivante, à refaire.
+      const remises = next ? subs.filter((sb) => sb.done) : [];
+      this.taskOpsWithUndo(
+        [{ op: 'done', id, occ: t.due, next }, ...remises.map((sb) => ({ op: 'reopen' as const, id: sb.id }))],
+        remises.length ? msg + ', cases remises à zéro' : msg,
+      );
+      return;
+    }
+    const ouvertes = subs.filter((sb) => !sb.done);
+    if (ouvertes.length) {
+      // Cocher le parent coche ce qu'il porte : laisser des sous-tâches ouvertes
+      // sous une ligne barrée les rendrait invisibles. Un seul geste défait tout.
+      this.taskOpsWithUndo(
+        [{ op: 'done', id }, ...ouvertes.map((sb) => ({ op: 'done' as const, id: sb.id }))],
+        'Faite, avec ses ' + ouvertes.length + ' sous-tâche' + (ouvertes.length > 1 ? 's' : ''),
+      );
+      return;
+    }
+    // La dernière sous-tâche cochée propose de clore le parent, elle ne le coche
+    // pas : c'est au foyer de dire que l'affaire est finie.
+    if (t.parentId) {
+      this.pushTaskOps([{ op: 'done', id }]);
+      if (this.proposeParentClose(t.parentId)) return;
+      const back = inverseOf({ op: 'done', id }, t);
+      if (back) this.toastWithUndo('Tâche faite', () => this.pushTaskOps([back]));
+      else this.toast('Tâche faite');
       return;
     }
     this.taskOpWithUndo({ op: 'done', id }, 'Tâche faite');
+  }
+
+  /** Les sous-tâches d'une tâche, dans leur ordre. */
+  subtasks(id: string): TaskItem[] { return subtasksOf(this._data()?.tasks || [], id); }
+
+  /** Le parent vient-il de voir sa dernière sous-tâche cochée ? Alors le proposer, sans le faire. */
+  private proposeParentClose(parentId: string): boolean {
+    const p = this.task(parentId);
+    if (!p || p.done) return false;
+    const subs = this.subtasks(parentId);
+    if (!subs.length || subs.some((sb) => !sb.done)) return false;
+    this.toastAction('Tout est coché. Clore « ' + p.text + ' » ?', 'Clore', () => this.toggleTask(parentId));
+    return true;
+  }
+
+  /** Une sous-tâche : un intitulé sous un parent, et rien d'autre à régler. */
+  addSubtask(parentId: string, text: string): string | null {
+    const p = this.task(parentId); const t = text.trim();
+    if (!p || !t) return null;
+    if (p.parentId) { this.toast('Une sous-tâche ne peut pas en avoir elle-même'); return null; }
+    const id = uid('t');
+    const pos = this.subtasks(parentId).length;
+    this.pushTaskOps([{ op: 'add', id, listId: p.listId, text: t, who: [], due: null, parentId, pos }]);
+    return id;
+  }
+
+  /**
+   * Le nouvel ordre après un glisser-déposer : les positions sont renumérotées
+   * de 0 à n, et seules celles qui bougent sont envoyées. Renuméroter tout
+   * ferait un lot de vingt opérations pour un déplacement d'un cran.
+   */
+  reorderTasks(ids: readonly string[]): void {
+    const ops: TaskOpDraft[] = [];
+    ids.forEach((id, i) => { const t = this.task(id); if (t && t.pos !== i) ops.push({ op: 'edit', id, pos: i }); });
+    if (ops.length) this.taskOpsWithUndo(ops, 'Ordre modifié');
   }
 
   /** Passer l'occurrence courante d'une série sans la faire. */
@@ -1443,6 +1506,16 @@ export class FoyerStore {
     const t = this.task(id); if (!t) return;
     if (scope === 'one' && t.rec) { this.skipTask(id); return; }
     this.patch({ taskEdit: null });
+    const subs = this.subtasks(id);
+    if (subs.length) {
+      // Les sous-tâches partent avec leur parent, et reviennent avec lui : une
+      // seule annulation, sinon on rendrait la tâche sans ce qu'elle portait.
+      this.taskOpsWithUndo(
+        [...subs.map((sb) => ({ op: 'remove' as const, id: sb.id })), { op: 'remove', id }],
+        'Tâche supprimée, avec ses ' + subs.length + ' sous-tâche' + (subs.length > 1 ? 's' : ''),
+      );
+      return;
+    }
     this.taskOpWithUndo({ op: 'remove', id }, t.rec ? 'Série supprimée' : 'Tâche supprimée');
   }
 
