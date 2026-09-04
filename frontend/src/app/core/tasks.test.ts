@@ -247,15 +247,39 @@ test('sans position, une tâche passe après celles qui en ont une, dans l’ord
   assert.deepEqual(g[0].lines.map((l) => l.task.id), ['rangee', 'neuve', 'vieille']);
 });
 
-test('la date et l’heure passent devant l’ordre manuel, qui départage le reste', () => {
+test('dans le jour même, l’ordre manuel passe devant l’heure : on range sa journée comme on la fera', () => {
   const g = groupOpen([
-    tache('sans-b', { due: TODAY, pos: 1 }),
-    tache('a-18h', { due: TODAY, time: '18:00', pos: 9 }),
-    tache('sans-a', { due: TODAY, pos: 0 }),
+    tache('a-08h', { due: TODAY, time: '08:00', pos: 2 }),
+    tache('a-18h', { due: TODAY, time: '18:00', pos: 0 }),
+    tache('sans-heure', { due: TODAY, pos: 1 }),
   ], TODAY);
-  // Une heure posée passe avant ce qui n'en a pas, quelle que soit la position :
-  // la position ne range que ce qu'aucune heure ne range déjà.
-  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['a-18h', 'sans-a', 'sans-b']);
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['a-18h', 'sans-heure', 'a-08h']);
+});
+
+test('une tâche du jour jamais déplacée passe après celles qui l’ont été, à son heure', () => {
+  const g = groupOpen([
+    tache('neuve-18h', { due: TODAY, time: '18:00' }),
+    tache('rangee', { due: TODAY, pos: 0 }),
+    tache('neuve-08h', { due: TODAY, time: '08:00' }),
+  ], TODAY);
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['rangee', 'neuve-08h', 'neuve-18h']);
+});
+
+test('sur ce qui s’étale, la date passe devant : « À venir » reste chronologique', () => {
+  const g = groupOpen([
+    tache('apres-demain', { due: '2026-09-04', pos: 0 }),
+    tache('demain', { due: '2026-09-03', pos: 9 }),
+  ], TODAY);
+  const venir = g.find((x) => x.key === 'soon')!;
+  assert.deepEqual(venir.lines.map((l) => l.task.id), ['demain', 'apres-demain']);
+});
+
+test('l’accueil montre le jour même dans l’ordre choisi à l’écran', () => {
+  const lignes = todayTasks([
+    tache('a-08h', { due: TODAY, time: '08:00', pos: 1 }),
+    tache('a-18h', { due: TODAY, time: '18:00', pos: 0 }),
+  ], TODAY, 5).lines.map((l) => l.task.id);
+  assert.deepEqual(lignes, ['a-18h', 'a-08h']);
 });
 
 test('reorder déplace un élément et laisse le tableau intact quand les indices ne veulent rien dire', () => {
@@ -266,6 +290,6 @@ test('reorder déplace un élément et laisse le tableau intact quand les indice
   assert.deepEqual(reorder(['a', 'b', 'c'], -1, 0), ['a', 'b', 'c']);
 });
 
-test('seuls les groupes qu’aucune date ne range déjà se réordonnent à la main', () => {
-  assert.deepEqual(REORDERABLE, ['undated']);
+test('se réordonnent à la main : le jour même et ce qui n’a pas de date, pas ce qui s’étale', () => {
+  assert.deepEqual(REORDERABLE, ['today', 'undated']);
 });

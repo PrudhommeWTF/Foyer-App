@@ -387,11 +387,23 @@ Ce qui en découle :
 
 ## Ordre manuel
 
-`pos` est posé par le glisser-déposer. Il décide **là où aucune date ne
-décide** : une checklist, le groupe « Sans date », et les sous-tâches d'un
-parent. Ailleurs, la date et l'heure passent devant et `pos` départage. La
-poignée n'apparaît donc que dans les groupes où l'ordre tient : la montrer sur
-« À venir », où la date range déjà, ferait un geste sans effet.
+`pos` est posé par le glisser-déposer. Il décide dans le **jour même**, dans une
+**checklist**, dans les tâches **sans date**, et sous un **parent**. La poignée
+n'apparaît que là.
+
+Le jour même en fait partie parce que ses tâches sont toutes du même jour :
+l'heure dit quand elles tombent, pas dans quel ordre on s'y prend. L'ordre
+manuel y passe donc **devant l'heure**, et le foyer range sa journée comme il la
+fera. Une tâche du jour jamais déplacée passe après celles qui l'ont été, à son
+heure ; une tâche ajoutée ensuite arrive en bas.
+
+Sur ce qui **s'étale** (« En retard », « À venir »), la date passe devant et
+`pos` ne fait que départager : là, la date est l'information utile, et une
+poignée cacherait le calendrier au lieu de servir. « En retard » garde son
+classement par ancienneté.
+
+L'accueil suit le même ordre que l'écran pour le jour même : la journée rangée
+à la main se lit pareil des deux côtés.
 
 Le glisser-déposer est écrit à la main (`frontend/src/app/shared/reorder.ts`),
 sans le CDK d'Angular : cent lignes de `pointer events` contre un paquet de

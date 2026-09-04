@@ -74,13 +74,23 @@ export class ReorderDirective {
   onMove(e: PointerEvent): void {
     if (this.from < 0) return;
     const dy = e.clientY - this.startY;
-    const centre = this.rects[this.from].top + this.rects[this.from].height / 2 + dy;
-    const mid = (i: number): number => this.rects[i].top + this.rects[i].height / 2;
-    let to = this.from;
-    while (to < this.rows.length - 1 && centre > mid(to + 1)) to++;
-    while (to > 0 && centre < mid(to - 1)) to--;
+
+    // La place visée se lit sous le **doigt**, pas au centre de la ligne tirée.
+    // Avec des lignes de hauteurs différentes (un parent et ses sous-tâches face
+    // à une ligne simple), comparer les centres demandait de tirer bien au-delà
+    // de la ligne voulue pour la dépasser, ce qui rendait le geste inutilisable.
+    // On compte les autres lignes dont le milieu est déjà passé : c'est
+    // exactement l'indice d'arrivée, une fois la ligne tirée retirée du rang.
+    let to = 0;
+    for (let i = 0; i < this.rects.length; i++) {
+      if (i === this.from) continue;
+      if (e.clientY > this.rects[i].top + this.rects[i].height / 2) to++;
+      else break;
+    }
     this.to = to;
 
+    // Les autres se décalent d'exactement la place que la ligne tirée libère ou
+    // réclame : sa hauteur, écart compris.
     for (let i = 0; i < this.rows.length; i++) {
       if (i === this.from) { this.rows[i].style.transform = `translateY(${dy}px)`; continue; }
       const shift = to > this.from && i > this.from && i <= to ? -this.step
