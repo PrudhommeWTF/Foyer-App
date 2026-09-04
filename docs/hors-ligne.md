@@ -9,7 +9,7 @@ pourquoi le cache ne fige pas la version installée.
   aucune connexion. Un service worker garde la coquille (le HTML d'entrée et
   les fichiers du build).
 - **Le foyer s'affiche**, tel qu'il était à la dernière connexion : le dernier
-  document lu est gardé dans le navigateur, avec sa version et la date de cette
+  document lu est gardé dans **IndexedDB**, avec sa version et la date de cette
   lecture.
 - **Un bandeau le dit**, en haut de l'écran : « Hors ligne. Voici votre foyer
   tel qu'il était le 04/09/2026 à 15:41. Vos gestes partiront au retour du
@@ -59,16 +59,41 @@ le HTML d'entrée et prend ce qu'il référence. C'est exact par construction.
 Le cache est borné à 60 entrées, les plus anciennes évincées d'abord : sans
 cela, chaque version y laisserait ses fichiers pour toujours.
 
+## Où le document est gardé, et pourquoi là
+
+Dans **IndexedDB**, pas dans le stockage local. Et pas pour la raison qu'on
+croit : sur iOS, l'effacement des données de site après sept jours sans visite
+frappe les deux de la même façon, et c'est l'**ajout à l'écran d'accueil** qui
+en exempte, pas le choix du magasin. Les trois vraies raisons :
+
+- il **libère tout le budget du stockage local** pour les files de courses et
+  de tâches, qui elles ne sont pas remplaçables : ce qui n'est pas encore parti
+  n'existe nulle part ailleurs ;
+- son quota se compte en centaines de mégaoctets, contre environ cinq pour le
+  stockage local, partagés avec le reste ;
+- il n'écrit pas sur le fil principal : enregistrer un gros document ne fige
+  pas l'interface.
+
+L'application demande au passage à ne pas être évincée sous la pression du
+disque (`navigator.storage.persist()`). Le navigateur accorde selon ses propres
+règles, et refuse sans conséquence : c'est une demande qui ne coûte rien, pas
+une garantie.
+
+Un foyer venant d'une version précédente a son document dans le stockage local :
+il **remonte tout seul** dans IndexedDB au premier démarrage, et en disparaît.
+Le nettoyage se fait à l'écriture, et pas seulement à la relecture : un foyer
+qui démarre en ligne ne relit jamais le cache, et l'ancienne copie resterait
+sinon pour toujours à occuper la place qu'on cherche à libérer.
+
 ## Ce qu'il faut savoir avant de s'en servir
 
-- **Le document du foyer est écrit en clair** dans le stockage local du
-  navigateur, comme l'est déjà le jeton de session. Sur un appareil partagé,
-  c'est à considérer. Il est **effacé à la déconnexion**.
-- **Un document trop volumineux n'est pas gardé** (au-delà de 2 Mo). Le
-  stockage local est partagé avec les files de courses et de tâches, et
-  celles-ci ne sont pas remplaçables : ce qui n'est pas encore parti n'existe
-  nulle part ailleurs. Entre perdre des coches et perdre le démarrage hors
-  ligne, le choix est fait. Le cas est écrit dans la console.
+- **Le document du foyer est écrit en clair**, comme l'est déjà le jeton de
+  session dans le stockage local. Sur un appareil partagé, c'est à considérer.
+  Il est **effacé à la déconnexion**, des deux magasins.
+- **Un document trop volumineux n'est pas gardé** (au-delà de 10 Mo). La borne
+  ne protège plus un quota partagé mais le coût d'écriture : le document est
+  réenregistré à chaque sauvegarde, et au-delà de cet ordre de grandeur c'est
+  le document lui-même qui a un problème. Le cas est écrit dans la console.
 - **Les pièces jointes ne comptent pas** dans cette taille : elles ont quitté
   le document à la migration 5.
 
@@ -80,11 +105,21 @@ await caches.keys();                                  // ['foyer-shell-v1']
 (await (await caches.open('foyer-shell-v1')).keys()).map((r) => r.url);
 
 // De quand date le foyer gardé
-JSON.parse(localStorage.getItem('foyer.doc')).at;
+const lire = () => new Promise((ok) => {
+  const r = indexedDB.open('foyer', 1);
+  r.onsuccess = () => {
+    const g = r.result.transaction('doc', 'readonly').objectStore('doc').get('household');
+    g.onsuccess = () => { r.result.close(); ok(JSON.parse(g.result)); };
+  };
+});
+(await lire()).at;
 
 // Ce qui attend de partir
 JSON.parse(localStorage.getItem('foyer.taskQueue') || '[]').length;
 JSON.parse(localStorage.getItem('foyer.shopQueue') || '[]').length;
+
+// Les données sont-elles à l'abri d'une éviction ?
+await navigator.storage.persisted();
 ```
 
 Pour repartir de zéro (le service worker se réinstalle au chargement suivant) :
@@ -92,7 +127,8 @@ Pour repartir de zéro (le service worker se réinstalle au chargement suivant) 
 ```js
 for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
 for (const n of await caches.keys()) await caches.delete(n);
-localStorage.removeItem('foyer.doc');
+indexedDB.deleteDatabase('foyer');
+localStorage.removeItem('foyer.doc');   // reliquat d'une version précédente
 ```
 
 ## Où vit le code
@@ -100,7 +136,7 @@ localStorage.removeItem('foyer.doc');
 | Fichier | Rôle |
 |---|---|
 | `frontend/public/sw.js` | Le service worker : préchargement de la coquille, réseau d'abord pour le HTML, cache d'abord pour le build, et les rappels. |
-| `frontend/src/app/core/offline-doc.ts` | Mise en forme et relecture du dernier document, avec ses bornes. Pur, testé. |
+| `frontend/src/app/core/offline-doc.ts` | Mise en forme et relecture du dernier document (pur, testé), et l'accès à IndexedDB : garde, relecture, reprise de l'ancienne copie, effacement, demande de persistance. |
 | `frontend/src/app/core/foyer.store.ts` | Enregistrement du service worker au démarrage, garde du document, reprise depuis le cache quand le réseau manque, effacement à la déconnexion. |
 | `frontend/src/app/shell/shell.ts` | Le bandeau qui dit de quand date ce qui est affiché. |
 

@@ -4,7 +4,7 @@ import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
-import { DOC_CACHE_KEY, packDoc, readDoc, staleLabel } from './offline-doc';
+import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -311,6 +311,9 @@ export class FoyerStore {
     // réseau ouvre quelque chose. L'attacher aux rappels le réservait à ceux
     // qui les avaient activés.
     void this.ensureServiceWorker();
+    // Demandé une fois, sans rien attendre en retour : le navigateur accorde ou
+    // non de ne pas évincer nos données sous la pression du disque.
+    void askPersistence();
     // First run? The setup wizard must create the household + admin account.
     try {
       const status = await this.api.setupStatus();
@@ -338,7 +341,7 @@ export class FoyerStore {
           // Le réseau manque : plutôt qu'une application vide, le foyer tel
           // qu'on l'a laissé, avec la date de cette lecture. Sans document
           // gardé, on garde le message d'erreur, qui reste la vérité.
-          if (this.hydrateFromCache()) this.syncOffline.set(true);
+          if (await this.hydrateFromCache()) this.syncOffline.set(true);
           else this.docError.set((e as Error).message);
         } else {
           this.api.token = null;
@@ -385,18 +388,18 @@ export class FoyerStore {
   // Gardé à chaque lecture réussie et à chaque enregistrement réussi : ce sont
   // les deux moments où l'on sait ce que le serveur a. Voir offline-doc.ts.
 
-  private persistDoc(): void {
+  private async persistDoc(): Promise<void> {
     const d = this._data(); if (!d) return;
     const raw = packDoc(d, this.docVersion, new Date().toISOString());
     if (!raw) {
       // Trop gros : on retire ce qui traînait plutôt que de laisser un document
       // périmé prendre la place, et on le dit une fois dans la console.
-      try { localStorage.removeItem(DOC_CACHE_KEY); } catch { /* ignore */ }
+      await clearCachedDoc();
       // eslint-disable-next-line no-console
       console.warn('[foyer] hors ligne : document trop volumineux pour être gardé, le démarrage hors ligne est indisponible.');
       return;
     }
-    try { localStorage.setItem(DOC_CACHE_KEY, raw); } catch { /* quota : le démarrage hors ligne n'aura rien, les files restent prioritaires */ }
+    await saveCachedDoc(raw);
   }
 
   /**
@@ -404,10 +407,8 @@ export class FoyerStore {
    * daté. Vrai quand il y avait quelque chose à montrer. Les files d'attente
    * sont rejouées par-dessus, comme après une lecture réussie.
    */
-  private hydrateFromCache(): boolean {
-    let raw: string | null = null;
-    try { raw = localStorage.getItem(DOC_CACHE_KEY); } catch { return false; }
-    const garde = readDoc<HouseholdState>(raw);
+  private async hydrateFromCache(): Promise<boolean> {
+    const garde = readDoc<HouseholdState>(await loadCachedDoc());
     if (!garde) return false;
     this._data.set(this.normalise(garde.state));
     this.docVersion = garde.version;
@@ -433,7 +434,7 @@ export class FoyerStore {
     this.pending = [];
     this.docLoadedAt.set(new Date().toISOString());
     this.docError.set('');
-    this.persistDoc();
+    void this.persistDoc();
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
@@ -714,7 +715,7 @@ export class FoyerStore {
     this.docError.set('');
     this.docStaleAt.set('');
     // Le document gardé porte la vie du foyer : il ne survit pas à une déconnexion.
-    try { localStorage.removeItem(DOC_CACHE_KEY); } catch { /* ignore */ }
+    void clearCachedDoc();
     this.ui.set(initialUi());
     this.isAdmin.set(false);
     this.currentMemberId.set(null);
@@ -813,7 +814,7 @@ export class FoyerStore {
           this.pending = this.pending.slice(envoyees);
           this.saveState.set('idle');
           this.docStaleAt.set('');
-          this.persistDoc();
+          void this.persistDoc();
           if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
           return;
         } catch (e) {
