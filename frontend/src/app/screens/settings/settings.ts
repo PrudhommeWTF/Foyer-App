@@ -286,6 +286,9 @@ const GESTES: Section[] = [
                                 <div><span>Espace disque restant</span><b>inconnu sur cette plateforme</b></div>
                               }
                               <div><span>Contenu</span><b>{{ st.counts.members }} membres · {{ st.counts.events }} événements · {{ st.counts.tasks }} tâches · {{ st.counts.recipes }} recettes · {{ st.counts.files }} documents</b></div>
+                              <!-- Un refus d'Apple se présente comme « HTTP 403 » à côté d'un
+                                   appareil, sans dire que c'est ce contact qui ne convient pas. -->
+                              <div><span>Contact déclaré aux services push</span><b class="chemin">{{ st.pushSubject }}</b></div>
                             </div>
                           } @else {
                             <div class="hint">État du service indisponible.</div>

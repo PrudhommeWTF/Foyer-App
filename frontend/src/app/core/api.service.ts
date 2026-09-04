@@ -143,6 +143,8 @@ export interface SystemStatus {
   dataBytes: number;
   /** Null quand la plateforme ne sait pas le dire : l'écran l'annonce plutôt que d'afficher zéro. */
   disk: { free: number; total: number } | null;
+  /** Le contact déclaré aux services push : c'est lui qu'Apple refuse quand un envoi rend 403. */
+  pushSubject: string;
   snapshots: Snapshot[];
   counts: { members: number; events: number; tasks: number; recipes: number; files: number };
 }
