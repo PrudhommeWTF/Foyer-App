@@ -78,9 +78,20 @@ describe('les valeurs par défaut du registre sont celles du code d’avant', ()
     assert.equal(setting('mealTimeMorning', vide), '08:00');
     assert.equal(setting('mealTimeNoon', vide), '12:30');
     assert.equal(setting('mealTimeEvening', vide), '19:30');
-    assert.equal(setting('sessionDays', vide), 30);
-    assert.equal(setting('passwordMinLength', vide), 6);
     assert.equal(setting('maxUploadMb', vide), 20);
     assert.equal(setting('readingDueDays', vide), 30);
+  });
+
+  // Ces deux-là ont changé, à dessein, quand l'application est passée d'un
+  // réseau domestique à une adresse publique. Ils restent écrits ici pour la
+  // même raison que les autres : les rebaisser doit rester un geste conscient,
+  // pas un effet de bord.
+  it('les défauts durcis pour l’exposition publique', () => {
+    assert.equal(setting('sessionDays', vide), 7,
+      'trente jours de session sur un téléphone perdu, c’est un mois d’accès au foyer');
+    assert.equal(setting('passwordMinLength', vide), 12,
+      'six caractères tiennent quelques secondes hors ligne si la base fuit');
+    assert.equal(setting('inactivityHours', vide), 12,
+      'un appareil laissé ouvert quelque part finit par se refermer');
   });
 });
