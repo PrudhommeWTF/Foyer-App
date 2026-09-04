@@ -6,6 +6,7 @@ import { buildIcs } from '../src/ics';
 import { Deadline } from '../src/finances/contracts';
 import { EMPTY_STATE } from '../src/seed';
 import type { HouseholdState } from '../src/seed';
+import type { TaskItem } from '../src/tasks/ops';
 
 const state = (over: Partial<HouseholdState> = {}): HouseholdState =>
   ({ ...structuredClone(EMPTY_STATE), familyName: 'Foyer Dupont', ...over }) as HouseholdState;
@@ -79,13 +80,13 @@ describe('flux ICS', () => {
 });
 
 describe('flux ICS : les tâches datées, sur demande', () => {
-  const tache = (over: Record<string, unknown> = {}) => ({
+  const tache = (over: Partial<TaskItem> = {}): TaskItem => ({
     id: 't1', listId: 'l1', text: 'Sortir les poubelles', who: ['m1'], due: '2026-09-08', done: false, ...over,
   });
-  const avec = (tasks: Record<string, unknown>[], icsTasks = true): HouseholdState => state({
+  const avec = (tasks: TaskItem[], icsTasks = true): HouseholdState => state({
     members: [{ id: 'm1', name: 'Marie', role: 'Maman', color: '#000', ini: 'M' }],
     taskLists: [{ id: 'l1', name: 'Maison', color: '#000', icon: 'checklist', kind: 'taches', scope: 'shared', position: 0 }],
-    tasks: tasks as HouseholdState['tasks'],
+    tasks,
     settings: { ...EMPTY_STATE.settings, icsTasks },
   });
 
