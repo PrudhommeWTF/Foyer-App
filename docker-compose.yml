@@ -19,8 +19,10 @@ services:
       # Extra cross-origin origins (comma-separated). Empty in single-container setups.
       # FOYER_CORS_ORIGINS: "https://foyer.mondomaine.fr"
       # First launch shows the setup wizard (creates household + admin account).
-      # Close registrations once your household is created:
-      FOYER_ALLOW_SIGNUP: "true"
+      # Self-registration is OFF by default and is managed from the app
+      # (Paramètres > Accès et comptes). Setting FOYER_ALLOW_SIGNUP here would
+      # pin it to that value and grey out the switch in the UI, so leave it out.
+      # FOYER_ALLOW_SIGNUP: "false"
 
 volumes:
   foyer-data:

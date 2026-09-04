@@ -209,6 +209,10 @@ describe('réglages : ce que l’environnement impose', () => {
   });
 
   it('la valeur renvoyée est celle qui s’applique, pas celle rangée dans le document', async () => {
+    // Le foyer a délibérément allumé l'inscription ; la machine, elle, l'impose
+    // éteinte. C'est le seul montage où les deux valeurs diffèrent, donc le seul
+    // qui prouve laquelle des deux l'écran affiche.
+    await appel('PATCH', 'admin', { changes: { signupAllowed: true } });
     process.env.FOYER_ALLOW_SIGNUP = 'false';
     env['FOYER_ALLOW_SIGNUP'] = 'false';
     try {
@@ -220,6 +224,9 @@ describe('réglages : ce que l’environnement impose', () => {
   });
 
   it('un réglage imposé par l’environnement est refusé à l’écriture, en nommant la variable', async () => {
+    // Posé avant que la variable n'arrive : ce que le document garde ensuite
+    // montre que l'écriture refusée n'a rien changé.
+    await appel('PATCH', 'admin', { changes: { signupAllowed: true } });
     env['FOYER_ALLOW_SIGNUP'] = 'false';
     process.env.FOYER_ALLOW_SIGNUP = 'false';
     try {

@@ -265,6 +265,36 @@ function requireAdmin(req: AuthedRequest, res: Response, next: NextFunction): vo
   next();
 }
 
+/**
+ * Un compte connecté ne suffit pas : il faut être **quelqu'un du foyer**.
+ *
+ * Un compte peut exister sans être rattaché à un membre : c'est le cas de tout
+ * compte né de `POST /auth/register`, qui ne demande qu'une adresse et un mot de
+ * passe. Sans ce garde, un tel compte lisait et écrivait le document du foyer
+ * entier, les finances et les pièces jointes, exactement comme un parent : il
+ * suffisait que les inscriptions soient ouvertes pour que n'importe qui, depuis
+ * Internet, obtienne l'agenda des enfants et l'adresse de la maison.
+ *
+ * Couper les inscriptions ferme la porte ; ce garde-ci retire la pièce derrière.
+ * Les deux sont nécessaires : le réglage peut être rallumé, une base peut déjà
+ * porter un compte orphelin, et un membre supprimé laisse son compte derrière lui.
+ *
+ * Deux routes restent ouvertes à un compte sans membre, à dessein : `/me`, pour
+ * que l'application sache quoi afficher plutôt que d'enchaîner les 403 sans rien
+ * expliquer, et `/me/credentials`, pour que la personne puisse changer son mot de
+ * passe sans dépendre de personne.
+ */
+function requireMember(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (!currentMember(req)) {
+    res.status(403).json({
+      error: 'Ce compte n’est rattaché à aucun membre du foyer : il n’a accès à rien. '
+        + 'Demandez à un administrateur du foyer de vous rattacher à un membre depuis l’écran « Famille ».',
+    });
+    return;
+  }
+  next();
+}
+
 const api = express.Router();
 
 api.get('/health', (_req, res) => res.json({ ok: true }));
@@ -358,11 +388,11 @@ api.post('/auth/register', authLimiter, (req: Request, res: Response) => {
   res.status(201).json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
 });
 
-api.get('/state', auth, (_req, res) => {
+api.get('/state', auth, requireMember, (_req, res) => {
   res.json(getHousehold());
 });
 
-api.put('/state', auth, (req: AuthedRequest, res: Response) => {
+api.put('/state', auth, requireMember, (req: AuthedRequest, res: Response) => {
   const state = req.body?.state as HouseholdState | undefined;
   if (state == null || typeof state !== 'object') {
     res.status(400).json({ error: 'État invalide' });
@@ -465,7 +495,7 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
  * les cinq secondes tant qu'ils sont visibles, autant que la réponse tienne en
  * trois lignes le reste du temps.
  */
-api.get('/live', auth, (req: Request, res: Response) => {
+api.get('/live', auth, requireMember, (req: Request, res: Response) => {
   const shop = getShopping();
   const since = parseInt(String(req.query['since'] ?? ''), 10);
   if (Number.isInteger(since) && since === shop.version) {
@@ -529,7 +559,7 @@ api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response
 });
 
 // ---- Member login accounts (admin-managed) ----
-api.get('/members/accounts', auth, (_req, res) => {
+api.get('/members/accounts', auth, requireMember, (_req, res) => {
   res.json({ accounts: listMemberAccounts() });
 });
 
@@ -582,12 +612,12 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, financesRouter(requireAdmin));
+api.use('/finances', auth, requireMember, financesRouter(requireAdmin));
 
 // Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
 // plutôt que par enregistrement du document entier, pour que deux
 // administrateurs qui règlent deux choses ne s'écrasent pas.
-api.use('/settings', auth, settingsRouter({
+api.use('/settings', auth, requireMember, settingsRouter({
   memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
   isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
   isChild: (req) => !!currentMember(req as AuthedRequest)?.enfant,
@@ -598,14 +628,14 @@ api.use('/settings', auth, settingsRouter({
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).
-api.use('/files', auth, filesRouter(() => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024));
+api.use('/files', auth, requireMember, filesRouter(() => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024));
 
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
-api.use('/shopping', auth, shoppingRouter());
+api.use('/shopping', auth, requireMember, shoppingRouter());
 
 // Tâches : même dispositif, même raison. Voir tasks/ops.ts.
-api.use('/tasks', auth, tasksRouter());
+api.use('/tasks', auth, requireMember, tasksRouter());
 
 // Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
 //
@@ -615,11 +645,11 @@ api.use('/tasks', auth, tasksRouter());
 // quand c'était une adresse locale, d'où l'intérêt de pouvoir la poser sans
 // éditer un fichier sur le serveur.
 const appUrl = (): string => String(effectiveSetting('publicUrl') || '');
-api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
+api.use('/push', auth, requireMember, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
-api.use('/recipes', auth, recipesRouter(() => effectiveSetting('recipeImport') === true));
+api.use('/recipes', auth, requireMember, recipesRouter(() => effectiveSetting('recipeImport') === true));
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -655,7 +685,7 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
  * modifier puis recharger la page sans redémarrer le service est précisément ce
  * qu'on attend d'un réglage tenu dans un fichier.
  */
-api.get('/home/rules', auth, (_req, res) => {
+api.get('/home/rules', auth, requireMember, (_req, res) => {
   const outcome = loadRules(DATA_DIR);
   if (outcome.errors.length) {
     log.attention(`accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
@@ -663,7 +693,7 @@ api.get('/home/rules', auth, (_req, res) => {
   res.json(outcome);
 });
 
-api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) => {
+api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, res: Response) => {
   const academie = String(req.query['academie'] || '').trim();
   if (!academie) { res.json({ holidays: [], academie: '' }); return; }
   const cache = getSchoolHolidaysCache(academie);
@@ -678,7 +708,7 @@ api.get('/calendar/school-holidays', auth, async (req: Request, res: Response) =
   }
 });
 
-api.get('/calendar/ics', auth, (_req, res) => {
+api.get('/calendar/ics', auth, requireMember, (_req, res) => {
   let token = getIcsToken();
   if (!token) { token = crypto.randomBytes(18).toString('hex'); setIcsToken(token); }
   res.json({ token });
@@ -701,11 +731,11 @@ api.get('/calendar/feed.ics', (req: Request, res: Response) => {
 });
 
 // ---- System / self-update ----
-api.get('/system/version', auth, (_req, res) => {
+api.get('/system/version', auth, requireMember, (_req, res) => {
   res.json({ current: currentVersion(), selfUpdate: selfUpdateEnabled(), repo: GITHUB_REPO });
 });
 
-api.get('/system/update-check', auth, async (_req, res) => {
+api.get('/system/update-check', auth, requireMember, async (_req, res) => {
   const current = currentVersion();
   try {
     const rel = await fetchLatestRelease();
@@ -792,7 +822,7 @@ api.delete('/system/backup/:name', auth, requireAdmin, (req: Request, res: Respo
   res.json({ ok: true });
 });
 
-api.get('/system/update-status', auth, (_req, res) => {
+api.get('/system/update-status', auth, requireMember, (_req, res) => {
   try {
     const p = path.join(DATA_DIR, 'update-status.json');
     if (fs.existsSync(p)) {
@@ -826,67 +856,83 @@ if (fs.existsSync(STATIC_DIR)) {
   });
 }
 
-// ---- Rappels : clés VAPID, affectations, planificateur ----
-// Les clés sont générées une fois et gardées en base : en changer invaliderait
-// tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
-const vapid = initPush(
-  db,
-  { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT },
-  () => String(effectiveSetting('publicUrl') || ''),
-);
-log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}), `
-  + `contact déclaré aux services push : ${vapid.subject.subject}`);
-if (vapid.subject.rejected) {
-  // Le dire au démarrage, pas au premier rappel raté : un refus d'Apple se
-  // présente comme un « HTTP 403 » et n'apprend rien à qui le lit.
-  log.attention(`Notifications : le contact « ${vapid.subject.rejected.value} » a été écarté (${vapid.subject.rejected.reason}). `
-    + `Posez FOYER_VAPID_SUBJECT, ou renseignez l’adresse publique du foyer dans Paramètres, section « Notifications ».`);
-}
-
-const notifLog = (line: string): void => log.info(line);
+export { app, auth, requireAdmin, requireMember };
 
 /**
- * Ce membre veut-il ce genre de rappel sur son téléphone ?
+ * Ce que le service fait en plus de répondre : les rappels et l'écoute réseau.
  *
- * La préférence est personnelle : chacun coupe les siennes sans rien imposer
- * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
+ * Séparé du montage des routes pour une raison précise : les tests de sécurité
+ * doivent pouvoir monter **les vraies routes, avec leurs vrais gardes**, sans
+ * ouvrir de port ni démarrer un planificateur qui enverrait des notifications
+ * pendant la CI. Un garde éprouvé sur une application reconstruite pour le test
+ * n'éprouve que la copie.
  */
-const memberWants = (memberId: string, kind: 'reminder' | 'assigned'): boolean => {
-  const state = getHousehold().state as HouseholdState;
-  // Les deux clés sont écrites en toutes lettres : une clé calculée ne dit rien
-  // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
-  return kind === 'reminder'
-    ? setting('pushReminders', state, memberId)
-    : setting('pushAssigned', state, memberId);
-};
+export function start(): void {
+  // ---- Rappels : clés VAPID, affectations, planificateur ----
+  // Les clés sont générées une fois et gardées en base : en changer invaliderait
+  // tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
+  const vapid = initPush(
+    db,
+    { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT },
+    () => String(effectiveSetting('publicUrl') || ''),
+  );
+  log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}), `
+    + `contact déclaré aux services push : ${vapid.subject.subject}`);
+  if (vapid.subject.rejected) {
+    // Le dire au démarrage, pas au premier rappel raté : un refus d'Apple se
+    // présente comme un « HTTP 403 » et n'apprend rien à qui le lit.
+    log.attention(`Notifications : le contact « ${vapid.subject.rejected.value} » a été écarté (${vapid.subject.rejected.reason}). `
+      + `Posez FOYER_VAPID_SUBJECT, ou renseignez l’adresse publique du foyer dans Paramètres, section « Notifications ».`);
+  }
 
-// Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
-onAssigned((memberId, task, opId) => {
-  // Le foyer a suspendu les rappels, ou ce membre ne veut pas être prévenu des
-  // affectations : rien ne part, et rien n'est noté comme manqué.
-  if (effectiveSetting('pushPaused') === true || !memberWants(memberId, 'assigned')) return;
-  const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
-  void notify(`assign|${opId}|${memberId}`, [memberId], {
-    kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
-    url: appUrl(), taskId: task.id, tag: 'task-' + task.id,
-  }).then((r) => {
-    const m = r.members[0];
-    if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
-  }).catch((e) => notifLog('Notifications : affectation non envoyée : ' + (e as Error).message));
-});
+  const notifLog = (line: string): void => log.info(line);
 
-startScheduler({
-  tasks: () => (getHousehold().state as HouseholdState).tasks || [],
-  accounts: () => accountsOf().map((a) => a.memberId),
-  url: appUrl,
-  rules: () => ({
-    paused: effectiveSetting('pushPaused') === true,
-    quiet: { from: String(effectiveSetting('quietFrom')), to: String(effectiveSetting('quietTo')) },
-  }),
-  wants: memberWants,
-  log: notifLog,
-});
+  /**
+   * Ce membre veut-il ce genre de rappel sur son téléphone ?
+   *
+   * La préférence est personnelle : chacun coupe les siennes sans rien imposer
+   * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
+   */
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned'): boolean => {
+    const state = getHousehold().state as HouseholdState;
+    // Les deux clés sont écrites en toutes lettres : une clé calculée ne dit rien
+    // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
+    return kind === 'reminder'
+      ? setting('pushReminders', state, memberId)
+      : setting('pushAssigned', state, memberId);
+  };
 
-app.listen(PORT, '0.0.0.0', () => {
-  log.info(`API + app disponibles sur http://0.0.0.0:${PORT}`);
-});
+  // Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
+  onAssigned((memberId, task, opId) => {
+    // Le foyer a suspendu les rappels, ou ce membre ne veut pas être prévenu des
+    // affectations : rien ne part, et rien n'est noté comme manqué.
+    if (effectiveSetting('pushPaused') === true || !memberWants(memberId, 'assigned')) return;
+    const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
+    void notify(`assign|${opId}|${memberId}`, [memberId], {
+      kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
+      url: appUrl(), taskId: task.id, tag: 'task-' + task.id,
+    }).then((r) => {
+      const m = r.members[0];
+      if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
+    }).catch((e) => notifLog('Notifications : affectation non envoyée : ' + (e as Error).message));
+  });
+
+  startScheduler({
+    tasks: () => (getHousehold().state as HouseholdState).tasks || [],
+    accounts: () => accountsOf().map((a) => a.memberId),
+    url: appUrl,
+    rules: () => ({
+      paused: effectiveSetting('pushPaused') === true,
+      quiet: { from: String(effectiveSetting('quietFrom')), to: String(effectiveSetting('quietTo')) },
+    }),
+    wants: memberWants,
+    log: notifLog,
+  });
+
+  app.listen(PORT, '0.0.0.0', () => {
+    log.info(`API + app disponibles sur http://0.0.0.0:${PORT}`);
+  });
+}
+
+// Lancé comme service : on démarre. Importé par un test : on ne démarre pas.
+if (require.main === module) start();

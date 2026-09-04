@@ -753,14 +753,90 @@ autorisations plutôt que par la faiblesse du facteur.
 
 ---
 
-## 10. Plan de correction proposé
+## 10. Tranche 1 : ce qui est corrigé
+
+Appliquée le 4 septembre 2026. Trois gestes, plus le socle de test.
+
+**1. `signupAllowed` passe à `false` par défaut** (`backend/src/settings/registry.ts`, et
+son miroir `frontend/src/app/core/settings/registry.ts`). Le libellé explique
+désormais pourquoi, et dit où ouvrir un accès pour de bon.
+
+**2. L'installeur et le compose ne posent plus `FOYER_ALLOW_SIGNUP`**
+(`deploy/lxc/install.sh`, `docker-compose.yml`). Poser la variable verrouillait
+le réglage et grisait l'interrupteur dans l'application. En prime, l'installeur
+**retire** la ligne `FOYER_ALLOW_SIGNUP=true` des fichiers d'environnement
+existants, en le disant à l'écran : sans cela, chaque installation déjà en place
+serait restée ouverte après la mise à jour. Une valeur posée à la main (`false`,
+ou `true` assumé) n'est pas touchée.
+
+**3. Le garde structurel** (`backend/src/server.ts`, `requireMember`). Un compte
+qui n'est rattaché à aucun membre du foyer reçoit 403 sur **toute** route
+métier : le document, les finances, les fichiers, les courses, les tâches, les
+rappels, les réglages, l'import de recette. Deux routes restent ouvertes à
+dessein : `GET /me`, pour que l'écran sache quoi dire plutôt que d'enchaîner les
+403 sans rien expliquer, et `PUT /me/credentials`, pour que la personne change
+son mot de passe sans dépendre de personne.
+
+C'est le garde qui compte : le réglage peut être rallumé, une base peut déjà
+porter un compte orphelin, et un membre supprimé laisse son compte derrière lui.
+
+**4. Le socle de test.** `src/server.ts` exporte son application et regroupe ses
+effets de bord (clés VAPID, planificateur, écoute réseau) dans `start()`, lancé
+seulement quand le fichier est exécuté comme service. Les tests montent donc
+**les vraies routes avec leurs vrais gardes**, sans ouvrir de port ni envoyer de
+notification pendant la CI.
+
+Trois fichiers ajoutés, exécutés par `npm test` donc bloquants en CI :
+
+| Fichier | Ce qu'il verrouille |
+|---|---|
+| `test/auth-guards.test.ts` | 91 routes appelées sans jeton répondent 401, et la liste des 6 routes publiques est écrite à la main : en ajouter une demande de l'assumer devant la CI |
+| `test/auth-membre.test.ts` | Un compte sans membre reçoit 403 sur 27 routes, le message explique quoi faire, `/me` et `/me/credentials` restent ouvertes, un vrai membre passe, et le défaut de `signupAllowed` est `false` |
+| `test/auth-jwt.test.ts` | `alg: none`, autre secret, jeton expiré, compte disparu, en-tête mal formé, et `token_version` périmée : tous refusés |
+
+**Preuve que le test sert à quelque chose.** Gardes retirés des chaînes de routes
+et `signupAllowed` remis à `true`, en conservant le seul refactor de
+testabilité : `auth-membre` tombe à **4 tests sur 36**. Gardes rétablis :
+**36 sur 36**. La suite complète du backend passe de 813 à **849 tests, tous au
+vert**, et les deux builds ainsi que le lint « code mort » sont propres des deux
+côtés.
+
+**Vérifié dans le navigateur** : une connexion avec un compte sans membre reste
+sur l'écran de connexion et affiche le message de refus dans le style de
+l'application ; l'administrateur, lui, entre normalement.
+
+### Ce que la vérification navigateur a fait apparaître, et qui n'était pas au rapport
+
+L'écran de connexion **ne propose la création de compte dans aucun cas**, même
+avec `signupAllowed` à `true` : il affiche toujours « Votre foyer est géré par
+son administrateur ». En cherchant pourquoi : `FoyerStore.register()` et
+`ApiService.register()` existent mais **ne sont appelés par aucun composant**, et
+le signal `allowSignup`, renseigné au démarrage, n'est lu par **aucun gabarit**.
+
+Autrement dit, `POST /api/auth/register` est un endpoint public qu'aucune partie
+du produit n'utilise, et `signupAllowed` gouverne une porte qui n'a pas de
+poignée. C'est du code mort au sens de `CLAUDE.md`, et c'est une surface
+d'attaque publique entretenue pour rien.
+
+**Recommandation, à trancher pour la tranche 2 :** supprimer entièrement le
+chemin d'inscription libre, backend et frontend, ainsi que le réglage
+`signupAllowed` et la variable `FOYER_ALLOW_SIGNUP`. La manière prévue d'ouvrir
+un accès est déjà `POST /api/members/:memberId/account`, réservée à un
+administrateur, qui rattache le compte à un membre. Cela retire une route
+publique de la surface exposée, et supprime un réglage qui ne pilote rien de
+visible.
+
+Ce n'est pas fait dans cette tranche : c'est une décision de produit (l'inscription
+libre existe-t-elle comme fonctionnalité ?), pas un détail d'implémentation, et
+elle sort de ce que le rapport validé annonçait.
+
+---
+
+## 11. Plan de correction proposé
 
 À valider avant que je touche au code.
 
-**Tranche 1, les critiques et le socle de test.** C1 (les trois gestes, dont le
-garde structurel sur les comptes sans membre), plus l'extraction de
-l'application Express pour rendre les routes testables, plus les tests
-`auth-guards`, `auth-jwt`, `auth-sans-membre`. Déployable seule.
+**Tranche 1, les critiques et le socle de test.** Faite : voir la section 10.
 
 **Tranche 2, les élevées.** E1 à E9, chacune avec son test. Deux sous-lots :
 autorisations (E1, E5, E6, E9) puis robustesse (E2, E3, E4, E7, E8), pour que le

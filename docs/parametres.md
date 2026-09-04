@@ -168,12 +168,12 @@ Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a 
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `signupAllowed` | Autoriser la création de comptes | Foyer | oui / non | activé | — | Accès | `FOYER_ALLOW_SIGNUP` |
+| `signupAllowed` | Autoriser la création de comptes | Foyer | oui / non | désactivé | — | Accès | `FOYER_ALLOW_SIGNUP` |
 | `recipeImport` | Importer une recette depuis une adresse web | Foyer | oui / non | activé | — | Cuisine | `FOYER_RECIPE_IMPORT` |
 | `sessionDays` | Durée de validité d’une session | Foyer | entier | `30` | de 1 à 365 | Accès | — |
 | `passwordMinLength` | Longueur minimale d’un mot de passe | Foyer | entier | `6` | de 6 à 64 | Accès | — |
 
-- **Autoriser la création de comptes** (`signupAllowed`) : Quand c’est coupé, l’écran de connexion ne propose plus de créer un compte et l’API refuse les inscriptions. À laisser coupé dès que l’application est joignable depuis Internet.
+- **Autoriser la création de comptes** (`signupAllowed`) : Coupé par défaut : un formulaire d’inscription ouvert sur Internet laisse n’importe qui se créer un compte. La bonne manière d’ouvrir un accès est la fiche du membre, dans « Famille », qui rattache le compte à quelqu’un. Un compte créé par ce formulaire n’est rattaché à aucun membre, et n’accède donc à rien tant qu’un administrateur ne l’a pas rattaché.
 - **Importer une recette depuis une adresse web** (`recipeImport`) : La seule requête sortante de l’application, déclenchée par vous et journalisée : le carnet va lire la page d’une recette pour la recopier. Coupé, le bouton d’import disparaît du carnet.
 - **Durée de validité d’une session** (`sessionDays`) : Combien de jours une connexion reste valable avant de redemander le mot de passe. Les sessions déjà ouvertes gardent leur durée : c’est à la connexion suivante que la nouvelle valeur s’applique.
 - **Longueur minimale d’un mot de passe** (`passwordMinLength`) : S’applique à la création d’un accès et à tout changement de mot de passe. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.

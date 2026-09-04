@@ -144,8 +144,10 @@ PORT=${PORT}
 FOYER_DATA_DIR=${DATA_DIR}
 FOYER_STATIC_DIR=${APP_DIR}/backend/public
 FOYER_JWT_SECRET=${JWT}
-FOYER_ALLOW_SIGNUP=true
 # Au 1er démarrage, l'assistant de configuration crée le foyer + le compte admin.
+# La création de comptes est coupée par défaut, et se règle depuis l'application
+# (Paramètres, section « Accès et comptes »). Poser FOYER_ALLOW_SIGNUP ici la
+# verrouillerait sur cette valeur, sans possibilité de la changer depuis l'écran.
 # Mise à jour « en un clic » depuis l'interface (helper root via systemd).
 FOYER_SELF_UPDATE=${SELF_UPDATE}
 FOYER_GITHUB_REPO=${FOYER_GITHUB_REPO:-PrudhommeWTF/Foyer-App}
@@ -153,6 +155,17 @@ EOF
   chmod 600 "${ENV_FILE}"
 else
   log "${ENV_FILE} existe déjà — conservé."
+  # Les versions antérieures de ce script posaient FOYER_ALLOW_SIGNUP=true, ce qui
+  # laisse l'inscription libre ouverte et grise le réglage dans l'application : sur
+  # une instance joignable depuis Internet, n'importe qui peut alors se créer un
+  # compte. On retire la ligne pour rendre la main à l'écran Paramètres, dont le
+  # défaut est « coupé ». Une valeur posée à la main (false, ou true assumé après
+  # cette mise à jour) n'est pas touchée.
+  if grep -q '^FOYER_ALLOW_SIGNUP=true$' "${ENV_FILE}"; then
+    sed -i '/^FOYER_ALLOW_SIGNUP=true$/d' "${ENV_FILE}"
+    log "  ATTENTION : FOYER_ALLOW_SIGNUP=true retiré de ${ENV_FILE}."
+    log "  La création de comptes est désormais coupée, et se règle dans Paramètres > Accès et comptes."
+  fi
   # Applique la valeur d'auto-MAJ résolue (respecte l'existant ; override possible
   # avec SELF_UPDATE=true|false bash deploy/lxc/install.sh).
   if grep -q '^FOYER_SELF_UPDATE=' "${ENV_FILE}"; then
