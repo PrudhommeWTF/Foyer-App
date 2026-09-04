@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, PushStatus, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
@@ -27,7 +27,7 @@ import { UiState, initialUi } from './ui-state';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
-import { SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
+import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
 import { mealItemName, mealNames, recipeTime } from './meals';
 
 /**
@@ -3051,6 +3051,35 @@ export class FoyerStore {
   // détectable en CI. Personne ne touche `settings` directement.
 
   /**
+   * Ce que le serveur dit des réglages : ce qu'une variable d'environnement
+   * impose, qui a le droit d'écrire, et le journal des modifications. Les
+   * valeurs, elles, viennent du document, pour que la page reste lisible hors
+   * ligne.
+   */
+  readonly settingsInfo = signal<SettingsPayload | null>(null);
+
+  async loadSettingsInfo(): Promise<void> {
+    try { this.settingsInfo.set(await this.api.settings()); }
+    catch { /* hors ligne : la page se contente du document, sans le journal */ }
+  }
+
+  /**
+   * Pourquoi ce réglage n'est pas modifiable ici, ou une chaîne vide quand il
+   * l'est. Un champ grisé sans explication est pire qu'un champ absent : on
+   * croit à une panne.
+   */
+  settingLock(d: SettingDecl): string {
+    const impose = this.settingsInfo()?.overrides[d.key];
+    if (impose !== undefined) {
+      return `Imposé par la variable d’environnement ${d.envOverride} (« ${impose} »). `
+        + 'Pour le changer : éditez /etc/foyer/foyer.env (ou docker-compose.yml), puis redémarrez le service.';
+    }
+    if (d.scope === 'foyer' && !this.isAdmin()) return 'Réglage du foyer : seul un administrateur peut le modifier. Vous le voyez tel qu’il est appliqué.';
+    if (d.scope === 'personnel' && !this.currentMemberId()) return 'Votre compte n’est rattaché à aucun membre du foyer : cette préférence n’a personne à qui s’appliquer.';
+    return '';
+  }
+
+  /**
    * La valeur d'un réglage, ou son défaut quand le document ne la porte pas.
    *
    * Une préférence personnelle est lue dans la table du membre connecté : c'est
@@ -3058,6 +3087,18 @@ export class FoyerStore {
    */
   setting<K extends SettingKey>(key: K): SettingValue<K> {
     return setting(key, this._data(), this.currentMemberId());
+  }
+
+  /**
+   * Lit et écrit un réglage depuis sa **déclaration** plutôt que depuis sa clé.
+   *
+   * La page Paramètres est engendrée : elle parcourt le registre et ne connaît
+   * aucune clé à la compilation. La conversion de type est enfermée ici, à un
+   * seul endroit, et le contrôle de saisie du registre reste le juge.
+   */
+  readDeclared(d: SettingDecl): boolean | number | string { return this.setting(d.key as SettingKey); }
+  writeDeclared(d: SettingDecl, val: boolean | number | string): void {
+    this.setSetting(d.key as SettingKey, val as SettingValue<SettingKey>);
   }
 
   /**
@@ -3092,6 +3133,7 @@ export class FoyerStore {
     if (key === 'academie') void this.loadSchoolHolidays();
     try {
       await this.api.patchSettings({ [key]: val });
+      void this.loadSettingsInfo(); // le journal vient de gagner une ligne
     } catch (e) {
       this.putSettingLocally(key, avant);
       if (key === 'academie') void this.loadSchoolHolidays();

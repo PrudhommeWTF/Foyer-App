@@ -20,7 +20,7 @@ import { FinancesScreen } from '../screens/finances/finances';
 import { RepasScreen } from '../screens/repas';
 import { RecettesScreen } from '../screens/recettes';
 import { PlanningScreen } from '../screens/planning';
-import { SettingsScreen } from '../screens/settings';
+import { SettingsScreen } from '../screens/settings/settings';
 
 @Component({
   selector: 'app-shell',
