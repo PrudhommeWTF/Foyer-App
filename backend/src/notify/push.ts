@@ -36,8 +36,18 @@ export interface MemberReport { memberId: string; status: SendStatus; devices: n
 export interface SendReport { key: string; members: MemberReport[]; }
 
 let database: Database;
+/**
+ * Le sujet est résolu **à chaque envoi**, pas une fois au démarrage : il peut
+ * dépendre de l'adresse publique du foyer, qui est un réglage. La corriger
+ * répare les rappels sans redémarrer le service.
+ */
+let subject: () => string = () => FALLBACK_SUBJECT;
 let sender: Sender = async (d, p) => {
-  await webpush.sendNotification({ endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } }, JSON.stringify(p), { TTL: 6 * 3600 });
+  await webpush.sendNotification(
+    { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },
+    JSON.stringify(p),
+    { TTL: 6 * 3600, vapidDetails: { subject: subject(), publicKey: keys.publicKey, privateKey: keys.privateKey } },
+  );
 };
 let keys = { publicKey: '', privateKey: '' };
 
@@ -45,11 +55,69 @@ let keys = { publicKey: '', privateKey: '' };
 export function setSender(s: Sender): void { sender = s; }
 
 /**
+ * Le contact déclaré au service push quand rien d'autre ne convient.
+ *
+ * C'est le dépôt du projet : une adresse réelle, joignable, et qui ne dépend
+ * d'aucune configuration. Elle vaut mieux qu'une adresse locale, qu'Apple
+ * refuse (voir `resolveVapidSubject`).
+ */
+export const FALLBACK_SUBJECT = 'https://github.com/PrudhommeWTF/Foyer-App';
+
+/** Un sujet écarté, et pourquoi. Le démarrage le dit, plutôt que d'échouer plus tard. */
+export interface SubjectChoice { subject: string; rejected: { value: string; reason: string } | null; }
+
+/**
+ * Le contact que le service push peut joindre, tel qu'il part dans le jeton VAPID.
+ *
+ * **Apple refuse un contact qui ne mène nulle part** et répond alors 403
+ * (`BadJwtToken`), sans que rien d'autre ne le laisse deviner. Le défaut
+ * historique, « mailto:foyer@localhost », passe au travers du garde de la
+ * bibliothèque : sur une adresse `mailto:`, `URL.hostname` est vide, donc son
+ * contrôle du « localhost » ne se déclenche jamais. D'où ce contrôle-ci, qui
+ * regarde le domaine réel de l'adresse.
+ *
+ * Les candidats sont essayés dans l'ordre : ce que l'exploitant a posé, puis
+ * l'adresse publique du foyer, puis le dépôt du projet. Le premier qui tient la
+ * route gagne, et celui qui a été écarté est nommé.
+ */
+export function resolveVapidSubject(input: { env?: string; publicUrl?: string }): SubjectChoice {
+  let rejected: SubjectChoice['rejected'] = null;
+  for (const value of [input.env, input.publicUrl]) {
+    if (!value) continue;
+    const reason = subjectProblem(value);
+    if (!reason) return { subject: value, rejected };
+    // Seul le premier refus est rapporté : c'est celui que quelqu'un a posé
+    // exprès, donc celui qu'il faut corriger.
+    rejected ||= { value, reason };
+  }
+  return { subject: FALLBACK_SUBJECT, rejected };
+}
+
+/** Ce qui empêche un sujet de servir, ou une chaîne vide quand il convient. */
+export function subjectProblem(value: string): string {
+  let url: URL;
+  try { url = new URL(value); } catch { return 'ce n’est pas une adresse valide'; }
+  if (url.protocol !== 'https:' && url.protocol !== 'mailto:') return 'seules les adresses « https: » et « mailto: » sont acceptées';
+  // Sur un « mailto: », le domaine est dans le chemin, pas dans le hostname.
+  const domaine = url.protocol === 'mailto:' ? (url.pathname.split('@')[1] || '') : url.hostname;
+  if (!domaine) return 'aucun domaine dans cette adresse';
+  if (domaine === 'localhost' || domaine.endsWith('.localhost') || domaine.endsWith('.local')) {
+    return 'une adresse locale, qu’Apple refuse (erreur 403 BadJwtToken)';
+  }
+  if (!domaine.includes('.')) return 'un domaine sans point ne mène nulle part, et Apple le refuse';
+  return '';
+}
+
+/**
  * Prépare le canal : les clés VAPID sont générées une fois et gardées en base
  * (`hh_meta`), parce qu'en changer invalide tous les abonnements. Une paire
  * fournie par l'environnement l'emporte, pour qui veut la tenir ailleurs.
  */
-export function initPush(db: Database, env: { publicKey?: string; privateKey?: string; subject?: string } = {}): { publicKey: string; generated: boolean } {
+export function initPush(
+  db: Database,
+  env: { publicKey?: string; privateKey?: string; subject?: string } = {},
+  publicUrl: () => string = () => '',
+): { publicKey: string; generated: boolean; subject: SubjectChoice } {
   database = db;
   const read = (k: string): string => (db.prepare('SELECT value FROM hh_meta WHERE key = ?').get(k) as { value: string } | undefined)?.value || '';
   let generated = false;
@@ -65,10 +133,11 @@ export function initPush(db: Database, env: { publicKey?: string; privateKey?: s
       generated = true;
     }
   }
-  // Le sujet est le contact que le service push peut joindre en cas d'abus. Une
-  // adresse réelle vaut mieux, mais une adresse locale ne bloque pas l'envoi.
-  webpush.setVapidDetails(env.subject || 'mailto:foyer@localhost', keys.publicKey, keys.privateKey);
-  return { publicKey: keys.publicKey, generated };
+  // Le sujet est le contact que le service push peut joindre. Il est recalculé à
+  // chaque envoi, pour que corriger l'adresse publique du foyer répare les
+  // rappels sans redémarrage.
+  subject = () => resolveVapidSubject({ env: env.subject, publicUrl: publicUrl() }).subject;
+  return { publicKey: keys.publicKey, generated, subject: resolveVapidSubject({ env: env.subject, publicUrl: publicUrl() }) };
 }
 
 export function publicKey(): string { return keys.publicKey; }
@@ -132,6 +201,25 @@ function record(key: string, memberId: string, payload: PushPayload, status: Sen
   database.prepare('DELETE FROM hh_notif_sent WHERE rowid NOT IN (SELECT rowid FROM hh_notif_sent ORDER BY sent_at DESC, rowid DESC LIMIT 2000)').run();
 }
 
+/**
+ * Ce que le service push a répondu, en une poignée de mots.
+ *
+ * Sans cela, un refus se résume à « HTTP 403 » et n'est **pas diagnosticable** :
+ * c'est le corps de la réponse qui nomme la cause (« BadJwtToken » quand le
+ * contact déclaré ne convient pas, « VapidPkHashMismatch » quand l'appareil
+ * s'est abonné avec d'autres clés). Le corps est tronqué : il n'a pas vocation
+ * à remplir une colonne de base.
+ */
+export function reasonOf(e: unknown): string {
+  const body = (e as { body?: unknown }).body;
+  const texte = typeof body === 'string' ? body : body ? JSON.stringify(body) : '';
+  const propre = texte.replace(/\s+/g, ' ').trim();
+  if (!propre) return '';
+  // Apple et Google répondent du JSON : « {"reason":"BadJwtToken"} ».
+  const m = /"reason"\s*:\s*"([^"]+)"/.exec(propre);
+  return ' : ' + (m ? m[1] : propre.slice(0, 120));
+}
+
 /** Note un rappel manqué (service arrêté trop longtemps), sans l'envoyer. Une fois. */
 export function recordMissed(key: string, memberIds: string[], payload: PushPayload): number {
   let n = 0;
@@ -159,7 +247,7 @@ export async function notify(key: string, memberIds: string[], payload: PushPayl
         database.prepare("UPDATE hh_push_subs SET last_ok_at = datetime('now'), last_error = NULL WHERE id = ?").run(d.id);
       } catch (e) {
         const code = (e as { statusCode?: number }).statusCode;
-        const msg = code ? `HTTP ${code}` : (e as Error).message;
+        const msg = code ? `HTTP ${code}${reasonOf(e)}` : (e as Error).message;
         lastError = msg;
         if (code === 404 || code === 410) {
           // Abonnement mort : l'icône a été retirée, ou l'autorisation révoquée.

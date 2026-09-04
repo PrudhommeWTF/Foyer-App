@@ -118,7 +118,7 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`). **Réglable depuis l'application** (Paramètres → Accès et comptes) : cette variable, quand elle est posée, l'emporte et grise le champ | _(réglage du foyer)_ |
 | `FOYER_RECIPE_IMPORT` | Autoriser l'import d'une recette depuis une URL, seule requête sortante du module Cuisine (`true`/`false`). **Réglable depuis l'application** ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
 | `FOYER_VAPID_PUBLIC` / `FOYER_VAPID_PRIVATE` | Paire de clés des rappels Web Push. Sans elles, une paire est générée au premier démarrage et gardée en base (en changer invalide tous les abonnements) | _(générées)_ |
-| `FOYER_VAPID_SUBJECT` | Contact déclaré au service push (`mailto:` ou `https:`) | `mailto:foyer@localhost` |
+| `FOYER_VAPID_SUBJECT` | Contact déclaré au service push (`mailto:` ou `https:`). **Une adresse locale est refusée par Apple** (403 `BadJwtToken`) : elle est donc écartée au démarrage, avec un message dans le journal. Sans variable, c'est l'adresse publique du foyer (Paramètres → Notifications) qui sert de contact, et à défaut le dépôt du projet | _(adresse publique du foyer)_ |
 | `FOYER_PUBLIC_URL` | Adresse ouverte au tap sur une notification. **Réglable depuis l'application** ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
 
 La liste complète des réglages, leur portée et le module qui les consomme est engendrée depuis

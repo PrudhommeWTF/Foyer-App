@@ -28,6 +28,12 @@ export interface SystemStatus {
   dbBytes: number;
   dataBytes: number;
   disk: DiskUsage | null;
+  /**
+   * Le contact déclaré aux services push. Il est ici parce qu'un refus d'Apple
+   * se présente comme un « HTTP 403 » à côté d'un appareil, sans dire que c'est
+   * ce contact qui ne convient pas.
+   */
+  pushSubject: string;
   snapshots: Snapshot[];
   /** Le document et ses sous-arbres, pour situer ce qui pèse. */
   counts: { members: number; events: number; tasks: number; recipes: number; files: number };
@@ -120,6 +126,7 @@ export function buildStatus(input: {
   version: string;
   dataDir: string;
   dbPath: string;
+  pushSubject: string;
   counts: SystemStatus['counts'];
 }): SystemStatus {
   return {
@@ -130,6 +137,7 @@ export function buildStatus(input: {
     dbBytes: dbBytes(input.dbPath),
     dataBytes: dirBytes(input.dataDir),
     disk: diskUsage(input.dataDir),
+    pushSubject: input.pushSubject,
     snapshots: listSnapshots(input.dataDir),
     counts: input.counts,
   };

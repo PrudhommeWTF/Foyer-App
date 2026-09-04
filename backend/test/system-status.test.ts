@@ -85,6 +85,7 @@ describe('état du service', () => {
     makeSnapshot(db, dir, 7);
     const st = buildStatus({
       version: '1.4.0', dataDir: dir, dbPath: path.join(dir, 'foyer.db'),
+      pushSubject: 'https://foyer.exemple.fr',
       counts: { members: 4, events: 12, tasks: 30, recipes: 8, files: 3 },
     });
     assert.equal(st.version, '1.4.0');
@@ -94,6 +95,7 @@ describe('état du service', () => {
     assert.equal(st.snapshots.length, 1);
     assert.deepEqual(st.counts, { members: 4, events: 12, tasks: 30, recipes: 8, files: 3 });
     assert.ok(st.uptime >= 0);
+    assert.equal(st.pushSubject, 'https://foyer.exemple.fr', 'c’est lui qu’Apple refuse quand un envoi rend 403');
   });
 
   it('un dossier absent pèse zéro plutôt que de faire échouer la page', () => {

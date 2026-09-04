@@ -35,7 +35,7 @@ import { getShopping, preserveShopping } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
 import { getTasks, onAssigned, preserveTasks } from './tasks/repo';
 import { pushRouter } from './notify/routes';
-import { initPush, notify } from './notify/push';
+import { initPush, notify, resolveVapidSubject } from './notify/push';
 import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
@@ -704,6 +704,7 @@ api.get('/system/status', auth, requireAdmin, (_req, res) => {
   res.json(buildStatus({
     version: currentVersion(),
     dataDir: DATA_DIR,
+    pushSubject: resolveVapidSubject({ env: process.env.FOYER_VAPID_SUBJECT, publicUrl: String(effectiveSetting('publicUrl') || '') }).subject,
     dbPath: process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db'),
     counts: {
       members: (state.members || []).length,
@@ -783,8 +784,19 @@ if (fs.existsSync(STATIC_DIR)) {
 // ---- Rappels : clés VAPID, affectations, planificateur ----
 // Les clés sont générées une fois et gardées en base : en changer invaliderait
 // tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
-const vapid = initPush(db, { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT });
-log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}).`);
+const vapid = initPush(
+  db,
+  { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT },
+  () => String(effectiveSetting('publicUrl') || ''),
+);
+log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}), `
+  + `contact déclaré aux services push : ${vapid.subject.subject}`);
+if (vapid.subject.rejected) {
+  // Le dire au démarrage, pas au premier rappel raté : un refus d'Apple se
+  // présente comme un « HTTP 403 » et n'apprend rien à qui le lit.
+  log.attention(`Notifications : le contact « ${vapid.subject.rejected.value} » a été écarté (${vapid.subject.rejected.reason}). `
+    + `Posez FOYER_VAPID_SUBJECT, ou renseignez l’adresse publique du foyer dans Paramètres, section « Notifications ».`);
+}
 
 const notifLog = (line: string): void => log.info(line);
 
