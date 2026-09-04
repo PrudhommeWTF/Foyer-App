@@ -830,17 +830,129 @@ Ce n'est pas fait dans cette tranche : c'est une décision de produit (l'inscrip
 libre existe-t-elle comme fonctionnalité ?), pas un détail d'implémentation, et
 elle sort de ce que le rapport validé annonçait.
 
+### L'inscription libre a été supprimée, pas seulement coupée
+
+Vous avez tranché la question ouverte ci-dessus : le chemin d'inscription libre
+est retiré en entier, backend et frontend, avec le réglage `signupAllowed`, la
+variable `FOYER_ALLOW_SIGNUP`, le champ `allowSignup` de `/setup/status` et la
+fonction `createUser` en base. Un compte ne se crée plus que rattaché à un
+membre, par un administrateur, depuis l'écran Famille.
+
+`/me` ne renvoie plus l'identifiant de membre tel qu'il figure en colonne mais
+celui de la fiche telle qu'elle existe : un membre retiré du foyer laisse son
+compte derrière lui, et pointer l'application sur une fiche disparue vaut moins
+que ne rien renvoyer. C'est aussi le cas qui justifie que `requireMember` reste
+en place maintenant que l'inscription n'existe plus.
+
 ---
 
-## 11. Plan de correction proposé
+## 11. Tranche 2 : ce qui est corrigé
+
+Appliquée le 4 septembre 2026, en deux lots déployables.
+
+### Lot A, les autorisations (E1, E5, E6, E9)
+
+**E1.** Le garde `requireAdulte` ferme `/api/finances` aux comptes enfants. Pour
+`/api/files`, un refus global aurait cassé le carnet de recettes sans rien
+protéger : la règle porte sur le **genre du propriétaire**, lu sur la fiche et
+non sur ce que l'appelant déclare. Une photo de recette reste ouverte, un
+document du foyer ne l'est plus, ni en lecture, ni en dépôt, ni en suppression.
+
+Côté écran, Finances et Documents sortent de la navigation d'un enfant, les
+quatre tuiles adossées aux Finances sortent de son accueil, et le module n'est
+plus appelé du tout : sans cela l'accueil aurait épinglé quatre tuiles en panne
+là où il n'y a qu'une frontière. Le filtre est déclaré une seule fois dans
+`nav.ts`, parce que trois endroits doivent filtrer la même chose.
+
+**E5, E6, E9.** `GET /members/accounts`, `GET /calendar/ics` et les deux exports
+complets des Finances passent sous `requireAdmin`. Les exports et le
+téléchargement d'une sauvegarde sont journalisés. Le flux `feed.ics` gagne une
+limitation de débit. Les écrans suivent : le badge « accès » et le lien de
+calendrier ne s'affichent plus qu'à un administrateur, avec une phrase qui dit
+pourquoi plutôt qu'un champ vide.
+
+`test/auth-roles.test.ts` : **13 tests sur 32 avant ces gardes, 32 sur 32 après.**
+
+### Lot B, la robustesse (E2, E3, E4, E7, E8)
+
+**E4.** Le chemin « compte inconnu » compare désormais contre un condensat
+leurre, de même coût. Mesuré avant : 2,0 ms contre 81,0 ms. Après : **83 ms
+contre 81 ms.**
+
+**E3.** Deux compteurs remplacent la limitation par IP seule
+(`backend/src/auth/throttle.ts`) : par compte visé, serré et progressif ; par
+adresse, large. Une réussite efface l'ardoise, et le limiteur de débit ne compte
+plus les requêtes réussies. Vérifié sur le service en fonctionnement : le compte
+visé reçoit 429 avec un `Retry-After`, **pendant qu'un autre membre du foyer se
+connecte normalement**. C'est la promesse qui comptait le plus.
+
+**M2**, remontée dans cette tranche parce que sans elle rien de tout cela ne se
+constate : les connexions réussies et refusées sont journalisées, avec l'adresse
+et l'heure. La section 7.4 sur fail2ban devient applicable.
+
+**E2.** `FOYER_BIND` restreint l'interface d'écoute, `FOYER_TRUST_PROXY` coupe la
+confiance accordée à `X-Forwarded-For`, et le démarrage **avertit** quand les
+deux réglages se contredisent (écoute ouverte plus confiance au proxy).
+
+**E7.** La connexion sortante est ouverte sur l'adresse déjà validée ; le nom ne
+sert plus qu'au certificat (SNI et vérification inchangées) et à l'en-tête Host.
+Il n'y a plus de seconde résolution, donc plus de fenêtre de réidentification.
+Les plages 198.18.0.0/15, 6to4 et NAT64 rejoignent la liste des refus.
+
+Une nuance par rapport au constat **F4** : les plages de documentation
+(198.51.100.0/24, 203.0.113.0/24) ne sont **pas** bloquées. Elles ne sont
+routables nulle part, les interdire ne protège de rien, et elles servent
+d'adresses publiques factices dans les tests et la documentation. F4 est traité
+pour ce qui protège réellement, et écarté pour le reste.
+
+**E8.** Le déflatage est borné à 64 Mo par entrée, et une entrée dont le
+répertoire central annonce déjà davantage est refusée sans rien allouer.
+
+Fichiers ajoutés : `auth-throttle`, `auth-login`, `ssrf-epinglage`,
+`import-bombe`. Avant leurs corrections respectives : **1 sur 4** pour la bombe
+zip, **4 sur 6** pour la connexion, **7 sur 8** pour l'épinglage. Après :
+**910 tests au vert** sur le backend, 462 sur le frontend, builds et lint
+« code mort » propres des deux côtés.
+
+### Ce que vous devez vérifier vous-même
+
+```sh
+# Le compte visé est temporisé, la famille passe toujours
+for i in $(seq 1 12); do curl -s -o /dev/null -w "%{http_code} " \
+  -X POST https://foyer.mondomaine.fr/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"VOTRE_ADRESSE","password":"faux"}'; done; echo
+# puis, depuis la maison, une connexion normale d'un autre membre : elle doit passer
+
+# Le temps de réponse ne dit plus quel compte existe
+for e in inconnu@nulle-part.example VOTRE_ADRESSE; do
+  curl -s -o /dev/null -w "$e : %{time_total}s\n" \
+    -X POST https://foyer.mondomaine.fr/api/auth/login \
+    -H 'Content-Type: application/json' -d "{\"email\":\"$e\",\"password\":\"faux\"}"
+done
+
+# Les connexions se lisent dans le journal
+journalctl -u foyer --since "1 hour ago" | grep -E "Connexion (réussie|refusée)"
+```
+
+### Effet sur les sessions et retour arrière
+
+**Aucune déconnexion** dans les deux lots. Les changements visibles : un compte
+enfant perd les écrans Finances et Documents ; un adulte non administrateur ne
+voit plus le lien de calendrier ni le badge « accès », et ne peut plus lancer les
+exports Finances. Le retour arrière reste un `git revert` du commit concerné,
+suivi d'une reconstruction et d'un redémarrage : aucune migration, aucun
+changement de schéma.
+
+---
+
+## 12. Plan de correction proposé
 
 À valider avant que je touche au code.
 
 **Tranche 1, les critiques et le socle de test.** Faite : voir la section 10.
 
-**Tranche 2, les élevées.** E1 à E9, chacune avec son test. Deux sous-lots :
-autorisations (E1, E5, E6, E9) puis robustesse (E2, E3, E4, E7, E8), pour que le
-premier parte vite.
+**Tranche 2, les élevées.** Faite : voir la section 11.
 
 **Tranche 3, le reste groupé.** M1 à M12 et F1 à F5, moins F1 (le TOTP) qui
 mérite sa propre décision et son propre chantier.
