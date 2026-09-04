@@ -122,12 +122,22 @@ export class ApiService {
   /** Absolute URL of an API path (base href aware). */
   absolute(path: string): string { return this.base + path; }
 
-  /** Un appel réseau dont l'échec de transport devient une ApiError de statut 0. */
+  /**
+   * Un appel réseau dont l'échec de transport devient une ApiError de statut 0.
+   *
+   * Le message distingue les deux causes, parce qu'elles n'appellent pas le même
+   * geste : sans réseau, il n'y a rien à vérifier côté serveur, et envoyer
+   * quelqu'un redémarrer un service qui tourne très bien est une fausse piste.
+   * Depuis que l'application s'ouvre hors ligne (voir docs/hors-ligne.md), le
+   * cas est devenu courant.
+   */
   private async send(url: string, init: RequestInit): Promise<Response> {
     try {
       return await fetch(url, init);
     } catch {
-      throw new ApiError('Le serveur ne répond pas. Vérifiez que le service Foyer est démarré.', 0);
+      throw new ApiError(navigator.onLine
+        ? 'Le serveur ne répond pas. Vérifiez que le service Foyer est démarré.'
+        : 'Pas de réseau. Ce qui est affiché date de la dernière connexion.', 0);
     }
   }
 

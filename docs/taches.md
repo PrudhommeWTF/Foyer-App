@@ -668,8 +668,6 @@ Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
 ## Ce qui reste à faire
 
-Le chantier de parité et d'intégration est terminé. Reste, hors tranche, le
-chargement **hors ligne à froid** (cache PWA) : aujourd'hui, les gestes faits
-sans réseau repartent au retour, mais l'application doit avoir été ouverte
-avant. C'est un choix à faire séparément, parce qu'un cache d'application
-change la façon dont les mises à jour arrivent.
+Rien : le chantier est terminé. Le démarrage **hors ligne à froid** est arrivé
+depuis, hors tranche : l'application s'ouvre sans réseau et montre le foyer tel
+qu'il était, daté. Voir [`hors-ligne.md`](hors-ligne.md).
