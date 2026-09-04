@@ -167,8 +167,9 @@ export interface UiState {
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfEnfant: boolean; mfBirthday: string; memberDelId: string | null;
   /** Contraintes alimentaires en cours d'édition, et recherche d'aliment refusé. */
   mfAllerg: string[]; mfRefuse: string[]; mfRefuseQ: string;
-  profileOpen: boolean;
-  pfName: string; pfRole: string; pfEmail: string; pfColor: string;
+  /** La section ouverte dans Paramètres : l'accordéon sur téléphone, l'onglet sur grand écran. */
+  settingsSection: string;
+  pfName: string; pfRole: string; pfIni: string; pfEmail: string; pfColor: string;
 
   // member login account management
   accountFor: string | null; acEmail: string; acPassword: string; acBusy: boolean;
@@ -209,7 +210,7 @@ export function initialUi(): UiState {
     familyOpen: false, famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', memberDelId: null,
     mfAllerg: [], mfRefuse: [], mfRefuseQ: '',
-    profileOpen: false, pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
+    settingsSection: 'compte', pfName: '', pfRole: '', pfIni: '', pfEmail: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,
   };
 }

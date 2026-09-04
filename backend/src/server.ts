@@ -483,6 +483,51 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin, enfant: !!m?.enfant });
 });
 
+/**
+ * Ses propres identifiants, changés par soi-même.
+ *
+ * Les routes `/members/:id/account` sont réservées à un administrateur : elles
+ * servent à ouvrir un accès à quelqu'un d'autre. Ici, chacun change son adresse
+ * et son mot de passe sans passer par personne, mais **en redonnant son mot de
+ * passe actuel** : sans cela, un téléphone déverrouillé laissé sur la table
+ * suffirait à s'approprier le compte.
+ *
+ * Changer le mot de passe incrémente `token_version`, donc **déconnecte les
+ * autres sessions** : c'est le but. La session en cours, elle, reçoit un jeton
+ * neuf, sinon on se déconnecterait soi-même en se protégeant.
+ */
+api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response) => {
+  const user = req.user ? getUserById(req.user.id) : undefined;
+  if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  if (!bcrypt.compareSync(String(req.body?.currentPassword ?? ''), user.password_hash)) {
+    res.status(403).json({ error: 'Mot de passe actuel incorrect' });
+    return;
+  }
+  let email: string | undefined;
+  let password: string | undefined;
+  const rawEmail = req.body?.email;
+  if (rawEmail !== undefined && String(rawEmail).trim().toLowerCase() !== user.email) {
+    email = String(rawEmail).trim();
+    if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
+    if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
+  }
+  const rawPassword = req.body?.password;
+  if (rawPassword !== undefined && String(rawPassword) !== '') {
+    password = String(rawPassword);
+    if (password.length < pwdMin()) { res.status(400).json({ error: pwdTropCourt() }); return; }
+    if (password === String(req.body?.currentPassword ?? '')) {
+      res.status(400).json({ error: 'Le nouveau mot de passe est identique à l’ancien' });
+      return;
+    }
+  }
+  if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
+  updateUserCredentials(user.id, email, password);
+  const frais = getUserById(user.id);
+  if (!frais) { res.status(500).json({ error: 'Compte introuvable après modification' }); return; }
+  log.info(`Compte : ${user.email} a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
+  res.json({ email: frais.email, token: sign(frais), othersLoggedOut: password !== undefined });
+});
+
 // ---- Member login accounts (admin-managed) ----
 api.get('/members/accounts', auth, (_req, res) => {
   res.json({ accounts: listMemberAccounts() });

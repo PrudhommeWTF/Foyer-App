@@ -88,21 +88,49 @@ export interface SettingSection {
   label: string;
   /** Ce que la section regroupe, affiché sous son titre. */
   desc: string;
+  /** Identifiant d'un groupe de `GROUPS`. */
+  group: string;
 }
 
-/** Les sections de la page, dans l'ordre d'affichage. */
+/**
+ * Les grands ensembles de la page, dans l'ordre.
+ *
+ * On va d'abord à soi, puis au foyer, puis aux modules, puis à la machine : du
+ * plus personnel au plus technique. Le groupe vit ici parce que la page est
+ * engendrée : déclarer une section, c'est décider où elle tombe, sans rouvrir
+ * l'écran.
+ */
+export interface SettingGroup { id: string; label: string; desc: string; }
+
+export const GROUPS: readonly SettingGroup[] = [
+  { id: 'moi', label: 'Vous', desc: 'Votre compte, votre affichage, et ce qui vous interpelle.' },
+  { id: 'cercle', label: 'Le foyer', desc: 'Ce qui vaut pour tout le monde sous ce toit.' },
+  { id: 'modules', label: 'Les modules', desc: 'Le comportement de chaque écran de l’application.' },
+  { id: 'machine', label: 'Serveur et exploitation', desc: 'Les accès, la machine, les sauvegardes et les mises à jour.' },
+];
+
+/**
+ * Les sections de la page, dans l'ordre d'affichage, groupe par groupe.
+ *
+ * Deux sections ne portent aucun réglage et n'en porteront peut-être jamais :
+ * « Mon compte » et « Membres et accès » sont des gestes (changer son mot de
+ * passe, ajouter quelqu'un). Elles sont déclarées ici quand même, parce que
+ * c'est cette liste qui décide de l'ordre de la page.
+ */
 export const SECTIONS: readonly SettingSection[] = [
-  { id: 'affichage', label: 'Foyer et affichage', desc: 'Ce que voit tout le monde : identité du foyer et thème.' },
-  { id: 'calendriers', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
-  { id: 'notifications', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
-  { id: 'repas', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
-  { id: 'courses', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
-  { id: 'taches', label: 'Tâches', desc: 'Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.' },
-  { id: 'finances', label: 'Finances', desc: 'Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.' },
-  { id: 'documents', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
-  { id: 'exploitation', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
-  { id: 'acces', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.' },
-  { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
+  { id: 'compte', group: 'moi', label: 'Mon compte', desc: 'Votre prénom, vos initiales, votre couleur, votre adresse de connexion et votre mot de passe.' },
+  { id: 'affichage', group: 'moi', label: 'Apparence', desc: 'Comment l’application se présente à vous, sur tous vos appareils.' },
+  { id: 'notifications', group: 'moi', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
+  { id: 'membres', group: 'cercle', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres, et qui peut se connecter.' },
+  { id: 'calendriers', group: 'cercle', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
+  { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
+  { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
+  { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.' },
+  { id: 'finances', group: 'modules', label: 'Finances', desc: 'Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.' },
+  { id: 'documents', group: 'modules', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
+  { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
+  { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
+  { id: 'serveur', group: 'machine', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
 ];
 
 /**
@@ -150,7 +178,7 @@ const ACADEMIE_OPTIONS: readonly SettingOption[] = [
 export const REGISTRY = [
   {
     key: 'dark',
-    type: 'bool', scope: 'personnel', section: 'affichage', module: 'Affichage',
+    type: 'bool', scope: 'personnel', section: 'affichage', module: 'Apparence',
     label: 'Thème sombre',
     desc: 'Bascule l’application en couleurs sombres, sur tous vos appareils. Propre à vous : votre choix ne change rien à l’affichage des autres membres.',
     default: false,

@@ -7,7 +7,6 @@ import { NotificationsComponent } from './notifications';
 import { GenerateModal } from './generate-modal';
 import { RepairModal } from './repair-modal';
 import { FamilyModalComponent } from './family-modal';
-import { ProfileModalComponent } from './profile-modal';
 import { SearchModalComponent } from './search-modal';
 import { HomeScreen } from '../screens/home/home';
 import { CalendarScreen } from '../screens/calendar';
@@ -28,7 +27,7 @@ import { SettingsScreen } from '../screens/settings/settings';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     SidebarComponent, TopbarComponent, TabbarComponent, NotificationsComponent,
-    FamilyModalComponent, ProfileModalComponent, SearchModalComponent, GenerateModal, RepairModal,
+    FamilyModalComponent, SearchModalComponent, GenerateModal, RepairModal,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, MessagesScreen, ContactsScreen,
     DocumentsScreen, FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
   ],
@@ -78,7 +77,6 @@ import { SettingsScreen } from '../screens/settings/settings';
     @if (store.ui().notifOpen) { <app-notifications /> }
     @if (store.ui().searchOpen) { <app-search-modal /> }
     <app-family-modal />
-    <app-profile-modal />
   `,
   styles: [`
     :host { display: block; }

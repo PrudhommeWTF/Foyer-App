@@ -46,6 +46,18 @@ export function contactIni(name: string): string {
 }
 
 /**
+ * Les initiales à écrire quand un membre change de prénom.
+ *
+ * Des initiales qui ne découlent pas de l'ancien prénom sont des initiales que
+ * quelqu'un a **choisies** : elles survivent au fait qu'on le renomme, sans
+ * quoi un administrateur les effacerait sans s'en apercevoir. Les autres
+ * suivent le nouveau prénom, comme avant.
+ */
+export function keptIni(prev: { name: string; ini?: string } | null, name: string): string {
+  return prev && prev.ini && prev.ini !== contactIni(prev.name) ? prev.ini : contactIni(name);
+}
+
+/**
  * Une date ISO (AAAA-MM-JJ) en date courte française : 31/12/2026.
  *
  * Le format n'est pas réglable, comme la locale, le fuseau et la devise :

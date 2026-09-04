@@ -24,7 +24,7 @@ import {
 import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
-import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
@@ -138,6 +138,8 @@ export class FoyerStore {
   readonly isChild = signal(false);
   readonly currentMemberId = signal<string | null>(null);
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
+  /** L'adresse avec laquelle on s'est connecté, telle que le serveur la connaît. */
+  readonly myEmail = signal('');
 
   // Calendar overlays
   readonly schoolHolidays = signal<SchoolHoliday[]>([]);
@@ -452,6 +454,7 @@ export class FoyerStore {
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
+      this.myEmail.set(me.email);
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
       this.isChild.set(me.enfant);
@@ -742,6 +745,7 @@ export class FoyerStore {
     this.isChild.set(false);
     this.currentMemberId.set(null);
     this.accounts.set({});
+    this.myEmail.set('');
     this.schoolHolidays.set([]);
     this.icsToken.set('');
     this.revokePhotos();
@@ -763,11 +767,12 @@ export class FoyerStore {
     const email = s.acEmail.trim();
     const password = s.acPassword;
     const exists = this.memberHasAccount(memberId);
+    const min = this.setting('passwordMinLength');
     if (!exists) {
       if (!/^\S+@\S+\.\S+$/.test(email)) { this.toast('Email invalide'); return; }
-      if (password.length < 6) { this.toast('Mot de passe : 6 caractères minimum'); return; }
-    } else if (password && password.length < 6) {
-      this.toast('Mot de passe : 6 caractères minimum'); return;
+      if (password.length < min) { this.toast(`Mot de passe : ${min} caractères minimum`); return; }
+    } else if (password && password.length < min) {
+      this.toast(`Mot de passe : ${min} caractères minimum`); return;
     }
     this.patch({ acBusy: true });
     try {
@@ -2957,11 +2962,16 @@ export class FoyerStore {
   newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
   editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfEnfant: !!m.enfant, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
-    const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, enfant: s.mfEnfant, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
+    const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; }
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, enfant: s.mfEnfant, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
     this.mutate((d) => {
-      if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
-      else d.members.push({ id: uid('mb'), ...data });
+      if (s.mfEditId) {
+        const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i < 0) return;
+        // Des initiales que le membre a choisies lui-même (elles ne découlent pas
+        // de son prénom) survivent au fait qu'un administrateur le renomme.
+        const prev = d.members[i];
+        d.members[i] = { ...prev, ...data, ini: keptIni(prev, name) };
+      } else d.members.push({ id: uid('mb'), ...data, ini: contactIni(name) });
     });
     this.toast(s.mfEditId ? 'Membre modifié' : 'Membre ajouté');
     this.patch({ memberForm: false, mfEditId: null });
@@ -2985,19 +2995,52 @@ export class FoyerStore {
       ? 'Membre retiré, ' + seuls + (seuls > 1 ? ' créneaux sont désormais sans membre' : ' créneau est désormais sans membre')
       : 'Membre retiré');
   }
-  openProfile(): void {
+  /** Recharge le formulaire « Mon compte » depuis le document. */
+  loadProfileFields(): void {
     const m = this.me();
-    this.patch({ profileOpen: true, pfName: m?.name || '', pfRole: m?.role || '', pfEmail: m ? this.memberAccountEmail(m.id) : '', pfColor: m?.color || '#E56B4E' });
+    this.patch({
+      pfName: m?.name || '', pfRole: m?.role || '', pfIni: m?.ini || '',
+      pfEmail: this.myEmail(), pfColor: m?.color || '#E56B4E',
+    });
   }
+  /** Le bouton de profil de la barre latérale mène là où le profil se modifie. */
+  openProfile(): void { this.loadProfileFields(); this.patch({ settingsSection: 'compte' }); this.go('settings'); }
   saveProfile(): void {
-    const s = this.ui(); if (!s.pfName.trim()) { this.toast('Le prénom est requis'); return; }
+    const s = this.ui(); const name = s.pfName.trim(); if (!name) { this.toast('Le prénom est requis'); return; }
+    // Des initiales laissées vides suivent le prénom ; des initiales choisies
+    // restent, y compris après un changement de prénom (voir saveMember).
+    const ini = s.pfIni.trim().toUpperCase().slice(0, 3) || contactIni(name);
     const id = this.me()?.id;
     this.mutate((d) => {
       const mi = d.members.findIndex((m) => m.id === id);
-      if (mi >= 0) d.members[mi] = { ...d.members[mi], name: s.pfName.trim(), role: s.pfRole.trim(), color: s.pfColor, ini: contactIni(s.pfName.trim()) };
+      if (mi >= 0) d.members[mi] = { ...d.members[mi], name, role: s.pfRole.trim(), color: s.pfColor, ini };
     });
-    this.patch({ profileOpen: false });
+    this.patch({ pfIni: ini });
     this.toast('Profil mis à jour');
+  }
+
+  /**
+   * Changer son adresse de connexion ou son mot de passe, soi-même.
+   *
+   * Le mot de passe actuel est exigé par le serveur. Un changement de mot de
+   * passe déconnecte les autres sessions : le jeton neuf que renvoie le serveur
+   * garde celle-ci ouverte, sans quoi on se déconnecterait en se protégeant.
+   */
+  async changeCredentials(currentPassword: string, email: string, password: string): Promise<boolean> {
+    if (!currentPassword) { this.toast('Donnez votre mot de passe actuel.'); return false; }
+    const min = this.setting('passwordMinLength');
+    if (password && password.length < min) { this.toast(`Mot de passe : ${min} caractères minimum`); return false; }
+    const mail = email.trim();
+    if (!password && mail.toLowerCase() === this.myEmail()) { this.toast('Rien à changer.'); return false; }
+    try {
+      const r = await this.api.updateMyCredentials(currentPassword, mail || undefined, password || undefined);
+      this.api.token = r.token;
+      this.myEmail.set(r.email);
+      await this.refreshAccounts();
+      this.patch({ pfEmail: r.email });
+      this.toast(r.othersLoggedOut ? 'Identifiants mis à jour, vos autres sessions sont déconnectées' : 'Adresse de connexion mise à jour');
+      return true;
+    } catch (e) { this.toast((e as Error).message); return false; }
   }
 
   // ---- notifications (dérivées de l'état, côté client) ------------------

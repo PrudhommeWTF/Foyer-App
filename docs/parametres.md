@@ -18,29 +18,21 @@ Un réglage appartient à **une seule** portée. Quand une variable d’environn
 l’emporte sur un réglage du foyer, la colonne « Variable prioritaire » la nomme, et
 l’interface grise le champ en l’expliquant.
 
-## Foyer et affichage
+## Vous
 
-Ce que voit tout le monde : identité du foyer et thème.
+Votre compte, votre affichage, et ce qui vous interpelle.
+
+### Apparence
+
+Comment l’application se présente à vous, sur tous vos appareils.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `dark` | Thème sombre | Personnel | oui / non | désactivé | — | Affichage | — |
+| `dark` | Thème sombre | Personnel | oui / non | désactivé | — | Apparence | — |
 
 - **Thème sombre** (`dark`) : Bascule l’application en couleurs sombres, sur tous vos appareils. Propre à vous : votre choix ne change rien à l’affichage des autres membres.
 
-## Calendriers de référence
-
-Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.
-
-| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
-|---|---|---|---|---|---|---|---|
-| `academie` | Académie | Foyer | liste | _(vide)_ | _(vide)_, `Aix-Marseille`, `Amiens`, `Besançon`, `Bordeaux`, `Clermont-Ferrand`, `Corse`, `Créteil`, `Dijon`, `Grenoble`, `Lille`, `Limoges`, `Lyon`, `Montpellier`, `Nancy-Metz`, `Nantes`, `Nice`, `Normandie`, `Orléans-Tours`, `Paris`, `Poitiers`, `Reims`, `Rennes`, `Strasbourg`, `Toulouse`, `Versailles` | Calendriers | — |
-| `icsTasks` | Inclure les tâches datées dans le flux partagé | Foyer | oui / non | désactivé | — | Calendriers | — |
-
-- **Académie** (`academie`) : Fixe la zone de vacances scolaires. Elle colore le calendrier, décide des créneaux « seulement en période scolaire » de l’emploi du temps, et fait passer l’accueil en rythme de vacances.
-- **Inclure les tâches datées dans le flux partagé** (`icsTasks`) : Les tâches à faire qui ont une date apparaissent dans les agendas abonnés au lien ICS, préfixées « Tâche : ». Une tâche faite en disparaît ; une série n’y met que sa prochaine occurrence.
-
-## Notifications et rappels
+### Notifications et rappels
 
 Ce qui vous interpelle, dans l’application et sur le téléphone.
 
@@ -70,7 +62,27 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 - **Dans la cloche : budgets et échéances de contrat** (`notifFinances`) : Les budgets dépassés, les fenêtres de résiliation qui approchent et les mois d’opérations incomplets.
 - **Adresse publique de Foyer** (`publicUrl`) : L’adresse ouverte quand on touche une notification sur le téléphone, par exemple https://foyer.exemple.fr. Vide, la notification ouvre l’adresse par laquelle l’appareil s’était abonné, ce qui échoue depuis l’extérieur si c’était une adresse locale.
 
-## Repas et cuisine
+## Le foyer
+
+Ce qui vaut pour tout le monde sous ce toit.
+
+### Calendriers de référence
+
+Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `academie` | Académie | Foyer | liste | _(vide)_ | _(vide)_, `Aix-Marseille`, `Amiens`, `Besançon`, `Bordeaux`, `Clermont-Ferrand`, `Corse`, `Créteil`, `Dijon`, `Grenoble`, `Lille`, `Limoges`, `Lyon`, `Montpellier`, `Nancy-Metz`, `Nantes`, `Nice`, `Normandie`, `Orléans-Tours`, `Paris`, `Poitiers`, `Reims`, `Rennes`, `Strasbourg`, `Toulouse`, `Versailles` | Calendriers | — |
+| `icsTasks` | Inclure les tâches datées dans le flux partagé | Foyer | oui / non | désactivé | — | Calendriers | — |
+
+- **Académie** (`academie`) : Fixe la zone de vacances scolaires. Elle colore le calendrier, décide des créneaux « seulement en période scolaire » de l’emploi du temps, et fait passer l’accueil en rythme de vacances.
+- **Inclure les tâches datées dans le flux partagé** (`icsTasks`) : Les tâches à faire qui ont une date apparaissent dans les agendas abonnés au lien ICS, préfixées « Tâche : ». Une tâche faite en disparaît ; une série n’y met que sa prochaine occurrence.
+
+## Les modules
+
+Le comportement de chaque écran de l’application.
+
+### Repas et cuisine
 
 Planning des repas, suggestions et génération des courses.
 
@@ -92,7 +104,7 @@ Planning des repas, suggestions et génération des courses.
 - **Ce qu’on appelle une recette rapide** (`suggestQuickMin`) : Préparation et cuisson comprises, en minutes. En dessous, la recette est mise en avant les soirs de semaine chargés.
 - **Afficher le petit-déjeuner** (`showBreakfast`) : Ajoute la ligne du matin au planning des repas, et donc à la génération des courses. Les repas déjà saisis sont conservés quand la ligne est masquée.
 
-## Courses
+### Courses
 
 Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.
 
@@ -102,7 +114,7 @@ Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L
 
 - **Durée du « j’ai déjà ça »** (`stockDays`) : Combien de jours un article écarté d’un « j’ai déjà ça » reste hors de la liste engendrée depuis les repas. Passé ce délai il revient, parce qu’un placard se vide. La date du geste reste affichée.
 
-## Tâches
+### Tâches
 
 Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.
 
@@ -114,7 +126,7 @@ Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.
 - **Au-delà de ce retard, une tâche passe derrière** (`taskLateDays`) : Une tâche en retard depuis plus longtemps cesse d’être l’affaire du jour et descend sous les tâches d’aujourd’hui. Elle n’est ni effacée ni masquée : elle cesse seulement de passer devant.
 - **Rappel proposé pour une nouvelle tâche datée** (`taskDefaultRemind`) : Ce que le formulaire coche d’avance quand on donne une date à une tâche. Cela ne change aucune tâche existante, et reste modifiable tâche par tâche.
 
-## Finances
+### Finances
 
 Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.
 
@@ -126,7 +138,7 @@ Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.
 - **Horizon des échéances sur l’accueil** (`deadlineHorizonDays`) : Une fenêtre de résiliation ou une reconduction plus lointaine que cela n’apparaît pas sur l’accueil : elle n’appelle aucun geste aujourd’hui. L’écran Contrats les montre toutes, quoi qu’il arrive.
 - **Relevé de compteur attendu après** (`readingDueDays`) : Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.
 
-## Documents
+### Documents
 
 Ce que le foyer accepte de ranger sur son disque.
 
@@ -136,21 +148,13 @@ Ce que le foyer accepte de ranger sur son disque.
 
 - **Taille maximale d’un fichier** (`maxUploadMb`) : En mégaoctets, pour les documents du foyer comme pour les photos de recettes. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.
 
-## Exploitation
+## Serveur et exploitation
 
-Version, mises à jour, sauvegardes, journal du service et journal des modifications.
+Les accès, la machine, les sauvegardes et les mises à jour.
 
-| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
-|---|---|---|---|---|---|---|---|
-| `logLevel` | Niveau de journalisation | Foyer | liste | `info` | `erreur`, `info`, `debug` | Exploitation | — |
-| `backupKeep` | Sauvegardes conservées | Foyer | entier | `7` | de 1 à 60 | Exploitation | — |
+### Accès et comptes
 
-- **Niveau de journalisation** (`logLevel`) : Ce que le service écrit dans son journal, lisible avec « journalctl -u foyer » (LXC) ou « docker compose logs -f foyer ». Le changement est immédiat, sans redémarrage.
-- **Sauvegardes conservées** (`backupKeep`) : Combien d’instantanés de la base sont gardés dans le dossier de données. Au-delà, le plus ancien est effacé à la sauvegarde suivante, pour que le disque ne se remplisse pas tout seul.
-
-## Accès et comptes
-
-Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.
+Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
@@ -164,7 +168,19 @@ Qui peut ouvrir un compte, et ce que l’application a le droit d’aller cherch
 - **Durée de validité d’une session** (`sessionDays`) : Combien de jours une connexion reste valable avant de redemander le mot de passe. Les sessions déjà ouvertes gardent leur durée : c’est à la connexion suivante que la nouvelle valeur s’applique.
 - **Longueur minimale d’un mot de passe** (`passwordMinLength`) : S’applique à la création d’un accès et à tout changement de mot de passe. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.
 
-## Serveur et déploiement
+### Exploitation
+
+Version, mises à jour, sauvegardes, journal du service et journal des modifications.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `logLevel` | Niveau de journalisation | Foyer | liste | `info` | `erreur`, `info`, `debug` | Exploitation | — |
+| `backupKeep` | Sauvegardes conservées | Foyer | entier | `7` | de 1 à 60 | Exploitation | — |
+
+- **Niveau de journalisation** (`logLevel`) : Ce que le service écrit dans son journal, lisible avec « journalctl -u foyer » (LXC) ou « docker compose logs -f foyer ». Le changement est immédiat, sans redémarrage.
+- **Sauvegardes conservées** (`backupKeep`) : Combien d’instantanés de la base sont gardés dans le dossier de données. Au-delà, le plus ancien est effacé à la sauvegarde suivante, pour que le disque ne se remplisse pas tout seul.
+
+### Serveur et déploiement
 
 Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.
 

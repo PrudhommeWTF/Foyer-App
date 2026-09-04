@@ -6,7 +6,7 @@
 // (voir backend/test/settings-registry.test.ts).
 //
 //   cd backend && npm run docs:settings
-import { SECTIONS, SettingDecl, sectionSettings } from '../src/settings/registry';
+import { GROUPS, SECTIONS, SettingDecl, sectionSettings } from '../src/settings/registry';
 
 const SCOPE_LABELS: Record<string, string> = {
   deploiement: 'Déploiement',
@@ -57,23 +57,32 @@ export function render(): string {
   L.push('l’interface grise le champ en l’expliquant.');
   L.push('');
 
-  for (const section of SECTIONS) {
-    const items = sectionSettings(section.id);
-    if (!items.length) continue;
-    L.push(`## ${section.label}`);
+  // Les groupes et l'ordre des sections viennent du registre : la page
+  // Paramètres et ce document décrivent donc exactement la même organisation.
+  for (const group of GROUPS) {
+    const sections = SECTIONS.filter((s) => s.group === group.id && sectionSettings(s.id).length);
+    if (!sections.length) continue;
+    L.push(`## ${group.label}`);
     L.push('');
-    L.push(section.desc);
+    L.push(group.desc);
     L.push('');
-    L.push('| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |');
-    L.push('|---|---|---|---|---|---|---|---|');
-    for (const d of items) {
-      L.push(`| \`${d.key}\` | ${d.label} | ${SCOPE_LABELS[d.scope]} | ${TYPE_LABELS[d.type]} | ${defaultLabel(d)} | ${domainLabel(d) || '—'} | ${d.module} | ${d.envOverride ? '`' + d.envOverride + '`' : '—'} |`);
+    for (const section of sections) {
+      const items = sectionSettings(section.id);
+      L.push(`### ${section.label}`);
+      L.push('');
+      L.push(section.desc);
+      L.push('');
+      L.push('| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |');
+      L.push('|---|---|---|---|---|---|---|---|');
+      for (const d of items) {
+        L.push(`| \`${d.key}\` | ${d.label} | ${SCOPE_LABELS[d.scope]} | ${TYPE_LABELS[d.type]} | ${defaultLabel(d)} | ${domainLabel(d) || '—'} | ${d.module} | ${d.envOverride ? '`' + d.envOverride + '`' : '—'} |`);
+      }
+      L.push('');
+      for (const d of items) {
+        L.push(`- **${d.label}** (\`${d.key}\`) : ${d.desc}`);
+      }
+      L.push('');
     }
-    L.push('');
-    for (const d of items) {
-      L.push(`- **${d.label}** (\`${d.key}\`) : ${d.desc}`);
-    }
-    L.push('');
   }
 
   L.push('## Où c’est stocké, et comment le sauvegarder');
