@@ -87,9 +87,14 @@ export interface RecipeImportResult {
 
 /** Un appareil abonné aux rappels, tel que le serveur le connaît. */
 export interface PushDevice { id: number; ua: string; createdAt: string; lastOkAt: string | null; lastError: string | null; }
-export interface PushSend { key: string; memberId: string; kind: string; taskId: string | null; title: string; status: 'sent' | 'no-device' | 'failed' | 'missed' | 'skipped'; error: string | null; sentAt: string; }
+/**
+ * `partial` : une partie des appareils a répondu, pas tous. Sans lui, un envoi
+ * qui n'atteint qu'un téléphone sur deux se présentait comme un envoi réussi.
+ */
+export type PushSendStatus = 'sent' | 'partial' | 'no-device' | 'failed' | 'missed' | 'skipped';
+export interface PushSend { key: string; memberId: string; kind: string; taskId: string | null; title: string; status: PushSendStatus; error: string | null; sentAt: string; }
 export interface PushStatus { publicKey: string; devices: PushDevice[]; subscribed: string[]; sends: PushSend[]; }
-export interface PushTestResult { memberId: string; status: PushSend['status']; devices: number; error: string | null; }
+export interface PushTestResult { memberId: string; status: PushSendStatus; devices: number; total: number; error: string | null; }
 
 export interface SetupPayload {
   household: { name: string; theme: 'light' | 'dark'; academie?: string };

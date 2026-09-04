@@ -216,7 +216,7 @@ const GESTES: Section[] = [
                 @if (ps.sends.length) {
                   <div class="push-sub">Derniers envois</div>
                   @for (s of ps.sends.slice(0, 8); track s.key + s.memberId) {
-                    <div class="push-send" [class.ko]="s.status === 'failed' || s.status === 'missed'">
+                    <div class="push-send" [class.ko]="s.status === 'failed' || s.status === 'missed'" [class.partiel]="s.status === 'partial'">
                       <span class="push-send-t">{{ s.title }}</span>
                       <span class="push-send-m">{{ kindLabel(s.kind) }} · {{ store.memberName(s.memberId) || s.memberId }} · {{ sendLabel(s.status) }}{{ s.error ? ' : ' + s.error : '' }}</span>
                     </div>
@@ -548,6 +548,8 @@ const GESTES: Section[] = [
     .push-send-t { font-size: 12.5px; font-weight: 800; color: var(--ink); }
     .push-send-m { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .push-send.ko .push-send-m { color: #C6492F; }
+    /* Un envoi partiel n'est ni une réussite ni une panne : il se signale sans crier. */
+    .push-send.partiel .push-send-m { color: #B8860B; }
   `],
 })
 export class SettingsScreen {
@@ -681,7 +683,11 @@ export class SettingsScreen {
   }
   kindLabel(k: string): string { return k === 'reminder' ? 'rappel' : k === 'assigned' ? 'affectation' : k === 'test' ? 'test' : k; }
   sendLabel(s: string): string {
-    return s === 'sent' ? 'envoyé' : s === 'no-device' ? 'aucun appareil' : s === 'failed' ? 'échec' : s === 'missed' ? 'manqué (service arrêté)' : s;
+    return s === 'sent' ? 'envoyé'
+      : s === 'partial' ? 'reçu par une partie des appareils'
+      : s === 'no-device' ? 'aucun appareil'
+      : s === 'failed' ? 'échec'
+      : s === 'missed' ? 'manqué (service arrêté)' : s;
   }
 
   async copyIcs(): Promise<void> {

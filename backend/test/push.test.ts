@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateHousehold } from '../src/storage/schema';
-import { addDevice, initPush, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, setSender } from '../src/notify/push';
+import { addDevice, detailOf, initPush, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, setSender } from '../src/notify/push';
 import { SchedulerDeps, tick } from '../src/notify/scheduler';
 import { applyTaskOps, initTasks, onAssigned } from '../src/tasks/repo';
 import { TaskItem } from '../src/tasks/ops';
@@ -80,7 +80,11 @@ describe('envoi', () => {
     addDevice('m1', sub('a'), 'iPhone'); addDevice('m1', sub('b'), 'iPad');
     failWith['https://push.example/a'] = 410;
     const r = await notify('k3', ['m1'], { kind: 'reminder', title: 'Plombier', body: '' });
-    assert.equal(r.members[0].status, 'sent', 'l’iPad a reçu');
+    // L'iPad a reçu, l'iPhone est parti : ce n'est pas un envoi réussi, et le
+    // journal doit dire lequel des deux, sinon l'appareil disparaît sans un mot.
+    assert.equal(r.members[0].status, 'partial');
+    assert.match(r.members[0].error!, /1 appareil sur 2/);
+    assert.match(r.members[0].error!, /abonnement expiré/);
     assert.equal(listDevices('m1').length, 1, 'l’iPhone dont l’abonnement est mort a été retiré');
     failWith['https://push.example/b'] = 500;
     const r2 = await notify('k4', ['m1'], { kind: 'reminder', title: 'Plombier', body: '' });
@@ -88,6 +92,44 @@ describe('envoi', () => {
     assert.match(r2.members[0].error!, /HTTP 500/);
     assert.equal(listDevices('m1').length, 1, 'une panne passagère ne retire pas l’appareil');
     assert.match(listDevices('m1')[0].lastError!, /500/);
+  });
+
+  // Le cas réel : un iPhone qui reçoit, un Mac qui refuse. Le journal notait
+  // « envoyé » et jetait l'échec, donc un appareil muet passait pour un succès.
+  it('un envoi qui n’atteint qu’une partie des appareils ne se présente pas comme réussi', async () => {
+    addDevice('m1', sub('iphone'), 'iPhone'); addDevice('m1', sub('mac'), 'Safari sur Mac');
+    failWith['https://push.example/mac'] = 403;
+    const r = await notify('k5', ['m1'], { kind: 'test', title: 'Foyer : test', body: '' });
+    const m = r.members[0];
+    assert.equal(m.status, 'partial');
+    assert.equal(m.devices, 1, 'un appareil atteint');
+    assert.equal(m.total, 2, 'sur deux abonnés');
+    assert.match(m.error!, /1 appareil sur 2/);
+    assert.match(m.error!, /HTTP 403/, 'la raison du refus est là, pas seulement le compte');
+    assert.equal(listDevices('m1').length, 2, 'un 403 ne retire pas l’appareil : il se corrige');
+  });
+
+  it('tous les appareils répondent : c’est un envoi réussi, sans détail inutile', async () => {
+    addDevice('m1', sub('a'), 'iPhone'); addDevice('m1', sub('b'), 'iPad');
+    const r = await notify('k6', ['m1'], { kind: 'test', title: 'Foyer : test', body: '' });
+    assert.equal(r.members[0].status, 'sent');
+    assert.equal(r.members[0].devices, 2);
+    assert.equal(r.members[0].total, 2);
+    assert.equal(r.members[0].error, null);
+  });
+
+  it('un seul appareil, qui refuse : un échec franc, sans « 0 appareil sur 1 »', async () => {
+    addDevice('m1', sub('a'), 'iPhone');
+    failWith['https://push.example/a'] = 403;
+    const r = await notify('k7', ['m1'], { kind: 'test', title: 'Foyer : test', body: '' });
+    assert.equal(r.members[0].status, 'failed');
+    assert.match(r.members[0].error!, /HTTP 403/);
+    assert.equal(/sur 1/.test(r.members[0].error!), false, 'un compte n’apprend rien quand il n’y a qu’un appareil');
+  });
+
+  it('des appareils qui refusent pour la même raison tiennent en une ligne', () => {
+    assert.equal(detailOf(1, 3, ['HTTP 403 : BadJwtToken', 'HTTP 403 : BadJwtToken']), '1 appareil sur 3 · HTTP 403 : BadJwtToken');
+    assert.equal(detailOf(1, 3, ['HTTP 403', 'HTTP 500']), '1 appareil sur 3 · HTTP 403 ; HTTP 500');
   });
 });
 
