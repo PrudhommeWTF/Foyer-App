@@ -22,7 +22,14 @@ import {
   saveHousehold,
   setIcsToken,
   setSchoolHolidaysCache,
+  SecoursRange,
+  activerTotp,
+  desactiverTotp,
   setPasswordHash,
+  setTotpLastStep,
+  setTotpPending,
+  setTotpRecovery,
+  totpRecovery,
   updateUserCredentials,
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
@@ -51,6 +58,9 @@ import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './sys
 import { buildStatus } from './system/status';
 import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './auth/throttle';
 import { aRehacher, hacher, verifier } from './auth/passwords';
+import {
+  empreinteSecours, genererSecours, genererSecret, otpauthUri, secretLisible, verifierCode,
+} from './auth/totp';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -302,6 +312,26 @@ const route = (fn: (req: AuthedRequest, res: Response) => Promise<void>) =>
   };
 
 /**
+ * Le secret qui signe le **défi** du second facteur, dérivé de celui des
+ * sessions mais distinct de lui.
+ *
+ * Ce n'est pas une précaution de style. Entre le mot de passe et le code, il
+ * faut bien remettre quelque chose au navigateur, et ce quelque chose ne doit
+ * en aucun cas ouvrir l'application : sinon le second facteur ne serait qu'une
+ * fenêtre décorative que l'on saute en gardant le jeton du premier temps. Signer
+ * le défi avec un autre secret rend cette confusion **impossible par
+ * construction**, plutôt que de dépendre d'un contrôle qu'une relecture
+ * distraite pourrait retirer un jour.
+ */
+const DEFI_SECRET = crypto.createHmac('sha256', JWT_SECRET).update('foyer-totp-challenge').digest('hex');
+
+/** Le défi vit cinq minutes : le temps de sortir son téléphone, pas davantage. */
+const DEFI_MINUTES = 5;
+
+const signerDefi = (u: { id: number; token_version: number }): string =>
+  jwt.sign({ id: u.id, tv: u.token_version }, DEFI_SECRET, { expiresIn: `${DEFI_MINUTES}m` });
+
+/**
  * Les deux compteurs de tentatives : par compte visé, et par adresse. Voir
  * auth/throttle.ts pour les seuils et la raison de leur écart.
  */
@@ -530,8 +560,6 @@ api.post('/auth/login', authLimiter, route(async (req, res) => {
     res.status(401).json({ error: 'Identifiants invalides' });
     return;
   }
-  parCompte.succes(cible);
-  parAdresse.succes(adresse);
   // Seul instant où le mot de passe en clair est disponible : on en profite pour
   // refaire un condensat trop faible. Personne n'a rien à faire, et le parc se
   // met à niveau au fil des connexions. La version du jeton ne bouge pas.
@@ -539,6 +567,18 @@ api.post('/auth/login', authLimiter, route(async (req, res) => {
     try { setPasswordHash(user.id, await hacher(String(password))); log.info(`Compte : condensat de ${user.email} remis au coût courant.`); }
     catch (e) { log.attention('Compte : remise à niveau du condensat impossible', e); }
   }
+
+  // Second facteur posé : le mot de passe ne suffit pas, et l'ardoise n'est
+  // **pas** effacée. L'effacer ici laisserait qui détient le mot de passe
+  // essayer un million de codes sans jamais recroiser la temporisation.
+  if (user.totp_secret) {
+    log.info(`Connexion : mot de passe accepté pour ${user.email} depuis ${adresse}, code du second facteur attendu.`);
+    res.json({ totpRequired: true, challenge: signerDefi(user) });
+    return;
+  }
+
+  parCompte.succes(cible);
+  parAdresse.succes(adresse);
   log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
   res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
 }));
@@ -548,6 +588,83 @@ api.post('/auth/login', authLimiter, route(async (req, res) => {
 // rattache le compte à quelqu'un du foyer. Un formulaire d'inscription public
 // n'aurait produit que des comptes sans membre, c'est-à-dire sans accès à quoi
 // que ce soit, tout en offrant à Internet une route de création de comptes.
+
+/**
+ * Le second temps de la connexion : le code du téléphone, ou un code de secours.
+ *
+ * Le défi remis au premier temps ne vaut rien d'autre que cela : il est signé
+ * avec un autre secret que les sessions, il porte la version du jeton du compte,
+ * et il expire en cinq minutes.
+ *
+ * La temporisation continue de courir sur le compte visé. Un code fait six
+ * chiffres, soit un million de combinaisons : sans elle, quelqu'un qui détient
+ * le mot de passe les essaierait toutes en une soirée, et le second facteur ne
+ * serait qu'un ralentisseur.
+ */
+api.post('/auth/login/totp', authLimiter, route(async (req, res) => {
+  const adresse = req.ip || 'inconnue';
+  const now = Date.now();
+
+  let charge: { id: number; tv: number };
+  try {
+    charge = jwt.verify(String(req.body?.challenge ?? ''), DEFI_SECRET) as { id: number; tv: number };
+  } catch {
+    res.status(401).json({ error: 'Cette demande de connexion a expiré. Reprenez depuis votre mot de passe.' });
+    return;
+  }
+
+  const user = getUserById(charge.id);
+  // Le mot de passe a changé entre les deux temps : le défi ne vaut plus.
+  if (!user || user.token_version !== charge.tv || !user.totp_secret) {
+    res.status(401).json({ error: 'Cette demande de connexion n’est plus valable. Reprenez depuis votre mot de passe.' });
+    return;
+  }
+
+  const cible = user.email;
+  const attente = Math.max(parCompte.attente(cible, now), parAdresse.attente(adresse, now));
+  if (attente > 0) {
+    log.attention(`Second facteur refusé (temporisation, ${Math.ceil(attente / 1000)} s) pour ${cible} depuis ${adresse}.`);
+    res.status(429).set('Retry-After', String(Math.ceil(attente / 1000))).json({ error: messageAttente(attente) });
+    return;
+  }
+
+  const saisi = String(req.body?.code ?? '');
+  const pas = verifierCode(user.totp_secret, saisi, now);
+
+  if (pas !== null) {
+    // Un code lu par-dessus une épaule reste valable une trentaine de secondes.
+    // Le pas déjà consommé ferme cette fenêtre.
+    if (pas <= user.totp_last_step) {
+      parCompte.echec(cible, now);
+      parAdresse.echec(adresse, now);
+      log.attention(`Second facteur refusé (code déjà utilisé) pour ${cible} depuis ${adresse}.`);
+      res.status(401).json({ error: 'Ce code a déjà servi. Attendez le suivant sur votre téléphone.' });
+      return;
+    }
+    setTotpLastStep(user.id, pas);
+  } else {
+    // Pas un code du téléphone : peut-être un code de secours.
+    const secours = totpRecovery(user);
+    const empreinte = empreinteSecours(saisi);
+    const i = secours.findIndex((c) => !c.used && c.h === empreinte);
+    if (i < 0) {
+      parCompte.echec(cible, now);
+      parAdresse.echec(adresse, now);
+      log.attention(`Second facteur refusé pour ${cible} depuis ${adresse}.`);
+      res.status(401).json({ error: 'Code incorrect.' });
+      return;
+    }
+    secours[i].used = true;
+    setTotpRecovery(user.id, secours);
+    const restants = secours.filter((c) => !c.used).length;
+    log.attention(`Connexion par code de secours : ${cible} depuis ${adresse}, ${restants} code(s) restant(s).`);
+  }
+
+  parCompte.succes(cible);
+  parAdresse.succes(adresse);
+  log.info(`Connexion réussie (second facteur) : ${user.email} depuis ${adresse}.`);
+  res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
+}));
 
 api.get('/state', auth, requireMember, (_req, res) => {
   res.json(getHousehold());
@@ -684,8 +801,13 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   // renvoyer l'identifiant d'une fiche disparue ferait pointer l'application sur
   // un fantôme. Rien plutôt qu'un mensonge, et l'écran sait alors quoi dire.
   const m = currentMember(req);
+  const secours = totpRecovery(u).filter((c) => !c.used).length;
   res.json({
     email: u.email, name: u.name, memberId: m?.id ?? null, admin: !!m?.admin, enfant: !!m?.enfant,
+    totp: !!u.totp_secret,
+    // Combien de codes de secours restent : l'écran doit pouvoir alerter avant
+    // qu'il n'en reste zéro, pas après.
+    totpRecoveryLeft: u.totp_secret ? secours : null,
     // Un jeton émis vivait sa durée entière sans jamais tourner : volé le
     // premier jour, il servait encore le dernier. Passé la moitié de sa vie, on
     // en rend un neuf, que le client range à la place. Rien à faire pour
@@ -739,12 +861,133 @@ api.put('/me/credentials', authLimiter, auth, route(async (req, res) => {
   res.json({ email: frais.email, token: sign(frais), othersLoggedOut: password !== undefined });
 }));
 
+// ---- Second facteur (TOTP), géré par chacun pour lui-même ----
+//
+// Comme `/me/credentials`, ces routes restent ouvertes à un compte sans membre :
+// protéger son compte ne doit dépendre de personne, et un compte qui n'accède à
+// rien n'a rien de plus à perdre en le faisant.
+//
+// Chaque geste qui touche au second facteur redemande le **mot de passe**. Sans
+// cela, un téléphone déverrouillé laissé sur la table suffirait à retirer la
+// protection qu'on vient de poser, ou à en poser une que son propriétaire ne
+// connaît pas.
+
+/**
+ * Premier temps de l'enrôlement : un secret est engendré et **mis de côté**.
+ *
+ * Il ne protège rien tant que la personne n'a pas prouvé, par un code, que son
+ * téléphone le lit bien. Sans ce second temps, une saisie de travers dans
+ * l'application d'authentification fermerait le compte au prochain démarrage,
+ * et il faudrait un administrateur pour le rouvrir.
+ */
+api.post('/me/totp/start', authLimiter, auth, route(async (req, res) => {
+  const user = req.user ? getUserById(req.user.id) : undefined;
+  if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
+    log.attention(`Second facteur : mot de passe incorrect à l’enrôlement de ${user.email}.`);
+    res.status(403).json({ error: 'Mot de passe incorrect.' });
+    return;
+  }
+  if (user.totp_secret) {
+    res.status(409).json({ error: 'Le second facteur est déjà actif sur ce compte. Retirez-le d’abord si vous voulez le reconfigurer.' });
+    return;
+  }
+  const secret = genererSecret();
+  setTotpPending(user.id, secret);
+  res.json({
+    secret,
+    // Le même secret, présenté à l'oeil : toutes les applications ne savent pas
+    // lire un QR code, et il faut alors pouvoir le recopier sans se perdre.
+    secretLisible: secretLisible(secret),
+    uri: otpauthUri(secret, user.email),
+  });
+}));
+
+/**
+ * Second temps : le code prouve que le téléphone lit le bon secret, et le
+ * second facteur s'active. Les codes de secours ne sont montrés qu'ici, une
+ * seule fois : ils ne sont pas rangés en clair.
+ */
+api.post('/me/totp/enable', authLimiter, auth, route(async (req, res) => {
+  const user = req.user ? getUserById(req.user.id) : undefined;
+  if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  if (!user.totp_pending) {
+    res.status(409).json({ error: 'Aucun enrôlement en cours. Recommencez depuis le début.' });
+    return;
+  }
+  const pas = verifierCode(user.totp_pending, String(req.body?.code ?? ''), Date.now());
+  if (pas === null) {
+    log.attention(`Second facteur : code invalide à l’activation de ${user.email}.`);
+    res.status(400).json({ error: 'Ce code ne correspond pas. Vérifiez l’heure de votre téléphone, puis réessayez avec le code affiché.' });
+    return;
+  }
+  const codes = genererSecours();
+  const ranges: SecoursRange[] = codes.map((c) => ({ h: empreinteSecours(c), used: false }));
+  activerTotp(user.id, user.totp_pending, ranges, pas);
+  log.info(`Second facteur activé pour ${user.email}.`);
+  res.json({ enabled: true, recovery: codes });
+}));
+
+/**
+ * Retirer son second facteur : mot de passe **et** code en cours. Le mot de
+ * passe seul suffirait à qui l'a volé, ce qui reviendrait à ne pas avoir de
+ * second facteur du tout.
+ */
+api.post('/me/totp/disable', authLimiter, auth, route(async (req, res) => {
+  const user = req.user ? getUserById(req.user.id) : undefined;
+  if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
+  if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
+    res.status(403).json({ error: 'Mot de passe incorrect.' });
+    return;
+  }
+  const saisi = String(req.body?.code ?? '');
+  const parCode = verifierCode(user.totp_secret, saisi, Date.now()) !== null;
+  const parSecours = totpRecovery(user).some((c) => !c.used && c.h === empreinteSecours(saisi));
+  if (!parCode && !parSecours) {
+    log.attention(`Second facteur : code invalide au retrait pour ${user.email}.`);
+    res.status(403).json({ error: 'Code incorrect. Utilisez le code de votre téléphone, ou l’un de vos codes de secours.' });
+    return;
+  }
+  desactiverTotp(user.id);
+  log.attention(`Second facteur retiré par ${user.email} depuis ${req.ip}.`);
+  res.json({ enabled: false });
+}));
+
+/**
+ * Refaire ses codes de secours, quand il n'en reste plus assez ou qu'on a perdu
+ * le papier. Les anciens cessent immédiatement de valoir.
+ */
+api.post('/me/totp/recovery', authLimiter, auth, route(async (req, res) => {
+  const user = req.user ? getUserById(req.user.id) : undefined;
+  if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
+  if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
+    res.status(403).json({ error: 'Mot de passe incorrect.' });
+    return;
+  }
+  if (verifierCode(user.totp_secret, String(req.body?.code ?? ''), Date.now()) === null) {
+    res.status(403).json({ error: 'Code incorrect.' });
+    return;
+  }
+  const codes = genererSecours();
+  setTotpRecovery(user.id, codes.map((c) => ({ h: empreinteSecours(c), used: false })));
+  log.info(`Second facteur : codes de secours refaits pour ${user.email}.`);
+  res.json({ recovery: codes });
+}));
+
 // ---- Member login accounts (admin-managed) ----
 // Réservée à un administrateur : cette liste est l'inventaire exact des
 // identifiants à attaquer, et les adresses personnelles de la famille avec.
 // L'écran qui s'en sert est déjà celui de la gestion des accès.
 api.get('/members/accounts', auth, requireAdmin, (_req, res) => {
-  res.json({ accounts: listMemberAccounts() });
+  // Qui a posé un second facteur : sans cette colonne, un administrateur ne peut
+  // pas savoir où en est le foyer, ni à qui le proposer.
+  const accounts = listMemberAccounts().map((a) => ({
+    ...a,
+    totp: !!getUserByMemberId(a.memberId)?.totp_secret,
+  }));
+  res.json({ accounts });
 });
 
 api.post('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
@@ -782,6 +1025,35 @@ api.put('/members/:memberId/account', auth, requireAdmin, route(async (req, res)
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
   updateUserCredentials(user.id, email, password === undefined ? undefined : await hacher(password));
   res.json({ memberId, email: (email ?? user.email).toLowerCase() });
+}));
+
+/**
+ * Le téléphone d'un membre est perdu, cassé ou réinitialisé, et ses codes de
+ * secours avec : un administrateur retire son second facteur.
+ *
+ * C'est la sortie de secours de dernier recours, et elle a un prix : elle veut
+ * dire qu'un administrateur compromis peut retirer le second facteur de toute la
+ * famille. C'est le compromis assumé, faute de quoi un accident de téléphone
+ * fermerait un compte définitivement. Le mot de passe de l'administrateur est
+ * redemandé, et le geste est journalisé.
+ */
+api.post('/members/:memberId/totp/reset', auth, requireAdmin, route(async (req, res) => {
+  const moi = req.user ? getUserById(req.user.id) : undefined;
+  if (!moi || !await verifier(String(req.body?.password ?? ''), moi.password_hash)) {
+    res.status(403).json({ error: 'Mot de passe incorrect. Ce geste retire la protection d’un autre compte : il se confirme par votre mot de passe.' });
+    return;
+  }
+  const user = getUserByMemberId(String(req.params.memberId));
+  if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
+  // Un enrôlement commencé et jamais confirmé compte aussi : le laisser traîner
+  // ferait échouer une reconfiguration par un « déjà actif » que rien n'explique.
+  if (!user.totp_secret && !user.totp_pending) {
+    res.status(409).json({ error: 'Ce compte n’a pas de second facteur.' });
+    return;
+  }
+  desactiverTotp(user.id);
+  log.attention(`Second facteur de ${user.email} retiré par l’administrateur ${moi.email} depuis ${req.ip}.`);
+  res.json({ enabled: false });
 }));
 
 api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest, res: Response) => {

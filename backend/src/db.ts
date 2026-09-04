@@ -51,6 +51,15 @@ try { db.exec('ALTER TABLE household ADD COLUMN ics_token TEXT'); } catch { /* a
 // Migration: per-user token version, bumped to revoke all outstanding sessions
 // (e.g. on password change or account removal).
 try { db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0'); } catch { /* already present */ }
+// Migrations : le second facteur. Additives et idempotentes, comme les autres.
+// `totp_pending` porte le secret d'un enrôlement commencé et pas confirmé : il
+// ne protège rien tant que la personne n'a pas prouvé qu'elle lit bien les codes.
+// `totp_last_step` refuse le rejeu d'un code déjà consommé.
+try { db.exec('ALTER TABLE users ADD COLUMN totp_secret TEXT'); } catch { /* déjà présent */ }
+try { db.exec('ALTER TABLE users ADD COLUMN totp_pending TEXT'); } catch { /* déjà présent */ }
+try { db.exec('ALTER TABLE users ADD COLUMN totp_recovery TEXT'); } catch { /* déjà présent */ }
+try { db.exec('ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0'); } catch { /* déjà présent */ }
+try { db.exec('ALTER TABLE users ADD COLUMN totp_enabled_at TEXT'); } catch { /* déjà présent */ }
 
 // The bytes of every module live next to the database, in the same data
 // directory: one tar of DATA_DIR remains a complete backup.
@@ -215,6 +224,68 @@ export interface UserRow {
   name: string;
   member_id: string | null;
   token_version: number;
+  /** Secret du second facteur, en base32. Null quand il n'est pas activé. */
+  totp_secret: string | null;
+  /** Secret d'un enrôlement commencé, pas encore confirmé par un code. */
+  totp_pending: string | null;
+  /** Codes de secours, en JSON : leurs empreintes et ce qui a déjà servi. */
+  totp_recovery: string | null;
+  /** Dernier pas consommé, pour refuser le rejeu d'un code lu par-dessus une épaule. */
+  totp_last_step: number;
+  totp_enabled_at: string | null;
+}
+
+/** Un code de secours tel qu'il est rangé : son empreinte, et s'il a servi. */
+export interface SecoursRange { h: string; used: boolean }
+
+/** Commence un enrôlement : le secret est posé de côté, il ne protège encore rien. */
+export function setTotpPending(id: number, secret: string | null): void {
+  db.prepare('UPDATE users SET totp_pending = ? WHERE id = ?').run(secret, id);
+}
+
+/**
+ * Active le second facteur : le secret en attente devient le secret actif, et
+ * les codes de secours sont rangés. Le pas courant est mémorisé pour que le code
+ * qui vient de servir à l'activation ne serve pas une seconde fois.
+ */
+export function activerTotp(id: number, secret: string, secours: SecoursRange[], pas: number): void {
+  db.prepare(
+    "UPDATE users SET totp_secret = ?, totp_pending = NULL, totp_recovery = ?, totp_last_step = ?, "
+    + "totp_enabled_at = datetime('now') WHERE id = ?",
+  ).run(secret, JSON.stringify(secours), pas, id);
+}
+
+/**
+ * Retire le second facteur, et tout ce qui allait avec.
+ *
+ * La version du jeton n'est pas incrémentée : retirer son second facteur n'est
+ * pas un changement d'identifiants, et déconnecter les autres appareils de la
+ * famille au passage serait une surprise sans rapport.
+ */
+export function desactiverTotp(id: number): void {
+  db.prepare(
+    'UPDATE users SET totp_secret = NULL, totp_pending = NULL, totp_recovery = NULL, '
+    + 'totp_last_step = 0, totp_enabled_at = NULL WHERE id = ?',
+  ).run(id);
+}
+
+/** Note le pas consommé : un code ne vaut qu'une fois. */
+export function setTotpLastStep(id: number, pas: number): void {
+  db.prepare('UPDATE users SET totp_last_step = ? WHERE id = ?').run(pas, id);
+}
+
+/** Marque un code de secours comme dépensé. */
+export function setTotpRecovery(id: number, secours: SecoursRange[]): void {
+  db.prepare('UPDATE users SET totp_recovery = ? WHERE id = ?').run(JSON.stringify(secours), id);
+}
+
+/** Les codes de secours d'un compte, ou une liste vide si la colonne est illisible. */
+export function totpRecovery(u: UserRow): SecoursRange[] {
+  if (!u.totp_recovery) return [];
+  try {
+    const lu = JSON.parse(u.totp_recovery) as SecoursRange[];
+    return Array.isArray(lu) ? lu.filter((c) => typeof c?.h === 'string') : [];
+  } catch { return []; }
 }
 
 export function findUserByEmail(email: string): UserRow | undefined {

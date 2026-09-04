@@ -23,7 +23,20 @@ export class ApiError extends Error {
 export const isOffline = (e: unknown): boolean => e instanceof ApiError && e.status === 0;
 
 export interface AuthUser { email: string; name: string; memberId: string | null; }
-export interface LoginResult { token: string; user: AuthUser; }
+/**
+ * Ce que rend le premier temps de la connexion.
+ *
+ * Avec un second facteur posé, le mot de passe ne rend **pas** de jeton : il
+ * rend un défi, qui ne vaut que pour le second temps et n'ouvre rien par
+ * lui-même. Les deux formes sont donc facultatives, et l'appelant regarde
+ * laquelle est là.
+ */
+export interface LoginResult {
+  token?: string;
+  user?: AuthUser;
+  totpRequired?: boolean;
+  challenge?: string;
+}
 
 export interface UpdateInfo {
   current: string;
@@ -252,20 +265,54 @@ export class ApiService {
     return this.request('setup/status');
   }
 
-  setup(payload: SetupPayload): Promise<LoginResult> {
-    return this.request<LoginResult>('setup', { method: 'POST', body: JSON.stringify(payload) });
+  /**
+   * L'assistant rend toujours un jeton : un foyer qui vient de naître n'a pas de
+   * second facteur, et il n'y a pas de second temps à attendre.
+   */
+  setup(payload: SetupPayload): Promise<{ token: string; user: AuthUser }> {
+    return this.request('setup', { method: 'POST', body: JSON.stringify(payload) });
   }
 
   login(email: string, password: string): Promise<LoginResult> {
     return this.request<LoginResult>('auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
   }
 
+  /** Second temps : le code du téléphone, ou un code de secours. */
+  loginTotp(challenge: string, code: string): Promise<LoginResult> {
+    return this.request<LoginResult>('auth/login/totp', { method: 'POST', body: JSON.stringify({ challenge, code }) });
+  }
+
+  // ---- second facteur, pour son propre compte ----
+  totpStart(password: string): Promise<{ secret: string; secretLisible: string; uri: string }> {
+    return this.request('me/totp/start', { method: 'POST', body: JSON.stringify({ password }) });
+  }
+
+  totpEnable(code: string): Promise<{ enabled: boolean; recovery: string[] }> {
+    return this.request('me/totp/enable', { method: 'POST', body: JSON.stringify({ code }) });
+  }
+
+  totpDisable(password: string, code: string): Promise<{ enabled: boolean }> {
+    return this.request('me/totp/disable', { method: 'POST', body: JSON.stringify({ password, code }) });
+  }
+
+  totpNewRecovery(password: string, code: string): Promise<{ recovery: string[] }> {
+    return this.request('me/totp/recovery', { method: 'POST', body: JSON.stringify({ password, code }) });
+  }
+
+  /** Le téléphone d'un membre est perdu : un administrateur retire son second facteur. */
+  totpReset(memberId: string, password: string): Promise<{ enabled: boolean }> {
+    return this.request(`members/${encodeURIComponent(memberId)}/totp/reset`, { method: 'POST', body: JSON.stringify({ password }) });
+  }
+
   /** `token` n'est présent que lorsque le serveur en a rendu un neuf. Voir aRenouveler côté serveur. */
-  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean; token?: string }> {
+  me(): Promise<{
+    email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean; token?: string;
+    totp: boolean; totpRecoveryLeft: number | null;
+  }> {
     return this.request('me');
   }
 
-  memberAccounts(): Promise<{ accounts: { memberId: string; email: string }[] }> {
+  memberAccounts(): Promise<{ accounts: { memberId: string; email: string; totp: boolean }[] }> {
     return this.request('members/accounts');
   }
 

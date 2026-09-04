@@ -32,8 +32,28 @@ sqlite3 /var/lib/foyer/foyer.db \
       d'exister : supprimez-le.
 - [ ] Les comptes des enfants sont marqués « enfant » sur leur fiche (écran
       Famille). Sans ce marquage, ils voient les Finances et les Documents.
-- [ ] Aucun mot de passe n'est réutilisé ailleurs. C'est le seul scénario que la
+- [ ] Aucun mot de passe n'est réutilisé ailleurs. C'est le scénario que la
       temporisation ne voit pas passer : une connexion réussie du premier coup.
+      C'est aussi celui que le second facteur couvre, ci-dessous.
+
+### Le second facteur
+
+```sh
+sqlite3 /var/lib/foyer/foyer.db \
+  "SELECT email, CASE WHEN totp_secret IS NULL THEN 'NON' ELSE 'oui' END AS second_facteur FROM users;"
+```
+
+- [ ] **Posé sur chaque compte adulte**, en commençant par les administrateurs.
+      Il se pose depuis Paramètres, section « Mon compte ». Le mécanisme ne
+      protège personne tant qu'il n'est activé nulle part.
+- [ ] Les **codes de secours sont notés ailleurs que sur le téléphone** qui
+      porte l'application. Sur papier dans un tiroir, ou dans un gestionnaire de
+      mots de passe qui n'est pas sur ce téléphone.
+- [ ] Vous avez **essayé un code de secours au moins une fois**, pour savoir
+      qu'ils fonctionnent avant d'en avoir besoin. Il en restera neuf, et
+      l'écran vous dira combien.
+- [ ] Vous savez qu'un administrateur peut retirer le second facteur d'un membre
+      depuis l'écran Famille, si son téléphone est perdu **et** ses codes avec.
 
 ### Les permissions et le service
 
@@ -189,6 +209,23 @@ done; echo
 - [ ] **Pendant ce temps**, depuis la maison, un autre membre du foyer se
       connecte normalement. C'est la vérification qui compte le plus : une
       protection qui enferme la famille dehors n'en est pas une.
+
+### Le second facteur, vu de l'extérieur
+
+```sh
+curl -s -X POST https://foyer.mondomaine.fr/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"VOTRE_ADRESSE","password":"VOTRE_MOT_DE_PASSE"}'
+```
+
+- [ ] La réponse porte `"totpRequired":true` et un `challenge`, **et aucun
+      `token`**. Le mot de passe seul ne doit rien ouvrir.
+- [ ] Ce `challenge`, présenté comme un jeton de session, est refusé :
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' https://foyer.mondomaine.fr/api/state \
+  -H "Authorization: Bearer LE_CHALLENGE"      # attendu 401
+```
 
 ### Le flux de calendrier
 

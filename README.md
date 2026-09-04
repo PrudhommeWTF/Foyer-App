@@ -47,7 +47,7 @@ Foyer-App/
 ```
 
 - Le **backend** stocke l'état du foyer comme un document JSON versionné en **SQLite**
-  (`GET/PUT /api/state`), avec authentification **JWT** (mots de passe **bcrypt**).
+  (`GET/PUT /api/state`), avec authentification **JWT** (mots de passe **bcrypt**, second facteur **TOTP** en option).
   Un seul conteneur, idéal pour l'auto-hébergement.
 - Le document s'écrit avec **contrôle de version** : un client annonce la version sur
   laquelle il a travaillé, le serveur refuse (409) d'écrire par-dessus plus récent et lui
@@ -168,7 +168,13 @@ de tâches, des catégories de budget). Une base déjà configurée n'est jamais
 - **Révocation des sessions** : changer le mot de passe d'un membre (ou supprimer son compte) invalide
   immédiatement tous ses jetons existants.
 - **Autorisations** : seul un administrateur du foyer peut ajouter/retirer un membre ou modifier des droits
-  d'administration ; un membre non-admin ne peut éditer que son propre profil.
+  d'administration ; un membre non-admin ne peut éditer que son propre profil. Un compte enfant n'entre ni
+  dans les Finances, ni dans les Documents, ni dans les Paramètres.
+- **Second facteur (TOTP)** : un code à six chiffres en plus du mot de passe, compatible avec toutes les
+  applications d'authentification (Aegis, Google Authenticator, 1Password, Bitwarden…). Facultatif, compte
+  par compte, à poser depuis Paramètres > Mon compte. Dix codes de secours, et un administrateur peut
+  retirer la protection d'un membre qui a perdu son téléphone. Aucun service tiers : le calcul est local.
+- **Pas d'inscription libre** : un accès s'ouvre depuis la fiche d'un membre, par un administrateur.
 
 ## 📥 Import de relevés bancaires
 

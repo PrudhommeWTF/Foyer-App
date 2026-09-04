@@ -35,10 +35,17 @@ import { contactIni } from '../core/helpers';
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="40" />
               <div class="minfo">
                 <div class="mname">{{ m.name }} @if (m.admin) { <span class="admin">admin</span> }</div>
-                <div class="mrole">{{ m.role }}@if (store.isAdmin() && store.memberHasAccount(m.id)) { <span class="acct" [title]="store.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }</div>
+                <div class="mrole">{{ m.role }}@if (store.isAdmin() && store.memberHasAccount(m.id)) { <span class="acct" [title]="store.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }@if (store.isAdmin() && store.memberHasTotp(m.id)) { <span class="acct totp" title="Second facteur actif"><f-icon name="lock" [size]="10" color="#4E93B8" [width]="3" /> 2FA</span> }</div>
               </div>
               @if (store.isAdmin()) {
                 <button class="icon-btn sm" title="Gérer l'accès" (click)="store.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="store.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>
+                @if (store.memberHasTotp(m.id)) {
+                  <!-- Téléphone perdu, cassé ou réinitialisé, et codes de secours
+                       avec : c'est la sortie de dernier recours. -->
+                  <button class="icon-btn sm" title="Retirer son second facteur (téléphone perdu)" (click)="retirerTotp(m.id, m.name)">
+                    <f-icon name="refresh" [size]="15" color="var(--ink3)" />
+                  </button>
+                }
                 <button class="icon-btn sm" (click)="store.editMember(m.id)"><f-icon name="edit" [size]="16" /></button>
                 <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })"><f-icon name="trash" [size]="16" color="var(--primary)" /></button>
               }
@@ -172,6 +179,8 @@ import { contactIni } from '../core/helpers';
     .confirm { font-size: 14px; font-weight: 600; color: var(--ink2); margin-bottom: 20px; line-height: 1.5; }
     .acct { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; background: #EDF2EB; color: #5F7E5C; font-size: 10.5px; font-weight: 800; }
     :host-context(:root.dark) .acct { background: rgba(122,155,118,.22); }
+    .acct.totp { background: #E5F0F4; color: #3C6E88; }
+    :host-context(:root.dark) .acct.totp { background: rgba(78,147,184,.22); }
     .acc-foot { display: flex; align-items: center; gap: 10px; }
     .input.readonly { display: flex; align-items: center; color: var(--ink2); font-weight: 700; background: var(--soft); }
   `],
@@ -182,6 +191,20 @@ export class FamilyModalComponent {
   palette = PALETTE;
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   ini(): string { return contactIni(this.store.ui().mfName || '?'); }
+  /**
+   * Le téléphone d'un membre est perdu : on retire son second facteur pour qu'il
+   * puisse se reconnecter, puis en reposer un. Le mot de passe de
+   * l'administrateur est redemandé par le serveur, pas seulement ici.
+   */
+  async retirerTotp(memberId: string, nom: string): Promise<void> {
+    const mdp = prompt(
+      `Retirer le second facteur de ${nom} ?\n\n`
+      + 'Son mot de passe seul suffira de nouveau à ouvrir son compte, jusqu’à ce qu’il en repose un.\n'
+      + 'Confirmez avec VOTRE mot de passe.',
+    );
+    if (mdp) await this.store.resetMemberTotp(memberId, mdp);
+  }
+
   accEmail(): string { const id = this.store.ui().accountFor; return id ? this.store.memberAccountEmail(id) : ''; }
   accMemberName(): string { const id = this.store.ui().accountFor; return this.d().members.find((m) => m.id === id)?.name || 'ce membre'; }
 }

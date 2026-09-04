@@ -1025,8 +1025,7 @@ dans les tests.
 
 ### F1, le second facteur
 
-Non fait, comme annoncé : c'est un chantier à part, et c'est aujourd'hui le
-principal risque résiduel. Voir `docs/risques-acceptes.md`.
+**Fait, dans une tranche à part.** Voir la section 14.
 
 ### Ce qui a été vérifié
 
@@ -1050,6 +1049,100 @@ qui fait conclure à tort à une sauvegarde incomplète.
 
 **Ce qui n'a pas pu être vérifié :** le conteneur Docker durci n'a pas été
 construit ni lancé, faute de démon Docker dans l'environnement d'audit.
+
+---
+
+## 14. Tranche 4 : le second facteur
+
+Le constat **F1**, seul risque qu'aucune autre correction n'atteignait : un mot
+de passe réutilisé ailleurs et découvert. Ni le verrou par compte, ni
+l'égalisation du temps de réponse, ni fail2ban ne voient passer une connexion
+réussie du premier coup.
+
+### Ce qui a été fait
+
+Un TOTP conforme à la RFC 6238, écrit à la main dans
+`backend/src/auth/totp.ts`, comme le sont déjà les lecteurs XML et ZIP du module
+Finances : la grammaire tient en quarante lignes, Node fournit HMAC-SHA1, et une
+dépendance de plus sur le chemin de la connexion est une surface de plus. Aucun
+service tiers, aucun SMS, aucun compte externe : le calcul est local des deux
+côtés.
+
+**La connexion se fait en deux temps.** Le mot de passe ne rend plus de jeton
+quand un second facteur est posé : il rend un **défi**, signé avec un secret
+dérivé de celui des sessions mais distinct de lui. Ce n'est pas une précaution
+de style : cela rend structurellement impossible de sauter le second temps en
+gardant le jeton du premier, plutôt que de dépendre d'un contrôle qu'une
+relecture distraite pourrait retirer. Un test le vérifie en forgeant un défi
+avec le secret des sessions : il est refusé.
+
+**Un code ne vaut qu'une fois.** Le pas consommé est mémorisé, et un code déjà
+servi est refusé : sans cela, un code lu par-dessus une épaule reste utilisable
+une trentaine de secondes. Le code qui a servi à l'activation ne sert donc pas
+non plus à se connecter dans la foulée.
+
+**La temporisation continue de courir** sur le compte visé pendant le second
+temps, et l'ardoise n'est **pas** effacée par un mot de passe correct : sans
+cela, qui détient le mot de passe essaierait le million de combinaisons sans
+jamais recroiser le verrou.
+
+**Dix codes de secours**, montrés une fois, rangés en SHA-256 et non en bcrypt :
+ils portent cinquante bits d'aléa, il n'y a rien à deviner, et hacher dix codes
+avec bcrypt à chaque connexion coûterait trois secondes pour rien. Ils ne
+portent ni I, ni O, ni 0, ni 1 : un code de secours se recopie à la main
+précisément le jour où l'on est déjà contrarié.
+
+**L'enrôlement se prouve avant de protéger.** Le secret est mis de côté et
+n'active rien tant qu'un code ne l'a pas confirmé : une saisie de travers dans
+l'application du téléphone ne ferme pas le compte. Retirer la protection exige
+le mot de passe **et** un code : le mot de passe seul suffirait à qui l'a volé.
+
+**Une sortie de secours** : un administrateur peut retirer le second facteur
+d'un membre dont le téléphone est perdu et les codes avec. Elle a un prix, écrit
+dans `docs/risques-acceptes.md`.
+
+### Ce qui a été vérifié
+
+`test/totp.test.ts` éprouve le calcul contre les **vecteurs de la RFC 6238**,
+c'est-à-dire contre la même référence que les applications de téléphone. C'est le
+seul endroit de l'application où « ça marche chez moi » ne suffit pas : un code
+faux rendrait la connexion impossible et la panne incompréhensible.
+
+`test/auth-totp.test.ts` éprouve vingt-neuf cas de bout en bout sur les vraies
+routes, surtout ceux qui ne doivent **pas** marcher : sauter le second temps, se
+servir du défi comme d'une session, rejouer un code, retirer la protection sans
+la prouver, débloquer le compte d'un autre.
+
+Deux découvertes en écrivant ces tests, toutes deux corrigées : le déblocage
+administrateur ne nettoyait pas un enrôlement resté en attente, ce qui bloquait
+une reconfiguration par un « déjà actif » que rien n'expliquait ; et le code
+d'activation restait utilisable pour se connecter dans la foulée.
+
+**Au navigateur**, parcours complet avec une implémentation TOTP écrite
+séparément dans le test, pour vérifier que le serveur calcule bien ce qu'un vrai
+téléphone calculerait : activation, codes de secours affichés, mot de passe seul
+refusé, code faux refusé, bon code accepté, code de secours accepté. Aucune
+erreur de page.
+
+**1004 tests backend**, 463 frontend, CI complète au vert.
+
+### Ce qui n'est délibérément pas fait
+
+**Le QR code.** La clé s'affiche en base32, par groupes de quatre, avec un bouton
+de copie ; toutes les applications d'authentification acceptent la saisie
+manuelle. Un encodeur QR demande une arithmétique de Reed-Solomon que je ne
+pouvais pas vérifier ici de façon convaincante, et un QR faux se voit mal :
+l'enrôlement échouerait sans dire pourquoi. La saisie manuelle, elle, échoue
+franchement ou marche. À ajouter plus tard si l'enrôlement devient fréquent, ce
+qu'il ne sera pas dans un foyer de quatre personnes.
+
+**L'obligation.** Le second facteur est facultatif, compte par compte. Le rendre
+obligatoire fermerait un compte au premier téléphone perdu, et une protection
+qu'on subit finit par être contournée. C'est donc à vous de le poser, et
+`docs/mise-en-ligne-checklist.md` vous le rappelle.
+
+**Le chiffrement du secret en base.** Voir `docs/risques-acceptes.md` : le
+chiffrer avec une clé rangée sur la même machine ne protégerait de rien.
 
 ---
 
