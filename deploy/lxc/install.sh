@@ -147,6 +147,12 @@ FOYER_JWT_SECRET=${JWT}
 # Au 1er démarrage, l'assistant de configuration crée le foyer + le compte admin.
 # Les accès suivants s'ouvrent depuis la fiche d'un membre, par un administrateur :
 # il n'y a pas d'inscription libre.
+#
+# Exposition : si un reverse-proxy tourne sur CETTE machine, décommentez la ligne
+# ci-dessous. Le service ne sera plus joignable que par lui, et personne ne pourra
+# se faire passer pour une autre adresse en posant X-Forwarded-For.
+#   FOYER_BIND=127.0.0.1
+# S'il n'y a aucun proxy devant, posez plutôt FOYER_TRUST_PROXY=false.
 # Mise à jour « en un clic » depuis l'interface (helper root via systemd).
 FOYER_SELF_UPDATE=${SELF_UPDATE}
 FOYER_GITHUB_REPO=${FOYER_GITHUB_REPO:-PrudhommeWTF/Foyer-App}

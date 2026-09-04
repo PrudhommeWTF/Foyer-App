@@ -16,6 +16,7 @@ import { initBlobs } from '../src/storage/blobs';
 import { migrateHousehold } from '../src/storage/schema';
 import * as files from '../src/storage/files';
 import { recipesRouter } from '../src/recipes/routes';
+import { FetchError, FetchedPage, resolvePublicUrl } from '../src/recipes/fetch';
 
 /** L'interrupteur d'import, passé au routeur : le module ne lit plus l'environnement. */
 let importAutorise = true;
@@ -33,25 +34,39 @@ const pageWith = (node: unknown): string =>
 let server: http.Server;
 let base: string;
 let dir: string;
-const realFetch = globalThis.fetch;
 
 /** Réponses que le faux réseau doit servir, par fragment d'URL. */
 let routes: { match: RegExp; status?: number; type: string; body: Buffer | string }[] = [];
 const calls: string[] = [];
 
-function stubFetch(): void {
-  globalThis.fetch = (async (input: string | URL) => {
-    const url = String(input);
-    calls.push(url);
-    const hit = routes.find((r) => r.match.test(url));
-    if (!hit) return new Response('nope', { status: 404 });
-    const body = typeof hit.body === 'string' ? hit.body : new Uint8Array(hit.body);
-    return new Response(body as BodyInit, { status: hit.status ?? 200, headers: { 'content-type': hit.type } });
-  }) as typeof fetch;
-}
+/**
+ * Le transport, remplacé par une table de réponses.
+ *
+ * Ce fichier éprouve la lecture d'une page et le rangement de la photo, pas la
+ * façon d'ouvrir une connexion : les gardes du transport (adresses privées,
+ * redirections revalidées, adresse épinglée, taille et durée bornées) ont leur
+ * propre fichier, recipe-fetch.test.ts, où ils sont éprouvés sur le vrai module.
+ * Injecter ici évite d'aller sur le réseau pour vérifier un parseur.
+ */
+const faux = async (url: string): Promise<FetchedPage> => {
+  // La validation de l'adresse reste **la vraie** : c'est elle qui refuse le
+  // réseau local, et la remplacer par une approximation ferait passer le test
+  // pendant que la porte s'ouvrirait. Elle n'ouvre aucune connexion.
+  await resolvePublicUrl(url);
+  calls.push(url);
+  const hit = routes.find((r) => r.match.test(url));
+  if (!hit) throw new FetchError('Cette page n’existe pas ou plus sur le site.');
+  const statut = hit.status ?? 200;
+  if (statut === 401 || statut === 403) {
+    throw new FetchError('Le site refuse la lecture automatique de cette page. Vous pouvez saisir la recette à la main.');
+  }
+  if (statut >= 400) throw new FetchError(`Le site a répondu une erreur ${statut}.`);
+  const body = typeof hit.body === 'string' ? Buffer.from(hit.body) : hit.body;
+  return { url, body, contentType: hit.type };
+};
 
 const post = async (body: unknown): Promise<{ status: number; json: any }> => {
-  const res = await realFetch(base + '/recipes/import', {
+  const res = await fetch(base + '/recipes/import', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
   });
   return { status: res.status, json: await res.json() };
@@ -65,18 +80,16 @@ beforeEach(async () => {
   files.initFiles(db);
 
   const app = express();
-  app.use('/api/recipes', recipesRouter(() => importAutorise));
+  app.use('/api/recipes', recipesRouter(() => importAutorise, faux));
   server = http.createServer(app);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = 'http://127.0.0.1:' + (server.address() as { port: number }).port + '/api';
 
   calls.length = 0;
   routes = [];
-  stubFetch();
 });
 
 afterEach(async () => {
-  globalThis.fetch = realFetch;
   await new Promise<void>((r) => server.close(() => r()));
   fs.rmSync(dir, { recursive: true, force: true });
   importAutorise = true;

@@ -48,6 +48,7 @@ import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finance
 import { LogLevel, log, setLogLevelSource } from './log';
 import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
 import { buildStatus } from './system/status';
+import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './auth/throttle';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -141,9 +142,36 @@ const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'p
 
 const app = express();
 
-// Behind a reverse proxy (Caddy/Traefik/Nginx, Proxmox ingress…): trust the first
-// hop so client IPs (rate-limiting) and protocol are read from X-Forwarded-* headers.
-app.set('trust proxy', 1);
+/**
+ * À qui l'on fait confiance pour dire d'où vient une requête.
+ *
+ * `X-Forwarded-For` est un en-tête que **l'appelant** écrit. Le croire n'a de
+ * sens que si un proxy l'a réécrit avant nous. Derrière NGINX Proxy Manager
+ * configuré comme le décrit docs/mise-en-ligne-checklist.md, c'est le cas, et
+ * `1` est la bonne valeur : le dernier maillon est le proxy.
+ *
+ * Joignable directement, en revanche, l'attaquant EST le maillon, et son en-tête
+ * est cru : mesuré, dix tentatives avec « X-Forwarded-For » différent à chaque
+ * coup repartaient toutes à zéro, et la temporisation ne servait plus à rien.
+ * Deux réponses, complémentaires :
+ *
+ *   - `FOYER_BIND=127.0.0.1` : le service n'est joignable que par un proxy local,
+ *     personne d'autre ne peut être le maillon ;
+ *   - `FOYER_TRUST_PROXY=false` : aucun en-tête n'est cru, l'adresse vue est celle
+ *     de la connexion. C'est la bonne valeur quand l'application est exposée
+ *     directement sur le réseau, sans proxy devant.
+ */
+const trustProxy = ((): number | boolean => {
+  const brut = (process.env.FOYER_TRUST_PROXY || '').trim();
+  if (!brut) return 1;
+  if (/^(0|false|no|off)$/i.test(brut)) return false;
+  const n = parseInt(brut, 10);
+  return Number.isInteger(n) && n >= 0 ? n : 1;
+})();
+app.set('trust proxy', trustProxy);
+
+/** L'interface d'écoute. Voir FOYER_TRUST_PROXY ci-dessus pour le rapport entre les deux. */
+const BIND = process.env.FOYER_BIND || '0.0.0.0';
 
 // Security headers. The frontend is a self-hosted SPA that inlines styles and loads
 // Google fonts; images come as data:/blob: URLs. upgrade-insecure-requests is disabled
@@ -193,14 +221,45 @@ app.use((err: Error & { type?: string }, _req: Request, res: Response, next: Nex
   });
 });
 
-// Throttle credential endpoints to blunt brute-force / account-enumeration attempts.
+/**
+ * Le garde-fou grossier des routes d'identifiants : il borne le débit brut, pas
+ * les tentatives. La vraie temporisation est dans auth/throttle.ts, par compte
+ * visé et par adresse, et c'est elle qui distingue un attaquant d'une famille.
+ *
+ * Les requêtes **réussies ne comptent plus** : sans cela, trente connexions
+ * légitimes dans le quart d'heure fermaient la porte à la trente-et-unième, et
+ * un foyer de cinq personnes sur quatre appareils y arrive.
+ */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 120,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de tentatives, réessayez dans quelques minutes.' },
 });
+
+/**
+ * Un condensat bcrypt de rien du tout, comparé quand le compte n'existe pas.
+ *
+ * Sans lui, un compte inconnu ressortait avant tout calcul et un compte connu
+ * payait la vérification : 2,0 ms contre 81,0 ms, mesurés, écarts nets. Le
+ * message était bien le même dans les deux cas, mais le chronomètre disait
+ * lequel des deux existait, et un attaquant n'avait plus qu'à concentrer son
+ * bourrage sur les adresses qui répondent lentement.
+ *
+ * Le condensat est engendré au démarrage, avec le même coût que les vrais : le
+ * chemin « compte inconnu » coûte désormais exactement ce que coûte le chemin
+ * « mauvais mot de passe ».
+ */
+const HASH_LEURRE = bcrypt.hashSync('mot de passe qui ne sert a personne', 10);
+
+/**
+ * Les deux compteurs de tentatives : par compte visé, et par adresse. Voir
+ * auth/throttle.ts pour les seuils et la raison de leur écart.
+ */
+const parCompte = new Throttle(SEUILS_COMPTE);
+const parAdresse = new Throttle(SEUILS_ADRESSE);
 
 /** Le flux ICS, servi sans session : borné pour ne pas devenir un robinet. */
 const icsLimiter = rateLimit({
@@ -387,11 +446,33 @@ api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
     res.status(400).json({ error: 'Email et mot de passe requis' });
     return;
   }
-  const user = findUserByEmail(String(email));
-  if (!user || !bcrypt.compareSync(String(password), user.password_hash)) {
+  const cible = String(email).trim().toLowerCase();
+  const adresse = req.ip || 'inconnue';
+  const now = Date.now();
+
+  // Le compte visé d'abord : c'est lui qu'un bourrage distribué garde constant
+  // pendant qu'il change d'adresse.
+  const attente = Math.max(parCompte.attente(cible, now), parAdresse.attente(adresse, now));
+  if (attente > 0) {
+    log.attention(`Connexion refusée (temporisation, ${Math.ceil(attente / 1000)} s) pour ${cible} depuis ${adresse}.`);
+    res.status(429).set('Retry-After', String(Math.ceil(attente / 1000))).json({ error: messageAttente(attente) });
+    return;
+  }
+
+  const user = findUserByEmail(cible);
+  // Le compte inconnu paie la même vérification que le compte connu : sans cela
+  // le chronomètre dit lequel des deux existe. Voir HASH_LEURRE.
+  const bon = bcrypt.compareSync(String(password), user ? user.password_hash : HASH_LEURRE);
+  if (!user || !bon) {
+    parCompte.echec(cible, now);
+    parAdresse.echec(adresse, now);
+    log.attention(`Connexion refusée pour ${cible} depuis ${adresse}.`);
     res.status(401).json({ error: 'Identifiants invalides' });
     return;
   }
+  parCompte.succes(cible);
+  parAdresse.succes(adresse);
+  log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
   res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
 });
 
@@ -571,7 +652,7 @@ api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response
   updateUserCredentials(user.id, email, password);
   const frais = getUserById(user.id);
   if (!frais) { res.status(500).json({ error: 'Compte introuvable après modification' }); return; }
-  log.info(`Compte : ${user.email} a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
+  log.info(`Compte : ${user.email} (depuis ${req.ip || 'adresse inconnue'}) a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
   res.json({ email: frais.email, token: sign(frais), othersLoggedOut: password !== undefined });
 });
 
@@ -963,8 +1044,20 @@ export function start(): void {
     log: notifLog,
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
-    log.info(`API + app disponibles sur http://0.0.0.0:${PORT}`);
+  // Le dire au démarrage plutôt qu'au premier bourrage : cru sur une interface
+  // ouverte, X-Forwarded-For rend la temporisation contournable par quiconque
+  // joint le port directement.
+  if (trustProxy !== false && BIND === '0.0.0.0') {
+    log.attention(
+      'Sécurité : le service écoute sur toutes les interfaces ET fait confiance à X-Forwarded-For. '
+      + 'Quiconque joint le port directement peut donc se faire passer pour l’adresse de son choix, et contourner '
+      + 'la temporisation des tentatives de connexion. Posez FOYER_BIND=127.0.0.1 si un proxy tourne sur la même '
+      + 'machine, filtrez le port au pare-feu sinon, ou posez FOYER_TRUST_PROXY=false s’il n’y a aucun proxy devant.',
+    );
+  }
+
+  app.listen(PORT, BIND, () => {
+    log.info(`API + app disponibles sur http://${BIND}:${PORT}`);
   });
 }
 
