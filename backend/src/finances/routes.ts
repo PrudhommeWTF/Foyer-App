@@ -18,6 +18,7 @@ import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
 import * as loans from './loans';
 import { ACCOUNT_KINDS, LoanTerms, TX_KINDS, TxKind } from './types';
+import { log } from '../log';
 
 /** Reject with an explicit French message rather than a bare 400. */
 class Invalid extends Error {}
@@ -72,8 +73,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances : erreur inattendue', e);
+      log.erreur('Finances : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur interne du module Finances : ' + (e as Error).message });
     }
   };

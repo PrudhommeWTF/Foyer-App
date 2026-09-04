@@ -3,6 +3,7 @@ import express, { Request, Response, Router } from 'express';
 import * as energy from './energy';
 import { getContract } from './contracts';
 import { isIsoDate, parseCents } from './money';
+import { log } from '../log';
 
 class Invalid extends Error {}
 const fail = (msg: string): never => { throw new Invalid(msg); };
@@ -12,8 +13,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances/énergie : erreur inattendue', e);
+      log.erreur('Finances/énergie : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur sur les relevés : ' + (e as Error).message });
     }
   };

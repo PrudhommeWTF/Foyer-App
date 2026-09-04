@@ -6,6 +6,7 @@ import { contentDisposition } from '../headers';
 import express, { NextFunction, Request, Response, Router } from 'express';
 import { ACCEPTED_IMAGE_LABEL, DetectedType, GENERIC_TYPE, IMAGE_MIMES, INLINE_MIMES, detectType } from './blobs';
 import * as files from './files';
+import { log } from '../log';
 
 /**
  * Le plafond **technique** du serveur : au-delà, la requête n'est même pas lue.
@@ -67,8 +68,7 @@ export function filesRouter(maxBytes: UploadLimit): Router {
       const { file, deduplicated } = files.store(kind, ownerId, name, buf, type ?? GENERIC_TYPE);
       res.status(201).json({ file, deduplicated });
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Fichiers : échec de l’enregistrement', e);
+      log.erreur('Fichiers : échec de l’enregistrement', e);
       res.status(500).json({ error: 'Enregistrement du fichier impossible : ' + (e as Error).message });
     }
   });

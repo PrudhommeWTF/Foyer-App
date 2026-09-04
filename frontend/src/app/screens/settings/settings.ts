@@ -31,10 +31,13 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   exploitation: { icon: 'refresh', tint: '#F2ECF5', color: '#9B6FA8' },
 };
 
-/** Les sections sans réglages déclarés, dans l'ordre où elles suivent celles du registre. */
+/**
+ * Les sections qui portent des **gestes** plutôt que des réglages, dans l'ordre
+ * où elles suivent celles du registre. Une section déclarée dans le registre
+ * n'a rien à faire ici : elle en viendrait deux fois.
+ */
 const GESTES: Section[] = [
   { id: 'membres', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres et leurs accès.', ...ICONES['membres'] },
-  { id: 'exploitation', label: 'Exploitation', desc: 'Version, mises à jour, export des données, journal des modifications.', ...ICONES['exploitation'] },
   { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose, en lecture seule.', ...ICONES['serveur'] },
 ];
 
@@ -265,6 +268,65 @@ const GESTES: Section[] = [
             </div>
                         }
                         @case ('exploitation') {
+                          <div class="extra-t">État du service</div>
+                          @if (store.systemStatus(); as st) {
+                            <div class="etat">
+                              <div><span>Version</span><b>{{ st.version }}</b></div>
+                              <div><span>En service depuis</span><b>{{ duree(st.uptime) }}</b></div>
+                              <div><span>Node</span><b>{{ st.nodeVersion }}</b></div>
+                              <div><span>Dossier des données</span><b class="chemin">{{ st.dataDir }}</b></div>
+                              <div><span>Base de données</span><b>{{ poids(st.dbBytes) }}</b></div>
+                              <div><span>Dossier complet</span><b>{{ poids(st.dataBytes) }}</b></div>
+                              @if (st.disk; as d) {
+                                <div [class.alerte]="d.free < d.total * 0.1">
+                                  <span>Espace disque restant</span>
+                                  <b>{{ poids(d.free) }} sur {{ poids(d.total) }}</b>
+                                </div>
+                              } @else {
+                                <div><span>Espace disque restant</span><b>inconnu sur cette plateforme</b></div>
+                              }
+                              <div><span>Contenu</span><b>{{ st.counts.members }} membres · {{ st.counts.events }} événements · {{ st.counts.tasks }} tâches · {{ st.counts.recipes }} recettes · {{ st.counts.files }} documents</b></div>
+                            </div>
+                          } @else {
+                            <div class="hint">État du service indisponible.</div>
+                          }
+
+                          <div class="extra-t">Sauvegardes de la base</div>
+                          <div class="hint" style="margin:0 0 10px">
+                            Un instantané cohérent pris <b>sans arrêter le service</b> (la base est en WAL : copier
+                            le fichier à chaud donnerait une archive corrompue). Il emporte tout ce qui est en base,
+                            finances comprises, mais <b>ni les fichiers ni les photos</b>, qui vivent à côté sur le
+                            disque. Pour une archive vraiment complète :
+                            <code>tar czf foyer.tar.gz -C {{ dossierParent() }} {{ dossierNom() }}</code>, service arrêté.
+                          </div>
+                          @if (store.isAdmin()) {
+                            <button class="data-row" [disabled]="store.backupBusy()" (click)="store.makeBackup()">
+                              <f-icon name="folder" [size]="18" color="var(--ink2)" [width]="2" />
+                              <span>{{ store.backupBusy() ? 'Sauvegarde en cours…' : 'Sauvegarder maintenant' }}</span>
+                            </button>
+                          }
+                          @for (b of store.systemStatus()?.snapshots || []; track b.name) {
+                            <div class="sauv">
+                              <div class="sauv-b">
+                                <div class="sauv-n">{{ b.name }}</div>
+                                <div class="sauv-m">{{ quand(b.at.replace('T', ' ')) }} · {{ poids(b.bytes) }}</div>
+                              </div>
+                              <button class="icon-btn sm" title="Télécharger" (click)="store.downloadBackup(b.name)">
+                                <f-icon name="download" [size]="16" color="var(--ink2)" [width]="2" />
+                              </button>
+                              <button class="icon-btn sm" title="Effacer" (click)="store.deleteBackup(b.name)">
+                                <f-icon name="trash" [size]="16" color="var(--primary)" [width]="2" />
+                              </button>
+                            </div>
+                          } @empty {
+                            <div class="hint">Aucune sauvegarde pour le moment.</div>
+                          }
+                          <div class="hint" style="margin-top:10px">
+                            <b>Restaurer</b> ne se fait pas depuis l’application : remplacer la base pendant que le
+                            service l’utilise la corromprait. Service arrêté :
+                            <code>systemctl stop foyer &amp;&amp; cp sauvegardes/foyer-….db foyer.db &amp;&amp; rm -f foyer.db-wal foyer.db-shm &amp;&amp; systemctl start foyer</code>
+                          </div>
+
                           <div class="extra-t">Mises à jour</div>
             @if (store.updating()) {
               <div class="upd-badge new"><f-icon name="refresh" [size]="13" color="#D9930F" [width]="3" /> Mise à jour en cours…</div>
@@ -407,6 +469,20 @@ const GESTES: Section[] = [
     .log-k { font-size: 13px; font-weight: 800; color: var(--ink); }
     .log-m { font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.45; }
 
+    .etat { background: var(--soft); border-radius: 13px; padding: 4px 14px; margin-bottom: 10px; }
+    .etat > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .etat > div:last-child { border-bottom: none; }
+    .etat span { font-size: 12px; font-weight: 700; color: var(--ink2); flex: none; }
+    .etat b { font-size: 12.5px; font-weight: 800; color: var(--ink); text-align: right; min-width: 0; }
+    .etat b.chemin { word-break: break-all; font-family: ui-monospace, monospace; font-size: 11.5px; }
+    .etat > div.alerte b { color: #C6492F; }
+
+    .sauv { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .sauv:last-of-type { border-bottom: none; }
+    .sauv-b { flex: 1; min-width: 0; }
+    .sauv-n { font-size: 12.5px; font-weight: 800; color: var(--ink); font-family: ui-monospace, monospace; word-break: break-all; }
+    .sauv-m { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+
     .rapport { background: var(--soft); border-radius: 13px; padding: 12px 14px; margin-bottom: 10px; }
     .rap-t { font-size: 12px; font-weight: 800; color: var(--ink); margin-bottom: 5px; }
     .rap-l { font-size: 12px; font-weight: 700; color: var(--ink2); line-height: 1.5; }
@@ -485,11 +561,13 @@ export class SettingsScreen {
   readonly ouvert = signal(SECTIONS[0]?.id || 'membres');
 
   /** Les sections du registre qui portent au moins un réglage, puis celles de gestes. */
-  readonly sections = computed<Section[]>(() => [
-    ...SECTIONS.filter((s) => s.id !== 'serveur' && ALL.some((d) => d.section === s.id))
-      .map((s) => ({ id: s.id, label: s.label, desc: s.desc, ...(ICONES[s.id] || ICONES['affichage']) })),
-    ...GESTES,
-  ]);
+  readonly sections = computed<Section[]>(() => {
+    const registre = SECTIONS
+      .filter((s) => s.id !== 'serveur' && ALL.some((d) => d.section === s.id))
+      .map((s) => ({ id: s.id, label: s.label, desc: s.desc, ...(ICONES[s.id] || ICONES['affichage']) }));
+    const deja = new Set(registre.map((s) => s.id));
+    return [...registre, ...GESTES.filter((s) => !deja.has(s.id))];
+  });
 
   readonly cherche = computed(() => this.q().trim().length >= 2);
 
@@ -514,6 +592,7 @@ export class SettingsScreen {
     this.store.loadIcs();
     this.store.checkUpdates();
     void this.store.loadSettingsInfo();
+    void this.store.loadSystemStatus();
   }
 
   champs(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section && d.scope !== 'deploiement'); }
@@ -545,6 +624,31 @@ export class SettingsScreen {
     const f = input.files?.[0];
     if (f) void this.store.importSettings(f);
     input.value = '';
+  }
+
+  /** « 4,2 Mo », « 812 Ko ». Un chiffre lisible d'un coup d'oeil, pas une précision inutile. */
+  poids(o: number): string {
+    if (o >= 1073741824) return (o / 1073741824).toFixed(1).replace('.', ',') + ' Go';
+    if (o >= 1048576) return (o / 1048576).toFixed(1).replace('.', ',') + ' Mo';
+    if (o >= 1024) return Math.round(o / 1024) + ' Ko';
+    return o + ' o';
+  }
+
+  /** « 3 jours », « 4 h », « 12 min ». Depuis quand le service tourne. */
+  duree(s: number): string {
+    if (s >= 86400) return Math.floor(s / 86400) + ' jour' + (s >= 172800 ? 's' : '');
+    if (s >= 3600) return Math.floor(s / 3600) + ' h';
+    return Math.max(1, Math.floor(s / 60)) + ' min';
+  }
+
+  /** Le dossier de données découpé, pour écrire la commande tar sans la deviner. */
+  dossierParent(): string {
+    const d = this.store.systemStatus()?.dataDir || '/var/lib/foyer';
+    return d.slice(0, d.lastIndexOf('/')) || '/';
+  }
+  dossierNom(): string {
+    const d = this.store.systemStatus()?.dataDir || '/var/lib/foyer';
+    return d.slice(d.lastIndexOf('/') + 1) || 'foyer';
   }
 
   /** « le 04/09 à 16:53 ». La date complète n'apporte rien dans un journal court. */

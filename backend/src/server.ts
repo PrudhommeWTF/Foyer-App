@@ -46,6 +46,9 @@ import { setting } from './settings/registry';
 import { loadRules, rulesPath } from './home/rules';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
+import { LogLevel, log, setLogLevelSource } from './log';
+import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
+import { buildStatus } from './system/status';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -124,6 +127,14 @@ function resolveJwtSecret(): string {
   return ephemeral;
 }
 const JWT_SECRET = resolveJwtSecret();
+
+// Le niveau de journalisation est un réglage du foyer, relu à chaque ligne :
+// « journalctl -f -u foyer » change de verbosité pendant qu'on le regarde, sans
+// redémarrer le service. Le repli sur « info » couvre le démarrage, avant que la
+// base ne soit ouverte.
+setLogLevelSource(() => {
+  try { return effectiveSetting('logLevel') as LogLevel; } catch { return 'info'; }
+});
 /**
  * Les inscriptions sont un réglage du foyer, modifiable depuis l'application,
  * que `FOYER_ALLOW_SIGNUP` verrouille quand elle est posée. Lu à chaque appel :
@@ -428,9 +439,8 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
   // consequences for the items are applied server-side.
   const kept = preserveShopping(state as unknown as Record<string, unknown>);
   if (kept.movedToFallback || kept.dropped) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[foyer] Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
+    log.info(
+      `Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
       `et ${kept.dropped} retiré(s) avec leur liste, à la suite d'une édition des rayons ou des listes.`,
     );
   }
@@ -438,9 +448,8 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
   // Same rule for the tasks: written op by op, never by whole-document PUT.
   const tasks = preserveTasks(state as unknown as Record<string, unknown>);
   if (tasks.dropped || tasks.unassigned || tasks.unlinked || tasks.orphaned) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[foyer] Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
+    log.info(
+      `Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
       `à un membre disparu retirée(s), ${tasks.unlinked} lien(s) vers une liste de courses ou un document disparus retiré(s), ` +
       `${tasks.orphaned} sous-tâche(s) remontée(s) au premier niveau.`,
     );
@@ -604,8 +613,7 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
 api.get('/home/rules', auth, (_req, res) => {
   const outcome = loadRules(DATA_DIR);
   if (outcome.errors.length) {
-    // eslint-disable-next-line no-console
-    console.warn(`[foyer] accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
+    log.attention(`accueil : ${rulesPath(DATA_DIR)} ignoré, règles par défaut appliquées : ${outcome.errors.join(' | ')}`);
   }
   res.json(outcome);
 });
@@ -686,6 +694,58 @@ api.post('/system/update', auth, requireAdmin, (_req, res) => {
   }
 });
 
+/**
+ * L'état du service : version, place restante, poids des données, sauvegardes.
+ * Réservé aux administrateurs : c'est de l'exploitation, et le chemin des
+ * données n'a pas à circuler plus loin que nécessaire.
+ */
+api.get('/system/status', auth, requireAdmin, (_req, res) => {
+  const state = getHousehold().state as HouseholdState;
+  res.json(buildStatus({
+    version: currentVersion(),
+    dataDir: DATA_DIR,
+    dbPath: process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db'),
+    counts: {
+      members: (state.members || []).length,
+      events: (state.events || []).length,
+      tasks: (state.tasks || []).length,
+      recipes: (state.recipes || []).length,
+      files: (state.files || []).length,
+    },
+  }));
+});
+
+/**
+ * Un instantané cohérent de la base, sans arrêter le service (VACUUM INTO).
+ * Il n'emporte ni les fichiers ni les photos : l'écran le dit et donne la
+ * commande d'archive complète.
+ */
+api.post('/system/backup', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
+  try {
+    const keep = Number(effectiveSetting('backupKeep')) || 7;
+    const out = makeSnapshot(db, DATA_DIR, keep);
+    log.info(`Sauvegarde : ${out.snapshot.name} (${Math.round(out.snapshot.bytes / 1024)} Ko) écrite par ${currentMember(req)?.id || '(membre inconnu)'}`
+      + (out.deleted.length ? `, ${out.deleted.length} ancienne(s) effacée(s)` : '') + '.');
+    res.json(out);
+  } catch (e) {
+    if (e instanceof BackupRefused) { res.status(409).json({ error: e.message }); return; }
+    log.erreur('Sauvegarde impossible', e);
+    res.status(500).json({ error: 'Sauvegarde impossible : ' + (e as Error).message });
+  }
+});
+
+api.get('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
+  const p = snapshotPath(DATA_DIR, String(req.params.name));
+  if (!p) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
+  res.download(p);
+});
+
+api.delete('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
+  if (!removeSnapshot(DATA_DIR, String(req.params.name))) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
+  log.info(`Sauvegarde ${req.params.name} effacée.`);
+  res.json({ ok: true });
+});
+
 api.get('/system/update-status', auth, (_req, res) => {
   try {
     const p = path.join(DATA_DIR, 'update-status.json');
@@ -724,10 +784,9 @@ if (fs.existsSync(STATIC_DIR)) {
 // Les clés sont générées une fois et gardées en base : en changer invaliderait
 // tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
 const vapid = initPush(db, { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT });
-// eslint-disable-next-line no-console
-console.log(`[foyer] Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}).`);
+log.info(`Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}).`);
 
-const notifLog = (line: string): void => { console.log('[foyer] ' + line); }; // eslint-disable-line no-console
+const notifLog = (line: string): void => log.info(line);
 
 /**
  * Ce membre veut-il ce genre de rappel sur son téléphone ?
@@ -772,6 +831,5 @@ startScheduler({
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  // eslint-disable-next-line no-console
-  console.log(`[foyer] API + app disponibles sur http://0.0.0.0:${PORT}`);
+  log.info(`API + app disponibles sur http://0.0.0.0:${PORT}`);
 });

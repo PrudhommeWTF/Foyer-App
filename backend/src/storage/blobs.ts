@@ -15,6 +15,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { log } from '../log';
 
 let rootDir = '';
 
@@ -197,18 +198,16 @@ export function sweepOrphans(): SweepReport {
 export function reportOrphansAtBoot(): SweepReport {
   const report = sweepOrphans();
   if (report.danglingPaths.length) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[foyer] Fichiers : ${report.danglingPaths.length} fiche(s) sans fichier sur le disque ` +
+    log.attention(
+      `Fichiers : ${report.danglingPaths.length} fiche(s) sans fichier sur le disque ` +
       `(${[...new Set(report.danglingPaths.map((d) => d.holder))].join(', ')}). ` +
       'Restaurez le répertoire « pieces » ou supprimez ces pièces depuis l’application. ' +
       `Exemple : ${report.danglingPaths[0].name}`,
     );
   }
   if (report.orphanFiles.length) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[foyer] Fichiers : ${report.orphanFiles.length} fichier(s) sur le disque qu'aucune table ne référence. ` +
+    log.attention(
+      `Fichiers : ${report.orphanFiles.length} fichier(s) sur le disque qu'aucune table ne référence. ` +
       'Rien n’a été supprimé. Voir docs/cuisine-architecture.md pour la commande de nettoyage.',
     );
   }

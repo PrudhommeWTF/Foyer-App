@@ -20,6 +20,7 @@
 //      remplir la mémoire du conteneur.
 import dns from 'dns/promises';
 import net from 'net';
+import { log } from '../log';
 
 export class FetchError extends Error {}
 
@@ -198,8 +199,7 @@ export async function fetchPublic(raw: string, accept: string): Promise<FetchedP
     } catch (e) {
       // Trace complète côté serveur : c'est là que l'exploitant ira chercher la
       // pile d'appels, la réponse à l'écran devant rester une phrase.
-      // eslint-disable-next-line no-console
-      console.warn(`[foyer] Recettes : échec réseau sur ${current.href} —`, e);
+      log.attention(`Recettes : échec réseau sur ${current.href}`, e);
       throw new FetchError(`Import impossible : ${networkReason(e)} (${current.hostname}).`);
     }
 

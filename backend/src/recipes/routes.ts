@@ -9,6 +9,7 @@ import { detectType, IMAGE_MIMES } from '../storage/blobs';
 import * as files from '../storage/files';
 import { FetchError, fetchPublic } from './fetch';
 import { ImportError, parseRecipePage } from './schema-org';
+import { log } from '../log';
 
 /**
  * Coupure franche : le module ne décide pas, il demande.
@@ -70,19 +71,16 @@ export function recipesRouter(importEnabled: ImportSwitch): Router {
       }
 
       // Journalisé, comme demandé : une sortie réseau doit laisser une trace.
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] Recettes : import de ${page.url} → « ${recipe.name} » (${recipe.ingr.length} ingrédients, ${recipe.steps.length} étapes${photoId ? ', photo' : ''}).`);
+      log.info(`Recettes : import de ${page.url} → « ${recipe.name} » (${recipe.ingr.length} ingrédients, ${recipe.steps.length} étapes${photoId ? ', photo' : ''}).`);
 
       res.json({ recipe: { ...recipe, imageUrl: undefined }, photoId, warnings });
     } catch (e) {
       if (e instanceof FetchError || e instanceof ImportError) {
-        // eslint-disable-next-line no-console
-        console.warn(`[foyer] Recettes : import de ${url} refusé — ${e.message}`);
+        log.attention(`Recettes : import de ${url} refusé — ${e.message}`);
         res.status(422).json({ error: e.message });
         return;
       }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Recettes : erreur inattendue pendant un import', e);
+      log.erreur('Recettes : erreur inattendue pendant un import', e);
       res.status(500).json({ error: 'Erreur pendant l’import : ' + (e as Error).message });
     }
   });

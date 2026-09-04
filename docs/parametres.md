@@ -136,6 +136,18 @@ Ce que le foyer accepte de ranger sur son disque.
 
 - **Taille maximale d’un fichier** (`maxUploadMb`) : En mégaoctets, pour les documents du foyer comme pour les photos de recettes. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.
 
+## Exploitation
+
+Version, mises à jour, sauvegardes, journal du service et journal des modifications.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `logLevel` | Niveau de journalisation | Foyer | liste | `info` | `erreur`, `info`, `debug` | Exploitation | — |
+| `backupKeep` | Sauvegardes conservées | Foyer | entier | `7` | de 1 à 60 | Exploitation | — |
+
+- **Niveau de journalisation** (`logLevel`) : Ce que le service écrit dans son journal, lisible avec « journalctl -u foyer » (LXC) ou « docker compose logs -f foyer ». Le changement est immédiat, sans redémarrage.
+- **Sauvegardes conservées** (`backupKeep`) : Combien d’instantanés de la base sont gardés dans le dossier de données. Au-delà, le plus ancien est effacé à la sauvegarde suivante, pour que le disque ne se remplisse pas tout seul.
+
 ## Accès et comptes
 
 Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.
@@ -251,6 +263,43 @@ Le journal se lit dans la page Paramètres, et en ligne de commande :
 sqlite3 /var/lib/foyer/foyer.db \
   "SELECT at, member_id, key, before_json, after_json FROM hh_settings_log ORDER BY id DESC LIMIT 20;"
 ```
+
+## Exploitation, en ligne de commande
+
+L’application montre l’état du service, la place restante et les sauvegardes
+(Paramètres → Exploitation). Les mêmes gestes depuis un terminal :
+
+```bash
+# État du service
+systemctl status foyer                 # LXC
+docker compose ps foyer                # Docker
+journalctl -u foyer -f                 # journal en direct
+
+# Place restante et poids des données
+df -h /var/lib/foyer && du -sh /var/lib/foyer
+
+# Instantané cohérent de la base, sans arrêter le service
+# (la base est en WAL : copier foyer.db à chaud donne une archive corrompue)
+sqlite3 /var/lib/foyer/foyer.db "VACUUM INTO '/var/lib/foyer/sauvegardes/manuel.db'"
+```
+
+**Restaurer** ne se fait pas depuis l’application : remplacer la base pendant que le
+service l’utilise la corromprait. Service arrêté :
+
+```bash
+systemctl stop foyer
+cd /var/lib/foyer
+cp foyer.db foyer.db.avant-restauration
+cp sauvegardes/foyer-AAAA-MM-JJ-HHMM.db foyer.db
+rm -f foyer.db-wal foyer.db-shm        # les journaux de l’ancienne base
+chown foyer:foyer foyer.db
+systemctl start foyer && journalctl -u foyer -n 30 --no-pager
+```
+
+Un instantané emporte **tout ce qui est en base**, finances comprises, mais **ni les
+fichiers ni les photos**, qui vivent à côté sur le disque. Pour une archive vraiment
+complète, c’est le dossier de données entier qu’il faut prendre, service arrêté
+(voir « Où c’est stocké » plus haut).
 
 ## Ajouter un réglage
 

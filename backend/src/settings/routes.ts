@@ -13,6 +13,7 @@ import express, { Request, Response, Router } from 'express';
 import { ALL, SECTIONS } from './registry';
 import { applySettings, effectiveSetting, readSettings, settingsLog } from './repo';
 import { ImportRefused, exportConfig, importConfig } from './backup';
+import { log } from '../log';
 
 /** Un lot vient d'un écran, pas d'une file : quelques clés, jamais des centaines. */
 const MAX_KEYS = 100;
@@ -96,14 +97,12 @@ export function settingsRouter(deps: SettingsDeps): Router {
   r.post('/import', admin, (req: Request, res: Response) => {
     try {
       const report = importConfig(req.body?.config, deps.memberId(req));
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] Réglages : configuration réimportée par ${deps.memberId(req) || '(membre inconnu)'} ; `
+      log.info(`Réglages : configuration réimportée par ${deps.memberId(req) || '(membre inconnu)'} ; `
         + `${report.applied.length} réglage(s) rétabli(s), ${report.ecartes.length} écarté(s).`);
       res.json(report);
     } catch (e) {
       if (e instanceof ImportRefused) { res.status(422).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Réglages : erreur inattendue à l’import d’une configuration', e);
+      log.erreur('Réglages : erreur inattendue à l’import d’une configuration', e);
       res.status(500).json({ error: 'Erreur en important la configuration : ' + (e as Error).message });
     }
   });
@@ -131,13 +130,11 @@ export function settingsRouter(deps: SettingsDeps): Router {
         return;
       }
       if (out.changed.length) {
-        // eslint-disable-next-line no-console
-        console.log(`[foyer] Réglages : ${out.changed.join(', ')} modifié(s) par ${deps.memberId(req) || '(membre inconnu)'}.`);
+        log.info(`Réglages : ${out.changed.join(', ')} modifié(s) par ${deps.memberId(req) || '(membre inconnu)'}.`);
       }
       res.json(out);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Réglages : erreur inattendue en écrivant un lot', e);
+      log.erreur('Réglages : erreur inattendue en écrivant un lot', e);
       res.status(500).json({ error: 'Erreur en enregistrant les réglages : ' + (e as Error).message });
     }
   });

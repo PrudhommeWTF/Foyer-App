@@ -130,6 +130,23 @@ export interface ConfigImportReport {
   generatedAt: string;
 }
 
+/** Un instantané de la base, écrit dans le dossier de données. */
+export interface Snapshot { name: string; bytes: number; at: string; }
+
+/** L'état du service, tel que la section Exploitation le montre. */
+export interface SystemStatus {
+  version: string;
+  uptime: number;
+  nodeVersion: string;
+  dataDir: string;
+  dbBytes: number;
+  dataBytes: number;
+  /** Null quand la plateforme ne sait pas le dire : l'écran l'annonce plutôt que d'afficher zéro. */
+  disk: { free: number; total: number } | null;
+  snapshots: Snapshot[];
+  counts: { members: number; events: number; tasks: number; recipes: number; files: number };
+}
+
 export interface SettingsWriteResult {
   changed: string[];
   refused: { key: string; error: string }[];
@@ -289,6 +306,15 @@ export class ApiService {
   homeRules(): Promise<RulesOutcome> { return this.request('home/rules'); }
 
   systemVersion(): Promise<{ current: string; selfUpdate: boolean; repo: string }> { return this.request('system/version'); }
+
+  // ---- exploitation ----
+  systemStatus(): Promise<SystemStatus> { return this.request('system/status'); }
+  makeBackup(): Promise<{ snapshot: Snapshot; deleted: string[] }> { return this.request('system/backup', { method: 'POST' }); }
+  deleteBackup(name: string): Promise<{ ok: boolean }> {
+    return this.request('system/backup/' + encodeURIComponent(name), { method: 'DELETE' });
+  }
+  backupUrl(name: string): string { return this.absolute('system/backup/' + encodeURIComponent(name)); }
+  downloadBackup(name: string): Promise<Blob> { return this.download('system/backup/' + encodeURIComponent(name)); }
   updateCheck(): Promise<UpdateInfo> { return this.request('system/update-check'); }
   startSystemUpdate(): Promise<{ started?: boolean; error?: string }> { return this.request('system/update', { method: 'POST' }); }
   updateStatus(): Promise<{ state: string; message?: string; current: string }> { return this.request('system/update-status'); }

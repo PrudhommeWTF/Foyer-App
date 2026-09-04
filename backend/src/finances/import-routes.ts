@@ -12,6 +12,7 @@ import { findTransferCandidates } from './import/transfers';
 import { ImportPreview, RawRow } from './import/types';
 import { applyRules } from './rules-repo';
 import { isIsoDate } from './money';
+import { log } from '../log';
 
 const MAX_UPLOAD = 25 * 1024 * 1024;
 
@@ -59,8 +60,7 @@ function handler(fn: (req: Request, res: Response) => void) {
     try { fn(req, res); }
     catch (e) {
       if (e instanceof UnsupportedFile) { res.status(415).json({ error: e.message }); return; }
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Finances/import : erreur inattendue', e);
+      log.erreur('Finances/import : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur pendant l’import : ' + (e as Error).message });
     }
   };

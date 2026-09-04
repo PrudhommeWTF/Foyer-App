@@ -20,6 +20,7 @@
 // Les migrations sont versionnées et appliquées au démarrage, chacune dans sa
 // transaction. Ne jamais modifier une migration livrée : en ajouter une.
 import type { Database } from 'better-sqlite3';
+import { log } from '../log';
 
 export const HH_SCHEMA_VERSION = 4;
 
@@ -150,12 +151,10 @@ export function migrateHousehold(db: Database): number {
         m.up(db);
         db.prepare("INSERT INTO hh_meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(m.version));
       })();
-      // eslint-disable-next-line no-console
-      console.log(`[foyer] Foyer : migration ${m.version} appliquée (${m.label}).`);
+      log.info(`Foyer : migration ${m.version} appliquée (${m.label}).`);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `[foyer] ERREUR : la migration Foyer ${m.version} (${m.label}) a échoué : ${(e as Error).message}\n` +
+      log.erreur(
+        `ERREUR : la migration Foyer ${m.version} (${m.label}) a échoué : ${(e as Error).message}\n` +
         `        La base reste en version ${currentVersion(db)}, aucune donnée n'a été modifiée.\n` +
         "        Restaurez votre sauvegarde si nécessaire (voir README, « Sauvegarde et restauration ») et signalez l'erreur.",
       );

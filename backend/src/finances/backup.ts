@@ -9,6 +9,7 @@
 // comprend pas, et exige une confirmation explicite dans la requête.
 import type { Database } from 'better-sqlite3';
 import { FIN_SCHEMA_VERSION } from './schema';
+import { log } from '../log';
 
 let database: Database;
 export function initBackup(db: Database): void { database = db; }
@@ -126,8 +127,7 @@ export function restoreModule(backup: unknown): RestoreReport {
 
   const after = counts();
   if (ignoredColumns.length) {
-    // eslint-disable-next-line no-console
-    console.warn('[foyer] Restauration : colonnes ignorées, absentes du schéma actuel : '
+    log.attention('Restauration : colonnes ignorées, absentes du schéma actuel : '
       + ignoredColumns.map((i) => `${i.table} (${i.columns.join(', ')})`).join(' ; '));
   }
   return { before, after, attachments: after['fin_attachments'], ignoredColumns };

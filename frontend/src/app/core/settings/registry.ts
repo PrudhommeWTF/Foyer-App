@@ -100,6 +100,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'taches', label: 'Tâches', desc: 'Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.' },
   { id: 'finances', label: 'Finances', desc: 'Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.' },
   { id: 'documents', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
+  { id: 'exploitation', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
   { id: 'acces', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
 ];
@@ -392,6 +393,27 @@ export const REGISTRY = [
     label: 'Longueur minimale d’un mot de passe',
     desc: 'S’applique à la création d’un accès et à tout changement de mot de passe. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.',
     default: 6, min: 6, max: 64,
+  },
+
+  // ---- exploitation -------------------------------------------------------
+  {
+    key: 'logLevel',
+    type: 'enum', scope: 'foyer', section: 'exploitation', module: 'Exploitation',
+    label: 'Niveau de journalisation',
+    desc: 'Ce que le service écrit dans son journal, lisible avec « journalctl -u foyer » (LXC) ou « docker compose logs -f foyer ». Le changement est immédiat, sans redémarrage.',
+    default: 'info',
+    options: [
+      { value: 'erreur', label: 'Erreurs seulement' },
+      { value: 'info', label: 'Normal : ce que le service a fait' },
+      { value: 'debug', label: 'Détaillé : pour comprendre un cas précis' },
+    ],
+  },
+  {
+    key: 'backupKeep',
+    type: 'int', scope: 'foyer', section: 'exploitation', module: 'Exploitation',
+    label: 'Sauvegardes conservées',
+    desc: 'Combien d’instantanés de la base sont gardés dans le dossier de données. Au-delà, le plus ancien est effacé à la sauvegarde suivante, pour que le disque ne se remplisse pas tout seul.',
+    default: 7, min: 1, max: 60,
   },
 
   // ---- déploiement : lu, jamais écrit d'ici -------------------------------

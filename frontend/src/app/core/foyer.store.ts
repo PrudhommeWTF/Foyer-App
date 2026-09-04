@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, SystemStatus, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
@@ -3098,6 +3098,43 @@ export class FoyerStore {
   async loadSettingsInfo(): Promise<void> {
     try { this.settingsInfo.set(await this.api.settings()); }
     catch { /* hors ligne : la page se contente du document, sans le journal */ }
+  }
+
+  // ---- exploitation ------------------------------------------------------
+
+  readonly systemStatus = signal<SystemStatus | null>(null);
+  readonly backupBusy = signal(false);
+
+  async loadSystemStatus(): Promise<void> {
+    try { this.systemStatus.set(await this.api.systemStatus()); }
+    catch { /* non administrateur, ou hors ligne : la section le dit */ }
+  }
+
+  /**
+   * Un instantané cohérent de la base, sans arrêter le service. Il n'emporte ni
+   * les fichiers ni les photos : l'écran le dit, plutôt que de laisser croire à
+   * une sauvegarde complète.
+   */
+  async makeBackup(): Promise<void> {
+    this.backupBusy.set(true);
+    try {
+      const out = await this.api.makeBackup();
+      await this.loadSystemStatus();
+      this.toast(`Sauvegarde écrite : ${out.snapshot.name}`);
+    } catch (e) {
+      this.toast('Sauvegarde impossible : ' + (e as Error).message);
+    } finally { this.backupBusy.set(false); }
+  }
+
+  async downloadBackup(name: string): Promise<void> {
+    try { this.download(await this.api.downloadBackup(name), name); }
+    catch (e) { this.toast('Téléchargement impossible : ' + (e as Error).message); }
+  }
+
+  async deleteBackup(name: string): Promise<void> {
+    if (!confirm(`Effacer la sauvegarde ${name} ? Elle ne sera pas récupérable.`)) return;
+    try { await this.api.deleteBackup(name); await this.loadSystemStatus(); this.toast('Sauvegarde effacée'); }
+    catch (e) { this.toast('Suppression impossible : ' + (e as Error).message); }
   }
 
   /**

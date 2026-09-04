@@ -5,6 +5,7 @@
 // sondages pour deux sous-arbres du même document n'auraient aucun sens.
 import express, { Request, Response, Router } from 'express';
 import { applyTaskOps } from './repo';
+import { log } from '../log';
 
 /** Un lot vient d'une file hors ligne : quelques dizaines d'opérations, jamais plus. */
 const MAX_OPS_PER_BATCH = 500;
@@ -30,16 +31,14 @@ export function tasksRouter(): Router {
       // sa file. Le dire dans les journaux, sinon une tâche qui n'arrive jamais
       // reste un mystère côté serveur.
       if (out.skipped.length) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[foyer] Tâches : ${out.skipped.length} opération(s) écartée(s). ` +
+        log.attention(
+          `Tâches : ${out.skipped.length} opération(s) écartée(s). ` +
           out.skipped.map((s) => `${s.opId || '(sans id)'} : ${s.reason}`).join(' | '),
         );
       }
       res.json(out);
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[foyer] Tâches : erreur inattendue en appliquant un lot', e);
+      log.erreur('Tâches : erreur inattendue en appliquant un lot', e);
       res.status(500).json({ error: 'Erreur sur les tâches : ' + (e as Error).message });
     }
   });
