@@ -8,8 +8,8 @@ import { CAL_KINDS } from './constants';
 import { ageOn, frenchHolidays, isBirthdayOn, occursOn } from './helpers';
 import { EventItem, HouseholdState } from './models';
 
-/** Un repère de journée qui n'est pas un événement : férié, anniversaire, échéance. */
-export interface DayExtra { kind: string; label: string; color: string; sub?: string; }
+/** Un repère de journée qui n'est pas un événement : férié, anniversaire, tâche, échéance. `id` : la tâche qu'un tap ouvre. */
+export interface DayExtra { kind: string; label: string; color: string; sub?: string; id?: string; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
 
 /** Les événements d'un jour, dans l'ordre des heures. Une heure vide vaut « — ». */
@@ -40,7 +40,7 @@ export function dayExtrasOn(ds: string, input: DayInput): DayExtra[] {
   for (const sh of input.schoolHolidays) { if (ds >= sh.start && ds <= sh.end) { out.push({ kind: 'school', label: sh.name, color: CAL_KINDS['school'].color }); break; } }
   for (const m of d.members) { if (isBirthdayOn(m.birthday, ds)) { const a = ageOn(m.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + m.name, color: m.color, sub: a != null ? a + ' ans' : undefined }); } }
   for (const c of d.contacts) { if (isBirthdayOn(c.birthday, ds)) { const a = ageOn(c.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + c.name, color: CAL_KINDS['birthday'].color, sub: a != null ? a + ' ans' : undefined }); } }
-  for (const t of d.tasks) { if (t.due === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : (t.time || undefined) }); }
+  for (const t of d.tasks) { if (t.due === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : (t.time || undefined), id: t.id }); }
   out.push(...(input.external[ds] || []));
   return out;
 }

@@ -12,8 +12,8 @@ export interface UiState {
   selDay: string;
   moreOpen: boolean;
   toast: string;
-  /** Le toast en cours propose-t-il de revenir en arrière ? */
-  toastUndo: boolean;
+  /** Le toast en cours propose-t-il une action ? `toastLabel` la nomme (« Annuler » le plus souvent). */
+  toastUndo: boolean; toastLabel: string;
   notifOpen: boolean;
   addMenuOpen: boolean;
   searchOpen: boolean;
@@ -177,7 +177,7 @@ export interface UiState {
 export function initialUi(): UiState {
   const today = todayIn(HOUSEHOLD_TZ);
   return {
-    screen: 'home', selDay: today, moreOpen: false, toast: '', toastUndo: false, notifOpen: false, addMenuOpen: false,
+    screen: 'home', selDay: today, moreOpen: false, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,

@@ -8,7 +8,7 @@ import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
-import { mealEventTitle, shoppingTaskLabel } from './links';
+import { closableShoppingTask, mealEventTitle, shoppingTaskLabel } from './links';
 import { moveMeal } from './meal-move';
 import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
@@ -968,9 +968,12 @@ export class FoyerStore {
    * l'état d'interface ne contient que des données.
    */
   private undoFn: (() => void) | null = null;
-  toastWithUndo(msg: string, undo: () => void): void {
-    this.undoFn = undo;
-    this.patch({ toast: msg, toastUndo: true });
+  toastWithUndo(msg: string, undo: () => void): void { this.toastAction(msg, 'Annuler', undo); }
+
+  /** Un toast qui propose une suite, nommée : « Clore » la tâche quand la liste de courses est finie. */
+  toastAction(msg: string, label: string, fn: () => void): void {
+    this.undoFn = fn;
+    this.patch({ toast: msg, toastUndo: true, toastLabel: label });
     if (this.toastTimer) clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => { this.undoFn = null; this.patch({ toast: '', toastUndo: false }); }, UNDO_MS);
   }
@@ -1086,18 +1089,34 @@ export class FoyerStore {
   toggleShop(id: string): void {
     const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
     this.setShopState(id, it.state === 'panier' ? 'a-prendre' : 'panier');
+    this.proposeClosing(it.listId);
   }
   setShopState(id: string, state: ShopState): void { this.pushShopOps([{ op: 'set-state', id, state }]); }
 
   /**
    * Coche un article depuis une liste où il disparaît aussitôt. Comme pour les
-   * tâches, le retour en arrière est offert quelques secondes.
+   * tâches, le retour en arrière est offert quelques secondes ; sauf quand
+   * c'était le dernier article et qu'une tâche ouvre la liste : la suite
+   * naturelle est alors de la clore, et c'est elle qui est proposée.
    */
   toggleShopWithUndo(id: string): void {
     const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
     const avant = it.state;
-    this.toggleShop(id);
+    this.setShopState(id, avant === 'panier' ? 'a-prendre' : 'panier');
+    if (this.proposeClosing(it.listId)) return;
     this.toastWithUndo(avant === 'panier' ? 'Remis dans la liste' : 'Dans le panier', () => this.setShopState(id, avant));
+  }
+
+  /**
+   * Le dernier article vient d'être pris et une tâche ouvre cette liste :
+   * proposer de la clore, sans la cocher à la place de quiconque. Vrai quand
+   * la proposition a été faite.
+   */
+  private proposeClosing(listId: string): boolean {
+    const d = this._data(); if (!d) return false;
+    const t = closableShoppingTask(d.tasks, d.shop, listId); if (!t) return false;
+    this.toastAction('Tout est dans le panier. Clore « ' + t.text + ' » ?', 'Clore', () => this.toggleTask(t.id));
+    return true;
   }
 
   /**
@@ -1351,7 +1370,7 @@ export class FoyerStore {
     const due = draft.due || (draft.rec ? this.todayStr() : null);
     this.pushTaskOps([{
       op: 'add', id, listId, text, who: draft.who, due, time: due ? draft.time || null : null,
-      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: due ? draft.remind : null,
+      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: due ? draft.remind : null, docId: draft.docId,
     }]);
     return id;
   }
@@ -1368,7 +1387,7 @@ export class FoyerStore {
       const { rec: _rec, ...rest } = fields; void _rec;
       const copy = { ...t, ...rest };
       this.taskOpsWithUndo([
-        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null },
+        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null, contractId: copy.contractId ?? null, docId: copy.docId ?? null },
         { op: 'skip', id, occ: t.due, next },
       ], 'Cette occurrence modifiée, la série continue');
       return;
@@ -1443,17 +1462,47 @@ export class FoyerStore {
    * l'utilisateur peut cocher, déplacer et supprimer doit lui appartenir, pas
    * réapparaître parce qu'une table dit autre chose.
    */
-  addExternalTask(text: string, due: string, who: string[] = []): string | null {
+  addExternalTask(text: string, due: string | null, who: string[] = [], link: { contractId?: number | null; docId?: string | null } = {}): string | null {
     const listId = this.activeTaskListId();
     if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
     const id = uid('t');
-    this.pushTaskOps([{ op: 'add', id, listId, text, who, due }]);
+    this.pushTaskOps([{ op: 'add', id, listId, text, who, due, contractId: link.contractId ?? null, docId: link.docId ?? null }]);
     this.toast('Tâche ajoutée');
     return id;
   }
 
   openTask(): void { this.patch({ taskNew: true }); }
   editTaskItem(id: string): void { if (this.task(id)) this.patch({ taskEdit: id }); }
+  /** Depuis un autre écran (le calendrier) : l'écran Tâches, la tâche ouverte. */
+  openTaskItem(id: string): void { if (!this.task(id)) return; this.go('taches'); this.patch({ taskEdit: id }); }
+
+  // ---- liens avec les documents -----------------------------------------------
+
+  /** La tâche encore à faire qui ouvre ce document, s'il y en a une. */
+  documentTask(docId: string): TaskItem | undefined {
+    return (this._data()?.tasks || []).find((t) => t.docId === docId && !t.done);
+  }
+
+  /** « En tâche » depuis un document : une tâche à son nom, sans date, qui l'ouvre en un tap. */
+  taskFromFile(docId: string): void {
+    const f = this._data()?.files.find((x) => x.id === docId); if (!f) return;
+    if (this.documentTask(docId)) { this.toast('La tâche existe déjà'); this.go('taches'); return; }
+    if (this.addExternalTask(f.name, null, [], { docId })) this.toast('Tâche ajoutée : « ' + f.name + ' »');
+  }
+
+  /**
+   * Depuis la tâche, le document : téléchargé tout de suite quand il a un
+   * fichier, sinon montré dans l'écran Documents (une fiche sans pièce jointe
+   * n'a rien d'autre à ouvrir).
+   */
+  openDocument(docId: string): void {
+    const f = this._data()?.files.find((x) => x.id === docId);
+    if (!f) { this.toast('Ce document n’existe plus'); return; }
+    if (f.fileId) { void this.downloadFile(f.id); return; }
+    this.go('documents');
+    this.patch({ docFolder: f.folderId, docSearch: f.name });
+    this.toast('Ce document n’a pas de fichier joint');
+  }
 
   // ---- listes de tâches et modèles -------------------------------------------
   // Elles s'éditent par l'enregistrement du document : ce sont des réglages,

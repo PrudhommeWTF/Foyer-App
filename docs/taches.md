@@ -61,6 +61,9 @@ interface TaskItem {
   doneAt?; doneBy?;           // qui a coché, et quand
   by?; at?;                   // auteur et date de création
   shopListId?: string | null; // lien vers une liste de courses
+  contractId?: number | null; // contrat du module Finances (échéance, piste d'économie)
+  docId?: string | null;      // document du foyer (FileItem.id)
+  rec?; history?; remind?;    // voir « La récurrence » et « Rappels »
 }
 ```
 
@@ -80,9 +83,6 @@ Ce que ces choix impliquent à l'écran :
   d'un mois derrière le jour même, sans jamais le décompter.
 - **La priorité n'existe plus.** La catégorie organise ; un badge rouge
   « Haute » était l'affichage anxiogène que le module refuse.
-
-Les champs prévus pour la tranche 4 (liens vers un contrat ou un document)
-n'existent pas encore dans le modèle : ils arriveront avec ce qui les lit.
 
 ## La récurrence
 
@@ -177,7 +177,7 @@ eux est un document sans série.
 
 | Opération | Champs | Effet |
 |---|---|---|
-| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `rec`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
+| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `contractId`, `docId`, `rec`, `remind`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
 | `edit` | `id` et les champs à changer | Ne touche que les champs nommés. `who` est remplacé, jamais fusionné. `rec: null` retire la règle. |
 | `done` | `id`, et sur une série `occ`, `next` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). Sur une série : ligne d'historique et échéance avancée à `next` (null : la série s'arrête, la tâche est faite). |
 | `skip` | `id`, `occ`, `next` | Passe l'occurrence courante d'une série sans trace. |
@@ -190,9 +190,10 @@ quelqu'un l'a supprimée pendant que l'autre était hors ligne.
 
 Ce qui est **refusé**, avec la raison renvoyée au client et écrite au journal :
 une tâche sans intitulé, une liste inconnue, une date qui n'est pas
-`AAAA-MM-JJ`, une heure qui n'est pas `HH:MM`, une opération inconnue. Un
-membre inconnu dans `who` est simplement retiré. Un lien vers une liste de
-courses disparue tombe, la tâche reste.
+`AAAA-MM-JJ`, une heure qui n'est pas `HH:MM`, un numéro de contrat qui n'en
+est pas un, une opération inconnue. Un membre inconnu dans `who` est
+simplement retiré. Un lien vers une liste de courses ou un document disparus
+tombe, la tâche reste.
 
 Un « report » est un `edit` de `due`. **Annuler** envoie l'opération inverse
 (`reopen` après `done`, `add` avec la tâche telle qu'elle était après `remove`,
@@ -346,6 +347,85 @@ Le canal ne demande **aucune migration du document** : le schéma du foyer
 passe en version 3 (deux tables), appliqué au démarrage, sans toucher aux
 tâches.
 
+## Liens avec le reste du foyer
+
+Le principe est le même partout : une tâche liée **reste une tâche**. Elle se
+coche, se déplace, se supprime comme les autres ; le lien est un raccourci vers
+l'autre module et une information de plus, jamais un miroir qui la ferait
+réapparaître ou bouger toute seule.
+
+### Finances : le contrat en un tap
+
+- Une tâche créée depuis une échéance (« Dernier jour pour résilier : Box
+  internet ») ou depuis une piste d'économie porte `contractId`. Sur l'écran
+  Tâches, elle montre **« Ouvrir le contrat »** : un tap ouvre l'écran Finances,
+  l'onglet Contrats, la fiche du contrat (d'où « Voir ces opérations »).
+- Les contrats ne vivent pas dans le document d'état mais dans leurs tables :
+  le serveur vérifie la forme du numéro, pas son existence. Un contrat supprimé
+  entre-temps est dit au tap (« Ce contrat n'existe plus »), la tâche reste.
+- Si la date du contrat bouge après coup, la tâche **ne suit pas** : c'est une
+  copie assumée, sinon une tâche qu'on a déplacée à la main reviendrait.
+
+### Documents : un document lié, ouvert en un tap
+
+- Dans la saisie, le bouton **« Document »** (présent dès que le foyer a des
+  documents) choisit un fichier du module Documents ; la tâche porte `docId`.
+  Sur un document, **« En tâche »** crée une tâche à son nom, sans date.
+- Sur la tâche, un tap sur le nom du document le **télécharge** quand il a un
+  fichier joint (un PDF s'ouvre dans le navigateur du téléphone) ; une fiche
+  sans pièce jointe ouvre l'écran Documents, déjà filtré sur elle.
+- Un document supprimé délie les tâches qui l'ouvraient, à l'enregistrement
+  du document d'état (même rattrapage que les listes de courses).
+
+### Courses : clore la tâche quand la liste est finie
+
+Quand le **dernier article** d'une liste passe dans le panier et qu'une tâche
+ouvre cette liste, un toast propose **« Clore »** la tâche. Il propose, il ne
+coche pas : « tout dans le panier » n'est pas toujours « courses faites »
+(il reste la caisse), et la tâche appartient au foyer. Le geste reste
+annulable comme n'importe quelle coche. Un article « indisponible » n'est pas
+à prendre : il ne bloque pas la proposition.
+
+### Emploi du temps : lu, jamais écrit
+
+Dans le panneau de la date, quand la tâche a **des membres affectés** et une
+date :
+
+- ce qu'ils ont ce jour-là (« Ce jour-là : École 08:30 à 16:30, Foot 17:00 à
+  18:30 »), avec le prénom devant quand plusieurs membres sont affectés ;
+- si une heure est choisie en plein créneau, un avertissement (« À cette
+  heure : École 08:30 à 16:30 ») ; l'heure reste possible, c'est un avis ;
+- le **jour le plus libre** des sept jours à venir, en un tap (le moins
+  d'heures prises, puis le moins de créneaux, puis le plus tôt).
+
+Sans membre affecté, rien n'est dit : « le premier qui passe » n'a pas
+d'agenda. Quand tous les jours se valent, rien n'est proposé non plus. Les
+vacances scolaires et fériés sont pris en compte comme dans l'écran Emploi du
+temps (un créneau « hors vacances » ne compte pas pendant les vacances).
+L'emploi du temps n'est **jamais modifié** par une tâche.
+
+### Agenda et flux ICS
+
+- Le calendrier montre les tâches datées le jour de leur échéance, avec
+  l'heure ; un **tap** ouvre la tâche (écran Tâches, modale de modification).
+- Le flux ICS partagé n'inclut les tâches que sur demande : *Paramètres →
+  Partage du calendrier → Inclure les tâches datées* (`settings.icsTasks`,
+  éteint par défaut : le flux est l'agenda de la famille). Alors chaque tâche
+  **à faire et datée** devient un `VEVENT` `Tâche : <intitulé>` (journée
+  entière, ou une heure à partir de l'heure choisie), catégorie `Tâche`, avec
+  la liste, les membres et la note en description. L'UID `task-<id>@foyer`
+  est stable : quand une coche fait avancer une série, l'agenda **déplace**
+  l'entrée. Une tâche faite disparaît du flux. Une série n'y met que son
+  occurrence courante, sans `RRULE` : une règle iCalendar dirait autre chose
+  que l'application (tolérance, base sur la réalisation).
+
+Vérifier le flux depuis le serveur, sans agenda :
+
+```sh
+TOKEN=…   # le jeton du lien affiché dans Paramètres
+curl -s "http://localhost:3000/api/calendar/feed.ics?token=$TOKEN" | grep -c '^SUMMARY:Tâche :'
+```
+
 ## Où vit le code
 
 | Fichier | Rôle |
@@ -364,7 +444,11 @@ tâches.
 | `frontend/src/app/core/task-ops.ts` | Application locale d'une opération, et son inverse pour « Annuler ». |
 | `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, la tolérance, les suggestions, les dates d'un tap. |
 | `frontend/src/app/core/recurrence.ts` | Le moteur de récurrence : l'occurrence suivante dans les deux modes, le saut d'occurrence, la fenêtre de tolérance, le libellé de la règle. |
-| `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles. |
+| `frontend/src/app/core/availability.ts` | La disponibilité lue dans l'emploi du temps : créneaux du jour, conflit à une heure, jour le plus libre. Pur, lecture seule. |
+| `frontend/src/app/core/links.ts` | Les intitulés déposés entre modules, et la tâche à proposer de clore quand la liste de courses est finie. |
+| `backend/src/ics.ts` | Le flux ICS, dont les tâches datées quand `settings.icsTasks` est activé. |
+| `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles, les liens (document, tâche depuis un document, clôture proposée depuis les courses). |
+| `frontend/src/app/core/finances.store.ts` | `taskFromDeadline`, `taskFromSaving` (la tâche porte le contrat) et `openContract` (le contrat en un tap). |
 | `frontend/src/app/screens/taches/composer.ts` | La saisie rapide et sa barre d'action, réutilisée par l'accueil et la modale de modification. |
 | `frontend/src/app/screens/taches/taches.ts` | L'écran. |
 | `frontend/src/app/screens/home/taches.ts`, `core/tiles/taches.tile.ts` | La tuile d'accueil et son fournisseur. |
@@ -479,7 +563,8 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 
 | Fichier | Ce qu'il tient |
 |---|---|
-| `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. |
+| `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses, d'un document. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. Les liens : contrat lié, délié, refusé s'il est illisible ; document inconnu qui tombe sans faire échouer ; suppression annulée qui rend les liens. |
+| `backend/test/ics.test.ts` | Le flux : rien sans le réglage, journée entière ou créneau d'une heure, identifiant stable, une tâche faite ou sans date absente, une série sans `RRULE` et une seule fois, échappement. |
 | `backend/test/tasks-repo.test.ts` | La couture avec la base : version qui n'avance pas pour rien, journal qui survit, deux téléphones sur la même tâche, et un `PUT` périmé qui ne peut ni décocher ni ressusciter. |
 | `backend/test/state-migrations.test.ts` | La migration 9 : chaque conversion, ce qui est nommé au journal, la rejouabilité, aucune tâche perdue. |
 | `backend/test/reminders.test.ts` | L'heure du rappel dans les quatre réglages, sans heure, à cheval sur minuit, l'heure murale du foyer été comme hiver, la fenêtre de rattrapage, les destinataires, la clé d'idempotence, les affectations. |
@@ -487,14 +572,14 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 | `frontend/src/app/core/task-ops.test.ts` | L'application locale sans bascule, l'inverse exact de chaque opération pour « Annuler », y compris sur une série (occurrence rétablie, saut annulé, suppression annulée avec règle et historique). |
 | `frontend/src/app/core/recurrence.test.ts` | Les deux modes : la piscine faite en retard qui repart de la réalisation, les poubelles du mardi qui ne rattrapent pas, toutes les N semaines sur certains jours, le mensuel borné, le 29 février, la fin de série, la tolérance, les libellés. |
 | `frontend/src/app/core/tasks.test.ts` | Le compteur et la relégation de l'accueil, ce qui se voit selon le type et la portée des listes, l'ordre des groupes, les suggestions, les catégories, les dates d'un tap, la lecture de l'échéance. |
+| `frontend/src/app/core/availability.test.ts` | Rien sans membre affecté, les créneaux du jour des membres affectés, le conflit à une heure (fin de créneau et créneau sans fin exclus), le jour le plus libre, rien quand tous se valent. |
+| `frontend/src/app/core/links.test.ts` | La clôture proposée seulement quand plus rien n'est à prendre, sur la bonne liste, jamais sur une liste vide ni une tâche faite. |
 | `frontend/src/app/core/tiles/tiles.test.ts` | La tuile d'accueil : trois vides différents, compteur sur le jour seulement. |
 
 Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
 ## Ce qui reste à faire
 
-Liens vers un
-contrat ou un document, clôture proposée quand la dernière ligne de courses est
-cochée, date proposée d'après l'emploi du temps, tap sur une tâche depuis le
-calendrier et option ICS (tranche 4), glisser-déposer, sous-tâches et vue « ce
-qui m'est affecté » (tranche 5).
+Tranche 5 (confort) : glisser-déposer pour ordonner, sous-tâches à un niveau,
+vue « ce qui m'est affecté ». Et, hors tranche, le chargement hors ligne à
+froid (cache PWA), qui reste un choix à faire séparément.

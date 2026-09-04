@@ -217,7 +217,7 @@ import { ACADEMIES } from '../core/constants';
               </div>
               <span class="sec-title">Partage du calendrier</span>
             </div>
-            <div class="hint" style="margin-bottom:10px">Abonnez Google Agenda, Apple Calendrier… à ce lien (événements du foyer, lecture seule).</div>
+            <div class="hint" style="margin-bottom:10px">Abonnez Google Agenda, Apple Calendrier… à ce lien (événements du foyer et échéances de contrat, lecture seule).</div>
             @if (store.icsUrl()) {
               <div class="ics-url">{{ store.icsUrl() }}</div>
               <div class="ics-actions">
@@ -229,6 +229,16 @@ import { ACADEMIES } from '../core/constants';
             } @else {
               <div class="hint">Lien indisponible.</div>
             }
+            <!-- Sur demande : le flux est l'agenda de la famille, les tâches n'y entrent que si le foyer le veut. -->
+            <div class="prefs" style="margin-top:14px">
+              <div class="pref" (click)="store.setSetting('icsTasks', !d().settings.icsTasks)">
+                <div>
+                  <div class="pref-label">Inclure les tâches datées</div>
+                  <div class="pref-desc">Les tâches à faire qui ont une date apparaissent dans les agendas abonnés, préfixées « Tâche : ». Une tâche faite en disparaît ; une série n’y met que sa prochaine occurrence.</div>
+                </div>
+                <div class="sw" [class.on]="d().settings.icsTasks"><div class="knob"></div></div>
+              </div>
+            </div>
           </div>
 
           <div class="card">

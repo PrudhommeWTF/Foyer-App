@@ -42,7 +42,7 @@ export const EMPTY_STATE: HouseholdState = {
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
   settings: {
     dateFmt: 'JJ/MM/AAAA',
-    dark: false, prefNotifs: true, academie: '', showBreakfast: false,
+    dark: false, prefNotifs: true, academie: '', showBreakfast: false, icsTasks: false,
   },
 };
 
@@ -130,6 +130,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
       prefNotifs: true,
       academie: input.household.academie || '',
       showBreakfast: false,
+      icsTasks: false,
     },
   };
 }

@@ -53,7 +53,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                     <div class="chip-ev" [style.background]="chip.bg" [style.color]="chip.fg">{{ chip.title }}</div>
                   }
                   @for (ex of c.extras; track $index) {
-                    <div class="chip-ex" [style.border-left]="'3px solid ' + ex.color">
+                    <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
                       <span class="ex-dot" [style.background]="ex.color"></span>
                       <span class="ex-lbl">{{ ex.label }}</span>
                     </div>
@@ -89,7 +89,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                       }
                     }
                     @for (ex of col.extras; track $index) {
-                      <div class="col-ex" [style.border-left]="'3px solid ' + ex.color">
+                      <div class="col-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
                         <span class="ex-dot" [style.background]="ex.color"></span>
                         <span class="ex-lbl">{{ ex.label }}</span>
                         @if (ex.sub) { <span class="ex-sub">{{ ex.sub }}</span> }
@@ -138,7 +138,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
           @if (selExtras().length) {
             <div class="side-extras">
               @for (ex of selExtras(); track $index) {
-                <div class="side-ex" [style.border-left]="'4px solid ' + ex.color">
+                <div class="side-ex" [class.tap]="ex.id" [style.border-left]="'4px solid ' + ex.color" (click)="openExtra($event, ex)">
                   <span class="ex-dot" [style.background]="ex.color"></span>
                   <span class="sx-lbl">{{ ex.label }}</span>
                   @if (ex.sub) { <span class="sx-sub">{{ ex.sub }}</span> }
@@ -263,6 +263,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
 
     /* ===== informational overlay items (holidays, school, birthdays, tasks) ===== */
     .ex-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .tap { cursor: pointer; }
     .ex-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chip-ex { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 5px; background: var(--surface); font-size: 10px; font-weight: 800; color: var(--ink2); white-space: nowrap; overflow: hidden; }
     .col-ex { display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 10px; padding: 6px 9px; font-size: 12px; font-weight: 800; color: var(--ink2); }
@@ -444,4 +445,12 @@ export class CalendarScreen {
     this.store.patch({ selDay: key });
     this.store.openEvent();
   }
+
+  /** Un repère qui est une tâche s'ouvre d'un tap ; les autres (férié, anniversaire, échéance) restent des repères. */
+  openExtra(e: Event, ex: DayExtra): void {
+    if (!ex.id) return;
+    e.stopPropagation();
+    this.store.openTaskItem(ex.id);
+  }
+
 }

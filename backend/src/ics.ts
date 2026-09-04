@@ -86,6 +86,34 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): str
     L.push('END:VEVENT');
   }
 
+  // Les tâches datées, sur demande seulement : le flux est l'agenda de la
+  // famille, et « sortir les poubelles » n'y a sa place que si le foyer le
+  // veut. Une série n'y met que son occurrence courante : une RRULE dirait
+  // autre chose que l'application (tolérance, base sur la réalisation), et
+  // l'agenda déplace l'entrée quand la coche fait avancer l'échéance, grâce à
+  // l'UID stable. Une tâche faite disparaît du flux, comme elle disparaît du jour.
+  if (state.settings?.icsTasks) {
+    const listName = (id: string): string => (state.taskLists || []).find((l) => l.id === id)?.name || '';
+    for (const t of state.tasks || []) {
+      if (t.done || !t.due) continue;
+      L.push('BEGIN:VEVENT', `UID:task-${t.id}@foyer`, `DTSTAMP:${dtstamp}`);
+      if (t.time && /^\d{2}:\d{2}$/.test(t.time)) {
+        const [hh, mm] = t.time.split(':');
+        L.push(`DTSTART:${icsDate(t.due)}T${pad2(+hh)}${pad2(+mm)}00`);
+        L.push(`DTEND:${icsDate(t.due)}T${pad2(Math.min(+hh + 1, 23))}${pad2(+mm)}00`);
+      } else {
+        L.push(`DTSTART;VALUE=DATE:${icsDate(t.due)}`);
+        L.push(`DTEND;VALUE=DATE:${icsAddDay(t.due)}`);
+      }
+      L.push(`SUMMARY:${icsEsc('Tâche : ' + t.text)}`);
+      L.push('CATEGORIES:Tâche');
+      const who = (t.who || []).map(mname).filter(Boolean).join(', ');
+      const detail = [listName(t.listId), who, t.note || ''].filter(Boolean).join('. ');
+      if (detail) L.push(`DESCRIPTION:${icsEsc(detail)}`);
+      L.push('END:VEVENT');
+    }
+  }
+
   L.push('END:VCALENDAR');
   return L.join('\r\n') + '\r\n';
 }

@@ -68,12 +68,23 @@ export interface TaskItem {
   history?: TaskDone[];
   /** Rappel avant l'échéance. Sans échéance, il n'a pas de sens et n'est pas gardé. */
   remind?: Remind | null;
+  /**
+   * Contrat du module Finances dont la tâche découle (échéance ou piste
+   * d'économie). Comme la liste de courses, c'est un raccourci : la tâche
+   * reste au foyer. Les contrats vivent dans leurs propres tables, hors du
+   * document ; le serveur vérifie la forme, et l'écran dit si le contrat a
+   * disparu entre-temps.
+   */
+  contractId?: number | null;
+  /** Document du foyer (FileItem.id) que la tâche ouvre. Tombe avec le document. */
+  docId?: string | null;
 }
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
+  contractId?: number | null; docId?: string | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; }
@@ -101,6 +112,8 @@ export interface OpsContext {
   memberIds: Set<string>;
   /** Listes de courses existantes, pour le lien. */
   shopListIds: Set<string>;
+  /** Documents existants, pour le lien. */
+  docIds: Set<string>;
   /** Vrai quand cette opération a déjà été appliquée (rejeu après coupure réseau). */
   alreadyApplied: (opId: string) => boolean;
 }
@@ -202,6 +215,16 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     // Une liste de courses disparue ne fait pas échouer la tâche : le lien tombe.
     f.shopListId = id && ctx.shopListIds.has(id) ? id : null;
   }
+  if (o['docId'] !== undefined) {
+    const id = trimmed(o['docId'], 80);
+    f.docId = id && ctx.docIds.has(id) ? id : null;
+  }
+  if (o['contractId'] !== undefined) {
+    const v = o['contractId'];
+    if (v === null || v === '') f.contractId = null;
+    else if (typeof v === 'number' && Number.isInteger(v) && v > 0) f.contractId = v;
+    else return { reason: 'Contrat illisible : ' + str(v) };
+  }
   return { fields: f };
 }
 
@@ -212,6 +235,8 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (!next.cat) delete next.cat;
   if (next.time === null || next.time === undefined) delete next.time;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
+  if (next.docId === null || next.docId === undefined) delete next.docId;
+  if (next.contractId === null || next.contractId === undefined) delete next.contractId;
   if (!next.rec) { delete next.rec; }
   if (!next.remind || !next.due) delete next.remind;
   return next;
@@ -357,17 +382,17 @@ export interface ReconcileReport {
   dropped: number;
   /** Affectations à un membre qui n'existe plus. */
   unassigned: number;
-  /** Liens vers une liste de courses disparue. */
+  /** Liens vers une liste de courses ou un document disparus. */
   unlinked: number;
 }
 
 /**
- * Rattrape ce que l'édition des listes, des membres et des listes de courses
- * implique pour les tâches. Ces trois-là s'éditent par l'enregistrement du
- * document complet, dans lequel les tâches ne voyagent plus : il faut donc
- * appliquer ici les conséquences.
+ * Rattrape ce que l'édition des listes, des membres, des listes de courses et
+ * des documents implique pour les tâches. Ces quatre-là s'éditent par
+ * l'enregistrement du document complet, dans lequel les tâches ne voyagent
+ * plus : il faut donc appliquer ici les conséquences.
  */
-export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>): ReconcileReport {
+export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>, docIds: Set<string> = new Set()): ReconcileReport {
   const kept = items.filter((t) => listIds.has(t.listId));
   let unassigned = 0;
   let unlinked = 0;
@@ -376,6 +401,7 @@ export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Se
     const who = (t.who || []).filter((m) => memberIds.has(m));
     if (who.length !== (t.who || []).length) { unassigned++; next = { ...next, who }; }
     if (t.shopListId && !shopListIds.has(t.shopListId)) { unlinked++; next = { ...next }; delete next.shopListId; }
+    if (t.docId && !docIds.has(t.docId)) { unlinked++; next = { ...next }; delete next.docId; }
     return next;
   });
   return { items: out, dropped: items.length - kept.length, unassigned, unlinked };

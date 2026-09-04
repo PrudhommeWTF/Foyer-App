@@ -64,6 +64,10 @@ import { FileType } from '../core/models';
               <div class="file-name">{{ fl.name }}</div>
               <div class="file-meta">{{ folderName(fl.folderId) }} · {{ fl.date }}</div>
             </div>
+            <!-- Écrit, pas dessiné : « En tâche » se comprend sans infobulle, et sur téléphone il n'y en a pas. -->
+            <button class="mini-link" (click)="store.taskFromFile(fl.id)">
+              <f-icon name="checklist" [size]="14" color="var(--ink2)" [width]="2.4" /> {{ store.documentTask(fl.id) ? 'Dans les tâches' : 'En tâche' }}
+            </button>
             @if (fl.fileId) {
               <button class="icon-btn" title="Télécharger" (click)="store.downloadFile(fl.id)"><f-icon name="download" [size]="16" color="var(--ink2)" /></button>
             }
@@ -178,6 +182,7 @@ import { FileType } from '../core/models';
     .file-main { flex: 1; min-width: 0; }
     .file-name { font-weight: 800; font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .file-meta { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
+    .mini-link { display: inline-flex; align-items: center; gap: 5px; border: none; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 12px; font-weight: 800; padding: 6px 9px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
     .file-empty { background: var(--surface); border-radius: 16px; padding: 36px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 14px; box-shadow: var(--sh-card); }
 
     .swatch.active { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--ink3); }

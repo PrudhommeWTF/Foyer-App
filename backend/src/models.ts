@@ -122,6 +122,8 @@ export interface Settings {
   academie?: string;
   /** Show the breakfast row in the meal planner. Off by default: rarely planned. */
   showBreakfast?: boolean;
+  /** Include open dated tasks in the shared ICS feed. Off by default: the feed is the family calendar, tasks are opt-in. */
+  icsTasks?: boolean;
 }
 
 export interface HouseholdState {
