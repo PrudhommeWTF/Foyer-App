@@ -20,7 +20,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ALL, SECTIONS, SettingDecl, checkValue, householdDefaults, memberDefaults, setting, validate } from '../src/settings/registry';
+import { ALL, GROUPS, SECTIONS, SettingDecl, checkValue, householdDefaults, memberDefaults, setting, validate } from '../src/settings/registry';
 import { render } from '../scripts/settings-doc';
 
 const ROOT = path.join(__dirname, '..', '..');
@@ -177,6 +177,38 @@ test('registre : un document neuf porte exactement les réglages du foyer', () =
 test('registre : les préférences d’un membre neuf sont exactement celles de portée personnelle', () => {
   const attendu = ALL.filter((d) => d.scope === 'personnel').map((d) => d.key).sort();
   assert.deepEqual(Object.keys(memberDefaults()).sort(), attendu);
+});
+
+/**
+ * Une section déclarée que la page n'affiche jamais est le pendant du réglage
+ * mort : elle existe dans le registre, dans la documentation engendrée, et nulle
+ * part à l'écran. Une section sans réglage n'est légitime que si l'écran lui
+ * connaît des gestes, et il les nomme dans sa constante `GESTES`.
+ */
+test('registre : chaque section a un groupe connu et quelque chose à montrer', () => {
+  const groupes = new Set(GROUPS.map((g) => g.id));
+  const ecran = fs.readFileSync(path.join(ROOT, 'frontend', 'src', 'app', 'screens', 'settings', 'settings.ts'), 'utf8');
+  const gestes = new Set((/const GESTES = new Set\(\[([^\]]*)\]\)/.exec(ecran)?.[1] || '')
+    .split(',').map((x) => x.trim().replace(/^'|'$/g, '')).filter(Boolean));
+  assert.ok(gestes.size, 'la constante GESTES de l’écran Paramètres est introuvable : ce test ne vérifie plus rien');
+
+  const vues = new Set<string>();
+  for (const s of SECTIONS) {
+    assert.ok(!vues.has(s.id), `Section en double : ${s.id}`);
+    vues.add(s.id);
+    assert.ok(groupes.has(s.group), `${s.id} : groupe « ${s.group} » inconnu de GROUPS`);
+    assert.ok(s.desc.trim().length > 20, `${s.id} : description absente ou trop courte`);
+    assert.ok(!/—/.test(s.label + s.desc), `${s.id} : pas de tiret cadratin dans les textes de l’interface`);
+    const porte = ALL.some((d) => d.section === s.id);
+    assert.ok(porte || gestes.has(s.id),
+      `${s.id} : section sans réglage que l’écran ne connaît pas comme section de gestes, donc jamais affichée`);
+  }
+  for (const id of gestes) {
+    assert.ok(vues.has(id), `GESTES nomme « ${id} », qui n’est déclarée dans aucune section du registre`);
+  }
+  for (const g of GROUPS) {
+    assert.ok(SECTIONS.some((s) => s.group === g.id), `Groupe « ${g.id} » sans aucune section`);
+  }
 });
 
 test('registre : aucune clé n’est rangée dans deux endroits à la fois', () => {

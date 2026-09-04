@@ -2,21 +2,25 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-import { ALL, DEPLOYMENT, SECTIONS, SettingDecl } from '../../core/settings/registry';
+import { PALETTE } from '../../core/constants';
+import { contactIni } from '../../core/helpers';
+import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl } from '../../core/settings/registry';
+import { AvatarComponent } from '../../shared/avatar';
 import { SettingFieldComponent } from './field';
 
 /**
- * Une section de la page.
+ * Une section de la page, et le groupe où elle tombe.
  *
- * Les sections de réglages viennent du registre : déclarer une clé la fait
- * apparaître ici, au bon endroit, sans rouvrir ce fichier. Les sections
- * « Membres et accès » et « Exploitation » n'ont pas de réglages : elles
- * portent des gestes (ajouter un membre, lancer une mise à jour, exporter), et
- * sont donc décrites à la main.
+ * Tout vient du registre : l'ordre, les groupes, les intitulés, et les réglages
+ * de chaque section. Déclarer une clé la fait apparaître ici, au bon endroit,
+ * sans rouvrir ce fichier. Il ne reste à ce fichier que l'icône, et le contenu
+ * des sections qui portent des **gestes** plutôt que des réglages.
  */
-interface Section { id: string; label: string; desc: string; icon: string; tint: string; color: string; }
+interface Section { id: string; group: string; label: string; desc: string; icon: string; tint: string; color: string; }
+interface Groupe { id: string; label: string; desc: string; sections: Section[]; }
 
 const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
+  compte: { icon: 'key', tint: '#FCE9E3', color: '#E56B4E' },
   affichage: { icon: 'settings', tint: '#EDF2EB', color: '#7A9B76' },
   calendriers: { icon: 'calendar', tint: '#E5F0F4', color: '#4E93B8' },
   notifications: { icon: 'bell', tint: '#FCE9E3', color: '#E56B4E' },
@@ -32,20 +36,17 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
 };
 
 /**
- * Les sections qui portent des **gestes** plutôt que des réglages, dans l'ordre
- * où elles suivent celles du registre. Une section déclarée dans le registre
- * n'a rien à faire ici : elle en viendrait deux fois.
+ * Les sections qui s'affichent même sans porter le moindre réglage, parce
+ * qu'elles portent des gestes : changer son mot de passe, ajouter un membre.
+ * Ailleurs, une section vide est une section qu'on ne montre pas.
  */
-const GESTES: Section[] = [
-  { id: 'membres', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres et leurs accès.', ...ICONES['membres'] },
-  { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose, en lecture seule.', ...ICONES['serveur'] },
-];
+const GESTES = new Set(['compte', 'membres']);
 
 @Component({
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, SettingFieldComponent],
+  imports: [FormsModule, AvatarComponent, IconComponent, SettingFieldComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -86,17 +87,31 @@ const GESTES: Section[] = [
                qu'une. Téléphone : le même état pilote un accordéon. -->
           @if (!store.narrow()) {
             <nav class="side">
-              @for (s of sections(); track s.id) {
-                <button [class.on]="ouvert() === s.id" (click)="ouvert.set(s.id)">
-                  <f-icon [name]="s.icon" [size]="17" [color]="ouvert() === s.id ? 'var(--primary)' : 'var(--ink2)'" [width]="2" />
-                  <span>{{ s.label }}</span>
-                </button>
+              @for (g of groupes(); track g.id) {
+                @if (!$first) { <hr class="sep" /> }
+                <div class="gt">{{ g.label }}</div>
+                @for (s of g.sections; track s.id) {
+                  <button [class.on]="ouvert() === s.id" (click)="aller(s.id)">
+                    <f-icon [name]="s.icon" [size]="17" [color]="ouvert() === s.id ? 'var(--primary)' : 'var(--ink2)'" [width]="2" />
+                    <span>{{ s.label }}</span>
+                  </button>
+                }
               }
             </nav>
           }
 
           <div class="body">
-            @for (s of sections(); track s.id) {
+            @for (g of groupes(); track g.id) {
+            <!-- Le trait sépare les quatre grands ensembles déclarés dans le
+                 registre : soi, le foyer, les modules, la machine. Sur grand
+                 écran, une seule section est dépliée et c'est la barre latérale
+                 qui porte ce découpage : un titre de groupe seul n'y aurait
+                 rien à annoncer. -->
+            @if (store.narrow()) {
+              @if (!$first) { <hr class="sep" /> }
+              <div class="groupe"><div class="gl">{{ g.label }}</div><div class="gd">{{ g.desc }}</div></div>
+            }
+            @for (s of g.sections; track s.id) {
               @if (store.narrow() || ouvert() === s.id) {
                 <section class="card" [id]="'section-' + s.id">
                   @if (store.narrow()) {
@@ -139,6 +154,62 @@ const GESTES: Section[] = [
                       }
 
                       @switch (s.id) {
+                        @case ('compte') {
+                          @if (store.currentMemberId()) {
+                            <div class="moi">
+                              <f-avatar [ini]="apercuIni()" [color]="store.ui().pfColor" [size]="60" />
+                              <div class="moi-b">
+                                <div class="moi-n">{{ store.ui().pfName || 'Sans prénom' }}</div>
+                                <div class="moi-m">{{ store.ui().pfRole || 'Sans rôle' }}{{ store.isAdmin() ? ' · admin du foyer' : '' }}</div>
+                              </div>
+                            </div>
+
+                            <label class="field-label" for="pf-nom">Prénom</label>
+                            <input id="pf-nom" class="input" autocomplete="given-name"
+                              [ngModel]="store.ui().pfName" (ngModelChange)="store.patch({ pfName: $event })" />
+                            <label class="field-label" for="pf-role">Rôle</label>
+                            <input id="pf-role" class="input" placeholder="Maman, Papa, Ado…"
+                              [ngModel]="store.ui().pfRole" (ngModelChange)="store.patch({ pfRole: $event })" />
+                            <label class="field-label" for="pf-ini">Initiales affichées</label>
+                            <input id="pf-ini" class="input court" maxlength="3" [placeholder]="iniAuto()"
+                              [ngModel]="store.ui().pfIni" (ngModelChange)="store.patch({ pfIni: $event })" />
+                            <div class="hint">Ce qui s’écrit dans votre pastille de couleur, partout dans l’application. Laissez vide pour qu’elles suivent le prénom ({{ iniAuto() }}).</div>
+                            <label class="field-label">Couleur d’identité</label>
+                            <div class="swatch-row">
+                              @for (c of palette; track c) {
+                                <button class="swatch" [style.background]="c" [attr.aria-label]="'Couleur ' + c"
+                                  [style.box-shadow]="store.ui().pfColor === c ? ('0 0 0 3px var(--surface),0 0 0 6px ' + c) : 'none'"
+                                  (click)="store.patch({ pfColor: c })"></button>
+                              }
+                            </div>
+                            <button class="btn btn-primary btn-block" style="margin-top:16px" (click)="store.saveProfile()">Enregistrer mon profil</button>
+                          } @else {
+                            <div class="hint">Votre compte n’est rattaché à aucun membre du foyer : il n’y a ni prénom ni couleur à régler ici. Un administrateur peut faire le lien depuis « Membres et accès ».</div>
+                          }
+
+                          <div class="extra-t">Connexion</div>
+                          <label class="field-label" for="cr-mail">Adresse de connexion</label>
+                          <input id="cr-mail" class="input" type="email" autocomplete="username" inputmode="email"
+                            [ngModel]="store.ui().pfEmail" (ngModelChange)="store.patch({ pfEmail: $event })" />
+                          <label class="field-label" for="cr-actuel">Mot de passe actuel</label>
+                          <input id="cr-actuel" class="input" type="password" autocomplete="current-password"
+                            [ngModel]="mdpActuel()" (ngModelChange)="mdpActuel.set($event)" />
+                          <div class="hint">Exigé pour toute modification : sans lui, un téléphone déverrouillé laissé sur la table suffirait à s’approprier le compte.</div>
+                          <label class="field-label" for="cr-neuf">Nouveau mot de passe</label>
+                          <input id="cr-neuf" class="input" type="password" autocomplete="new-password"
+                            [ngModel]="mdpNeuf()" (ngModelChange)="mdpNeuf.set($event)" />
+                          <label class="field-label" for="cr-confirme">Confirmation</label>
+                          <input id="cr-confirme" class="input" type="password" autocomplete="new-password"
+                            [ngModel]="mdpConfirme()" (ngModelChange)="mdpConfirme.set($event)" />
+                          <div class="hint">Au moins {{ store.setting('passwordMinLength') }} caractères. Laissez ces deux champs vides pour ne changer que l’adresse. Changer le mot de passe <b>déconnecte vos autres appareils</b> ; celui-ci reste connecté.</div>
+                          <button class="btn btn-primary btn-block" style="margin-top:16px" [disabled]="credBusy()" (click)="enregistrerIdentifiants()">
+                            {{ credBusy() ? 'Enregistrement…' : 'Mettre à jour mes identifiants' }}
+                          </button>
+
+                          <button class="btn btn-soft btn-block" style="margin-top:22px" (click)="store.logout()">
+                            <f-icon name="logout" [size]="18" color="var(--ink2)" [width]="2.2" /> Se déconnecter
+                          </button>
+                        }
                         @case ('courses') {
                           <!-- L'ordre des rayons et les articles de placard sont des
                                données du foyer, pas des réglages : ils se modifient là
@@ -415,9 +486,6 @@ const GESTES: Section[] = [
                             }
                           }
 
-                          <button class="btn btn-primary btn-block" style="margin-top:18px" (click)="store.logout()">
-                            <f-icon name="logout" [size]="18" color="#fff" [width]="2.2" /> Se déconnecter
-                          </button>
                         }
                       }
                     </div>
@@ -425,12 +493,26 @@ const GESTES: Section[] = [
                 </section>
               }
             }
+            }
           </div>
         </div>
       }
     </div>
   `,
   styles: [`
+    .sep { border: none; border-top: 2px solid var(--line); margin: 22px 0 0; }
+    .groupe { margin: 18px 0 2px; }
+    .gl { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); }
+    .gd { font-size: 12px; font-weight: 700; color: var(--ink3); line-height: 1.45; }
+    .side .sep { margin: 12px 0 4px; }
+    .gt { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; padding: 6px 13px 4px; }
+
+    .moi { display: flex; align-items: center; gap: 14px; background: var(--soft); border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; }
+    .moi-b { min-width: 0; }
+    .moi-n { font-size: 16px; font-weight: 800; color: var(--ink); }
+    .moi-m { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .input.court { max-width: 120px; text-transform: uppercase; }
+
     .find { display: flex; align-items: center; gap: 9px; background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-input); padding: 0 13px; margin-bottom: 20px; }
     .find .input { border: none; background: none; padding: 13px 0; flex: 1; min-width: 0; }
     .find .input:focus { border: none; outline: none; }
@@ -559,20 +641,35 @@ export class SettingsScreen {
 
   readonly DEPLOYMENT = DEPLOYMENT;
   readonly q = signal('');
+  readonly palette = PALETTE;
+
+  /**
+   * Les mots de passe ne passent pas par l'état d'interface : ils vivent ici, le
+   * temps de la saisie, et disparaissent avec l'écran.
+   */
+  readonly mdpActuel = signal('');
+  readonly mdpNeuf = signal('');
+  readonly mdpConfirme = signal('');
+  readonly credBusy = signal(false);
 
   /** Les réglages du serveur, indexés par clé, tels que le serveur les applique. */
   readonly serveur = computed<Record<string, { value: string; set: boolean }>>(() =>
     Object.fromEntries((this.store.settingsInfo()?.deployment || []).map((d) => [d.key, d])));
-  readonly ouvert = signal(SECTIONS[0]?.id || 'membres');
+  /** La section dépliée. Dans l'état d'interface, pour qu'on puisse y mener depuis ailleurs. */
+  readonly ouvert = computed(() => this.store.ui().settingsSection);
 
-  /** Les sections du registre qui portent au moins un réglage, puis celles de gestes. */
-  readonly sections = computed<Section[]>(() => {
-    const registre = SECTIONS
-      .filter((s) => s.id !== 'serveur' && ALL.some((d) => d.section === s.id))
-      .map((s) => ({ id: s.id, label: s.label, desc: s.desc, ...(ICONES[s.id] || ICONES['affichage']) }));
-    const deja = new Set(registre.map((s) => s.id));
-    return [...registre, ...GESTES.filter((s) => !deja.has(s.id))];
-  });
+  /** Les sections du registre qui ont quelque chose à montrer, dans son ordre. */
+  readonly sections = computed<Section[]>(() => SECTIONS
+    .filter((s) => GESTES.has(s.id) || ALL.some((d) => d.section === s.id))
+    .map((s) => ({ id: s.id, group: s.group, label: s.label, desc: s.desc, ...(ICONES[s.id] || ICONES['affichage']) })));
+
+  /**
+   * Les mêmes, rangées par groupe. C'est ce découpage que la page sépare d'un
+   * trait : on va de soi au foyer, du foyer aux modules, des modules à la machine.
+   */
+  readonly groupes = computed<Groupe[]>(() => GROUPS
+    .map((g) => ({ ...g, sections: this.sections().filter((s) => s.group === g.id) }))
+    .filter((g) => g.sections.length));
 
   readonly cherche = computed(() => this.q().trim().length >= 2);
 
@@ -594,16 +691,36 @@ export class SettingsScreen {
 
   constructor() {
     this.store.patch({ famNameField: this.d().familyName });
+    this.store.loadProfileFields();
     this.store.loadIcs();
     this.store.checkUpdates();
     void this.store.loadSettingsInfo();
     void this.store.loadSystemStatus();
   }
 
+  /** Les initiales que le prénom donnerait, celles qu'on retrouve en vidant le champ. */
+  iniAuto(): string { return contactIni(this.store.ui().pfName || '?'); }
+  /** Ce que la pastille affichera une fois enregistré : la saisie, ou le prénom à défaut. */
+  apercuIni(): string { return this.store.ui().pfIni.trim().toUpperCase().slice(0, 3) || this.iniAuto(); }
+
+  /**
+   * Adresse et mot de passe, ensemble : c'est un seul aller-retour au serveur,
+   * et un seul mot de passe actuel à retaper. La confirmation est vérifiée ici,
+   * parce que le serveur ne voit qu'un mot de passe et ne peut pas la juger.
+   */
+  async enregistrerIdentifiants(): Promise<void> {
+    if (this.credBusy()) return;
+    if (this.mdpNeuf() !== this.mdpConfirme()) { this.store.toast('Les deux mots de passe ne sont pas identiques.'); return; }
+    this.credBusy.set(true);
+    const ok = await this.store.changeCredentials(this.mdpActuel(), this.store.ui().pfEmail, this.mdpNeuf());
+    this.credBusy.set(false);
+    if (ok) { this.mdpActuel.set(''); this.mdpNeuf.set(''); this.mdpConfirme.set(''); }
+  }
+
   champs(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section && d.scope !== 'deploiement'); }
   nomSection(id: string): string { return SECTIONS.find((s) => s.id === id)?.label || id; }
-  basculer(id: string): void { this.ouvert.set(this.ouvert() === id ? '' : id); }
-  aller(id: string): void { this.q.set(''); this.ouvert.set(id); }
+  basculer(id: string): void { this.store.patch({ settingsSection: this.ouvert() === id ? '' : id }); }
+  aller(id: string): void { this.q.set(''); this.store.patch({ settingsSection: id }); }
 
   /** Au moins un réglage de la section est modifiable par la personne connectée. */
   modifiable(section: string): boolean { return this.champs(section).some((d) => !this.store.settingLock(d)); }

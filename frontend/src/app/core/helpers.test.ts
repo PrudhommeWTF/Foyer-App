@@ -3,7 +3,7 @@
 // hors navigateur.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { dstr, weekDates } from './helpers';
+import { contactIni, dstr, keptIni, weekDates } from './helpers';
 
 const iso = (offset: number, anchor: string): string[] => weekDates(offset, anchor).map(dstr);
 
@@ -49,4 +49,18 @@ test('le passage à l’heure d’été ne décale pas les jours', () => {
 test('la semaine traverse correctement les fins de mois et d’année', () => {
   assert.equal(iso(0, '2027-01-01')[0], '2026-12-28');
   assert.equal(iso(0, '2028-02-29')[0], '2028-02-28');
+});
+
+// Les initiales choisies : le seul moyen d'écrire « JO » quand on s'appelle
+// Jonathan, sans que le prochain changement de prénom ne les efface.
+test('des initiales qui suivent le prénom continuent de le suivre', () => {
+  assert.equal(keptIni({ name: 'Camille', ini: contactIni('Camille') }, 'Camille Dupont'), 'CD');
+  assert.equal(keptIni({ name: 'Camille', ini: '' }, 'Léa'), 'LÉ');
+  assert.equal(keptIni(null, 'Léa Martin'), 'LM');
+});
+
+test('des initiales choisies survivent au changement de prénom', () => {
+  // « JO » découlerait de « Jonathan » : ce sont « JJ » et « 🐱 » qu'on a choisis.
+  assert.equal(keptIni({ name: 'Jonathan', ini: 'JJ' }, 'Jonathan Prudhomme'), 'JJ');
+  assert.equal(keptIni({ name: 'Jonathan', ini: '🐱' }, 'Jo'), '🐱');
 });

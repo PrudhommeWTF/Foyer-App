@@ -296,6 +296,11 @@ export class ApiService {
     return this.request('settings', { method: 'PATCH', body: JSON.stringify({ changes }) });
   }
 
+  /** Ses propres identifiants. Le mot de passe actuel est exigé, et un jeton neuf revient. */
+  updateMyCredentials(currentPassword: string, email?: string, password?: string): Promise<{ email: string; token: string; othersLoggedOut: boolean }> {
+    return this.request('me/credentials', { method: 'PUT', body: JSON.stringify({ currentPassword, email, password }) });
+  }
+
   exportSettings(): Promise<Blob> { return this.download('settings/export'); }
 
   importSettings(config: unknown): Promise<ConfigImportReport> {
