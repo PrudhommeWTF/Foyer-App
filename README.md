@@ -115,11 +115,16 @@ docker run -d --name foyer -p 8099:8099 -v foyer-data:/data \
 | `FOYER_DATA_DIR` | Dossier de la base SQLite | `./data` (ou `/data` en conteneur) |
 | `FOYER_JWT_SECRET` | Secret de signature des sessions (≥ 16 caractères aléatoires) — **obligatoire** : en `NODE_ENV=production`, un secret absent/faible **empêche le démarrage** ; sinon un secret éphémère est généré (sessions perdues au redémarrage) | _(aucun)_ |
 | `FOYER_CORS_ORIGINS` | Origines cross-origin autorisées (liste séparée par des virgules) — laissez vide en mono-conteneur (l'API sert sa propre app) | _(aucune)_ |
-| `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`) | `true` |
-| `FOYER_RECIPE_IMPORT` | Autoriser l'import d'une recette depuis une URL, seule requête sortante du module Cuisine (`true`/`false`) | `true` |
+| `FOYER_ALLOW_SIGNUP` | Autoriser l'inscription de comptes (`true`/`false`). **Réglable depuis l'application** (Paramètres → Accès et comptes) : cette variable, quand elle est posée, l'emporte et grise le champ | _(réglage du foyer)_ |
+| `FOYER_RECIPE_IMPORT` | Autoriser l'import d'une recette depuis une URL, seule requête sortante du module Cuisine (`true`/`false`). **Réglable depuis l'application** ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
 | `FOYER_VAPID_PUBLIC` / `FOYER_VAPID_PRIVATE` | Paire de clés des rappels Web Push. Sans elles, une paire est générée au premier démarrage et gardée en base (en changer invalide tous les abonnements) | _(générées)_ |
 | `FOYER_VAPID_SUBJECT` | Contact déclaré au service push (`mailto:` ou `https:`) | `mailto:foyer@localhost` |
-| `FOYER_PUBLIC_URL` | Adresse ouverte au tap sur une notification | _(racine de l'app)_ |
+| `FOYER_PUBLIC_URL` | Adresse ouverte au tap sur une notification. **Réglable depuis l'application** ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
+
+La liste complète des réglages, leur portée et le module qui les consomme est engendrée depuis
+le registre : [`docs/parametres.md`](docs/parametres.md). Les valeurs de déploiement ci-dessus sont
+aussi visibles en lecture seule dans l'application (Paramètres → Serveur et déploiement), pour savoir
+ce qui s'applique sans ouvrir un terminal.
 
 La base SQLite vit dans le volume `foyer-data` (`/data`) et **persiste** entre les
 redémarrages et les mises à jour de l'image.

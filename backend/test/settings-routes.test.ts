@@ -16,8 +16,8 @@ import express, { Request } from 'express';
 import { migrateHousehold } from '../src/storage/schema';
 import { initDoc, readDoc } from '../src/state/doc';
 import { settingsRouter } from '../src/settings/routes';
-import { householdDefaults, memberDefaults } from '../src/settings/registry';
-import { foreignPrefsChanged, settingsChanged } from '../src/settings/repo';
+import { declOf, householdDefaults, memberDefaults } from '../src/settings/registry';
+import { deploymentView, envOverrides, envValueOf, foreignPrefsChanged, settingsChanged } from '../src/settings/repo';
 
 let server: http.Server;
 let base: string;
@@ -55,7 +55,8 @@ beforeEach(async () => {
   app.use('/api/settings', settingsRouter({
     memberId: (req) => (role(req) === 'anonyme' ? null : 'm-' + role(req)),
     isAdmin: (req) => role(req) === 'admin',
-    envValue: (name) => env[name],
+    overrides: () => envOverrides(env),
+    deployment: () => deploymentView(env),
   }));
   server = http.createServer(app);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -192,12 +193,78 @@ describe('réglages : le journal des modifications', () => {
 });
 
 describe('réglages : ce que l’environnement impose', () => {
-  it('une variable posée est signalée à la clé qu’elle écrase', async () => {
-    // Aucun réglage ne porte encore d'envOverride : on éprouve le mécanisme en
-    // posant la variable qu'une future déclaration nommera.
-    env['FOYER_ESSAI'] = 'false';
+  it('sans variable posée, rien n’est imposé', async () => {
     const { json } = await appel('GET', 'admin');
-    assert.deepEqual(json.overrides, {}, 'sans déclaration qui la nomme, une variable ne s’impose à rien');
+    assert.deepEqual(json.overrides, {});
+  });
+
+  it('une variable posée est signalée à la clé qu’elle écrase, avec sa valeur', async () => {
+    env['FOYER_ALLOW_SIGNUP'] = 'false';
+    const { json } = await appel('GET', 'admin');
+    assert.deepEqual(json.overrides, { signupAllowed: 'false' },
+      'l’interface a besoin du nom ET de la valeur pour expliquer le champ grisé');
+  });
+
+  it('la valeur renvoyée est celle qui s’applique, pas celle rangée dans le document', async () => {
+    process.env.FOYER_ALLOW_SIGNUP = 'false';
+    env['FOYER_ALLOW_SIGNUP'] = 'false';
+    try {
+      const { json } = await appel('GET', 'admin');
+      assert.equal(json.values.signupAllowed, false,
+        'sinon l’écran montre un interrupteur allumé sous une explication disant qu’il est éteint');
+      assert.equal(reglages()['signupAllowed'], true, 'le document, lui, garde ce que le foyer avait choisi');
+    } finally { delete process.env.FOYER_ALLOW_SIGNUP; }
+  });
+
+  it('un réglage imposé par l’environnement est refusé à l’écriture, en nommant la variable', async () => {
+    env['FOYER_ALLOW_SIGNUP'] = 'false';
+    process.env.FOYER_ALLOW_SIGNUP = 'false';
+    try {
+      const { status, json } = await appel('PATCH', 'admin', { changes: { signupAllowed: true } });
+      assert.equal(status, 403);
+      assert.match(json.error, /FOYER_ALLOW_SIGNUP/);
+      assert.equal(reglages()['signupAllowed'], true, 'rien n’est rangé dans le document : ce serait une valeur sans effet');
+    } finally { delete process.env.FOYER_ALLOW_SIGNUP; }
+  });
+
+  it('les réglages du serveur sont affichés, et jamais les secrets', async () => {
+    env['FOYER_DATA_DIR'] = '/var/lib/foyer';
+    env['FOYER_JWT_SECRET'] = 'un-secret-tres-long-et-aleatoire';
+    const { json } = await appel('GET', 'admin');
+    const par = Object.fromEntries(json.deployment.map((d: { key: string }) => [d.key, d]));
+    assert.deepEqual(par['envDataDir'], { key: 'envDataDir', value: '/var/lib/foyer', set: true });
+    assert.deepEqual(par['envJwtSecret'], { key: 'envJwtSecret', value: '', set: true },
+      'un secret posé se signale, mais ne se relit jamais');
+    assert.equal(par['envPort'].set, false, 'non posée : c’est la valeur par défaut qui s’applique');
+    assert.equal(par['envPort'].value, '8099');
+  });
+});
+
+describe('réglages : la lecture de l’environnement', () => {
+  const signup = declOf('signupAllowed')!;
+
+  it('une variable absente ou vide ne dit rien', () => {
+    assert.equal(envValueOf(signup, {}), null);
+    assert.equal(envValueOf(signup, { FOYER_ALLOW_SIGNUP: '' }), null, 'on la pose pour imposer une valeur, pas le vide');
+  });
+
+  it('coupe sur les valeurs qu’un administrateur écrit réellement', () => {
+    for (const v of ['false', 'FALSE', '0', 'no', 'off']) {
+      assert.equal(envValueOf(signup, { FOYER_ALLOW_SIGNUP: v }), false, v);
+    }
+  });
+
+  it('ne coupe pas sur une valeur affirmative', () => {
+    for (const v of ['true', 'TRUE', '1', 'yes', 'on']) {
+      assert.equal(envValueOf(signup, { FOYER_ALLOW_SIGNUP: v }), true, v);
+    }
+  });
+
+  it('une valeur hors domaine est ignorée plutôt que d’imposer n’importe quoi', () => {
+    const url = declOf('publicUrl')!;
+    const trop = 'https://' + 'x'.repeat(400);
+    assert.equal(envValueOf(url, { FOYER_PUBLIC_URL: trop }), null);
+    assert.equal(envValueOf(url, { FOYER_PUBLIC_URL: 'https://foyer.exemple.fr' }), 'https://foyer.exemple.fr');
   });
 });
 

@@ -44,7 +44,7 @@
 export type SettingScope = 'deploiement' | 'foyer' | 'personnel';
 
 /** Le type décide du contrôle de saisie et de la forme du champ engendré. */
-export type SettingType = 'bool' | 'int' | 'enum' | 'text' | 'time';
+export type SettingType = 'bool' | 'int' | 'enum' | 'text' | 'time' | 'secret';
 
 /** Une valeur admise d'un paramètre `enum`, avec son libellé affiché. */
 export interface SettingOption { value: string; label: string; }
@@ -72,7 +72,14 @@ export interface SettingDecl {
   max?: number;
   /** `text` : longueur maximale. */
   maxLength?: number;
-  /** Variable d'environnement qui, si elle est posée, l'emporte sur ce réglage. */
+  /**
+   * Variable d'environnement liée au réglage.
+   *
+   *   - portée `foyer` : si elle est posée, **elle l'emporte**, et l'interface
+   *     grise le champ en la nommant, plutôt que de laisser croire qu'un réglage
+   *     sans effet est actif.
+   *   - portée `deploiement` : c'est la seule source du réglage, obligatoire.
+   */
   envOverride?: string;
 }
 
@@ -89,6 +96,8 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'calendriers', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
   { id: 'notifications', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'repas', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
+  { id: 'acces', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.' },
+  { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
 ];
 
 /**
@@ -170,6 +179,101 @@ export const REGISTRY = [
     desc: 'Ajoute la ligne du matin au planning des repas, et donc à la génération des courses. Les repas déjà saisis sont conservés quand la ligne est masquée.',
     default: false,
   },
+  {
+    key: 'signupAllowed',
+    type: 'bool', scope: 'foyer', section: 'acces', module: 'Accès',
+    label: 'Autoriser la création de comptes',
+    desc: 'Quand c’est coupé, l’écran de connexion ne propose plus de créer un compte et l’API refuse les inscriptions. À laisser coupé dès que l’application est joignable depuis Internet.',
+    default: true,
+    envOverride: 'FOYER_ALLOW_SIGNUP',
+  },
+  {
+    key: 'recipeImport',
+    type: 'bool', scope: 'foyer', section: 'acces', module: 'Cuisine',
+    label: 'Importer une recette depuis une adresse web',
+    desc: 'La seule requête sortante de l’application, déclenchée par vous et journalisée : le carnet va lire la page d’une recette pour la recopier. Coupé, le bouton d’import disparaît du carnet.',
+    default: true,
+    envOverride: 'FOYER_RECIPE_IMPORT',
+  },
+  {
+    key: 'publicUrl',
+    type: 'text', scope: 'foyer', section: 'notifications', module: 'Notifications',
+    label: 'Adresse publique de Foyer',
+    desc: 'L’adresse ouverte quand on touche une notification sur le téléphone, par exemple https://foyer.exemple.fr. Vide, la notification ouvre l’adresse par laquelle l’appareil s’était abonné, ce qui échoue depuis l’extérieur si c’était une adresse locale.',
+    default: '',
+    maxLength: 300,
+    envOverride: 'FOYER_PUBLIC_URL',
+  },
+
+  // ---- déploiement : lu, jamais écrit d'ici -------------------------------
+  //
+  // Ces lignes ne servent pas à régler, elles servent à **savoir ce qui
+  // s'applique** sans ouvrir un terminal. Chacune nomme sa variable et le
+  // fichier où la changer. Un `secret` n'est jamais relu : l'interface dit
+  // seulement s'il est posé.
+  {
+    key: 'envVersion',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Version installée',
+    desc: 'La version que ce service exécute. Injectée au build de l’image Docker, ou posée par l’installeur LXC dans /etc/foyer/foyer.env.',
+    default: '', envOverride: 'FOYER_VERSION',
+  },
+  {
+    key: 'envDataDir',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Dossier des données',
+    desc: 'Où vivent la base SQLite, les fichiers, les photos et les sauvegardes de migration. C’est ce dossier qu’il faut archiver pour avoir une sauvegarde complète.',
+    default: '', envOverride: 'FOYER_DATA_DIR',
+  },
+  {
+    key: 'envPort',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Port d’écoute',
+    desc: 'Le port sur lequel le service répond, derrière votre reverse-proxy le cas échéant.',
+    default: '8099', envOverride: 'PORT',
+  },
+  {
+    key: 'envJwtSecret',
+    type: 'secret', scope: 'deploiement', section: 'serveur', module: 'Accès',
+    label: 'Secret de signature des sessions',
+    desc: 'Il protège tous les jetons de session : un secret faible laisse forger une session d’administrateur. Jamais affiché, seulement son état. En production, un secret absent ou trop court empêche le démarrage.',
+    default: '', envOverride: 'FOYER_JWT_SECRET',
+  },
+  {
+    key: 'envCorsOrigins',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Origines cross-origin autorisées',
+    desc: 'À laisser vide en mono-conteneur : l’API sert sa propre application, donc aucune requête n’est cross-origin. Ne sert qu’à un déploiement où l’application est servie par un autre hôte.',
+    default: '', envOverride: 'FOYER_CORS_ORIGINS',
+  },
+  {
+    key: 'envSelfUpdate',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Mise à jour automatique',
+    desc: 'Quand elle est active, le bouton « Mettre à jour maintenant » dépose un fichier déclencheur qu’une unité systemd root exécute. Elle ne se change pas ici : une unité systemd en dépend.',
+    default: '', envOverride: 'FOYER_SELF_UPDATE',
+  },
+  {
+    key: 'envGithubRepo',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Dépôt consulté pour les mises à jour',
+    desc: 'Le dépôt GitHub dont les releases sont comparées à la version installée.',
+    default: 'PrudhommeWTF/Foyer-App', envOverride: 'FOYER_GITHUB_REPO',
+  },
+  {
+    key: 'envGithubToken',
+    type: 'secret', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Jeton GitHub',
+    desc: 'Facultatif, et seulement utile pour un dépôt privé ou pour ne pas se faire limiter par GitHub lors des vérifications de version.',
+    default: '', envOverride: 'FOYER_GITHUB_TOKEN',
+  },
+  {
+    key: 'envVapidPrivate',
+    type: 'secret', scope: 'deploiement', section: 'serveur', module: 'Notifications',
+    label: 'Clé privée des rappels (VAPID)',
+    desc: 'Sans elle, une paire est engendrée au premier démarrage et gardée en base. En changer invalide tous les appareils déjà abonnés aux rappels.',
+    default: '', envOverride: 'FOYER_VAPID_PRIVATE',
+  },
 ] as const satisfies readonly SettingDecl[];
 
 /**
@@ -186,9 +290,16 @@ type Decl = (typeof REGISTRY)[number];
 type ValueOfType<T> = T extends 'bool' ? boolean : T extends 'int' ? number : string;
 type AllValues = { [D in Decl as D['key']]: ValueOfType<D['type']> };
 
-/** Les clés réellement déclarées. Une faute de frappe ne compile pas. */
-export type SettingKey = keyof AllValues & string;
+/**
+ * Les clés qu'on peut lire avec `setting()`. Une faute de frappe ne compile pas,
+ * et une clé de déploiement non plus : elle ne vit pas dans le document, elle
+ * vient de l'environnement du serveur.
+ */
+export type SettingKey = Extract<Decl, { scope: 'foyer' | 'personnel' }>['key'];
 export type SettingValue<K extends SettingKey> = AllValues[K];
+
+/** Les réglages fixés par la machine, affichés en lecture seule. */
+export const DEPLOYMENT: readonly SettingDecl[] = ALL.filter((d) => d.scope === 'deploiement');
 
 /** La forme de `HouseholdState.settings` : tout est facultatif, le défaut prend le relais. */
 export type HouseholdSettings = Partial<Pick<AllValues, Extract<Decl, { scope: 'foyer' }>['key']>>;
@@ -277,6 +388,11 @@ export function checkValue(d: SettingDecl, raw: unknown): Checked {
       if (raw.length > max) return { ok: false, error: `Attendu : ${max} caractères au maximum.` };
       return { ok: true, value: raw };
     }
+    case 'secret':
+      // Un secret ne se relit ni ne s'écrit d'ici : l'interface dit seulement
+      // s'il est posé. Le refuser explicitement évite qu'il finisse un jour dans
+      // le document, donc dans un export, donc en clair.
+      return { ok: false, error: `« ${d.label} » se change dans la configuration du serveur, jamais depuis l’application.` };
   }
 }
 

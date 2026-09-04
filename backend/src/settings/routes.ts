@@ -11,7 +11,7 @@
 //                sienne. Le tri se fait clé par clé, à la portée déclarée.
 import express, { Request, Response, Router } from 'express';
 import { ALL, SECTIONS } from './registry';
-import { applySettings, readSettings, settingsLog } from './repo';
+import { applySettings, effectiveSetting, readSettings, settingsLog } from './repo';
 
 /** Un lot vient d'un écran, pas d'une file : quelques clés, jamais des centaines. */
 const MAX_KEYS = 100;
@@ -22,8 +22,10 @@ export interface SettingsDeps {
   /** Le membre du foyer derrière la requête, ou null. */
   memberId: (req: Request) => string | null;
   isAdmin: (req: Request) => boolean;
-  /** Les variables d'environnement posées, pour dire quel réglage est imposé. */
-  envValue: (name: string) => string | undefined;
+  /** Les réglages du foyer qu'une variable d'environnement écrase, avec sa valeur. */
+  overrides: () => Record<string, string>;
+  /** Les réglages fixés par la machine, tels qu'ils s'appliquent. Secrets exclus. */
+  deployment: () => { key: string; value: string; set: boolean }[];
 }
 
 export function settingsRouter(deps: SettingsDeps): Router {
@@ -37,18 +39,19 @@ export function settingsRouter(deps: SettingsDeps): Router {
    */
   r.get('/', (req: Request, res: Response) => {
     const { values, stored, version } = readSettings(deps.memberId(req));
-    const overrides: Record<string, string> = {};
-    for (const d of ALL) {
-      if (!d.envOverride) continue;
-      const posee = deps.envValue(d.envOverride);
-      if (posee !== undefined && posee !== '') overrides[d.key] = posee;
-    }
+    // `values` porte ce qui **s'applique**, variable d'environnement comprise.
+    // Renvoyer la valeur du document pour un réglage écrasé donnerait un
+    // interrupteur allumé sous une explication disant qu'il est éteint : le
+    // mensonge exact que ce chantier existe pour supprimer.
+    const overrides = deps.overrides();
+    for (const key of Object.keys(overrides)) values[key] = effectiveSetting(key);
     res.json({
       sections: SECTIONS,
       registry: ALL,
       values,
       stored,
       overrides,
+      deployment: deps.deployment(),
       version,
       canEdit: deps.isAdmin(req),
       log: settingsLog(LOG_MAX),
@@ -73,7 +76,7 @@ export function settingsRouter(deps: SettingsDeps): Router {
         // n'est pas le même geste pour la personne en face, et l'écran n'a pas à
         // deviner lequel des deux lui est arrivé. Dans les deux cas le message
         // part clé par clé, pour se placer au bon champ.
-        const droit = out.refused.some((f) => /administrateur|ne se change pas ici|aucun membre/.test(f.error));
+        const droit = out.refused.some((f) => f.kind === 'droit');
         res.status(droit ? 403 : 422).json({ error: out.refused[0].error, refused: out.refused });
         return;
       }

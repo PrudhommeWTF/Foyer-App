@@ -47,8 +47,10 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
 | `prefNotifs` | Alertes dans l’application | Personnel | oui / non | activé | — | Notifications | — |
+| `publicUrl` | Adresse publique de Foyer | Foyer | texte | _(vide)_ | 300 caractères au maximum | Notifications | `FOYER_PUBLIC_URL` |
 
 - **Alertes dans l’application** (`prefNotifs`) : La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Propre à vous, et sans effet sur les rappels envoyés au téléphone.
+- **Adresse publique de Foyer** (`publicUrl`) : L’adresse ouverte quand on touche une notification sur le téléphone, par exemple https://foyer.exemple.fr. Vide, la notification ouvre l’adresse par laquelle l’appareil s’était abonné, ce qui échoue depuis l’extérieur si c’était une adresse locale.
 
 ## Repas et cuisine
 
@@ -59,6 +61,44 @@ Planning des repas, suggestions et génération des courses.
 | `showBreakfast` | Afficher le petit-déjeuner | Foyer | oui / non | désactivé | — | Repas | — |
 
 - **Afficher le petit-déjeuner** (`showBreakfast`) : Ajoute la ligne du matin au planning des repas, et donc à la génération des courses. Les repas déjà saisis sont conservés quand la ligne est masquée.
+
+## Accès et comptes
+
+Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `signupAllowed` | Autoriser la création de comptes | Foyer | oui / non | activé | — | Accès | `FOYER_ALLOW_SIGNUP` |
+| `recipeImport` | Importer une recette depuis une adresse web | Foyer | oui / non | activé | — | Cuisine | `FOYER_RECIPE_IMPORT` |
+
+- **Autoriser la création de comptes** (`signupAllowed`) : Quand c’est coupé, l’écran de connexion ne propose plus de créer un compte et l’API refuse les inscriptions. À laisser coupé dès que l’application est joignable depuis Internet.
+- **Importer une recette depuis une adresse web** (`recipeImport`) : La seule requête sortante de l’application, déclenchée par vous et journalisée : le carnet va lire la page d’une recette pour la recopier. Coupé, le bouton d’import disparaît du carnet.
+
+## Serveur et déploiement
+
+Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `envVersion` | Version installée | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_VERSION` |
+| `envDataDir` | Dossier des données | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_DATA_DIR` |
+| `envPort` | Port d’écoute | Déploiement | texte | `8099` | 200 caractères au maximum | Exploitation | `PORT` |
+| `envJwtSecret` | Secret de signature des sessions | Déploiement | undefined | _(vide)_ | — | Accès | `FOYER_JWT_SECRET` |
+| `envCorsOrigins` | Origines cross-origin autorisées | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_CORS_ORIGINS` |
+| `envSelfUpdate` | Mise à jour automatique | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_SELF_UPDATE` |
+| `envGithubRepo` | Dépôt consulté pour les mises à jour | Déploiement | texte | `PrudhommeWTF/Foyer-App` | 200 caractères au maximum | Exploitation | `FOYER_GITHUB_REPO` |
+| `envGithubToken` | Jeton GitHub | Déploiement | undefined | _(vide)_ | — | Exploitation | `FOYER_GITHUB_TOKEN` |
+| `envVapidPrivate` | Clé privée des rappels (VAPID) | Déploiement | undefined | _(vide)_ | — | Notifications | `FOYER_VAPID_PRIVATE` |
+
+- **Version installée** (`envVersion`) : La version que ce service exécute. Injectée au build de l’image Docker, ou posée par l’installeur LXC dans /etc/foyer/foyer.env.
+- **Dossier des données** (`envDataDir`) : Où vivent la base SQLite, les fichiers, les photos et les sauvegardes de migration. C’est ce dossier qu’il faut archiver pour avoir une sauvegarde complète.
+- **Port d’écoute** (`envPort`) : Le port sur lequel le service répond, derrière votre reverse-proxy le cas échéant.
+- **Secret de signature des sessions** (`envJwtSecret`) : Il protège tous les jetons de session : un secret faible laisse forger une session d’administrateur. Jamais affiché, seulement son état. En production, un secret absent ou trop court empêche le démarrage.
+- **Origines cross-origin autorisées** (`envCorsOrigins`) : À laisser vide en mono-conteneur : l’API sert sa propre application, donc aucune requête n’est cross-origin. Ne sert qu’à un déploiement où l’application est servie par un autre hôte.
+- **Mise à jour automatique** (`envSelfUpdate`) : Quand elle est active, le bouton « Mettre à jour maintenant » dépose un fichier déclencheur qu’une unité systemd root exécute. Elle ne se change pas ici : une unité systemd en dépend.
+- **Dépôt consulté pour les mises à jour** (`envGithubRepo`) : Le dépôt GitHub dont les releases sont comparées à la version installée.
+- **Jeton GitHub** (`envGithubToken`) : Facultatif, et seulement utile pour un dépôt privé ou pour ne pas se faire limiter par GitHub lors des vérifications de version.
+- **Clé privée des rappels (VAPID)** (`envVapidPrivate`) : Sans elle, une paire est engendrée au premier démarrage et gardée en base. En changer invalide tous les appareils déjà abonnés aux rappels.
 
 ## Où c’est stocké, et comment le sauvegarder
 

@@ -7,7 +7,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { FetchError, assertPublicUrl, isPrivateAddress, networkReason } from '../src/recipes/fetch';
-import { importEnabled } from '../src/recipes/routes';
 
 const refuse = async (url: string, motif: RegExp): Promise<void> => {
   await assert.rejects(
@@ -150,32 +149,5 @@ describe('ce que le message dit quand le réseau lâche', () => {
     );
     assert.match(networkReason(new Error('vide')), /n’a pas pu être émise/);
     assert.match(networkReason(null), /n’a pas pu être émise|connexion impossible/);
-  });
-});
-
-describe('interrupteur de configuration', () => {
-  const avec = (v: string | undefined, fn: () => void): void => {
-    const before = process.env.FOYER_RECIPE_IMPORT;
-    if (v === undefined) delete process.env.FOYER_RECIPE_IMPORT; else process.env.FOYER_RECIPE_IMPORT = v;
-    try { fn(); } finally {
-      if (before === undefined) delete process.env.FOYER_RECIPE_IMPORT; else process.env.FOYER_RECIPE_IMPORT = before;
-    }
-  };
-
-  it('est actif par défaut', () => {
-    avec(undefined, () => assert.equal(importEnabled(), true));
-    avec('', () => assert.equal(importEnabled(), true));
-  });
-
-  it('se coupe avec les valeurs qu’un administrateur écrirait', () => {
-    for (const v of ['false', 'FALSE', '0', 'no', 'off']) {
-      avec(v, () => assert.equal(importEnabled(), false, v));
-    }
-  });
-
-  it('ne se coupe pas sur une valeur affirmative', () => {
-    for (const v of ['true', '1', 'yes', 'on']) {
-      avec(v, () => assert.equal(importEnabled(), true, v));
-    }
   });
 });

@@ -41,7 +41,7 @@ import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { settingsRouter } from './settings/routes';
-import { foreignPrefsChanged, settingsChanged } from './settings/repo';
+import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
 import { loadRules, rulesPath } from './home/rules';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
@@ -123,7 +123,12 @@ function resolveJwtSecret(): string {
   return ephemeral;
 }
 const JWT_SECRET = resolveJwtSecret();
-const ALLOW_SIGNUP = (process.env.FOYER_ALLOW_SIGNUP || 'true') !== 'false';
+/**
+ * Les inscriptions sont un réglage du foyer, modifiable depuis l'application,
+ * que `FOYER_ALLOW_SIGNUP` verrouille quand elle est posée. Lu à chaque appel :
+ * couper les inscriptions ne doit pas demander de redémarrer le service.
+ */
+const allowSignup = (): boolean => effectiveSetting('signupAllowed') === true;
 // The frontend uses a relative base href, so a single build works served at the
 // root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
@@ -246,7 +251,7 @@ api.get('/health', (_req, res) => res.json({ ok: true }));
 
 // ---- First-run setup (onboarding) ----
 api.get('/setup/status', (_req, res) => {
-  res.json({ needsSetup: countUsers() === 0, allowSignup: ALLOW_SIGNUP });
+  res.json({ needsSetup: countUsers() === 0, allowSignup: allowSignup() });
 });
 
 api.post('/setup', authLimiter, (req: Request, res: Response) => {
@@ -316,7 +321,7 @@ api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
 });
 
 api.post('/auth/register', authLimiter, (req: Request, res: Response) => {
-  if (!ALLOW_SIGNUP) {
+  if (!allowSignup()) {
     res.status(403).json({ error: 'Les inscriptions sont désactivées' });
     return;
   }
@@ -517,7 +522,8 @@ api.use('/finances', auth, financesRouter(requireAdmin));
 api.use('/settings', auth, settingsRouter({
   memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
   isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
-  envValue: (name) => process.env[name],
+  overrides: () => envOverrides(),
+  deployment: () => deploymentView(),
 }));
 
 // Recipe photos and other household files: bytes on disk, never in the state
@@ -532,14 +538,18 @@ api.use('/shopping', auth, shoppingRouter());
 api.use('/tasks', auth, tasksRouter());
 
 // Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
-// L'adresse ouverte au tap est celle que le navigateur a utilisée pour
-// s'abonner : le serveur ne connaît pas son nom public.
-const APP_URL = process.env.FOYER_PUBLIC_URL || '';
-api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, () => APP_URL));
+//
+// L'adresse ouverte au tap vient du réglage « Adresse publique de Foyer », que
+// `FOYER_PUBLIC_URL` verrouille. Vide, c'est le navigateur qui décide, avec
+// l'adresse par laquelle il s'était abonné : elle échoue depuis l'extérieur
+// quand c'était une adresse locale, d'où l'intérêt de pouvoir la poser sans
+// éditer un fichier sur le serveur.
+const appUrl = (): string => String(effectiveSetting('publicUrl') || '');
+api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
-api.use('/recipes', auth, recipesRouter());
+api.use('/recipes', auth, recipesRouter(() => effectiveSetting('recipeImport') === true));
 
 // ---- School holidays (official FR data, cached) ----
 interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
@@ -708,7 +718,7 @@ onAssigned((memberId, task, opId) => {
   const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
   void notify(`assign|${opId}|${memberId}`, [memberId], {
     kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
-    url: APP_URL, taskId: task.id, tag: 'task-' + task.id,
+    url: appUrl(), taskId: task.id, tag: 'task-' + task.id,
   }).then((r) => {
     const m = r.members[0];
     if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
@@ -718,7 +728,7 @@ onAssigned((memberId, task, opId) => {
 startScheduler({
   tasks: () => (getHousehold().state as HouseholdState).tasks || [],
   accounts: () => accountsOf().map((a) => a.memberId),
-  url: () => APP_URL,
+  url: appUrl,
   log: notifLog,
 });
 

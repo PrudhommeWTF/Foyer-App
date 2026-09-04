@@ -115,6 +115,8 @@ export interface SettingsPayload {
   stored: string[];
   /** Clé de réglage vers la valeur imposée par une variable d'environnement. */
   overrides: Record<string, string>;
+  /** Les réglages fixés par la machine. `value` est vide pour un secret : il ne se relit jamais. */
+  deployment: { key: string; value: string; set: boolean }[];
   version: number;
   canEdit: boolean;
   log: SettingsLogLine[];

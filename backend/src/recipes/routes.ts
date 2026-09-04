@@ -10,8 +10,15 @@ import * as files from '../storage/files';
 import { FetchError, fetchPublic } from './fetch';
 import { ImportError, parseRecipePage } from './schema-org';
 
-/** Coupure franche : `FOYER_RECIPE_IMPORT=false` et le foyer ne sort plus du tout. */
-export const importEnabled = (): boolean => !/^(0|false|no|off)$/i.test(process.env.FOYER_RECIPE_IMPORT || '');
+/**
+ * Coupure franche : le module ne décide pas, il demande.
+ *
+ * L'interrupteur est le réglage « Importer une recette depuis une adresse web »,
+ * que `FOYER_RECIPE_IMPORT` verrouille quand elle est posée. La règle de
+ * priorité vit à un seul endroit (settings/repo.ts) et le serveur la passe ici,
+ * ce qui garde ce module lisible sans base de données.
+ */
+export type ImportSwitch = () => boolean;
 
 /**
  * Un import est un geste humain : quelques-uns par soirée, jamais une rafale.
@@ -25,14 +32,15 @@ const importLimiter = rateLimit({
   message: { error: 'Trop d’imports d’affilée. Réessayez dans quelques minutes.' },
 });
 
-export function recipesRouter(): Router {
+export function recipesRouter(importEnabled: ImportSwitch): Router {
   const r = express.Router();
   r.use(express.json({ limit: '8kb' }));
 
   r.post('/import', importLimiter, async (req: Request, res: Response) => {
     if (!importEnabled()) {
       res.status(503).json({
-        error: 'L’import de recette est désactivé sur ce serveur (FOYER_RECIPE_IMPORT=false).',
+        error: 'L’import de recette est coupé. Un administrateur peut le rallumer dans Paramètres, '
+          + 'section « Accès et comptes », sauf si la variable FOYER_RECIPE_IMPORT le verrouille sur le serveur.',
       });
       return;
     }

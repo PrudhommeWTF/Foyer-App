@@ -54,8 +54,14 @@ export function readSettings(memberId: string | null = null): SettingsView {
   return { values, stored, version };
 }
 
-/** Une clé refusée, et la raison à afficher à côté du champ. */
-export interface Refus { key: string; error: string; }
+/**
+ * Une clé refusée, et la raison à afficher à côté du champ.
+ *
+ * `kind` distingue « vous n'avez pas le droit » de « cette valeur ne va pas » :
+ * ce n'est pas le même geste pour la personne en face, et l'écran n'a pas à le
+ * deviner en lisant le message.
+ */
+export interface Refus { key: string; error: string; kind: 'droit' | 'valeur'; }
 
 export interface ApplyOutcome {
   /** Les clés réellement écrites. Une valeur identique à l'existante n'y figure pas. */
@@ -78,23 +84,31 @@ export function applySettings(changes: Record<string, unknown>, memberId: string
   const retenues: { decl: SettingDecl; value: boolean | number | string }[] = [];
   for (const [key, raw] of Object.entries(changes || {})) {
     const d = declOf(key);
-    if (!d) { refused.push({ key, error: `Le réglage « ${key} » n’existe pas.` }); continue; }
+    if (!d) { refused.push({ key, kind: 'valeur', error: `Le réglage « ${key} » n’existe pas.` }); continue; }
     if (d.scope === 'deploiement') {
-      refused.push({ key, error: `« ${d.label} » est fixé par le serveur et ne se change pas ici.` });
+      refused.push({ key, kind: 'droit', error: `« ${d.label} » est fixé par le serveur et ne se change pas ici.` });
       continue;
     }
     // Un réglage du foyer engage tout le monde : administrateur uniquement. Une
     // préférence n'engage que soi, et n'a donc rien à demander à personne.
     if (d.scope === 'foyer' && !isAdmin) {
-      refused.push({ key, error: `« ${d.label} » est un réglage du foyer : seul un administrateur peut le modifier.` });
+      refused.push({ key, kind: 'droit', error: `« ${d.label} » est un réglage du foyer : seul un administrateur peut le modifier.` });
       continue;
     }
     if (d.scope === 'personnel' && !memberId) {
-      refused.push({ key, error: `« ${d.label} » est une préférence personnelle : votre compte n’est rattaché à aucun membre du foyer.` });
+      refused.push({ key, kind: 'droit', error: `« ${d.label} » est une préférence personnelle : votre compte n’est rattaché à aucun membre du foyer.` });
+      continue;
+    }
+    // Écrire un réglage que l'environnement écrase reviendrait à ranger dans le
+    // document une valeur sans effet : exactement le réglage auquel on cesse de
+    // croire. On refuse, en nommant la variable et le geste.
+    const impose = envValueOf(d);
+    if (impose !== null) {
+      refused.push({ key, kind: 'droit', error: `« ${d.label} » est imposé par la variable d’environnement ${d.envOverride} (« ${process.env[d.envOverride!]} »). Changez-la dans la configuration du service, puis redémarrez.` });
       continue;
     }
     const checked = checkValue(d, raw);
-    if (!checked.ok) { refused.push({ key, error: checked.error }); continue; }
+    if (!checked.ok) { refused.push({ key, kind: 'valeur', error: checked.error }); continue; }
     retenues.push({ decl: d, value: checked.value });
   }
   if (refused.length) {
@@ -195,3 +209,64 @@ export function foreignPrefsChanged(avant: unknown, apres: unknown, memberId: st
   return [...ids].some((id) => JSON.stringify(a[id]) !== JSON.stringify(b[id]));
 }
 
+
+/**
+ * Ce que l'environnement impose pour cette déclaration, ou `null` quand il ne
+ * dit rien.
+ *
+ * Une variable **vide** (`FOYER_ALLOW_SIGNUP=`) compte pour absente : on la pose
+ * pour imposer une valeur, pas pour imposer le vide. Pour un booléen, les
+ * formes qu'un administrateur écrit réellement sont acceptées des deux côtés
+ * (`false`, `FALSE`, `0`, `no`, `off` contre `true`, `1`, `yes`, `on`), parce
+ * qu'un fichier d'environnement se relit à l'oeil et se tape à la main.
+ */
+export function envValueOf(d: SettingDecl, env: NodeJS.ProcessEnv = process.env): boolean | number | string | null {
+  const brut = d.envOverride ? env[d.envOverride] : undefined;
+  if (brut === undefined || brut === '') return null;
+  if (d.type === 'secret') return brut;
+  const lu = d.type === 'bool' ? !/^(0|false|no|off)$/i.test(brut) : brut;
+  const checked = checkValue(d, lu);
+  return checked.ok ? checked.value : null;
+}
+
+/**
+ * La valeur effective d'un réglage du foyer, **variable d'environnement
+ * comprise**.
+ *
+ * C'est le seul endroit qui applique la règle de priorité, et c'est pour cela
+ * qu'elle ne peut pas diverger entre le code qui décide et l'interface qui
+ * explique : `GET /api/settings` lit la même chose pour dire quel champ griser.
+ */
+export function effectiveSetting(key: string, env: NodeJS.ProcessEnv = process.env): boolean | number | string {
+  const d = declOf(key);
+  if (!d) throw new Error(`Réglage inconnu : ${key}`);
+  const impose = envValueOf(d, env);
+  return impose !== null ? impose : readSettings().values[key];
+}
+
+/**
+ * Ce que l'environnement impose réellement, clé de réglage vers valeur lue.
+ * Sert à griser le champ **en le disant**, jamais à griser en silence.
+ */
+export function envOverrides(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const d of ALL) {
+    if (d.scope !== 'foyer') continue;
+    const brut = d.envOverride ? env[d.envOverride] : undefined;
+    if (brut !== undefined && brut !== '') out[d.key] = brut;
+  }
+  return out;
+}
+
+/** Les réglages de déploiement, tels qu'ils s'appliquent. Un secret n'est jamais rendu. */
+export function deploymentView(env: NodeJS.ProcessEnv = process.env): { key: string; value: string; set: boolean }[] {
+  return ALL.filter((d) => d.scope === 'deploiement').map((d) => {
+    const pose = envValueOf(d, env) !== null;
+    return {
+      key: d.key,
+      // Un secret ne sort jamais d'ici : seul son état est une information.
+      value: d.type === 'secret' ? '' : (pose ? String(envValueOf(d, env)) : String(d.default)),
+      set: pose,
+    };
+  });
+}

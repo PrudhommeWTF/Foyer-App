@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-import { ALL, SECTIONS, SettingDecl } from '../../core/settings/registry';
+import { ALL, DEPLOYMENT, SECTIONS, SettingDecl } from '../../core/settings/registry';
 import { SettingFieldComponent } from './field';
 
 /**
@@ -21,6 +21,8 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   calendriers: { icon: 'calendar', tint: '#E5F0F4', color: '#4E93B8' },
   notifications: { icon: 'bell', tint: '#FCE9E3', color: '#E56B4E' },
   repas: { icon: 'repas', tint: '#FDF0DA', color: '#F0B24B' },
+  acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
+  serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },
   membres: { icon: 'users', tint: '#E5F0F4', color: '#4E93B8' },
   exploitation: { icon: 'refresh', tint: '#F2ECF5', color: '#9B6FA8' },
 };
@@ -29,6 +31,7 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
 const GESTES: Section[] = [
   { id: 'membres', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres et leurs accès.', ...ICONES['membres'] },
   { id: 'exploitation', label: 'Exploitation', desc: 'Version, mises à jour, export des données, journal des modifications.', ...ICONES['exploitation'] },
+  { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose, en lecture seule.', ...ICONES['serveur'] },
 ];
 
 @Component({
@@ -104,7 +107,19 @@ const GESTES: Section[] = [
 
                   @if (!store.narrow() || ouvert() === s.id) {
                     <div class="content">
-                      @if (champs(s.id).length) {
+                      @if (s.id === 'serveur') {
+                        <div class="hint" style="margin:0 0 12px">
+                          Ces valeurs viennent de la configuration du service, pas de l’application. Pour les changer :
+                          éditez <code>/etc/foyer/foyer.env</code> (LXC) ou <code>docker-compose.yml</code> (Docker),
+                          puis <code>systemctl restart foyer</code> ou <code>docker compose up -d</code>.
+                        </div>
+                        <div class="fields">
+                          @for (d of DEPLOYMENT; track d.key) {
+                            <f-setting [decl]="d" [value]="''" [readonly]="true"
+                              [affiche]="serveur()[d.key]?.value || ''" [pose]="!!serveur()[d.key]?.set" />
+                          }
+                        </div>
+                      } @else if (champs(s.id).length) {
                         <div class="fields">
                           @for (d of champs(s.id); track d.key) {
                             <f-setting [decl]="d" [value]="store.readDeclared(d)" [lock]="store.settingLock(d)"
@@ -411,12 +426,17 @@ export class SettingsScreen {
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   copied = signal(false);
 
+  readonly DEPLOYMENT = DEPLOYMENT;
   readonly q = signal('');
+
+  /** Les réglages du serveur, indexés par clé, tels que le serveur les applique. */
+  readonly serveur = computed<Record<string, { value: string; set: boolean }>>(() =>
+    Object.fromEntries((this.store.settingsInfo()?.deployment || []).map((d) => [d.key, d])));
   readonly ouvert = signal(SECTIONS[0]?.id || 'membres');
 
   /** Les sections du registre qui portent au moins un réglage, puis celles de gestes. */
   readonly sections = computed<Section[]>(() => [
-    ...SECTIONS.filter((s) => ALL.some((d) => d.section === s.id))
+    ...SECTIONS.filter((s) => s.id !== 'serveur' && ALL.some((d) => d.section === s.id))
       .map((s) => ({ id: s.id, label: s.label, desc: s.desc, ...(ICONES[s.id] || ICONES['affichage']) })),
     ...GESTES,
   ]);
@@ -430,7 +450,8 @@ export class SettingsScreen {
    */
   readonly trouves = computed<SettingDecl[]>(() => {
     const m = norm(this.q());
-    return m ? ALL.filter((d) => norm(d.label + ' ' + d.desc + ' ' + d.module + ' ' + this.nomSection(d.section)).includes(m)) : [];
+    return m ? ALL.filter((d) => d.scope !== 'deploiement'
+      && norm(d.label + ' ' + d.desc + ' ' + d.module + ' ' + this.nomSection(d.section)).includes(m)) : [];
   });
 
   readonly sectionsTrouvees = computed<Section[]>(() => {
@@ -445,7 +466,7 @@ export class SettingsScreen {
     void this.store.loadSettingsInfo();
   }
 
-  champs(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section); }
+  champs(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section && d.scope !== 'deploiement'); }
   nomSection(id: string): string { return SECTIONS.find((s) => s.id === id)?.label || id; }
   basculer(id: string): void { this.ouvert.set(this.ouvert() === id ? '' : id); }
   aller(id: string): void { this.q.set(''); this.ouvert.set(id); }

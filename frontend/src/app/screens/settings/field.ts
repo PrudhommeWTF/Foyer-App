@@ -33,13 +33,16 @@ import { SettingDecl, checkValue } from '../../core/settings/registry';
           <div class="desc">{{ d.desc }}</div>
         </div>
 
-        @if (d.type === 'bool') {
+        @if (d.type === 'bool' && !readonly()) {
           <button class="sw" [class.on]="value() === true" [disabled]="!!lock()"
             [attr.aria-label]="d.label" [attr.aria-pressed]="value() === true"
             (click)="poser(!value())"><span class="knob"></span></button>
         }
       </div>
 
+      @if (readonly() && d.type === 'bool') { <div class="ro">{{ value() ? 'Activé' : 'Désactivé' }}</div> }
+
+      @if (!readonly()) {
       @switch (d.type) {
         @case ('enum') {
           <select class="input" [disabled]="!!lock()" [ngModel]="value()" (ngModelChange)="poser($event)">
@@ -63,15 +66,26 @@ import { SettingDecl, checkValue } from '../../core/settings/registry';
             (blur)="valider()" (keydown.enter)="valider()" />
         }
       }
+      }
+
+      @if (d.type === 'secret') {
+        <!-- Un secret ne s'affiche jamais, même masqué derrière des points : ce
+             qu'on a besoin de savoir est s'il est posé, pas ce qu'il vaut. -->
+        <div class="secret" [class.ok]="pose()">{{ pose() ? 'Défini' : 'Non défini' }}</div>
+      }
 
       @if (erreur()) { <div class="ko">{{ erreur() }}</div> }
 
+      @if (readonly()) {
+        @if (d.type !== 'secret') { <div class="ro">{{ affiche() || '(vide)' }}</div> }
+      } @else {
       <div class="foot">
         <span class="def">Par défaut : {{ lisible(d.default) }}</span>
         @if (!lock() && !parDefaut()) {
           <button class="reset" (click)="poser(d.default)">Revenir au défaut</button>
         }
       </div>
+      }
 
       @if (lock(); as raison) { <div class="lock">{{ raison }}</div> }
     </div>
@@ -102,6 +116,11 @@ import { SettingDecl, checkValue } from '../../core/settings/registry';
     .ko { margin-top: 8px; font-size: 12px; font-weight: 800; color: #C6492F; line-height: 1.45; }
     .lock { margin-top: 9px; font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.5; border-left: 3px solid var(--line2); padding-left: 9px; }
 
+    .ro { margin-top: 10px; font-size: 13px; font-weight: 800; color: var(--ink); background: var(--soft2); border-radius: 10px; padding: 9px 12px; word-break: break-all; }
+    .secret { margin-top: 10px; display: inline-block; font-size: 11.5px; font-weight: 800; padding: 5px 11px; border-radius: 20px; background: var(--soft2); color: var(--ink3); }
+    .secret.ok { background: #EDF2EB; color: #5F7E5C; }
+    :host-context(:root.dark) .secret.ok { background: rgba(122,155,118,.22); color: #A9C4A4; }
+
     .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
     .def { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .reset { border: none; background: none; padding: 0; cursor: pointer; font-size: 11.5px; font-weight: 800; color: var(--primary); }
@@ -114,6 +133,12 @@ export class SettingFieldComponent {
   readonly lock = input('');
   /** Section d'origine, montrée seulement dans les résultats de recherche. */
   readonly where = input('');
+  /** Réglage fixé par la machine : montré tel qu'il s'applique, jamais modifiable. */
+  readonly readonly = input(false);
+  /** Pour un secret : est-il posé ? Sa valeur, elle, ne sort jamais du serveur. */
+  readonly pose = input(false);
+  /** Pour un réglage en lecture seule : la valeur telle qu'elle s'applique. */
+  readonly affiche = input('');
   readonly change = output<boolean | number | string>();
 
   /**

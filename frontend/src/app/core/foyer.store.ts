@@ -3096,7 +3096,14 @@ export class FoyerStore {
    * aucune clé à la compilation. La conversion de type est enfermée ici, à un
    * seul endroit, et le contrôle de saisie du registre reste le juge.
    */
-  readDeclared(d: SettingDecl): boolean | number | string { return this.setting(d.key as SettingKey); }
+  readDeclared(d: SettingDecl): boolean | number | string {
+    // Un réglage qu'une variable d'environnement écrase ne vaut pas ce que le
+    // document en dit : c'est le serveur qui a raison, et la page doit montrer
+    // ce qui s'applique, pas ce qui est rangé.
+    const info = this.settingsInfo();
+    if (info && info.overrides[d.key] !== undefined) return info.values[d.key];
+    return this.setting(d.key as SettingKey);
+  }
   writeDeclared(d: SettingDecl, val: boolean | number | string): void {
     this.setSetting(d.key as SettingKey, val as SettingValue<SettingKey>);
   }

@@ -17,6 +17,9 @@ import { migrateHousehold } from '../src/storage/schema';
 import * as files from '../src/storage/files';
 import { recipesRouter } from '../src/recipes/routes';
 
+/** L'interrupteur d'import, passé au routeur : le module ne lit plus l'environnement. */
+let importAutorise = true;
+
 const FIXTURE = JSON.parse(fs.readFileSync(
   path.join(__dirname, 'fixtures', 'recipes', 'marmiton-gratin-courgettes.json'), 'utf8',
 ));
@@ -62,7 +65,7 @@ beforeEach(async () => {
   files.initFiles(db);
 
   const app = express();
-  app.use('/api/recipes', recipesRouter());
+  app.use('/api/recipes', recipesRouter(() => importAutorise));
   server = http.createServer(app);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = 'http://127.0.0.1:' + (server.address() as { port: number }).port + '/api';
@@ -76,7 +79,7 @@ afterEach(async () => {
   globalThis.fetch = realFetch;
   await new Promise<void>((r) => server.close(() => r()));
   fs.rmSync(dir, { recursive: true, force: true });
-  delete process.env.FOYER_RECIPE_IMPORT;
+  importAutorise = true;
 });
 
 describe('import réussi', () => {
@@ -184,11 +187,11 @@ describe('pages qui ne conviennent pas', () => {
 
 describe('interrupteur de configuration', () => {
   it('coupé, la route refuse et n’ouvre aucune connexion', async () => {
-    process.env.FOYER_RECIPE_IMPORT = 'false';
+    importAutorise = false;
     routes = [{ match: /marmiton/, type: 'text/html', body: pageWith(FIXTURE) }];
     const { status, json } = await post({ url: 'https://www.marmiton.org/r.aspx', recipeId: 'r1' });
     assert.equal(status, 503);
-    assert.match(json.error, /FOYER_RECIPE_IMPORT/);
-    assert.deepEqual(calls, []);
+    assert.match(json.error, /Paramètres|FOYER_RECIPE_IMPORT/);
+    assert.deepEqual(calls, [], 'aucune requête sortante ne doit partir quand l’import est coupé');
   });
 });
