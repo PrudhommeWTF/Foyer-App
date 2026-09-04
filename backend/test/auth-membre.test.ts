@@ -58,7 +58,7 @@ describe('les deux routes qui restent ouvertes, et pourquoi', () => {
   it('/me répond, pour que l’écran sache quoi dire au lieu d’enchaîner les 403', async () => {
     const r = await appel(ctx.base, 'GET', '/me', undefined, ctx.jetons.sansMembre);
     assert.equal(r.status, 200);
-    assert.equal(r.json.memberId, null);
+    assert.equal(r.json.memberId, null, 'la fiche a disparu : rien plutôt qu’un identifiant fantôme');
     assert.equal(r.json.admin, false);
   });
 
@@ -83,21 +83,29 @@ describe('un vrai membre, lui, passe', () => {
   });
 });
 
-describe('l’inscription libre est coupée par défaut', () => {
-  it('le réglage signupAllowed vaut false tant que personne ne l’allume', () => {
-    assert.equal(declOf('signupAllowed')?.default, false,
-      'un formulaire d’inscription ouvert sur Internet laisse n’importe qui se créer un compte');
-  });
-
-  it('POST /auth/register est refusé', async () => {
+describe('l’inscription libre n’existe pas', () => {
+  it('POST /auth/register n’est plus une route', async () => {
     const r = await appel(ctx.base, 'POST', '/auth/register', {
       email: 'robot@attaquant.example', password: 'robot-mot-de-passe', name: 'Robot',
     });
-    assert.equal(r.status, 403);
+    assert.equal(r.status, 404, 'une route de création de comptes ouverte à Internet n’a aucune raison d’exister');
   });
 
-  it('/setup/status ne promet pas une inscription qui n’aura pas lieu', async () => {
+  it('aucun compte n’a été créé au passage', async () => {
+    const r = await appel(ctx.base, 'POST', '/auth/login', {
+      email: 'robot@attaquant.example', password: 'robot-mot-de-passe',
+    });
+    assert.equal(r.status, 401);
+  });
+
+  it('/setup/status ne parle pas d’une inscription qui n’existe pas', async () => {
     const r = await appel(ctx.base, 'GET', '/setup/status');
-    assert.equal(r.json.allowSignup, false);
+    assert.equal(r.json.allowSignup, undefined);
+    assert.equal(r.json.needsSetup, false);
+  });
+
+  it('le réglage signupAllowed a disparu du registre', () => {
+    assert.equal(declOf('signupAllowed'), undefined,
+      'un réglage qui ne pilote plus rien est un interrupteur sans fil');
   });
 });

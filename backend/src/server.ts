@@ -10,7 +10,6 @@ import fs from 'fs';
 import path from 'path';
 import {
   countUsers,
-  createUser,
   createUserWithMember,
   deleteUser,
   findUserByEmail,
@@ -135,12 +134,6 @@ const JWT_SECRET = resolveJwtSecret();
 setLogLevelSource(() => {
   try { return effectiveSetting('logLevel') as LogLevel; } catch { return 'info'; }
 });
-/**
- * Les inscriptions sont un réglage du foyer, modifiable depuis l'application,
- * que `FOYER_ALLOW_SIGNUP` verrouille quand elle est posée. Lu à chaque appel :
- * couper les inscriptions ne doit pas demander de redémarrer le service.
- */
-const allowSignup = (): boolean => effectiveSetting('signupAllowed') === true;
 // The frontend uses a relative base href, so a single build works served at the
 // root or behind a reverse proxy on a sub-path.
 const STATIC_DIR = process.env.FOYER_STATIC_DIR || path.join(__dirname, '..', 'public');
@@ -301,7 +294,7 @@ api.get('/health', (_req, res) => res.json({ ok: true }));
 
 // ---- First-run setup (onboarding) ----
 api.get('/setup/status', (_req, res) => {
-  res.json({ needsSetup: countUsers() === 0, allowSignup: allowSignup() });
+  res.json({ needsSetup: countUsers() === 0 });
 });
 
 api.post('/setup', authLimiter, (req: Request, res: Response) => {
@@ -370,23 +363,11 @@ api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
   res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
 });
 
-api.post('/auth/register', authLimiter, (req: Request, res: Response) => {
-  if (!allowSignup()) {
-    res.status(403).json({ error: 'Les inscriptions sont désactivées' });
-    return;
-  }
-  const { email, password, name } = req.body || {};
-  if (!email || !password) {
-    res.status(400).json({ error: 'Email et mot de passe requis' });
-    return;
-  }
-  if (findUserByEmail(String(email))) {
-    res.status(409).json({ error: 'Un compte existe déjà avec cet email' });
-    return;
-  }
-  const user = createUser(String(email), String(password), String(name || '').trim() || 'Membre');
-  res.status(201).json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
-});
+// Il n'y a pas d'inscription libre : un accès s'ouvre depuis la fiche d'un
+// membre (`POST /members/:memberId/account`, réservé à un administrateur), ce qui
+// rattache le compte à quelqu'un du foyer. Un formulaire d'inscription public
+// n'aurait produit que des comptes sans membre, c'est-à-dire sans accès à quoi
+// que ce soit, tout en offrant à Internet une route de création de comptes.
 
 api.get('/state', auth, requireMember, (_req, res) => {
   res.json(getHousehold());
@@ -509,8 +490,12 @@ api.get('/live', auth, requireMember, (req: Request, res: Response) => {
 api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   const u = req.user ? getUserById(req.user.id) : undefined;
   if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  // L'identifiant du membre vient de la fiche telle qu'elle existe, pas de la
+  // colonne : un membre retiré du foyer laisse son compte derrière lui, et
+  // renvoyer l'identifiant d'une fiche disparue ferait pointer l'application sur
+  // un fantôme. Rien plutôt qu'un mensonge, et l'écran sait alors quoi dire.
   const m = currentMember(req);
-  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin, enfant: !!m?.enfant });
+  res.json({ email: u.email, name: u.name, memberId: m?.id ?? null, admin: !!m?.admin, enfant: !!m?.enfant });
 });
 
 /**

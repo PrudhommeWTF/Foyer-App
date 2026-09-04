@@ -28,11 +28,15 @@ const PUBLICS: { chemin: string; method: string; pourquoi: string; attendu: numb
   { method: 'GET', chemin: '/setup/status', pourquoi: 'l’écran doit savoir s’il faut proposer l’assistant', attendu: [200] },
   { method: 'POST', chemin: '/setup', pourquoi: 'création du foyer, refusée dès qu’un compte existe', attendu: [409] },
   { method: 'POST', chemin: '/auth/login', pourquoi: 'formulaire de connexion', attendu: [400, 401] },
-  { method: 'POST', chemin: '/auth/register', pourquoi: 'inscription, coupée par défaut', attendu: [400, 403] },
   { method: 'GET', chemin: '/calendar/feed.ics?token=', pourquoi: 'flux ICS, le jeton est le secret', attendu: [404] },
 ];
 
-/** Ce que l'API expose, hors routes publiques. Une omission ici est un trou. */
+/**
+ * Ce que l'API expose, hors routes publiques. Une omission ici est un trou.
+ *
+ * `POST /auth/register` n'y figure pas parce qu'il n'existe plus : un accès
+ * s'ouvre depuis la fiche d'un membre, sous contrôle d'un administrateur.
+ */
 const PROTEGES: [string, string][] = [
   ['GET', '/state'], ['PUT', '/state'], ['GET', '/live'], ['GET', '/me'], ['PUT', '/me/credentials'],
   ['GET', '/members/accounts'], ['POST', '/members/m1/account'], ['PUT', '/members/m1/account'], ['DELETE', '/members/m1/account'],

@@ -206,14 +206,6 @@ export function findUserByEmail(email: string): UserRow | undefined {
   return db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase()) as UserRow | undefined;
 }
 
-export function createUser(email: string, password: string, name: string): UserRow {
-  const hash = bcrypt.hashSync(password, 10);
-  const info = db
-    .prepare('INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)')
-    .run(email.toLowerCase(), hash, name);
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRow;
-}
-
 export function getHousehold(): { state: unknown; version: number } {
   const row = db.prepare('SELECT state, version FROM household WHERE id = 1').get() as
     | { state: string; version: number }

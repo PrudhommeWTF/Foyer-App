@@ -202,39 +202,32 @@ describe('réglages : ce que l’environnement impose', () => {
   });
 
   it('une variable posée est signalée à la clé qu’elle écrase, avec sa valeur', async () => {
-    env['FOYER_ALLOW_SIGNUP'] = 'false';
+    env['FOYER_RECIPE_IMPORT'] = 'false';
     const { json } = await appel('GET', 'admin');
-    assert.deepEqual(json.overrides, { signupAllowed: 'false' },
+    assert.deepEqual(json.overrides, { recipeImport: 'false' },
       'l’interface a besoin du nom ET de la valeur pour expliquer le champ grisé');
   });
 
   it('la valeur renvoyée est celle qui s’applique, pas celle rangée dans le document', async () => {
-    // Le foyer a délibérément allumé l'inscription ; la machine, elle, l'impose
-    // éteinte. C'est le seul montage où les deux valeurs diffèrent, donc le seul
-    // qui prouve laquelle des deux l'écran affiche.
-    await appel('PATCH', 'admin', { changes: { signupAllowed: true } });
-    process.env.FOYER_ALLOW_SIGNUP = 'false';
-    env['FOYER_ALLOW_SIGNUP'] = 'false';
+    process.env.FOYER_RECIPE_IMPORT = 'false';
+    env['FOYER_RECIPE_IMPORT'] = 'false';
     try {
       const { json } = await appel('GET', 'admin');
-      assert.equal(json.values.signupAllowed, false,
+      assert.equal(json.values.recipeImport, false,
         'sinon l’écran montre un interrupteur allumé sous une explication disant qu’il est éteint');
-      assert.equal(reglages()['signupAllowed'], true, 'le document, lui, garde ce que le foyer avait choisi');
-    } finally { delete process.env.FOYER_ALLOW_SIGNUP; }
+      assert.equal(reglages()['recipeImport'], true, 'le document, lui, garde ce que le foyer avait choisi');
+    } finally { delete process.env.FOYER_RECIPE_IMPORT; }
   });
 
   it('un réglage imposé par l’environnement est refusé à l’écriture, en nommant la variable', async () => {
-    // Posé avant que la variable n'arrive : ce que le document garde ensuite
-    // montre que l'écriture refusée n'a rien changé.
-    await appel('PATCH', 'admin', { changes: { signupAllowed: true } });
-    env['FOYER_ALLOW_SIGNUP'] = 'false';
-    process.env.FOYER_ALLOW_SIGNUP = 'false';
+    env['FOYER_RECIPE_IMPORT'] = 'false';
+    process.env.FOYER_RECIPE_IMPORT = 'false';
     try {
-      const { status, json } = await appel('PATCH', 'admin', { changes: { signupAllowed: true } });
+      const { status, json } = await appel('PATCH', 'admin', { changes: { recipeImport: false } });
       assert.equal(status, 403);
-      assert.match(json.error, /FOYER_ALLOW_SIGNUP/);
-      assert.equal(reglages()['signupAllowed'], true, 'rien n’est rangé dans le document : ce serait une valeur sans effet');
-    } finally { delete process.env.FOYER_ALLOW_SIGNUP; }
+      assert.match(json.error, /FOYER_RECIPE_IMPORT/);
+      assert.equal(reglages()['recipeImport'], true, 'rien n’est rangé dans le document : ce serait une valeur sans effet');
+    } finally { delete process.env.FOYER_RECIPE_IMPORT; }
   });
 
   it('les réglages du serveur sont affichés, et jamais les secrets', async () => {
@@ -251,22 +244,22 @@ describe('réglages : ce que l’environnement impose', () => {
 });
 
 describe('réglages : la lecture de l’environnement', () => {
-  const signup = declOf('signupAllowed')!;
+  const signup = declOf('recipeImport')!;
 
   it('une variable absente ou vide ne dit rien', () => {
     assert.equal(envValueOf(signup, {}), null);
-    assert.equal(envValueOf(signup, { FOYER_ALLOW_SIGNUP: '' }), null, 'on la pose pour imposer une valeur, pas le vide');
+    assert.equal(envValueOf(signup, { FOYER_RECIPE_IMPORT: '' }), null, 'on la pose pour imposer une valeur, pas le vide');
   });
 
   it('coupe sur les valeurs qu’un administrateur écrit réellement', () => {
     for (const v of ['false', 'FALSE', '0', 'no', 'off']) {
-      assert.equal(envValueOf(signup, { FOYER_ALLOW_SIGNUP: v }), false, v);
+      assert.equal(envValueOf(signup, { FOYER_RECIPE_IMPORT: v }), false, v);
     }
   });
 
   it('ne coupe pas sur une valeur affirmative', () => {
     for (const v of ['true', 'TRUE', '1', 'yes', 'on']) {
-      assert.equal(envValueOf(signup, { FOYER_ALLOW_SIGNUP: v }), true, v);
+      assert.equal(envValueOf(signup, { FOYER_RECIPE_IMPORT: v }), true, v);
     }
   });
 

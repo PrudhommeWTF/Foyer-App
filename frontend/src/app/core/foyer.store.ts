@@ -107,7 +107,6 @@ export class FoyerStore {
   readonly ready = signal(false);
   readonly authed = signal(false);
   readonly needsSetup = signal(false);
-  readonly allowSignup = signal(true);
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
 
@@ -333,7 +332,6 @@ export class FoyerStore {
     // First run? The setup wizard must create the household + admin account.
     try {
       const status = await this.api.setupStatus();
-      this.allowSignup.set(status.allowSignup);
       if (status.needsSetup) {
         this.needsSetup.set(true);
         this.api.token = null;
@@ -703,21 +701,6 @@ export class FoyerStore {
     this.api.setRemember(remember);
     try {
       const res = await this.api.login(email, password);
-      this.api.token = res.token;
-      await this.loadState();
-      this.authed.set(true);
-      this.toast('Bienvenue dans votre foyer');
-      return true;
-    } catch (e) {
-      this.authError.set((e as Error).message);
-      return false;
-    }
-  }
-
-  async register(email: string, password: string, name: string): Promise<boolean> {
-    this.authError.set('');
-    try {
-      const res = await this.api.register(email, password, name);
       this.api.token = res.token;
       await this.loadState();
       this.authed.set(true);

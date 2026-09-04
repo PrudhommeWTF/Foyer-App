@@ -248,7 +248,7 @@ export class ApiService {
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
-  setupStatus(): Promise<{ needsSetup: boolean; allowSignup: boolean }> {
+  setupStatus(): Promise<{ needsSetup: boolean }> {
     return this.request('setup/status');
   }
 
@@ -258,10 +258,6 @@ export class ApiService {
 
   login(email: string, password: string): Promise<LoginResult> {
     return this.request<LoginResult>('auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-  }
-
-  register(email: string, password: string, name: string): Promise<LoginResult> {
-    return this.request<LoginResult>('auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
   }
 
   me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean }> {

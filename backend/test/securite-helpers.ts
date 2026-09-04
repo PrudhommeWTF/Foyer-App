@@ -43,7 +43,6 @@ export async function demarrer(): Promise<Contexte> {
   process.env.FOYER_DB_PATH = path.join(dir, 'foyer.db');
   process.env.FOYER_JWT_SECRET = SECRET;
   process.env.FOYER_STATIC_DIR = path.join(dir, 'public-absent');
-  delete process.env.FOYER_ALLOW_SIGNUP;
 
   const { app } = await import('../src/server');
   const server = http.createServer(app);
@@ -53,18 +52,36 @@ export async function demarrer(): Promise<Contexte> {
   const setup = await appel(base, 'POST', '/setup', {
     household: { name: 'Foyer de test' },
     admin: { name: 'Thomas', email: 'admin@example.fr', password: 'MotDePasseSolide1' },
-    members: [{ name: 'Camille', email: 'membre@example.fr', password: 'MotDePasseSolide2' }],
+    members: [
+      { name: 'Camille', email: 'membre@example.fr', password: 'MotDePasseSolide2' },
+      // Sans identifiants : c'est à lui qu'on ouvrira un accès avant de le retirer
+      // du foyer, pour obtenir un compte qui survit à sa fiche de membre.
+      { name: 'Alex' },
+    ],
   });
   if (setup.status !== 201) throw new Error('onboarding de test échoué : ' + JSON.stringify(setup.json));
 
   const membre = await appel(base, 'POST', '/auth/login', { email: 'membre@example.fr', password: 'MotDePasseSolide2' });
 
-  // Le compte sans membre : créé directement en base, parce que l'inscription
-  // libre est désormais coupée par défaut. C'est le compte qu'une base existante
-  // porte déjà, et celui qu'une inscription rallumée produirait.
+  // Le compte sans membre, construit comme la vie le produit : un accès ouvert
+  // en bonne et due forme, puis le membre retiré du foyer. Le compte survit à sa
+  // fiche, et c'est précisément le cas que le garde doit couvrir maintenant que
+  // l'inscription libre n'existe plus. Une base héritée porte les mêmes lignes.
   const db = await import('../src/db');
-  const sans = db.createUser('orphelin@example.fr', 'MotDePasseSolide3', 'Orphelin');
+  const etat = await appel(base, 'GET', '/state', undefined, setup.json.token);
+  const membres = etat.json.state.members as { id: string; name: string }[];
+  const aRetirer = membres.find((m) => m.name === 'Alex')!.id;
+  const ouvert = await appel(base, 'POST', `/members/${aRetirer}/account`, {
+    email: 'orphelin@example.fr', password: 'MotDePasseSolide3',
+  }, setup.json.token);
+  if (ouvert.status !== 201) throw new Error('ouverture d’accès de test échouée : ' + JSON.stringify(ouvert.json));
   const sansJeton = (await appel(base, 'POST', '/auth/login', { email: 'orphelin@example.fr', password: 'MotDePasseSolide3' })).json.token;
+
+  const retire = await appel(base, 'PUT', '/state', {
+    version: etat.json.version,
+    state: { ...etat.json.state, members: membres.filter((m) => m.id !== aRetirer) },
+  }, setup.json.token);
+  if (retire.status !== 200) throw new Error('retrait du membre de test échoué : ' + JSON.stringify(retire.json));
 
   const idDe = (email: string): number => {
     const u = db.findUserByEmail(email);
@@ -75,7 +92,7 @@ export async function demarrer(): Promise<Contexte> {
   return {
     base, app, server, dir,
     jetons: { admin: setup.json.token, membre: membre.json.token, sansMembre: sansJeton },
-    ids: { admin: idDe('admin@example.fr'), membre: idDe('membre@example.fr'), sansMembre: sans.id },
+    ids: { admin: idDe('admin@example.fr'), membre: idDe('membre@example.fr'), sansMembre: idDe('orphelin@example.fr') },
   };
 }
 

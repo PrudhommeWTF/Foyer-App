@@ -344,16 +344,6 @@ export const REGISTRY = [
     default: false,
   },
   {
-    key: 'signupAllowed',
-    type: 'bool', scope: 'foyer', section: 'acces', module: 'Accès',
-    label: 'Autoriser la création de comptes',
-    desc: 'Coupé par défaut : un formulaire d’inscription ouvert sur Internet laisse n’importe qui se créer un compte. '
-      + 'La bonne manière d’ouvrir un accès est la fiche du membre, dans « Famille », qui rattache le compte à quelqu’un. '
-      + 'Un compte créé par ce formulaire n’est rattaché à aucun membre, et n’accède donc à rien tant qu’un administrateur ne l’a pas rattaché.',
-    default: false,
-    envOverride: 'FOYER_ALLOW_SIGNUP',
-  },
-  {
     key: 'recipeImport',
     type: 'bool', scope: 'foyer', section: 'acces', module: 'Cuisine',
     label: 'Importer une recette depuis une adresse web',
