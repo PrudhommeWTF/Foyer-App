@@ -26,6 +26,7 @@ frontend/src/app/
   shared/     # composants réutilisables (avatar, modal)
 backend/src/  # server.ts (Express + routes), db.ts (SQLite), models.ts, seed.ts (EMPTY_STATE + buildInitialState)
               # shopping/ et tasks/ : sous-arbres du document écrits par opérations ciblées (ops.ts pur, repo.ts transaction + journal, routes.ts)
+              # notify/ : rappels Web Push (reminders.ts pur, push.ts clés + appareils + journal, scheduler.ts, routes.ts)
 deploy/lxc/   # install.sh, proxmox-create.sh, self-update.sh, update.sh, uninstall.sh
 docs/         # maquette de design de référence
 ```

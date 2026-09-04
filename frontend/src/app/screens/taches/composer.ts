@@ -3,9 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { LIST_ICONS } from '../../core/constants';
-import { TaskItem, TaskRec } from '../../core/models';
+import { Remind, TaskItem, TaskRec } from '../../core/models';
 import { TaskDraft } from '../../core/task-ops';
-import { dueLabel, quickDates } from '../../core/tasks';
+import { REMINDS, REMIND_LABELS, dueLabel, quickDates } from '../../core/tasks';
 import { DOW_SHORT, FREQ_LABELS, recLabel } from '../../core/recurrence';
 import { AvatarComponent } from '../../shared/avatar';
 
@@ -73,6 +73,7 @@ type Scope = 'one' | 'all';
             </button>
             <button class="opt" [class.on]="due()" [class.open]="panel() === 'date'" (click)="toggle('date')">
               <f-icon name="calendar" [size]="15" color="currentColor" [width]="2.2" /> {{ due() ? dueText() : 'Date' }}
+              @if (due() && remind()) { <f-icon name="bell" [size]="13" color="currentColor" [width]="2.4" /> }
             </button>
             <button class="opt" [class.open]="panel() === 'list'" (click)="toggle('list')">
               @if (listObj(); as l) {
@@ -121,6 +122,17 @@ type Scope = 'one' | 'all';
                   <input class="input sm" type="time" [disabled]="!due()" [ngModel]="time() || ''" (ngModelChange)="time.set($event || null)" />
                   @if (time()) { <button class="chip" (click)="time.set(null)">Sans heure</button> }
                 </div>
+                @if (due()) {
+                  <!-- Le rappel se règle ici, à côté de l'heure : c'est un attribut de la date. -->
+                  <div class="chips">
+                    <span class="lbl"><f-icon name="bell" [size]="14" color="var(--ink2)" [width]="2.2" /> Rappel</span>
+                    <button class="chip" [class.active]="!remind()" (click)="remind.set(null)">Aucun</button>
+                    @for (r of reminds; track r) {
+                      <button class="chip" [class.active]="remind() === r" (click)="remind.set(r)">{{ remindLabel(r) }}</button>
+                    }
+                  </div>
+                  @if (remind() && !time() && (remind() === 'at' || remind() === '1h')) { <div class="hint">Sans heure, la tâche est prise à 9 h.</div> }
+                }
               </div>
             }
             @case ('list') {
@@ -295,6 +307,8 @@ export class TaskComposerComponent {
   readonly note = signal('');
   readonly list = signal('');
   readonly rec = signal<TaskRec | null>(null);
+  readonly remind = signal<Remind | null>(null);
+  readonly reminds = REMINDS;
   readonly panel = signal<Panel>('');
   /** La question « cette occurrence ou toute la série » est ouverte, pour enregistrer ou supprimer. */
   readonly ask = signal<'' | 'save' | 'delete'>('');
@@ -314,7 +328,7 @@ export class TaskComposerComponent {
       untracked(() => {
         if (t) {
           this.text.set(t.text); this.who.set([...t.who]); this.due.set(t.due); this.time.set(t.time ?? null);
-          this.cat.set(t.cat || ''); this.note.set(t.note || ''); this.list.set(t.listId); this.rec.set(t.rec ? { ...t.rec } : null);
+          this.cat.set(t.cat || ''); this.note.set(t.note || ''); this.list.set(t.listId); this.rec.set(t.rec ? { ...t.rec } : null); this.remind.set(t.remind ?? null);
         } else {
           this.list.set(fallback);
         }
@@ -343,6 +357,7 @@ export class TaskComposerComponent {
   useFreeCat(): void { const c = this.catFree().trim(); if (c) { this.cat.set(c); this.catFree.set(''); this.panel.set(''); } }
 
   freqLabel(f: TaskRec['freq']): string { return FREQ_LABELS[f]; }
+  remindLabel(r: Remind): string { return REMIND_LABELS[r]; }
   unitLabel(r: TaskRec): string {
     const n = r.every > 1;
     return r.freq === 'daily' ? (n ? 'jours' : 'jour') : r.freq === 'weekly' ? (n ? 'semaines' : 'semaine') : r.freq === 'monthly' ? 'mois' : (n ? 'ans' : 'an');
@@ -399,7 +414,7 @@ export class TaskComposerComponent {
   submit(scope: Scope = 'all'): void {
     const text = this.text().trim();
     if (!text) return;
-    this.saved.emit({ text, listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note(), rec: this.rec(), scope });
+    this.saved.emit({ text, listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note(), rec: this.rec(), remind: this.due() ? this.remind() : null, scope });
     if (this.task()) return;
     // La liste reste, tout le reste repart à zéro : la tâche suivante n'a pas
     // de raison d'hériter de la date ni du membre de la précédente.
@@ -409,6 +424,6 @@ export class TaskComposerComponent {
   }
 
   private reset(): void {
-    this.text.set(''); this.who.set([]); this.due.set(null); this.time.set(null); this.cat.set(''); this.catFree.set(''); this.note.set(''); this.rec.set(null); this.panel.set('');
+    this.text.set(''); this.who.set([]); this.due.set(null); this.time.set(null); this.cat.set(''); this.catFree.set(''); this.note.set(''); this.rec.set(null); this.remind.set(null); this.panel.set('');
   }
 }

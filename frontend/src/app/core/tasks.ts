@@ -17,7 +17,7 @@
 //     derrière le jour même : une tâche en retard de trois mois n'est pas
 //     l'affaire du jour. Elle n'est jamais supprimée ni décomptée.
 import { addDaysIso, normText, parseDay, weekdayOf } from './helpers';
-import { ListKind, TaskItem, TaskList } from './models';
+import { ListKind, Remind, TaskItem, TaskList } from './models';
 import { windowEnd } from './recurrence';
 
 /**
@@ -171,6 +171,10 @@ export function suggestTexts(tasks: TaskItem[], listId: string, typed: string, m
     .slice(0, max)
     .map(([, v]) => v.text);
 }
+
+/** Les réglages de rappel, dans l'ordre où la barre d'action les propose. */
+export const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
+export const REMIND_LABELS: Record<Remind, string> = { at: 'À l’heure', '1h': '1 h avant', eve: 'La veille à 18 h', morning: 'Le matin à 9 h' };
 
 /** Les catégories proposées : celles de départ, puis celles que le foyer a écrites. */
 export const DEFAULT_CATEGORIES = ['Maison', 'Enfants', 'Administratif', 'Courses', 'Travail'];

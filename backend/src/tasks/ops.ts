@@ -31,6 +31,9 @@ export interface TaskRec {
   grace?: number;
   until?: string | null;
 }
+/** Le réglage de rappel d'une tâche. Aucun par défaut ; voir notify/reminders.ts pour l'heure qui en découle. */
+export type Remind = 'at' | '1h' | 'eve' | 'morning';
+const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
 /** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
 export interface TaskDone { at: string; by: string | null; due: string | null; }
 
@@ -63,12 +66,14 @@ export interface TaskItem {
   /** Une série : la tâche porte son échéance courante, et l'historique de ses réalisations. */
   rec?: TaskRec | null;
   history?: TaskDone[];
+  /** Rappel avant l'échéance. Sans échéance, il n'a pas de sens et n'est pas gardé. */
+  remind?: Remind | null;
 }
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
-  due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null;
+  due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; }
@@ -187,6 +192,11 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     if ('reason' in r) return { reason: r.reason };
     f.rec = r.rec;
   }
+  if (o['remind'] !== undefined) {
+    if (o['remind'] === null || o['remind'] === '') f.remind = null;
+    else if (REMINDS.includes(o['remind'] as Remind)) f.remind = o['remind'] as Remind;
+    else return { reason: 'Réglage de rappel inconnu : ' + str(o['remind']) };
+  }
   if (o['shopListId'] !== undefined) {
     const id = trimmed(o['shopListId'], 80);
     // Une liste de courses disparue ne fait pas échouer la tâche : le lien tombe.
@@ -203,6 +213,7 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (next.time === null || next.time === undefined) delete next.time;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
   if (!next.rec) { delete next.rec; }
+  if (!next.remind || !next.due) delete next.remind;
   return next;
 }
 
