@@ -172,6 +172,75 @@ export const REGISTRY = [
     desc: 'La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Propre à vous, et sans effet sur les rappels envoyés au téléphone.',
     default: true,
   },
+  // ---- notifications : deux canaux, et on ne les confond pas ------------
+  //
+  // La cloche de l'application et les rappels envoyés au téléphone ne sont pas
+  // le même objet : l'une se regarde quand on ouvre Foyer, l'autre interrompt.
+  // Les couper ensemble sous un seul interrupteur était le premier mensonge de
+  // l'ancienne page.
+  {
+    key: 'pushPaused',
+    type: 'bool', scope: 'foyer', section: 'notifications', module: 'Notifications',
+    label: 'Suspendre tous les rappels du foyer',
+    desc: 'Coupe d’un geste les rappels envoyés aux téléphones, pour tout le monde : le temps des vacances, d’un déménagement, d’une semaine chargée. Les rappels suspendus ne sont pas rattrapés à la reprise.',
+    default: false,
+  },
+  {
+    key: 'quietFrom',
+    type: 'time', scope: 'foyer', section: 'notifications', module: 'Notifications',
+    label: 'Début des heures de silence',
+    desc: 'À partir de cette heure, plus aucun rappel n’arrive sur les téléphones du foyer. Un rappel qui tombe pendant est reporté à la fin du silence, jamais perdu.',
+    default: '21:30',
+  },
+  {
+    key: 'quietTo',
+    type: 'time', scope: 'foyer', section: 'notifications', module: 'Notifications',
+    label: 'Fin des heures de silence',
+    desc: 'Heure à laquelle les rappels reprennent, et à laquelle arrivent ceux qui ont été reportés pendant la nuit.',
+    default: '07:00',
+  },
+  {
+    key: 'pushReminders',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Tâches',
+    label: 'Sur le téléphone : rappels de mes tâches',
+    desc: 'Le rappel réglé sur une tâche datée (à l’heure, une heure avant, la veille au soir, le matin) arrive sur vos appareils abonnés. Coupé, la tâche garde son rappel mais vous ne le recevez plus.',
+    default: true,
+  },
+  {
+    key: 'pushAssigned',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Tâches',
+    label: 'Sur le téléphone : quand on m’affecte une tâche',
+    desc: 'Quelqu’un du foyer vous affecte une tâche : vous êtes prévenu tout de suite, sans attendre d’ouvrir l’application.',
+    default: true,
+  },
+  {
+    key: 'notifEvents',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Agenda',
+    label: 'Dans la cloche : agenda du jour et de demain',
+    desc: 'Les événements d’aujourd’hui et de demain apparaissent dans la cloche en haut de l’écran.',
+    default: true,
+  },
+  {
+    key: 'notifTasks',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Tâches',
+    label: 'Dans la cloche : tâches du jour et en retard',
+    desc: 'Les tâches datées à faire aujourd’hui et celles qui ont dépassé leur échéance apparaissent dans la cloche.',
+    default: true,
+  },
+  {
+    key: 'notifBirthdays',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Contacts',
+    label: 'Dans la cloche : anniversaires',
+    desc: 'Les anniversaires des membres et des contacts, dans les sept jours qui viennent.',
+    default: true,
+  },
+  {
+    key: 'notifFinances',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Finances',
+    label: 'Dans la cloche : budgets et échéances de contrat',
+    desc: 'Les budgets dépassés, les fenêtres de résiliation qui approchent et les mois d’opérations incomplets.',
+    default: true,
+  },
   {
     key: 'showBreakfast',
     type: 'bool', scope: 'foyer', section: 'repas', module: 'Repas',

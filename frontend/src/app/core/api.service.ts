@@ -240,7 +240,7 @@ export class ApiService {
     return this.request<LoginResult>('auth/register', { method: 'POST', body: JSON.stringify({ email, password, name }) });
   }
 
-  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean }> {
+  me(): Promise<{ email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean }> {
     return this.request('me');
   }
 

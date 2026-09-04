@@ -42,16 +42,49 @@ export function wallAdd(wall: string, minutes: number): string {
   return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}T${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())}`;
 }
 
-/** L'instant mural où la tâche rappelle, ou null si elle ne rappelle pas. */
-export function fireAt(t: Pick<TaskItem, 'due' | 'time' | 'remind'>): string | null {
+/**
+ * Les heures de silence du foyer. `from` peut être après `to` : la fenêtre
+ * enjambe alors minuit, ce qui est le cas normal (21:30 à 07:00).
+ */
+export interface QuietHours { from: string; to: string; }
+
+/** L'heure murale HH:MM tombe-t-elle dans la fenêtre de silence ? */
+export function inQuiet(wall: string, q: QuietHours): boolean {
+  if (!q.from || !q.to || q.from === q.to) return false;
+  const hm = wall.slice(11, 16);
+  return q.from < q.to ? hm >= q.from && hm < q.to : hm >= q.from || hm < q.to;
+}
+
+/**
+ * Décale un instant hors des heures de silence, à la première minute de reprise.
+ *
+ * Un rappel qui tombe la nuit n'est pas perdu, il attend le matin : le perdre
+ * ferait rater l'échéance, et l'envoyer quand même ferait sonner la maison à
+ * trois heures. Une fenêtre qui enjambe minuit reporte au lendemain matin.
+ */
+export function deferPastQuiet(wall: string, q: QuietHours): string {
+  if (!inQuiet(wall, q)) return wall;
+  const jour = wall.slice(0, 10);
+  const hm = wall.slice(11, 16);
+  // Fenêtre à cheval sur minuit et instant situé avant minuit : la reprise est le lendemain.
+  const lendemain = q.from > q.to && hm >= q.from;
+  return `${lendemain ? wallAdd(`${jour}T00:00`, 24 * 60).slice(0, 10) : jour}T${q.to}`;
+}
+
+/**
+ * L'instant mural où la tâche rappelle, ou null si elle ne rappelle pas.
+ *
+ * Les heures de silence, quand elles sont données, repoussent l'instant à la
+ * reprise plutôt que d'annuler le rappel.
+ */
+export function fireAt(t: Pick<TaskItem, 'due' | 'time' | 'remind'>, quiet?: QuietHours): string | null {
   if (!t.due || !t.remind || !REMINDS.includes(t.remind)) return null;
   const ref = `${t.due}T${t.time || MORNING}`;
-  switch (t.remind) {
-    case 'at': return ref;
-    case '1h': return wallAdd(ref, -60);
-    case 'morning': return `${t.due}T${MORNING}`;
-    case 'eve': return wallAdd(`${t.due}T${EVE}`, -24 * 60);
-  }
+  const brut = t.remind === 'at' ? ref
+    : t.remind === '1h' ? wallAdd(ref, -60)
+    : t.remind === 'morning' ? `${t.due}T${MORNING}`
+    : wallAdd(`${t.due}T${EVE}`, -24 * 60);
+  return quiet ? deferPastQuiet(brut, quiet) : brut;
 }
 
 export interface ReminderHit {
@@ -77,13 +110,19 @@ export function whenLabel(t: Pick<TaskItem, 'due' | 'time'>, nowWall: string): s
  * plus de deux heures) : ceux-là sont notés, pas envoyés, un rappel de 18 h
  * reçu à 23 h ne servant plus à rien.
  */
-export function dueReminders(tasks: TaskItem[], accountMemberIds: string[], nowWall: string, lateWindowMin = LATE_WINDOW_MIN): { hits: ReminderHit[]; missed: ReminderHit[] } {
+export function dueReminders(
+  tasks: TaskItem[],
+  accountMemberIds: string[],
+  nowWall: string,
+  quiet?: QuietHours,
+  lateWindowMin = LATE_WINDOW_MIN,
+): { hits: ReminderHit[]; missed: ReminderHit[] } {
   const floor = wallAdd(nowWall, -lateWindowMin);
   const hits: ReminderHit[] = [];
   const missed: ReminderHit[] = [];
   for (const t of tasks || []) {
     if (t.done) continue;
-    const at = fireAt(t);
+    const at = fireAt(t, quiet);
     if (!at || at > nowWall) continue;
     const hit: ReminderHit = {
       key: `rem|${t.id}|${t.due}|${t.time || ''}|${t.remind}`,

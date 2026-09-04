@@ -47,9 +47,27 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
 | `prefNotifs` | Alertes dans l’application | Personnel | oui / non | activé | — | Notifications | — |
+| `pushPaused` | Suspendre tous les rappels du foyer | Foyer | oui / non | désactivé | — | Notifications | — |
+| `quietFrom` | Début des heures de silence | Foyer | heure | `21:30` | HH:MM | Notifications | — |
+| `quietTo` | Fin des heures de silence | Foyer | heure | `07:00` | HH:MM | Notifications | — |
+| `pushReminders` | Sur le téléphone : rappels de mes tâches | Personnel | oui / non | activé | — | Tâches | — |
+| `pushAssigned` | Sur le téléphone : quand on m’affecte une tâche | Personnel | oui / non | activé | — | Tâches | — |
+| `notifEvents` | Dans la cloche : agenda du jour et de demain | Personnel | oui / non | activé | — | Agenda | — |
+| `notifTasks` | Dans la cloche : tâches du jour et en retard | Personnel | oui / non | activé | — | Tâches | — |
+| `notifBirthdays` | Dans la cloche : anniversaires | Personnel | oui / non | activé | — | Contacts | — |
+| `notifFinances` | Dans la cloche : budgets et échéances de contrat | Personnel | oui / non | activé | — | Finances | — |
 | `publicUrl` | Adresse publique de Foyer | Foyer | texte | _(vide)_ | 300 caractères au maximum | Notifications | `FOYER_PUBLIC_URL` |
 
 - **Alertes dans l’application** (`prefNotifs`) : La cloche en haut de l’écran : agenda du jour, tâches en retard, anniversaires, échéances. Propre à vous, et sans effet sur les rappels envoyés au téléphone.
+- **Suspendre tous les rappels du foyer** (`pushPaused`) : Coupe d’un geste les rappels envoyés aux téléphones, pour tout le monde : le temps des vacances, d’un déménagement, d’une semaine chargée. Les rappels suspendus ne sont pas rattrapés à la reprise.
+- **Début des heures de silence** (`quietFrom`) : À partir de cette heure, plus aucun rappel n’arrive sur les téléphones du foyer. Un rappel qui tombe pendant est reporté à la fin du silence, jamais perdu.
+- **Fin des heures de silence** (`quietTo`) : Heure à laquelle les rappels reprennent, et à laquelle arrivent ceux qui ont été reportés pendant la nuit.
+- **Sur le téléphone : rappels de mes tâches** (`pushReminders`) : Le rappel réglé sur une tâche datée (à l’heure, une heure avant, la veille au soir, le matin) arrive sur vos appareils abonnés. Coupé, la tâche garde son rappel mais vous ne le recevez plus.
+- **Sur le téléphone : quand on m’affecte une tâche** (`pushAssigned`) : Quelqu’un du foyer vous affecte une tâche : vous êtes prévenu tout de suite, sans attendre d’ouvrir l’application.
+- **Dans la cloche : agenda du jour et de demain** (`notifEvents`) : Les événements d’aujourd’hui et de demain apparaissent dans la cloche en haut de l’écran.
+- **Dans la cloche : tâches du jour et en retard** (`notifTasks`) : Les tâches datées à faire aujourd’hui et celles qui ont dépassé leur échéance apparaissent dans la cloche.
+- **Dans la cloche : anniversaires** (`notifBirthdays`) : Les anniversaires des membres et des contacts, dans les sept jours qui viennent.
+- **Dans la cloche : budgets et échéances de contrat** (`notifFinances`) : Les budgets dépassés, les fenêtres de résiliation qui approchent et les mois d’opérations incomplets.
 - **Adresse publique de Foyer** (`publicUrl`) : L’adresse ouverte quand on touche une notification sur le téléphone, par exemple https://foyer.exemple.fr. Vide, la notification ouvre l’adresse par laquelle l’appareil s’était abonné, ce qui échoue depuis l’extérieur si c’était une adresse locale.
 
 ## Repas et cuisine

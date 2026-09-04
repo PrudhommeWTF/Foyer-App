@@ -73,9 +73,11 @@ const FOLD_KEY = 'foyer.menuReduit';
           @if (store.setting('dark')) { <f-icon name="sun" [size]="19" color="#F0B24B" /> }
           @else { <f-icon name="moon" [size]="19" color="#8A7E74" /> }
         </button>
+        @if (!store.isChild()) {
         <button class="icon-btn" [class.on]="store.ui().screen === 'settings'" (click)="store.go('settings')" title="Paramètres">
           <f-icon name="gear" [size]="19" [color]="store.ui().screen === 'settings' ? 'var(--primary)' : 'var(--ink2)'" />
         </button>
+        }
       </div>
     </aside>
   `,

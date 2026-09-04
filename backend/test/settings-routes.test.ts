@@ -55,6 +55,7 @@ beforeEach(async () => {
   app.use('/api/settings', settingsRouter({
     memberId: (req) => (role(req) === 'anonyme' ? null : 'm-' + role(req)),
     isAdmin: (req) => role(req) === 'admin',
+    isChild: (req) => role(req) === 'enfant',
     overrides: () => envOverrides(env),
     deployment: () => deploymentView(env),
     appVersion: () => '1.2.3',
@@ -328,5 +329,24 @@ describe('réglages : les préférences des autres, dans PUT /api/state', () => 
   it('un document sans préférences ne bloque rien', () => {
     assert.equal(foreignPrefsChanged(undefined, undefined, 'm-adulte'), false);
     assert.equal(foreignPrefsChanged(undefined, { 'm-adulte': { dark: true } }, 'm-adulte'), false);
+  });
+});
+
+describe('réglages : un enfant n’entre pas', () => {
+  it('même en lecture, l’API lui répond 403', async () => {
+    const { status, json } = await appel('GET', 'enfant');
+    assert.equal(status, 403);
+    assert.match(json.error, /pas accessibles depuis ce compte/);
+  });
+
+  it('et il ne peut pas écrire ses propres préférences par cette porte', async () => {
+    const { status } = await appel('PATCH', 'enfant', { changes: { dark: true } });
+    assert.equal(status, 403);
+    assert.equal(prefsDe('m-enfant')['dark'], undefined, 'rien n’a été écrit');
+  });
+
+  it('ni exporter la configuration du foyer', async () => {
+    const res = await fetch(base + '/settings/export', { headers: { 'x-essai-role': 'enfant' } });
+    assert.equal(res.status, 403);
   });
 });

@@ -6,7 +6,7 @@
 // une longue coupure lisible (les rappels tombés pendant sont notés manqués).
 import type { TaskItem } from '../tasks/ops';
 import { PushPayload, notify, recordMissed } from './push';
-import { ReminderHit, dueReminders, parisWall } from './reminders';
+import { QuietHours, ReminderHit, dueReminders, parisWall } from './reminders';
 
 export interface SchedulerDeps {
   tasks: () => TaskItem[];
@@ -14,6 +14,14 @@ export interface SchedulerDeps {
   accounts: () => string[];
   /** Adresse ouverte au tap sur la notification. */
   url: () => string;
+  /**
+   * Les réglages du foyer au moment du passage. Relus à chaque minute : couper
+   * les rappels avant de partir en vacances ne doit pas demander de redémarrer
+   * le service.
+   */
+  rules: () => { paused: boolean; quiet: QuietHours };
+  /** Ce membre veut-il ce genre de rappel sur son téléphone ? */
+  wants: (memberId: string, kind: 'reminder' | 'assigned') => boolean;
   log: (line: string) => void;
 }
 
@@ -22,13 +30,22 @@ const payloadOf = (h: ReminderHit, url: string): PushPayload =>
 
 /** Un passage. Exporté pour les tests, et pour forcer un passage à la main. */
 export async function tick(deps: SchedulerDeps, nowWall = parisWall()): Promise<void> {
-  const { hits, missed } = dueReminders(deps.tasks(), deps.accounts(), nowWall);
+  const { paused, quiet } = deps.rules();
+  // Suspendu : on ne calcule rien et on ne note rien. À la reprise, les rappels
+  // de la période ne sont pas rattrapés, et l'écran le dit avant de suspendre.
+  if (paused) return;
+
+  const { hits, missed } = dueReminders(deps.tasks(), deps.accounts(), nowWall, quiet);
   for (const h of missed) {
-    const n = recordMissed(h.key, h.memberIds, payloadOf(h, deps.url()));
+    const pour = h.memberIds.filter((m) => deps.wants(m, 'reminder'));
+    if (!pour.length) continue;
+    const n = recordMissed(h.key, pour, payloadOf(h, deps.url()));
     if (n) deps.log(`Notifications : rappel manqué pour « ${h.title} » (prévu ${h.fireAt.replace('T', ' ')}, service arrêté à ce moment-là).`);
   }
   for (const h of hits) {
-    const r = await notify(h.key, h.memberIds, payloadOf(h, deps.url()));
+    const pour = h.memberIds.filter((m) => deps.wants(m, 'reminder'));
+    if (!pour.length) continue;
+    const r = await notify(h.key, pour, payloadOf(h, deps.url()));
     const parts = r.members.filter((m) => m.status !== 'skipped')
       .map((m) => `${m.memberId} : ${m.status === 'sent' ? m.devices + ' appareil(s)' : m.status === 'no-device' ? 'aucun appareil abonné' : 'échec (' + m.error + ')'}`);
     if (parts.length) deps.log(`Notifications : rappel « ${h.title} » (${h.fireAt.replace('T', ' ')}) → ${parts.join(' ; ')}`);

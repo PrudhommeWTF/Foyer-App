@@ -25,6 +25,8 @@ export interface SettingsDeps {
   /** Le membre du foyer derrière la requête, ou null. */
   memberId: (req: Request) => string | null;
   isAdmin: (req: Request) => boolean;
+  /** Membre mineur : la page entière lui est fermée, écran comme API. */
+  isChild: (req: Request) => boolean;
   /** Les réglages du foyer qu'une variable d'environnement écrase, avec sa valeur. */
   overrides: () => Record<string, string>;
   /** Les réglages fixés par la machine, tels qu'ils s'appliquent. Secrets exclus. */
@@ -34,6 +36,16 @@ export interface SettingsDeps {
 export function settingsRouter(deps: SettingsDeps): Router {
   const r = express.Router();
   r.use(express.json({ limit: MAX_BODY }));
+
+  // Un enfant n'entre pas, même par une adresse directe : masquer une entrée de
+  // menu n'a jamais empêché personne de taper l'adresse de l'API.
+  r.use((req: Request, res: Response, next: express.NextFunction) => {
+    if (deps.isChild(req)) {
+      res.status(403).json({ error: 'Les réglages du foyer ne sont pas accessibles depuis ce compte.' });
+      return;
+    }
+    next();
+  });
 
   /**
    * Tout ce qu'il faut pour engendrer la page : les déclarations, les valeurs

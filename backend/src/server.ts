@@ -42,6 +42,7 @@ import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { settingsRouter } from './settings/routes';
 import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
+import { setting } from './settings/registry';
 import { loadRules, rulesPath } from './home/rules';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
@@ -369,7 +370,12 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
     return;
   }
   // Les préférences d'un autre membre ne se modifient pas, même par un
-  // administrateur : c'est le pendant de la règle sur la fiche de membre.
+  // administrateur : c'est le pendant de la règle sur la fiche de membre. Un
+  // enfant, lui, n'en écrit aucune, pas même les siennes.
+  if (me?.enfant && foreignPrefsChanged(avant.prefs, state.prefs, null)) {
+    res.status(403).json({ error: 'Les réglages du foyer ne sont pas accessibles depuis ce compte.' });
+    return;
+  }
   if (foreignPrefsChanged(avant.prefs, state.prefs, me?.id ?? null)) {
     res.status(403).json({ error: 'Vous ne pouvez modifier que vos propres préférences.' });
     return;
@@ -457,7 +463,7 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   const u = req.user ? getUserById(req.user.id) : undefined;
   if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
   const m = currentMember(req);
-  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin });
+  res.json({ email: u.email, name: u.name, memberId: u.member_id, admin: !!m?.admin, enfant: !!m?.enfant });
 });
 
 // ---- Member login accounts (admin-managed) ----
@@ -522,6 +528,7 @@ api.use('/finances', auth, financesRouter(requireAdmin));
 api.use('/settings', auth, settingsRouter({
   memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
   isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
+  isChild: (req) => !!currentMember(req as AuthedRequest)?.enfant,
   overrides: () => envOverrides(),
   deployment: () => deploymentView(),
   appVersion: currentVersion,
@@ -714,8 +721,26 @@ console.log(`[foyer] Notifications : Web Push prêt (${vapid.generated ? 'clés 
 
 const notifLog = (line: string): void => { console.log('[foyer] ' + line); }; // eslint-disable-line no-console
 
+/**
+ * Ce membre veut-il ce genre de rappel sur son téléphone ?
+ *
+ * La préférence est personnelle : chacun coupe les siennes sans rien imposer
+ * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
+ */
+const memberWants = (memberId: string, kind: 'reminder' | 'assigned'): boolean => {
+  const state = getHousehold().state as HouseholdState;
+  // Les deux clés sont écrites en toutes lettres : une clé calculée ne dit rien
+  // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
+  return kind === 'reminder'
+    ? setting('pushReminders', state, memberId)
+    : setting('pushAssigned', state, memberId);
+};
+
 // Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
 onAssigned((memberId, task, opId) => {
+  // Le foyer a suspendu les rappels, ou ce membre ne veut pas être prévenu des
+  // affectations : rien ne part, et rien n'est noté comme manqué.
+  if (effectiveSetting('pushPaused') === true || !memberWants(memberId, 'assigned')) return;
   const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
   void notify(`assign|${opId}|${memberId}`, [memberId], {
     kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
@@ -730,6 +755,11 @@ startScheduler({
   tasks: () => (getHousehold().state as HouseholdState).tasks || [],
   accounts: () => accountsOf().map((a) => a.memberId),
   url: appUrl,
+  rules: () => ({
+    paused: effectiveSetting('pushPaused') === true,
+    quiet: { from: String(effectiveSetting('quietFrom')), to: String(effectiveSetting('quietTo')) },
+  }),
+  wants: memberWants,
   log: notifLog,
 });
 

@@ -164,7 +164,7 @@ export interface UiState {
 
   // family & profile
   familyOpen: boolean; famNameField: string;
-  memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfBirthday: string; memberDelId: string | null;
+  memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfEnfant: boolean; mfBirthday: string; memberDelId: string | null;
   /** Contraintes alimentaires en cours d'édition, et recherche d'aliment refusé. */
   mfAllerg: string[]; mfRefuse: string[]; mfRefuseQ: string;
   profileOpen: boolean;
@@ -207,7 +207,7 @@ export function initialUi(): UiState {
     seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false, schedMove: null,
     schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
     familyOpen: false, famNameField: '',
-    memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', memberDelId: null,
+    memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', memberDelId: null,
     mfAllerg: [], mfRefuse: [], mfRefuseQ: '',
     profileOpen: false, pfName: '', pfRole: '', pfEmail: '', pfColor: '#E56B4E',
     accountFor: null, acEmail: '', acPassword: '', acBusy: false,

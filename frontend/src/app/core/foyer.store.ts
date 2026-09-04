@@ -134,6 +134,8 @@ export class FoyerStore {
 
   // Current user & member login accounts (admin-managed).
   readonly isAdmin = signal(false);
+  /** Membre mineur : les Paramètres lui sont fermés, et le serveur refuse aussi. */
+  readonly isChild = signal(false);
   readonly currentMemberId = signal<string | null>(null);
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
 
@@ -440,6 +442,7 @@ export class FoyerStore {
       const me = await this.api.me();
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
+      this.isChild.set(me.enfant);
     } catch { /* ignore */ }
     await this.refreshAccounts();
     // Quelle version le serveur exécute réellement : la première question quand
@@ -719,6 +722,7 @@ export class FoyerStore {
     void clearCachedDoc();
     this.ui.set(initialUi());
     this.isAdmin.set(false);
+    this.isChild.set(false);
     this.currentMemberId.set(null);
     this.accounts.set({});
     this.schoolHolidays.set([]);
@@ -1079,7 +1083,13 @@ export class FoyerStore {
   grad = grad;
 
   // ---- navigation -------------------------------------------------------
-  go(screen: string): void { this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false }); }
+  go(screen: string): void {
+    // Un seul point de passage, plutôt qu'une condition à chaque bouton : c'est
+    // ce qui rend impossible d'ouvrir l'écran par une entrée qu'on aurait
+    // oublié de cacher. Le serveur refuse de son côté, indépendamment.
+    if (screen === 'settings' && this.isChild()) { this.toast('Les réglages du foyer sont réservés aux adultes.'); return; }
+    this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false });
+  }
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
   setThemeMode(mode: 'light' | 'dark'): void { this.setSetting('dark', mode === 'dark'); }
 
@@ -2920,11 +2930,11 @@ export class FoyerStore {
   // ---- family & profile -------------------------------------------------
   openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
   saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
-  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
-  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
+  newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
+  editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfEnfant: !!m.enfant, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
     const s = this.ui(); const name = s.mfName.trim(); if (!name) { this.toast('Donne un prénom'); return; } const ini = contactIni(name);
-    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
+    const data = { name, role: s.mfRole.trim(), email: s.mfEmail.trim(), color: s.mfColor, admin: s.mfAdmin, enfant: s.mfEnfant, ini, birthday: s.mfBirthday || null, allerg: s.mfAllerg, refuse: s.mfRefuse };
     this.mutate((d) => {
       if (s.mfEditId) { const i = d.members.findIndex((m) => m.id === s.mfEditId); if (i >= 0) d.members[i] = { ...d.members[i], ...data }; }
       else d.members.push({ id: uid('mb'), ...data });
@@ -2998,11 +3008,16 @@ export class FoyerStore {
     const mName = (id: string): string => d.members.find((m) => m.id === id)?.name || '';
     const raw: Omit<Notif, 'read'>[] = [];
 
+    // Chaque module a son interrupteur, personnel : la cloche de l'un n'est pas
+    // celle de l'autre, et couper les anniversaires ne doit pas couper l'agenda.
     // Événements aujourd'hui / demain
+    if (this.setting('notifEvents')) {
     for (const e of this.eventsForDay(today)) raw.push({ id: `ev-${e.id}-${today}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + "Aujourd'hui" + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: "Aujourd'hui" });
     for (const e of this.eventsForDay(tomorrow)) raw.push({ id: `ev-${e.id}-${tomorrow}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + 'Demain' + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: 'Demain' });
+    }
 
     // Tâches datées de l'affaire du jour : à faire aujourd'hui / en retard
+    if (this.setting('notifTasks')) {
     for (const t of dailyTasks(d.tasks, d.taskLists, this.currentMemberId())) {
       if (t.done || !t.due) continue;
       const qui = t.who.length ? ' · ' + t.who.map(mName).join(', ') : '';
@@ -3010,8 +3025,10 @@ export class FoyerStore {
       if (t.due === today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.time ? ' à ' + t.time : '') + rappel + qui, time: "Aujourd'hui" });
       else if (t.due < today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: 'En retard (prévue le ' + this.fmtNumDate(t.due) + ')' + qui, time: 'En retard' });
     }
+    }
 
     // Anniversaires : aujourd'hui + 7 jours (membres & contacts)
+    if (this.setting('notifBirthdays')) {
     for (let i = 0; i <= 7; i++) {
       const ds = addDays(today, i);
       const when = i === 0 ? "Aujourd'hui" : i === 1 ? 'Demain' : `Dans ${i} jours`;
@@ -3022,10 +3039,11 @@ export class FoyerStore {
       for (const m of d.members) if (isBirthdayOn(m.birthday, ds)) bday(m.name, m.birthday!, 'm' + m.id);
       for (const c of d.contacts) if (isBirthdayOn(c.birthday, ds)) bday(c.name, c.birthday!, 'c' + c.id);
     }
+    }
 
     // Les alertes de budget viennent du module Finances, dont les données vivent
     // dans des tables dédiées et non dans ce document.
-    raw.push(...this.externalNotifs());
+    if (this.setting('notifFinances')) raw.push(...this.externalNotifs());
 
     return raw.map((n) => ({ ...n, read: read.has(n.id) }));
   });

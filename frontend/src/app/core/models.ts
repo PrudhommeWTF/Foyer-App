@@ -11,8 +11,20 @@ export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
  * liste européenne, et clés d'articles du référentiel qu'on ne veut pas voir
  * arriver. Les deux sont confrontés au contenu des recettes (voir diet.ts).
  */
-export interface Member { id: string; name: string; role: string; color: string; ini: string; admin?: boolean; email?: string; birthday?: string | null;
-  allerg?: string[]; refuse?: string[]; }
+export interface Member {
+  id: string; name: string; role: string; color: string; ini: string; email?: string; birthday?: string | null;
+  /** Administrateur du foyer : seul à pouvoir changer les réglages partagés et gérer les accès. */
+  admin?: boolean;
+  /**
+   * Membre mineur. `role` reste du texte libre (« Maman », « 12 ans »), qui
+   * n'est pas exploitable : ce booléen l'est. Un enfant n'a **rien** dans les
+   * Paramètres, écran comme API, pas même ses préférences : elles vivent dans
+   * un document que tout compte lit, et l'écran n'a pas à devenir un endroit où
+   * l'on bricole le foyer.
+   */
+  enfant?: boolean;
+  allerg?: string[]; refuse?: string[];
+}
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite

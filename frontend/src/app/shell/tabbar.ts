@@ -33,10 +33,12 @@ import { MOBILE_TABS, NAV_GROUPS } from './nav';
               <span>{{ it.label }}</span>
             </button>
           }
-          <button class="sheet-item" (click)="pick('settings')">
-            <span class="si-ic"><f-icon name="gear" [size]="22" color="var(--ink2)" /></span>
-            <span>Paramètres</span>
-          </button>
+          @if (!store.isChild()) {
+            <button class="sheet-item" (click)="pick('settings')">
+              <span class="si-ic"><f-icon name="gear" [size]="22" color="var(--ink2)" /></span>
+              <span>Paramètres</span>
+            </button>
+          }
         </div>
       </div>
     }
