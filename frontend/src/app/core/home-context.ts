@@ -89,6 +89,30 @@ export function contextOf(rules: HomeRules, f: DayFacts, hhmm: string): HomeCont
   return { moment, days, label };
 }
 
+/**
+ * L'ordre choisi à la main, appliqué à la liste des tuiles réellement déclarées.
+ *
+ * Trois précautions, et chacune évite une disparition silencieuse :
+ *
+ *   - une tuile inconnue de l'ordre enregistré est ignorée (un module retiré ne
+ *     doit pas laisser un trou) ;
+ *   - une tuile déclarée qu'il ne nomme pas vient **à la fin**, dans l'ordre du
+ *     registre (une tuile ajoutée par une mise à jour apparaît, au lieu de
+ *     manquer sans un mot) ;
+ *   - un doublon ne compte qu'une fois.
+ *
+ * Un ordre vide veut dire « laissez les règles décider » : c'est le défaut.
+ */
+export function manualOrder(saved: string, ids: readonly string[]): string[] {
+  const connues = new Set(ids);
+  const vus = new Set<string>();
+  const debut: string[] = [];
+  for (const id of saved.split(',').map((x) => x.trim())) {
+    if (connues.has(id) && !vus.has(id)) { vus.add(id); debut.push(id); }
+  }
+  return [...debut, ...ids.filter((id) => !vus.has(id))];
+}
+
 export interface RankedTile {
   id: string;
   score: number;

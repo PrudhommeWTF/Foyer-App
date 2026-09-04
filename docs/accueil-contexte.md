@@ -8,6 +8,24 @@ Ce qui compte n'est pas une affaire de code : c'est le rythme d'une maison, et
 il change. Ces règles sont donc **des données**, dans un fichier que vous
 modifiez avec un éditeur de texte, sans recompiler ni redéployer.
 
+## L'ordre choisi à la main l'emporte
+
+Tout ce qui suit décrit le classement **automatique**, celui qui s'applique tant
+que personne n'a fixé d'ordre.
+
+Dans **Paramètres, Accueil**, un administrateur peut ranger les tuiles lui-même.
+Dès qu'il le fait, son ordre gagne : les règles de ce fichier ne reclassent plus
+rien, plus aucune tuile ne se replie, et aucune raison ne s'affiche. L'accueil le
+dit sous le bonjour (« ordre choisi dans les Paramètres ») pour qu'on ne cherche
+pas la panne du côté de ce fichier, qui n'y est pour rien.
+
+L'ordre est enregistré dans le réglage `homeOrder` (voir `parametres.md`) : une
+liste d'identifiants de tuiles séparés par des virgules. Vide, c'est le
+classement automatique qui reprend, et le bouton « Revenir à l'ordre
+automatique » ne fait rien d'autre que le vider. Une tuile ajoutée par une mise
+à jour n'est nommée nulle part dans cet ordre : elle apparaît **à la fin**,
+plutôt que de manquer sans un mot.
+
 ## Le fichier
 
 ```
@@ -158,7 +176,8 @@ de la page.
 Ils ne sont pas configurables, et c'est volontaire.
 
 1. **Le contexte réordonne et replie, il ne masque jamais.** Toutes les tuiles
-   restent sur la page, à un défilement de là.
+   restent sur la page, à un défilement de là. Un ordre choisi à la main ne les
+   masque pas non plus : il les range, il n'en retire aucune.
 2. **L'ordre ne dépend que du jour et du moment.** Il est figé et n'est refait
    qu'au franchissement d'une frontière. Une tuile ne bouge donc **jamais**
    parce qu'une donnée vient d'arriver : l'écran est stable entre deux moments
@@ -186,7 +205,11 @@ Dit franchement, pour que vous ne le cherchiez pas :
   tuiles, où elle ne déplace rien : un préavis de résiliation s'affiche en rouge,
   une alerte alimentaire aussi.
 - **Aucun réglage par utilisateur.** Une seule vue, la même pour tout le foyer,
-  comme demandé.
+  comme demandé. L'ordre choisi à la main est lui aussi celui du foyer, pas
+  celui d'un membre.
+- **Pas de demi-mesure entre l'ordre choisi et les règles.** Un ordre fixé les
+  éteint entièrement plutôt que de les laisser bousculer ce qu'on vient de
+  ranger. Pour retrouver le classement automatique, videz l'ordre.
 
 ## Recette
 

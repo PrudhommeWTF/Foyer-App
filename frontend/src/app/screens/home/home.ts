@@ -28,7 +28,7 @@ import { TILE_RENDERERS } from './tiles';
             « ah, c'est pour ça » devant un écran qui n'est pas dans le même
             ordre qu'hier soir, sans avoir à lire une ligne de code.
           -->
-          <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}@if (contexte()) { · {{ contexte() }} }</div>
+          <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}@if (ordreManuel()) { · ordre choisi dans les Paramètres } @else if (contexte()) { · {{ contexte() }} }</div>
           <!--
             Un fichier de règles refusé ne doit pas se découvrir dans les
             journaux : celui qui l'a écrit doit le voir en ouvrant la page.
@@ -67,6 +67,13 @@ export class HomeScreen {
 
   /** « Fin d'après-midi · jour d'école ». Vide tant que les règles ne sont pas là. */
   readonly contexte = computed(() => this.dash.context()?.label ?? '');
+
+  /**
+   * Un ordre choisi à la main l'emporte sur les règles de contexte. Le dire
+   * ici : sans cela, l'écran ne bouge plus et on cherche la panne du côté du
+   * fichier de règles, qui n'y est pour rien.
+   */
+  readonly ordreManuel = computed(() => !!this.store.setting('homeOrder').trim());
 
   /** Le fichier de règles a été refusé : le dire ici, pas seulement au journal. */
   readonly reglesKo = computed(() => {

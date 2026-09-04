@@ -82,6 +82,16 @@ Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.
 
 Le comportement de chaque écran de l’application.
 
+### Accueil
+
+L’ordre des tuiles de l’écran d’accueil, et ce qui en décide.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `homeOrder` | Ordre des tuiles de l’accueil | Foyer | texte | _(vide)_ | 300 caractères au maximum | Accueil | — |
+
+- **Ordre des tuiles de l’accueil** (`homeOrder`) : Fige l’ordre des tuiles de l’accueil. Tant qu’il est vide, les règles de contexte remontent ce qui compte selon l’heure et le jour ; dès qu’un ordre est choisi, il l’emporte, plus rien ne bouge et plus rien ne se replie. Une tuile ajoutée par une mise à jour vient à la fin.
+
 ### Repas et cuisine
 
 Planning des repas, suggestions et génération des courses.

@@ -206,6 +206,15 @@ test('registre : chaque section a un groupe connu et quelque chose à montrer', 
   for (const id of gestes) {
     assert.ok(vues.has(id), `GESTES nomme « ${id} », qui n’est déclarée dans aucune section du registre`);
   }
+
+  // Un réglage marqué `custom` n'est pas rendu par le champ engendré : si sa
+  // section n'a pas de bloc écrit à la main, il n'apparaît nulle part, tout en
+  // restant dans la documentation. C'est un réglage invisible, pas un réglage mort.
+  const rendus = new Set([...ecran.matchAll(/@case \('([a-z]+)'\)/g)].map((m) => m[1]));
+  for (const d of ALL.filter((x) => x.custom)) {
+    assert.ok(rendus.has(d.section),
+      `${d.key} est marqué « custom » mais la section « ${d.section} » n’a pas de bloc écrit à la main dans l’écran Paramètres`);
+  }
   for (const g of GROUPS) {
     assert.ok(SECTIONS.some((s) => s.group === g.id), `Groupe « ${g.id} » sans aucune section`);
   }

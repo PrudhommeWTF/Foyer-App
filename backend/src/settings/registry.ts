@@ -73,6 +73,15 @@ export interface SettingDecl {
   /** `text` : longueur maximale. */
   maxLength?: number;
   /**
+   * Le réglage a son propre contrôle dans sa section, écrit à la main.
+   *
+   * Il reste déclaré ici, donc journalisé, exporté, contrôlé côté serveur et
+   * remis à zéro comme les autres : seule sa **saisie** échappe au champ
+   * engendré, parce qu'une liste ordonnée ne se règle pas dans une zone de
+   * texte. La CI vérifie que la section nomme bien un rendu à la main.
+   */
+  custom?: boolean;
+  /**
    * Variable d'environnement liée au réglage.
    *
    *   - portée `foyer` : si elle est posée, **elle l'emporte**, et l'interface
@@ -123,6 +132,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'notifications', group: 'moi', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'membres', group: 'cercle', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres, et qui peut se connecter.' },
   { id: 'calendriers', group: 'cercle', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
+  { id: 'accueil', group: 'modules', label: 'Accueil', desc: 'L’ordre des tuiles de l’écran d’accueil, et ce qui en décide.' },
   { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
   { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
   { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.' },
@@ -275,6 +285,15 @@ export const REGISTRY = [
     default: true,
   },
   // ---- repas et cuisine ---------------------------------------------------
+  {
+    key: 'homeOrder',
+    type: 'text', scope: 'foyer', section: 'accueil', module: 'Accueil',
+    custom: true,
+    label: 'Ordre des tuiles de l’accueil',
+    desc: 'Fige l’ordre des tuiles de l’accueil. Tant qu’il est vide, les règles de contexte remontent ce qui compte selon l’heure et le jour ; dès qu’un ordre est choisi, il l’emporte, plus rien ne bouge et plus rien ne se replie. Une tuile ajoutée par une mise à jour vient à la fin.',
+    default: '',
+    maxLength: 300,
+  },
   {
     key: 'mealTimeMorning',
     type: 'time', scope: 'foyer', section: 'repas', module: 'Repas',

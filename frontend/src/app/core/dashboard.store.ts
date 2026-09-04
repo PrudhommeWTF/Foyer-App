@@ -2,7 +2,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { ApiService } from './api.service';
 import { FinancesStore, frMonthLabel } from './finances.store';
 import { FoyerStore } from './foyer.store';
-import { HomeContext, RulesOutcome, contextOf, rankTiles } from './home-context';
+import { HomeContext, RulesOutcome, contextOf, manualOrder, rankTiles } from './home-context';
 import { slotsOn } from './schedule';
 import { DocSnapshot, FinSnapshot, Source, TileProvider, TileState, safeState } from './tiles/contract';
 import { TILE_PROVIDERS, TileId } from './tiles/registry';
@@ -181,6 +181,11 @@ export class DashboardStore {
     const r = this.rules();
     const ctx = this.context();
     const ids = TILE_PROVIDERS.map((p) => p.id);
+    // Un ordre choisi à la main l'emporte : les règles ne reclassent plus, ne
+    // replient plus et n'ont plus de raison à afficher, sinon l'écran
+    // contredirait l'ordre qu'on vient de lui donner.
+    const choisi = this.foyer.setting('homeOrder');
+    if (choisi.trim()) return new Map(manualOrder(choisi, ids).map((id) => [id, { id, score: 0, raison: '', folded: false }]));
     if (!r || !ctx) return new Map(ids.map((id) => [id, { id, score: 0, raison: '', folded: false }]));
     // Une tuile en panne est épinglée : ce qui est cassé doit se voir, quelle
     // que soit l'heure. Le calcul lit l'état des tuiles sans s'y abonner, sinon
