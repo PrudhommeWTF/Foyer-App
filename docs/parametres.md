@@ -76,9 +76,65 @@ Planning des repas, suggestions et génération des courses.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
+| `mealTimeMorning` | Heure du petit-déjeuner | Foyer | heure | `08:00` | HH:MM | Repas | — |
+| `mealTimeNoon` | Heure du déjeuner | Foyer | heure | `12:30` | HH:MM | Repas | — |
+| `mealTimeEvening` | Heure du dîner | Foyer | heure | `19:30` | HH:MM | Repas | — |
+| `suggestRepeatDays` | Ne pas resservir un plat avant | Foyer | entier | `15` | de 1 à 90 | Cuisine | — |
+| `suggestForgottenDays` | Considérer un plat comme oublié après | Foyer | entier | `21` | de 2 à 365 | Cuisine | — |
+| `suggestQuickMin` | Ce qu’on appelle une recette rapide | Foyer | entier | `25` | de 5 à 180 | Cuisine | — |
 | `showBreakfast` | Afficher le petit-déjeuner | Foyer | oui / non | désactivé | — | Repas | — |
 
+- **Heure du petit-déjeuner** (`mealTimeMorning`) : Heure de référence du créneau du matin. Elle décide de l’heure de l’événement créé quand un repas part à l’agenda, et de qui est compté à table selon l’emploi du temps.
+- **Heure du déjeuner** (`mealTimeNoon`) : Heure de référence du créneau du midi. Un créneau d’emploi du temps marqué « hors du foyer » qui la couvre retire la personne du décompte des couverts.
+- **Heure du dîner** (`mealTimeEvening`) : Heure de référence du créneau du soir. Même rôle que les deux précédentes : l’agenda et le décompte des couverts s’y accrochent.
+- **Ne pas resservir un plat avant** (`suggestRepeatDays`) : Une recette servie il y a moins de ce nombre de jours est écartée des suggestions du planning. L’écran de suggestion dit combien de recettes il a écartées pour cette raison.
+- **Considérer un plat comme oublié après** (`suggestForgottenDays`) : Passé ce délai sans l’avoir servi, une recette est remise en avant dans les suggestions avec la mention « pas fait depuis longtemps ».
+- **Ce qu’on appelle une recette rapide** (`suggestQuickMin`) : Préparation et cuisson comprises, en minutes. En dessous, la recette est mise en avant les soirs de semaine chargés.
 - **Afficher le petit-déjeuner** (`showBreakfast`) : Ajoute la ligne du matin au planning des repas, et donc à la génération des courses. Les repas déjà saisis sont conservés quand la ligne est masquée.
+
+## Courses
+
+Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `stockDays` | Durée du « j’ai déjà ça » | Foyer | entier | `21` | de 1 à 180 | Courses | — |
+
+- **Durée du « j’ai déjà ça »** (`stockDays`) : Combien de jours un article écarté d’un « j’ai déjà ça » reste hors de la liste engendrée depuis les repas. Passé ce délai il revient, parce qu’un placard se vide. La date du geste reste affichée.
+
+## Tâches
+
+Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `taskLateDays` | Au-delà de ce retard, une tâche passe derrière | Foyer | entier | `30` | de 1 à 365 | Tâches | — |
+| `taskDefaultRemind` | Rappel proposé pour une nouvelle tâche datée | Foyer | liste | _(vide)_ | _(vide)_, `at`, `1h`, `eve`, `morning` | Tâches | — |
+
+- **Au-delà de ce retard, une tâche passe derrière** (`taskLateDays`) : Une tâche en retard depuis plus longtemps cesse d’être l’affaire du jour et descend sous les tâches d’aujourd’hui. Elle n’est ni effacée ni masquée : elle cesse seulement de passer devant.
+- **Rappel proposé pour une nouvelle tâche datée** (`taskDefaultRemind`) : Ce que le formulaire coche d’avance quand on donne une date à une tâche. Cela ne change aucune tâche existante, et reste modifiable tâche par tâche.
+
+## Finances
+
+Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `deadlineHorizonDays` | Horizon des échéances sur l’accueil | Foyer | entier | `60` | de 7 à 365 | Finances | — |
+| `readingDueDays` | Relevé de compteur attendu après | Foyer | entier | `30` | de 7 à 365 | Énergie | — |
+
+- **Horizon des échéances sur l’accueil** (`deadlineHorizonDays`) : Une fenêtre de résiliation ou une reconduction plus lointaine que cela n’apparaît pas sur l’accueil : elle n’appelle aucun geste aujourd’hui. L’écran Contrats les montre toutes, quoi qu’il arrive.
+- **Relevé de compteur attendu après** (`readingDueDays`) : Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.
+
+## Documents
+
+Ce que le foyer accepte de ranger sur son disque.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `maxUploadMb` | Taille maximale d’un fichier | Foyer | entier | `20` | de 1 à 20 | Documents | — |
+
+- **Taille maximale d’un fichier** (`maxUploadMb`) : En mégaoctets, pour les documents du foyer comme pour les photos de recettes. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.
 
 ## Accès et comptes
 
@@ -88,9 +144,13 @@ Qui peut ouvrir un compte, et ce que l’application a le droit d’aller cherch
 |---|---|---|---|---|---|---|---|
 | `signupAllowed` | Autoriser la création de comptes | Foyer | oui / non | activé | — | Accès | `FOYER_ALLOW_SIGNUP` |
 | `recipeImport` | Importer une recette depuis une adresse web | Foyer | oui / non | activé | — | Cuisine | `FOYER_RECIPE_IMPORT` |
+| `sessionDays` | Durée de validité d’une session | Foyer | entier | `30` | de 1 à 365 | Accès | — |
+| `passwordMinLength` | Longueur minimale d’un mot de passe | Foyer | entier | `6` | de 6 à 64 | Accès | — |
 
 - **Autoriser la création de comptes** (`signupAllowed`) : Quand c’est coupé, l’écran de connexion ne propose plus de créer un compte et l’API refuse les inscriptions. À laisser coupé dès que l’application est joignable depuis Internet.
 - **Importer une recette depuis une adresse web** (`recipeImport`) : La seule requête sortante de l’application, déclenchée par vous et journalisée : le carnet va lire la page d’une recette pour la recopier. Coupé, le bouton d’import disparaît du carnet.
+- **Durée de validité d’une session** (`sessionDays`) : Combien de jours une connexion reste valable avant de redemander le mot de passe. Les sessions déjà ouvertes gardent leur durée : c’est à la connexion suivante que la nouvelle valeur s’applique.
+- **Longueur minimale d’un mot de passe** (`passwordMinLength`) : S’applique à la création d’un accès et à tout changement de mot de passe. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.
 
 ## Serveur et déploiement
 

@@ -203,8 +203,16 @@ interface AuthedRequest extends Request {
 }
 
 function sign(user: { id: number; email: string; token_version: number }): string {
-  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: '30d' });
+  // La durée est un réglage du foyer, lue à chaque connexion : la changer ne
+  // touche pas aux sessions déjà ouvertes, qui gardent la durée qu'on leur a
+  // donnée. C'est à la connexion suivante que la nouvelle valeur s'applique.
+  const jours = Number(effectiveSetting('sessionDays')) || 30;
+  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: `${jours}d` });
 }
+
+/** Longueur minimale exigée d'un mot de passe, et le message qui va avec. */
+const pwdMin = (): number => Number(effectiveSetting('passwordMinLength')) || 6;
+const pwdTropCourt = (): string => `Le mot de passe doit faire au moins ${pwdMin()} caractères`;
 
 function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization || '';
@@ -264,7 +272,7 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
   if (!household?.name?.trim()) { res.status(400).json({ error: 'Le nom du foyer est requis' }); return; }
   if (!admin?.name?.trim()) { res.status(400).json({ error: 'Votre prénom est requis' }); return; }
   if (!admin?.email?.trim() || !EMAIL_RE.test(String(admin.email).trim())) { res.status(400).json({ error: 'Email administrateur invalide' }); return; }
-  if (String(admin.password || '').length < 6) { res.status(400).json({ error: 'Le mot de passe doit faire au moins 6 caractères' }); return; }
+  if (String(admin.password || '').length < pwdMin()) { res.status(400).json({ error: pwdTropCourt() }); return; }
 
   // Normalise members (drop nameless entries) and validate optional per-member credentials.
   const rawMembers = Array.isArray(members) ? members : [];
@@ -285,7 +293,7 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
     const hasPwd = !!m.password;
     if (hasEmail !== hasPwd) { res.status(400).json({ error: `Membre « ${m.name} » : renseignez email ET mot de passe, ou aucun des deux` }); return; }
     if (hasEmail && !EMAIL_RE.test(m.email)) { res.status(400).json({ error: `Email invalide pour « ${m.name} »` }); return; }
-    if (hasPwd && m.password.length < 6) { res.status(400).json({ error: `Mot de passe de « ${m.name} » : 6 caractères minimum` }); return; }
+    if (hasPwd && m.password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe de « ${m.name} » : ${pwdMin()} caractères minimum` }); return; }
   }
 
   // Every login email must be unique (across admin + members) and not already taken.
@@ -480,7 +488,7 @@ api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: R
   const email = String(req.body?.email || '').trim();
   const password = String(req.body?.password || '');
   if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
-  if (password.length < 6) { res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' }); return; }
+  if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
   createUserWithMember(email, password, member.name, memberId);
   res.status(201).json({ memberId, email: email.toLowerCase() });
@@ -501,7 +509,7 @@ api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Re
   }
   if (rawPassword !== undefined && String(rawPassword) !== '') {
     password = String(rawPassword);
-    if (password.length < 6) { res.status(400).json({ error: 'Mot de passe : 6 caractères minimum' }); return; }
+    if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
   updateUserCredentials(user.id, email, password);
@@ -536,7 +544,7 @@ api.use('/settings', auth, settingsRouter({
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).
-api.use('/files', auth, filesRouter());
+api.use('/files', auth, filesRouter(() => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024));
 
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.

@@ -8,6 +8,7 @@ import { isIsoDate, isMonth, parseCents } from './money';
 import { dashboard } from './dashboard';
 import { attachmentsRouter } from './attachments-routes';
 import * as backup from './backup';
+import { effectiveSetting } from '../settings/repo';
 import { contractsRouter } from './contracts-routes';
 import * as contracts from './contracts';
 import * as energy from './energy';
@@ -268,7 +269,7 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
         currentAccounts: courants.map((c) => ({ id: c.id, name: c.name })),
         energy: {
           contracts: all.filter((c) => c.kind === 'energie').length,
-          due: energy.readingsDue(all, energy.lastReadingDates(), today),
+          due: energy.readingsDue(all, energy.lastReadingDates(), today, Number(effectiveSetting('readingDueDays'))),
         },
       },
     });

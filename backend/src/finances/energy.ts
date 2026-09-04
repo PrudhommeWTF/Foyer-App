@@ -82,6 +82,7 @@ export function readingsDue(
   contracts: { id: number; name: string; provider: string; kind: string; status: string }[],
   last: Map<number, string>,
   today: string,
+  dueDays = READING_DUE_DAYS,
 ): ReadingDue[] {
   const jours = (from: string): number =>
     Math.max(0, Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000));
@@ -93,7 +94,7 @@ export function readingsDue(
     })
     // Jamais relevé, ou relevé il y a trop longtemps. Un compteur posé hier
     // n'est pas en retard : il n'a simplement pas encore d'histoire.
-    .filter((d) => d.daysSince === null || d.daysSince >= READING_DUE_DAYS)
+    .filter((d) => d.daysSince === null || d.daysSince >= dueDays)
     .sort((a, b) => (b.daysSince ?? Number.MAX_SAFE_INTEGER) - (a.daysSince ?? Number.MAX_SAFE_INTEGER));
 }
 

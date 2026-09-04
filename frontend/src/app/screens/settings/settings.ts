@@ -21,6 +21,10 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   calendriers: { icon: 'calendar', tint: '#E5F0F4', color: '#4E93B8' },
   notifications: { icon: 'bell', tint: '#FCE9E3', color: '#E56B4E' },
   repas: { icon: 'repas', tint: '#FDF0DA', color: '#F0B24B' },
+  courses: { icon: 'courses', tint: '#EDF2EB', color: '#7A9B76' },
+  taches: { icon: 'taches', tint: '#F2ECF5', color: '#9B6FA8' },
+  finances: { icon: 'budget', tint: '#EDF2EB', color: '#5F9E6E' },
+  documents: { icon: 'documents', tint: '#FDF0DA', color: '#F0B24B' },
   acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
   serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },
   membres: { icon: 'users', tint: '#E5F0F4', color: '#4E93B8' },
@@ -132,6 +136,19 @@ const GESTES: Section[] = [
                       }
 
                       @switch (s.id) {
+                        @case ('courses') {
+                          <!-- L'ordre des rayons et les articles de placard sont des
+                               données du foyer, pas des réglages : ils se modifient là
+                               où on les voit. Cette page les pointe plutôt que de
+                               devenir un second back-office. -->
+                          <button class="jump" style="margin-top:16px" (click)="store.go('courses')">
+                            <div class="ji" style="background:#EDF2EB"><f-icon name="courses" [size]="17" color="#7A9B76" [width]="2" /></div>
+                            <div>
+                              <div class="jl">Ordre des rayons et articles de placard</div>
+                              <div class="jd">Ils se règlent dans l’écran Courses, où on les voit : ce sont des listes que vous tenez, pas des réglages.</div>
+                            </div>
+                          </button>
+                        }
                         @case ('calendriers') {
                           <div class="extra">
                             <div class="extra-t">Partage du calendrier</div>

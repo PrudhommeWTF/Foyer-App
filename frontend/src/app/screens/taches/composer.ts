@@ -387,6 +387,17 @@ export class TaskComposerComponent {
     });
   }
 
+  /**
+   * Donner une date à une tâche neuve propose le rappel réglé par le foyer.
+   * Jamais sur une tâche existante : ce serait lui poser un rappel qu'on ne lui
+   * a pas demandé. Et jamais si un rappel est déjà choisi.
+   */
+  private proposerRappel(): void {
+    if (this.task() || this.remind()) return;
+    const propose = this.store.setting('taskDefaultRemind');
+    if (propose) this.remind.set(propose as Remind);
+  }
+
   /** La barre se montre dès qu'on écrit, ou toujours quand on modifie. */
   readonly expanded = computed(() => !!this.task() || this.focused() || !!this.text().trim() || !!this.panel());
   readonly members = computed(() => this.store.data()?.members || []);
@@ -443,7 +454,7 @@ export class TaskComposerComponent {
   has(id: string): boolean { return this.who().includes(id); }
   toggleWho(id: string): void { this.who.update((w) => (w.includes(id) ? w.filter((x) => x !== id) : [...w, id])); }
   toggle(p: Panel): void { this.panel.update((cur) => (cur === p ? '' : p)); }
-  setDue(d: string | null): void { this.due.set(d); if (!d) this.time.set(null); }
+  setDue(d: string | null): void { this.due.set(d); if (d) this.proposerRappel(); else this.time.set(null); }
   useFreeCat(): void { const c = this.catFree().trim(); if (c) { this.cat.set(c); this.catFree.set(''); this.panel.set(''); } }
 
   freqLabel(f: TaskRec['freq']): string { return FREQ_LABELS[f]; }
@@ -458,7 +469,7 @@ export class TaskComposerComponent {
     if (!f) { this.rec.set(null); return; }
     const cur = this.rec();
     this.rec.set({ freq: f, every: cur?.every || 1, base: cur?.base || 'due', ...(cur?.grace ? { grace: cur.grace } : {}), ...(cur?.until ? { until: cur.until } : {}) });
-    if (!this.due()) this.due.set(this.store.todayStr());
+    if (!this.due()) { this.due.set(this.store.todayStr()); this.proposerRappel(); }
   }
   patchRec(p: Partial<TaskRec>): void {
     const cur = this.rec(); if (!cur) return;

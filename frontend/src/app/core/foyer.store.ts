@@ -168,7 +168,19 @@ export class FoyerStore {
    * and costs a third of the grid height on a phone. Hiding it keeps whatever
    * was already recorded, it only stops displaying the row.
    */
-  readonly mealSlots = computed(() => MEAL_SLOTS.filter((s) => s.key !== 'matin' || this.setting('showBreakfast')));
+  /**
+   * Les heures de référence des repas, telles que le foyer les a réglées. Elles
+   * décident de l'heure de l'événement créé quand un repas part à l'agenda, et
+   * de qui est compté à table (voir presence.ts).
+   */
+  readonly mealTimes = computed<Record<string, string>>(() => ({
+    matin: this.setting('mealTimeMorning'),
+    midi: this.setting('mealTimeNoon'),
+    soir: this.setting('mealTimeEvening'),
+  }));
+  readonly mealSlots = computed(() => MEAL_SLOTS
+    .filter((s) => s.key !== 'matin' || this.setting('showBreakfast'))
+    .map((s) => ({ ...s, at: this.mealTimes()[s.key] || s.at })));
   readonly narrow = signal(false);
 
   // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
@@ -1994,7 +2006,7 @@ export class FoyerStore {
     const e = this.ui().mealEdit; if (!e) return;
     const value = this.mealFromForm();
     if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
-    const slot = MEAL_SLOTS.find((s) => s.key === e.slot);
+    const heure = this.mealTimes()[e.slot];
     const titre = this.titleFor(value, e.slot);
     const key = e.dateStr + '-' + e.slot;
     const existant = this.mealEvent(key);
@@ -2002,10 +2014,10 @@ export class FoyerStore {
       d.meals[key] = value;
       if (existant) {
         const i = d.events.findIndex((x) => x.id === existant.id);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: slot?.at || '—' };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: heure || '—' };
       } else {
         d.events.push({
-          id: uid('e'), date: e.dateStr, title: titre, time: slot?.at || '—',
+          id: uid('e'), date: e.dateStr, title: titre, time: heure || '—',
           who: this.me()?.id || this.members()[0]?.id || '', recur: 'none', end: null, mealKey: key,
         });
       }
@@ -2079,7 +2091,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return;
     const res = moveMeal(meals, d.events, from, to,
       (v, slot) => this.titleFor(v, slot),
-      (slot) => MEAL_SLOTS.find((x) => x.key === slot)?.at || '—');
+      (slot) => this.mealTimes()[slot] || '—');
     if (!res.moved) { this.toast('Rien à déplacer'); return; }
     this.mutate((dd) => { dd.meals = res.meals; dd.events = res.events; });
     this.toast(res.swapped ? 'Les deux repas ont été échangés' : 'Repas déplacé');
@@ -2107,7 +2119,7 @@ export class FoyerStore {
    */
   presenceOf(dateStr: string, slot: string) {
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
   }
   /** « 3 couverts (Léa absente) », affiché sous le créneau. */
   paxTextOf(dateStr: string, slot: string): string { return paxLabel(this.presenceOf(dateStr, slot)); }
@@ -2121,7 +2133,7 @@ export class FoyerStore {
   readonly editingPresence = computed(() => {
     const e = this.ui().mealEdit; if (!e) return null;
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
+    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
   });
 
   // ---- suggestions ---------------------------------------------------------
@@ -2135,6 +2147,12 @@ export class FoyerStore {
     if (!e || !d) return null;
     return suggestMeals({
       recipes: d.recipes, meals: d.meals, members: d.members, sched: d.sched, cal: this.calendar(), index: this.articleIndex(),
+      mealTimes: this.mealTimes(),
+      seuils: {
+        repeatDays: this.setting('suggestRepeatDays'),
+        oubliDays: this.setting('suggestForgottenDays'),
+        rapideMin: this.setting('suggestQuickMin'),
+      },
       shop: d.shop.filter((i) => i.listId === this.activeShopListId()),
       dateStr: e.dateStr, slot: e.slot,
     });
@@ -2179,7 +2197,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return [];
     // Seuls les convives attendus : alerter pour quelqu'un qui n'est pas là ce
     // soir-là est une fausse alerte, et une de trop suffit à ne plus les lire.
-    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
+    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar(), mealTimes: this.mealTimes() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
     return mealConflicts(d.meals[key]?.items || [], d.recipes, presents, this.articleIndex());
   }
 
@@ -2264,6 +2282,7 @@ export class FoyerStore {
     if (!slots.length) { this.toast('Aucun repas planifié sur cette période'); return; }
     this.genReport.set(buildPlan({
       slots,
+      stockDays: this.setting('stockDays'),
       recipes: d.recipes, aisles: d.aisles, articles: d.articles, index: this.articleIndex(),
       existing: d.shop.filter((i) => i.listId === listId),
       fallbackAisle: this.defaultAisleId(), stock: d.stock, today: this.todayStr(),

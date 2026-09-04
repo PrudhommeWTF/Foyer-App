@@ -156,7 +156,7 @@ export function standing(t: TaskItem, today: string): 'late' | 'now' | 'soon' | 
 /** Jours de retard, tolérance déduite. */
 const lateOf = (t: TaskItem, today: string): number => daysLate(windowEnd(t.due!, t.rec), today);
 
-export function todayTasks(tasks: TaskItem[], today: string, max: number): TodayTasks {
+export function todayTasks(tasks: TaskItem[], today: string, max: number, relegation = RELEGATION_DAYS): TodayTasks {
   // Les sous-tâches ne montent pas sur l'accueil : elles n'ont pas de date, et
   // les compter ferait passer une tâche en cinq points pour cinq tâches.
   const open = (tasks || []).filter((t) => !t.done && !t.parentId);
@@ -168,9 +168,9 @@ export function todayTasks(tasks: TaskItem[], today: string, max: number): Today
   const later = open.filter((t) => standing(t, today) === 'soon');
 
   const lines: TaskLine[] = [
-    ...late.filter((l) => l.late <= RELEGATION_DAYS),
+    ...late.filter((l) => l.late <= relegation),
     ...now,
-    ...late.filter((l) => l.late > RELEGATION_DAYS),
+    ...late.filter((l) => l.late > relegation),
     ...undated,
   ].slice(0, max);
 

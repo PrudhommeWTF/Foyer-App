@@ -7,9 +7,13 @@ import express, { NextFunction, Request, Response, Router } from 'express';
 import { ACCEPTED_IMAGE_LABEL, DetectedType, GENERIC_TYPE, IMAGE_MIMES, INLINE_MIMES, detectType } from './blobs';
 import * as files from './files';
 
-/** Une photo prise au téléphone pèse quelques mégaoctets, le scan d'un dossier plus encore. */
+/**
+ * Le plafond **technique** du serveur : au-delà, la requête n'est même pas lue.
+ * Le foyer, lui, se fixe une limite en dessous (réglage « Taille maximale d'un
+ * fichier »), appliquée une fois les octets reçus. Les deux existent pour des
+ * raisons différentes : celui-ci protège le conteneur, celui-là protège le disque.
+ */
 const MAX_UPLOAD = '20mb';
-const MAX_UPLOAD_LISIBLE = '20 Mo';
 
 /**
  * Ce que chaque genre de propriétaire accepte. Le type vient des octets, jamais
@@ -28,7 +32,10 @@ const ACCEPTS: Record<files.OwnerKind, { ok: (t: DetectedType | null) => boolean
   document: { ok: () => true, refus: '' },
 };
 
-export function filesRouter(): Router {
+/** La limite que le foyer s'est fixée, en octets. */
+export type UploadLimit = () => number;
+
+export function filesRouter(maxBytes: UploadLimit): Router {
   const r = express.Router();
 
   r.post('/', express.raw({ type: '*/*', limit: MAX_UPLOAD }), (req: Request, res: Response) => {
@@ -43,6 +50,14 @@ export function filesRouter(): Router {
     const buf = req.body as Buffer;
     if (!Buffer.isBuffer(buf) || !buf.length) {
       res.status(400).json({ error: 'Aucun fichier reçu. Envoyez le contenu brut du fichier dans le corps de la requête.' });
+      return;
+    }
+    // La limite que le foyer s'est fixée, sous le plafond du serveur. Elle est
+    // vérifiée ici, une fois les octets reçus : c'est ce qui permet de la
+    // changer depuis l'application sans redémarrer le service.
+    const limite = maxBytes();
+    if (buf.length > limite) {
+      res.status(413).json({ error: `Ce fichier fait ${Math.ceil(buf.length / 1048576)} Mo, au-delà de la taille maximale réglée pour ce foyer (${Math.round(limite / 1048576)} Mo). Un administrateur peut la relever dans Paramètres, section « Documents ».` });
       return;
     }
     const type = detectType(buf);
@@ -99,7 +114,7 @@ export function filesRouter(): Router {
   // Le scan d'un dossier médical entier atteint vite 20 Mo : autant le dire.
   r.use((err: Error & { type?: string }, _req: Request, res: Response, next: NextFunction) => {
     if (err?.type !== 'entity.too.large') { next(err); return; }
-    res.status(413).json({ error: `Ce fichier dépasse la taille maximale acceptée (${MAX_UPLOAD_LISIBLE}).` });
+    res.status(413).json({ error: `Ce fichier dépasse le plafond du serveur (${MAX_UPLOAD.replace('mb', ' Mo')}).` });
   });
 
   return r;

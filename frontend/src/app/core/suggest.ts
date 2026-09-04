@@ -20,12 +20,19 @@ import { presenceAt } from './presence';
 import { CalendarFacts } from './schedule';
 import { normaliseName } from './articles';
 
-/** Fenêtre d'anti-répétition, en jours. Deux semaines pleines, plus le jour même. */
+/**
+ * Les trois seuils du moteur de suggestion. Ce sont les **valeurs par défaut** :
+ * le foyer les règle (Paramètres, section « Repas et cuisine ») et les passe
+ * dans `SuggestInput`. Elles restent ici pour qu'un appelant sans réglages sous
+ * la main (un test, une tuile) obtienne un résultat sensé.
+ */
 export const REPEAT_DAYS = 15;
-/** Au-delà, la recette est « oubliée » et mérite d'être remise en avant. */
-const OUBLI_DAYS = 21;
-/** Ce qu'on appelle une recette rapide, préparation et cuisson comprises. */
-const RAPIDE_MIN = 25;
+export const OUBLI_DAYS = 21;
+export const RAPIDE_MIN = 25;
+
+/** Les seuils réellement appliqués à un passage. */
+export interface SuggestSeuils { repeatDays: number; oubliDays: number; rapideMin: number; }
+const SEUILS: SuggestSeuils = { repeatDays: REPEAT_DAYS, oubliDays: OUBLI_DAYS, rapideMin: RAPIDE_MIN };
 
 export interface Suggestion {
   recipe: Recipe;
@@ -52,6 +59,10 @@ export interface SuggestInput {
   dateStr: string;
   slot: string;
   limit?: number;
+  /** Les seuils réglés par le foyer. Absents, les valeurs par défaut ci-dessus s'appliquent. */
+  seuils?: SuggestSeuils;
+  /** Les heures de repas réglées, pour le décompte des présents. */
+  mealTimes?: Readonly<Record<string, string>>;
 }
 
 export interface SuggestReport {
@@ -81,7 +92,8 @@ export function daysBetween(from: string, to: string): number {
 
 export function suggestMeals(input: SuggestInput): SuggestReport {
   const { recipes, meals, members, sched, cal, index, shop, dateStr, slot } = input;
-  const presents = presenceAt({ members, sched, cal }, dateStr, slot, meals[dateStr + '-' + slot]).present;
+  const { repeatDays, oubliDays, rapideMin } = input.seuils || SEUILS;
+  const presents = presenceAt({ members, sched, cal, mealTimes: input.mealTimes }, dateStr, slot, meals[dateStr + '-' + slot]).present;
 
   // Les noms de la liste sont normalisés une fois : la comparaison a lieu une
   // fois par ingrédient et par recette, ce qui monte vite sur un gros carnet.
@@ -96,7 +108,7 @@ export function suggestMeals(input: SuggestInput): SuggestReport {
     const since = dernier ? daysBetween(dernier, dateStr) : null;
     // Servie dans la fenêtre, ou déjà planifiée plus tard : dans les deux cas on
     // ne la propose pas, et un écart négatif veut dire « prévue après ».
-    if (since !== null && since < REPEAT_DAYS) { recent++; continue; }
+    if (since !== null && since < repeatDays) { recent++; continue; }
 
     const gene = conflicts(recipeContent(r, index), presents, index);
     if (gene.length) {
@@ -108,9 +120,9 @@ export function suggestMeals(input: SuggestInput): SuggestReport {
     const total = (r.prepMin || 0) + (r.cookMin || 0);
     const reasons: string[] = [];
     if (since === null) reasons.push('jamais encore faite');
-    else if (since >= OUBLI_DAYS) reasons.push('pas faite depuis ' + semaines(since));
+    else if (since >= oubliDays) reasons.push('pas faite depuis ' + semaines(since));
     if (onList) reasons.push(onList + (onList > 1 ? ' ingrédients déjà sur la liste' : ' ingrédient déjà sur la liste'));
-    if (total && total <= RAPIDE_MIN) reasons.push('prête en ' + total + ' min');
+    if (total && total <= rapideMin) reasons.push('prête en ' + total + ' min');
     if ((r.rating || 0) >= 4) reasons.push('bien notée');
     out.push({ recipe: r, since, reasons, onList });
   }

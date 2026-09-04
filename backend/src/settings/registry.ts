@@ -96,6 +96,10 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'calendriers', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
   { id: 'notifications', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'repas', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
+  { id: 'courses', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
+  { id: 'taches', label: 'Tâches', desc: 'Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.' },
+  { id: 'finances', label: 'Finances', desc: 'Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.' },
+  { id: 'documents', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
   { id: 'acces', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'serveur', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
 ];
@@ -241,6 +245,49 @@ export const REGISTRY = [
     desc: 'Les budgets dépassés, les fenêtres de résiliation qui approchent et les mois d’opérations incomplets.',
     default: true,
   },
+  // ---- repas et cuisine ---------------------------------------------------
+  {
+    key: 'mealTimeMorning',
+    type: 'time', scope: 'foyer', section: 'repas', module: 'Repas',
+    label: 'Heure du petit-déjeuner',
+    desc: 'Heure de référence du créneau du matin. Elle décide de l’heure de l’événement créé quand un repas part à l’agenda, et de qui est compté à table selon l’emploi du temps.',
+    default: '08:00',
+  },
+  {
+    key: 'mealTimeNoon',
+    type: 'time', scope: 'foyer', section: 'repas', module: 'Repas',
+    label: 'Heure du déjeuner',
+    desc: 'Heure de référence du créneau du midi. Un créneau d’emploi du temps marqué « hors du foyer » qui la couvre retire la personne du décompte des couverts.',
+    default: '12:30',
+  },
+  {
+    key: 'mealTimeEvening',
+    type: 'time', scope: 'foyer', section: 'repas', module: 'Repas',
+    label: 'Heure du dîner',
+    desc: 'Heure de référence du créneau du soir. Même rôle que les deux précédentes : l’agenda et le décompte des couverts s’y accrochent.',
+    default: '19:30',
+  },
+  {
+    key: 'suggestRepeatDays',
+    type: 'int', scope: 'foyer', section: 'repas', module: 'Cuisine',
+    label: 'Ne pas resservir un plat avant',
+    desc: 'Une recette servie il y a moins de ce nombre de jours est écartée des suggestions du planning. L’écran de suggestion dit combien de recettes il a écartées pour cette raison.',
+    default: 15, min: 1, max: 90,
+  },
+  {
+    key: 'suggestForgottenDays',
+    type: 'int', scope: 'foyer', section: 'repas', module: 'Cuisine',
+    label: 'Considérer un plat comme oublié après',
+    desc: 'Passé ce délai sans l’avoir servi, une recette est remise en avant dans les suggestions avec la mention « pas fait depuis longtemps ».',
+    default: 21, min: 2, max: 365,
+  },
+  {
+    key: 'suggestQuickMin',
+    type: 'int', scope: 'foyer', section: 'repas', module: 'Cuisine',
+    label: 'Ce qu’on appelle une recette rapide',
+    desc: 'Préparation et cuisson comprises, en minutes. En dessous, la recette est mise en avant les soirs de semaine chargés.',
+    default: 25, min: 5, max: 180,
+  },
   {
     key: 'showBreakfast',
     type: 'bool', scope: 'foyer', section: 'repas', module: 'Repas',
@@ -272,6 +319,79 @@ export const REGISTRY = [
     default: '',
     maxLength: 300,
     envOverride: 'FOYER_PUBLIC_URL',
+  },
+
+  // ---- courses ------------------------------------------------------------
+  {
+    key: 'stockDays',
+    type: 'int', scope: 'foyer', section: 'courses', module: 'Courses',
+    label: 'Durée du « j’ai déjà ça »',
+    desc: 'Combien de jours un article écarté d’un « j’ai déjà ça » reste hors de la liste engendrée depuis les repas. Passé ce délai il revient, parce qu’un placard se vide. La date du geste reste affichée.',
+    default: 21, min: 1, max: 180,
+  },
+
+  // ---- tâches -------------------------------------------------------------
+  {
+    key: 'taskLateDays',
+    type: 'int', scope: 'foyer', section: 'taches', module: 'Tâches',
+    label: 'Au-delà de ce retard, une tâche passe derrière',
+    desc: 'Une tâche en retard depuis plus longtemps cesse d’être l’affaire du jour et descend sous les tâches d’aujourd’hui. Elle n’est ni effacée ni masquée : elle cesse seulement de passer devant.',
+    default: 30, min: 1, max: 365,
+  },
+  {
+    key: 'taskDefaultRemind',
+    type: 'enum', scope: 'foyer', section: 'taches', module: 'Tâches',
+    label: 'Rappel proposé pour une nouvelle tâche datée',
+    desc: 'Ce que le formulaire coche d’avance quand on donne une date à une tâche. Cela ne change aucune tâche existante, et reste modifiable tâche par tâche.',
+    default: '',
+    options: [
+      { value: '', label: 'Aucun rappel' },
+      { value: 'at', label: 'À l’heure de la tâche' },
+      { value: '1h', label: 'Une heure avant' },
+      { value: 'eve', label: 'La veille à 18 h' },
+      { value: 'morning', label: 'Le matin à 9 h' },
+    ],
+  },
+
+  // ---- finances -----------------------------------------------------------
+  {
+    key: 'deadlineHorizonDays',
+    type: 'int', scope: 'foyer', section: 'finances', module: 'Finances',
+    label: 'Horizon des échéances sur l’accueil',
+    desc: 'Une fenêtre de résiliation ou une reconduction plus lointaine que cela n’apparaît pas sur l’accueil : elle n’appelle aucun geste aujourd’hui. L’écran Contrats les montre toutes, quoi qu’il arrive.',
+    default: 60, min: 7, max: 365,
+  },
+  {
+    key: 'readingDueDays',
+    type: 'int', scope: 'foyer', section: 'finances', module: 'Énergie',
+    label: 'Relevé de compteur attendu après',
+    desc: 'Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.',
+    default: 30, min: 7, max: 365,
+  },
+
+  // ---- documents ----------------------------------------------------------
+  {
+    key: 'maxUploadMb',
+    type: 'int', scope: 'foyer', section: 'documents', module: 'Documents',
+    label: 'Taille maximale d’un fichier',
+    desc: 'En mégaoctets, pour les documents du foyer comme pour les photos de recettes. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.',
+    default: 20, min: 1, max: 20,
+  },
+
+  // ---- accès --------------------------------------------------------------
+  {
+    key: 'sessionDays',
+    type: 'int', scope: 'foyer', section: 'acces', module: 'Accès',
+    label: 'Durée de validité d’une session',
+    desc: 'Combien de jours une connexion reste valable avant de redemander le mot de passe. Les sessions déjà ouvertes gardent leur durée : c’est à la connexion suivante que la nouvelle valeur s’applique.',
+    default: 30, min: 1, max: 365,
+  },
+  {
+    key: 'passwordMinLength',
+    type: 'int', scope: 'foyer', section: 'acces', module: 'Accès',
+    label: 'Longueur minimale d’un mot de passe',
+    desc: 'S’applique à la création d’un accès et à tout changement de mot de passe. Les mots de passe existants ne sont pas invalidés : personne ne se retrouve dehors parce que la règle a changé.',
+    default: 6, min: 6, max: 64,
   },
 
   // ---- déploiement : lu, jamais écrit d'ici -------------------------------

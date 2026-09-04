@@ -148,6 +148,8 @@ const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) :
  */
 export const STOCK_DAYS = 21;
 
+/** La durée réglée par le foyer, ou celle ci-dessus quand elle n'est pas donnée. */
+
 /**
  * Clé sous laquelle une ligne se retient dans le stock : celle de son article
  * quand il est reconnu, sinon son nom normalisé. La même que pour un article de
@@ -187,6 +189,8 @@ export interface PlanInput {
   stock?: Record<string, string>;
   /** Jour de référence pour périmer les marques, au format ISO. */
   today?: string;
+  /** Durée pendant laquelle un « j'ai déjà ça » écarte l'article. Réglée par le foyer. */
+  stockDays?: number;
 }
 
 /**
@@ -250,7 +254,7 @@ export function buildPlan(input: PlanInput): PlanReport {
     const dit = stock[key];
     if (dit && today) {
       const days = stockAge(dit, today);
-      if (days >= 0 && days <= STOCK_DAYS) { report.stocked.push({ line, since: dit, days }); continue; }
+      if (days >= 0 && days <= (input.stockDays ?? STOCK_DAYS)) { report.stocked.push({ line, since: dit, days }); continue; }
     }
     wanted.add(key);
     const deja = generated.find((i) => keyOfItem(i) === key);

@@ -25,8 +25,16 @@ import { MEAL_SLOTS } from './constants';
 import { MealValue, Member, SchedSlot } from './models';
 import { CalendarFacts, NO_CALENDAR, occursOn } from './schedule';
 
-/** L'heure de référence d'un créneau de repas, celle que le foyer a réglée. */
-const mealAt = (slot: string): string => MEAL_SLOTS.find((s) => s.key === slot)?.at || '12:00';
+/**
+ * L'heure de référence d'un créneau de repas, celle que le foyer a réglée.
+ *
+ * Elle est **donnée** plutôt que lue ici : ce module reste une fonction pure,
+ * vérifiable sans document ni service. `MEAL_SLOTS` ne sert que de repli, pour
+ * un appelant qui n'a pas de réglages sous la main (un test, une tuile).
+ */
+export type MealTimes = Readonly<Record<string, string>>;
+const mealAt = (slot: string, times?: MealTimes): string =>
+  times?.[slot] || MEAL_SLOTS.find((s) => s.key === slot)?.at || '12:00';
 
 /**
  * Les membres que l'emploi du temps place **hors du foyer** à l'heure de ce repas.
@@ -41,8 +49,8 @@ const mealAt = (slot: string): string => MEAL_SLOTS.find((s) => s.key === slot)?
  * heure de fin ne retire donc personne, et une course de 12h à 12h30 ne fait pas
  * sauter le déjeuner de 12h30. C'est le sens d'erreur voulu.
  */
-export function awayAt(sched: SchedSlot[], date: string, slot: string, cal: CalendarFacts = NO_CALENDAR): Set<string> {
-  const at = mealAt(slot);
+export function awayAt(sched: SchedSlot[], date: string, slot: string, cal: CalendarFacts = NO_CALENDAR, times?: MealTimes): Set<string> {
+  const at = mealAt(slot, times);
   const out = new Set<string>();
   for (const s of sched || []) {
     if (!s.away || !s.end) continue;
@@ -70,10 +78,12 @@ export interface PresenceInput {
   sched: SchedSlot[];
   /** Les faits calendaires, pour que les vacances comptent tout le monde à la maison. */
   cal?: CalendarFacts;
+  /** Les heures de repas réglées par le foyer. Absentes, celles du référentiel s'appliquent. */
+  mealTimes?: MealTimes;
 }
 
 export function presenceAt(input: PresenceInput, dateStr: string, slot: string, value?: MealValue | null): Presence {
-  const dehors = awayAt(input.sched || [], dateStr, slot, input.cal);
+  const dehors = awayAt(input.sched || [], dateStr, slot, input.cal, input.mealTimes);
   const derogation = new Set(value?.away || []);
   const present: Member[] = [];
   const away: Member[] = [];
