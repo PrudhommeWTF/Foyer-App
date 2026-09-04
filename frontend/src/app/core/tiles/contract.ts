@@ -66,6 +66,8 @@ export type TileState<T> =
  */
 export interface DocSnapshot {
   doc: HouseholdState;
+  /** Le membre connecté. Une liste de tâches privée à quelqu'un d'autre ne se voit pas sur son accueil. */
+  me: string | null;
   /** Vacances scolaires de l'académie du foyer. Vide quand aucune n'est configurée. */
   schoolHolidays: SchoolHoliday[];
   /** Référentiel d'articles, pour lire le contenu des recettes (alertes alimentaires). */

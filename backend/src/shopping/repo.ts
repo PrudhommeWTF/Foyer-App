@@ -7,32 +7,15 @@
 // SQLite, donc deux téléphones qui cochent en même temps se sérialisent au lieu
 // de s'écraser.
 import type { Database } from 'better-sqlite3';
+import { docDb, idsOf as ids, initDoc, readDoc, writeDoc } from '../state/doc';
 import { ApplyResult, ShopItem, applyOps, reconcile } from './ops';
-
-let database: Database;
 
 /** Au-delà, le journal des opérations est élagué : c'est une mémoire courte contre les rejeux, pas un historique. */
 const OPS_JOURNAL_MAX = 2000;
 
-export function initShopping(db: Database): void { database = db; }
-
-interface HouseholdRow { state: string; version: number }
-
-function readDoc(): { doc: Record<string, any>; version: number } {
-  const row = database.prepare('SELECT state, version FROM household WHERE id = 1').get() as HouseholdRow | undefined;
-  if (!row) return { doc: {}, version: 0 };
-  return { doc: JSON.parse(row.state), version: row.version };
-}
-
-function writeDoc(doc: unknown): number {
-  database.prepare("UPDATE household SET state = ?, version = version + 1, updated_at = datetime('now') WHERE id = 1")
-    .run(JSON.stringify(doc));
-  return (database.prepare('SELECT version FROM household WHERE id = 1').get() as { version: number }).version;
-}
+export function initShopping(db: Database): void { initDoc(db); }
 
 const items = (doc: Record<string, any>): ShopItem[] => (Array.isArray(doc['shop']) ? doc['shop'] : []);
-const ids = (doc: Record<string, any>, key: string): Set<string> =>
-  new Set((Array.isArray(doc[key]) ? doc[key] : []).map((x: any) => String(x?.id ?? '')));
 
 export interface ShoppingSnapshot { items: ShopItem[]; version: number }
 
@@ -49,6 +32,7 @@ export interface ApplyOutcome extends ApplyResult { version: number }
  * intermédiaire que l'autre téléphone lirait au milieu.
  */
 export function applyShoppingOps(ops: unknown): ApplyOutcome {
+  const database = docDb();
   return database.transaction((): ApplyOutcome => {
     const { doc, version } = readDoc();
     const journal = database.prepare('SELECT 1 FROM hh_shop_ops WHERE op_id = ?');

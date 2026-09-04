@@ -12,7 +12,7 @@ import { SearchModalComponent } from './search-modal';
 import { HomeScreen } from '../screens/home/home';
 import { CalendarScreen } from '../screens/calendar';
 import { CoursesScreen } from '../screens/courses';
-import { TachesScreen } from '../screens/taches';
+import { TachesScreen } from '../screens/taches/taches';
 import { MessagesScreen } from '../screens/messages';
 import { ContactsScreen } from '../screens/contacts';
 import { DocumentsScreen } from '../screens/documents';

@@ -112,7 +112,7 @@ export class DashboardStore {
       : '';
     return {
       status: 'ready',
-      data: { doc, schoolHolidays: this.foyer.schoolHolidays(), articles: this.foyer.articleIndex() },
+      data: { doc, me: this.foyer.currentMemberId(), schoolHolidays: this.foyer.schoolHolidays(), articles: this.foyer.articleIndex() },
       asOf: this.foyer.docLoadedAt(),
       ...(stale ? { stale } : {}),
     };

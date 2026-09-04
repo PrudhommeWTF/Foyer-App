@@ -9,6 +9,7 @@ import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
 import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
 import * as files from './storage/files';
 import { initShopping } from './shopping/repo';
+import { initTasks } from './tasks/repo';
 import { STATE_VERSION, fileStorer, migrateState } from './state/migrations';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -59,10 +60,11 @@ initBlobs(DATA_DIR);
 migrateFinances(db);
 initFinancesRepo(db);
 
-// Household-side tables (files, shopping-ops journal), then the document itself.
+// Household-side tables (files, ops journals), then the document itself.
 migrateHousehold(db);
 files.initFiles(db);
 initShopping(db);
+initTasks(db);
 migrateHouseholdDocument();
 
 // Fichiers qu'aucune entité du document ne cite plus (recette supprimée, photo

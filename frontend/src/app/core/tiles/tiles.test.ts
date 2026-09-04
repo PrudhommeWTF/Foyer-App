@@ -18,7 +18,7 @@ const TODAY = '2026-08-21';
 /** Un document vide mais bien formé : c'est le foyer qui vient d'être créé. */
 const emptyDoc = (): HouseholdState => ({
   familyName: 'Foyer', members: [], events: [], aisles: [], articles: [],
-  shopLists: [], shop: [], taskLists: [], tasks: [], msgs: [], contacts: [],
+  shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [], msgs: [], contacts: [],
   folders: [], files: [], meals: {}, recipes: [], sched: [],
   profile: { name: '', role: '', email: '', phone: '', color: '#E56B4E', memberId: '' },
   settings: { dateFmt: 'JJ/MM/AAAA', dark: false, prefNotifs: true },
@@ -29,9 +29,10 @@ const fullDoc = (): HouseholdState => ({
   ...emptyDoc(),
   members: [{ id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE' }],
   events: [{ id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: 'm1', recur: 'none' }],
+  taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison', kind: 'taches', scope: 'shared', position: 0 }],
   tasks: [
-    { id: 't1', text: 'Sortir le verre', who: 'm1', due: 'Aujourd’hui', done: false, listId: 'l1', prio: 'med' },
-    { id: 't2', text: 'Déjà faite', who: 'm1', due: 'Hier', done: true, listId: 'l1', prio: 'low' },
+    { id: 't1', text: 'Sortir le verre', who: ['m1'], due: TODAY, done: false, listId: 'l1' },
+    { id: 't2', text: 'Déjà faite', who: ['m1'], due: '2026-08-20', done: true, listId: 'l1' },
   ],
   shop: [
     { id: 's1', name: 'Farine', qty: '1 kg', aisleId: 'a1', state: 'a-prendre', listId: 'c1' },
@@ -73,7 +74,7 @@ const finVierge = (): FinSnapshot => finSnapshot({
 
 /** Le plan « document » tel que l'adaptateur le compose. */
 const snap = (doc: HouseholdState, schoolHolidays: DocSnapshot['schoolHolidays'] = []): DocSnapshot =>
-  ({ doc, schoolHolidays, articles: buildArticleIndex(doc.articles) });
+  ({ doc, me: 'me', schoolHolidays, articles: buildArticleIndex(doc.articles) });
 
 const ctx = (doc: Source<DocSnapshot>, fin: Source<FinSnapshot>): TileContext => ({ today: TODAY, doc, fin });
 const ready = <T>(data: T, stale?: string): Source<T> =>
@@ -146,7 +147,7 @@ test('agenda : les événements du jour, triés, et eux seuls', () => {
 
 test('taches : « tout est fait » et « aucune tâche » sont deux vides différents', () => {
   const fait = fullDoc();
-  fait.tasks = [{ id: 't2', text: 'Déjà faite', who: 'm1', due: '', done: true, listId: 'l1', prio: 'low' }];
+  fait.tasks = [{ id: 't2', text: 'Déjà faite', who: ['m1'], due: null, done: true, listId: 'l1' }];
   const a = provider('taches').state(ctx(ready(snap(fait)), ready(finSnapshot())));
   const b = provider('taches').state(ctx(ready(snap(emptyDoc())), ready(finSnapshot())));
   assert.equal(a.kind, 'empty');
@@ -197,7 +198,7 @@ test('finances : sans compte déclaré, le module n’a jamais servi (vide, pas 
 test('agenda : la journée est composée, pas seulement ses rendez-vous', () => {
   const doc = fullDoc();
   doc.members[0].birthday = '2016-08-21';
-  doc.tasks.push({ id: 't9', text: 'Passer chez le notaire', who: 'm1', due: '', done: false, listId: 'l1', prio: 'high', planned: TODAY });
+  doc.tasks.push({ id: 't9', text: 'Passer chez le notaire', who: ['m1'], due: TODAY, done: false, listId: 'l1' });
   const fin = finSnapshot({
     dayExtras: { [TODAY]: [{ kind: 'echeance', label: 'Résilier : Assurance auto', color: '#C6492F' }] },
   });
@@ -232,9 +233,9 @@ test('agenda : quand les finances sont tombées, la journée dit qu’elle est a
 test('taches : le compteur porte sur aujourd’hui, pas sur l’arriéré', () => {
   const doc = fullDoc();
   doc.tasks = [
-    { id: 'a', text: 'Aujourd’hui', who: 'm1', due: '', done: false, listId: 'l1', prio: 'med', planned: TODAY },
-    { id: 'b', text: 'Sans date', who: 'm1', due: '', done: false, listId: 'l1', prio: 'med' },
-    { id: 'c', text: 'Sans date non plus', who: 'm1', due: '', done: false, listId: 'l1', prio: 'med' },
+    { id: 'a', text: 'Aujourd’hui', who: ['m1'], due: TODAY, done: false, listId: 'l1' },
+    { id: 'b', text: 'Sans date', who: ['m1'], due: null, done: false, listId: 'l1' },
+    { id: 'c', text: 'Sans date non plus', who: ['m1'], due: null, done: false, listId: 'l1' },
   ];
   const s = provider('taches').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
@@ -247,7 +248,7 @@ test('taches : le compteur porte sur aujourd’hui, pas sur l’arriéré', () =
 
 test('taches : « rien pour aujourd’hui » n’est pas « tout est fait »', () => {
   const doc = fullDoc();
-  doc.tasks = [{ id: 'a', text: 'Plus tard', who: 'm1', due: '', done: false, listId: 'l1', prio: 'med', planned: '2026-12-24' }];
+  doc.tasks = [{ id: 'a', text: 'Plus tard', who: ['m1'], due: '2026-12-24', done: false, listId: 'l1' }];
   const s = provider('taches').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'empty');
   if (s.kind === 'empty') assert.match(s.hint, /aujourd/i);

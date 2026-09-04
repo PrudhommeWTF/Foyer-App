@@ -317,7 +317,7 @@ export class FinancesStore {
    * ce qui est précisément le cas depuis l'accueil.
    */
   taskFromDeadline(d: FinDeadline): void {
-    this.foyer.addExternalTask(`${deadlineLabel(d.kind)} : ${d.contractName}`, d.date, d.memberIds[0] ?? null);
+    this.foyer.addExternalTask(`${deadlineLabel(d.kind)} : ${d.contractName}`, d.date, d.memberIds);
   }
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }

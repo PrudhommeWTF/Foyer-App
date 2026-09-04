@@ -19,7 +19,7 @@ Angular 21 · Node/Express · SQLite · Docker
 | 🏠 **Accueil** | Tableau de bord du jour : agenda, tâches, dîner, finances, courses, messages. Chaque tuile est fournie par son module et distingue quatre états : chargement, donnée, **rien à afficher** et **panne** (avec sa cause et un « Réessayer »). Une tuile en erreur n'empêche pas les autres de fonctionner, et aucune n'affiche `0` à la place d'une valeur inconnue. La journée montre aussi fériés, vacances scolaires, anniversaires et échéances ; les tâches, ce qui est dû **aujourd'hui** ; le dîner, les couverts et les **alertes alimentaires**. S'y ajoutent l'emploi du temps du jour, les **échéances de contrat** (une résiliation manquée coûte une année), les **relevés de compteur attendus** et les pistes d'économies ouvertes. Un module jamais servi propose son geste de démarrage plutôt qu'un zéro. **Les gestes du quotidien se font depuis l'accueil** : cocher, reporter à demain, créer une tâche ou un article en une ligne, remplacer le dîner, saisir un relevé ou une dépense en espèces, avec **annulation** de quelques secondes sur tout ce qui disparaît. L'ordre des tuiles suit le **moment de la journée et le type de jour** (école, week-end, vacances, férié), selon des règles tenues dans un fichier modifiable sans recompiler ; une tuile déclassée est repliée, jamais retirée, et dit pourquoi elle a bougé. Voir `docs/accueil-contrat-de-tuile.md` et `docs/accueil-contexte.md`. |
 | 📅 **Calendrier** | Vues 3 jours / semaine / mois, récurrence, multi-jours, couleur par membre. Superpose **tâches planifiées**, **jours fériés** (FR), **vacances scolaires** (selon l'académie), **anniversaires** (membres & contacts) et **échéances de contrat**. Partage par **flux ICS** (Google/Apple Agenda). |
 | 🛒 **Courses** | Multi-listes, rayons **réordonnables** (l'ordre des allées de votre magasin), coche **en un tap**, trois états (à prendre, dans le panier, indisponible), articles pris regroupés en bas, suggestions dès les premières lettres, génération depuis le planning repas, **export CSV** lisible par un tableur français, **tâche « faire les courses »** qui ouvre la liste et compte ce qui reste à prendre. **Écriture article par article** : deux téléphones peuvent cocher en même temps sans que l'un écrase l'autre, et les coches faites **hors ligne** repartent au retour du réseau. **Génération depuis les repas** : les ingrédients de la semaine sont lus, additionnés, mis à l'échelle des couverts et rangés par rayon, avec un **rapport affiché avant d'écrire** (à ajouter, à compléter, à retirer, écarté comme fond de placard, non reconnu). Une régénération ne défait jamais un ajout manuel ni un article déjà coché. **« J'ai déjà ça »** : un geste sur une ligne du rapport l'écarte et retient la date ; l'article revient tout seul au bout de trois semaines, et le recocher efface la note. Pas d'inventaire à tenir. |
-| ✅ **Tâches** | Multi-listes, priorités, assignation à un membre, échéances, **date de planification** (visible dans le calendrier). |
+| ✅ **Tâches** | **Saisie en un champ** : on tape, on valide ; membres, date et heure, liste, catégorie et note se règlent dans une barre sous le champ, sans formulaire, sur l'écran comme depuis l'accueil. Affectation à **un, plusieurs ou aucun** membre (« le premier qui passe »), échéance datée avec heure, catégorie, note. **Listes typées** : tâches (l'affaire du jour), corvées, checklists (valise, fournitures, idées) qui vivent dans leur onglet sans peser sur la journée ; partagées ou **privées** (cachées, pas chiffrées) ; archivables ; **modèles** réutilisables (« En modèle », puis « Depuis un modèle »). Cocher est un tap, sans confirmation ; supprimer, reporter et « Tout reporter à aujourd'hui » s'**annulent** quelques secondes. Le retard se dit, il ne crie pas. **Écriture tâche par tâche** : deux téléphones peuvent cocher en même temps sans que l'un décoche l'autre, et les gestes faits **hors ligne** repartent au retour du réseau. Voir [`docs/taches.md`](docs/taches.md). |
 | 💬 **Messagerie** | Fil de discussion familial, une bulle par membre. |
 | ☎️ **Contacts** | Recherche, catégories (Urgences, Santé, École…), contacts d'urgence. |
 | 📁 **Documents** | Dossiers colorés, fichiers, recherche transverse. Les **fichiers sont stockés sur le disque** (jamais dans le document d'état, qui repartait en entier à chaque enregistrement), et téléchargés avec la session : un PDF ou une image s'ouvre dans l'onglet, le reste est proposé à l'enregistrement. **Tous les formats sont acceptés**, y compris ceux que le serveur ne sait pas nommer. Supprimer une fiche rend les octets au disque tout de suite. |
@@ -58,10 +58,12 @@ Foyer-App/
   dédiées** (`fin_*`, même fichier SQLite), servies par `/api/finances/*` avec des opérations
   granulaires. Milliers d'opérations, agrégats côté serveur, pas de « dernier arrivé gagne ».
   Voir [`docs/finances-architecture.md`](docs/finances-architecture.md).
-- La **liste de courses** reste dans le document, mais s'écrit **article par article**
-  (`/api/shopping/ops`) : `PUT /api/state` ignore ce champ et conserve celui du serveur.
-  Deux personnes cochent en même temps sans que l'une écrase l'autre, et les coches faites
-  hors ligne sont rejouées au retour du réseau.
+- La **liste de courses** et les **tâches** restent dans le document, mais s'écrivent
+  **article par article** et **tâche par tâche** (`/api/shopping/ops`, `/api/tasks/ops`) :
+  `PUT /api/state` ignore ces champs et conserve ceux du serveur. Deux personnes cochent
+  en même temps sans que l'une écrase l'autre, et les coches faites hors ligne sont
+  rejouées au retour du réseau. Un seul sondage (`GET /api/live`) rafraîchit les deux.
+  Voir [`docs/taches.md`](docs/taches.md).
 - Les **fichiers** (pièces jointes Finances, photos de recettes, documents du foyer) vivent
   sur le disque dans `<données>/pieces`, adressés par leur empreinte, jamais en base64 dans
   le document. `PUT /api/state` accepte donc au plus **4 Mo** : aucun octet de fichier n'y
@@ -536,6 +538,14 @@ La maquette de référence est conservée dans [`docs/`](docs/).
 Modèle des créneaux, récurrence retenue et son inspiration iCalendar, choix de
 densité d'affichage, procédures de sauvegarde et de migration :
 [`docs/emploi-du-temps.md`](docs/emploi-du-temps.md).
+
+## ✅ Tâches
+
+Modèle, opérations ciblées et journal anti-rejeu, hors ligne (ce qui est
+garanti, ce qui ne l'est pas), migration 9 avec sauvegarde, vérification et
+retour en arrière en commandes shell, lignes de journal à savoir lire :
+[`docs/taches.md`](docs/taches.md). L'état des lieux et le plan du chantier :
+[`docs/taches-etat-des-lieux.md`](docs/taches-etat-des-lieux.md).
 
 ## 🍽️ Cuisine : recettes, repas, courses
 

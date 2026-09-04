@@ -1,15 +1,16 @@
-// Surface HTTP de la liste de courses, montée sous /api/shopping.
+// Surface HTTP des tâches, montée sous /api/tasks.
 //
 // Tout le routeur est derrière le garde de session, comme le reste de l'API.
-// La lecture passe par /api/live, commune aux courses et aux tâches.
+// La lecture passe par /api/live, commune aux courses et aux tâches : deux
+// sondages pour deux sous-arbres du même document n'auraient aucun sens.
 import express, { Request, Response, Router } from 'express';
-import { applyShoppingOps } from './repo';
+import { applyTaskOps } from './repo';
 
 /** Un lot vient d'une file hors ligne : quelques dizaines d'opérations, jamais plus. */
 const MAX_OPS_PER_BATCH = 500;
-const MAX_BODY = '256kb';
+const MAX_BODY = '512kb';
 
-export function shoppingRouter(): Router {
+export function tasksRouter(): Router {
   const r = express.Router();
   r.use(express.json({ limit: MAX_BODY }));
 
@@ -24,22 +25,22 @@ export function shoppingRouter(): Router {
       return;
     }
     try {
-      const out = applyShoppingOps(ops);
+      const out = applyTaskOps(ops);
       // Les opérations écartées le sont définitivement : le client les retire de
-      // sa file. Le dire dans les journaux, sinon un article qui n'arrive jamais
-      // dans la liste reste un mystère côté serveur.
+      // sa file. Le dire dans les journaux, sinon une tâche qui n'arrive jamais
+      // reste un mystère côté serveur.
       if (out.skipped.length) {
         // eslint-disable-next-line no-console
         console.warn(
-          `[foyer] Courses : ${out.skipped.length} opération(s) écartée(s). ` +
+          `[foyer] Tâches : ${out.skipped.length} opération(s) écartée(s). ` +
           out.skipped.map((s) => `${s.opId || '(sans id)'} : ${s.reason}`).join(' | '),
         );
       }
       res.json(out);
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.error('[foyer] Courses : erreur inattendue en appliquant un lot', e);
-      res.status(500).json({ error: 'Erreur sur la liste de courses : ' + (e as Error).message });
+      console.error('[foyer] Tâches : erreur inattendue en appliquant un lot', e);
+      res.status(500).json({ error: 'Erreur sur les tâches : ' + (e as Error).message });
     }
   });
 

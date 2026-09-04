@@ -31,7 +31,9 @@ import { financesRouter } from './finances/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
-import { preserveShopping } from './shopping/repo';
+import { getShopping, preserveShopping } from './shopping/repo';
+import { tasksRouter } from './tasks/routes';
+import { getTasks, preserveTasks } from './tasks/repo';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { loadRules, rulesPath } from './home/rules';
@@ -390,8 +392,34 @@ api.put('/state', auth, (req: AuthedRequest, res: Response) => {
     );
   }
 
+  // Same rule for the tasks: written op by op, never by whole-document PUT.
+  const tasks = preserveTasks(state as unknown as Record<string, unknown>);
+  if (tasks.dropped || tasks.unassigned || tasks.unlinked) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[foyer] Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
+      `à un membre disparu retirée(s), ${tasks.unlinked} lien(s) vers une liste de courses disparue retiré(s).`,
+    );
+  }
+
   const result = saveHousehold(state);
   res.json(result);
+});
+
+/**
+ * Instantané des sous-arbres qui s'écrivent par opérations : courses et tâches.
+ * `since` évite de les renvoyer quand rien n'a bougé : les écrans sondent toutes
+ * les cinq secondes tant qu'ils sont visibles, autant que la réponse tienne en
+ * trois lignes le reste du temps.
+ */
+api.get('/live', auth, (req: Request, res: Response) => {
+  const shop = getShopping();
+  const since = parseInt(String(req.query['since'] ?? ''), 10);
+  if (Number.isInteger(since) && since === shop.version) {
+    res.json({ version: shop.version, unchanged: true });
+    return;
+  }
+  res.json({ version: shop.version, shop: shop.items, tasks: getTasks().items });
 });
 
 // ---- Current user ----
@@ -465,6 +493,9 @@ api.use('/files', auth, filesRouter());
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
 api.use('/shopping', auth, shoppingRouter());
+
+// Tâches : même dispositif, même raison. Voir tasks/ops.ts.
+api.use('/tasks', auth, tasksRouter());
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.

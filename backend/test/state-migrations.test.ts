@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -527,4 +527,78 @@ test('decodeDataUrl lit le base64 et refuse ce qui n’en est pas', () => {
   assert.equal(decodeDataUrl(''), null);
   // Une data-URL sans base64 est décodée telle quelle plutôt que rejetée.
   assert.equal(decodeDataUrl('data:text/plain,bonjour')!.toString('latin1'), 'bonjour');
+});
+
+// ---- tâches : migration 9 ---------------------------------------------------
+
+const foyerTaches = (tasks: Record<string, unknown>[], lists: Record<string, unknown>[] = [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison' }]) => ({
+  members: [{ id: 'me', name: 'Thomas' }, { id: 'm1', name: 'Léa' }],
+  taskLists: lists,
+  tasks,
+});
+
+test('migration 9 : un membre devient une liste, une date planifiée devient l’échéance', () => {
+  const { doc } = run(foyerTaches([{ id: 't1', text: 'Notaire', who: 'm1', due: "Aujourd'hui", planned: '2026-09-05', done: false, listId: 'l1', prio: 'med' }]), 8);
+  const t = doc['tasks'][0];
+  assert.deepEqual(t.who, ['m1']);
+  assert.equal(t.due, '2026-09-05');
+  assert.equal('planned' in t, false);
+  assert.equal('prio' in t, false);
+  assert.equal(t.done, false);
+});
+
+test('migration 9 : une échéance en JJ/MM/AAAA (créée depuis Finances) devient une date', () => {
+  const { doc, outcome } = run(foyerTaches([{ id: 't1', text: 'Résilier', who: 'me', due: '05/09/2026', done: false, listId: 'l1', prio: 'high' }]), 8);
+  assert.equal(doc['tasks'][0].due, '2026-09-05');
+  assert.ok(outcome.notes.some((n) => n.includes('converties en date')));
+  assert.ok(outcome.notes.some((n) => n.includes('Résilier')), 'une priorité haute abandonnée est nommée');
+});
+
+test('migration 9 : un texte libre illisible part dans la note, jamais à la poubelle', () => {
+  const { doc, outcome } = run(foyerTaches([{ id: 't1', text: 'Plombier', who: 'me', due: 'avant vendredi', done: false, listId: 'l1', prio: 'med', note: 'Fuite sous l’évier' }]), 8);
+  const t = doc['tasks'][0];
+  assert.equal(t.due, null);
+  assert.equal(t.note, 'avant vendredi\nFuite sous l’évier');
+  assert.ok(outcome.notes.some((n) => n.includes('recopiée')));
+});
+
+test('migration 9 : les puces par défaut du formulaire sont abandonnées, et comptées', () => {
+  const { doc, outcome } = run(foyerTaches([
+    { id: 't1', text: 'a', who: 'me', due: "Aujourd'hui", done: false, listId: 'l1', prio: 'med' },
+    { id: 't2', text: 'b', who: 'me', due: 'Demain', done: false, listId: 'l1', prio: 'med' },
+    { id: 't3', text: 'c', who: 'me', due: 'Cette semaine', done: false, listId: 'l1', prio: 'med' },
+  ]), 8);
+  assert.deepEqual(doc['tasks'].map((t: { due: unknown }) => t.due), [null, null, null]);
+  assert.ok(!doc['tasks'].some((t: { note?: string }) => t.note), 'sans rapport avec une date réelle, elles n’encombrent pas la note');
+  assert.ok(outcome.notes.some((n) => n.includes('3 échéance(s)')));
+});
+
+test('migration 9 : un membre disparu laisse la tâche sans responsable, et le dit', () => {
+  const { doc, outcome } = run(foyerTaches([{ id: 't1', text: 'x', who: 'parti', due: '', done: false, listId: 'l1', prio: 'med' }]), 8);
+  assert.deepEqual(doc['tasks'][0].who, []);
+  assert.ok(outcome.notes.some((n) => n.includes('membre disparu')));
+});
+
+test('migration 9 : les listes deviennent typées, partagées et ordonnées ; les modèles apparaissent', () => {
+  const { doc } = run(foyerTaches([], [{ id: 'l1', name: 'Maison' }, { id: 'l2', name: 'Valise' }]), 8);
+  assert.deepEqual(doc['taskLists'].map((l: Record<string, unknown>) => [l['kind'], l['scope'], l['position']]), [['taches', 'shared', 0], ['taches', 'shared', 1]]);
+  assert.deepEqual(doc['taskTemplates'], []);
+});
+
+test('migration 9 : rejouée sur un document déjà migré, elle ne change rien', () => {
+  const migre = {
+    ...foyerTaches([{ id: 't1', text: 'Notaire', who: ['m1'], due: '2026-09-05', time: '18:00', done: true, doneBy: 'me', listId: 'l1', note: 'RDV' }],
+      [{ id: 'l1', name: 'Maison', kind: 'checklist', scope: 'm1', position: 3, archived: true }]),
+    taskTemplates: [{ id: 'tp1', name: 'Valise', kind: 'checklist', items: ['Maillots'] }],
+  };
+  const avant = JSON.stringify(migre);
+  run(migre, 8);
+  assert.equal(JSON.stringify(migre), avant);
+});
+
+test('migration 9 : aucune tâche n’est perdue', () => {
+  const tasks = Array.from({ length: 7 }, (_, i) => ({ id: 't' + i, text: 'x' + i, who: i % 2 ? 'me' : 'nobody', due: i % 3 ? 'bientôt' : '01/01/2027', done: i % 2 === 0, listId: 'l1', prio: 'low' }));
+  const { doc } = run(foyerTaches(tasks), 8);
+  assert.equal(doc['tasks'].length, 7);
+  assert.equal(STATE_VERSION, 9);
 });

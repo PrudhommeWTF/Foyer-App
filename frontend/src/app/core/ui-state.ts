@@ -1,4 +1,4 @@
-import { FileType, MealItem, Prio, Rayon, Recur, SchedRec, SchedType, SchedWhen, ShopState } from './models';
+import { FileType, ListKind, MealItem, Rayon, Recur, SchedRec, SchedType, SchedWhen, ShopState } from './models';
 import { todayIn, weekdayOf } from './helpers';
 import { PasteMode, SchedClip } from './sched-copy';
 import { SchedScope } from './schedule';
@@ -73,13 +73,16 @@ export interface UiState {
   // aisles
   aiForm: boolean; aiEditId: string | null; aiName: string; aiColor: string; aiKind: Rayon | ''; aisleDelId: string | null;
 
-  // task modal
-  showTask: boolean; taskEditId: string | null;
-  tTitle: string; tWho: string; tDue: string; tPrio: Prio; tListId: string; tPlanned: string;
-  newTask: string;
-  // task lists
+  // tâches
+  /** Tâche ouverte dans la modale de modification, ou null. `taskNew` ouvre la saisie en modale (menu « + »). */
+  taskEdit: string | null; taskNew: boolean;
+  /** Terminées dépliées, listes archivées montrées. */
+  showDone: boolean; showArchived: boolean;
+  // listes de tâches
   activeList: string; listForm: boolean; listEditId: string | null;
-  lName: string; lColor: string; lIcon: string; listDelId: string | null;
+  lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
+  /** Choix d'un modèle pour créer une liste. */
+  tplOpen: boolean;
 
   // messages
   newMsg: string;
@@ -184,8 +187,9 @@ export function initialUi(): UiState {
     aisleOrderOpen: false,
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
-    showTask: false, taskEditId: null, tTitle: '', tWho: 'cam', tDue: "Aujourd'hui", tPrio: 'med', tListId: 'l1', tPlanned: '', newTask: '',
-    activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', listDelId: null,
+    taskEdit: null, taskNew: false, showDone: false, showArchived: false,
+    activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
+    tplOpen: false,
     newMsg: '',
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,

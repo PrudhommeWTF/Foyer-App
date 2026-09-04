@@ -12,10 +12,12 @@
 // polie de perdre quand même.
 //
 // Ce que ce mécanisme ne prétend pas résoudre : deux personnes qui modifient la
-// **même** chose en même temps. Cocher une tâche que l'autre vient de cocher la
-// décoche, parce que « cocher » est écrit comme une bascule. Il n'y a pas de
-// bonne réponse automatique à ce cas, et il est rare ; perdre l'événement qu'on
-// vient de créer parce que l'autre a coché une tâche, ça, ce n'était pas rare.
+// **même** chose en même temps. Une bascule rejouée inverse ce que l'autre vient
+// de faire. C'est pour cela que ce qui se coche à deux (les courses, les tâches)
+// ne passe plus par ici du tout, mais par des opérations qui disent une
+// intention (voir task-ops.ts). Le rejeu reste la bonne réponse pour le reste :
+// perdre l'événement qu'on vient de créer parce que l'autre a enregistré une
+// seconde plus tôt, ça, ce n'était pas rare.
 import { HouseholdState } from './models';
 
 /** Une modification locale du document, telle que le store l'applique. */
