@@ -22,10 +22,12 @@ export interface Contexte {
   app: Express;
   server: http.Server;
   dir: string;
-  /** Jeton d'un compte : administrateur, membre ordinaire, ou compte sans membre. */
-  jetons: { admin: string; membre: string; sansMembre: string };
+  /** Jeton d'un compte : administrateur, adulte ordinaire, enfant, ou compte sans membre. */
+  jetons: { admin: string; membre: string; enfant: string; sansMembre: string };
   /** Identifiants en base, pour les tests qui manipulent `token_version`. */
-  ids: { admin: number; membre: number; sansMembre: number };
+  ids: { admin: number; membre: number; enfant: number; sansMembre: number };
+  /** Identifiants créés côté Finances et Documents, pour éprouver les accès directs. */
+  pieces: { transactionId: number; pieceFinances: number; document: number; photoRecette: number };
 }
 
 /**
@@ -54,6 +56,7 @@ export async function demarrer(): Promise<Contexte> {
     admin: { name: 'Thomas', email: 'admin@example.fr', password: 'MotDePasseSolide1' },
     members: [
       { name: 'Camille', email: 'membre@example.fr', password: 'MotDePasseSolide2' },
+      { name: 'Lena', email: 'enfant@example.fr', password: 'MotDePasseSolide7' },
       // Sans identifiants : c'est à lui qu'on ouvrira un accès avant de le retirer
       // du foyer, pour obtenir un compte qui survit à sa fiche de membre.
       { name: 'Alex' },
@@ -83,6 +86,26 @@ export async function demarrer(): Promise<Contexte> {
   }, setup.json.token);
   if (retire.status !== 200) throw new Error('retrait du membre de test échoué : ' + JSON.stringify(retire.json));
 
+  // Lena est marquée enfant : c'est une propriété de la fiche, pas du compte.
+  const etat2 = await appel(base, 'GET', '/state', undefined, setup.json.token);
+  const membres2 = (etat2.json.state.members as { id: string; name: string; enfant?: boolean }[])
+    .map((m) => (m.name === 'Lena' ? { ...m, enfant: true } : m));
+  const marque = await appel(base, 'PUT', '/state', { version: etat2.json.version, state: { ...etat2.json.state, members: membres2 } }, setup.json.token);
+  if (marque.status !== 200) throw new Error('marquage enfant échoué : ' + JSON.stringify(marque.json));
+  const enfantJeton = (await appel(base, 'POST', '/auth/login', { email: 'enfant@example.fr', password: 'MotDePasseSolide7' })).json.token;
+
+  // De quoi éprouver un accès direct : une opération, sa pièce jointe, un
+  // document de famille et une photo de recette.
+  const compte = await appel(base, 'POST', '/finances/accounts', { name: 'Compte joint', kind: 'courant' }, setup.json.token);
+  const tx = await appel(base, 'POST', '/finances/transactions', {
+    accountId: compte.json.account.id, date: '2026-09-01', amount: '-84,30', label: 'Assurance, ref client 44821',
+  }, setup.json.token);
+  const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(64, 0x20)]);
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+  const pj = await brut(base, `/finances/attachments?owner=transaction&id=${tx.json.transaction.id}`, PDF, setup.json.token);
+  const doc = await brut(base, '/files?owner=document&id=d1&filename=carte-identite.pdf', PDF, setup.json.token);
+  const photo = await brut(base, '/files?owner=recipe&id=r1&filename=tarte.png', PNG, setup.json.token);
+
   const idDe = (email: string): number => {
     const u = db.findUserByEmail(email);
     if (!u) throw new Error('compte de test introuvable : ' + email);
@@ -91,8 +114,17 @@ export async function demarrer(): Promise<Contexte> {
 
   return {
     base, app, server, dir,
-    jetons: { admin: setup.json.token, membre: membre.json.token, sansMembre: sansJeton },
-    ids: { admin: idDe('admin@example.fr'), membre: idDe('membre@example.fr'), sansMembre: idDe('orphelin@example.fr') },
+    jetons: { admin: setup.json.token, membre: membre.json.token, enfant: enfantJeton, sansMembre: sansJeton },
+    ids: {
+      admin: idDe('admin@example.fr'), membre: idDe('membre@example.fr'),
+      enfant: idDe('enfant@example.fr'), sansMembre: idDe('orphelin@example.fr'),
+    },
+    pieces: {
+      transactionId: tx.json.transaction.id,
+      pieceFinances: pj.json.attachment.id,
+      document: doc.json.file.id,
+      photoRecette: photo.json.file.id,
+    },
   };
 }
 
@@ -102,6 +134,16 @@ export async function arreter(ctx: Contexte): Promise<void> {
 }
 
 export interface Reponse { status: number; json: any }
+
+/** Envoi d'un fichier en corps brut, comme le fait l'application. */
+export async function brut(base: string, chemin: string, corps: Buffer, jeton: string): Promise<Reponse> {
+  const res = await fetch(base + chemin, {
+    method: 'POST',
+    headers: { 'content-type': 'application/octet-stream', authorization: 'Bearer ' + jeton },
+    body: new Uint8Array(corps),
+  });
+  return { status: res.status, json: await res.json() };
+}
 
 export async function appel(base: string, method: string, chemin: string, body?: unknown, jeton?: string): Promise<Reponse> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };

@@ -36,7 +36,23 @@ const ACCEPTS: Record<files.OwnerKind, { ok: (t: DetectedType | null) => boolean
 /** La limite que le foyer s'est fixée, en octets. */
 export type UploadLimit = () => number;
 
-export function filesRouter(maxBytes: UploadLimit): Router {
+/** Le compte derrière la requête est-il celui d'un enfant du foyer ? */
+export type IsChild = (req: Request) => boolean;
+
+/**
+ * Ce qu'un compte enfant a le droit d'atteindre, par genre de propriétaire.
+ *
+ * Une photo de recette est du contenu de famille : le carnet de cuisine
+ * s'ouvre pour tout le monde, et la lui refuser casserait l'écran sans rien
+ * protéger. Un document du foyer, lui, est une pièce d'identité, un contrat ou
+ * un relevé : cela ne se lit pas, et surtout cela ne se supprime pas, depuis un
+ * compte enfant.
+ */
+const OUVERT_AUX_ENFANTS: Record<files.OwnerKind, boolean> = { recipe: true, document: false };
+
+const REFUS_ENFANT = 'Les documents du foyer ne sont pas accessibles depuis un compte enfant.';
+
+export function filesRouter(maxBytes: UploadLimit, isChild: IsChild): Router {
   const r = express.Router();
 
   r.post('/', express.raw({ type: '*/*', limit: MAX_UPLOAD }), (req: Request, res: Response) => {
@@ -45,6 +61,7 @@ export function filesRouter(maxBytes: UploadLimit): Router {
       res.status(400).json({ error: 'Type de rattachement inconnu : attendu ' + files.OWNER_KINDS.join(', ') + '.' });
       return;
     }
+    if (!OUVERT_AUX_ENFANTS[kind] && isChild(req)) { res.status(403).json({ error: REFUS_ENFANT }); return; }
     const ownerId = String(req.query['id'] ?? '').slice(0, 80);
     if (!ownerId) { res.status(400).json({ error: 'Identifiant de rattachement manquant.' }); return; }
 
@@ -76,9 +93,16 @@ export function filesRouter(maxBytes: UploadLimit): Router {
   r.get('/:id', (req: Request, res: Response) => {
     const id = parseInt(String(req.params['id'] ?? ''), 10);
     if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return; }
+    // Le genre du propriétaire décide, et il se lit sur la fiche : l'appelant ne
+    // choisit pas ce qu'il déclare télécharger.
+    const fiche = files.get(id);
+    if (fiche && !OUVERT_AUX_ENFANTS[fiche.ownerKind] && isChild(req)) {
+      res.status(403).json({ error: REFUS_ENFANT });
+      return;
+    }
     const file = files.fileOf(id);
     if (!file) {
-      const known = files.get(id);
+      const known = fiche;
       if (!known) { res.status(404).json({ error: 'Fichier introuvable.' }); return; }
       res.status(410).json({
         error: 'Le fichier est absent du disque. Restaurez le répertoire « pieces » de vos sauvegardes, '
@@ -106,6 +130,11 @@ export function filesRouter(maxBytes: UploadLimit): Router {
   r.delete('/:id', (req: Request, res: Response) => {
     const id = parseInt(String(req.params['id'] ?? ''), 10);
     if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return; }
+    const fiche = files.get(id);
+    if (fiche && !OUVERT_AUX_ENFANTS[fiche.ownerKind] && isChild(req)) {
+      res.status(403).json({ error: REFUS_ENFANT });
+      return;
+    }
     if (!files.remove(id)) { res.status(404).json({ error: 'Fichier introuvable.' }); return; }
     res.status(204).end();
   });

@@ -24,6 +24,7 @@ import {
 import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
+import { ECRANS_ADULTES } from '../shell/nav';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
@@ -590,7 +591,11 @@ export class FoyerStore {
     try { const r = await this.api.schoolHolidays(ac); this.schoolHolidays.set(r.holidays || []); }
     catch { this.schoolHolidays.set([]); }
   }
-  async loadIcs(): Promise<void> { try { const r = await this.api.icsInfo(); this.icsToken.set(r.token); } catch { /* ignore */ } }
+  /** Le jeton du flux vaut accès sans mot de passe : le serveur ne le sert qu'à un administrateur. */
+  async loadIcs(): Promise<void> {
+    if (!this.isAdmin()) return;
+    try { const r = await this.api.icsInfo(); this.icsToken.set(r.token); } catch { /* ignore */ }
+  }
   async regenerateIcs(): Promise<void> {
     try { const r = await this.api.icsRegenerate(); this.icsToken.set(r.token); this.toast('Nouveau lien de calendrier généré'); }
     catch (e) { this.toast((e as Error).message); }
@@ -674,7 +679,9 @@ export class FoyerStore {
     return dayExtrasOn(ds, { doc: d, schoolHolidays: this.schoolHolidays(), external: this.externalDayExtras() });
   }
 
+  /** Réservée à un administrateur, comme l'écran qui s'en sert. */
   async refreshAccounts(): Promise<void> {
+    if (!this.isAdmin()) return;
     try {
       const { accounts } = await this.api.memberAccounts();
       this.accounts.set(Object.fromEntries(accounts.map((a) => [a.memberId, a.email])));
@@ -1092,7 +1099,12 @@ export class FoyerStore {
     // Un seul point de passage, plutôt qu'une condition à chaque bouton : c'est
     // ce qui rend impossible d'ouvrir l'écran par une entrée qu'on aurait
     // oublié de cacher. Le serveur refuse de son côté, indépendamment.
-    if (screen === 'settings' && this.isChild()) { this.toast('Les réglages du foyer sont réservés aux adultes.'); return; }
+    if (this.isChild() && ECRANS_ADULTES.has(screen)) {
+      this.toast(screen === 'settings'
+        ? 'Les réglages du foyer sont réservés aux adultes.'
+        : 'Cet écran est réservé aux adultes du foyer.');
+      return;
+    }
     this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false });
   }
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }

@@ -261,13 +261,13 @@ const GESTES = new Set(['compte', 'membres']);
                           <div class="extra">
                             <div class="extra-t">Partage du calendrier</div>
             <div class="hint" style="margin-bottom:10px">Abonnez Google Agenda, Apple Calendrier… à ce lien (événements du foyer et échéances de contrat, lecture seule).</div>
-            @if (store.icsUrl()) {
+            @if (!store.isAdmin()) {
+              <div class="hint">Ce lien vaut accès au calendrier du foyer sans mot de passe : seul un administrateur peut le voir. Demandez-lui de vous le transmettre.</div>
+            } @else if (store.icsUrl()) {
               <div class="ics-url">{{ store.icsUrl() }}</div>
               <div class="ics-actions">
                 <button class="btn btn-soft grow" (click)="copyIcs()"><f-icon name="copy" [size]="16" [width]="2" /> {{ copied() ? 'Copié !' : 'Copier le lien' }}</button>
-                @if (store.isAdmin()) {
-                  <button class="btn btn-ghost" (click)="store.regenerateIcs()" title="Invalide l'ancien lien"><f-icon name="refresh" [size]="16" color="var(--primary)" [width]="2" /></button>
-                }
+                <button class="btn btn-ghost" (click)="store.regenerateIcs()" title="Invalide l'ancien lien"><f-icon name="refresh" [size]="16" color="var(--primary)" [width]="2" /></button>
               </div>
             } @else {
               <div class="hint">Lien indisponible.</div>

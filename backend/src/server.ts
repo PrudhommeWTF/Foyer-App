@@ -202,6 +202,15 @@ const authLimiter = rateLimit({
   message: { error: 'Trop de tentatives, réessayez dans quelques minutes.' },
 });
 
+/** Le flux ICS, servi sans session : borné pour ne pas devenir un robinet. */
+const icsLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de requêtes sur le flux de calendrier.' },
+});
+
 interface AuthedRequest extends Request {
   user?: { id: number; email: string; tv: number };
 }
@@ -283,6 +292,29 @@ function requireMember(req: AuthedRequest, res: Response, next: NextFunction): v
       error: 'Ce compte n’est rattaché à aucun membre du foyer : il n’a accès à rien. '
         + 'Demandez à un administrateur du foyer de vous rattacher à un membre depuis l’écran « Famille ».',
     });
+    return;
+  }
+  next();
+}
+
+/**
+ * Les modules qui ne concernent pas un enfant : Finances et Documents.
+ *
+ * Un compte enfant lisait jusqu'ici tout le module Finances (comptes, soldes,
+ * opérations, contrats avec leurs références client, export complet en un
+ * appel) et tous les documents de famille, pièces d'identité scannées
+ * comprises. Il pouvait aussi en **supprimer**. Masquer les écrans ne changeait
+ * rien : l'API répondait à qui la sollicitait.
+ *
+ * Le cloisonnement est ici, côté serveur, comme celui des réglages. Les écrans
+ * correspondants disparaissent aussi de la navigation, pour ne pas proposer une
+ * porte qui répond 403.
+ */
+function requireAdulte(req: AuthedRequest, res: Response, next: NextFunction): void {
+  const m = currentMember(req);
+  if (!m) { requireMember(req, res, next); return; }
+  if (m.enfant) {
+    res.status(403).json({ error: 'Ce module n’est pas accessible depuis un compte enfant.' });
     return;
   }
   next();
@@ -544,7 +576,10 @@ api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response
 });
 
 // ---- Member login accounts (admin-managed) ----
-api.get('/members/accounts', auth, requireMember, (_req, res) => {
+// Réservée à un administrateur : cette liste est l'inventaire exact des
+// identifiants à attaquer, et les adresses personnelles de la famille avec.
+// L'écran qui s'en sert est déjà celui de la gestion des accès.
+api.get('/members/accounts', auth, requireAdmin, (_req, res) => {
   res.json({ accounts: listMemberAccounts() });
 });
 
@@ -597,7 +632,7 @@ api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, requireMember, financesRouter(requireAdmin));
+api.use('/finances', auth, requireAdulte, financesRouter(requireAdmin));
 
 // Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
 // plutôt que par enregistrement du document entier, pour que deux
@@ -613,7 +648,10 @@ api.use('/settings', auth, requireMember, settingsRouter({
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).
-api.use('/files', auth, requireMember, filesRouter(() => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024));
+api.use('/files', auth, requireMember, filesRouter(
+  () => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024,
+  (req) => !!currentMember(req as AuthedRequest)?.enfant,
+));
 
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
@@ -693,7 +731,12 @@ api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, r
   }
 });
 
-api.get('/calendar/ics', auth, requireMember, (_req, res) => {
+// Le jeton donne un accès permanent et SANS authentification à tout le
+// calendrier du foyer, horaires des enfants compris, et il survit à la
+// suppression du compte qui l'a lu. Le lire, comme le créer, est un geste
+// d'administration : c'est le canal d'exfiltration le plus discret de
+// l'application.
+api.get('/calendar/ics', auth, requireAdmin, (_req, res) => {
   let token = getIcsToken();
   if (!token) { token = crypto.randomBytes(18).toString('hex'); setIcsToken(token); }
   res.json({ token });
@@ -706,7 +749,10 @@ api.post('/calendar/ics/regenerate', auth, requireAdmin, (_req, res) => {
 });
 
 // Public — consumed by external calendar apps (Google/Apple), so no auth; the token is the secret.
-api.get('/calendar/feed.ics', (req: Request, res: Response) => {
+// Un agenda relit ce flux quelques fois par heure ; personne n'a de raison d'en
+// demander cent. La limite ne rend pas le jeton devinable (144 bits, il ne
+// l'était pas), elle empêche d'en faire un robinet.
+api.get('/calendar/feed.ics', icsLimiter, (req: Request, res: Response) => {
   const token = String(req.query['token'] || '');
   const state = getStateByIcsToken(token) as HouseholdState | null;
   if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
@@ -795,9 +841,12 @@ api.post('/system/backup', auth, requireAdmin, (req: AuthedRequest, res: Respons
   }
 });
 
-api.get('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
+api.get('/system/backup/:name', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
   const p = snapshotPath(DATA_DIR, String(req.params.name));
   if (!p) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
+  // Une base entière quitte la machine : c'est le genre de geste qu'on veut
+  // pouvoir dater après coup, pas reconstituer de mémoire.
+  log.info(`Sauvegarde ${req.params.name} téléchargée par ${req.user?.email || '(compte inconnu)'}.`);
   res.download(p);
 });
 
