@@ -94,9 +94,9 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
  * téléphone est ignoré, quel que soit son âge. Un client périmé ne peut donc
  * plus transporter les tâches, et aucune coche ne se décoche toute seule.
  */
-export function preserveTasks(incoming: Record<string, any>): { dropped: number; unassigned: number; unlinked: number } {
+export function preserveTasks(incoming: Record<string, any>): { dropped: number; unassigned: number; unlinked: number; orphaned: number } {
   const { doc } = readDoc();
   const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'), idsOf(incoming, 'files'));
   incoming['tasks'] = res.items;
-  return { dropped: res.dropped, unassigned: res.unassigned, unlinked: res.unlinked };
+  return { dropped: res.dropped, unassigned: res.unassigned, unlinked: res.unlinked, orphaned: res.orphaned };
 }

@@ -152,6 +152,13 @@ export interface TaskItem {
   contractId?: number | null;
   /** Document du foyer (FileItem.id) que la tâche ouvre. Tombe avec le document. */
   docId?: string | null;
+  /**
+   * Tâche parente, pour une sous-tâche. **Un seul niveau**, dans la même liste.
+   * Une sous-tâche est un détail du parent : ni date, ni récurrence, ni rappel.
+   */
+  parentId?: string | null;
+  /** Ordre manuel, posé au glisser-déposer. Décide là où aucune date ne décide. */
+  pos?: number;
 }
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }

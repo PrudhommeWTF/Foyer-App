@@ -78,13 +78,26 @@ export interface TaskItem {
   contractId?: number | null;
   /** Document du foyer (FileItem.id) que la tâche ouvre. Tombe avec le document. */
   docId?: string | null;
+  /**
+   * Tâche parente, pour une sous-tâche. **Un seul niveau** : une sous-tâche ne
+   * peut pas en avoir elle-même, et une tâche qui a des sous-tâches ne peut pas
+   * en devenir une. Une sous-tâche est un détail du parent (intitulé, membres,
+   * coche) : elle ne porte ni date, ni récurrence, ni rappel, qui sont l'affaire
+   * du parent.
+   */
+  parentId?: string | null;
+  /**
+   * Ordre manuel dans la liste, posé par le glisser-déposer. Il décide là où
+   * aucune date ne décide (checklists, tâches sans date) et départage ailleurs.
+   */
+  pos?: number;
 }
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; docId?: string | null;
+  contractId?: number | null; docId?: string | null; parentId?: string | null; pos?: number | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; }
@@ -140,6 +153,8 @@ const NOTE_MAX = 2000;
 const CAT_MAX = 40;
 const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
 const HISTORY_MAX = 200;
+/** Bornes de l'ordre manuel : au-delà, ce n'est plus une position mais une erreur. */
+const POS_MAX = 10_000_000;
 
 /** Lit une règle de récurrence. Null pour « aucune », une raison si elle est illisible. */
 function readRec(v: unknown): { rec: TaskRec | null } | { reason: string } {
@@ -219,6 +234,12 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     const id = trimmed(o['docId'], 80);
     f.docId = id && ctx.docIds.has(id) ? id : null;
   }
+  if (o['pos'] !== undefined) {
+    const n = o['pos'];
+    if (n === null || n === '') f.pos = null;
+    else if (typeof n === 'number' && Number.isFinite(n)) f.pos = Math.max(-POS_MAX, Math.min(POS_MAX, Math.round(n)));
+    else return { reason: 'Position illisible : ' + str(n) };
+  }
   if (o['contractId'] !== undefined) {
     const v = o['contractId'];
     if (v === null || v === '') f.contractId = null;
@@ -230,16 +251,41 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
 
 /** Pose les champs lus sur une tâche, en retirant les clés vides plutôt que de les laisser à « ». */
 function assign(t: TaskItem, f: TaskFields): TaskItem {
-  const next: TaskItem = { ...t, ...f };
+  // `pos` sort du lot : une tâche stockée porte un nombre ou rien, jamais null,
+  // et c'est ainsi que « retirer l'ordre manuel » s'écrit sans conversion forcée.
+  const { pos, ...rest } = { ...t, ...f };
+  const next: TaskItem = { ...rest, ...(typeof pos === 'number' ? { pos } : {}) };
   if (!next.note) delete next.note;
   if (!next.cat) delete next.cat;
-  if (next.time === null || next.time === undefined) delete next.time;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
   if (next.docId === null || next.docId === undefined) delete next.docId;
   if (next.contractId === null || next.contractId === undefined) delete next.contractId;
+  if (next.parentId === null || next.parentId === undefined) delete next.parentId;
+  // Une sous-tâche est un détail du parent : la date, la récurrence et le rappel
+  // sont l'affaire de celui-ci. Les poser ici ferait sonner un rappel pour une
+  // ligne que l'écran ne montre jamais seule.
+  if (next.parentId) { next.due = null; delete next.time; delete next.rec; delete next.remind; }
+  if (next.time === null || next.time === undefined) delete next.time;
   if (!next.rec) { delete next.rec; }
   if (!next.remind || !next.due) delete next.remind;
   return next;
+}
+
+/**
+ * Lit la tâche parente d'une sous-tâche. Un seul niveau, dans une seule liste :
+ * ce sont les deux règles qui empêchent l'arborescence que le module refuse.
+ */
+function readParent(v: unknown, items: TaskItem[], self: TaskItem): { parentId: string | null } | { reason: string } {
+  if (v === undefined) return { parentId: self.parentId ?? null };
+  const id = trimmed(v, 80);
+  if (!id) return { parentId: null };
+  if (id === self.id) return { reason: 'Une tâche ne peut pas être sa propre sous-tâche.' };
+  const parent = items.find((t) => t.id === id);
+  if (!parent) return { reason: 'La tâche parente n’existe plus.' };
+  if (parent.parentId) return { reason: 'Une sous-tâche ne peut pas en avoir elle-même.' };
+  if (parent.listId !== self.listId) return { reason: 'Une sous-tâche vit dans la liste de son parent.' };
+  if (items.some((t) => t.parentId === self.id)) return { reason: 'Une tâche qui a des sous-tâches ne peut pas en devenir une.' };
+  return { parentId: id };
 }
 
 /** Les réalisations passées d'une série, telles qu'un ajout peut les restituer. Ce qui n'a pas la forme est ignoré. */
@@ -301,11 +347,17 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (!f.listId) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
         const done = o['done'] === true;
         const history = readHistory(o['history']);
-        out.push(assign({
+        const bare: TaskItem = {
           id, listId: f.listId, text: f.text, who: f.who ?? [], due: f.due ?? null, done, by, at,
           ...(done ? { doneAt: trimmed(o['doneAt'], 40) || at, doneBy: trimmed(o['doneBy'], 80) || by } : {}),
           ...(history.length ? { history } : {}),
-        }, f));
+        };
+        // Le parent est décidé avant de poser les champs : c'est lui qui dit si
+        // la date et le rappel ont un sens, et une seule passe évite qu'un ordre
+        // d'application les laisse traîner.
+        const parent = readParent(o['parentId'], out, bare);
+        if ('reason' in parent) { skipped.push({ opId, reason: parent.reason }); break; }
+        out.push(assign(bare, { ...f, parentId: parent.parentId }));
         applied.push(opId);
         break;
       }
@@ -315,7 +367,14 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (idx < 0) { applied.push(opId); break; }
         const read = readFields(o, ctx);
         if ('reason' in read) { skipped.push({ opId, reason: read.reason }); break; }
-        out[idx] = assign(out[idx], read.fields);
+        // Le parent est validé contre la liste d'arrivée (déplacer une tâche et
+        // la ranger sous un parent d'une autre liste ne veut rien dire), et posé
+        // dans la même passe que les autres champs : sans quoi une sous-tâche
+        // promue au premier niveau perdrait la date donnée par la même opération.
+        const cible: TaskItem = { ...out[idx], listId: read.fields.listId ?? out[idx].listId };
+        const p = o['parentId'] !== undefined ? readParent(o['parentId'], out, cible) : { parentId: out[idx].parentId ?? null };
+        if ('reason' in p) { skipped.push({ opId, reason: p.reason }); break; }
+        out[idx] = assign(out[idx], { ...read.fields, parentId: p.parentId });
         applied.push(opId);
         break;
       }
@@ -364,7 +423,14 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         break;
       }
       case 'remove': {
-        if (idx >= 0) out.splice(idx, 1);
+        if (idx >= 0) {
+          out.splice(idx, 1);
+          // Une sous-tâche restée sans parent remonte au premier niveau plutôt
+          // que de disparaître : l'écran qui supprime un parent envoie ses
+          // sous-tâches dans le même lot, et ce qu'un autre appareil vient
+          // d'ajouter se voit au lieu de se perdre.
+          for (let i = 0; i < out.length; i++) if (out[i].parentId === id) out[i] = assign(out[i], { parentId: null });
+        }
         applied.push(opId);
         break;
       }
@@ -384,6 +450,8 @@ export interface ReconcileReport {
   unassigned: number;
   /** Liens vers une liste de courses ou un document disparus. */
   unlinked: number;
+  /** Sous-tâches remontées au premier niveau, leur parent ayant disparu ou changé de liste. */
+  orphaned: number;
 }
 
 /**
@@ -394,15 +462,21 @@ export interface ReconcileReport {
  */
 export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>, docIds: Set<string> = new Set()): ReconcileReport {
   const kept = items.filter((t) => listIds.has(t.listId));
+  const byId = new Map(kept.map((t) => [t.id, t]));
   let unassigned = 0;
   let unlinked = 0;
+  let orphaned = 0;
   const out = kept.map((t) => {
     let next = t;
     const who = (t.who || []).filter((m) => memberIds.has(m));
     if (who.length !== (t.who || []).length) { unassigned++; next = { ...next, who }; }
     if (t.shopListId && !shopListIds.has(t.shopListId)) { unlinked++; next = { ...next }; delete next.shopListId; }
     if (t.docId && !docIds.has(t.docId)) { unlinked++; next = { ...next }; delete next.docId; }
+    // Un parent parti avec sa liste laisserait une sous-tâche invisible : elle
+    // remonte au premier niveau, où elle se voit et se traite.
+    const parent = t.parentId ? byId.get(t.parentId) : null;
+    if (t.parentId && (!parent || parent.listId !== t.listId || parent.parentId)) { orphaned++; next = { ...next }; delete next.parentId; }
     return next;
   });
-  return { items: out, dropped: items.length - kept.length, unassigned, unlinked };
+  return { items: out, dropped: items.length - kept.length, unassigned, unlinked, orphaned };
 }

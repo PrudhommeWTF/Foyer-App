@@ -314,3 +314,95 @@ test('annuler une suppression rend la tâche avec ses liens', () => {
   const back = applyOps(gone.items, [op({ op: 'add', ...r.items[0] })], ctx());
   assert.deepEqual({ c: back.items[0].contractId, d: back.items[0].docId, s: back.items[0].shopListId }, { c: 7, d: 'f1', s: 'cl1' });
 });
+
+// ---- sous-tâches : un seul niveau, jamais d'arborescence ---------------------------
+
+test('une sous-tâche se range sous un parent de la même liste, et le parent ne peut pas en avoir un', () => {
+  const r = applyOps([task({ id: 'p' })], [op({ op: 'add', id: 's1', listId: 'l1', text: 'Sortir le bac jaune', parentId: 'p' })], ctx());
+  assert.equal(r.items[1].parentId, 'p');
+  const deux = applyOps(r.items, [op({ op: 'add', id: 's2', listId: 'l1', text: 'Trop profond', parentId: 's1' })], ctx());
+  assert.equal(deux.skipped.length, 1);
+  assert.match(deux.skipped[0].reason, /ne peut pas en avoir elle-même/);
+  assert.equal(deux.items.length, 2, 'la tâche n’est pas créée du tout : une arborescence ne se crée pas à moitié');
+});
+
+test('une tâche qui a des sous-tâches ne peut pas en devenir une', () => {
+  const depart = [task({ id: 'p' }), task({ id: 's', parentId: 'p' }), task({ id: 'autre' })];
+  const r = applyOps(depart, [op({ op: 'edit', id: 'p', parentId: 'autre' })], ctx());
+  assert.equal(r.skipped.length, 1);
+  assert.match(r.skipped[0].reason, /qui a des sous-tâches/);
+  assert.equal(r.items[0].parentId, undefined);
+});
+
+test('un parent inconnu, disparu ou d’une autre liste est refusé avec la raison', () => {
+  const depart = [task({ id: 'p' }), task({ id: 'ailleurs', listId: 'l2' })];
+  const inconnu = applyOps(depart, [op({ op: 'add', id: 's', listId: 'l1', text: 'x', parentId: 'fantome' })], ctx());
+  assert.match(inconnu.skipped[0].reason, /parente n’existe plus/);
+  const autreListe = applyOps(depart, [op({ op: 'add', id: 's', listId: 'l1', text: 'x', parentId: 'ailleurs' })], ctx());
+  assert.match(autreListe.skipped[0].reason, /liste de son parent/);
+  const soi = applyOps(depart, [op({ op: 'edit', id: 'p', parentId: 'p' })], ctx());
+  assert.match(soi.skipped[0].reason, /sa propre sous-tâche/);
+});
+
+test('une sous-tâche ne porte ni date, ni heure, ni récurrence, ni rappel : ce sont l’affaire du parent', () => {
+  const r = applyOps([task({ id: 'p' })], [op({
+    op: 'add', id: 's', listId: 'l1', text: 'Détail', parentId: 'p',
+    due: '2026-09-30', time: '08:00', remind: 'eve', rec: { freq: 'weekly', every: 1, base: 'due' },
+  })], ctx());
+  const s = r.items[1];
+  assert.equal(r.applied.length, 1, 'l’ajout passe : ces champs sont ignorés, pas refusés');
+  assert.deepEqual({ due: s.due, time: s.time, rec: s.rec, remind: s.remind }, { due: null, time: undefined, rec: undefined, remind: undefined });
+});
+
+test('une sous-tâche promue au premier niveau peut de nouveau porter une date', () => {
+  const depart = [task({ id: 'p' }), task({ id: 's', parentId: 'p', due: null })];
+  const r = applyOps(depart, [op({ op: 'edit', id: 's', parentId: null, due: '2026-09-30' })], ctx());
+  assert.equal(r.items[1].parentId, undefined);
+  assert.equal(r.items[1].due, '2026-09-30');
+});
+
+test('supprimer un parent remonte ses sous-tâches au premier niveau, il n’en disparaît aucune en silence', () => {
+  const depart = [task({ id: 'p' }), task({ id: 's1', parentId: 'p' }), task({ id: 's2', parentId: 'p' })];
+  const r = applyOps(depart, [op({ op: 'remove', id: 'p' })], ctx());
+  assert.equal(r.items.length, 2);
+  assert.deepEqual(r.items.map((t) => t.parentId), [undefined, undefined]);
+});
+
+test('rattrapage : une sous-tâche dont le parent est parti avec sa liste remonte au premier niveau', () => {
+  const r = reconcile(
+    [task({ id: 'p', listId: 'l2' }), task({ id: 's', listId: 'l1', parentId: 'p' }), task({ id: 'ok' })],
+    new Set(['l1']), new Set(['me']), new Set(['cl1']), new Set(['f1']),
+  );
+  assert.equal(r.dropped, 1, 'le parent part avec sa liste');
+  assert.equal(r.orphaned, 1);
+  assert.equal(r.items.find((t) => t.id === 's')!.parentId, undefined);
+});
+
+// ---- ordre manuel -----------------------------------------------------------------
+
+test('la position se pose, se retire, et une position illisible est refusée avec la raison', () => {
+  const r = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 3 })], ctx());
+  assert.equal(r.items[0].pos, 3);
+  const zero = applyOps(r.items, [op({ op: 'edit', id: 't1', pos: 0 })], ctx());
+  assert.equal(zero.items[0].pos, 0, 'zéro est une position, pas une absence');
+  const enleve = applyOps(r.items, [op({ op: 'edit', id: 't1', pos: null })], ctx());
+  assert.equal('pos' in enleve.items[0], false);
+  const faux = applyOps(r.items, [op({ op: 'edit', id: 't1', pos: 'premier' })], ctx());
+  assert.equal(faux.skipped.length, 1);
+  assert.match(faux.skipped[0].reason, /Position illisible/);
+});
+
+test('une position est arrondie et bornée : un client fantaisiste ne casse pas l’ordre', () => {
+  const r = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 2.6 })], ctx());
+  assert.equal(r.items[0].pos, 3);
+  const grand = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 1e12 })], ctx());
+  assert.equal(grand.items[0].pos, 10_000_000);
+});
+
+test('deux appareils qui réordonnent en même temps : le dernier lot reçu fait foi, sans rien perdre', () => {
+  const depart = [task({ id: 'a', pos: 0 }), task({ id: 'b', pos: 1 }), task({ id: 'c', pos: 2 })];
+  const un = applyOps(depart, [op({ op: 'edit', id: 'c', pos: 0 }), op({ op: 'edit', id: 'a', pos: 1 })], ctx());
+  const deux = applyOps(un.items, [op({ op: 'edit', id: 'b', pos: 0 }), op({ op: 'edit', id: 'c', pos: 1 })], ctx());
+  assert.deepEqual(deux.items.map((t) => [t.id, t.pos]), [['a', 1], ['b', 0], ['c', 1]]);
+  assert.equal(deux.items.length, 3, 'aucune tâche perdue dans la bagarre');
+});

@@ -17,7 +17,7 @@ import { Remind, TaskDone, TaskItem, TaskRec } from './models';
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; docId?: string | null;
+  contractId?: number | null; docId?: string | null; parentId?: string | null; pos?: number | null;
 }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
@@ -47,13 +47,18 @@ export interface TaskDraft {
 
 /** Pose les champs, en retirant les clés vides plutôt que de laisser « ». */
 function assign(t: TaskItem, f: TaskFields): TaskItem {
-  const next: TaskItem = { ...t, ...f };
+  const { pos, ...rest } = { ...t, ...f };
+  const next: TaskItem = { ...rest, ...(typeof pos === 'number' ? { pos } : {}) };
   if (!next.note) delete next.note;
   if (!next.cat) delete next.cat;
-  if (next.time == null) delete next.time;
   if (next.shopListId == null) delete next.shopListId;
   if (next.docId == null) delete next.docId;
   if (next.contractId == null) delete next.contractId;
+  if (next.parentId == null) delete next.parentId;
+  // Même règle que le serveur : une sous-tâche ne porte ni date, ni récurrence,
+  // ni rappel. L'écran doit le montrer tout de suite, pas après l'aller-retour.
+  if (next.parentId) { next.due = null; delete next.time; delete next.rec; delete next.remind; }
+  if (next.time == null) delete next.time;
   if (!next.rec) delete next.rec;
   if (!next.remind || !next.due) delete next.remind;
   return next;
@@ -134,13 +139,14 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
     case 'add': return { op: 'remove', id: op.id };
     case 'remove': {
       if (!before) return null;
-      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind, contractId, docId } = before;
+      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind, contractId, docId, parentId, pos } = before;
       return {
         op: 'add', id, listId, text, who, due, done,
         ...(done ? { doneAt: doneAt ?? null, doneBy: doneBy ?? null } : {}),
         ...(note ? { note } : {}), ...(cat ? { cat } : {}), ...(time ? { time } : {}), ...(shopListId ? { shopListId } : {}),
         ...(rec ? { rec } : {}), ...(history?.length ? { history } : {}), ...(remind ? { remind } : {}),
         ...(contractId ? { contractId } : {}), ...(docId ? { docId } : {}),
+        ...(parentId ? { parentId } : {}), ...(typeof pos === 'number' ? { pos } : {}),
       };
     }
     case 'edit': {
