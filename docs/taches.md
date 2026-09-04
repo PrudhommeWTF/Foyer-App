@@ -376,7 +376,8 @@ Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
 ## Ce qui reste à faire
 
-Rappels et notifications (tranche 3), liens vers un
+Rappels et notifications (tranche 3 : la note d'analyse est dans
+[`taches-notifications.md`](taches-notifications.md)), liens vers un
 contrat ou un document, clôture proposée quand la dernière ligne de courses est
 cochée, date proposée d'après l'emploi du temps, tap sur une tâche depuis le
 calendrier et option ICS (tranche 4), glisser-déposer, sous-tâches et vue « ce
