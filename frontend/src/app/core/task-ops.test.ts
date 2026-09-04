@@ -141,3 +141,15 @@ test('retirer la règle d’une série la rend ponctuelle, et l’annulation la 
   assert.equal('rec' in apres[0], false);
   assert.deepEqual(inverseOf(off, avant), { op: 'edit', id: 'p1', rec: avant.rec });
 });
+
+// ---- le rappel ----------------------------------------------------------------------------
+
+test('un rappel sans échéance n’est pas gardé, et annuler la suppression le remet', () => {
+  const sans = applyTaskOp([], op({ op: 'add', id: 'r1', listId: 'l1', text: 'x', due: null, remind: 'at' }));
+  assert.equal('remind' in sans[0], false, 'un rappel n’a pas de sens sans date');
+  const avec = applyTaskOp([], op({ op: 'add', id: 'r2', listId: 'l1', text: 'x', due: TODAY, remind: 'eve' }));
+  assert.equal(avec[0].remind, 'eve');
+  const retour = inverseOf({ op: 'remove', id: 'r2' }, avec[0])!;
+  assert.equal(applyTaskOp([], op(retour))[0].remind, 'eve');
+  assert.deepEqual(inverseOf({ op: 'edit', id: 'r2', remind: null }, avec[0]), { op: 'edit', id: 'r2', remind: 'eve' });
+});

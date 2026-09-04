@@ -10,13 +10,15 @@
 //   - `hh_shop_ops` et `hh_task_ops` : les identifiants des opérations de
 //     courses et de tâches déjà appliquées, pour qu'un rejeu après coupure
 //     réseau ne ressuscite pas un article ou une tâche supprimés entre-temps.
-//   - `hh_meta` : la version du schéma et celle du document.
+//   - `hh_push_subs` et `hh_notif_sent` : les appareils abonnés aux rappels et
+//     le journal de ce qui leur a été envoyé (voir notify/push.ts).
+//   - `hh_meta` : la version du schéma, celle du document, et les clés VAPID.
 //
 // Les migrations sont versionnées et appliquées au démarrage, chacune dans sa
 // transaction. Ne jamais modifier une migration livrée : en ajouter une.
 import type { Database } from 'better-sqlite3';
 
-export const HH_SCHEMA_VERSION = 2;
+export const HH_SCHEMA_VERSION = 3;
 
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
@@ -62,6 +64,43 @@ const MIGRATIONS: Migration[] = [
         CREATE TABLE hh_task_ops (
           op_id TEXT PRIMARY KEY,
           applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    },
+  },
+  {
+    version: 3,
+    label: 'appareils abonnés aux rappels et journal des envois',
+    up: (db) => {
+      db.exec(`
+        -- Un abonnement Web Push par appareil, rattaché au membre connecté au
+        -- moment de l'abonnement. L'adresse (endpoint) est l'identité de l'appareil.
+        CREATE TABLE hh_push_subs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          member_id TEXT NOT NULL,
+          endpoint TEXT NOT NULL UNIQUE,
+          p256dh TEXT NOT NULL,
+          auth TEXT NOT NULL,
+          ua TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          last_ok_at TEXT,
+          last_error TEXT
+        );
+        CREATE INDEX idx_hh_push_subs_member ON hh_push_subs(member_id);
+
+        -- Ce qui a été envoyé, à qui, et ce que ça a donné. La clé porte la
+        -- tâche, son échéance et son réglage : c'est ce qui rend un redémarrage
+        -- sans double envoi, et une tâche reportée rappelée à nouveau.
+        CREATE TABLE hh_notif_sent (
+          key TEXT NOT NULL,
+          member_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          task_id TEXT,
+          title TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL,
+          error TEXT,
+          sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (key, member_id)
         );
       `);
     },

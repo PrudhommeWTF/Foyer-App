@@ -33,7 +33,11 @@ import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
 import { getShopping, preserveShopping } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
-import { getTasks, preserveTasks } from './tasks/repo';
+import { getTasks, onAssigned, preserveTasks } from './tasks/repo';
+import { pushRouter } from './notify/routes';
+import { initPush, notify } from './notify/push';
+import { startScheduler } from './notify/scheduler';
+import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { loadRules, rulesPath } from './home/rules';
@@ -497,6 +501,12 @@ api.use('/shopping', auth, shoppingRouter());
 // Tâches : même dispositif, même raison. Voir tasks/ops.ts.
 api.use('/tasks', auth, tasksRouter());
 
+// Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
+// L'adresse ouverte au tap est celle que le navigateur a utilisée pour
+// s'abonner : le serveur ne connaît pas son nom public.
+const APP_URL = process.env.FOYER_PUBLIC_URL || '';
+api.use('/push', auth, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, () => APP_URL));
+
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
 api.use('/recipes', auth, recipesRouter());
@@ -653,6 +663,34 @@ if (fs.existsSync(STATIC_DIR)) {
     res.sendFile(path.join(STATIC_DIR, 'index.html'));
   });
 }
+
+// ---- Rappels : clés VAPID, affectations, planificateur ----
+// Les clés sont générées une fois et gardées en base : en changer invaliderait
+// tous les abonnements. FOYER_VAPID_PUBLIC / FOYER_VAPID_PRIVATE les remplacent.
+const vapid = initPush(db, { publicKey: process.env.FOYER_VAPID_PUBLIC, privateKey: process.env.FOYER_VAPID_PRIVATE, subject: process.env.FOYER_VAPID_SUBJECT });
+// eslint-disable-next-line no-console
+console.log(`[foyer] Notifications : Web Push prêt (${vapid.generated ? 'clés VAPID générées et gardées en base' : 'clés VAPID existantes'}).`);
+
+const notifLog = (line: string): void => { console.log('[foyer] ' + line); }; // eslint-disable-line no-console
+
+// Quelqu'un d'autre vient de m'affecter une tâche : tout de suite, pas à la minute.
+onAssigned((memberId, task, opId) => {
+  const by = task.by ? (getHousehold().state as HouseholdState).members.find((m) => m.id === task.by)?.name : '';
+  void notify(`assign|${opId}|${memberId}`, [memberId], {
+    kind: 'assigned', title: task.text, body: (by ? by + ' vous a affecté cette tâche' : 'Une tâche vous a été affectée') + (task.due ? ' · ' + task.due.split('-').reverse().join('/') : ''),
+    url: APP_URL, taskId: task.id, tag: 'task-' + task.id,
+  }).then((r) => {
+    const m = r.members[0];
+    if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
+  }).catch((e) => notifLog('Notifications : affectation non envoyée : ' + (e as Error).message));
+});
+
+startScheduler({
+  tasks: () => (getHousehold().state as HouseholdState).tasks || [],
+  accounts: () => accountsOf().map((a) => a.memberId),
+  url: () => APP_URL,
+  log: notifLog,
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   // eslint-disable-next-line no-console

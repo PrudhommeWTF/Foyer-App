@@ -84,6 +84,12 @@ export interface RecipeImportResult {
   warnings: string[];
 }
 
+/** Un appareil abonné aux rappels, tel que le serveur le connaît. */
+export interface PushDevice { id: number; ua: string; createdAt: string; lastOkAt: string | null; lastError: string | null; }
+export interface PushSend { key: string; memberId: string; kind: string; taskId: string | null; title: string; status: 'sent' | 'no-device' | 'failed' | 'missed' | 'skipped'; error: string | null; sentAt: string; }
+export interface PushStatus { publicKey: string; devices: PushDevice[]; subscribed: string[]; sends: PushSend[]; }
+export interface PushTestResult { memberId: string; status: PushSend['status']; devices: number; error: string | null; }
+
 export interface SetupPayload {
   household: { name: string; theme: 'light' | 'dark'; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
@@ -245,6 +251,17 @@ export class ApiService {
   taskOps(ops: TaskOp[]): Promise<TasksApplied> {
     return this.request('tasks/ops', { method: 'POST', body: JSON.stringify({ ops }) });
   }
+
+  // ---- rappels par Web Push ----------------------------------------------
+  pushStatus(): Promise<PushStatus> { return this.request('push/status'); }
+  pushSubscribe(subscription: PushSubscriptionJSON, ua: string): Promise<PushDevice> {
+    return this.request('push/subscribe', { method: 'POST', body: JSON.stringify({ subscription, ua }) });
+  }
+  pushUnsubscribe(endpoint: string): Promise<{ removed: boolean }> {
+    return this.request('push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) });
+  }
+  pushRemoveDevice(id: number): Promise<{ ok: boolean }> { return this.request('push/subscribe/' + id, { method: 'DELETE' }); }
+  pushTest(): Promise<PushTestResult> { return this.request('push/test', { method: 'POST' }); }
 
   // ---- import de recette --------------------------------------------------
   // Seule sortie réseau du module, faite par le serveur : le navigateur ne peut

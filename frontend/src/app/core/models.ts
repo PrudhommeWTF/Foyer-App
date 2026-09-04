@@ -99,6 +99,12 @@ export interface TaskRec {
   grace?: number;
   until?: string | null;
 }
+/**
+ * Le réglage de rappel d'une tâche. Aucun par défaut, réglé tâche par tâche.
+ * L'heure qui en découle est calculée par le serveur (backend notify/reminders.ts) :
+ * à l'heure de la tâche (9 h sans heure), une heure avant, la veille à 18 h, le matin à 9 h.
+ */
+export type Remind = 'at' | '1h' | 'eve' | 'morning';
 /** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
 export interface TaskDone { at: string; by: string | null; due: string | null; }
 /**
@@ -135,6 +141,8 @@ export interface TaskItem {
    */
   rec?: TaskRec | null;
   history?: TaskDone[];
+  /** Rappel avant l'échéance. Sans échéance, il n'a pas de sens et n'est pas gardé. */
+  remind?: Remind | null;
 }
 export interface Message { who: string; text: string; time: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }

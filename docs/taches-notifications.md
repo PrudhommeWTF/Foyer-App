@@ -1,7 +1,11 @@
 # Rappels et notifications des tâches : note d'analyse
 
-Tranche 3 du chantier Tâches. Rien de ce qui est décrit ici n'est codé : c'est
-la base de la décision. Le brief est clair sur l'enjeu : une tâche non
+Tranche 3 du chantier Tâches. Note écrite avant le code, et tranchée ainsi :
+**Web Push** (option A), rappel réglé tâche par tâche, tâche sans responsable
+rappelée à tous les comptes, affectation notifiée tout de suite, pas
+d'intégration Home Assistant pour l'instant. Ce qui est en place est décrit
+dans [`taches.md`](taches.md), section « Rappels et notifications ». Le reste
+de cette note est l'analyse telle qu'elle a servi à décider. Le brief est clair sur l'enjeu : une tâche non
 rappelée est une tâche oubliée, et c'est exactement ce qui ferait rester le
 foyer sur FamilyWall. Cette note dit donc ce qui marche vraiment, ce qui ne
 marche qu'une fois sur trois, et ce que je recommande.

@@ -11,12 +11,12 @@
 // l'œil : l'application locale, et l'**inverse** d'une opération, qui est ce que
 // « Annuler » envoie. Annuler ne remet jamais le tableau en bloc : ce serait
 // effacer ce que l'autre appareil a écrit entre-temps.
-import { TaskDone, TaskItem, TaskRec } from './models';
+import { Remind, TaskDone, TaskItem, TaskRec } from './models';
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
-  due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null;
+  due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
 }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
@@ -39,7 +39,7 @@ export type TaskOpDraft = TaskOp extends infer T ? (T extends TaskOp ? Omit<T, '
 
 /** Ce qu'une saisie produit : les champs d'une tâche neuve. */
 export interface TaskDraft {
-  text: string; listId: string; who: string[]; due: string | null; time: string | null; cat: string; note: string; rec: TaskRec | null;
+  text: string; listId: string; who: string[]; due: string | null; time: string | null; cat: string; note: string; rec: TaskRec | null; remind: Remind | null;
 }
 
 /** Pose les champs, en retirant les clés vides plutôt que de laisser « ». */
@@ -50,6 +50,7 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (next.time == null) delete next.time;
   if (next.shopListId == null) delete next.shopListId;
   if (!next.rec) delete next.rec;
+  if (!next.remind || !next.due) delete next.remind;
   return next;
 }
 
@@ -128,12 +129,12 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
     case 'add': return { op: 'remove', id: op.id };
     case 'remove': {
       if (!before) return null;
-      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history } = before;
+      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind } = before;
       return {
         op: 'add', id, listId, text, who, due, done,
         ...(done ? { doneAt: doneAt ?? null, doneBy: doneBy ?? null } : {}),
         ...(note ? { note } : {}), ...(cat ? { cat } : {}), ...(time ? { time } : {}), ...(shopListId ? { shopListId } : {}),
-        ...(rec ? { rec } : {}), ...(history?.length ? { history } : {}),
+        ...(rec ? { rec } : {}), ...(history?.length ? { history } : {}), ...(remind ? { remind } : {}),
       };
     }
     case 'edit': {
@@ -144,7 +145,7 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
       for (const k of Object.keys(fields) as (keyof TaskFields)[]) {
         const v = before[k];
         // Un champ absent avant redevient absent : null pour les dates, vide pour les textes.
-        (back as Record<string, unknown>)[k] = v === undefined ? (k === 'due' || k === 'time' || k === 'shopListId' || k === 'rec' ? null : k === 'who' ? [] : '') : v;
+        (back as Record<string, unknown>)[k] = v === undefined ? (k === 'due' || k === 'time' || k === 'shopListId' || k === 'rec' || k === 'remind' ? null : k === 'who' ? [] : '') : v;
       }
       return { op: 'edit', id, ...back };
     }

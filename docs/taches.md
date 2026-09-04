@@ -1,6 +1,6 @@
 # Tâches : modèle, écriture, hors ligne, exploitation
 
-Ce document décrit le module Tâches tel qu'il est depuis les tranches 1 et 2
+Ce document décrit le module Tâches tel qu'il est depuis les tranches 1 à 3
 du chantier « parité FamilyWall et intégration » (l'état des lieux qui les a
 précédées est dans [`taches-etat-des-lieux.md`](taches-etat-des-lieux.md)).
 Il s'adresse à qui exploite l'application : ce que le module garantit, où
@@ -81,9 +81,8 @@ Ce que ces choix impliquent à l'écran :
 - **La priorité n'existe plus.** La catégorie organise ; un badge rouge
   « Haute » était l'affichage anxiogène que le module refuse.
 
-Les champs prévus pour les tranches suivantes (rappel, liens vers un contrat
-ou un document) n'existent pas encore dans le modèle : ils arriveront avec ce
-qui les lit.
+Les champs prévus pour la tranche 4 (liens vers un contrat ou un document)
+n'existent pas encore dans le modèle : ils arriveront avec ce qui les lit.
 
 ## La récurrence
 
@@ -236,6 +235,117 @@ Une liste créée à l'instant part par le document, pas par la file : la file
 attend que le document soit enregistré avant de partir, sinon le serveur
 refuserait la tâche pour une liste qu'il ne connaît pas encore.
 
+## Rappels et notifications (Web Push)
+
+Le choix du canal, ses raisons et ses limites sont dans
+[`taches-notifications.md`](taches-notifications.md). Ce qui suit est ce qui
+est en place, et comment l'exploiter.
+
+### Ce qui est envoyé, et à qui
+
+| Quoi | Quand | À qui |
+|---|---|---|
+| **Rappel d'échéance** | À l'heure choisie sur la tâche : à l'heure (9 h sans heure), 1 h avant, la veille à 18 h, le matin à 9 h. **Aucun rappel par défaut**, réglé tâche par tâche dans le panneau « Date » du composeur. | Les membres affectés. Une tâche sans responsable rappelle **tous les comptes** du foyer. |
+| **Tâche qui m'est affectée** | Tout de suite, quand quelqu'un d'autre m'affecte une tâche (création ou modification). Pas quand je m'affecte moi-même, pas pour une tâche faite. | Le membre affecté. |
+
+Rien d'autre : pas de « Marie a coché », pas de résumé. Une série récurrente
+rappelle son occurrence courante, puis la suivante quand elle arrive. Une
+tâche reportée est rappelée à nouveau ; une tâche faite ou supprimée ne l'est
+plus. Les heures sont celles du foyer (Europe/Paris), quel que soit le fuseau
+du serveur.
+
+```ts
+// sur la tâche
+remind?: 'at' | '1h' | 'eve' | 'morning' | null;   // sans échéance, retiré
+```
+
+### Comment ça marche
+
+1. Le navigateur enregistre un **service worker** (`sw.js`, sans cache : il
+   n'affiche que les notifications) et, sur un geste dans *Paramètres →
+   Notifications → « Activer les rappels sur cet appareil »*, s'abonne auprès
+   du service push de son éditeur avec la clé VAPID publique du serveur.
+2. L'abonnement est confié au serveur (`POST /api/push/subscribe`), rattaché
+   au membre connecté, dans `hh_push_subs`. Un appareil par ligne.
+3. Un **planificateur** passe toutes les minutes : il lit le document, calcule
+   les rappels dus (`notify/reminders.ts`) et les envoie à chaque appareil
+   des membres visés (`notify/push.ts`). Une affectation est envoyée dès que
+   l'opération est appliquée.
+4. Chaque envoi est journalisé dans `hh_notif_sent` par clé et par membre. La
+   clé porte la tâche, son échéance et son réglage : un redémarrage ne renvoie
+   rien deux fois, une tâche reportée est rappelée à nouveau. Un rappel tombé
+   pendant plus de deux heures d'arrêt du service est noté **manqué**, pas
+   envoyé en retard.
+
+### Sur iPhone : ce qu'il faut faire, et ce qui casse
+
+- Les rappels n'arrivent qu'à une application **ajoutée à l'écran d'accueil**
+  (Safari, *Partager*, *Sur l'écran d'accueil*), ouverte depuis cette icône,
+  sur iOS 16.4 au moins. Dans un onglet Safari, l'écran Paramètres le dit et
+  ne propose pas d'activer.
+- **Supprimer l'icône révoque l'abonnement.** Le serveur l'apprend au prochain
+  envoi (le service push répond 404 ou 410), retire l'appareil et l'écrit au
+  journal. Entre-temps, rien ne prévient.
+- Le service worker **affiche toujours** une notification, même si le message
+  est illisible : un message reçu sans notification affichée fait révoquer
+  l'abonnement par iOS.
+- Le service push d'Apple ou de Google répond « accepté » : cela veut dire
+  qu'il a pris le message, pas que le téléphone l'a montré. Quand un rappel
+  n'arrive pas alors que le journal dit `sent`, la cause est sur le téléphone
+  (réglages de notification, mode concentration, icône supprimée) et
+  l'application n'a aucun moyen de la voir. C'est la limite du canal, elle
+  était connue au moment de le choisir.
+
+### L'écran d'état
+
+*Paramètres → Notifications* montre, pour cet appareil, où il en est
+(installer d'abord, bloqué, activer, activé), **« Envoyer un test »** qui
+envoie une vraie notification, mes appareils avec la date du dernier envoi
+accepté ou la dernière erreur, qui du foyer reçoit les rappels, et les
+derniers envois avec leur sort (envoyé, aucun appareil, échec, manqué).
+
+### Configuration
+
+| Variable | Rôle | Défaut |
+|---|---|---|
+| `FOYER_VAPID_PUBLIC`, `FOYER_VAPID_PRIVATE` | Paire VAPID. Sans elles, une paire est **générée au premier démarrage et gardée en base** (`hh_meta`). En changer invalide tous les abonnements. | générées |
+| `FOYER_VAPID_SUBJECT` | Contact que le service push peut joindre en cas d'abus, `mailto:` ou `https:`. Mettez une adresse réelle. | `mailto:foyer@localhost` |
+| `FOYER_PUBLIC_URL` | Adresse ouverte au tap sur une notification. Vide : la racine de l'application telle que le service worker la connaît. | vide |
+
+HTTPS est obligatoire pour le push (le reverse-proxy le fournit). Rien ne
+sort du serveur tant qu'aucun appareil n'est abonné ; les envois vont aux
+services push d'Apple et de Google, avec l'intitulé de la tâche, l'échéance et
+le membre. Retirer tous les appareils dans Paramètres coupe tout.
+
+### Exploitation
+
+```bash
+# Ce que le serveur a envoyé, et ce qu'on lui a répondu
+journalctl -u foyer | grep 'Notifications'
+
+# Les appareils abonnés, et le dernier sort de chacun
+sqlite3 /var/lib/foyer/foyer.db "SELECT id, member_id, substr(ua,1,40), created_at, last_ok_at, last_error FROM hh_push_subs;"
+
+# Les derniers envois
+sqlite3 /var/lib/foyer/foyer.db "SELECT sent_at, member_id, status, title, error FROM hh_notif_sent ORDER BY sent_at DESC LIMIT 20;"
+
+# Les clés VAPID (à sauvegarder avec la base : les perdre invalide tous les abonnements)
+sqlite3 /var/lib/foyer/foyer.db "SELECT key FROM hh_meta WHERE key LIKE 'vapid_%';"
+```
+
+| Ligne de journal | Sens |
+|---|---|
+| `Notifications : Web Push prêt (clés VAPID générées et gardées en base)` | Premier démarrage avec le canal. Au suivant : « clés VAPID existantes ». |
+| `Notifications : appareil abonné pour m1 (…)` | Un téléphone vient de s'abonner. |
+| `Notifications : rappel « … » (2026-09-05 18:00) → m1 : 1 appareil(s) ; me : aucun appareil abonné` | Un rappel est parti, membre par membre. « aucun appareil abonné » n'est pas une erreur, c'est un membre qui n'a jamais activé les rappels. |
+| `… → m1 : échec (abonnement expiré (HTTP 410), appareil retiré)` | L'icône a été supprimée ou l'autorisation retirée : à refaire sur le téléphone. |
+| `Notifications : rappel manqué pour « … »` | Le service était arrêté à l'heure du rappel. Noté, pas envoyé en retard. |
+| `Notifications : affectation « … » → m1 : sent` | Quelqu'un vient d'affecter la tâche à m1. |
+
+Le canal ne demande **aucune migration du document** : le schéma du foyer
+passe en version 3 (deux tables), appliqué au démarrage, sans toucher aux
+tâches.
+
 ## Où vit le code
 
 | Fichier | Rôle |
@@ -246,6 +356,11 @@ refuserait la tâche pour une liste qu'il ne connaît pas encore.
 | `backend/src/state/doc.ts` | Lecture et écriture brutes du document, partagées avec les courses. |
 | `backend/src/server.ts` | `GET /api/live`, et l'appel de `preserveTasks` dans `PUT /api/state`. |
 | `backend/src/state/migrations.ts` | Migration 9. |
+| `backend/src/notify/reminders.ts` | Quand une tâche rappelle et à qui, en heure murale du foyer : pur, testé. |
+| `backend/src/notify/push.ts` | Clés VAPID, appareils, envoi idempotent, journal, appareils morts retirés. |
+| `backend/src/notify/scheduler.ts` | Le passage à la minute. |
+| `backend/src/notify/routes.ts` | `/api/push` : état, abonnement, test. |
+| `frontend/public/sw.js`, `manifest.webmanifest` | Le service worker (notifications seulement) et le manifeste d'installation. |
 | `frontend/src/app/core/task-ops.ts` | Application locale d'une opération, et son inverse pour « Annuler ». |
 | `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, la tolérance, les suggestions, les dates d'un tap. |
 | `frontend/src/app/core/recurrence.ts` | Le moteur de récurrence : l'occurrence suivante dans les deux modes, le saut d'occurrence, la fenêtre de tolérance, le libellé de la règle. |
@@ -367,6 +482,8 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 | `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. |
 | `backend/test/tasks-repo.test.ts` | La couture avec la base : version qui n'avance pas pour rien, journal qui survit, deux téléphones sur la même tâche, et un `PUT` périmé qui ne peut ni décocher ni ressusciter. |
 | `backend/test/state-migrations.test.ts` | La migration 9 : chaque conversion, ce qui est nommé au journal, la rejouabilité, aucune tâche perdue. |
+| `backend/test/reminders.test.ts` | L'heure du rappel dans les quatre réglages, sans heure, à cheval sur minuit, l'heure murale du foyer été comme hiver, la fenêtre de rattrapage, les destinataires, la clé d'idempotence, les affectations. |
+| `backend/test/push.test.ts` | Clés gardées, abonnements sans doublon, envoi à tous les appareils et une seule fois par clé, « aucun appareil » visible, appareil mort retiré et panne passagère gardée, planificateur qui envoie, note les manqués et ne recommence pas, affectation signalée avec son opération. |
 | `frontend/src/app/core/task-ops.test.ts` | L'application locale sans bascule, l'inverse exact de chaque opération pour « Annuler », y compris sur une série (occurrence rétablie, saut annulé, suppression annulée avec règle et historique). |
 | `frontend/src/app/core/recurrence.test.ts` | Les deux modes : la piscine faite en retard qui repart de la réalisation, les poubelles du mardi qui ne rattrapent pas, toutes les N semaines sur certains jours, le mensuel borné, le 29 février, la fin de série, la tolérance, les libellés. |
 | `frontend/src/app/core/tasks.test.ts` | Le compteur et la relégation de l'accueil, ce qui se voit selon le type et la portée des listes, l'ordre des groupes, les suggestions, les catégories, les dates d'un tap, la lecture de l'échéance. |
@@ -376,8 +493,7 @@ Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
 ## Ce qui reste à faire
 
-Rappels et notifications (tranche 3 : la note d'analyse est dans
-[`taches-notifications.md`](taches-notifications.md)), liens vers un
+Liens vers un
 contrat ou un document, clôture proposée quand la dernière ligne de courses est
 cochée, date proposée d'après l'emploi du temps, tap sur une tâche depuis le
 calendrier et option ICS (tranche 4), glisser-déposer, sous-tâches et vue « ce

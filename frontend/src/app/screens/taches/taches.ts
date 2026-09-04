@@ -6,7 +6,7 @@ import { LIST_ICONS, PALETTE, tint } from '../../core/constants';
 import { ListKind, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
-import { KIND_LABELS, KIND_ORDER, TaskGroup, dailyTasks, doneTasks, dueLabel, groupOpen } from '../../core/tasks';
+import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, TaskGroup, dailyTasks, doneTasks, dueLabel, groupOpen } from '../../core/tasks';
 import { recLabel } from '../../core/recurrence';
 import { ModalComponent } from '../../shared/modal';
 import { WhoComponent } from '../../shared/who';
@@ -145,6 +145,7 @@ import { TaskComposerComponent } from './composer';
                     <div class="t-meta">
                       @if (l.task.due) { <span class="due" [class.late]="l.late > 0">{{ dueOf(l.task) }}@if (l.late > 0) { <span class="late-n"> · depuis {{ lateLabel(l.late) }}</span> }</span> }
                       @if (l.task.rec) { <span class="rec" [title]="recOf(l.task)"><f-icon name="refresh" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ recOf(l.task) }}</span> }
+                      @if (l.task.remind && l.task.due) { <span class="rec" title="Rappel"><f-icon name="bell" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ remindOf(l.task) }}</span> }
                       @if (l.task.cat) { <span class="pill" [style.background]="tint(listColor(l.task.listId))" [style.color]="listColor(l.task.listId)">{{ l.task.cat }}</span> }
                       @if (l.task.note) { <span class="note-mark" [title]="l.task.note"><f-icon name="edit" [size]="12" color="var(--ink3)" [width]="2.2" /> note</span> }
                       @if (active() === 'all') { <span class="list-badge" [style.color]="listColor(l.task.listId)"><span class="dot" [style.background]="listColor(l.task.listId)"></span>{{ listName(l.task.listId) }}</span> }
@@ -412,6 +413,7 @@ export class TachesScreen {
   badges(t: TaskItem) { return whoBadges(t, this.d().members); }
   dueOf(t: TaskItem): string { return dueLabel(t.due, t.time, this.store.todayStr(), (iso) => this.store.fmtNumDate(iso), t.rec?.grace); }
   recOf(t: TaskItem): string { return t.rec ? recLabel(t.rec, (iso) => this.store.fmtNumDate(iso)) : ''; }
+  remindOf(t: TaskItem): string { return t.remind ? REMIND_LABELS[t.remind].toLowerCase() : ''; }
   lastDone() { return (this.editing()?.history || []).slice(-5).reverse(); }
   lateLabel(days: number): string {
     if (days < 7) return days + (days > 1 ? ' jours' : ' jour');
@@ -429,7 +431,7 @@ export class TachesScreen {
   saveTask(draft: TaskDraft & { scope: 'one' | 'all' }): void {
     const t = this.editing();
     if (t) {
-      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec }, draft.scope);
+      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: draft.due ? draft.remind : null }, draft.scope);
       if (draft.scope === 'all') this.store.toast(t.rec || draft.rec ? 'Série modifiée' : 'Tâche modifiée');
     } else {
       this.store.createTask(draft);

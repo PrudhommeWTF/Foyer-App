@@ -150,6 +150,61 @@ import { ACADEMIES } from '../core/constants';
                 </div>
               }
             </div>
+
+            <!-- Les rappels sur le téléphone : ce qui marche ici, et ce qui est parti. Le
+                 push est muet quand il casse, donc tout ce que le serveur sait est montré. -->
+            <div class="push">
+              <div class="pref-label">Rappels sur cet appareil</div>
+              @switch (store.pushSupport()) {
+                @case ('checking') { <div class="pref-desc">Vérification…</div> }
+                @case ('unsupported') { <div class="pref-desc">Ce navigateur ne sait pas recevoir de rappels. Sur iPhone, ouvrez Foyer depuis l’icône de l’écran d’accueil.</div> }
+                @case ('install') {
+                  <div class="pref-desc">Sur iPhone, les rappels n’arrivent qu’à une application installée : dans Safari, touchez <b>Partager</b>, puis <b>Sur l’écran d’accueil</b>, et ouvrez Foyer depuis cette icône pour activer les rappels ici.</div>
+                }
+                @case ('denied') { <div class="pref-desc">Les notifications sont bloquées pour Foyer dans les réglages de cet appareil. Autorisez-les, puis revenez ici.</div> }
+                @case ('off') {
+                  <div class="pref-desc">Les rappels d’échéance et les tâches qu’on vous affecte arriveront ici, même l’application fermée.</div>
+                  <button class="btn btn-primary push-btn" [disabled]="store.pushBusy()" (click)="store.enablePush()"><f-icon name="bell" [size]="16" color="#fff" [width]="2.2" /> Activer les rappels sur cet appareil</button>
+                }
+                @case ('on') {
+                  <div class="pref-desc ok">Activés sur cet appareil.</div>
+                  <div class="push-acts">
+                    <button class="btn btn-soft grow" [disabled]="store.pushBusy()" (click)="store.testPush()">Envoyer un test</button>
+                    <button class="btn btn-ghost" [disabled]="store.pushBusy()" (click)="store.disablePush()">Désactiver ici</button>
+                  </div>
+                }
+              }
+
+              @if (store.pushStatus(); as ps) {
+                @if (ps.devices.length) {
+                  <div class="push-sub">Mes appareils</div>
+                  @for (dv of ps.devices; track dv.id) {
+                    <div class="push-dev">
+                      <div class="push-dev-body">
+                        <div class="push-dev-ua">{{ deviceName(dv.ua) }}</div>
+                        <div class="push-dev-meta">
+                          @if (dv.lastError) { <span class="ko">{{ dv.lastError }}</span> }
+                          @else if (dv.lastOkAt) { dernier envoi accepté le {{ store.fmtNumDate(dv.lastOkAt.slice(0, 10)) }} }
+                          @else { abonné le {{ store.fmtNumDate(dv.createdAt.slice(0, 10)) }}, rien d’envoyé encore }
+                        </div>
+                      </div>
+                      <button class="icon-btn sm" (click)="store.removePushDevice(dv.id)" aria-label="Retirer cet appareil"><f-icon name="x" [size]="15" color="var(--ink2)" [width]="2.2" /></button>
+                    </div>
+                  }
+                }
+                <div class="push-sub">Qui reçoit les rappels</div>
+                <div class="pref-desc">{{ subscribedNames(ps.subscribed) }}</div>
+                @if (ps.sends.length) {
+                  <div class="push-sub">Derniers envois</div>
+                  @for (s of ps.sends.slice(0, 8); track s.key + s.memberId) {
+                    <div class="push-send" [class.ko]="s.status === 'failed' || s.status === 'missed'">
+                      <span class="push-send-t">{{ s.title }}</span>
+                      <span class="push-send-m">{{ kindLabel(s.kind) }} · {{ store.memberName(s.memberId) || s.memberId }} · {{ sendLabel(s.status) }}{{ s.error ? ' : ' + s.error : '' }}</span>
+                    </div>
+                  }
+                }
+              }
+            </div>
           </div>
         </div>
 
@@ -307,6 +362,21 @@ import { ACADEMIES } from '../core/constants';
     .upd-bar { display: block; height: 100%; width: 40%; border-radius: 20px; background: var(--primary); animation: upd-slide 1.2s ease-in-out infinite; }
     @keyframes upd-slide { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
     code { background: var(--soft2); padding: 1px 6px; border-radius: 6px; font-size: 11px; }
+    .push { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .push .pref-desc.ok { color: #6E9E5F; }
+    .push-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .push-acts { display: flex; gap: 8px; margin-top: 10px; }
+    .push-acts .grow { flex: 1; }
+    .push-sub { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
+    .push-dev { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+    .push-dev-body { flex: 1; min-width: 0; }
+    .push-dev-ua { font-size: 13px; font-weight: 800; color: var(--ink); }
+    .push-dev-meta { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .ko { color: #C6492F; }
+    .push-send { display: flex; flex-direction: column; padding: 4px 0; }
+    .push-send-t { font-size: 12.5px; font-weight: 800; color: var(--ink); }
+    .push-send-m { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .push-send.ko .push-send-m { color: #C6492F; }
   `],
 })
 export class SettingsScreen {
@@ -331,6 +401,23 @@ export class SettingsScreen {
     if (confirm('Lancer la mise à jour de Foyer ? Le service va se recompiler et redémarrer (environ 1–2 min).')) {
       this.store.applyUpdate();
     }
+  }
+
+  /** « iPhone », « iPad », « Chrome sur Android », « Safari sur Mac » : lisible, pas l'agent complet. */
+  deviceName(ua: string): string {
+    if (/iPhone/.test(ua)) return 'iPhone';
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && /Mobile/.test(ua))) return 'iPad';
+    const nav = /Firefox/.test(ua) ? 'Firefox' : /Edg\//.test(ua) ? 'Edge' : /Chrome/.test(ua) ? 'Chrome' : /Safari/.test(ua) ? 'Safari' : 'Navigateur';
+    const os = /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
+    return os ? nav + ' sur ' + os : nav;
+  }
+  subscribedNames(ids: string[]): string {
+    const names = ids.map((id) => this.store.memberName(id)).filter(Boolean);
+    return names.length ? names.join(', ') : 'Personne n’a encore activé les rappels sur un appareil.';
+  }
+  kindLabel(k: string): string { return k === 'reminder' ? 'rappel' : k === 'assigned' ? 'affectation' : k === 'test' ? 'test' : k; }
+  sendLabel(s: string): string {
+    return s === 'sent' ? 'envoyé' : s === 'no-device' ? 'aucun appareil' : s === 'failed' ? 'échec' : s === 'missed' ? 'manqué (service arrêté)' : s;
   }
 
   async copyIcs(): Promise<void> {

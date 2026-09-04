@@ -1,9 +1,9 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, PushStatus, SetupPayload, ShopOp, ShopOpDraft, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
-import { categories, dailyTasks, dueLabel, suggestTexts, visibleLists } from './tasks';
+import { REMIND_LABELS, categories, dailyTasks, dueLabel, suggestTexts, visibleLists } from './tasks';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
 import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
@@ -63,6 +63,12 @@ const SHOP_QUEUE_KEY = 'foyer.shopQueue';
 const TASK_QUEUE_KEY = 'foyer.taskQueue';
 function loadQueue<T>(key: string): T[] {
   try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+/** La clé VAPID publique, en base64 URL, vers les octets que `subscribe` attend. */
+function urlBase64ToUint8Array(b64: string): Uint8Array<ArrayBuffer> {
+  const padded = (b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  return base64ToBytes(padded);
 }
 
 /** Durée d'un toast simple, et celle d'un toast qui propose de revenir en arrière. */
@@ -377,6 +383,105 @@ export class FoyerStore {
     this.loadSchoolHolidays();
     this.loadIcs();
     this.resumeUpdateIfRunning();
+    void this.initPush();
+  }
+
+  // ---- rappels par Web Push -------------------------------------------------
+  //
+  // Le navigateur s'abonne auprès du service push de son éditeur et confie
+  // l'abonnement au serveur, qui y enverra les rappels. Sur iPhone, seule une
+  // application ajoutée à l'écran d'accueil peut s'abonner : c'est l'état
+  // « install ». Le reste est muet quand il casse (voir docs/taches.md), d'où
+  // l'état détaillé dans Paramètres.
+
+  /** Où en est cet appareil. */
+  readonly pushSupport = signal<'checking' | 'unsupported' | 'install' | 'denied' | 'off' | 'on'>('checking');
+  readonly pushStatus = signal<PushStatus | null>(null);
+  readonly pushBusy = signal(false);
+  private swReg: ServiceWorkerRegistration | null = null;
+
+  /** iPhone ou iPad, où Safari n'accepte le push que depuis l'écran d'accueil. */
+  private isIos(): boolean {
+    return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+  private isStandalone(): boolean {
+    return matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & { standalone?: boolean }).standalone;
+  }
+
+  async initPush(): Promise<void> {
+    if (!('serviceWorker' in navigator)) { this.pushSupport.set('unsupported'); return; }
+    try {
+      this.swReg = await navigator.serviceWorker.register(new URL('sw.js', document.baseURI).href);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[foyer] rappels : service worker refusé : ' + (e as Error).message);
+      this.pushSupport.set('unsupported');
+      return;
+    }
+    if (!('PushManager' in window) || !('Notification' in window)) {
+      this.pushSupport.set(this.isIos() && !this.isStandalone() ? 'install' : 'unsupported');
+      return;
+    }
+    if (Notification.permission === 'denied') { this.pushSupport.set('denied'); }
+    else {
+      const sub = await this.swReg.pushManager.getSubscription();
+      this.pushSupport.set(sub ? 'on' : 'off');
+      // Un abonnement déjà là est redit au serveur : il a pu changer de membre ou être perdu en base.
+      if (sub) this.api.pushSubscribe(sub.toJSON(), navigator.userAgent).catch(() => { /* l'état l'affichera */ });
+    }
+    void this.refreshPushStatus();
+  }
+
+  async refreshPushStatus(): Promise<void> {
+    try { this.pushStatus.set(await this.api.pushStatus()); } catch { /* l'écran dit « indisponible » */ }
+  }
+
+  /** Sur un geste de l'utilisateur, obligatoirement : Safari refuse la demande sinon. */
+  async enablePush(): Promise<void> {
+    if (!this.swReg || this.pushBusy()) return;
+    this.pushBusy.set(true);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { this.pushSupport.set(perm === 'denied' ? 'denied' : 'off'); this.toast('Autorisation refusée : les rappels ne peuvent pas arriver ici.'); return; }
+      const key = this.pushStatus()?.publicKey || (await this.api.pushStatus()).publicKey;
+      const sub = await this.swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+      await this.api.pushSubscribe(sub.toJSON(), navigator.userAgent);
+      this.pushSupport.set('on');
+      this.toast('Rappels activés sur cet appareil');
+      await this.refreshPushStatus();
+    } catch (e) {
+      this.toast('Activation impossible : ' + (e as Error).message);
+    } finally { this.pushBusy.set(false); }
+  }
+
+  async disablePush(): Promise<void> {
+    if (!this.swReg || this.pushBusy()) return;
+    this.pushBusy.set(true);
+    try {
+      const sub = await this.swReg.pushManager.getSubscription();
+      if (sub) { await this.api.pushUnsubscribe(sub.endpoint).catch(() => { /* l'abonnement local part quand même */ }); await sub.unsubscribe(); }
+      this.pushSupport.set('off');
+      this.toast('Rappels désactivés sur cet appareil');
+      await this.refreshPushStatus();
+    } finally { this.pushBusy.set(false); }
+  }
+
+  async removePushDevice(id: number): Promise<void> {
+    try { await this.api.pushRemoveDevice(id); await this.refreshPushStatus(); this.toast('Appareil retiré'); }
+    catch (e) { this.toast((e as Error).message); }
+  }
+
+  /** Une vraie notification, tout de suite : le seul test qui vaille. */
+  async testPush(): Promise<void> {
+    if (this.pushBusy()) return;
+    this.pushBusy.set(true);
+    try {
+      const r = await this.api.pushTest();
+      this.toast(r.status === 'sent' ? 'Test envoyé à ' + r.devices + (r.devices > 1 ? ' appareils' : ' appareil') + ', il devrait arriver dans la seconde'
+        : r.status === 'no-device' ? 'Aucun appareil abonné pour vous' : 'Échec : ' + (r.error || r.status));
+      await this.refreshPushStatus();
+    } catch (e) { this.toast((e as Error).message); }
+    finally { this.pushBusy.set(false); }
   }
 
   // ---- calendar overlays -----------------------------------------------
@@ -1246,7 +1351,7 @@ export class FoyerStore {
     const due = draft.due || (draft.rec ? this.todayStr() : null);
     this.pushTaskOps([{
       op: 'add', id, listId, text, who: draft.who, due, time: due ? draft.time || null : null,
-      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec,
+      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: due ? draft.remind : null,
     }]);
     return id;
   }
@@ -1263,7 +1368,7 @@ export class FoyerStore {
       const { rec: _rec, ...rest } = fields; void _rec;
       const copy = { ...t, ...rest };
       this.taskOpsWithUndo([
-        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null },
+        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null },
         { op: 'skip', id, occ: t.due, next },
       ], 'Cette occurrence modifiée, la série continue');
       return;
@@ -2697,7 +2802,8 @@ export class FoyerStore {
     for (const t of dailyTasks(d.tasks, d.taskLists, this.currentMemberId())) {
       if (t.done || !t.due) continue;
       const qui = t.who.length ? ' · ' + t.who.map(mName).join(', ') : '';
-      if (t.due === today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.time ? ' à ' + t.time : '') + qui, time: "Aujourd'hui" });
+      const rappel = t.remind ? ' · rappel ' + REMIND_LABELS[t.remind].toLowerCase() : '';
+      if (t.due === today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: "À faire aujourd'hui" + (t.time ? ' à ' + t.time : '') + rappel + qui, time: "Aujourd'hui" });
       else if (t.due < today) raw.push({ id: `task-${t.id}-${t.due}`, kind: 'task', title: t.text, desc: 'En retard (prévue le ' + this.fmtNumDate(t.due) + ')' + qui, time: 'En retard' });
     }
 
