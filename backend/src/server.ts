@@ -2,7 +2,6 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { cacheControlFor } from './static-cache';
@@ -23,6 +22,7 @@ import {
   saveHousehold,
   setIcsToken,
   setSchoolHolidaysCache,
+  setPasswordHash,
   updateUserCredentials,
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
@@ -39,6 +39,7 @@ import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { conflictOf, isUpToDate } from './state/concurrency';
+import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
 import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
 import { setting } from './settings/registry';
@@ -49,6 +50,7 @@ import { LogLevel, log, setLogLevelSource } from './log';
 import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
 import { buildStatus } from './system/status';
 import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './auth/throttle';
+import { aRehacher, hacher, verifier } from './auth/passwords';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -252,7 +254,29 @@ const authLimiter = rateLimit({
  * chemin « compte inconnu » coûte désormais exactement ce que coûte le chemin
  * « mauvais mot de passe ».
  */
-const HASH_LEURRE = bcrypt.hashSync('mot de passe qui ne sert a personne', 10);
+let leurrePromis: Promise<string> | null = null;
+/**
+ * Calculé une fois, à la première connexion qui en a besoin, et gardé. Le poser
+ * au démarrage laisserait une fenêtre de quelques centaines de millisecondes où
+ * il serait vide, donc où le chemin « compte inconnu » redeviendrait instantané
+ * et trahirait de nouveau l'existence des comptes.
+ */
+const hashLeurre = (): Promise<string> => (leurrePromis ??= hacher('mot de passe qui ne sert a personne'));
+
+/**
+ * Une route asynchrone dont l'échec devient un 500, pas une promesse non
+ * traitée. Express 4 ne connaît pas les gestionnaires asynchrones : sans ce
+ * garde, un rejet inattendu remonte à Node, qui arrête le processus. Un mot de
+ * passe qui ne se hache pas ne doit pas couper l'application du foyer.
+ */
+const route = (fn: (req: AuthedRequest, res: Response) => Promise<void>) =>
+  (req: Request, res: Response, next: NextFunction): void => {
+    fn(req as AuthedRequest, res).catch((e) => {
+      log.erreur('Erreur inattendue sur une route asynchrone', e);
+      if (res.headersSent) { next(e); return; }
+      res.status(500).json({ error: 'Erreur interne du serveur.' });
+    });
+  };
 
 /**
  * Les deux compteurs de tentatives : par compte visé, et par adresse. Voir
@@ -388,7 +412,7 @@ api.get('/setup/status', (_req, res) => {
   res.json({ needsSetup: countUsers() === 0 });
 });
 
-api.post('/setup', authLimiter, (req: Request, res: Response) => {
+api.post('/setup', authLimiter, route(async (req, res) => {
   if (countUsers() > 0) {
     res.status(409).json({ error: 'La configuration a déjà été effectuée' });
     return;
@@ -432,15 +456,15 @@ api.post('/setup', authLimiter, (req: Request, res: Response) => {
     members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, birthday: m.birthday, email: m.email || undefined })),
   });
 
-  const adminUser = createUserWithMember(String(admin.email), String(admin.password), String(admin.name).trim(), state.members[0].id);
+  const adminUser = createUserWithMember(String(admin.email), await hacher(String(admin.password)), String(admin.name).trim(), state.members[0].id);
   for (const m of normMembers) {
-    if (m.email && m.password) createUserWithMember(m.email, m.password, m.name, m.id);
+    if (m.email && m.password) createUserWithMember(m.email, await hacher(m.password), m.name, m.id);
   }
   saveHousehold(state);
   res.status(201).json({ token: sign(adminUser), user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
-});
+}));
 
-api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
+api.post('/auth/login', authLimiter, route(async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     res.status(400).json({ error: 'Email et mot de passe requis' });
@@ -462,7 +486,7 @@ api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
   const user = findUserByEmail(cible);
   // Le compte inconnu paie la même vérification que le compte connu : sans cela
   // le chronomètre dit lequel des deux existe. Voir HASH_LEURRE.
-  const bon = bcrypt.compareSync(String(password), user ? user.password_hash : HASH_LEURRE);
+  const bon = await verifier(String(password), user ? user.password_hash : await hashLeurre());
   if (!user || !bon) {
     parCompte.echec(cible, now);
     parAdresse.echec(adresse, now);
@@ -472,9 +496,16 @@ api.post('/auth/login', authLimiter, (req: Request, res: Response) => {
   }
   parCompte.succes(cible);
   parAdresse.succes(adresse);
+  // Seul instant où le mot de passe en clair est disponible : on en profite pour
+  // refaire un condensat trop faible. Personne n'a rien à faire, et le parc se
+  // met à niveau au fil des connexions. La version du jeton ne bouge pas.
+  if (aRehacher(user.password_hash)) {
+    try { setPasswordHash(user.id, await hacher(String(password))); log.info(`Compte : condensat de ${user.email} remis au coût courant.`); }
+    catch (e) { log.attention('Compte : remise à niveau du condensat impossible', e); }
+  }
   log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
   res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
-});
+}));
 
 // Il n'y a pas d'inscription libre : un accès s'ouvre depuis la fiche d'un
 // membre (`POST /members/:memberId/account`, réservé à un administrateur), ce qui
@@ -487,11 +518,20 @@ api.get('/state', auth, requireMember, (_req, res) => {
 });
 
 api.put('/state', auth, requireMember, (req: AuthedRequest, res: Response) => {
-  const state = req.body?.state as HouseholdState | undefined;
-  if (state == null || typeof state !== 'object') {
-    res.status(400).json({ error: 'État invalide' });
-    return;
+  // La charpente est vérifiée avant tout le reste, et le refus nomme le champ :
+  // sans cela, un tableau remplacé par un nombre s'enregistrait sans un mot et
+  // rendait l'écran illisible pour toute la famille. Voir state/validate.ts.
+  try {
+    validateState(req.body?.state);
+  } catch (e) {
+    if (e instanceof StateInvalide) {
+      log.attention(`État refusé (${req.user?.email || 'compte inconnu'}) : ${e.message}`);
+      res.status(400).json({ error: 'Enregistrement refusé : ' + e.message });
+      return;
+    }
+    throw e;
   }
+  const state = req.body.state as HouseholdState;
 
   // Écriture concurrente : le client annonce la version sur laquelle il a
   // travaillé, et n'écrit pas par-dessus plus récent que lui. Voir
@@ -624,10 +664,10 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
  * autres sessions** : c'est le but. La session en cours, elle, reçoit un jeton
  * neuf, sinon on se déconnecterait soi-même en se protégeant.
  */
-api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response) => {
+api.put('/me/credentials', authLimiter, auth, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
-  if (!bcrypt.compareSync(String(req.body?.currentPassword ?? ''), user.password_hash)) {
+  if (!await verifier(String(req.body?.currentPassword ?? ''), user.password_hash)) {
     res.status(403).json({ error: 'Mot de passe actuel incorrect' });
     return;
   }
@@ -649,12 +689,12 @@ api.put('/me/credentials', authLimiter, auth, (req: AuthedRequest, res: Response
     }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
-  updateUserCredentials(user.id, email, password);
+  updateUserCredentials(user.id, email, password === undefined ? undefined : await hacher(password));
   const frais = getUserById(user.id);
   if (!frais) { res.status(500).json({ error: 'Compte introuvable après modification' }); return; }
   log.info(`Compte : ${user.email} (depuis ${req.ip || 'adresse inconnue'}) a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
   res.json({ email: frais.email, token: sign(frais), othersLoggedOut: password !== undefined });
-});
+}));
 
 // ---- Member login accounts (admin-managed) ----
 // Réservée à un administrateur : cette liste est l'inventaire exact des
@@ -664,7 +704,7 @@ api.get('/members/accounts', auth, requireAdmin, (_req, res) => {
   res.json({ accounts: listMemberAccounts() });
 });
 
-api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Response) => {
+api.post('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
   const memberId = req.params.memberId;
   const state = getHousehold().state as HouseholdState;
   const member = state.members.find((m) => m.id === memberId);
@@ -675,11 +715,11 @@ api.post('/members/:memberId/account', auth, requireAdmin, (req: Request, res: R
   if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
   if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
-  createUserWithMember(email, password, member.name, memberId);
+  createUserWithMember(email, await hacher(password), member.name, memberId);
   res.status(201).json({ memberId, email: email.toLowerCase() });
-});
+}));
 
-api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Response) => {
+api.put('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
   const memberId = req.params.memberId;
   const user = getUserByMemberId(memberId);
   if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
@@ -697,9 +737,9 @@ api.put('/members/:memberId/account', auth, requireAdmin, (req: Request, res: Re
     if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
-  updateUserCredentials(user.id, email, password);
+  updateUserCredentials(user.id, email, password === undefined ? undefined : await hacher(password));
   res.json({ memberId, email: (email ?? user.email).toLowerCase() });
-});
+}));
 
 api.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
   const memberId = req.params.memberId;
