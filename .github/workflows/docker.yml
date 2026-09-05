@@ -3,7 +3,12 @@ name: Build & publish image
 on:
   push:
     branches: [main, master]
-    tags: ['v*']
+    # Les deux conventions de nom, parce que le dépôt en utilise une seule et
+    # que ce n'était pas celle qui était filtrée : les tags de release sont
+    # « 0.0.46 », sans « v », donc aucune release n'a jamais construit d'image
+    # versionnée. « [0-9]* » les rattrape, « v* » garde valables les tags posés
+    # à la main avec le préfixe.
+    tags: ['v*', '[0-9]*']
   workflow_dispatch:
 
 env:
