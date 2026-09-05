@@ -510,14 +510,32 @@ const GESTES = new Set(['compte', 'membres']);
               <div class="upd-progress"><span class="upd-bar"></span></div>
               <div class="hint" style="margin-top:8px">Ne fermez pas cette page ; elle se rechargera automatiquement à la fin.</div>
             } @else {
+              <!-- Le canal se règle ici et non parmi les champs engendrés de la
+                   section : il décide de ce que le bouton juste dessous va
+                   chercher, et un réglage se comprend à côté de son effet. -->
+              @if (canalDecl; as d) {
+                <div class="fields" style="margin-bottom:14px">
+                  <f-setting [decl]="d" [value]="store.readDeclared(d)" [lock]="store.settingLock(d)"
+                    (change)="changerCanal(d, $event)" />
+                </div>
+              }
               @let u = store.updateInfo();
               @if (u?.updateAvailable) {
-                <div class="upd-badge new">Nouvelle version {{ u!.latestTag }} disponible</div>
+                <div class="upd-badge new">Nouvelle version {{ u!.latestTag }} disponible{{ u!.prerelease ? ' (préversion)' : '' }}</div>
                 @if (u!.name && u!.name !== u!.latestTag) { <div class="hint" style="margin-top:6px">{{ u!.name }}</div> }
                 <div class="upd-cur">Version installée : {{ u!.current }}</div>
                 @if (u!.url) { <a class="upd-link" [href]="u!.url" target="_blank" rel="noopener">Voir les notes de version ↗</a> }
                 @if (!u!.selfUpdate) {
-                  <div class="hint" style="margin-top:10px">Auto-MAJ désactivée. Sur le serveur : <code>bash deploy/lxc/update.sh</code> (ou réinstallez avec <code>SELF_UPDATE=true</code>).</div>
+                  <div class="hint" style="margin-top:10px">
+                    @if (u!.selfUpdateReason === 'coupee') {
+                      Mise à jour depuis l’interface refusée sur ce serveur (<code>FOYER_SELF_UPDATE</code>).
+                      Sur la machine : <code>bash deploy/lxc/update.sh</code>.
+                    } @else {
+                      Ce serveur n’a pas le dispositif de mise à jour en un clic.
+                      En LXC : <code>bash deploy/lxc/update.sh</code>.
+                      En Docker : <code>docker compose pull &amp;&amp; docker compose up -d</code>.
+                    }
+                  </div>
                 } @else if (!store.isAdmin()) {
                   <div class="hint" style="margin-top:10px">Seul un administrateur peut lancer la mise à jour.</div>
                 }
@@ -926,6 +944,19 @@ export class SettingsScreen {
   readonly ordreManuel = computed(() => !!this.store.setting('homeOrder').trim());
   /** Pourquoi l'ordre n'est pas modifiable ici, dans les mêmes termes que les autres réglages. */
   readonly verrou = computed(() => { const d = declOf('homeOrder'); return d ? this.store.settingLock(d) : ''; });
+
+  /** Le canal de mise à jour, rendu à la main dans le bloc « Mises à jour ». */
+  readonly canalDecl = declOf('updateChannel');
+
+  /**
+   * Changer de canal sans revérifier laisserait à l'écran la réponse de
+   * l'ancien : « à jour » alors qu'une préversion attend, ou l'inverse. Le
+   * réglage et son effet se voient donc du même geste.
+   */
+  async changerCanal(d: SettingDecl, val: boolean | number | string): Promise<void> {
+    await this.store.writeDeclared(d, val);
+    await this.store.checkUpdates();
+  }
 
   /** Échange la tuile avec sa voisine, et enregistre l'ordre entier. */
   deplacer(i: number, sens: 1 | -1): void {

@@ -351,7 +351,7 @@ met en place un **helper root déclenché par un `systemd.path`** : le backend (
 `foyer`, non privilégié) dépose un fichier déclencheur, et une unité root exécute la mise
 à jour puis redémarre le service — **sans sudo**, le durcissement du service reste intact.
 
-Pour **désactiver** l'auto-MAJ (l'app affichera simplement qu'une version est disponible
+Pour **désactiver** l'auto-MAJ (l'app continuera d'afficher qu'une version est disponible,
 et rappellera `bash deploy/lxc/update.sh`) :
 
 ```bash
@@ -362,9 +362,29 @@ SELF_UPDATE=false bash deploy/lxc/install.sh          # dans le conteneur
 Un choix explicite est mémorisé dans `/etc/foyer/foyer.env` (`FOYER_SELF_UPDATE`) et
 respecté lors des mises à jour suivantes.
 
-Variables : `FOYER_SELF_UPDATE` (`true`/`false`, défaut `true`), `FOYER_GITHUB_REPO`
+**Ce qui décide du bouton, c'est le dispositif, pas la variable.** Le serveur regarde si
+`/usr/local/sbin/foyer-self-update.sh` existe réellement ; sans lui, le bouton écrirait un
+déclencheur que personne ne lit. `FOYER_SELF_UPDATE` n'est donc qu'un **interrupteur
+d'arrêt** : posée à `false`, elle retire le bouton même sur une machine équipée ; laissée
+vide ou à `true`, elle ne décide de rien. Une image Docker n'a pas ce script, et l'écran y
+rappelle `docker compose pull` au lieu d'un script LXC qui n'y existe pas.
+
+La **disponibilité** d'une nouvelle version s'affiche dans tous les cas, y compris en
+Docker et auto-MAJ coupée : savoir qu'une version existe et pouvoir l'installer d'un clic
+sont deux choses différentes.
+
+**Versions stables ou préversions.** *Paramètres → Exploitation → Mises à jour* propose
+« Versions proposées » : par défaut les seules releases stables, ou bien les préversions
+(`pre-release`) incluses, pour essayer ce qui vient avant tout le monde. Le bouton installe
+la version que ce canal désigne : le backend la nomme dans le fichier déclencheur, et
+`self-update.sh` installe celle-là. Sur une machine dont le helper root date d'avant cette
+version, le premier clic installera encore la stable (le helper ne lit pas le tag demandé) ;
+il se remplace lui-même à cette occasion, et le clic suivant fait ce qu'il annonce.
+
+Variables : `FOYER_SELF_UPDATE` (interrupteur d'arrêt, `false` pour couper), `FOYER_GITHUB_REPO`
 (défaut `PrudhommeWTF/Foyer-App`), `FOYER_GITHUB_TOKEN` (optionnel, requis pour un
-dépôt privé : il sert aussi bien à la vérification qu'au téléchargement).
+dépôt privé : il sert aussi bien à la vérification qu'au téléchargement),
+`FOYER_SELF_UPDATE_HELPER` (chemin du script root, si ce n'est pas l'emplacement standard).
 
 ### Vérifier qu'une mise à jour est bien active
 

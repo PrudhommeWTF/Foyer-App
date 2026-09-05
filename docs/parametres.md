@@ -185,9 +185,11 @@ Version, mises à jour, sauvegardes, journal du service et journal des modificat
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
 | `logLevel` | Niveau de journalisation | Foyer | liste | `info` | `erreur`, `info`, `debug` | Exploitation | — |
+| `updateChannel` | Versions proposées | Foyer | liste | `latest` | `latest`, `prerelease` | Exploitation | — |
 | `backupKeep` | Sauvegardes conservées | Foyer | entier | `7` | de 1 à 60 | Exploitation | — |
 
 - **Niveau de journalisation** (`logLevel`) : Ce que le service écrit dans son journal, lisible avec « journalctl -u foyer » (LXC) ou « docker compose logs -f foyer ». Le changement est immédiat, sans redémarrage.
+- **Versions proposées** (`updateChannel`) : Ce que « Vérifier les mises à jour » va chercher sur GitHub. Les préversions servent à essayer ce qui vient avant tout le monde : elles sont publiées plus souvent et moins éprouvées. Le bouton « Mettre à jour maintenant » installe la version que ce canal désigne, pas une autre.
 - **Sauvegardes conservées** (`backupKeep`) : Combien d’instantanés de la base sont gardés dans le dossier de données. Au-delà, le plus ancien est effacé à la sauvegarde suivante, pour que le disque ne se remplisse pas tout seul.
 
 ### Serveur et déploiement
@@ -201,7 +203,8 @@ Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la c
 | `envPort` | Port d’écoute | Déploiement | texte | `8099` | 200 caractères au maximum | Exploitation | `PORT` |
 | `envJwtSecret` | Secret de signature des sessions | Déploiement | undefined | _(vide)_ | — | Accès | `FOYER_JWT_SECRET` |
 | `envCorsOrigins` | Origines cross-origin autorisées | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_CORS_ORIGINS` |
-| `envSelfUpdate` | Mise à jour automatique | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_SELF_UPDATE` |
+| `envSelfUpdate` | Mise à jour automatique refusée | Déploiement | texte | _(vide)_ | 200 caractères au maximum | Exploitation | `FOYER_SELF_UPDATE` |
+| `envUpdateHelper` | Script de mise à jour root | Déploiement | texte | `/usr/local/sbin/foyer-self-update.sh` | 200 caractères au maximum | Exploitation | `FOYER_SELF_UPDATE_HELPER` |
 | `envGithubRepo` | Dépôt consulté pour les mises à jour | Déploiement | texte | `PrudhommeWTF/Foyer-App` | 200 caractères au maximum | Exploitation | `FOYER_GITHUB_REPO` |
 | `envGithubToken` | Jeton GitHub | Déploiement | undefined | _(vide)_ | — | Exploitation | `FOYER_GITHUB_TOKEN` |
 | `envVapidPrivate` | Clé privée des rappels (VAPID) | Déploiement | undefined | _(vide)_ | — | Notifications | `FOYER_VAPID_PRIVATE` |
@@ -211,7 +214,8 @@ Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la c
 - **Port d’écoute** (`envPort`) : Le port sur lequel le service répond, derrière votre reverse-proxy le cas échéant.
 - **Secret de signature des sessions** (`envJwtSecret`) : Il protège tous les jetons de session : un secret faible laisse forger une session d’administrateur. Jamais affiché, seulement son état. En production, un secret absent ou trop court empêche le démarrage.
 - **Origines cross-origin autorisées** (`envCorsOrigins`) : À laisser vide en mono-conteneur : l’API sert sa propre application, donc aucune requête n’est cross-origin. Ne sert qu’à un déploiement où l’application est servie par un autre hôte.
-- **Mise à jour automatique** (`envSelfUpdate`) : Quand elle est active, le bouton « Mettre à jour maintenant » dépose un fichier déclencheur qu’une unité systemd root exécute. Elle ne se change pas ici : une unité systemd en dépend.
+- **Mise à jour automatique refusée** (`envSelfUpdate`) : Interrupteur d’arrêt, et rien d’autre : posée à « false », elle retire le bouton « Mettre à jour maintenant » même si la machine sait faire. Laissée vide, c’est la présence du script root qui décide, parce qu’une variable peut mentir et pas un fichier.
+- **Script de mise à jour root** (`envUpdateHelper`) : Le fichier dont la présence décide du bouton « Mettre à jour maintenant ». Il est déposé par l’installeur LXC et exécuté par systemd, hors du service ; en Docker il n’existe pas, et le bouton non plus. Utile pour comprendre pourquoi le bouton manque.
 - **Dépôt consulté pour les mises à jour** (`envGithubRepo`) : Le dépôt GitHub dont les releases sont comparées à la version installée.
 - **Jeton GitHub** (`envGithubToken`) : Facultatif, et seulement utile pour un dépôt privé ou pour ne pas se faire limiter par GitHub lors des vérifications de version.
 - **Clé privée des rappels (VAPID)** (`envVapidPrivate`) : Sans elle, une paire est engendrée au premier démarrage et gardée en base. En changer invalide tous les appareils déjà abonnés aux rappels.

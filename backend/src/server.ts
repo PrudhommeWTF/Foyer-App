@@ -56,6 +56,8 @@ import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finance
 import { LogLevel, log, setLogLevelSource } from './log';
 import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
 import { buildStatus } from './system/status';
+import { selfUpdateCapacite as capaciteSelfUpdate } from './system/self-update';
+import { Canal, fetchRelease, semverCmp } from './system/releases';
 import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './auth/throttle';
 import { aRehacher, hacher, verifier } from './auth/passwords';
 import {
@@ -65,8 +67,6 @@ import {
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const GITHUB_REPO = process.env.FOYER_GITHUB_REPO || 'PrudhommeWTF/Foyer-App';
-
-const selfUpdateEnabled = (): boolean => /^(1|true|yes|on)$/i.test(process.env.FOYER_SELF_UPDATE || '');
 
 function currentVersion(): string {
   // Source de vérité : la variable FOYER_VERSION (injectée par Docker au build et
@@ -78,36 +78,26 @@ function currentVersion(): string {
   return '0.0.0';
 }
 
-function semverCmp(a: string, b: string): number {
-  const pa = a.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  const pb = b.replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
-  return 0;
-}
-
 function ghHeaders(): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'Foyer-App' };
   if (process.env.FOYER_GITHUB_TOKEN) headers['Authorization'] = 'Bearer ' + process.env.FOYER_GITHUB_TOKEN;
   return headers;
 }
 
-async function fetchLatestRelease(): Promise<{ tag: string; name: string; body: string; url: string; publishedAt: string }> {
-  // Prefer a published GitHub Release; fall back to the highest semver tag.
-  const rel = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, { headers: ghHeaders(), signal: AbortSignal.timeout(8000) });
-  if (rel.ok) {
-    const j = (await rel.json()) as { tag_name: string; name?: string; body?: string; html_url: string; published_at: string };
-    return { tag: j.tag_name, name: j.name || j.tag_name, body: j.body || '', url: j.html_url, publishedAt: j.published_at };
-  }
-  if (rel.status !== 404) throw new Error('GitHub HTTP ' + rel.status);
+/** Le canal choisi par le foyer, tel qu'il s'applique vraiment. */
+/**
+ * La capacité de la machine à se mettre à jour elle-même, relue à chaque appel :
+ * un helper posé ou retiré entre deux requêtes doit se voir sans redémarrage.
+ */
+const selfUpdateCapacite = () => capaciteSelfUpdate({
+  refus: process.env.FOYER_SELF_UPDATE,
+  helper: process.env.FOYER_SELF_UPDATE_HELPER,
+});
 
-  const tagsRes = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/tags?per_page=100`, { headers: ghHeaders(), signal: AbortSignal.timeout(8000) });
-  if (!tagsRes.ok) throw new Error(tagsRes.status === 404 ? 'aucune release ni tag' : 'GitHub HTTP ' + tagsRes.status);
-  const tags = (await tagsRes.json()) as { name: string }[];
-  const semverTags = tags.map((t) => t.name).filter((n) => /^v?\d+\.\d+/.test(n)).sort((a, b) => semverCmp(a, b));
-  const latest = semverTags[semverTags.length - 1];
-  if (!latest) throw new Error('aucune release ni tag de version');
-  return { tag: latest, name: latest, body: '', url: `https://github.com/${GITHUB_REPO}/releases/tag/${latest}`, publishedAt: '' };
-}
+const canalCourant = (): Canal => (effectiveSetting('updateChannel') === 'prerelease' ? 'prerelease' : 'latest');
+
+const chercherRelease = (): Promise<Awaited<ReturnType<typeof fetchRelease>>> =>
+  fetchRelease(GITHUB_REPO, canalCourant(), ghHeaders());
 
 const PORT = parseInt(process.env.PORT || '8099', 10);
 
@@ -1199,31 +1189,42 @@ api.get('/calendar/feed.ics', icsLimiter, (req: Request, res: Response) => {
 
 // ---- System / self-update ----
 api.get('/system/version', auth, requireMember, (_req, res) => {
-  res.json({ current: currentVersion(), selfUpdate: selfUpdateEnabled(), repo: GITHUB_REPO });
+  const cap = selfUpdateCapacite();
+  res.json({ current: currentVersion(), selfUpdate: cap.possible, selfUpdateReason: cap.raison, repo: GITHUB_REPO });
 });
 
+// Savoir qu'une version existe et pouvoir l'installer sont deux choses
+// différentes : la disponibilité s'affiche partout, y compris en Docker, où
+// c'est l'exploitant qui tire l'image. Seul le bouton dépend de la capacité.
 api.get('/system/update-check', auth, requireMember, async (_req, res) => {
   const current = currentVersion();
+  const cap = selfUpdateCapacite();
+  const socle = { current, selfUpdate: cap.possible, selfUpdateReason: cap.raison, channel: canalCourant() };
   try {
-    const rel = await fetchLatestRelease();
+    const rel = await chercherRelease();
     const latest = rel.tag.replace(/^v/, '');
     res.json({
-      current, latest, latestTag: rel.tag, name: rel.name,
+      ...socle, latest, latestTag: rel.tag, name: rel.name,
       notes: rel.body.slice(0, 2000), url: rel.url, publishedAt: rel.publishedAt,
+      prerelease: rel.prerelease,
       updateAvailable: semverCmp(latest, current) > 0,
-      selfUpdate: selfUpdateEnabled(),
     });
   } catch (e) {
-    res.json({ current, error: 'Vérification impossible : ' + (e as Error).message, selfUpdate: selfUpdateEnabled() });
+    res.json({ ...socle, error: 'Vérification impossible : ' + (e as Error).message });
   }
 });
 
 // Trigger a self-update. The backend only drops a trigger file; a root-owned
-// systemd path unit (installed when FOYER_SELF_UPDATE=1) performs the actual
+// systemd path unit (installed alongside the helper) performs the actual
 // download/build/restart, so the service keeps its hardening (no sudo).
 api.post('/system/update', auth, requireAdmin, route(async (req, res) => {
-  if (!selfUpdateEnabled()) {
-    res.status(400).json({ error: 'Mise à jour automatique non activée sur ce serveur. Lancez « deploy/lxc/update.sh » manuellement.' });
+  const cap = selfUpdateCapacite();
+  if (!cap.possible) {
+    res.status(400).json({
+      error: cap.raison === 'coupee'
+        ? 'Mise à jour depuis l’interface refusée sur ce serveur (FOYER_SELF_UPDATE). Mettez à jour depuis la machine.'
+        : 'Ce serveur n’a pas le dispositif de mise à jour en un clic. Mettez à jour depuis la machine : « bash deploy/lxc/update.sh » en LXC, « docker compose pull && docker compose up -d » en Docker.',
+    });
     return;
   }
   // Le mot de passe, redemandé ici et nulle part ailleurs.
@@ -1240,12 +1241,35 @@ api.post('/system/update', auth, requireAdmin, route(async (req, res) => {
     res.status(403).json({ error: 'Mot de passe incorrect. Cette mise à jour installe et exécute du code sur le serveur : elle se confirme par votre mot de passe.' });
     return;
   }
-  log.info(`Mise à jour lancée par ${moi.email} depuis ${req.ip}.`);
+  // Quelle version, exactement ?
+  //
+  // Le helper root sait trouver « la dernière release » tout seul, et
+  // /releases/latest ignore les préversions : sur le canal « préversions », il
+  // installerait donc la stable pendant que l'écran annonce une rc. On lui
+  // nomme la version, il n'a plus à choisir. Une résolution ratée reste sans
+  // conséquence sur le canal stable (le helper retombe sur son propre calcul,
+  // à l'identique), mais elle est bloquante sur le canal préversion : mieux
+  // vaut ne rien installer qu'installer autre chose que ce qui est affiché.
+  const canal = canalCourant();
+  let cible = '';
+  try { cible = (await chercherRelease()).tag; }
+  catch (e) {
+    if (canal === 'prerelease') {
+      res.status(502).json({ error: 'Version à installer indéterminable : ' + (e as Error).message });
+      return;
+    }
+  }
+  log.info(`Mise à jour lancée par ${moi.email} depuis ${req.ip}${cible ? ` (${cible})` : ''}.`);
   try {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(path.join(DATA_DIR, 'update-status.json'), JSON.stringify({ state: 'running', message: 'Mise à jour lancée…', ts: Date.now() }));
-    fs.writeFileSync(path.join(DATA_DIR, '.update-trigger'), String(Date.now()));
-    res.json({ started: true });
+    // Le contenu de ce fichier est lu par un script qui tourne EN ROOT : rien
+    // n'y passe qui ne soit un tag de version, et le helper le revalide de son
+    // côté. Sans tag reconnaissable (ancien helper, résolution ratée), il
+    // retrouve son comportement d'avant, ce qui garde les deux compatibles.
+    const declencheur = /^v?\d[\w.+-]*$/.test(cible) ? `tag=${cible}\n` : String(Date.now());
+    fs.writeFileSync(path.join(DATA_DIR, '.update-trigger'), declencheur);
+    res.json({ started: true, tag: cible || undefined });
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
