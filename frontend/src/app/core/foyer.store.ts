@@ -136,8 +136,13 @@ export class FoyerStore {
   readonly isAdmin = signal(false);
   /** Membre mineur : les Paramètres lui sont fermés, et le serveur refuse aussi. */
   readonly isChild = signal(false);
+  /** Le second facteur est-il posé sur ce compte, et combien de codes de secours restent. */
+  readonly totpOn = signal(false);
+  readonly totpRecoveryLeft = signal<number | null>(null);
   readonly currentMemberId = signal<string | null>(null);
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
+  /** Les membres qui ont posé un second facteur. Rempli en même temps que `accounts`. */
+  readonly accountsTotp = signal<Set<string>>(new Set());
   /** L'adresse avec laquelle on s'est connecté, telle que le serveur la connaît. */
   readonly myEmail = signal('');
 
@@ -461,6 +466,8 @@ export class FoyerStore {
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
       this.isChild.set(me.enfant);
+      this.totpOn.set(me.totp);
+      this.totpRecoveryLeft.set(me.totpRecoveryLeft);
     } catch { /* ignore */ }
     await this.refreshAccounts();
     // Quelle version le serveur exécute réellement : la première question quand
@@ -690,11 +697,28 @@ export class FoyerStore {
     try {
       const { accounts } = await this.api.memberAccounts();
       this.accounts.set(Object.fromEntries(accounts.map((a) => [a.memberId, a.email])));
+      this.accountsTotp.set(new Set(accounts.filter((a) => a.totp).map((a) => a.memberId)));
     } catch { /* ignore */ }
   }
 
   memberHasAccount(memberId: string): boolean { return !!this.accounts()[memberId]; }
   memberAccountEmail(memberId: string): string { return this.accounts()[memberId] || ''; }
+  /** Ce membre a-t-il posé un second facteur ? Réservé à l'écran d'un administrateur. */
+  memberHasTotp(memberId: string): boolean { return this.accountsTotp().has(memberId); }
+
+  /**
+   * Retire le second facteur d'un membre : le téléphone est perdu, cassé ou
+   * réinitialisé, et les codes de secours avec. Le mot de passe de
+   * l'administrateur est redemandé par le serveur.
+   */
+  async resetMemberTotp(memberId: string, password: string): Promise<boolean> {
+    try {
+      await this.api.totpReset(memberId, password);
+      await this.refreshAccounts();
+      this.toast('Second facteur retiré. Ce membre se reconnecte avec son seul mot de passe.');
+      return true;
+    } catch (e) { this.toast((e as Error).message); return false; }
+  }
 
   /** Guard against older/partial state documents missing newer keys. */
   private normalise(s: HouseholdState): HouseholdState {
@@ -708,20 +732,61 @@ export class FoyerStore {
     return s;
   }
 
+  /**
+   * Le défi rendu par le premier temps de la connexion, quand le compte porte un
+   * second facteur. Il ne vaut que pour le second temps : il n'ouvre rien.
+   */
+  readonly totpChallenge = signal('');
+
   async login(email: string, password: string, remember = true): Promise<boolean> {
     this.authError.set('');
     this.api.setRemember(remember);
     try {
       const res = await this.api.login(email, password);
-      this.api.token = res.token;
-      await this.loadState();
-      this.authed.set(true);
-      this.toast('Bienvenue dans votre foyer');
-      return true;
+      // Second facteur posé : le mot de passe est bon, mais il ne suffit pas.
+      // L'écran passe à la saisie du code, sans rien ouvrir entre-temps.
+      if (res.totpRequired && res.challenge) {
+        this.totpChallenge.set(res.challenge);
+        return false;
+      }
+      return await this.entrer(res);
     } catch (e) {
       this.authError.set((e as Error).message);
       return false;
     }
+  }
+
+  /** Second temps : le code du téléphone, ou l'un des codes de secours. */
+  async loginTotp(code: string): Promise<boolean> {
+    const defi = this.totpChallenge();
+    if (!defi) return false;
+    this.authError.set('');
+    try {
+      return await this.entrer(await this.api.loginTotp(defi, code));
+    } catch (e) {
+      const msg = (e as Error).message;
+      this.authError.set(msg);
+      // Le défi a expiré ou ne vaut plus : renvoyer au mot de passe plutôt que
+      // de laisser quelqu'un ressaisir des codes dans le vide.
+      if (/expiré|plus valable/.test(msg)) this.abandonnerTotp();
+      return false;
+    }
+  }
+
+  /** Retour au mot de passe : le défi est jeté. */
+  abandonnerTotp(): void {
+    this.totpChallenge.set('');
+  }
+
+  /** Ce qui est commun aux deux chemins d'entrée, une fois le jeton obtenu. */
+  private async entrer(res: { token?: string }): Promise<boolean> {
+    if (!res.token) { this.authError.set('Réponse inattendue du serveur.'); return false; }
+    this.api.token = res.token;
+    this.totpChallenge.set('');
+    await this.loadState();
+    this.authed.set(true);
+    this.toast('Bienvenue dans votre foyer');
+    return true;
   }
 
   /**
@@ -762,8 +827,12 @@ export class FoyerStore {
     this.ui.set(initialUi());
     this.isAdmin.set(false);
     this.isChild.set(false);
+    this.totpOn.set(false);
+    this.totpRecoveryLeft.set(null);
+    this.totpChallenge.set('');
     this.currentMemberId.set(null);
     this.accounts.set({});
+    this.accountsTotp.set(new Set());
     this.myEmail.set('');
     this.schoolHolidays.set([]);
     this.icsToken.set('');

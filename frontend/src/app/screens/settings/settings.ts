@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DashboardStore } from '../../core/dashboard.store';
+import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { PALETTE } from '../../core/constants';
@@ -209,6 +210,73 @@ const GESTES = new Set(['compte', 'membres']);
                           <button class="btn btn-primary btn-block" style="margin-top:16px" [disabled]="credBusy()" (click)="enregistrerIdentifiants()">
                             {{ credBusy() ? 'Enregistrement…' : 'Mettre à jour mes identifiants' }}
                           </button>
+
+                          <div class="extra-t">Second facteur</div>
+                          @if (store.totpOn()) {
+                            <div class="totp-on">
+                              <f-icon name="check" [size]="16" color="#5F7E5C" [width]="3" />
+                              <span>Actif. Votre mot de passe seul ne suffit plus à ouvrir ce compte.</span>
+                            </div>
+                            @if (secoursRestants() !== null) {
+                              <div class="hint" [class.alerte]="secoursRestants()! <= 3">
+                                {{ secoursRestants() }} code(s) de secours restant(s).
+                                @if (secoursRestants()! <= 3) { Refaites-en une série pendant que vous le pouvez encore. }
+                              </div>
+                            }
+                            @if (totpCodes().length) {
+                              <div class="secours">
+                                <div class="secours-t">Vos nouveaux codes de secours. Notez-les maintenant : ils ne seront plus affichés.</div>
+                                <div class="secours-l">@for (c of totpCodes(); track c) { <code>{{ c }}</code> }</div>
+                                <button class="btn btn-soft btn-block" style="margin-top:10px" (click)="copierSecours()">
+                                  {{ secoursCopies() ? 'Copiés !' : 'Copier les codes' }}
+                                </button>
+                              </div>
+                            }
+                            <label class="field-label" for="tp-mdp">Mot de passe</label>
+                            <input id="tp-mdp" class="input" type="password" autocomplete="current-password"
+                              [ngModel]="totpMdp()" (ngModelChange)="totpMdp.set($event)" />
+                            <label class="field-label" for="tp-code">Code à 6 chiffres</label>
+                            <input id="tp-code" class="input" inputmode="numeric" autocomplete="one-time-code"
+                              [ngModel]="totpCode()" (ngModelChange)="totpCode.set($event)" placeholder="000000" />
+                            <div class="hint">Les deux sont exigés : le mot de passe seul suffirait à qui l’a volé, ce qui reviendrait à ne pas avoir de second facteur.</div>
+                            <button class="btn btn-soft btn-block" style="margin-top:14px" [disabled]="totpBusy()" (click)="refaireSecours()">
+                              Refaire mes codes de secours
+                            </button>
+                            <button class="btn btn-ghost btn-block" style="margin-top:10px" [disabled]="totpBusy()" (click)="retirerTotp()">
+                              Retirer le second facteur
+                            </button>
+                          } @else if (totpUri()) {
+                            <div class="hint">
+                              Ajoutez ce compte dans votre application d’authentification (Aegis, Google Authenticator,
+                              1Password, Bitwarden…), puis saisissez le code qu’elle affiche pour confirmer.
+                            </div>
+                            <div class="secret-b">
+                              <div class="secret-t">Clé à saisir dans l’application</div>
+                              <code class="secret">{{ totpSecretLisible() }}</code>
+                              <button class="btn btn-soft btn-block" style="margin-top:10px" (click)="copierSecret()">
+                                {{ secretCopie() ? 'Copiée !' : 'Copier la clé' }}
+                              </button>
+                            </div>
+                            <label class="field-label" for="tp-verif">Code affiché par l’application</label>
+                            <input id="tp-verif" class="input" inputmode="numeric" autocomplete="one-time-code"
+                              [ngModel]="totpCode()" (ngModelChange)="totpCode.set($event)" placeholder="000000" />
+                            <button class="btn btn-primary btn-block" style="margin-top:14px" [disabled]="totpBusy()" (click)="confirmerTotp()">
+                              {{ totpBusy() ? 'Vérification…' : 'Activer le second facteur' }}
+                            </button>
+                            <button class="btn btn-ghost btn-block" style="margin-top:10px" (click)="annulerTotp()">Annuler</button>
+                          } @else {
+                            <div class="hint">
+                              Un code à six chiffres, en plus du mot de passe. C’est la seule protection qui couvre le cas
+                              d’un mot de passe réutilisé ailleurs et découvert : ni la temporisation ni les journaux ne
+                              voient passer une connexion réussie du premier coup.
+                            </div>
+                            <label class="field-label" for="tp-start">Mot de passe</label>
+                            <input id="tp-start" class="input" type="password" autocomplete="current-password"
+                              [ngModel]="totpMdp()" (ngModelChange)="totpMdp.set($event)" />
+                            <button class="btn btn-primary btn-block" style="margin-top:14px" [disabled]="totpBusy()" (click)="commencerTotp()">
+                              {{ totpBusy() ? 'Préparation…' : 'Activer le second facteur' }}
+                            </button>
+                          }
 
                           <button class="btn btn-soft btn-block" style="margin-top:22px" (click)="store.logout()">
                             <f-icon name="logout" [size]="18" color="var(--ink2)" [width]="2.2" /> Se déconnecter
@@ -555,6 +623,15 @@ const GESTES = new Set(['compte', 'membres']);
     .moi-m { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
     .input.court { max-width: 120px; text-transform: uppercase; }
 
+    .totp-on { display: flex; align-items: center; gap: 9px; background: #EDF2EB; border-radius: 12px; padding: 12px 14px; font-size: 13.5px; font-weight: 700; color: #4A6247; margin-bottom: 12px; }
+    .hint.alerte { color: var(--primary); font-weight: 800; }
+    .secret-b { background: var(--soft); border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .secret-t { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .secret { display: block; font-size: 17px; font-weight: 800; letter-spacing: 2px; word-break: break-all; color: var(--ink); }
+    .secours { background: #FDF0DA; border-radius: 14px; padding: 14px; margin: 12px 0; }
+    .secours-t { font-size: 13px; font-weight: 800; color: #8A6520; margin-bottom: 10px; }
+    .secours-l { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+    .secours-l code { font-size: 14px; font-weight: 800; letter-spacing: 1px; color: var(--ink); }
     .find { display: flex; align-items: center; gap: 9px; background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-input); padding: 0 13px; margin-bottom: 20px; }
     .find .input { border: none; background: none; padding: 13px 0; flex: 1; min-width: 0; }
     .find .input:focus { border: none; outline: none; }
@@ -679,6 +756,7 @@ const GESTES = new Set(['compte', 'membres']);
 export class SettingsScreen {
   store = inject(FoyerStore);
   dash = inject(DashboardStore);
+  private api = inject(ApiService);
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
   copied = signal(false);
 
@@ -694,6 +772,97 @@ export class SettingsScreen {
   readonly mdpNeuf = signal('');
   readonly mdpConfirme = signal('');
   readonly credBusy = signal(false);
+
+  // ---- second facteur ------------------------------------------------------
+  /** L'enrôlement en cours : la clé à saisir, tant qu'elle n'est pas confirmée. */
+  readonly totpUri = signal('');
+  readonly totpSecretLisible = signal('');
+  readonly totpMdp = signal('');
+  readonly totpCode = signal('');
+  readonly totpBusy = signal(false);
+  /** Les codes de secours, montrés une seule fois : ils ne sont pas rangés en clair. */
+  readonly totpCodes = signal<string[]>([]);
+  readonly secretCopie = signal(false);
+  readonly secoursCopies = signal(false);
+  readonly secoursRestants = this.store.totpRecoveryLeft;
+
+  async commencerTotp(): Promise<void> {
+    if (this.totpBusy()) return;
+    this.totpBusy.set(true);
+    try {
+      const r = await this.api.totpStart(this.totpMdp());
+      this.totpUri.set(r.uri);
+      this.totpSecretLisible.set(r.secretLisible);
+      this.totpMdp.set('');
+    } catch (e) { this.store.toast((e as Error).message); }
+    this.totpBusy.set(false);
+  }
+
+  async confirmerTotp(): Promise<void> {
+    if (this.totpBusy()) return;
+    this.totpBusy.set(true);
+    try {
+      const r = await this.api.totpEnable(this.totpCode().trim());
+      this.totpCodes.set(r.recovery);
+      this.totpUri.set('');
+      this.totpSecretLisible.set('');
+      this.totpCode.set('');
+      this.store.totpOn.set(true);
+      this.store.totpRecoveryLeft.set(r.recovery.length);
+      this.store.toast('Second facteur activé. Notez vos codes de secours.');
+    } catch (e) { this.store.toast((e as Error).message); }
+    this.totpBusy.set(false);
+  }
+
+  annulerTotp(): void {
+    this.totpUri.set('');
+    this.totpSecretLisible.set('');
+    this.totpCode.set('');
+  }
+
+  async retirerTotp(): Promise<void> {
+    if (this.totpBusy()) return;
+    if (!confirm('Retirer le second facteur ? Votre mot de passe seul suffira de nouveau à ouvrir ce compte.')) return;
+    this.totpBusy.set(true);
+    try {
+      await this.api.totpDisable(this.totpMdp(), this.totpCode().trim());
+      this.store.totpOn.set(false);
+      this.store.totpRecoveryLeft.set(null);
+      this.totpCodes.set([]);
+      this.totpMdp.set(''); this.totpCode.set('');
+      this.store.toast('Second facteur retiré.');
+    } catch (e) { this.store.toast((e as Error).message); }
+    this.totpBusy.set(false);
+  }
+
+  async refaireSecours(): Promise<void> {
+    if (this.totpBusy()) return;
+    this.totpBusy.set(true);
+    try {
+      const r = await this.api.totpNewRecovery(this.totpMdp(), this.totpCode().trim());
+      this.totpCodes.set(r.recovery);
+      this.store.totpRecoveryLeft.set(r.recovery.length);
+      this.totpMdp.set(''); this.totpCode.set('');
+      this.store.toast('Codes de secours refaits. Les anciens ne valent plus rien.');
+    } catch (e) { this.store.toast((e as Error).message); }
+    this.totpBusy.set(false);
+  }
+
+  async copierSecret(): Promise<void> {
+    // La clé sans les espaces : c'est ce que l'application attend, les espaces
+    // n'étaient là que pour la relire.
+    try {
+      await navigator.clipboard.writeText(this.totpSecretLisible().replace(/\s/g, ''));
+      this.secretCopie.set(true); setTimeout(() => this.secretCopie.set(false), 1800);
+    } catch { this.store.toast('Copie impossible : recopiez la clé à la main.'); }
+  }
+
+  async copierSecours(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(this.totpCodes().join('\n'));
+      this.secoursCopies.set(true); setTimeout(() => this.secoursCopies.set(false), 1800);
+    } catch { this.store.toast('Copie impossible : recopiez les codes à la main.'); }
+  }
 
   /** Les réglages du serveur, indexés par clé, tels que le serveur les applique. */
   readonly serveur = computed<Record<string, { value: string; set: boolean }>>(() =>

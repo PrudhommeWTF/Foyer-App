@@ -40,6 +40,27 @@ interface FamilyChip { ini: string; name: string; color: string; }
             <div class="brand-badge sm"><f-icon name="home" [size]="24" color="#fff" [width]="2.2" /></div>
             <div class="brand-name" style="color:var(--ink)">Foyer</div>
           </div>
+          @if (store.totpChallenge()) {
+            <!-- Second temps. Le mot de passe est bon ; il ne suffit pas. -->
+            <div class="title f-display">Encore une chose 🔐</div>
+            <div class="subtitle">Entrez le code affiché par votre application d’authentification</div>
+
+            <label class="field-label">Code à 6 chiffres</label>
+            <input class="input code-input" [(ngModel)]="totpCode" (keydown.enter)="submitTotp()"
+                   inputmode="numeric" autocomplete="one-time-code" placeholder="000000" maxlength="14" />
+
+            @if (error()) { <div class="err">{{ error() }}</div> }
+
+            <button class="btn btn-primary btn-block" style="padding:15px" (click)="submitTotp()" [disabled]="busy()">
+              {{ busy() ? 'Vérification…' : 'Valider' }}
+            </button>
+            <button class="btn btn-ghost btn-block" style="margin-top:10px" (click)="retour()">Revenir au mot de passe</button>
+
+            <div class="note">
+              Téléphone perdu ou hors service ? Entrez l’un de vos codes de secours à la place.
+              Si vous n’en avez plus, un administrateur du foyer peut retirer la protection depuis l’écran Famille.
+            </div>
+          } @else {
           <div class="title f-display">Bon retour 👋</div>
           <div class="subtitle">Connectez-vous à votre espace famille</div>
 
@@ -68,12 +89,14 @@ interface FamilyChip { ini: string; name: string; color: string; }
           </button>
 
           <div class="note">Votre foyer est géré par son administrateur. Demandez-lui vos identifiants pour vous connecter.</div>
+          }
         </div>
       </div>
     </div>
   `,
   styles: [`
     :host { display: block; }
+    .code-input { font-size: 26px; font-weight: 800; letter-spacing: 6px; text-align: center; font-variant-numeric: tabular-nums; }
     .login { width: 100%; min-height: 100vh; display: flex; }
     .art {
       flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 54px;
@@ -110,6 +133,7 @@ export class LoginComponent {
   store = inject(FoyerStore);
   email = '';
   pwd = '';
+  totpCode = '';
   show = signal(false);
   remember = signal(true);
   busy = signal(false);
@@ -127,5 +151,22 @@ export class LoginComponent {
     this.busy.set(true);
     await this.store.login(this.email.trim(), this.pwd, this.remember());
     this.busy.set(false);
+  }
+
+  async submitTotp(): Promise<void> {
+    if (this.busy() || !this.totpCode.trim()) return;
+    this.busy.set(true);
+    await this.store.loginTotp(this.totpCode.trim());
+    // Le champ est vidé dans tous les cas : un code refusé ne se réessaie pas
+    // tel quel, et un code accepté n'a plus à traîner à l'écran.
+    this.totpCode = '';
+    this.busy.set(false);
+  }
+
+  /** Retour au mot de passe : le défi est abandonné, le mot de passe ressaisi. */
+  retour(): void {
+    this.store.abandonnerTotp();
+    this.totpCode = '';
+    this.pwd = '';
   }
 }
