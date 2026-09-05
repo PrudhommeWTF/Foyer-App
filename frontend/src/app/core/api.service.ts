@@ -47,7 +47,14 @@ export interface UpdateInfo {
   url?: string;
   publishedAt?: string;
   updateAvailable?: boolean;
+  /** La version proposée est une préversion : l'écran le dit, on n'installe pas une rc sans le savoir. */
+  prerelease?: boolean;
+  /** Le canal consulté, tel qu'il s'applique sur le serveur. */
+  channel?: 'latest' | 'prerelease';
+  /** Le serveur sait-il lancer la mise à jour lui-même. Constaté sur la machine, pas déclaré. */
   selfUpdate: boolean;
+  /** Quand il ne sait pas : « coupee » (refusée explicitement) ou « absente » (pas le dispositif). */
+  selfUpdateReason?: 'coupee' | 'absente';
   error?: string;
 }
 
@@ -361,7 +368,7 @@ export class ApiService {
   /** Les règles de contexte de l'accueil, telles qu'elles s'appliquent réellement. */
   homeRules(): Promise<RulesOutcome> { return this.request('home/rules'); }
 
-  systemVersion(): Promise<{ current: string; selfUpdate: boolean; repo: string }> { return this.request('system/version'); }
+  systemVersion(): Promise<{ current: string; selfUpdate: boolean; selfUpdateReason?: 'coupee' | 'absente'; repo: string }> { return this.request('system/version'); }
 
   // ---- exploitation ----
   systemStatus(): Promise<SystemStatus> { return this.request('system/status'); }

@@ -64,10 +64,14 @@ systemctl show foyer -p Environment | tr ' ' '\n' | grep FOYER_
 ```
 
 - [ ] Le répertoire de données est en 700, la base en 600, propriété de `foyer`.
-- [ ] `FOYER_SELF_UPDATE` est la valeur que vous voulez. Laissée à `true`, un
-      compte administrateur compromis peut faire exécuter du code en root sur
-      cette machine ; la mise à jour redemande maintenant le mot de passe, ce qui
-      ferme le cas du jeton dérobé mais pas celui du mot de passe connu.
+- [ ] La mise à jour en un clic est dans l'état que vous voulez. Ce n'est plus
+      la variable qui décide mais la présence de
+      `/usr/local/sbin/foyer-self-update.sh` : vérifiez le fichier, pas la
+      déclaration (`ls -l /usr/local/sbin/foyer-self-update.sh`). Tant qu'il est
+      là, un compte administrateur compromis peut faire exécuter du code en root
+      sur cette machine ; la mise à jour redemande le mot de passe, ce qui ferme
+      le cas du jeton dérobé mais pas celui du mot de passe connu.
+      `FOYER_SELF_UPDATE=false` reste l'interrupteur d'arrêt franc.
 
 ### L'écoute réseau
 

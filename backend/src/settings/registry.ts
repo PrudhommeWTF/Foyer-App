@@ -455,6 +455,18 @@ export const REGISTRY = [
     ],
   },
   {
+    key: 'updateChannel',
+    type: 'enum', scope: 'foyer', section: 'exploitation', module: 'Exploitation',
+    custom: true,
+    label: 'Versions proposées',
+    desc: 'Ce que « Vérifier les mises à jour » va chercher sur GitHub. Les préversions servent à essayer ce qui vient avant tout le monde : elles sont publiées plus souvent et moins éprouvées. Le bouton « Mettre à jour maintenant » installe la version que ce canal désigne, pas une autre.',
+    default: 'latest',
+    options: [
+      { value: 'latest', label: 'Versions stables uniquement' },
+      { value: 'prerelease', label: 'Inclure les préversions (pre-release)' },
+    ],
+  },
+  {
     key: 'backupKeep',
     type: 'int', scope: 'foyer', section: 'exploitation', module: 'Exploitation',
     label: 'Sauvegardes conservées',
@@ -506,9 +518,16 @@ export const REGISTRY = [
   {
     key: 'envSelfUpdate',
     type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
-    label: 'Mise à jour automatique',
-    desc: 'Quand elle est active, le bouton « Mettre à jour maintenant » dépose un fichier déclencheur qu’une unité systemd root exécute. Elle ne se change pas ici : une unité systemd en dépend.',
+    label: 'Mise à jour automatique refusée',
+    desc: 'Interrupteur d’arrêt, et rien d’autre : posée à « false », elle retire le bouton « Mettre à jour maintenant » même si la machine sait faire. Laissée vide, c’est la présence du script root qui décide, parce qu’une variable peut mentir et pas un fichier.',
     default: '', envOverride: 'FOYER_SELF_UPDATE',
+  },
+  {
+    key: 'envUpdateHelper',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'Exploitation',
+    label: 'Script de mise à jour root',
+    desc: 'Le fichier dont la présence décide du bouton « Mettre à jour maintenant ». Il est déposé par l’installeur LXC et exécuté par systemd, hors du service ; en Docker il n’existe pas, et le bouton non plus. Utile pour comprendre pourquoi le bouton manque.',
+    default: '/usr/local/sbin/foyer-self-update.sh', envOverride: 'FOYER_SELF_UPDATE_HELPER',
   },
   {
     key: 'envGithubRepo',

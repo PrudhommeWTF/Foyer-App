@@ -3357,8 +3357,8 @@ export class FoyerStore {
     if (info && info.overrides[d.key] !== undefined) return info.values[d.key];
     return this.setting(d.key as SettingKey);
   }
-  writeDeclared(d: SettingDecl, val: boolean | number | string): void {
-    this.setSetting(d.key as SettingKey, val as SettingValue<SettingKey>);
+  writeDeclared(d: SettingDecl, val: boolean | number | string): Promise<void> {
+    return this.setSetting(d.key as SettingKey, val as SettingValue<SettingKey>);
   }
 
   /**
@@ -3373,7 +3373,7 @@ export class FoyerStore {
    * L'écriture est ciblée (PATCH /api/settings) et non un enregistrement du
    * document : deux administrateurs qui règlent deux choses ne s'écrasent pas.
    */
-  setSetting<K extends SettingKey>(key: K, val: SettingValue<K>): void {
+  async setSetting<K extends SettingKey>(key: K, val: SettingValue<K>): Promise<void> {
     // Un réglage du foyer engage tout le monde, une préférence n'engage que soi.
     // Le serveur refuse de toute façon : le dire tout de suite évite un
     // interrupteur qui bascule puis revient tout seul, ce qui ressemble à une panne.
@@ -3385,7 +3385,11 @@ export class FoyerStore {
     if (!checked.ok) { this.toast(checked.error); return; }
     const avant = this.setting(key);
     if (avant === checked.value) return;
-    this.writeSetting(key, checked.value as SettingValue<K>, avant);
+    // Rendue attendable : un appelant qui enchaîne sur l'effet du réglage (le
+    // canal de mise à jour revérifie dans la foulée) doit partir après
+    // l'enregistrement, sinon le serveur répondrait avec l'ancienne valeur.
+    // La pose locale, elle, reste immédiate : l'écran ne clignote pas.
+    return this.writeSetting(key, checked.value as SettingValue<K>, avant);
   }
 
   private async writeSetting<K extends SettingKey>(key: K, val: SettingValue<K>, avant: SettingValue<K>): Promise<void> {

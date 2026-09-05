@@ -79,6 +79,19 @@ mkdir -p "$DATA_DIR"
 exec >>"$LOG" 2>&1
 echo "=========================================="
 echo "[$(date)] Mise à jour Foyer — début"
+
+# La version demandée, telle que le backend l'a nommée dans le déclencheur.
+#
+# Sans elle, ce script choisit lui-même « la dernière release », et
+# /releases/latest ignore les préversions : un foyer réglé sur le canal
+# « préversions » verrait donc s'installer la stable, en silence, pendant que
+# l'écran annonce une rc. Le backend nomme la version, ce script l'installe.
+#
+# Ce fichier est écrit par le service NON PRIVILÉGIÉ et lu ici EN ROOT : le
+# filtre est la frontière de privilège. Il n'accepte qu'un tag de version, sans
+# aucun caractère que le shell interprète, et le rejet est silencieux (repli sur
+# la recherche habituelle) plutôt que fatal.
+WANT="$(grep -oP '^tag=\Kv?[0-9][A-Za-z0-9._+-]*$' "${DATA_DIR}/.update-trigger" 2>/dev/null | head -n1 || true)"
 rm -f "${DATA_DIR}/.update-trigger"
 step "Recherche de la dernière version" "Recherche de la dernière version…"
 
@@ -94,9 +107,13 @@ api() {
   curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused --connect-timeout 15 \
        -H 'User-Agent: Foyer' "${auth[@]}" "$1" 2>/dev/null || true
 }
-TAG="$(api "https://api.github.com/repos/${REPO}/releases/latest" | grep -oP '"tag_name":\s*"\K[^"]+' | head -n1 || true)"
-if [ -z "$TAG" ]; then
-  TAG="$(api "https://api.github.com/repos/${REPO}/tags?per_page=100" | grep -oP '"name":\s*"\Kv?[0-9][^"]*' | sort -V | tail -n1 || true)"
+if [ -n "$WANT" ]; then
+  TAG="$WANT"
+else
+  TAG="$(api "https://api.github.com/repos/${REPO}/releases/latest" | grep -oP '"tag_name":\s*"\K[^"]+' | head -n1 || true)"
+  if [ -z "$TAG" ]; then
+    TAG="$(api "https://api.github.com/repos/${REPO}/tags?per_page=100" | grep -oP '"name":\s*"\Kv?[0-9][^"]*' | sort -V | tail -n1 || true)"
+  fi
 fi
 [ -n "$TAG" ] || fail "Impossible de déterminer la dernière version (GitHub injoignable ?)"
 echo "Dernière version : $TAG"

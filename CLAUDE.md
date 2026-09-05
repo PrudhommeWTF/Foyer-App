@@ -71,6 +71,6 @@ docs/         # maquette de design de référence
 ## Déploiement (rappels)
 
 - **Secret JWT obligatoire** : `FOYER_JWT_SECRET` (≥ 16 caractères). En production, un secret absent ou trop faible empêche le démarrage.
-- **Auto-mise à jour** activée par défaut en LXC : le backend (non privilégié) dépose un fichier déclencheur, une unité systemd `path` root exécute `self-update.sh` (télécharge la dernière release, recompile, redémarre). Désactivable via `SELF_UPDATE=false`.
+- **Auto-mise à jour** activée par défaut en LXC : le backend (non privilégié) dépose un fichier déclencheur nommant la version, une unité systemd `path` root exécute `self-update.sh` (télécharge ce tag, recompile, redémarre). Ce qui décide de l'offrir, c'est la **présence du helper root** sur le disque, pas une variable ; `SELF_UPDATE=false` reste l'interrupteur d'arrêt. La **disponibilité** d'une version s'affiche dans tous les cas. Le réglage `updateChannel` choisit entre releases stables et préversions.
 - **Calendrier partagé** en lecture seule via flux **ICS** (`/api/calendar/feed.ics?token=…`) : événements, échéances de contrat, et les tâches datées sur option (`settings.icsTasks`). Pas de CalDAV.
 - **Vacances scolaires** récupérées auprès de `data.education.gouv.fr` selon l'académie (mises en cache, dégradation silencieuse si pas de réseau). **Jours fériés** France métropolitaine calculés localement.
