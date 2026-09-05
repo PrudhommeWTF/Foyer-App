@@ -626,7 +626,10 @@ sur un site tiers : on colle le lien d'une page choisie.
 - `.github/workflows/ci.yml` — build backend + frontend, **tests** et détection de code mort à chaque push/PR.
 - `.github/workflows/docker.yml` — publie une image **multi-arch** (`amd64`, `arm64`) sur
   `ghcr.io/<owner>/foyer-app` (tags `latest` + `sha` sur la branche par défaut ; `X.Y.Z`
-  et `X.Y` sur tag Git `vX.Y.Z`). La version affichée dans l'app provient du tag Git.
+  et `X.Y` sur un tag Git de version, avec ou sans préfixe `v`). La version affichée dans
+  l'app provient du tag Git. Les images antérieures à cette correction n'existent qu'en
+  `latest` et `sha-…` : le filtre n'attrapait que `v*`, alors que les tags de release de
+  ce dépôt s'écrivent `0.0.46`.
 
 ## 📝 Licence
 
