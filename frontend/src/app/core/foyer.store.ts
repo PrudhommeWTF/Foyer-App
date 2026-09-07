@@ -734,6 +734,10 @@ export class FoyerStore {
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
     s.articles ||= [];
+    // `who` d'un événement est une liste (plusieurs membres). Un document d'avant
+    // la migration 11, ou lu hors ligne, peut encore porter une chaîne : on la
+    // met en liste ici aussi, pour que l'affichage n'ait jamais à s'en soucier.
+    for (const e of s.events || []) { const w = e.who as unknown; if (typeof w === 'string') e.who = w ? [w] : []; else if (!Array.isArray(w)) e.who = []; }
     s.tasks ||= [];
     s.taskLists ||= [];
     s.taskTemplates ||= [];
@@ -1282,13 +1286,16 @@ export class FoyerStore {
   }
   openEvent(): void {
     const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evWho: this.members()[0]?.id || 'cam', evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
+    // Pré-affecté au membre courant : un événement qu'on crée est le plus souvent
+    // le sien, et on peut en ajouter d'autres.
+    const moi = this.me()?.id;
+    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evWho: moi ? [moi] : [], evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
   }
   editEvent(id: string): void {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
     const m = parseInt(ev.date.slice(5, 7), 10) - 7;
-    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evWho: ev.who, evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
   }
   dpPick(ds: string): void {
     const s = this.ui();
@@ -1307,14 +1314,20 @@ export class FoyerStore {
     this.mutate((d) => {
       if (s.evEditId) {
         const i = d.events.findIndex((e) => e.id === s.evEditId);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, who: s.evWho, recur: s.evRecur, end: s.evEnd || null };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null };
       } else {
-        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, who: s.evWho, recur: s.evRecur, end: s.evEnd || null });
+        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null });
       }
     });
     this.toast(s.evEditId ? 'Événement modifié' : 'Événement ajouté à l’agenda');
     this.patch({ showEvent: false, evEditId: null });
   }
+  /** Ajoute ou retire un membre de l'événement en cours d'édition. Aucun membre est licite (événement du foyer). */
+  toggleEvWho(id: string): void {
+    const cur = this.ui().evWho;
+    this.patch({ evWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
+
   delEvent(): void {
     const id = this.ui().evEditId; if (!id) return;
     this.mutate((d) => { d.events = d.events.filter((e) => e.id !== id); });
@@ -2153,7 +2166,7 @@ export class FoyerStore {
       } else {
         d.events.push({
           id: uid('e'), date: e.dateStr, title: titre, time: heure || '—',
-          who: this.me()?.id || this.members()[0]?.id || '', recur: 'none', end: null, mealKey: key,
+          who: [this.me()?.id || this.members()[0]?.id].filter((x): x is string => !!x), recur: 'none', end: null, mealKey: key,
         });
       }
     });
@@ -3227,14 +3240,15 @@ export class FoyerStore {
     const addDays = (iso: string, n: number): string => { const dt = parseDay(iso); dt.setDate(dt.getDate() + n); return dstr(dt); };
     const tomorrow = addDays(today, 1);
     const mName = (id: string): string => d.members.find((m) => m.id === id)?.name || '';
+    const mNames = (ids: string[]): string => (ids || []).map(mName).filter(Boolean).join(', ');
     const raw: Omit<Notif, 'read'>[] = [];
 
     // Chaque module a son interrupteur, personnel : la cloche de l'un n'est pas
     // celle de l'autre, et couper les anniversaires ne doit pas couper l'agenda.
     // Événements aujourd'hui / demain
     if (this.setting('notifEvents')) {
-    for (const e of this.eventsForDay(today)) raw.push({ id: `ev-${e.id}-${today}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + "Aujourd'hui" + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: "Aujourd'hui" });
-    for (const e of this.eventsForDay(tomorrow)) raw.push({ id: `ev-${e.id}-${tomorrow}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + 'Demain' + (mName(e.who) ? ' · ' + mName(e.who) : ''), time: 'Demain' });
+    for (const e of this.eventsForDay(today)) raw.push({ id: `ev-${e.id}-${today}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + "Aujourd'hui" + (mNames(e.who) ? ' · ' + mNames(e.who) : ''), time: "Aujourd'hui" });
+    for (const e of this.eventsForDay(tomorrow)) raw.push({ id: `ev-${e.id}-${tomorrow}`, kind: 'event', title: e.title, desc: (e.time && e.time !== '—' ? e.time + ' · ' : '') + 'Demain' + (mNames(e.who) ? ' · ' + mNames(e.who) : ''), time: 'Demain' });
     }
 
     // Tâches datées de l'affaire du jour : à faire aujourd'hui / en retard

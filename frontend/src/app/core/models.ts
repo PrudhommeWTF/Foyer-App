@@ -25,7 +25,7 @@ export interface Member {
   enfant?: boolean;
   allerg?: string[]; refuse?: string[];
 }
-export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
+export interface EventItem { id: string; date: string; time: string; title: string; who: string[]; recur: Recur; end?: string | null;
   /**
    * Heure de fin, HH:MM. `end` porte la date de fin (événement sur plusieurs
    * jours), `endTime` l'heure de fin dans la journée : les deux répondent à des

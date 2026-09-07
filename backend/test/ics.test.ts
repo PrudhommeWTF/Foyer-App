@@ -62,7 +62,7 @@ describe('flux ICS', () => {
 
   it('mêle événements du foyer et échéances dans le même calendrier', () => {
     const withEvent = state({
-      events: [{ id: 'e1', date: '2026-09-01', time: '18:30', title: 'Réunion école', who: '', recur: 'none' }],
+      events: [{ id: 'e1', date: '2026-09-01', time: '18:30', title: 'Réunion école', who: [], recur: 'none' }],
     } as Partial<HouseholdState>);
     const ics = buildIcs(withEvent, [deadline()]);
     assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 2);
@@ -72,7 +72,7 @@ describe('flux ICS', () => {
 
   it('sans échéance, le flux reste exactement celui d’avant', () => {
     const withEvent = state({
-      events: [{ id: 'e1', date: '2026-09-01', time: '', title: 'Vacances', who: '', recur: 'none' }],
+      events: [{ id: 'e1', date: '2026-09-01', time: '', title: 'Vacances', who: [], recur: 'none' }],
     } as Partial<HouseholdState>);
     assert.equal((buildIcs(withEvent).match(/BEGIN:VEVENT/g) || []).length, 1);
     assert.ok(!buildIcs(withEvent).includes('fin-preavis'));

@@ -28,7 +28,7 @@ const emptyDoc = (): HouseholdState => ({
 const fullDoc = (): HouseholdState => ({
   ...emptyDoc(),
   members: [{ id: 'm1', name: 'Léa', role: 'Enfant', color: '#9B6FA8', ini: 'LE' }],
-  events: [{ id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: 'm1', recur: 'none' }],
+  events: [{ id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: ['m1'], recur: 'none' }],
   taskLists: [{ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison', kind: 'taches', scope: 'shared', position: 0 }],
   tasks: [
     { id: 't1', text: 'Sortir le verre', who: ['m1'], due: TODAY, done: false, listId: 'l1' },
@@ -134,9 +134,9 @@ for (const p of TILE_PROVIDERS) {
 test('agenda : les événements du jour, triés, et eux seuls', () => {
   const doc = fullDoc();
   doc.events = [
-    { id: 'e2', date: TODAY, time: '18:00', title: 'Piscine', who: 'm1', recur: 'none' },
-    { id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: 'm1', recur: 'none' },
-    { id: 'e3', date: '2026-08-22', time: '09:00', title: 'Demain', who: 'm1', recur: 'none' },
+    { id: 'e2', date: TODAY, time: '18:00', title: 'Piscine', who: ['m1'], recur: 'none' },
+    { id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: ['m1'], recur: 'none' },
+    { id: 'e3', date: '2026-08-22', time: '09:00', title: 'Demain', who: ['m1'], recur: 'none' },
   ];
   const s = provider('agenda').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
@@ -425,8 +425,8 @@ test('finances : sans compte courant, aucun solde n’est affiché plutôt qu’
 test('agenda : demain accompagne aujourd’hui, sans se confondre avec lui', () => {
   const doc = fullDoc();
   doc.events = [
-    { id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: 'm1', recur: 'none' },
-    { id: 'e2', date: '2026-08-22', time: '09:00', title: 'Match de foot', who: 'm1', recur: 'none' },
+    { id: 'e1', date: TODAY, time: '08:30', title: 'Dentiste', who: ['m1'], recur: 'none' },
+    { id: 'e2', date: '2026-08-22', time: '09:00', title: 'Match de foot', who: ['m1'], recur: 'none' },
   ];
   const s = provider('agenda').state(ctx(ready(snap(doc)), ready(finSnapshot())));
   assert.equal(s.kind, 'ok');
@@ -438,7 +438,7 @@ test('agenda : demain accompagne aujourd’hui, sans se confondre avec lui', () 
 
 test('agenda : une journée vide mais un lendemain chargé n’est pas « rien de prévu »', () => {
   const doc = emptyDoc();
-  doc.events = [{ id: 'e2', date: '2026-08-22', time: '09:00', title: 'Match', who: 'm1', recur: 'none' }];
+  doc.events = [{ id: 'e2', date: '2026-08-22', time: '09:00', title: 'Match', who: ['m1'], recur: 'none' }];
   // Le soir, ce qui compte est le lendemain : le taire viderait l'écran au
   // moment précis où il sert le plus.
   assert.equal(provider('agenda').state(ctx(ready(snap(doc)), ready(finSnapshot()))).kind, 'ok');

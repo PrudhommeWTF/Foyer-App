@@ -59,7 +59,7 @@ test('un créneau vidé emporte son événement d’agenda, qui n’aurait plus 
   const d = doc();
   const key = TODAY + '-soir';
   d.meals = { [key]: { items: [{ text: 'Pizza' }] } };
-  d.events = [{ id: 'e1', date: TODAY, time: '19:30', title: 'Dîner : Pizza', who: 'me', recur: 'none', mealKey: key }];
+  d.events = [{ id: 'e1', date: TODAY, time: '19:30', title: 'Dîner : Pizza', who: ['me'], recur: 'none', mealKey: key }];
   const out = apply(d, (x) => {
     delete x.meals[key];
     const i = x.events.findIndex((e) => e.mealKey === key);
