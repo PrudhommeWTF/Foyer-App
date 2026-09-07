@@ -280,10 +280,15 @@ et garantit que l'aperçu et le rejeu ne divergent jamais.
 ### 8.1 Catégorie suggérée (apprise)
 
 Là où une règle est une consigne explicite, la **suggestion** apprend toute seule des
-catégorisations faites à la main. À la saisie d'une opération, `GET /api/finances/transactions/suggest?label=…`
-propose une catégorie ; le formulaire l'affiche (« Suggestion : Courses, déjà classé ainsi 3× »)
-et l'utilisateur l'applique d'un clic. Rien n'est posé sans lui : la suggestion est purement
-consultative, comme l'aperçu des règles.
+catégorisations faites à la main. Elle se présente à deux endroits, toujours consultative
+(rien n'est posé sans validation, comme l'aperçu des règles) :
+
+- **À la saisie** d'une opération, `GET /api/finances/transactions/suggest?label=…` propose une
+  catégorie ; le formulaire l'affiche (« Suggestion : Courses, déjà classé ainsi 3× »), appliquée
+  d'un clic.
+- **Après un import**, ce que les règles n'ont pas rangé et que l'historique sait catégoriser
+  remonte dans la réponse du commit (`importSuggestions`) : l'écran d'import en fait une revue,
+  cochée d'avance, et `POST /api/finances/transactions/categorise` range la sélection en lot.
 
 Le principe est volontairement simple et explicable, pas un modèle opaque, et **tout reste local**
 (aucune donnée bancaire ne sort de la machine) :

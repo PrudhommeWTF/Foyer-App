@@ -3,7 +3,7 @@ import {
   AccountKind, AccountPayload, FinAccount, FinAction, FinActionKind, FinAlias, FinApplyReport, FinCategory,
   FinAsset, FinAssetKind, FinAssetStatus, FinCondition, FinConditionField, FinConditionOp, FinContract,
   FinContractCost, FinContractKind, FinContractRef, FinContractStatus, FinCoverage, FinDashboard,
-  FinAttachment, FinDeadline, FinEnergySummary, FinHome, FinImport, FinImportPreview, FinOwnerKind,
+  FinAttachment, FinDeadline, FinEnergySummary, FinHome, FinImport, FinImportPreview, FinImportSuggestion, FinOwnerKind,
   FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
   FinLoanView, FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
   FinTransferCandidate, FinTransaction, FinancesApi, TxKind,
@@ -203,6 +203,10 @@ export class FinancesStore {
   readonly preview = signal<FinImportPreview | null>(null);
   readonly imports = signal<FinImport[]>([]);
   readonly candidates = signal<FinTransferCandidate[]>([]);
+  /** Catégories suggérées après un import, à revoir puis appliquer en lot. */
+  readonly catSuggest = signal<FinImportSuggestion[]>([]);
+  /** Identifiants d'opérations cochées dans la revue des suggestions d'import. */
+  readonly catPicked = signal<Set<number>>(new Set());
   readonly transfers = signal<FinTransfer[]>([]);
 
   // Categorisation rules
@@ -967,10 +971,16 @@ export class FinancesStore {
       const r = await this.api.commitImport(p.importId);
       this.preview.set(null);
       this.patch({ importBusy: false });
+      // Les suggestions apprises pour ce que les règles n'ont pas rangé : cochées
+      // d'avance, l'utilisateur revoit puis applique en lot (ou ferme la revue).
+      this.catSuggest.set(r.suggestions || []);
+      this.catPicked.set(new Set((r.suggestions || []).map((s) => s.id)));
       // The rules run on the fresh rows straight away: say how many they filed.
       const filed = r.categorised?.changed ?? 0;
+      const sug = r.suggestions?.length ?? 0;
       this.foyer.toast(`${r.inserted} opération${r.inserted > 1 ? 's' : ''} importée${r.inserted > 1 ? 's' : ''}`
-        + (filed ? `, ${filed} rangée${filed > 1 ? 's' : ''} par vos règles` : ''));
+        + (filed ? `, ${filed} rangée${filed > 1 ? 's' : ''} par vos règles` : '')
+        + (sug ? `, ${sug} catégorie${sug > 1 ? 's' : ''} suggérée${sug > 1 ? 's' : ''}` : ''));
       await Promise.all([this.afterWrite(), this.loadImports()]);
       await this.loadCandidates();
     } catch (e) {
@@ -987,6 +997,39 @@ export class FinancesStore {
     // Uploading a file hides the pending transfers to keep the report in focus;
     // abandoning it must bring them back rather than leave them lost.
     await this.loadCandidates();
+  }
+
+  // ---- revue des catégories suggérées après import -----------------------
+  isCatPicked(id: number): boolean { return this.catPicked().has(id); }
+  catPickedCount = computed(() => this.catPicked().size);
+  toggleCatPick(id: number): void {
+    const next = new Set(this.catPicked());
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this.catPicked.set(next);
+  }
+  allCatPicked = computed(() => this.catSuggest().length > 0 && this.catSuggest().every((s) => this.catPicked().has(s.id)));
+  toggleAllCat(): void {
+    this.catPicked.set(this.allCatPicked() ? new Set() : new Set(this.catSuggest().map((s) => s.id)));
+  }
+  /** Ferme la revue sans rien ranger : les opérations restent sans catégorie. */
+  dismissCatSuggest(): void { this.catSuggest.set([]); this.catPicked.set(new Set()); }
+
+  /** Applique les suggestions cochées : les opérations prennent leur catégorie. */
+  async applyCatSuggest(): Promise<void> {
+    const picked = this.catPicked();
+    const items = this.catSuggest().filter((s) => picked.has(s.id)).map((s) => ({ id: s.id, categoryId: s.categoryId }));
+    if (!items.length) { this.dismissCatSuggest(); return; }
+    this.patch({ importBusy: true });
+    try {
+      const { changed } = await this.api.categoriseTransactions(items);
+      this.dismissCatSuggest();
+      this.patch({ importBusy: false });
+      this.foyer.toast(`${changed} opération${changed > 1 ? 's' : ''} rangée${changed > 1 ? 's' : ''}`);
+      await this.afterWrite();
+    } catch (e) {
+      this.patch({ importBusy: false });
+      this.foyer.toast((e as Error).message);
+    }
   }
 
   /** Undo a committed import: its rows leave, nothing else moves. */

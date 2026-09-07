@@ -41,29 +41,44 @@ export interface Suggestion {
   total: number;
 }
 
-/**
- * Propose une catégorie pour `key` à partir des opérations déjà catégorisées.
- * Rend une suggestion seulement si une catégorie est vue au moins `minSeen` fois
- * pour ce marchand **et** l'emporte franchement (strictement devant la suivante).
- * Sinon `null` : mieux vaut ne rien proposer qu'induire en erreur.
- */
-export function pickCategory(key: string, rows: KeyedTx[], minSeen: number): Suggestion | null {
-  if (!key) return null;
-  const tally = new Map<number, number>();
-  let total = 0;
+/** Compteurs par marchand : clé → (catégorie → nombre de fois vue). */
+export type MerchantIndex = Map<string, Map<number, number>>;
+
+/** Regroupe les opérations catégorisées par marchand. À calculer une fois quand
+ *  on suggère pour plusieurs opérations (import), plutôt que de rebalayer la liste. */
+export function buildIndex(rows: KeyedTx[]): MerchantIndex {
+  const idx: MerchantIndex = new Map();
   for (const r of rows) {
-    if (r.key !== key) continue;
-    tally.set(r.categoryId, (tally.get(r.categoryId) || 0) + 1);
-    total++;
+    let m = idx.get(r.key);
+    if (!m) { m = new Map(); idx.set(r.key, m); }
+    m.set(r.categoryId, (m.get(r.categoryId) || 0) + 1);
   }
-  if (!total) return null;
+  return idx;
+}
+
+/**
+ * Propose une catégorie pour `key` à partir d'un index de marchands. Rend une
+ * suggestion seulement si une catégorie est vue au moins `minSeen` fois pour ce
+ * marchand **et** l'emporte franchement (strictement devant la suivante). Sinon
+ * `null` : mieux vaut ne rien proposer qu'induire en erreur.
+ */
+export function pickFromIndex(key: string, idx: MerchantIndex, minSeen: number): Suggestion | null {
+  const tally = key ? idx.get(key) : undefined;
+  if (!tally) return null;
   let bestId = -1;
   let best = 0;
   let second = 0;
+  let total = 0;
   for (const [cid, n] of tally) {
+    total += n;
     if (n > best) { second = best; best = n; bestId = cid; }
     else if (n > second) { second = n; }
   }
   if (best < Math.max(1, minSeen) || best <= second) return null;
   return { categoryId: bestId, seen: best, total };
+}
+
+/** Suggestion pour un seul libellé, à partir de la liste brute des opérations. */
+export function pickCategory(key: string, rows: KeyedTx[], minSeen: number): Suggestion | null {
+  return pickFromIndex(key, buildIndex(rows), minSeen);
 }
