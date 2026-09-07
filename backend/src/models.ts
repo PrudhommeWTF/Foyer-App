@@ -23,6 +23,8 @@ export interface Member {
 export interface EventItem { id: string; date: string; time: string; title: string; who: string[]; recur: string; end?: string | null;
   /** Heure de fin, HH:MM (l'heure de fin dans la journée ; `end` est la date de fin). */
   endTime?: string | null;
+  /** Lieu, texte libre. Publié dans le flux ICS (LOCATION). */
+  place?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
    * d'en créer un second pour le même repas, et fait disparaître l'événement

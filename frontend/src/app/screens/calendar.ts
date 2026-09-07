@@ -165,6 +165,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
                   }
                 </div>
                 <div class="se-title">{{ it.ev.title }}</div>
+                @if (it.ev.place) { <div class="se-place"><f-icon name="pin" [size]="13" color="var(--ink3)" [width]="2" /> {{ it.ev.place }}</div> }
                 @if (it.ev.end && it.ev.end !== it.ev.date) {
                   <div class="se-span"><f-icon name="calendar" [size]="13" color="#4E93B8" [width]="2.2" /> du {{ fmtShort(it.ev.date) }} au {{ fmtShort(it.ev.end) }}</div>
                 }
@@ -216,6 +217,10 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
               <input class="input" type="time" [ngModel]="store.ui().evEndTime" (ngModelChange)="store.patch({ evEndTime: $event })" [disabled]="!store.ui().evTime" />
             </div>
           </div>
+
+          <div class="fl">Lieu (option.)</div>
+          <input class="input" [ngModel]="store.ui().evPlace" (ngModelChange)="store.patch({ evPlace: $event })"
+                 placeholder="Ex : Salle des fêtes, 12 rue des Lilas" style="margin-bottom:18px" />
 
           <div class="fl">Date</div>
           <div class="dp">
@@ -336,6 +341,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
     .se-recur { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: #7A9B76; background: #EDF2EB; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
     .se-title { font-weight: 800; font-size: 15px; color: var(--ink); margin-top: 4px; }
     .se-span { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 800; color: #4E93B8; margin-top: 6px; }
+    .se-place { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 5px; }
     .se-who { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
     .se-who .dot { width: 20px; height: 20px; font-size: 10px; }
     .se-who span:last-child { font-size: 13px; font-weight: 700; color: var(--ink2); }

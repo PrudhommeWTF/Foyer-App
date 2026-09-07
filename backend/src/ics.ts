@@ -65,6 +65,7 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): str
     const rr = icsRrule(ev.recur);
     if (rr) L.push(`RRULE:${rr}`);
     L.push(`SUMMARY:${icsEsc(ev.title)}`);
+    if (ev.place) L.push(`LOCATION:${icsEsc(ev.place)}`);
     const who = (ev.who || []).map(mname).filter(Boolean).join(', ');
     if (who) L.push(`DESCRIPTION:${icsEsc(who)}`);
     L.push('END:VEVENT');

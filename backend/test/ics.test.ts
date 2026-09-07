@@ -70,6 +70,17 @@ describe('flux ICS', () => {
     assert.ok(ics.includes('SUMMARY:Dernier jour pour résilier : Assurance habitation'));
   });
 
+  it('publie le lieu de l’événement dans LOCATION, et rien quand il n’y en a pas', () => {
+    const avec = state({
+      events: [{ id: 'e1', date: '2026-09-01', time: '18:30', title: 'Réunion école', who: [], recur: 'none', place: 'Salle B, 12 rue des Lilas' }],
+    } as Partial<HouseholdState>);
+    assert.ok(buildIcs(avec).includes('LOCATION:Salle B\\, 12 rue des Lilas'), 'le lieu est publié et échappé');
+    const sans = state({
+      events: [{ id: 'e1', date: '2026-09-01', time: '18:30', title: 'Réunion école', who: [], recur: 'none' }],
+    } as Partial<HouseholdState>);
+    assert.ok(!buildIcs(sans).includes('LOCATION:'), 'sans lieu, pas de ligne LOCATION');
+  });
+
   it('sans échéance, le flux reste exactement celui d’avant', () => {
     const withEvent = state({
       events: [{ id: 'e1', date: '2026-09-01', time: '', title: 'Vacances', who: [], recur: 'none' }],
