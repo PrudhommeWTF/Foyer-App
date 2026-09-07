@@ -25,7 +25,7 @@ import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSl
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
-import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
@@ -1322,6 +1322,20 @@ export class FoyerStore {
     this.toast(s.evEditId ? 'Événement modifié' : 'Événement ajouté à l’agenda');
     this.patch({ showEvent: false, evEditId: null });
   }
+  /**
+   * Saisie de l'heure de début d'un événement. L'heure de fin suit d'une heure
+   * par défaut, pour n'avoir à la préciser que lorsqu'elle diffère. On ne l'écrase
+   * pas si on l'a soi-même fixée : elle suit tant qu'elle est vide ou encore égale
+   * à ce que l'ancienne heure de début impliquait.
+   */
+  setEventStart(v: string): void {
+    const s = this.ui();
+    const patch: Partial<UiState> = { evTime: v };
+    const auto = addHourHHMM(s.evTime);
+    if (v && (!s.evEndTime || s.evEndTime === auto)) patch.evEndTime = addHourHHMM(v);
+    this.patch(patch);
+  }
+
   /** Ajoute ou retire un membre de l'événement en cours d'édition. Aucun membre est licite (événement du foyer). */
   toggleEvWho(id: string): void {
     const cur = this.ui().evWho;

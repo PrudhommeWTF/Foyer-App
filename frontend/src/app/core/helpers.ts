@@ -42,6 +42,17 @@ export function weekDates(offset: number, anchorIso: string): Date[] {
 }
 
 /**
+ * Une heure « HH:MM » plus une heure, bornée à 23:59 pour rester dans la journée
+ * (l'heure de fin d'un événement est le même jour). Une entrée mal formée rend ''.
+ */
+export function addHourHHMM(hhmm: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || '');
+  if (!m) return '';
+  const mins = Math.min(parseInt(m[1], 10) * 60 + parseInt(m[2], 10) + 60, 23 * 60 + 59);
+  return String(Math.floor(mins / 60)).padStart(2, '0') + ':' + String(mins % 60).padStart(2, '0');
+}
+
+/**
  * Le numéro de semaine ISO 8601 (lundi premier jour, la semaine 1 contient le
  * premier jeudi de l'année). C'est celui qu'affichent les agendas français.
  */
