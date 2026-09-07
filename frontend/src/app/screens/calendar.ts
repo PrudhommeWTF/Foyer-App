@@ -63,7 +63,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                   @for (ex of c.extras; track $index) {
                     <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
                       <span class="ex-dot" [style.background]="ex.color"></span>
-                      <span class="ex-lbl">{{ ex.label }}</span>
+                      <span class="ex-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
                     </div>
                   }
                   @if (c.more) { <span class="more">+{{ c.more }} autre{{ c.more > 1 ? 's' : '' }}</span> }
@@ -109,7 +109,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                     @for (ex of col.extras; track $index) {
                       <div class="col-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
                         <span class="ex-dot" [style.background]="ex.color"></span>
-                        <span class="ex-lbl">{{ ex.label }}</span>
+                        <span class="ex-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
                         @if (ex.sub) { <span class="ex-sub">{{ ex.sub }}</span> }
                       </div>
                     }
@@ -192,7 +192,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
               @for (ex of selExtras(); track $index) {
                 <div class="side-ex" [class.tap]="ex.id" [style.border-left]="'4px solid ' + ex.color" (click)="openExtra($event, ex)">
                   <span class="ex-dot" [style.background]="ex.color"></span>
-                  <span class="sx-lbl">{{ ex.label }}</span>
+                  <span class="sx-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
                   @if (ex.sub) { <span class="sx-sub">{{ ex.sub }}</span> }
                 </div>
               }
@@ -337,6 +337,8 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
     .ex-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
     .tap { cursor: pointer; }
     .ex-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Une tâche faite est barrée dans le calendrier comme dans sa liste. */
+    .ex-lbl.strike, .sx-lbl.strike { text-decoration: line-through; color: var(--ink3); }
     .chip-ex { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 5px; background: var(--surface); font-size: 10px; font-weight: 800; color: var(--ink2); white-space: nowrap; overflow: hidden; }
     .col-ex { display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 10px; padding: 6px 9px; font-size: 12px; font-weight: 800; color: var(--ink2); }
     .col-ex .ex-sub { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--ink3); flex: none; }

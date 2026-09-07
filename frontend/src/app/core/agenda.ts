@@ -9,8 +9,8 @@ import { ageOn, frenchHolidays, isBirthdayOn, occursOn } from './helpers';
 import { taskOccursOn } from './recurrence';
 import { EventItem, HouseholdState } from './models';
 
-/** Un repère de journée qui n'est pas un événement : férié, anniversaire, tâche, échéance. `id` : la tâche qu'un tap ouvre. */
-export interface DayExtra { kind: string; label: string; color: string; sub?: string; id?: string; }
+/** Un repère de journée qui n'est pas un événement : férié, anniversaire, tâche, échéance. `id` : la tâche qu'un tap ouvre. `done` : tâche faite, à barrer comme dans la liste. */
+export interface DayExtra { kind: string; label: string; color: string; sub?: string; id?: string; done?: boolean; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
 
 /** Les événements d'un jour, dans l'ordre des heures. Une heure vide vaut « — ». */
@@ -44,7 +44,7 @@ export function dayExtrasOn(ds: string, input: DayInput): DayExtra[] {
   // Une tâche récurrente apparaît sur chacune de ses occurrences, pas seulement à
   // son échéance courante : « faite » ne vaut que pour celle-ci, une occurrence
   // projetée n'a pas encore été faite.
-  for (const t of d.tasks) { if (taskOccursOn(t, ds)) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: (t.done && t.due === ds) ? 'faite' : (t.time || undefined), id: t.id }); }
+  for (const t of d.tasks) { if (taskOccursOn(t, ds)) { const fait = t.done && t.due === ds; out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: fait ? 'faite' : (t.time || undefined), id: t.id, done: fait }); } }
   out.push(...(input.external[ds] || []));
   return out;
 }
