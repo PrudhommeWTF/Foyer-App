@@ -49,7 +49,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                 <div class="mcell"
                      [style.background]="c.key === sel() ? 'rgba(229,107,78,.14)' : 'var(--soft)'"
                      [style.border]="cellBorder(c.key)"
-                     (click)="addAt(c.key)">
+                     (click)="cellClick(c)">
                   <span class="mnum" [style.color]="c.inMonth ? 'var(--ink)' : 'var(--ink3)'">{{ c.num }}</span>
                   @for (chip of c.chips; track $index) {
                     <div class="chip-ev tap" [style.background]="chip.bg" [style.color]="chip.fg" (click)="openEventChip($event, chip.id)">{{ chip.title }}</div>
@@ -503,6 +503,17 @@ export class CalendarScreen {
   openEventChip(e: Event, id: string): void {
     e.stopPropagation();
     this.store.editEvent(id);
+  }
+
+  /**
+   * Clic sur une case du mois. Sur un jour **libre**, on ouvre la création, geste
+   * rapide attendu. Sur un jour qui porte déjà des événements, la modale serait
+   * gênante : on se contente de sélectionner le jour (le panneau latéral le
+   * détaille, et son bouton « Ajouter un événement » reste là pour en créer un).
+   */
+  cellClick(c: MonthCell): void {
+    if (c.chips.length || c.slotEvents.length) this.store.patch({ selDay: c.key });
+    else this.addAt(c.key);
   }
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
