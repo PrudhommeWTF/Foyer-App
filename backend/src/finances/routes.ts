@@ -16,6 +16,7 @@ import * as savings from './savings';
 import { energyRouter } from './energy-routes';
 import { importRouter } from './import-routes';
 import { rulesRouter } from './rules-routes';
+import { suggestCategory } from './suggest-repo';
 import * as loans from './loans';
 import { ACCOUNT_KINDS, LoanTerms, TX_KINDS, TxKind } from './types';
 import { log } from '../log';
@@ -418,6 +419,14 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
       offset: q['offset'] ? parseInt(String(q['offset']), 10) : undefined,
     });
     res.json(result);
+  }));
+
+  // Catégorie suggérée pour un libellé, apprise des catégorisations manuelles.
+  // En lecture seule et advisory : elle ne pose rien, le formulaire la propose.
+  r.get('/transactions/suggest', handler((req, res) => {
+    const label = String(req.query['label'] || '').trim();
+    const minSeen = Math.max(1, Number(effectiveSetting('catSuggestMin')) || 1);
+    res.json({ suggestion: label ? suggestCategory(label, minSeen) : null });
   }));
 
   r.post('/transactions', handler((req, res) => {

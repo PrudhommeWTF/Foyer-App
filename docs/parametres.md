@@ -126,13 +126,15 @@ Le rappel proposé quand une tâche reçoit une date.
 
 ### Finances
 
-Quand un compteur d’énergie réclame un nouveau relevé.
+La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
 | `readingDueDays` | Relevé de compteur attendu après | Foyer | entier | `30` | de 7 à 365 | Énergie | — |
+| `catSuggestMin` | Suggérer une catégorie à partir de | Foyer | entier | `2` | de 1 à 20 | Finances | — |
 
 - **Relevé de compteur attendu après** (`readingDueDays`) : Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.
+- **Suggérer une catégorie à partir de** (`catSuggestMin`) : Combien de fois une même catégorie doit avoir été posée à la main pour un marchand avant que l’application ne la propose pour une nouvelle opération du même marchand. Plus le nombre est élevé, moins il y a de suggestions, mais plus elles sont sûres.
 
 ### Documents
 

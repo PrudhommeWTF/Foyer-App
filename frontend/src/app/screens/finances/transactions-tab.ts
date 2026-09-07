@@ -98,7 +98,7 @@ import { CAT_ICONS } from '../../core/constants';
         <div class="frow">
           <div class="fgrow">
             <div class="field-label">Libellé</div>
-            <input class="input" [ngModel]="store.ui().txLabel" (ngModelChange)="store.patch({ txLabel: $event })" placeholder="Ex : CB Remoulins Carrefour Marke" />
+            <input class="input" [ngModel]="store.ui().txLabel" (ngModelChange)="store.setTxLabel($event)" placeholder="Ex : CB Remoulins Carrefour Marke" />
           </div>
           <div class="fnarrow">
             <div class="field-label">Montant €</div>
@@ -126,6 +126,15 @@ import { CAT_ICONS } from '../../core/constants';
               @for (s of store.childrenOf(c.id); track s.id) { <option [ngValue]="s.id">&nbsp;&nbsp;{{ c.name }} · {{ s.name }}</option> }
             }
           </select>
+          @if (store.ui().txSuggest; as sg) {
+            @if (!store.ui().txCategory) {
+              <button class="suggest" (click)="store.applyTxSuggestion()">
+                <f-icon name="bolt" [size]="14" color="#7A9B76" [width]="2.2" />
+                <span>Suggestion : <b>{{ store.categoryPath(sg.categoryId) }}</b> <span class="sg-why">déjà classé ainsi {{ sg.seen }}×</span></span>
+                <span class="sg-apply">Appliquer</span>
+              </button>
+            }
+          }
         }
         @if (store.ui().txSign === 'out' && store.contracts().length) {
           <div class="field-label">Contrat</div>
@@ -213,6 +222,10 @@ import { CAT_ICONS } from '../../core/constants';
     .field-label { margin-top: 16px; }
     .frow .field-label { margin-top: 0; }
     .frow + .frow .field-label { margin-top: 16px; }
+    .suggest { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 8px; border: none; border-radius: 11px; padding: 9px 12px; background: #EDF2EB; color: var(--ink2); font-size: 12.5px; font-weight: 700; cursor: pointer; font-family: inherit; text-align: left; }
+    .suggest b { color: var(--ink); font-weight: 800; }
+    .suggest .sg-why { color: var(--ink3); font-weight: 700; }
+    .suggest .sg-apply { margin-left: auto; flex: none; font-weight: 800; color: #5F9A55; }
     .prov { margin-top: 18px; background: var(--soft); border-radius: 13px; padding: 12px 14px; font-size: 12.5px; font-weight: 700; color: var(--ink3); line-height: 1.5; }
     .mkrule { display: block; margin-top: 8px; border: none; border-radius: 10px; padding: 7px 13px; background: var(--soft2); font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; }
     .check { display: flex; align-items: center; gap: 10px; margin-top: 16px; font-size: 13.5px; font-weight: 700; color: var(--ink2); cursor: pointer; }

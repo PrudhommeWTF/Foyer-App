@@ -11,6 +11,7 @@ import { initBackup } from './backup';
 import { initEnergy } from './energy';
 import { initSavings } from './savings';
 import { initRulesRepo, tagsFor } from './rules-repo';
+import { initSuggestRepo } from './suggest-repo';
 import { centsToDecimal, monthRange, normaliseLabel } from './money';
 import {
   Account, AccountCoverage, Category, CategorySummary, LoanTerms, MonthSummary, Transaction, TxKind,
@@ -29,6 +30,7 @@ export function initFinancesRepo(db: Database): void {
   // cannot forget it and discover the omission only when a summary is computed.
   initImportRepo(db);
   initRulesRepo(db);
+  initSuggestRepo(db);
   initContracts(db);
   initDashboard(db);
   initEnergy(db);

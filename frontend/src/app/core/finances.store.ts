@@ -33,6 +33,8 @@ export interface FinancesUi {
   txAccount: number | null; txCategory: number | null; txContract: number | null;
   txNotes: string; txCleared: boolean;
   txDelId: number | null;
+  /** Catégorie suggérée pour le libellé en cours (advisory), ou null. */
+  txSuggest: { categoryId: number; seen: number } | null;
 
   // account form
   acForm: boolean; acId: number | null;
@@ -98,7 +100,7 @@ function initialUi(month: string): FinancesUi {
     tab: 'transactions', month,
     fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
-    txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null,
+    txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null, txSuggest: null,
     acForm: false, acId: null, acName: '', acKind: 'courant', acMembers: [], acOpening: '',
     acPrincipal: '', acRate: '', acPayment: '', acInsurance: '', acFirstOn: '',
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
@@ -643,7 +645,7 @@ export class FinancesStore {
       txForm: true, txId: null, txLabel: '', txAmount: '', txSign: 'out',
       txDate: this.isCurrentMonth() ? today : from,
       txAccount: this.ui().fltAccount ?? this.activeLedgerAccounts()[0]?.id ?? null,
-      txCategory: null, txContract: null, txNotes: '', txCleared: false,
+      txCategory: null, txContract: null, txNotes: '', txCleared: false, txSuggest: null,
     });
   }
 
@@ -653,8 +655,40 @@ export class FinancesStore {
     this.patch({
       txForm: true, txId: t.id, txLabel: t.label, txAmount: fmtEuros(Math.abs(t.amount)),
       txSign: t.amount < 0 ? 'out' : 'in', txDate: t.date, txAccount: t.accountId,
-      txCategory: t.categoryId, txContract: t.contractId, txNotes: t.notes, txCleared: t.cleared,
+      txCategory: t.categoryId, txContract: t.contractId, txNotes: t.notes, txCleared: t.cleared, txSuggest: null,
     });
+  }
+
+  /**
+   * Saisie du libellé : on met à jour le champ, et on demande une catégorie
+   * suggérée (après une courte pause de frappe). Seulement pour une dépense dont
+   * la catégorie n'est pas encore choisie, pour ne rien imposer.
+   */
+  private suggestTimer: ReturnType<typeof setTimeout> | null = null;
+  setTxLabel(label: string): void {
+    this.patch({ txLabel: label, txSuggest: null });
+    if (this.suggestTimer) clearTimeout(this.suggestTimer);
+    const wanted = label.trim();
+    if (!wanted || this.ui().txSign !== 'out' || this.ui().txCategory) return;
+    this.suggestTimer = setTimeout(() => { void this.fetchTxSuggestion(wanted); }, 400);
+  }
+
+  private async fetchTxSuggestion(label: string): Promise<void> {
+    try {
+      const { suggestion } = await this.api.suggestCategory(label);
+      // La saisie a pu changer entre-temps : ne rien poser si ce n'est plus d'actualité.
+      const u = this.ui();
+      if (!u.txForm || u.txSign !== 'out' || u.txCategory || u.txLabel.trim() !== label) return;
+      this.patch({ txSuggest: suggestion ? { categoryId: suggestion.categoryId, seen: suggestion.seen } : null });
+    } catch {
+      // Une suggestion indisponible n'est pas une erreur pour l'utilisateur.
+    }
+  }
+
+  /** L'utilisateur accepte la suggestion : elle devient sa catégorie (donc manuelle). */
+  applyTxSuggestion(): void {
+    const s = this.ui().txSuggest;
+    if (s) this.patch({ txCategory: s.categoryId, txSuggest: null });
   }
 
   async saveTx(): Promise<void> {

@@ -193,6 +193,10 @@ export class FinancesApi {
     if (q.offset !== undefined) p.set('offset', String(q.offset));
     return this.api.request('finances/transactions?' + p.toString());
   }
+  /** Catégorie suggérée pour un libellé, apprise des catégorisations manuelles. */
+  suggestCategory(label: string): Promise<{ suggestion: { categoryId: number; seen: number; total: number } | null }> {
+    return this.api.request('finances/transactions/suggest?label=' + encodeURIComponent(label));
+  }
   createTransaction(p: TxPayload): Promise<{ transaction: FinTransaction }> {
     return this.api.request('finances/transactions', { method: 'POST', body: JSON.stringify(p) });
   }

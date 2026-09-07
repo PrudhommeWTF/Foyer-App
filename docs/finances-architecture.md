@@ -136,6 +136,8 @@ backend/src/finances/
   rules.ts         moteur de décision pur : aucune base, aucun effet de bord
   rules-repo.ts    stockage des règles, étiquettes, rejeu et prévisualisation
   rules-routes.ts  /api/finances/rules et /tags
+  suggest.ts       catégorie suggérée : clé « marchand » et choix majoritaire, pur
+  suggest-repo.ts  mémoire apprise des catégorisations manuelles
   dashboard.ts     agrégats mensuels et annuels, calculés en SQL
   contracts.ts     biens, contrats, échéances dérivées, coût réel
   loans.ts         prêts amortissables : capital restant dû, échéancier, intérêts
@@ -274,6 +276,34 @@ Les règles tournent aussi **à la validation d'un import**, sur les seules lign
 
 `rules.ts` est **pur** : il décide, il n'écrit pas. C'est ce qui permet de le tester sans base
 et garantit que l'aperçu et le rejeu ne divergent jamais.
+
+### 8.1 Catégorie suggérée (apprise)
+
+Là où une règle est une consigne explicite, la **suggestion** apprend toute seule des
+catégorisations faites à la main. À la saisie d'une opération, `GET /api/finances/transactions/suggest?label=…`
+propose une catégorie ; le formulaire l'affiche (« Suggestion : Courses, déjà classé ainsi 3× »)
+et l'utilisateur l'applique d'un clic. Rien n'est posé sans lui : la suggestion est purement
+consultative, comme l'aperçu des règles.
+
+Le principe est volontairement simple et explicable, pas un modèle opaque, et **tout reste local**
+(aucune donnée bancaire ne sort de la machine) :
+
+- On réduit le libellé à une **clé « marchand »** (`suggest.ts`, `merchantKey`) : la normalisation
+  de `money.ts`, puis on retire ce qui change d'un passage à l'autre (dates, heures, fin de carte,
+  références). `CB CARREFOUR CITY 1234 DU 07/09` et `… 5678 DU 03/10` se ramènent à `CARREFOUR CITY`.
+  C'est une normalisation **distincte** de `normaliseLabel`, qu'on ne touche pas : celle-ci sert
+  d'empreinte de déduplication et doit rester stable.
+- On ne mémorise que les opérations **catégorisées à la main** (`category_id` posé, `rule_id` nul,
+  hors virement) : ce que les utilisateurs ont classé eux-mêmes, pas ce qu'une règle a déjà décidé.
+- On rend la catégorie **majoritaire** pour ce marchand, à condition qu'elle soit vue au moins
+  `catSuggestMin` fois (réglage du foyer, 2 par défaut) **et** qu'elle l'emporte franchement. Sinon
+  rien : sur des données d'argent, une correspondance approximative est pire que pas de suggestion,
+  exactement l'esprit de `suggestAccount` à l'import.
+
+Comme une suggestion acceptée passe par le formulaire normal, la ligne reste **manuelle**
+(`rule_id` nul) et nourrit à son tour la mémoire : l'apprentissage est continu et gratuit, puisque
+la mémoire n'est qu'un dérivé de l'historique, recalculé à chaque appel. `suggest.ts` est **pur**
+(clé marchand et choix majoritaire, testables sans base), `suggest-repo.ts` porte la seule requête.
 
 ## 9. Tableau de bord
 

@@ -135,7 +135,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
   { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
   { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date.' },
-  { id: 'finances', group: 'modules', label: 'Finances', desc: 'Quand un compteur d’énergie réclame un nouveau relevé.' },
+  { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
   { id: 'documents', group: 'modules', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -383,6 +383,13 @@ export const REGISTRY = [
     label: 'Relevé de compteur attendu après',
     desc: 'Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.',
     default: 30, min: 7, max: 365,
+  },
+  {
+    key: 'catSuggestMin',
+    type: 'int', scope: 'foyer', section: 'finances', module: 'Finances',
+    label: 'Suggérer une catégorie à partir de',
+    desc: 'Combien de fois une même catégorie doit avoir été posée à la main pour un marchand avant que l’application ne la propose pour une nouvelle opération du même marchand. Plus le nombre est élevé, moins il y a de suggestions, mais plus elles sont sûres.',
+    default: 2, min: 1, max: 20,
   },
 
   // ---- documents ----------------------------------------------------------
