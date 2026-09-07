@@ -1,98 +1,298 @@
-import { NgComponentOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { DashboardStore } from '../../core/dashboard.store';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { FoyerStore } from '../../core/foyer.store';
+import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
-import { TILE_RENDERERS } from './tiles';
+import { AvatarComponent } from '../../shared/avatar';
+import { WhoComponent } from '../../shared/who';
+import { recentActivity } from '../../core/activity';
+import { relTime } from '../../core/activity';
+import { EventItem } from '../../core/models';
+import { WhoBadge, whoBadges } from '../../core/schedule';
+import { cap, parseDay } from '../../core/helpers';
+
+interface FinLine { label: string; value: string; tone: 'pos' | 'neg' | 'ink'; }
+type FinState =
+  | { kind: 'hidden' | 'loading' | 'error' | 'empty' }
+  | { kind: 'ok'; month: string; lines: FinLine[] };
 
 /**
- * L'accueil.
+ * L'accueil, façon « mur de la famille ».
  *
- * Il compose, il ne calcule pas. Aucune règle métier ne doit apparaître dans ce
- * fichier : chaque chiffre vient du fournisseur de son module, chaque tuile se
- * rend elle-même, et ajouter une tuile se fait en déclarant un fournisseur
- * (voir docs/accueil-contrat-de-tuile.md), sans rouvrir cet écran.
+ * Une colonne : le fil de ce qui a récemment changé (tâches cochées, articles
+ * ajoutés...). Un bandeau à droite : les prochains rendez-vous, les dernières
+ * tâches, les repas du jour, et un sommaire des finances. Pas de « bouton
+ * exprimez-vous » : le bouton « + » de la barre couvre déjà la création.
+ *
+ * L'écran compose, il ne calcule pas de règle métier : chaque bloc lit son
+ * fournisseur (le store, le fil d'activité, les finances) et se contente de le
+ * mettre en forme.
  */
 @Component({
   selector: 'screen-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgComponentOutlet, IconComponent],
+  imports: [IconComponent, AvatarComponent, WhoComponent],
   template: `
     <div class="screen-enter">
-      <div class="screen-head">
+      <div class="home-head">
         <div>
           <div class="hello f-script">{{ hello() }}</div>
-          <!--
-            Le contexte est écrit en toutes lettres. C'est ce qui permet de dire
-            « ah, c'est pour ça » devant un écran qui n'est pas dans le même
-            ordre qu'hier soir, sans avoir à lire une ligne de code.
-          -->
-          <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}@if (ordreManuel()) { · ordre choisi dans les Paramètres } @else if (contexte()) { · {{ contexte() }} }</div>
-          <!--
-            Un fichier de règles refusé ne doit pas se découvrir dans les
-            journaux : celui qui l'a écrit doit le voir en ouvrant la page.
-          -->
-          @if (reglesKo()) { <div class="regles-ko">{{ reglesKo() }}</div> }
+          <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}</div>
         </div>
         @if (store.data()) {
           <button class="btn btn-sage" (click)="store.prepareList(store.weekDays())">
-            <f-icon name="bolt" [size]="20" color="#fff" /> Courses de cette semaine depuis les repas
+            <f-icon name="bolt" [size]="20" color="#fff" /> Courses de la semaine depuis les repas
           </button>
         }
       </div>
 
-      <div class="grid">
-        @for (t of tiles(); track t.id) {
-          <div class="cell" [class.wide]="t.span === 'wide'">
-            <ng-container *ngComponentOutlet="t.component; inputs: t.inputs" />
+      <div class="home-wrap">
+        <!-- ===== fil d'activité ===== -->
+        <div class="card feed">
+          <div class="feed-head">
+            <f-icon name="bolt" [size]="17" color="#E56B4E" [width]="2.2" />
+            <span>Activité récente</span>
           </div>
-        }
+          @for (a of activity(); track $index) {
+            <div class="act">
+              <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" />
+              <div class="act-b">
+                <div class="act-l"><b>{{ nm(a.by) }}</b> {{ a.verb }} <b>« {{ a.what }} »</b></div>
+                <div class="act-m">
+                  <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
+                  <span class="act-t">{{ rel(a.at) }}</span>
+                </div>
+              </div>
+            </div>
+          } @empty {
+            <div class="feed-empty">
+              Rien de récent pour l'instant. Dès qu'une tâche est cochée ou qu'un article rejoint les courses, ça s'affiche ici.
+            </div>
+          }
+        </div>
+
+        <!-- ===== bandeau ===== -->
+        <div class="rail">
+          <!-- prochains évènements -->
+          <div class="card rc">
+            <div class="rc-head"><span>Prochains évènements</span><button class="rc-link" (click)="store.go('calendar')">Agenda</button></div>
+            @for (e of nextEvents(); track $index) {
+              <div class="rc-row ev" (click)="store.editEvent(e.ev.id)">
+                <div class="ev-when" [style.background]="store.tint(evColor(e.ev))" [style.color]="evColor(e.ev)">
+                  <span class="ev-day">{{ dayLabel(e.date) }}</span>
+                  <span class="ev-time">{{ e.ev.time === '—' ? 'jour.' : e.ev.time }}</span>
+                </div>
+                <div class="rc-main">
+                  <div class="rc-title">{{ e.ev.title }}</div>
+                  @if (e.ev.who.length) { <f-who [badges]="badges(e.ev)" /> }
+                </div>
+              </div>
+            } @empty {
+              <div class="rc-empty">Aucun évènement à venir.</div>
+            }
+          </div>
+
+          <!-- dernières tâches -->
+          <div class="card rc">
+            <div class="rc-head"><span>Dernières tâches</span><button class="rc-link" (click)="store.go('taches')">Tâches</button></div>
+            @for (t of latestTasks(); track t.t.id) {
+              <div class="rc-row task" (click)="store.openTaskItem(t.t.id)">
+                <span class="t-dot" [style.background]="t.color" [class.done]="t.t.done"></span>
+                <span class="t-text" [class.strike]="t.t.done">{{ t.t.text }}</span>
+                <span class="t-list">{{ t.list }}</span>
+              </div>
+            } @empty {
+              <div class="rc-empty">Aucune tâche pour l'instant.</div>
+            }
+          </div>
+
+          <!-- repas du jour -->
+          <div class="card rc">
+            <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
+            @for (m of todayMeals(); track m.key) {
+              <div class="rc-row meal" (click)="store.go('repas')">
+                <span class="m-dot" [style.background]="m.dot"></span>
+                <span class="m-slot">{{ m.short }}</span>
+                <span class="m-dish" [class.none]="!m.label">{{ m.label || 'À planifier' }}</span>
+              </div>
+            }
+          </div>
+
+          <!-- finances -->
+          @if (fin() !== null) {
+            <div class="card rc fin">
+              <div class="rc-head"><span>Finances</span><button class="rc-link" (click)="store.go('finances')">Détails</button></div>
+              @switch (fin()!.kind) {
+                @case ('ok') {
+                  <div class="fin-month">{{ finOk().month }}</div>
+                  @for (l of finOk().lines; track $index) {
+                    <div class="rc-row fin-line">
+                      <span class="f-label">{{ l.label }}</span>
+                      <span class="f-val" [class.pos]="l.tone === 'pos'" [class.neg]="l.tone === 'neg'">{{ l.value }} €</span>
+                    </div>
+                  }
+                }
+                @case ('loading') { <div class="rc-empty">Chargement du relevé...</div> }
+                @case ('error') { <div class="rc-empty">Relevé indisponible pour le moment.</div> }
+                @case ('empty') { <div class="rc-empty">Le module Finances n'est pas encore utilisé.</div> }
+              }
+            </div>
+          }
+        </div>
       </div>
     </div>
   `,
   styles: [`
     .hello { font-size: 40px; color: var(--primary); line-height: .9; font-weight: 700; }
-    .regles-ko { font-size: 12px; font-weight: 800; color: #B8860B; margin-top: 6px; }
-    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start; }
-    :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
-    .cell { display: grid; min-width: 0; }
-    .cell.wide { grid-column: span 2; }
-    :host-context(.shell.narrow) .cell.wide { grid-column: auto; }
+    .home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+
+    .home-wrap { display: grid; grid-template-columns: 1fr 344px; gap: 20px; align-items: start; }
+    :host-context(.shell.narrow) .home-wrap { grid-template-columns: 1fr; }
+    @media (max-width: 900px) { .home-wrap { grid-template-columns: 1fr; } }
+
+    /* ===== fil d'activité ===== */
+    .feed { padding: 20px 22px; }
+    .feed-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 14px; }
+    .act { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+    .act:first-of-type { border-top: none; padding-top: 2px; }
+    .act-b { min-width: 0; flex: 1; }
+    .act-l { font-size: 14px; color: var(--ink2); line-height: 1.35; }
+    .act-l b { color: var(--ink); font-weight: 800; }
+    .act-m { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+    .act-where { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+    .act-t { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .feed-empty { padding: 30px 10px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 13.5px; line-height: 1.5; }
+
+    /* ===== bandeau ===== */
+    .rail { display: flex; flex-direction: column; gap: 16px; }
+    .rc { padding: 16px 18px; }
+    .rc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
+    .rc-link { border: none; background: var(--soft); border-radius: 9px; padding: 5px 11px; font-size: 11.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+    .rc-link:hover { background: var(--soft2); }
+    .rc-empty { font-size: 12.5px; font-weight: 700; color: var(--ink3); padding: 6px 2px 4px; }
+    .rc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; }
+    .rc-row:first-of-type { border-top: none; }
+
+    /* prochains évènements */
+    .ev-when { flex: none; width: 52px; height: 40px; border-radius: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .ev-day { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
+    .ev-time { font-size: 12px; font-weight: 800; }
+    .rc-main { min-width: 0; flex: 1; }
+    .rc-title { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rc-main f-who { margin-top: 4px; display: block; }
+
+    /* dernières tâches */
+    .t-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .t-dot.done { opacity: .4; }
+    .t-text { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .t-text.strike { text-decoration: line-through; color: var(--ink3); font-weight: 600; }
+    .t-list { flex: none; font-size: 11px; font-weight: 800; color: var(--ink3); }
+
+    /* repas du jour */
+    .m-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .m-slot { flex: none; width: 46px; font-size: 12px; font-weight: 800; color: var(--ink2); }
+    .m-dish { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .m-dish.none { color: var(--ink3); font-weight: 700; font-style: italic; }
+
+    /* finances */
+    .fin-month { font-size: 11.5px; font-weight: 800; color: var(--ink3); text-transform: capitalize; margin-bottom: 2px; }
+    .fin-line { cursor: default; }
+    .f-label { flex: 1; font-size: 13px; font-weight: 700; color: var(--ink2); }
+    .f-val { font-size: 13.5px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .f-val.pos { color: #5F9A55; }
+    .f-val.neg { color: #C2503A; }
   `],
 })
 export class HomeScreen {
   store = inject(FoyerStore);
-  dash = inject(DashboardStore);
+  private fins = inject(FinancesStore);
 
-  /** « Fin d'après-midi · jour d'école ». Vide tant que les règles ne sont pas là. */
-  readonly contexte = computed(() => this.dash.context()?.label ?? '');
+  constructor() {
+    // L'accueil demande aux finances le mois courant, une fois, et le laisse
+    // suivre l'horloge du foyer. Un compte enfant n'a pas accès au module :
+    // l'appeler ne rendrait qu'un 403.
+    let asked = '';
+    effect(() => {
+      if (!this.store.authed() || this.store.isChild()) return;
+      const month = this.store.todayStr().slice(0, 7);
+      if (!month || month === asked) return;
+      asked = month;
+      void this.fins.loadHome(month);
+    });
+  }
 
-  /**
-   * Un ordre choisi à la main l'emporte sur les règles de contexte. Le dire
-   * ici : sans cela, l'écran ne bouge plus et on cherche la panne du côté du
-   * fichier de règles, qui n'y est pour rien.
-   */
-  readonly ordreManuel = computed(() => !!this.store.setting('homeOrder').trim());
-
-  /** Le fichier de règles a été refusé : le dire ici, pas seulement au journal. */
-  readonly reglesKo = computed(() => {
-    const r = this.dash.rules();
-    if (!r?.errors.length) return '';
-    return `Règles de contexte ignorées (${r.errors.length} erreur${r.errors.length > 1 ? 's' : ''} dans accueil.json), `
-      + 'réglages d’origine appliqués.';
-  });
-
-  /** Sans membre connu (document pas encore chargé), on salue sans nommer personne. */
   readonly hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
 
-  readonly tiles = computed(() => this.dash.tiles().map((t) => {
-    const render = TILE_RENDERERS[t.provider.id];
-    return {
-      id: t.provider.id, component: render.component,
-      // Une tuile repliée ne mérite plus deux colonnes : elle tient sur son titre.
-      span: t.folded ? undefined : render.span,
-      inputs: { tile: t.provider, state: t.state, raison: t.raison, collapsed: t.folded },
-    };
-  }));
+  readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, 12) : []; });
+
+  /** Les 4 prochains évènements de l'agenda, aujourd'hui compris, en cherchant jusqu'à deux mois devant. */
+  readonly nextEvents = computed<{ date: string; ev: EventItem }[]>(() => {
+    if (!this.store.data()) return [];
+    const today = this.store.todayStr();
+    const out: { date: string; ev: EventItem }[] = [];
+    for (let i = 0; i < 62 && out.length < 4; i++) {
+      const day = this.store.addDays(today, i);
+      for (const ev of this.store.eventsForDay(day)) out.push({ date: day, ev });
+    }
+    return out.slice(0, 4);
+  });
+
+  /** Les 4 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
+  readonly latestTasks = computed(() => {
+    const d = this.store.data();
+    if (!d) return [];
+    const lists = new Map(this.store.visibleTaskLists().map((l) => [l.id, l]));
+    return (d.tasks || [])
+      .filter((t) => lists.has(t.listId))
+      .slice()
+      .sort((a, b) => (b.at || '').localeCompare(a.at || ''))
+      .slice(0, 4)
+      .map((t) => ({ t, list: lists.get(t.listId)!.name, color: lists.get(t.listId)!.color }));
+  });
+
+  /** Les créneaux de repas du jour et leurs plats. */
+  readonly todayMeals = computed(() => {
+    const d = this.store.data();
+    const today = this.store.todayStr();
+    return this.store.mealSlots().map((s) => ({ key: s.key, short: s.short, dot: s.dot, label: this.store.mealLabel(d?.meals[today + '-' + s.key]) }));
+  });
+
+  /** Le sommaire des finances : caché pour un enfant, sinon quatre lignes du mois. */
+  readonly fin = computed<FinState | null>(() => {
+    if (this.store.isChild()) return null;
+    const home = this.fins.home();
+    if (!home) return this.fins.homeError() ? { kind: 'error' } : { kind: 'loading' };
+    if (!home.accounts) return { kind: 'empty' };
+    const s = home.summary;
+    const sign = (c: number): 'pos' | 'neg' | 'ink' => (c > 0 ? 'pos' : c < 0 ? 'neg' : 'ink');
+    const lines: FinLine[] = [
+      { label: 'Revenus', value: fmtEuros(s.income), tone: 'pos' },
+      { label: 'Dépenses', value: fmtEuros(s.expense), tone: 'neg' },
+      { label: 'Solde du mois', value: fmtEuros(s.balance), tone: sign(s.balance) },
+      home.currentBalance !== null
+        ? { label: 'Comptes courants', value: fmtEuros(home.currentBalance), tone: sign(home.currentBalance) }
+        : { label: 'Budget du mois', value: fmtEuros(s.budgetTotal), tone: 'ink' },
+    ];
+    return { kind: 'ok', month: cap(parseDay(home.month + '-01').toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })), lines };
+  });
+
+  /** Vue affinée quand `fin()` vaut « ok », pour l'accès aux champs dans le template. */
+  readonly finOk = computed(() => this.fin() as { kind: 'ok'; month: string; lines: FinLine[] });
+
+  // ---- helpers de rendu ----
+  ini(id: string | null): string { return (id && (this.store.data()?.members || []).find((m) => m.id === id)?.ini) || '?'; }
+  col(id: string | null): string { return id ? this.store.memberColor(id) : '#8A7E74'; }
+  nm(id: string | null): string { return (id && this.store.memberName(id)) || 'Quelqu’un'; }
+  rel(iso: string): string { return relTime(iso, Date.now()); }
+
+  badges(ev: EventItem): WhoBadge[] { return whoBadges({ who: ev.who }, this.store.data()?.members || []); }
+  evColor(ev: EventItem): string { return ev.who.length ? this.store.memberColor(ev.who[0]) : '#E56B4E'; }
+
+  /** « Auj. », « Demain », sinon « lun. 12 ». */
+  dayLabel(date: string): string {
+    const today = this.store.todayStr();
+    if (date === today) return 'Auj.';
+    if (date === this.store.addDays(today, 1)) return 'Demain';
+    return cap(parseDay(date).toLocaleDateString(this.store.locale, { weekday: 'short', day: 'numeric' }));
+  }
 }

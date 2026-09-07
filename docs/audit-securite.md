@@ -117,7 +117,6 @@ appeler, et ce qui sort.
 | `GET /api/me` | Son propre compte, avec les indicateurs `admin` et `enfant` |
 | `PUT /api/me/credentials` | Change sa propre adresse et son mot de passe (exige le mot de passe actuel) |
 | `GET /api/members/accounts` | **Les adresses de connexion de tous les comptes du foyer.** Voir **E5** |
-| `GET /api/home/rules` | Règles de contexte de l'accueil |
 | `GET /api/calendar/school-holidays` | Vacances scolaires (données publiques) |
 | `GET /api/calendar/ics` | **Le jeton secret du flux ICS, et le crée s'il n'existe pas.** Voir **E6** |
 | `GET /api/system/version` | Version, dépôt GitHub, état de l'auto-mise à jour |

@@ -40,7 +40,7 @@ const PUBLICS: { chemin: string; method: string; pourquoi: string; attendu: numb
 const PROTEGES: [string, string][] = [
   ['GET', '/state'], ['PUT', '/state'], ['GET', '/live'], ['GET', '/me'], ['PUT', '/me/credentials'],
   ['GET', '/members/accounts'], ['POST', '/members/m1/account'], ['PUT', '/members/m1/account'], ['DELETE', '/members/m1/account'],
-  ['GET', '/home/rules'], ['GET', '/calendar/school-holidays'], ['GET', '/calendar/ics'], ['POST', '/calendar/ics/regenerate'],
+  ['GET', '/calendar/school-holidays'], ['GET', '/calendar/ics'], ['POST', '/calendar/ics/regenerate'],
   ['GET', '/system/version'], ['GET', '/system/update-check'], ['GET', '/system/update-status'],
   ['POST', '/system/update'], ['GET', '/system/status'],
   ['POST', '/system/backup'], ['GET', '/system/backup/foyer-2026-01-01-1200.db'], ['DELETE', '/system/backup/foyer-2026-01-01-1200.db'],
