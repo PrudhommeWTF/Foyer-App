@@ -54,7 +54,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
                   <span class="mnum" [style.color]="c.inMonth ? 'var(--ink)' : 'var(--ink3)'">{{ c.num }}</span>
                   @for (it of c.items; track $index) {
                     @if (it.kind === 'event') {
-                      <div class="chip-ev tap" [style.background]="store.tint(store.memberColor(it.ev.who))" [style.color]="store.memberColor(it.ev.who)" (click)="openEventChip($event, it.ev.id)">{{ it.ev.title }}</div>
+                      <div class="chip-ev tap" [style.background]="store.tint(eventColor(it.ev))" [style.color]="eventColor(it.ev)" (click)="openEventChip($event, it.ev.id)">{{ it.ev.title }}</div>
                     } @else {
                       <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
                         <f-icon name="planning" [size]="10" [color]="slotColor(it.se.k)" [width]="2.4" />
@@ -86,13 +86,10 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
                   <div class="col-body">
                     @for (it of col.items; track $index) {
                       @if (it.kind === 'event') {
-                        <div class="col-ev" [style.border-left]="'4px solid ' + store.memberColor(it.ev.who)" (click)="store.editEvent(it.ev.id)">
+                        <div class="col-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="store.editEvent(it.ev.id)">
                           <div class="ce-time f-display">{{ timeLabel(it.ev) }}</div>
                           <div class="ce-title">{{ it.ev.title }}</div>
-                          <div class="ce-who">
-                            <span class="dot" [style.background]="store.memberColor(it.ev.who)">{{ store.memberIni(it.ev.who) }}</span>
-                            <span>{{ store.memberName(it.ev.who) }}</span>
-                          </div>
+                          @if (it.ev.who.length) { <div class="ce-who"><f-who [badges]="eventBadges(it.ev)" /></div> }
                         </div>
                       } @else {
                         <div class="col-ev slotev" [style.border-left]="'4px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
@@ -160,7 +157,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
           <div class="side-sel">{{ selLabel() }}</div>
           @for (it of selItems(); track $index) {
             @if (it.kind === 'event') {
-              <div class="side-ev" [style.border-left]="'4px solid ' + store.memberColor(it.ev.who)" (click)="store.editEvent(it.ev.id)">
+              <div class="side-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="store.editEvent(it.ev.id)">
                 <div class="se-top">
                   <div class="se-time f-display">{{ timeLabel(it.ev) }}</div>
                   @if (it.ev.recur !== 'none') {
@@ -171,10 +168,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
                 @if (it.ev.end && it.ev.end !== it.ev.date) {
                   <div class="se-span"><f-icon name="calendar" [size]="13" color="#4E93B8" [width]="2.2" /> du {{ fmtShort(it.ev.date) }} au {{ fmtShort(it.ev.end) }}</div>
                 }
-                <div class="se-who">
-                  <span class="dot" [style.background]="store.memberColor(it.ev.who)">{{ store.memberIni(it.ev.who) }}</span>
-                  <span>{{ store.memberName(it.ev.who) }}</span>
-                </div>
+                @if (it.ev.who.length) { <div class="se-who"><f-who [badges]="eventBadges(it.ev)" /></div> }
               </div>
             } @else {
               <div class="side-ev slotev" [style.border-left]="'4px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
@@ -241,11 +235,14 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
           <div class="dp-summary"><f-icon name="calendar" [size]="15" color="#E56B4E" [width]="2" /> <span>{{ dpSummary() }}</span></div>
 
           <div class="fl">Assigné à</div>
+          <!-- Plusieurs membres possibles : un repas de famille, une sortie, un
+               trajet concernent plus d'une personne. Aucun est licite (événement
+               du foyer). -->
           <div class="seg-members">
             @for (m of d().members; track m.id) {
-              <button [style.background]="store.ui().evWho === m.id ? m.color : 'var(--soft)'"
-                      [style.color]="store.ui().evWho === m.id ? '#fff' : 'var(--ink2)'"
-                      (click)="store.patch({ evWho: m.id })">{{ m.name }}</button>
+              <button [style.background]="store.ui().evWho.includes(m.id) ? m.color : 'var(--soft)'"
+                      [style.color]="store.ui().evWho.includes(m.id) ? '#fff' : 'var(--ink2)'"
+                      (click)="store.toggleEvWho(m.id)">{{ m.name }}</button>
             }
           </div>
 
@@ -630,6 +627,12 @@ export class CalendarScreen {
 
   /** Les pastilles d'identité d'un créneau publié : plusieurs membres, comme dans l'emploi du temps. */
   slotBadges(se: SlotEvent): WhoBadge[] { return whoBadges({ who: se.who }, this.d().members); }
+
+  /** Les pastilles d'un événement : ses membres, dans l'ordre du foyer. */
+  eventBadges(ev: EventItem): WhoBadge[] { return whoBadges({ who: ev.who }, this.d().members); }
+
+  /** Couleur d'un événement : celle de son premier membre, ou la couleur « Événement » quand il n'en porte aucun. */
+  eventColor(ev: EventItem): string { return ev.who.length ? this.store.memberColor(ev.who[0]) : CAL_KINDS['event'].color; }
 
   /** Un événement d'agenda venu d'un créneau s'ouvre sur son créneau source, pas sur une copie. */
   openSlot(e: Event, se: SlotEvent): void {

@@ -20,7 +20,7 @@ export interface Member {
   enfant?: boolean;
   allerg?: string[]; refuse?: string[];
 }
-export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: string; end?: string | null;
+export interface EventItem { id: string; date: string; time: string; title: string; who: string[]; recur: string; end?: string | null;
   /** Heure de fin, HH:MM (l'heure de fin dans la journée ; `end` est la date de fin). */
   endTime?: string | null;
   /**

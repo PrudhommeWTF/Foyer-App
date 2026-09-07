@@ -22,7 +22,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 10;
+export const STATE_VERSION = 11;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -467,6 +467,28 @@ export const STATE_MIGRATIONS: StateMigration[] = [
         for (const k of restants) delete profile[k];
         ctx.log('Réglages : le profil en double du document est retiré ; les écrans lisent la fiche du membre.');
       }
+    },
+  },
+  {
+    version: 11,
+    label: 'un événement d’agenda peut porter plusieurs membres',
+    up: (doc, ctx) => {
+      // `who` passe d'un membre unique à une liste, comme les tâches et les
+      // créneaux : un événement de famille (repas, sortie) concerne plusieurs
+      // personnes. Un membre disparu laisse l'événement sans participant, ce qui
+      // est licite. Rejouable : une liste ne se retouche pas.
+      const membres = new Set(arr(doc['members']).map((m) => String(m?.['id'] ?? '')).filter(Boolean));
+      let inconnus = 0;
+      for (const e of arr(doc['events'])) {
+        if (typeof e['who'] === 'string') {
+          const w = e['who'];
+          e['who'] = membres.has(w) ? [w] : [];
+          if (w && !membres.has(w)) inconnus++;
+        } else if (!Array.isArray(e['who'])) {
+          e['who'] = [];
+        }
+      }
+      if (inconnus) ctx.log(`Agenda : ${inconnus} événement(s) attribué(s) à un membre disparu, remis sans participant.`);
     },
   },
 ];

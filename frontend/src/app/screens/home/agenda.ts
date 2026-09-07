@@ -1,14 +1,16 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { AvatarComponent } from '../../shared/avatar';
 import { TileComponent } from '../../shared/tile';
+import { WhoComponent } from '../../shared/who';
 import { AgendaTileData } from '../../core/tiles/agenda.tile';
+import { EventItem } from '../../core/models';
+import { WhoBadge, whoBadges } from '../../core/schedule';
 import { HomeTile } from './base';
 
 @Component({
   selector: 'tile-agenda',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TileComponent, AvatarComponent],
+  imports: [TileComponent, WhoComponent],
   template: `
     <f-tile [title]="tile().title" [link]="tile().link" [state]="state()" [raison]="raison()" [collapsed]="collapsed()"
             (open)="dash.open(tile())" (retry)="dash.retry(tile())">
@@ -22,25 +24,22 @@ import { HomeTile } from './base';
             </div>
           }
           @for (e of d.events; track e.id) {
-            <div class="ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)">
+            <div class="ev" [style.border-left]="'4px solid ' + evColor(e)">
               <div class="ev-time f-display">{{ e.time }}</div>
               <div class="ev-body">
                 <div class="ev-title">{{ e.title }}</div>
-                <div class="ev-who">
-                  <f-avatar [ini]="store.memberIni(e.who)" [color]="store.memberColor(e.who)" [size]="18" />
-                  <span>{{ store.memberName(e.who) }}</span>
-                </div>
+                @if (e.who.length) { <div class="ev-who"><f-who [badges]="badges(e)" [size]="18" /></div> }
               </div>
             </div>
           }
           @if (d.tomorrow.length) {
             <div class="demain">Demain</div>
             @for (e of d.tomorrow; track e.id) {
-              <div class="ev next" [style.border-left]="'4px solid ' + store.memberColor(e.who)">
+              <div class="ev next" [style.border-left]="'4px solid ' + evColor(e)">
                 <div class="ev-time f-display">{{ e.time }}</div>
                 <div class="ev-body">
                   <div class="ev-title">{{ e.title }}</div>
-                  <div class="ev-who"><span>{{ store.memberName(e.who) }}</span></div>
+                  @if (e.who.length) { <div class="ev-who"><span>{{ names(e) }}</span></div> }
                 </div>
               </div>
             }
@@ -67,4 +66,8 @@ import { HomeTile } from './base';
     .ev.next .ev-title { font-size: 13.5px; color: var(--ink2); }
   `],
 })
-export class AgendaTile extends HomeTile<AgendaTileData> {}
+export class AgendaTile extends HomeTile<AgendaTileData> {
+  badges(e: EventItem): WhoBadge[] { return whoBadges({ who: e.who }, this.store.data()?.members || []); }
+  evColor(e: EventItem): string { return e.who.length ? this.store.memberColor(e.who[0]) : '#E56B4E'; }
+  names(e: EventItem): string { return this.badges(e).map((b) => b.name).join(', '); }
+}
