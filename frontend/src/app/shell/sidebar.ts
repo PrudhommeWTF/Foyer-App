@@ -18,7 +18,10 @@ const FOLD_KEY = 'foyer.menuReduit';
   imports: [IconComponent, AvatarComponent],
   template: `
     <aside class="sidebar" [class.reduit]="reduit()">
-      <div class="brand">
+      <!-- L'en-tête est le bouton « Accueil » : comme le titre d'un site ramène à
+           sa page d'accueil, cliquer le logo et le nom y revient. -->
+      <button class="brand" [class.active]="store.ui().screen === 'home'" (click)="store.go('home')"
+              [attr.title]="reduit() ? 'Accueil' : null" aria-label="Accueil">
         <div class="badge"><f-icon name="home" [size]="24" color="#fff" [width]="2.2" /></div>
         @if (!reduit()) {
           <div>
@@ -26,7 +29,7 @@ const FOLD_KEY = 'foyer.menuReduit';
             <div class="tag f-script">la maison, ensemble</div>
           </div>
         }
-      </div>
+      </button>
 
       <nav class="nav fscroll">
         @for (g of groups(); track g.title) {
@@ -83,7 +86,10 @@ const FOLD_KEY = 'foyer.menuReduit';
   `,
   styles: [`
     .sidebar { width: 270px; flex: none; background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 26px 18px; height: 100vh; transition: width .18s ease, padding .18s ease; }
-    .brand { display: flex; align-items: center; gap: 12px; padding: 0 8px 4px; }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 8px; margin: -8px -8px 0; border: none; background: transparent; cursor: pointer; border-radius: 14px; width: calc(100% + 16px); text-align: left; transition: background .12s ease; }
+    .brand:hover { background: var(--soft2); }
+    .brand.active { background: #FCE9E3; }
+    :host-context(:root.dark) .brand.active { background: rgba(229,107,78,.18); }
     .badge { width: 42px; height: 42px; border-radius: 14px; background: linear-gradient(135deg, #E56B4E, #D9553A); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px -6px rgba(229,107,78,.6); }
     .name { font-size: 22px; font-weight: 700; color: var(--ink); line-height: 1; }
     .tag { font-size: 16px; color: var(--primary); line-height: 1; }
@@ -107,7 +113,7 @@ const FOLD_KEY = 'foyer.menuReduit';
 
     /* Replié : les icônes seules, centrées, et rien qui déborde. */
     .sidebar.reduit { width: 76px; padding-left: 12px; padding-right: 12px; }
-    .sidebar.reduit .brand { flex-direction: column; gap: 10px; padding: 0 0 4px; }
+    .sidebar.reduit .brand { flex-direction: column; gap: 10px; padding: 8px 0; margin: 0 0 4px; width: 100%; justify-content: center; }
     .sidebar.reduit .nav-item { justify-content: center; gap: 0; padding: 11px 0; }
     .sidebar.reduit .nav-item .accent { display: none; }
     .sidebar.reduit .plier { justify-content: center; gap: 0; padding: 9px 0; }
