@@ -10,6 +10,7 @@ import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl, declOf } from '../../co
 import { manualOrder } from '../../core/home-context';
 import { TILE_PROVIDERS } from '../../core/tiles/registry';
 import { AvatarComponent } from '../../shared/avatar';
+import { ModalComponent } from '../../shared/modal';
 import { SettingFieldComponent } from './field';
 
 /**
@@ -51,7 +52,7 @@ const GESTES = new Set(['compte', 'membres']);
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, AvatarComponent, IconComponent, SettingFieldComponent],
+  imports: [FormsModule, AvatarComponent, IconComponent, SettingFieldComponent, ModalComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -618,8 +619,31 @@ const GESTES = new Set(['compte', 'membres']);
         </div>
       }
     </div>
+
+    @if (updOpen()) {
+      <f-modal title="Mettre à jour Foyer" [maxWidth]="440" (close)="updOpen.set(false)">
+        <p class="upd-modal-txt">Le service va se recompiler et redémarrer (environ 1 à 2 min). Cette opération installe et exécute du code sur le serveur : confirmez avec votre mot de passe.</p>
+        <label class="field-label" for="upd-mdp">Mot de passe</label>
+        <div class="upd-pwd">
+          <input id="upd-mdp" class="input" [type]="updShow() ? 'text' : 'password'" autocomplete="current-password"
+                 [ngModel]="updMdp()" (ngModelChange)="updMdp.set($event)" (keydown.enter)="confirmUpdate()" placeholder="••••••••" />
+          <button type="button" class="upd-eye" (click)="updShow.set(!updShow())" [title]="updShow() ? 'Masquer' : 'Afficher'">
+            <f-icon [name]="updShow() ? 'eyeOff' : 'eye'" [size]="18" color="var(--ink3)" />
+          </button>
+        </div>
+        <div class="upd-modal-actions">
+          <button class="btn btn-soft" (click)="updOpen.set(false)">Annuler</button>
+          <button class="btn btn-primary" [disabled]="!updMdp()" (click)="confirmUpdate()">Mettre à jour</button>
+        </div>
+      </f-modal>
+    }
   `,
   styles: [`
+    .upd-modal-txt { font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; margin: 0 0 16px; }
+    .upd-pwd { position: relative; }
+    .upd-pwd .input { padding-right: 46px; }
+    .upd-eye { position: absolute; top: 0; right: 0; height: 100%; width: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; }
+    .upd-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
     .sep { border: none; border-top: 2px solid var(--line); margin: 22px 0 0; }
     .groupe { margin: 18px 0 2px; }
     .gl { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); }
@@ -1060,12 +1084,23 @@ export class SettingsScreen {
    * formalité, c'est ce qui sépare « quelqu'un a mon téléphone déverrouillé » de
    * « quelqu'un exécute ce qu'il veut sur ma machine ».
    */
+  /** État de la modale de confirmation de mise à jour. Un vrai champ mot de passe, pas le prompt() du navigateur qui l'affiche en clair. */
+  readonly updOpen = signal(false);
+  readonly updMdp = signal('');
+  readonly updShow = signal(false);
+
   doUpdate(): void {
-    const mdp = prompt(
-      'Lancer la mise à jour de Foyer ? Le service va se recompiler et redémarrer (environ 1 à 2 min).\n\n'
-      + 'Cette opération installe et exécute du code sur le serveur : confirmez avec votre mot de passe.',
-    );
-    if (mdp) this.store.applyUpdate(mdp);
+    this.updMdp.set('');
+    this.updShow.set(false);
+    this.updOpen.set(true);
+  }
+
+  confirmUpdate(): void {
+    const mdp = this.updMdp();
+    if (!mdp) return;
+    this.updOpen.set(false);
+    this.updMdp.set('');
+    this.store.applyUpdate(mdp);
   }
 
   /** « iPhone », « iPad », « Chrome sur Android », « Safari sur Mac » : lisible, pas l'agent complet. */
