@@ -7,7 +7,7 @@
 // pas cliqué. Un filtre vide qui viderait l'écran est un bug, pas un réglage.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { DEFAULT_START, WHO_SHOWN, calendarFacts, dowLabel, filterSlots, gapsOf, knownLabels, matchesWho, nextFreeStart, occursOn, slotsOn, sortSlots, validityLabel, whoBadges } from './schedule';
+import { DEFAULT_START, WHO_SHOWN, calendarFacts, dowLabel, filterSlots, gapsOf, knownLabels, matchesWho, nextFreeStart, occursOn, slotEventsOn, slotsOn, sortSlots, validityLabel, whoBadges } from './schedule';
 import { Member, SchedSlot } from './models';
 
 const slot = (over: Partial<SchedSlot> = {}): SchedSlot =>
@@ -319,4 +319,40 @@ test('les intitulés déjà employés sortent, les plus fréquents d’abord', (
     slot({ id: '4', label: '  ' }),
   ];
   assert.deepEqual(knownLabels(sched), ['École', 'Car scolaire'], 'un intitulé vide n’est pas une suggestion');
+});
+
+// ---- créneaux publiés à l'agenda --------------------------------------------
+//
+// Un créneau `sync` ressort dans le calendrier partagé. Les occurrences sont
+// dérivées à la volée : la récurrence réelle (période, vacances, jours sautés)
+// doit donc être respectée, et un créneau non publié ne doit jamais apparaître.
+
+test('seuls les créneaux publiés ressortent à l’agenda, avec leur créneau pour source', () => {
+  const sched = [
+    slot({ id: 'a', label: 'Piano', start: '17:00', end: '18:00', sync: true }),
+    slot({ id: 'b', label: 'École', sync: false }),
+  ];
+  const evs = slotEventsOn(sched, '2026-09-10');
+  assert.equal(evs.length, 1, 'le créneau non publié ne sort pas');
+  assert.equal(evs[0].slotId, 'a');
+  assert.equal(evs[0].title, 'Piano');
+  assert.equal(evs[0].time, '17:00');
+  assert.equal(evs[0].end, '18:00');
+  assert.equal(evs[0].id, 'slot:a:2026-09-10', 'l’identifiant porte le créneau et la date');
+});
+
+test('l’agenda dérivé respecte la récurrence : hors période et jours sautés ne sortent pas', () => {
+  const horsPeriode = slot({ id: 'a', sync: true, from: '2026-10-01' });
+  assert.equal(slotEventsOn([horsPeriode], '2026-09-10').length, 0, 'avant le début de validité, rien');
+  assert.equal(slotEventsOn([horsPeriode], '2026-10-01').length, 1, 'à partir du début, l’occurrence sort');
+
+  const saute = slot({ id: 'b', sync: true, skip: ['2026-09-10'] });
+  assert.equal(slotEventsOn([saute], '2026-09-10').length, 0, 'une date sautée ne produit pas d’événement');
+  assert.equal(slotEventsOn([saute], '2026-09-17').length, 1, 'les autres jours sortent normalement');
+});
+
+test('un créneau ponctuel publié ne sort qu’à sa date', () => {
+  const ponctuel = slot({ id: 'p', rec: 'once', date: '2026-09-10', sync: true });
+  assert.equal(slotEventsOn([ponctuel], '2026-09-10').length, 1);
+  assert.equal(slotEventsOn([ponctuel], '2026-09-17').length, 0);
 });

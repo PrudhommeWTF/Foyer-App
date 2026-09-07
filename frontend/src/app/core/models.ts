@@ -270,6 +270,15 @@ export interface SchedSlot {
   skip?: string[];
   /** Occurrence détachée : la série dont elle vient, pour pouvoir la retrouver. */
   srcId?: string;
+  /**
+   * Créneau **publié à l'agenda** : ses occurrences apparaissent dans le
+   * calendrier partagé, pour qui ne regarde que lui. Rien n'est recopié dans
+   * `events` : les occurrences sont dérivées à la volée (voir slotEventsOn),
+   * si bien que la récurrence réelle du créneau (période de validité, filtre
+   * scolaire/vacances, dates sautées) est respectée sans jamais figer une
+   * occurrence périmée. Modifier le créneau met l'agenda à jour d'office.
+   */
+  sync?: boolean;
 }
 export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
 /**

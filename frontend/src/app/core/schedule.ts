@@ -11,7 +11,7 @@
 // cliqué) était la raison pour laquelle le module ne servait à rien.
 import { SCHED_DAYS } from './constants';
 import { frenchHolidays, weekdayOf } from './helpers';
-import { Member, SchedSlot } from './models';
+import { Member, SchedSlot, SchedType } from './models';
 
 /** Le nom du jour, pour l'affichage. `dow` va de 1 (lundi) à 7 (dimanche). */
 export function dowLabel(dow: number): string {
@@ -102,6 +102,30 @@ export function occursOn(s: SchedSlot, date: string, cal: CalendarFacts = NO_CAL
 /** Les créneaux d'une date, dans l'ordre des heures, tous membres confondus. */
 export function slotsOn(sched: SchedSlot[], date: string, cal: CalendarFacts = NO_CALENDAR): SchedSlot[] {
   return sortSlots((sched || []).filter((s) => occursOn(s, date, cal)));
+}
+
+/**
+ * Une occurrence de créneau **publié à l'agenda**, résolue pour une date.
+ *
+ * Ce n'est pas un `EventItem` stocké : il est dérivé à la volée des créneaux
+ * `sync`, donc la récurrence réelle du créneau (période de validité, filtre
+ * scolaire/vacances, dates sautées) est respectée par construction, et rien de
+ * périmé ne peut survivre dans le document. `slotId` pointe la source, pour que
+ * l'agenda ouvre le créneau plutôt que d'en éditer une copie.
+ */
+export interface SlotEvent {
+  id: string; slotId: string; date: string; time: string; end: string;
+  title: string; who: string[]; k: SchedType;
+}
+
+/** Les occurrences du jour issues des créneaux publiés à l'agenda, triées par heure. */
+export function slotEventsOn(sched: SchedSlot[], date: string, cal: CalendarFacts = NO_CALENDAR): SlotEvent[] {
+  return slotsOn(sched, date, cal)
+    .filter((s) => s.sync)
+    .map((s) => ({
+      id: 'slot:' + s.id + ':' + date, slotId: s.id, date,
+      time: s.start, end: s.end || '', title: s.label, who: s.who || [], k: s.k,
+    }));
 }
 
 /**

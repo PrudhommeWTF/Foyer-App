@@ -132,6 +132,8 @@ export interface UiState {
   seRec: SchedRec; seDate: string; seFrom: string; seUntil: string; seWhen: SchedWhen;
   /** Le créneau se passe hors du foyer : c'est ce qui retire un couvert. */
   seAway: boolean;
+  /** Le créneau est publié à l'agenda : ses occurrences y apparaissent. */
+  seSync: boolean;
   /** Déplie les réglages de période, qui ne servent pas à la saisie courante. */
   seMore: boolean;
   /** La date de l'occurrence ouverte : c'est elle que visent « cette fois » et « à partir de ». */
@@ -204,7 +206,7 @@ export function initialUi(): UiState {
     fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
     schedWho: [], schedDow: weekdayOf(today), schedAnchor: today, schedEdit: false, seEditId: null,
     seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
-    seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seAway: true,
+    seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seAway: true, seSync: false,
     seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false, schedMove: null,
     schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
     familyOpen: false, famNameField: '',

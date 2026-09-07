@@ -3,18 +3,20 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
-import { DOW, RECUR_LABELS, CAL_KINDS } from '../core/constants';
+import { WhoComponent } from '../shared/who';
+import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS } from '../core/constants';
 import { cap, parseDay, dstr } from '../core/helpers';
 import { Recur } from '../core/models';
+import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
 
 interface Chip { title: string; bg: string; fg: string; }
-interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[]; extras: DayExtra[]; more: number; }
+interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[]; slotEvents: SlotEvent[]; extras: DayExtra[]; more: number; }
 
 @Component({
   selector: 'screen-calendar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, WhoComponent],
   template: `
     <div class="screen-enter">
       <div class="cal-wrap">
@@ -52,6 +54,12 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                   @for (chip of c.chips; track $index) {
                     <div class="chip-ev" [style.background]="chip.bg" [style.color]="chip.fg">{{ chip.title }}</div>
                   }
+                  @for (se of c.slotEvents; track se.id) {
+                    <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
+                      <f-icon name="planning" [size]="10" [color]="slotColor(se.k)" [width]="2.4" />
+                      <span class="ex-lbl">{{ se.title }}</span>
+                    </div>
+                  }
                   @for (ex of c.extras; track $index) {
                     <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
                       <span class="ex-dot" [style.background]="ex.color"></span>
@@ -84,9 +92,19 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                         </div>
                       </div>
                     } @empty {
-                      @if (!col.extras.length) {
+                      @if (!col.extras.length && !col.slotEvents.length) {
                         <div class="col-empty" (click)="addAt(col.key)">Libre</div>
                       }
+                    }
+                    @for (se of col.slotEvents; track se.id) {
+                      <div class="col-ev slotev" [style.border-left]="'4px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
+                        <div class="ce-time f-display">{{ se.time }}{{ se.end ? ' – ' + se.end : '' }}</div>
+                        <div class="ce-title">{{ se.title }}</div>
+                        <div class="slotev-foot">
+                          <f-who [badges]="slotBadges(se)" />
+                          <span class="slotev-tag"><f-icon name="planning" [size]="11" [color]="slotColor(se.k)" [width]="2.4" /> Emploi du temps</span>
+                        </div>
+                      </div>
                     }
                     @for (ex of col.extras; track $index) {
                       <div class="col-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
@@ -131,9 +149,19 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
               </div>
             </div>
           } @empty {
-            @if (!selExtras().length) {
+            @if (!selExtras().length && !selSlotEvents().length) {
               <div class="side-empty">Aucun événement ce jour</div>
             }
+          }
+          @for (se of selSlotEvents(); track se.id) {
+            <div class="side-ev slotev" [style.border-left]="'4px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
+              <div class="se-top">
+                <div class="se-time f-display">{{ se.time }}{{ se.end ? ' – ' + se.end : '' }}</div>
+                <span class="se-slot"><f-icon name="planning" [size]="12" [color]="slotColor(se.k)" [width]="2.4" /> Emploi du temps</span>
+              </div>
+              <div class="se-title">{{ se.title }}</div>
+              <div class="se-who"><f-who [badges]="slotBadges(se)" /></div>
+            </div>
           }
           @if (selExtras().length) {
             <div class="side-extras">
@@ -277,6 +305,17 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
     .sx-lbl { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sx-sub { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--ink3); flex: none; }
 
+    /* ===== événements venus de l'emploi du temps ===== */
+    /* Dérivés d'un créneau, ils s'ouvrent sur leur créneau source : un fond
+       légèrement teinté et une étiquette « Emploi du temps » les distinguent
+       d'un événement propre à l'agenda, qu'on modifie sur place. */
+    .col-ev.slotev, .side-ev.slotev { background: color-mix(in srgb, var(--ink) 3%, var(--surface)); }
+    .slotev-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
+    .slotev-tag, .se-slot { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
+    .se-slot { font-size: 11px; background: var(--soft); padding: 3px 9px; border-radius: 20px; }
+    .side-ev.slotev .se-who { margin-top: 8px; }
+    .chip-ex.slotev { gap: 3px; }
+
     .fl { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
     .dp { background: var(--soft); border: 2px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 8px; }
     .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -332,16 +371,18 @@ export class CalendarScreen {
       d.setDate(start.getDate() + i);
       const key = dstr(d);
       const evs = this.store.eventsForDay(key);
+      const slotEvents = this.store.slotEventsForDay(key);
       const extras = this.store.dayExtras(key);
-      // Le compteur porte sur les événements **et** les repères : sans cela, une
-      // échéance de contrat disparaissait sans laisser de trace le jour où elle
-      // tombait après un férié et un anniversaire.
-      const hidden = Math.max(0, evs.length - 2) + Math.max(0, extras.length - 2);
+      // Le compteur porte sur les événements **et** les créneaux publiés **et**
+      // les repères : sans cela, une échéance de contrat disparaissait sans
+      // laisser de trace le jour où elle tombait après un férié et un anniversaire.
+      const hidden = Math.max(0, evs.length - 2) + Math.max(0, slotEvents.length - 2) + Math.max(0, extras.length - 2);
       out.push({
         key,
         num: d.getDate(),
         inMonth: d.getMonth() === month,
         chips: evs.slice(0, 2).map((e) => ({ title: e.title, bg: this.store.tint(this.store.memberColor(e.who)), fg: this.store.memberColor(e.who) })),
+        slotEvents: slotEvents.slice(0, 2),
         extras: extras.slice(0, 2),
         more: hidden,
       });
@@ -361,16 +402,20 @@ export class CalendarScreen {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), extras: this.store.dayExtras(key), isToday: key === this.store.todayStr(), isSel: key === selDay });
+      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), slotEvents: this.store.slotEventsForDay(key), extras: this.store.dayExtras(key), isToday: key === this.store.todayStr(), isSel: key === selDay });
     }
     return out;
   });
 
   selEvents = computed(() => this.store.eventsForDay(this.store.ui().selDay));
+  selSlotEvents = computed(() => this.store.slotEventsForDay(this.store.ui().selDay));
   selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
   selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
 
-  legendKinds = ['holiday', 'school', 'birthday', 'task', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label }));
+  legendKinds = [
+    ...['holiday', 'school', 'birthday', 'task', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
+    { k: 'planning', color: SCHED_COLORS['ecole'], label: 'Emploi du temps' },
+  ];
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
   dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
@@ -451,6 +496,18 @@ export class CalendarScreen {
     if (!ex.id) return;
     e.stopPropagation();
     this.store.openTaskItem(ex.id);
+  }
+
+  /** Couleur du type de créneau, pour marquer d'un coup d'oeil un événement d'emploi du temps. */
+  slotColor(k: string): string { return SCHED_COLORS[k] || 'var(--ink3)'; }
+
+  /** Les pastilles d'identité d'un créneau publié : plusieurs membres, comme dans l'emploi du temps. */
+  slotBadges(se: SlotEvent): WhoBadge[] { return whoBadges({ who: se.who }, this.d().members); }
+
+  /** Un événement d'agenda venu d'un créneau s'ouvre sur son créneau source, pas sur une copie. */
+  openSlot(e: Event, se: SlotEvent): void {
+    e.stopPropagation();
+    this.store.openSlotEvent(se.slotId, se.date);
   }
 
 }

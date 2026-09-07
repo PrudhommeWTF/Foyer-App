@@ -261,6 +261,19 @@ interface DayView { dow: number; date: string; label: string; short: string; num
           </span>
         </div>
 
+        <!-- Le créneau ressort dans le calendrier partagé, pour qui ne regarde que
+             lui. Rien n'est recopié : ses occurrences sont dérivées du créneau, et
+             suivent sa récurrence réelle (période, vacances, jours sautés). -->
+        <div class="away-row" [class.on]="store.ui().seSync" (click)="store.patch({ seSync: !store.ui().seSync })">
+          <span class="box">@if (store.ui().seSync) { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }</span>
+          <span class="away-txt">
+            <b>Publier à l’agenda</b>
+            <span class="away-hint">{{ store.ui().seRec === 'once'
+              ? 'Ce créneau apparaît dans le calendrier partagé à sa date.'
+              : 'Toutes les occurrences de ce créneau apparaissent dans le calendrier partagé.' }}</span>
+          </span>
+        </div>
+
         <!-- Les réglages de période sont repliés : ils ne servent pas à la saisie
              courante, et le formulaire ne doit demander que le nécessaire. -->
         @if (store.ui().seRec === 'weekly') {
