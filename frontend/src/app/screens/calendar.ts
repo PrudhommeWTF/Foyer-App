@@ -90,7 +90,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
               }
             </div>
           } @else {
-            <div class="cols" [style.grid-template-columns]="'repeat(' + cols().length + ',1fr)'">
+            <div class="cols" [style.grid-template-columns]="store.narrow() ? '1fr' : ('repeat(' + cols().length + ',1fr)')">
               @for (col of cols(); track col.key) {
                 <div class="col">
                   <div class="col-head"
@@ -146,6 +146,10 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
               <span class="lg-item"><span class="ex-dot" [style.background]="lk.color"></span>{{ lk.label }}</span>
             }
           </div>
+          <!-- Sur mobile, le mini-calendrier et le détail du jour sélectionné sont
+               masqués (voir .side-detail) : la vue principale et le bouton d'ajout
+               suffisent, et l'écran reste court. -->
+          <div class="side-detail">
           <!-- Un mini-calendrier plutôt qu'une date en toutes lettres : il montre
                le mois d'un coup d'oeil et permet de sauter à n'importe quel jour,
                numéros de semaine compris. -->
@@ -214,6 +218,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
               }
             </div>
           }
+          </div>
         </div>
       </div>
 
@@ -298,6 +303,11 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     :host-context(.shell.narrow) .cal-wrap { flex-direction: column; }
     :host-context(.shell.narrow) .side { width: auto; }
     @media (max-width: 860px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
+    /* Sur mobile, le mini-calendrier et le détail du jour sélectionné n'apportent
+       rien de plus que la vue et le bouton d'ajout : on les masque pour garder un
+       écran court. Les vues Semaine et 3 jours passent en pile (une colonne). */
+    :host-context(.shell.narrow) .side-detail { display: none; }
+    @media (max-width: 860px) { .side-detail { display: none; } }
 
     .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
     .head-left { display: flex; align-items: center; gap: 12px; }
@@ -334,6 +344,9 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
 
     .cols { display: grid; gap: 10px; align-items: start; }
     .col { background: var(--soft); border-radius: 16px; padding: 10px; min-height: 300px; display: flex; flex-direction: column; }
+    /* En pile sur mobile, une colonne pleine largeur par jour : inutile de la
+       tenir à 300 px, elle prend la hauteur de son contenu. */
+    @media (max-width: 860px) { .col { min-height: 132px; } }
     .col-head { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 11px; padding: 8px 6px; margin-bottom: 10px; cursor: pointer; }
     .col-dow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
     .col-num { font-size: 17px; font-weight: 700; }
