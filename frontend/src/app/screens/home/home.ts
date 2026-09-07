@@ -6,9 +6,14 @@ import { AvatarComponent } from '../../shared/avatar';
 import { WhoComponent } from '../../shared/who';
 import { recentActivity } from '../../core/activity';
 import { relTime } from '../../core/activity';
-import { EventItem } from '../../core/models';
+import { EventItem, TaskItem } from '../../core/models';
 import { WhoBadge, whoBadges } from '../../core/schedule';
 import { cap, parseDay } from '../../core/helpers';
+
+/** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
+type Ahead =
+  | { date: string; time: string; kind: 'event'; ev: EventItem }
+  | { date: string; time: string; kind: 'task'; task: TaskItem; list: string; color: string };
 
 interface FinLine { label: string; value: string; tone: 'pos' | 'neg' | 'ink'; }
 type FinState =
@@ -76,19 +81,32 @@ type FinState =
           <!-- prochains évènements -->
           <div class="card rc">
             <div class="rc-head"><span>Prochains évènements</span><button class="rc-link" (click)="store.go('calendar')">Agenda</button></div>
-            @for (e of nextEvents(); track $index) {
-              <div class="rc-row ev" (click)="store.editEvent(e.ev.id)">
-                <div class="ev-when" [style.background]="store.tint(evColor(e.ev))" [style.color]="evColor(e.ev)">
-                  <span class="ev-day">{{ dayLabel(e.date) }}</span>
-                  <span class="ev-time">{{ e.ev.time === '—' ? 'jour.' : e.ev.time }}</span>
+            @for (a of nextAgenda(); track $index) {
+              @if (a.kind === 'event') {
+                <div class="rc-row ev" (click)="store.editEvent(a.ev.id)">
+                  <div class="ev-when" [style.background]="store.tint(evColor(a.ev))" [style.color]="evColor(a.ev)">
+                    <span class="ev-day">{{ dayLabel(a.date) }}</span>
+                    <span class="ev-time">{{ a.ev.time === '—' ? 'jour.' : a.ev.time }}</span>
+                  </div>
+                  <div class="rc-main">
+                    <div class="rc-title">{{ a.ev.title }}</div>
+                    @if (a.ev.who.length) { <f-who [badges]="badges(a.ev)" /> }
+                  </div>
                 </div>
-                <div class="rc-main">
-                  <div class="rc-title">{{ e.ev.title }}</div>
-                  @if (e.ev.who.length) { <f-who [badges]="badges(e.ev)" /> }
+              } @else {
+                <div class="rc-row ev" (click)="store.openTaskItem(a.task.id)">
+                  <div class="ev-when" [style.background]="store.tint(a.color)" [style.color]="a.color">
+                    <span class="ev-day">{{ dayLabel(a.date) }}</span>
+                    <span class="ev-time">@if (a.task.time) { {{ a.task.time }} } @else { <f-icon name="taches" [size]="12" [color]="a.color" [width]="2.4" /> }</span>
+                  </div>
+                  <div class="rc-main">
+                    <div class="rc-title">{{ a.task.text }}</div>
+                    <span class="rc-sub">{{ a.list }}</span>
+                  </div>
                 </div>
-              </div>
+              }
             } @empty {
-              <div class="rc-empty">Aucun évènement à venir.</div>
+              <div class="rc-empty">Rien à venir.</div>
             }
           </div>
 
@@ -179,6 +197,7 @@ type FinState =
     .ev-time { font-size: 12px; font-weight: 800; }
     .rc-main { min-width: 0; flex: 1; }
     .rc-title { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rc-sub { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rc-main f-who { margin-top: 4px; display: block; }
 
     /* dernières tâches */
@@ -225,16 +244,29 @@ export class HomeScreen {
 
   readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, 12) : []; });
 
-  /** Les 4 prochains évènements de l'agenda, aujourd'hui compris, en cherchant jusqu'à deux mois devant. */
-  readonly nextEvents = computed<{ date: string; ev: EventItem }[]>(() => {
-    if (!this.store.data()) return [];
+  /**
+   * Les 4 prochaines échéances de l'agenda, aujourd'hui compris et jusqu'à deux
+   * mois devant : les évènements et les tâches datées, mêlés et triés par date
+   * puis par heure. Une tâche sans heure passe en tête de son jour.
+   */
+  readonly nextAgenda = computed<Ahead[]>(() => {
+    const d = this.store.data();
+    if (!d) return [];
     const today = this.store.todayStr();
-    const out: { date: string; ev: EventItem }[] = [];
-    for (let i = 0; i < 62 && out.length < 4; i++) {
+    const horizon = this.store.addDays(today, 62);
+    const out: Ahead[] = [];
+    for (let i = 0; i < 62; i++) {
       const day = this.store.addDays(today, i);
-      for (const ev of this.store.eventsForDay(day)) out.push({ date: day, ev });
+      for (const ev of this.store.eventsForDay(day)) out.push({ date: day, time: ev.time === '—' ? '' : ev.time, kind: 'event', ev });
     }
-    return out.slice(0, 4);
+    const lists = new Map(this.store.visibleTaskLists().map((l) => [l.id, l]));
+    for (const t of d.tasks || []) {
+      if (t.done || !t.due || t.due < today || t.due > horizon) continue;
+      const l = lists.get(t.listId);
+      if (!l) continue;
+      out.push({ date: t.due, time: t.time || '', kind: 'task', task: t, list: l.name, color: l.color });
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).slice(0, 4);
   });
 
   /** Les 4 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
