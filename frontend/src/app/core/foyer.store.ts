@@ -23,7 +23,7 @@ import {
 } from './exports';
 import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotEventsOn, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
-import { UiState, initialUi } from './ui-state';
+import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
@@ -292,6 +292,16 @@ export class FoyerStore {
       const needed = this.neededPhotoIds();
       const known = untracked(() => this.photoUrls());
       for (const id of needed) if (!(id in known)) void this.loadPhoto(id);
+    });
+
+    // L'écran courant est retenu sur l'appareil pour survivre à un F5. Un compte
+    // enfant qui retrouverait un écran d'adulte (laissé par un autre sur le même
+    // navigateur) est ramené à l'accueil : go() garde déjà la porte à la
+    // navigation, ceci la garde aussi à la restauration.
+    effect(() => {
+      const screen = this.ui().screen;
+      if (this.authed() && this.isChild() && ECRANS_ADULTES.has(screen)) { this.patch({ screen: 'home' }); return; }
+      rememberScreen(screen);
     });
 
     // Le sondage tourne sur les écrans qui montrent ce qui se coche à deux :

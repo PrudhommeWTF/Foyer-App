@@ -23,7 +23,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: '',
     items: [
-      { id: 'home', label: 'Accueil', icon: 'home' },
+      // « Accueil » n'est pas ici : c'est l'en-tête du menu (logo + nom) qui y
+      // mène, comme le titre d'un site ramène à sa page d'accueil.
       { id: 'calendar', label: 'Calendrier', icon: 'calendar' },
       { id: 'courses', label: 'Listes de courses', icon: 'courses' },
       { id: 'taches', label: 'Tâches', icon: 'taches' },

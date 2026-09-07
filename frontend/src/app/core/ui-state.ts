@@ -6,7 +6,7 @@ import { HOUSEHOLD_TZ } from './constants';
 
 export interface IngrRow { id: string; val: string; }
 
-/** All ephemeral UI state (navigation, modals, form buffers, selections). Not persisted. */
+/** All ephemeral UI state (navigation, modals, form buffers, selections). Not persisted, except the current `screen` which is restored across a refresh. */
 export interface UiState {
   screen: string;
   selDay: string;
@@ -181,10 +181,28 @@ export interface UiState {
   accountFor: string | null; acEmail: string; acPassword: string; acBusy: boolean;
 }
 
+/**
+ * Écran courant, retenu sur l'appareil : un F5 sur le Calendrier doit rouvrir le
+ * Calendrier, pas l'accueil. C'est un choix d'affichage local, comme la largeur
+ * du menu, et non un état du foyer : il vit dans localStorage, pas dans le
+ * document. On ne restaure qu'un écran connu, jamais une valeur douteuse.
+ */
+const SCREEN_KEY = 'foyer.screen';
+const KNOWN_SCREENS: ReadonlySet<string> = new Set([
+  'home', 'calendar', 'courses', 'taches', 'messages', 'contacts',
+  'documents', 'finances', 'repas', 'recettes', 'planning', 'settings',
+]);
+export function rememberScreen(screen: string): void {
+  try { localStorage.setItem(SCREEN_KEY, screen); } catch { /* mode privé : le choix vaut pour la session */ }
+}
+function persistedScreen(): string {
+  try { const s = localStorage.getItem(SCREEN_KEY); return s && KNOWN_SCREENS.has(s) ? s : 'home'; } catch { return 'home'; }
+}
+
 export function initialUi(): UiState {
   const today = todayIn(HOUSEHOLD_TZ);
   return {
-    screen: 'home', selDay: today, moreOpen: false, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
+    screen: persistedScreen(), selDay: today, moreOpen: false, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today, miniAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
