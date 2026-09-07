@@ -121,6 +121,8 @@ export interface SchedSlot {
   away?: boolean;
   /** 'weekly' ou 'once'. Voir docs/emploi-du-temps.md pour le modèle complet. */
   rec: string;
+  /** Une semaine sur `interval` (2 = une sur deux), phase comptée depuis `from`. Voir docs/emploi-du-temps.md. */
+  interval?: number;
   date?: string;
   from?: string;
   until?: string | null;

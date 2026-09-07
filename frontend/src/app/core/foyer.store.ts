@@ -2746,7 +2746,7 @@ export class FoyerStore {
     this.patch({
       screen: 'planning', schedEdit: true, seEditId: null,
       seDow: jour, seWho: [...s.schedWho], seStart: heure, seEnd: '', seLabel: '', seType: 'ecole',
-      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seAway: SCHED_AWAY_DEFAULT['ecole'], seSync: false,
+      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seEvery: 1, seAway: SCHED_AWAY_DEFAULT['ecole'], seSync: false,
       seMore: false, seOccDate: date, seScope: 'all', seDelOpen: false, addMenuOpen: false,
     });
   }
@@ -2765,6 +2765,7 @@ export class FoyerStore {
       schedEdit: true, seEditId: id, seDow: it.dow, seWho: [...(it.who || [])],
       seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k,
       seRec: it.rec === 'once' ? 'once' : 'weekly', seDate: it.date || occ, seAway: !!it.away, seSync: !!it.sync,
+      seEvery: it.interval && it.interval > 1 ? it.interval : 1,
       seFrom: it.from || '', seUntil: it.until || '', seWhen: it.when || 'always',
       seMore: pose, seOccDate: occ, seScope: 'all', seDelOpen: false,
     });
@@ -2784,14 +2785,35 @@ export class FoyerStore {
       this.toast('La fin de période est avant son début'); return null;
     }
     const commun = { who: [...s.seWho], start, end: s.seEnd.trim(), label, k: s.seType, ...(s.seAway ? { away: true } : {}), ...(s.seSync ? { sync: true } : {}) };
-    return s.seRec === 'once'
-      ? { ...commun, rec: 'once', dow: weekdayOf(s.seDate), date: s.seDate }
-      : {
-          ...commun, rec: 'weekly', dow: s.seDow,
-          ...(s.seFrom ? { from: s.seFrom } : {}),
-          ...(s.seUntil ? { until: s.seUntil } : {}),
-          ...(s.seWhen !== 'always' ? { when: s.seWhen } : {}),
-        };
+    if (s.seRec === 'once') return { ...commun, rec: 'once', dow: weekdayOf(s.seDate), date: s.seDate };
+    // Une semaine sur deux a besoin d'une phase : sans début de validité choisi,
+    // on l'ancre sur le lundi de la semaine de l'occurrence ouverte, pour que
+    // « toutes les 2 semaines » veuille dire quelque chose de daté et lisible.
+    const biweekly = s.seEvery > 1;
+    const from = s.seFrom || (biweekly ? this.mondayOf(s.seOccDate) : '');
+    return {
+      ...commun, rec: 'weekly', dow: s.seDow,
+      ...(biweekly ? { interval: s.seEvery } : {}),
+      ...(from ? { from } : {}),
+      ...(s.seUntil ? { until: s.seUntil } : {}),
+      ...(s.seWhen !== 'always' ? { when: s.seWhen } : {}),
+    };
+  }
+
+  /** Le lundi de la semaine d'une date ISO : l'ancre d'une récurrence bimensuelle. */
+  private mondayOf(iso: string): string { return addDaysIso(iso, -(weekdayOf(iso) - 1)); }
+
+  /**
+   * Règle la cadence hebdomadaire du formulaire : toutes les semaines, ou une sur
+   * `n`. Passer à « une sur deux » réclame une phase : on remplit le début de
+   * validité (le lundi de la semaine ouverte) s'il est vide, et on déplie la
+   * période pour que ce point de départ soit visible et modifiable.
+   */
+  setSlotEvery(n: number): void {
+    const s = this.ui();
+    const patch: Partial<UiState> = { seRec: 'weekly', seEvery: n };
+    if (n > 1) { if (!s.seFrom) patch.seFrom = this.mondayOf(s.seOccDate); patch.seMore = true; }
+    this.patch(patch);
   }
 
   saveSlot(): void {
@@ -2824,7 +2846,7 @@ export class FoyerStore {
       // détachée la reprend. C'est le RECURRENCE-ID d'iCalendar, exprimé avec
       // les objets qu'on a déjà plutôt qu'avec un troisième type.
       const detachee: SchedSlot = { id: uid('s'), ...forme, rec: 'once', dow: weekdayOf(occ), date: occ, srcId: avant.id };
-      delete detachee.from; delete detachee.until; delete detachee.when;
+      delete detachee.from; delete detachee.until; delete detachee.when; delete detachee.interval;
       this.mutate((d) => {
         const i = d.sched.findIndex((x) => x.id === avant.id);
         if (i >= 0) d.sched[i] = { ...d.sched[i], skip: [...new Set([...(d.sched[i].skip || []), occ])] };

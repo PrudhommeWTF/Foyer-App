@@ -58,6 +58,7 @@ export interface SchedSlot {
   from?: string;            // validité : premier jour inclus
   until?: string | null;    // validité : dernier jour inclus
   when?: 'always' | 'school' | 'holidays';
+  interval?: number;        // une semaine sur N (2 = une sur deux), phase comptée depuis `from`
   skip?: string[];          // occurrences annulées (l'EXDATE d'iCalendar)
   srcId?: string;           // occurrence détachée : la série dont elle vient
   sync?: boolean;           // publié à l'agenda : ses occurrences y apparaissent (dérivées, jamais copiées)
@@ -266,9 +267,24 @@ détachée.
 2. sinon, le jour de la semaine doit correspondre ;
 3. la date doit tomber dans la **période de validité** (bornes incluses) ;
 4. elle ne doit pas figurer dans les **occurrences annulées** ;
-5. le **filtre calendaire** doit être satisfait.
+5. pour une cadence **une semaine sur N** (`interval`), le nombre de semaines
+   entières écoulées depuis `from` doit être un multiple de N ;
+6. le **filtre calendaire** doit être satisfait.
 
 Trente lignes, testées une par une dans `schedule.test.ts`.
+
+### Une semaine sur deux
+
+`interval` porte la cadence : 1 (ou absent) veut dire toutes les semaines, 2 une
+semaine sur deux. La **phase** (quelle semaine est la bonne) se compte en
+semaines entières depuis le début de validité `from`, et le formulaire remplit
+`from` avec le lundi de la semaine ouverte quand on choisit « Toutes les 2
+semaines » sans en avoir posé un. C'est le même principe que l'événement d'agenda
+« toutes les 2 semaines » (`recur: 'biweekly'`, `helpers.occursOn`) et que le
+`FREQ=WEEKLY;INTERVAL=2` d'iCalendar : la récurrence est ancrée sur sa date de
+départ, pas sur une parité de calendrier. Sans `from`, l'ancre manque et le
+moteur **affiche toutes les semaines** plutôt que de deviner, dans le même esprit
+que le repli des vacances inconnues.
 
 ### Vacances scolaires et jours fériés
 

@@ -20,6 +20,7 @@ function icsRrule(recur: string): string {
     case 'daily': return 'FREQ=DAILY';
     case 'weekday': return 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR';
     case 'weekly': return 'FREQ=WEEKLY';
+    case 'biweekly': return 'FREQ=WEEKLY;INTERVAL=2';
     case 'monthly': return 'FREQ=MONTHLY';
     default: return '';
   }

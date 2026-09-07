@@ -1,7 +1,7 @@
 // Domain models for the Foyer household state.
 import type { HouseholdSettings, MemberPrefs } from './settings/registry';
 
-export type Recur = 'none' | 'daily' | 'weekday' | 'weekly' | 'monthly';
+export type Recur = 'none' | 'daily' | 'weekday' | 'weekly' | 'biweekly' | 'monthly';
 export type SchedType = 'ecole' | 'travail' | 'sport' | 'loisir' | 'sante' | 'repas' | 'autre';
 export type ContactCat = 'Urgences' | 'Santé' | 'École' | 'Famille' | 'Maison' | 'Autre';
 export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
@@ -256,6 +256,15 @@ export interface SchedSlot {
   away?: boolean;
   /** Toutes les semaines (le cas majoritaire) ou une seule fois. */
   rec: SchedRec;
+  /**
+   * Une semaine sur `interval` pour une règle hebdomadaire : 1 (ou absent) veut
+   * dire toutes les semaines, 2 une semaine sur deux. La **phase** se compte
+   * depuis le début de validité `from` : « à partir du 8 septembre, puis toutes
+   * les 2 semaines ». Sans `from`, l'intervalle est ignoré (on affiche toutes
+   * les semaines), comme le module affiche plutôt que de cacher quand une
+   * information manque.
+   */
+  interval?: number;
   /** Pour `once` : la date de l'unique occurrence. Ignoré sinon. */
   date?: string;
   /**

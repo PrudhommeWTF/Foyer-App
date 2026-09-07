@@ -22,7 +22,7 @@
 // L'échéance de la série est **toujours** une date : sans elle, « toutes les
 // semaines » ne veut rien dire. La saisie en pose une par défaut.
 import { addDaysIso, parseDay, weekdayOf } from './helpers';
-import { TaskRec } from './models';
+import { TaskItem, TaskRec } from './models';
 
 /** Au-delà, on cesse de chercher : une règle qui ne tombe sur rien en cinq ans est vide. */
 const HORIZON_DAYS = 366 * 5;
@@ -104,6 +104,26 @@ export function skipOccurrence(rec: TaskRec, due: string, today: string): string
 /** Dernier jour où une occurrence n'est pas encore en retard : l'échéance, plus la tolérance. */
 export function windowEnd(due: string, rec: TaskRec | null | undefined): string {
   return rec?.grace ? addDaysIso(due, rec.grace) : due;
+}
+
+/**
+ * Une tâche a-t-elle une occurrence ce jour-là, pour l'affichage au calendrier ?
+ *
+ * Sans récurrence, la tâche ne tombe qu'à son échéance. Avec, on **projette la
+ * règle vers l'avant** à partir de l'échéance courante : rien avant elle (les
+ * occurrences passées sont soldées ou sautées, elles ne sont plus dues), rien
+ * après la fin de série. Le mode « après la réalisation » ne se projette pas :
+ * l'occurrence suivante dépend du jour où l'on fait la tâche, pas d'un calendrier
+ * connu d'avance, donc on ne montre que l'échéance courante plutôt que d'inventer
+ * des dates.
+ */
+export function taskOccursOn(task: TaskItem, date: string): boolean {
+  if (!task.due) return false;
+  if (!task.rec) return task.due === date;
+  if (date < task.due) return false;
+  if (task.rec.until && date > task.rec.until) return false;
+  if (task.rec.base === 'done') return date === task.due;
+  return matches(task.rec, task.due, date);
 }
 
 export const DOW_SHORT = ['', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
