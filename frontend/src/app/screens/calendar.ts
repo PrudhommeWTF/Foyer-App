@@ -50,7 +50,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
                 <div class="mcell"
                      [style.background]="c.key === sel() ? 'rgba(229,107,78,.14)' : 'var(--soft)'"
                      [style.border]="cellBorder(c.key)"
-                     (click)="cellClick(c)">
+                     (click)="cellClick(c)" (dblclick)="addAt(c.key)">
                   <span class="mnum" [style.color]="c.inMonth ? 'var(--ink)' : 'var(--ink3)'">{{ c.num }}</span>
                   @for (it of c.items; track $index) {
                     @if (it.kind === 'event') {
@@ -536,8 +536,9 @@ export class CalendarScreen {
   /**
    * Clic sur une case du mois. Sur un jour **libre**, on ouvre la création, geste
    * rapide attendu. Sur un jour qui porte déjà des événements, la modale serait
-   * gênante : on se contente de sélectionner le jour (le panneau latéral le
-   * détaille, et son bouton « Ajouter un événement » reste là pour en créer un).
+   * gênante : le simple clic sélectionne le jour (le panneau latéral le détaille),
+   * et c'est le **double-clic** qui ouvre alors la création, comme le bouton
+   * « Ajouter un événement » du panneau.
    */
   cellClick(c: MonthCell): void {
     if (c.items.length) this.store.patch({ selDay: c.key });
