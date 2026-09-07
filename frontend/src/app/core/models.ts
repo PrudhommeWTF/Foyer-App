@@ -36,6 +36,12 @@ export interface EventItem { id: string; date: string; time: string; title: stri
   /** Lieu, texte libre (« Salle des fêtes », « 12 rue des Lilas »). Publié dans le flux ICS. */
   place?: string | null;
   /**
+   * Événement sur la journée entière (pas d'heure). Il peut s'étaler sur
+   * plusieurs jours via `end`, et s'affiche alors comme une barre continue dans
+   * la vue mois. Un événement sans heure est traité comme tel même sans le drapeau.
+   */
+  allDay?: boolean;
+  /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
    * d'en créer un second pour le même repas, et fait disparaître l'événement
    * quand le repas est retiré : sans lui, l'agenda garderait un dîner annulé.
