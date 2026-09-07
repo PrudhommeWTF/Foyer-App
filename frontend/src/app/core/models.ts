@@ -27,6 +27,13 @@ export interface Member {
 }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string; recur: Recur; end?: string | null;
   /**
+   * Heure de fin, HH:MM. `end` porte la date de fin (événement sur plusieurs
+   * jours), `endTime` l'heure de fin dans la journée : les deux répondent à des
+   * questions différentes (« jusqu'à quel jour » et « jusqu'à quelle heure »).
+   * Absente, l'événement n'a pas de fin connue.
+   */
+  endTime?: string | null;
+  /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
    * d'en créer un second pour le même repas, et fait disparaître l'événement
    * quand le repas est retiré : sans lui, l'agenda garderait un dîner annulé.
