@@ -304,6 +304,11 @@ Le principe est volontairement simple et explicable, pas un modèle opaque, et *
   `catSuggestMin` fois (réglage du foyer, 2 par défaut) **et** qu'elle l'emporte franchement. Sinon
   rien : sur des données d'argent, une correspondance approximative est pire que pas de suggestion,
   exactement l'esprit de `suggestAccount` à l'import.
+- **À défaut de marchand connu, un repli par ressemblance** (Naïve Bayes multinomial, `trainBayes`
+  et `classifyBayes`) : un « CARREFOUR EXPRESS » jamais vu partage le mot `CARREFOUR` avec des
+  « CARREFOUR CITY » déjà rangés. On apprend, par catégorie, la fréquence des mots des libellés,
+  et on ne propose (marquée `via: 'similar'`) que si une classe l'emporte très nettement (probabilité
+  a posteriori ≥ 0,75) et s'appuie sur au moins `catSuggestMin` opérations. Sans mot connu, rien.
 
 Comme une suggestion acceptée passe par le formulaire normal, la ligne reste **manuelle**
 (`rule_id` nul) et nourrit à son tour la mémoire : l'apprentissage est continu et gratuit, puisque

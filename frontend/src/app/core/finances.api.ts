@@ -194,7 +194,7 @@ export class FinancesApi {
     return this.api.request('finances/transactions?' + p.toString());
   }
   /** Catégorie suggérée pour un libellé, apprise des catégorisations manuelles. */
-  suggestCategory(label: string): Promise<{ suggestion: { categoryId: number; seen: number; total: number } | null }> {
+  suggestCategory(label: string): Promise<{ suggestion: { categoryId: number; via: 'merchant' | 'similar'; seen: number; total: number } | null }> {
     return this.api.request('finances/transactions/suggest?label=' + encodeURIComponent(label));
   }
   createTransaction(p: TxPayload): Promise<{ transaction: FinTransaction }> {
@@ -359,6 +359,7 @@ export interface FinImportSuggestion {
   amount: number;
   date: string;
   categoryId: number;
+  via: 'merchant' | 'similar';
   seen: number;
 }
 

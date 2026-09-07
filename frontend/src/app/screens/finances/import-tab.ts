@@ -146,7 +146,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
             </span>
             <div class="cand-body">
               <div class="cand-legs"><span class="leg">{{ s.label }}</span></div>
-              <div class="cand-why">→ {{ store.categoryPath(s.categoryId) }} · déjà classé ainsi {{ s.seen }}×</div>
+              <div class="cand-why">→ {{ store.categoryPath(s.categoryId) }} · {{ s.via === 'merchant' ? 'déjà classé ainsi ' + s.seen + '×' : 'libellé ressemblant' }}</div>
             </div>
             <div class="cand-right"><div class="cand-amt f-display">{{ fmt(s.amount) }} €</div></div>
           </div>

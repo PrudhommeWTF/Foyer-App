@@ -130,7 +130,7 @@ import { CAT_ICONS } from '../../core/constants';
             @if (!store.ui().txCategory) {
               <button class="suggest" (click)="store.applyTxSuggestion()">
                 <f-icon name="bolt" [size]="14" color="#7A9B76" [width]="2.2" />
-                <span>Suggestion : <b>{{ store.categoryPath(sg.categoryId) }}</b> <span class="sg-why">déjà classé ainsi {{ sg.seen }}×</span></span>
+                <span>Suggestion : <b>{{ store.categoryPath(sg.categoryId) }}</b> <span class="sg-why">{{ sg.via === 'merchant' ? 'déjà classé ainsi ' + sg.seen + '×' : 'd’après des libellés ressemblants' }}</span></span>
                 <span class="sg-apply">Appliquer</span>
               </button>
             }

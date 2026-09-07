@@ -35,9 +35,14 @@ export interface KeyedTx { key: string; categoryId: number; }
 
 export interface Suggestion {
   categoryId: number;
-  /** Combien de fois ce marchand a déjà reçu cette catégorie. Sert à l'expliquer. */
+  /**
+   * D'où vient la suggestion : `merchant`, le même marchand déjà classé ainsi ;
+   * `similar`, un libellé jamais vu mais qui ressemble (repli Naïve Bayes).
+   */
+  via: 'merchant' | 'similar';
+  /** Nombre d'appuis : occurrences du marchand, ou documents de la catégorie retenue. */
   seen: number;
-  /** Total d'opérations connues pour ce marchand. */
+  /** Total d'opérations connues pour ce marchand (via merchant) ou apprises (via similar). */
   total: number;
 }
 
@@ -75,10 +80,75 @@ export function pickFromIndex(key: string, idx: MerchantIndex, minSeen: number):
     else if (n > second) { second = n; }
   }
   if (best < Math.max(1, minSeen) || best <= second) return null;
-  return { categoryId: bestId, seen: best, total };
+  return { categoryId: bestId, via: 'merchant', seen: best, total };
 }
 
 /** Suggestion pour un seul libellé, à partir de la liste brute des opérations. */
 export function pickCategory(key: string, rows: KeyedTx[], minSeen: number): Suggestion | null {
   return pickFromIndex(key, buildIndex(rows), minSeen);
+}
+
+// ---- repli par ressemblance : Naïve Bayes sur les mots du libellé ----------
+//
+// Quand le marchand exact n'a jamais été vu, un « CARREFOUR MARKET » inédit peut
+// tout de même ressembler à des « CARREFOUR CITY » déjà rangés. On apprend, par
+// catégorie, la fréquence des mots des libellés, et on classe un nouveau libellé
+// par le théorème de Bayes (multinomial, lissage de Laplace). Toujours prudent :
+// on ne propose que si une classe l'emporte très nettement et qu'elle s'appuie
+// sur au moins `minSeen` opérations, sinon rien.
+
+/** Découpe un libellé en mots signifiants (à partir de la clé marchand). */
+export function tokenize(label: string): string[] {
+  return merchantKey(label).split(' ').filter((t) => t.length >= 3);
+}
+
+export interface BayesModel {
+  /** catégorie → { docs, mots (mot → nombre), totalMots }. */
+  classes: Map<number, { docs: number; tokens: Map<string, number>; total: number }>;
+  vocab: Set<string>;
+  docs: number;
+}
+
+/** Apprend le modèle à partir des opérations catégorisées à la main. */
+export function trainBayes(rows: { label: string; categoryId: number }[]): BayesModel {
+  const classes: BayesModel['classes'] = new Map();
+  const vocab = new Set<string>();
+  let docs = 0;
+  for (const r of rows) {
+    const toks = tokenize(r.label);
+    if (!toks.length) continue;
+    docs++;
+    let c = classes.get(r.categoryId);
+    if (!c) { c = { docs: 0, tokens: new Map(), total: 0 }; classes.set(r.categoryId, c); }
+    c.docs++;
+    for (const t of toks) { c.tokens.set(t, (c.tokens.get(t) || 0) + 1); c.total++; vocab.add(t); }
+  }
+  return { classes, vocab, docs };
+}
+
+/**
+ * Classe un libellé. Rend une suggestion `similar` seulement si la classe la plus
+ * probable dépasse `minProb` (probabilité a posteriori) **et** s'appuie sur au
+ * moins `minSeen` opérations. Sans mot connu, aucun signal : `null`.
+ */
+export function classifyBayes(label: string, model: BayesModel, minSeen: number, minProb = 0.75): Suggestion | null {
+  if (!model.docs || !model.vocab.size) return null;
+  const known = tokenize(label).filter((t) => model.vocab.has(t));
+  if (!known.length) return null;
+  const V = model.vocab.size;
+  const scores: { id: number; logp: number; docs: number }[] = [];
+  for (const [id, c] of model.classes) {
+    let logp = Math.log(c.docs / model.docs);
+    for (const t of known) logp += Math.log(((c.tokens.get(t) || 0) + 1) / (c.total + V));
+    scores.push({ id, logp, docs: c.docs });
+  }
+  if (!scores.length) return null;
+  scores.sort((a, b) => b.logp - a.logp);
+  // Probabilités a posteriori par softmax stable sur les log-scores.
+  const max = scores[0].logp;
+  const denom = scores.reduce((s, x) => s + Math.exp(x.logp - max), 0);
+  const prob = 1 / denom; // exp(max-max)=1 au numérateur pour la meilleure classe
+  const best = scores[0];
+  if (best.docs < Math.max(1, minSeen) || prob < minProb) return null;
+  return { categoryId: best.id, via: 'similar', seen: best.docs, total: model.docs };
 }

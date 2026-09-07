@@ -34,7 +34,7 @@ export interface FinancesUi {
   txNotes: string; txCleared: boolean;
   txDelId: number | null;
   /** Catégorie suggérée pour le libellé en cours (advisory), ou null. */
-  txSuggest: { categoryId: number; seen: number } | null;
+  txSuggest: { categoryId: number; via: 'merchant' | 'similar'; seen: number } | null;
 
   // account form
   acForm: boolean; acId: number | null;
@@ -683,7 +683,7 @@ export class FinancesStore {
       // La saisie a pu changer entre-temps : ne rien poser si ce n'est plus d'actualité.
       const u = this.ui();
       if (!u.txForm || u.txSign !== 'out' || u.txCategory || u.txLabel.trim() !== label) return;
-      this.patch({ txSuggest: suggestion ? { categoryId: suggestion.categoryId, seen: suggestion.seen } : null });
+      this.patch({ txSuggest: suggestion ? { categoryId: suggestion.categoryId, via: suggestion.via, seen: suggestion.seen } : null });
     } catch {
       // Une suggestion indisponible n'est pas une erreur pour l'utilisateur.
     }
