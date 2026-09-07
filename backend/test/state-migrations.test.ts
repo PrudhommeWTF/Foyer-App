@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -655,4 +655,21 @@ test('migration 10 : un membre sans identifiant ne fabrique pas d’entrée fant
   const doc: Record<string, any> = { members: [{ name: 'sans id' }, { id: 'me' }], settings: { dark: true } };
   run(doc, 9);
   assert.deepEqual(Object.keys(doc['prefs']), ['me']);
+});
+
+// ---- migration 11 : un événement d'agenda porte plusieurs membres ----------
+
+test('l’affectation d’un événement, un membre unique, devient une liste', () => {
+  const res = run({ members: [{ id: 'm1' }, { id: 'm2' }], events: [{ id: 'e1', date: '2026-09-01', time: '18:00', title: 'RDV', who: 'm1', recur: 'none' }] });
+  assert.deepEqual(res.doc['events'][0].who, ['m1']);
+});
+
+test('un événement affecté à un membre disparu se retrouve sans participant', () => {
+  const res = run({ members: [{ id: 'm1' }], events: [{ id: 'e1', date: '2026-09-01', time: '18:00', title: 'RDV', who: 'inconnu', recur: 'none' }] });
+  assert.deepEqual(res.doc['events'][0].who, []);
+});
+
+test('une affectation d’événement déjà en liste n’est pas retouchée', () => {
+  const res = run({ members: [{ id: 'm1' }, { id: 'm2' }], events: [{ id: 'e1', date: '2026-09-01', time: '18:00', title: 'RDV', who: ['m1', 'm2'], recur: 'none' }] });
+  assert.deepEqual(res.doc['events'][0].who, ['m1', 'm2']);
 });

@@ -20,7 +20,7 @@ const cocher = (id: string): Mutation => (d) => { const t = d.tasks.find((x) => 
 test('le travail de l’autre est conservé, le mien est rejoué par-dessus', () => {
   // Pendant que je cochais une tâche, l'autre téléphone a créé un événement.
   const serveur = doc();
-  serveur.events.push({ id: 'e1', date: '2026-09-02', time: '18:00', title: 'Réunion', who: 'me', recur: 'none' });
+  serveur.events.push({ id: 'e1', date: '2026-09-02', time: '18:00', title: 'Réunion', who: ['me'], recur: 'none' });
 
   const r = rebase(serveur, [cocher('t1')]);
 

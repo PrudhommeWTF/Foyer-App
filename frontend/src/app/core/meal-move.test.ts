@@ -62,7 +62,7 @@ test('déplacer vers soi-même, ou déplacer du vide, ne fait rien', () => {
 // ---- l'agenda suit ---------------------------------------------------------
 
 const evenement = (mealKey: string, o: Partial<EventItem> = {}): EventItem =>
-  ({ id: 'e1', date: dayOf(mealKey), time: '12:30', title: 'Déjeuner : Gratin', who: 'm1', recur: 'none', end: null, mealKey, ...o });
+  ({ id: 'e1', date: dayOf(mealKey), time: '12:30', title: 'Déjeuner : Gratin', who: ['m1'], recur: 'none', end: null, mealKey, ...o });
 
 test('l’événement d’agenda suit son repas, jour, heure et titre', () => {
   // Un dîner déplacé qui resterait annoncé au mauvais jour est pire que pas
@@ -93,7 +93,7 @@ test('un échange fait suivre les deux événements', () => {
 
 test('les événements sans rapport ne sont pas touchés', () => {
   const m = { '2026-08-18-midi': repas('Gratin') };
-  const autre: EventItem = { id: 'x', date: '2026-08-18', time: '09:00', title: 'Dentiste', who: 'm1', recur: 'none', end: null };
+  const autre: EventItem = { id: 'x', date: '2026-08-18', time: '09:00', title: 'Dentiste', who: ['m1'], recur: 'none', end: null };
   const r = bouger(m, [autre, evenement('2026-08-18-midi')], '2026-08-18-midi', '2026-08-20-soir');
   assert.deepEqual(r.events[0], autre);
 });

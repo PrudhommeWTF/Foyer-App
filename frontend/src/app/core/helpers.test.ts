@@ -69,7 +69,7 @@ test('des initiales choisies survivent au changement de prénom', () => {
 // ---- récurrence d'un événement d'agenda ------------------------------------
 
 const ev = (over: Partial<EventItem> = {}): EventItem =>
-  ({ id: 'e1', date: '2026-09-10', time: '18:00', title: 'Réunion', who: 'me', recur: 'none', ...over });
+  ({ id: 'e1', date: '2026-09-10', time: '18:00', title: 'Réunion', who: ['me'], recur: 'none', ...over });
 
 test('un événement « toutes les 2 semaines » revient un jeudi sur deux', () => {
   // Jeudi 10 sept. 2026, puis un jeudi sur deux, la phase portée par la date.
