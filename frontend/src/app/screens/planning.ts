@@ -629,9 +629,15 @@ export class PlanningScreen {
   /** Ce qui, sur la ligne, dit qu'un créneau n'a pas lieu toute l'année. */
   noteOf(s: SchedSlot): string {
     const cadence = s.rec === 'weekly' && s.interval && s.interval > 1 ? '1 sem. sur ' + s.interval : '';
+    // Un « à partir du » déjà passé, sur un créneau hebdomadaire simple, n'apprend
+    // rien : le créneau a commencé et il est là. On le tait pour ne pas répéter la
+    // même date sur chaque ligne, tout en le gardant pour un démarrage futur, une
+    // fin, un filtre ou une cadence bimensuelle.
+    const startedPlain = !!s.from && !s.until && (!s.when || s.when === 'always') && !(s.interval && s.interval > 1) && s.from <= this.store.todayStr();
+    const valid = startedPlain ? '' : validityLabel(s, (iso) => this.store.fmtNumDate(iso));
     const quand = s.rec === 'once'
       ? (s.srcId ? 'ce jour seulement' : 'ponctuel')
-      : [cadence, validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']].filter(Boolean).join(' · ');
+      : [cadence, valid, WHEN_LABELS[s.when || 'always']].filter(Boolean).join(' · ');
     return [quand, s.away ? 'dehors' : ''].filter(Boolean).join(' · ');
   }
 

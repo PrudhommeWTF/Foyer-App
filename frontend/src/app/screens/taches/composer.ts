@@ -213,7 +213,10 @@ type Scope = 'one' | 'all';
                 <div class="chips">
                   <button class="chip" [class.active]="!rec()" (click)="setFreq(null)">Jamais</button>
                   @for (f of freqs; track f) {
-                    <button class="chip" [class.active]="rec()?.freq === f" (click)="setFreq(f)">{{ freqLabel(f) }}</button>
+                    <button class="chip" [class.active]="freqActive(f)" (click)="setFreq(f)">{{ freqLabel(f) }}</button>
+                    @if (f === 'weekly') {
+                      <button class="chip" [class.active]="biweeklyActive()" (click)="setBiweekly()">Toutes les 2 semaines</button>
+                    }
                   }
                 </div>
                 @if (rec(); as r) {
@@ -468,9 +471,23 @@ export class TaskComposerComponent {
   setFreq(f: TaskRec['freq'] | null): void {
     if (!f) { this.rec.set(null); return; }
     const cur = this.rec();
-    this.rec.set({ freq: f, every: cur?.every || 1, base: cur?.base || 'due', ...(cur?.grace ? { grace: cur.grace } : {}), ...(cur?.until ? { until: cur.until } : {}) });
+    // Un chip de fréquence vaut « une fois par unité » : il remet la cadence à 1.
+    // Le champ « Toutes les N » et le chip « Toutes les 2 semaines » portent le reste.
+    this.rec.set({ freq: f, every: 1, base: cur?.base || 'due', ...(cur?.grace ? { grace: cur.grace } : {}), ...(cur?.until ? { until: cur.until } : {}) });
     if (!this.due()) { this.due.set(this.store.todayStr()); this.proposerRappel(); }
   }
+
+  /** Raccourci « une semaine sur deux », comme au calendrier et à l'emploi du temps. */
+  setBiweekly(): void {
+    const cur = this.rec();
+    this.rec.set({ freq: 'weekly', every: 2, base: cur?.base || 'due',
+      ...(cur?.days?.length ? { days: cur.days } : {}), ...(cur?.grace ? { grace: cur.grace } : {}), ...(cur?.until ? { until: cur.until } : {}) });
+    if (!this.due()) { this.due.set(this.store.todayStr()); this.proposerRappel(); }
+  }
+
+  /** Un chip de fréquence est actif quand il correspond, « Chaque semaine » cédant à « Toutes les 2 semaines ». */
+  freqActive(f: TaskRec['freq']): boolean { const r = this.rec(); return !!r && r.freq === f && !(f === 'weekly' && r.every === 2); }
+  biweeklyActive(): boolean { const r = this.rec(); return !!r && r.freq === 'weekly' && r.every === 2; }
   patchRec(p: Partial<TaskRec>): void {
     const cur = this.rec(); if (!cur) return;
     const next: TaskRec = { ...cur, ...p };
