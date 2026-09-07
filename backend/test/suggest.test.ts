@@ -10,7 +10,8 @@ import { migrateFinances } from '../src/finances/schema';
 import { initBlobs } from '../src/storage/blobs';
 import * as repo from '../src/finances/repo';
 import * as rules from '../src/finances/rules-repo';
-import { suggestCategory } from '../src/finances/suggest-repo';
+import * as imports from '../src/finances/import-repo';
+import { importSuggestions, suggestCategory } from '../src/finances/suggest-repo';
 import { KeyedTx, merchantKey, pickCategory } from '../src/finances/suggest';
 
 const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
@@ -101,5 +102,23 @@ describe('suggestCategory (repo)', () => {
     addTx('CB CARREFOUR CITY 222', null);
     addTx('CB CARREFOUR CITY 333', resto, { kind: 'virement' });
     assert.equal(suggestCategory('CB CARREFOUR CITY 999', 2), null); // une seule manuelle valable
+  });
+
+  it('propose en lot les lignes non catégorisées d’un import', () => {
+    // Mémoire : deux passages Carrefour rangés à la main en Courses.
+    addTx('CB CARREFOUR CITY 111 DU 01/09', courses);
+    addTx('CB CARREFOUR CITY 222 DU 08/09', courses);
+    // Un import dont une ligne est sans catégorie (même marchand) et une autre inconnue.
+    const importId = imports.createDraft('releve.csv', 'csv');
+    const attach = (id: number) => db.prepare('UPDATE fin_transactions SET import_id = ? WHERE id = ?').run(importId, id);
+    const a = addTx('CB CARREFOUR CITY 777 DU 20/09', null); attach(a.id);
+    const b = addTx('VIR SALAIRE ACME 999', null); attach(b.id); // marchand inconnu : pas de suggestion
+    const sug = importSuggestions(importId, 2);
+    assert.equal(sug.length, 1);
+    assert.equal(sug[0].id, a.id);
+    assert.equal(sug[0].categoryId, courses);
+    // Une catégorisation en lot rend la ligne manuelle et vide la suggestion suivante.
+    assert.equal(repo.setCategoriesManual([{ id: a.id, categoryId: courses }]), 1);
+    assert.equal(importSuggestions(importId, 2).length, 0);
   });
 });

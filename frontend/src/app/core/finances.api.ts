@@ -296,7 +296,11 @@ export class FinancesApi {
   mapImportAccount(id: number, label: string, accountId: number): Promise<{ preview: FinImportPreview }> {
     return this.api.request(`finances/imports/${id}/accounts`, { method: 'POST', body: JSON.stringify({ label, accountId }) });
   }
-  commitImport(id: number): Promise<{ imported: FinImport; inserted: number; duplicates: number; categorised: FinApplyReport | null }> {
+  /** Range en lot des opérations (des suggestions acceptées après un import). */
+  categoriseTransactions(items: { id: number; categoryId: number }[]): Promise<{ changed: number }> {
+    return this.api.request('finances/transactions/categorise', { method: 'POST', body: JSON.stringify({ items }) });
+  }
+  commitImport(id: number): Promise<{ imported: FinImport; inserted: number; duplicates: number; categorised: FinApplyReport | null; suggestions: FinImportSuggestion[] }> {
     return this.api.request(`finances/imports/${id}/commit`, { method: 'POST' });
   }
   discardImport(id: number): Promise<{ cancelled?: boolean; deleted?: number; ungrouped?: number }> {
@@ -346,6 +350,16 @@ export interface FinUnknownAccount {
   label: string; rows: number; firstDate: string; lastDate: string; sample: string[];
   /** Account of the same name, pre-selected in the report. */
   suggestedAccountId: number | null;
+}
+
+/** Une opération importée sans catégorie, pour laquelle l'historique en propose une. */
+export interface FinImportSuggestion {
+  id: number;
+  label: string;
+  amount: number;
+  date: string;
+  categoryId: number;
+  seen: number;
 }
 
 export interface FinImportPreview {

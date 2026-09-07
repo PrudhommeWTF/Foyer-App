@@ -429,6 +429,20 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
     res.json({ suggestion: label ? suggestCategory(label, minSeen) : null });
   }));
 
+  // Rangement en lot : applique des catégories choisies (souvent des suggestions
+  // acceptées après un import). Chaque ligne devient manuelle, comme une saisie.
+  r.post('/transactions/categorise', handler((req, res) => {
+    const raw = Array.isArray(req.body?.items) ? req.body.items : fail('Liste d’opérations attendue dans « items ».');
+    if (raw.length > 5000) fail('Lot trop gros : envoyez-le en plusieurs fois.');
+    const items = raw.map((it: unknown) => {
+      const o = (it ?? {}) as Record<string, unknown>;
+      const categoryId = id(o['categoryId'], 'catégorie');
+      if (!repo.getCategory(categoryId)) fail('Catégorie introuvable.');
+      return { id: id(o['id'], 'opération'), categoryId };
+    });
+    res.json({ changed: repo.setCategoriesManual(items) });
+  }));
+
   r.post('/transactions', handler((req, res) => {
     res.status(201).json({ transaction: repo.createTransaction(txInput(req.body || {})) });
   }));

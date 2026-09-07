@@ -11,6 +11,8 @@ import { NO_ACCOUNT_LABEL, previewTransfers, resolveAndCollapse, stage } from '.
 import { findTransferCandidates } from './import/transfers';
 import { ImportPreview, RawRow } from './import/types';
 import { applyRules } from './rules-repo';
+import { importSuggestions } from './suggest-repo';
+import { effectiveSetting } from '../settings/repo';
 import { isIsoDate } from './money';
 import { log } from '../log';
 
@@ -160,7 +162,11 @@ export function importRouter(): Router {
     const inserted = imports.commitImport(draftId, staged.rows, staged.coverage);
     // The whole point of the rules: a statement should arrive already sorted.
     const categorised = inserted ? applyRules({ importId: draftId }) : null;
-    res.json({ imported: imports.getImport(draftId), inserted, duplicates: staged.duplicates, categorised });
+    // Ce que les règles n'ont pas rangé, mais que l'historique manuel sait
+    // catégoriser : proposé au foyer pour une application en lot, jamais posé seul.
+    const minSeen = Math.max(1, Number(effectiveSetting('catSuggestMin')) || 1);
+    const suggestions = inserted ? importSuggestions(draftId, minSeen) : [];
+    res.json({ imported: imports.getImport(draftId), inserted, duplicates: staged.duplicates, categorised, suggestions });
   }));
 
   r.delete('/imports/:id', handler((req, res) => {

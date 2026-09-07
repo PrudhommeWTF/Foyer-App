@@ -352,6 +352,23 @@ export function updateTransaction(id: number, input: TxInput): Transaction | nul
   return info.changes ? getTransaction(id) : null;
 }
 
+/**
+ * Range plusieurs opérations dans leur catégorie, en lot. Comme une correction à
+ * la main, chaque ligne prend possession d'elle-même (`rule_id` remis à nul) :
+ * c'est ce qui rend une suggestion acceptée durable et réutilisable comme mémoire.
+ */
+export function setCategoriesManual(items: { id: number; categoryId: number }[]): number {
+  const stmt = database.prepare(
+    "UPDATE fin_transactions SET category_id = ?, rule_id = NULL, updated_at = strftime('%Y-%m-%d %H:%M:%f','now') WHERE id = ?",
+  );
+  const run = database.transaction((rows: { id: number; categoryId: number }[]): number => {
+    let n = 0;
+    for (const it of rows) n += stmt.run(it.categoryId, it.id).changes;
+    return n;
+  });
+  return run(items);
+}
+
 export function deleteTransaction(id: number): void {
   // Its receipts go with it: kept, they would be rows nothing can reach.
   removeAllFor('transaction', id);

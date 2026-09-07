@@ -123,6 +123,38 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </div>
     }
 
+    <!-- CATÉGORIES SUGGÉRÉES APRÈS IMPORT -->
+    @if (store.catSuggest().length) {
+      <div class="card">
+        <div class="ch">
+          <div>
+            <div class="card-title sm">Catégories suggérées</div>
+            <div class="rmeta">D'après ce que vous avez déjà rangé à la main, pour les opérations que vos règles n'ont pas classées. Décochez ce qui ne convient pas : rien n'est rangé sans votre validation.</div>
+          </div>
+          <button class="btn btn-primary" [disabled]="!store.catPickedCount() || store.ui().importBusy" (click)="store.applyCatSuggest()">
+            Ranger {{ store.catPickedCount() }} opération{{ store.catPickedCount() > 1 ? 's' : '' }}
+          </button>
+        </div>
+        <button class="more" (click)="store.toggleAllCat()">
+          <span class="tick sm" [class.on]="store.allCatPicked()">@if (store.allCatPicked()) { <f-icon name="check" [size]="10" color="#fff" [width]="3.6" /> }</span>
+          {{ store.allCatPicked() ? 'Tout décocher' : 'Tout cocher' }}
+        </button>
+        @for (s of store.catSuggest(); track s.id) {
+          <div class="cand" [class.on]="store.isCatPicked(s.id)" (click)="store.toggleCatPick(s.id)">
+            <span class="tick" [class.on]="store.isCatPicked(s.id)">
+              @if (store.isCatPicked(s.id)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }
+            </span>
+            <div class="cand-body">
+              <div class="cand-legs"><span class="leg">{{ s.label }}</span></div>
+              <div class="cand-why">→ {{ store.categoryPath(s.categoryId) }} · déjà classé ainsi {{ s.seen }}×</div>
+            </div>
+            <div class="cand-right"><div class="cand-amt f-display">{{ fmt(s.amount) }} €</div></div>
+          </div>
+        }
+        <button class="more" (click)="store.dismissCatSuggest()">Ne rien ranger pour l'instant</button>
+      </div>
+    }
+
     <!-- VIREMENTS INTERNES PROPOSÉS -->
     @if (store.candidates().length) {
       <div class="card">
@@ -333,6 +365,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .cand.on { background: var(--soft); border-color: var(--primary); }
     .tick { width: 20px; height: 20px; flex: none; border-radius: 6px; border: 2px solid var(--line2); display: flex; align-items: center; justify-content: center; }
     .tick.on { background: var(--primary); border-color: var(--primary); }
+    .tick.sm { width: 18px; height: 18px; }
     .cand-body { flex: 1; min-width: 0; }
     .cand-legs { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--ink); }
     .leg { word-break: break-word; }
