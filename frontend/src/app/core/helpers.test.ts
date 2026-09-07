@@ -3,7 +3,7 @@
 // hors navigateur.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { contactIni, dstr, isoWeek, keptIni, occursOn, weekDates } from './helpers';
+import { addHourHHMM, contactIni, dstr, isoWeek, keptIni, occursOn, weekDates } from './helpers';
 import { EventItem } from './models';
 
 const iso = (offset: number, anchor: string): string[] => weekDates(offset, anchor).map(dstr);
@@ -95,4 +95,15 @@ test('isoWeek suit la norme ISO 8601 (lundi, semaine du premier jeudi)', () => {
   assert.equal(isoWeek(new Date(2027, 0, 1)), 53);
   // Le 4 janvier 2027 (lundi) ouvre la semaine 1 de 2027.
   assert.equal(isoWeek(new Date(2027, 0, 4)), 1);
+});
+
+// ---- heure + 1h (fin d'événement par défaut) --------------------------------
+
+test('addHourHHMM ajoute une heure, borne à 23:59, ignore une entrée mal formée', () => {
+  assert.equal(addHourHHMM('09:00'), '10:00');
+  assert.equal(addHourHHMM('08:30'), '09:30');
+  assert.equal(addHourHHMM('23:30'), '23:59', 'plus d’une heure déborderait le jour : on borne');
+  assert.equal(addHourHHMM('23:00'), '23:59');
+  assert.equal(addHourHHMM(''), '');
+  assert.equal(addHourHHMM('8h'), '');
 });

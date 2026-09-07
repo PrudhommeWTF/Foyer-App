@@ -209,7 +209,7 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
           <div class="ev-times">
             <div>
               <div class="fl">Heure de début</div>
-              <input class="input" type="time" [ngModel]="store.ui().evTime" (ngModelChange)="store.patch({ evTime: $event })" />
+              <input class="input" type="time" [ngModel]="store.ui().evTime" (ngModelChange)="store.setEventStart($event)" />
             </div>
             <div>
               <div class="fl">Heure de fin (option.)</div>
