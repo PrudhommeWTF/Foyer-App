@@ -12,7 +12,7 @@ import * as repo from '../src/finances/repo';
 import * as rules from '../src/finances/rules-repo';
 import * as imports from '../src/finances/import-repo';
 import { importSuggestions, suggestCategory } from '../src/finances/suggest-repo';
-import { KeyedTx, merchantKey, pickCategory } from '../src/finances/suggest';
+import { KeyedTx, classifyBayes, merchantKey, pickCategory, trainBayes } from '../src/finances/suggest';
 
 const tmpDir = (): string => fsp.mkdtempSync(tmpPath.join(os.tmpdir(), 'foyer-test-'));
 
@@ -38,7 +38,7 @@ describe('pickCategory', () => {
     { key: 'AUTRE', categoryId: 9 },
   ];
   it('rend la catégorie franchement majoritaire au-dessus du seuil', () => {
-    assert.deepEqual(pickCategory('CARREFOUR', rows, 2), { categoryId: 5, seen: 3, total: 4 });
+    assert.deepEqual(pickCategory('CARREFOUR', rows, 2), { categoryId: 5, via: 'merchant', seen: 3, total: 4 });
   });
   it('ne propose rien en dessous du seuil de confiance', () => {
     assert.equal(pickCategory('CARREFOUR', rows, 4), null); // 3 < 4
@@ -49,6 +49,31 @@ describe('pickCategory', () => {
   });
   it('ne propose rien pour un marchand inconnu', () => {
     assert.equal(pickCategory('INCONNU', rows, 1), null);
+  });
+});
+
+describe('classifyBayes (repli par ressemblance)', () => {
+  const train = [
+    { label: 'CARREFOUR CITY PARIS', categoryId: 5 },
+    { label: 'CARREFOUR MARKET LYON', categoryId: 5 },
+    { label: 'CARREFOUR CONTACT NIMES', categoryId: 5 },
+    { label: 'RESTAURANT LE BISTROT', categoryId: 6 },
+    { label: 'BRASSERIE DU COIN', categoryId: 6 },
+    { label: 'PIZZERIA BELLA NAPOLI', categoryId: 6 },
+  ];
+  const model = trainBayes(train);
+
+  it('classe un libellé inédit mais ressemblant', () => {
+    const s = classifyBayes('CARREFOUR EXPRESS NICE', model, 2);
+    assert.equal(s?.categoryId, 5);
+    assert.equal(s?.via, 'similar');
+  });
+  it('ne propose rien sans mot connu', () => {
+    assert.equal(classifyBayes('MAGASIN INCONNU XYZ', model, 1), null);
+  });
+  it('respecte le seuil d’appuis', () => {
+    // La classe la plus probable n'a que 3 documents : sous un seuil de 4, rien.
+    assert.equal(classifyBayes('CARREFOUR EXPRESS NICE', model, 4), null);
   });
 });
 
@@ -75,7 +100,18 @@ describe('suggestCategory (repo)', () => {
   it('apprend d’un marchand catégorisé à la main et le propose', () => {
     addTx('CB CARREFOUR CITY 111 DU 01/09', courses);
     addTx('CB CARREFOUR CITY 222 DU 08/09', courses);
-    assert.equal(suggestCategory('CB CARREFOUR CITY 999 DU 20/09', 2)?.categoryId, courses);
+    const s = suggestCategory('CB CARREFOUR CITY 999 DU 20/09', 2);
+    assert.equal(s?.categoryId, courses);
+    assert.equal(s?.via, 'merchant');
+  });
+
+  it('se rabat sur la ressemblance pour un marchand inédit', () => {
+    addTx('CB CARREFOUR CITY 111 DU 01/09', courses);
+    addTx('CB CARREFOUR MARKET 222 DU 08/09', courses);
+    // Marchand jamais vu (« EXPRESS ») mais qui partage le mot CARREFOUR.
+    const s = suggestCategory('CB CARREFOUR EXPRESS 999 NICE', 2);
+    assert.equal(s?.categoryId, courses);
+    assert.equal(s?.via, 'similar');
   });
 
   it('reste muet sous le seuil', () => {
