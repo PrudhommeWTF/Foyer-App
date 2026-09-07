@@ -57,8 +57,10 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): str
     } else {
       const [hh, mm] = ev.time.split(':');
       L.push(`DTSTART:${icsDate(ev.date)}T${pad2(+hh)}${pad2(+mm)}00`);
-      if (ev.end && ev.end !== ev.date) L.push(`DTEND:${icsDate(ev.end)}T${pad2(+hh)}${pad2(+mm)}00`);
-      else L.push(`DTEND:${icsDate(ev.date)}T${pad2(Math.min(+hh + 1, 23))}${pad2(+mm)}00`);
+      const endDate = ev.end && ev.end !== ev.date ? ev.end : ev.date;
+      // Heure de fin si elle est connue, sinon la fin par défaut (une heure plus tard).
+      const [eh, em] = ev.endTime ? ev.endTime.split(':') : [String(Math.min(+hh + 1, 23)), mm];
+      L.push(`DTEND:${icsDate(endDate)}T${pad2(+eh)}${pad2(+em)}00`);
     }
     const rr = icsRrule(ev.recur);
     if (rr) L.push(`RRULE:${rr}`);

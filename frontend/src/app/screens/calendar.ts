@@ -6,11 +6,12 @@ import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
 import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS } from '../core/constants';
 import { cap, parseDay, dstr, isoWeek } from '../core/helpers';
-import { Recur } from '../core/models';
+import { EventItem, Recur } from '../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
 
-interface Chip { id: string; title: string; bg: string; fg: string; }
-interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[]; slotEvents: SlotEvent[]; extras: DayExtra[]; more: number; }
+/** Un élément d'agenda du jour : un événement propre, ou une occurrence de créneau publié. Trié par heure, les deux mêlés. */
+type DayItem = { t: string; kind: 'event'; ev: EventItem } | { t: string; kind: 'slot'; se: SlotEvent };
+interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem[]; extras: DayExtra[]; more: number; }
 
 @Component({
   selector: 'screen-calendar',
@@ -51,14 +52,15 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                      [style.border]="cellBorder(c.key)"
                      (click)="cellClick(c)">
                   <span class="mnum" [style.color]="c.inMonth ? 'var(--ink)' : 'var(--ink3)'">{{ c.num }}</span>
-                  @for (chip of c.chips; track $index) {
-                    <div class="chip-ev tap" [style.background]="chip.bg" [style.color]="chip.fg" (click)="openEventChip($event, chip.id)">{{ chip.title }}</div>
-                  }
-                  @for (se of c.slotEvents; track se.id) {
-                    <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
-                      <f-icon name="planning" [size]="10" [color]="slotColor(se.k)" [width]="2.4" />
-                      <span class="ex-lbl">{{ se.title }}</span>
-                    </div>
+                  @for (it of c.items; track $index) {
+                    @if (it.kind === 'event') {
+                      <div class="chip-ev tap" [style.background]="store.tint(store.memberColor(it.ev.who))" [style.color]="store.memberColor(it.ev.who)" (click)="openEventChip($event, it.ev.id)">{{ it.ev.title }}</div>
+                    } @else {
+                      <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
+                        <f-icon name="planning" [size]="10" [color]="slotColor(it.se.k)" [width]="2.4" />
+                        <span class="ex-lbl">{{ it.se.title }}</span>
+                      </div>
+                    }
                   }
                   @for (ex of c.extras; track $index) {
                     <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
@@ -82,29 +84,30 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                     <span class="col-num f-display">{{ col.num }}</span>
                   </div>
                   <div class="col-body">
-                    @for (e of col.events; track e.id) {
-                      <div class="col-ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)" (click)="store.editEvent(e.id)">
-                        <div class="ce-time f-display">{{ e.time }}</div>
-                        <div class="ce-title">{{ e.title }}</div>
-                        <div class="ce-who">
-                          <span class="dot" [style.background]="store.memberColor(e.who)">{{ store.memberIni(e.who) }}</span>
-                          <span>{{ store.memberName(e.who) }}</span>
+                    @for (it of col.items; track $index) {
+                      @if (it.kind === 'event') {
+                        <div class="col-ev" [style.border-left]="'4px solid ' + store.memberColor(it.ev.who)" (click)="store.editEvent(it.ev.id)">
+                          <div class="ce-time f-display">{{ timeLabel(it.ev) }}</div>
+                          <div class="ce-title">{{ it.ev.title }}</div>
+                          <div class="ce-who">
+                            <span class="dot" [style.background]="store.memberColor(it.ev.who)">{{ store.memberIni(it.ev.who) }}</span>
+                            <span>{{ store.memberName(it.ev.who) }}</span>
+                          </div>
                         </div>
-                      </div>
+                      } @else {
+                        <div class="col-ev slotev" [style.border-left]="'4px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
+                          <div class="ce-time f-display">{{ it.se.time }}{{ it.se.end ? ' – ' + it.se.end : '' }}</div>
+                          <div class="ce-title">{{ it.se.title }}</div>
+                          <div class="slotev-foot">
+                            <f-who [badges]="slotBadges(it.se)" />
+                            <span class="slotev-tag"><f-icon name="planning" [size]="11" [color]="slotColor(it.se.k)" [width]="2.4" /> Emploi du temps</span>
+                          </div>
+                        </div>
+                      }
                     } @empty {
-                      @if (!col.extras.length && !col.slotEvents.length) {
+                      @if (!col.extras.length) {
                         <div class="col-empty" (click)="addAt(col.key)">Libre</div>
                       }
-                    }
-                    @for (se of col.slotEvents; track se.id) {
-                      <div class="col-ev slotev" [style.border-left]="'4px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
-                        <div class="ce-time f-display">{{ se.time }}{{ se.end ? ' – ' + se.end : '' }}</div>
-                        <div class="ce-title">{{ se.title }}</div>
-                        <div class="slotev-foot">
-                          <f-who [badges]="slotBadges(se)" />
-                          <span class="slotev-tag"><f-icon name="planning" [size]="11" [color]="slotColor(se.k)" [width]="2.4" /> Emploi du temps</span>
-                        </div>
-                      </div>
                     }
                     @for (ex of col.extras; track $index) {
                       <div class="col-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
@@ -155,37 +158,38 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
             </div>
           </div>
           <div class="side-sel">{{ selLabel() }}</div>
-          @for (e of selEvents(); track e.id) {
-            <div class="side-ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)" (click)="store.editEvent(e.id)">
-              <div class="se-top">
-                <div class="se-time f-display">{{ e.time }}</div>
-                @if (e.recur !== 'none') {
-                  <span class="se-recur"><f-icon name="refresh" [size]="12" color="#7A9B76" [width]="2.4" /> {{ recurLabel(e.recur) }}</span>
+          @for (it of selItems(); track $index) {
+            @if (it.kind === 'event') {
+              <div class="side-ev" [style.border-left]="'4px solid ' + store.memberColor(it.ev.who)" (click)="store.editEvent(it.ev.id)">
+                <div class="se-top">
+                  <div class="se-time f-display">{{ timeLabel(it.ev) }}</div>
+                  @if (it.ev.recur !== 'none') {
+                    <span class="se-recur"><f-icon name="refresh" [size]="12" color="#7A9B76" [width]="2.4" /> {{ recurLabel(it.ev.recur) }}</span>
+                  }
+                </div>
+                <div class="se-title">{{ it.ev.title }}</div>
+                @if (it.ev.end && it.ev.end !== it.ev.date) {
+                  <div class="se-span"><f-icon name="calendar" [size]="13" color="#4E93B8" [width]="2.2" /> du {{ fmtShort(it.ev.date) }} au {{ fmtShort(it.ev.end) }}</div>
                 }
+                <div class="se-who">
+                  <span class="dot" [style.background]="store.memberColor(it.ev.who)">{{ store.memberIni(it.ev.who) }}</span>
+                  <span>{{ store.memberName(it.ev.who) }}</span>
+                </div>
               </div>
-              <div class="se-title">{{ e.title }}</div>
-              @if (e.end && e.end !== e.date) {
-                <div class="se-span"><f-icon name="calendar" [size]="13" color="#4E93B8" [width]="2.2" /> du {{ fmtShort(e.date) }} au {{ fmtShort(e.end) }}</div>
-              }
-              <div class="se-who">
-                <span class="dot" [style.background]="store.memberColor(e.who)">{{ store.memberIni(e.who) }}</span>
-                <span>{{ store.memberName(e.who) }}</span>
+            } @else {
+              <div class="side-ev slotev" [style.border-left]="'4px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
+                <div class="se-top">
+                  <div class="se-time f-display">{{ it.se.time }}{{ it.se.end ? ' – ' + it.se.end : '' }}</div>
+                  <span class="se-slot"><f-icon name="planning" [size]="12" [color]="slotColor(it.se.k)" [width]="2.4" /> Emploi du temps</span>
+                </div>
+                <div class="se-title">{{ it.se.title }}</div>
+                <div class="se-who"><f-who [badges]="slotBadges(it.se)" /></div>
               </div>
-            </div>
+            }
           } @empty {
-            @if (!selExtras().length && !selSlotEvents().length) {
+            @if (!selExtras().length) {
               <div class="side-empty">Aucun événement ce jour</div>
             }
-          }
-          @for (se of selSlotEvents(); track se.id) {
-            <div class="side-ev slotev" [style.border-left]="'4px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
-              <div class="se-top">
-                <div class="se-time f-display">{{ se.time }}{{ se.end ? ' – ' + se.end : '' }}</div>
-                <span class="se-slot"><f-icon name="planning" [size]="12" [color]="slotColor(se.k)" [width]="2.4" /> Emploi du temps</span>
-              </div>
-              <div class="se-title">{{ se.title }}</div>
-              <div class="se-who"><f-who [badges]="slotBadges(se)" /></div>
-            </div>
           }
           @if (selExtras().length) {
             <div class="side-extras">
@@ -208,9 +212,16 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
           <input class="input" [ngModel]="store.ui().evTitle" (ngModelChange)="store.patch({ evTitle: $event })"
                  placeholder="Ex : Rendez-vous dentiste" style="margin-bottom:18px" />
 
-          <div class="fl">Heure</div>
-          <input class="input" [ngModel]="store.ui().evTime" (ngModelChange)="store.patch({ evTime: $event })"
-                 placeholder="08:00" style="width:130px;margin-bottom:18px" />
+          <div class="ev-times">
+            <div>
+              <div class="fl">Heure de début</div>
+              <input class="input" type="time" [ngModel]="store.ui().evTime" (ngModelChange)="store.patch({ evTime: $event })" />
+            </div>
+            <div>
+              <div class="fl">Heure de fin (option.)</div>
+              <input class="input" type="time" [ngModel]="store.ui().evEndTime" (ngModelChange)="store.patch({ evEndTime: $event })" [disabled]="!store.ui().evTime" />
+            </div>
+          </div>
 
           <div class="fl">Date</div>
           <div class="dp">
@@ -363,6 +374,9 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
     .chip-ex.slotev { gap: 3px; }
 
     .fl { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .ev-times { display: flex; gap: 12px; margin-bottom: 18px; }
+    .ev-times > div { flex: 1; min-width: 0; }
+    .ev-times .input { width: 100%; }
     .dp { background: var(--soft); border: 2px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 8px; }
     .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .dp-nav { width: 30px; height: 30px; border: none; border-radius: 9px; background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -416,19 +430,17 @@ export class CalendarScreen {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      const evs = this.store.eventsForDay(key);
-      const slotEvents = this.store.slotEventsForDay(key);
+      const items = this.dayItems(key);
       const extras = this.store.dayExtras(key);
-      // Le compteur porte sur les événements **et** les créneaux publiés **et**
+      // Le compteur porte sur les événements et créneaux publiés (mêlés) **et**
       // les repères : sans cela, une échéance de contrat disparaissait sans
       // laisser de trace le jour où elle tombait après un férié et un anniversaire.
-      const hidden = Math.max(0, evs.length - 2) + Math.max(0, slotEvents.length - 2) + Math.max(0, extras.length - 2);
+      const hidden = Math.max(0, items.length - 3) + Math.max(0, extras.length - 2);
       out.push({
         key,
         num: d.getDate(),
         inMonth: d.getMonth() === month,
-        chips: evs.slice(0, 2).map((e) => ({ id: e.id, title: e.title, bg: this.store.tint(this.store.memberColor(e.who)), fg: this.store.memberColor(e.who) })),
-        slotEvents: slotEvents.slice(0, 2),
+        items: items.slice(0, 3),
         extras: extras.slice(0, 2),
         more: hidden,
       });
@@ -448,14 +460,28 @@ export class CalendarScreen {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), events: this.store.eventsForDay(key), slotEvents: this.store.slotEventsForDay(key), extras: this.store.dayExtras(key), isToday: key === this.store.todayStr(), isSel: key === selDay });
+      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), items: this.dayItems(key), extras: this.store.dayExtras(key), isToday: key === this.store.todayStr(), isSel: key === selDay });
     }
     return out;
   });
 
-  selEvents = computed(() => this.store.eventsForDay(this.store.ui().selDay));
-  selSlotEvents = computed(() => this.store.slotEventsForDay(this.store.ui().selDay));
+  selItems = computed(() => this.dayItems(this.store.ui().selDay));
   selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
+
+  /**
+   * L'agenda d'un jour, événements propres et créneaux publiés **mêlés et triés
+   * par heure**. Sans cela, un créneau de midi s'affichait après un événement de
+   * 20 h, parce que les deux vivaient dans deux listes séparées. Une heure vide
+   * (« — », événement sur la journée) passe en tête.
+   */
+  dayItems(key: string): DayItem[] {
+    const evs: DayItem[] = this.store.eventsForDay(key).map((ev) => ({ t: /^\d\d:\d\d/.test(ev.time) ? ev.time : '', kind: 'event', ev }));
+    const slots: DayItem[] = this.store.slotEventsForDay(key).map((se) => ({ t: se.time, kind: 'slot', se }));
+    return [...evs, ...slots].sort((a, b) => a.t.localeCompare(b.t));
+  }
+
+  /** « 12:00 – 12:45 », ou « 12:00 » sans fin, ou « — » sans heure. */
+  timeLabel(ev: EventItem): string { return ev.endTime ? ev.time + ' – ' + ev.endTime : ev.time; }
   selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
 
   legendKinds = [
@@ -514,7 +540,7 @@ export class CalendarScreen {
    * détaille, et son bouton « Ajouter un événement » reste là pour en créer un).
    */
   cellClick(c: MonthCell): void {
-    if (c.chips.length || c.slotEvents.length) this.store.patch({ selDay: c.key });
+    if (c.items.length) this.store.patch({ selDay: c.key });
     else this.addAt(c.key);
   }
 

@@ -1272,13 +1272,13 @@ export class FoyerStore {
   }
   openEvent(): void {
     const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evWho: this.members()[0]?.id || 'cam', evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evWho: this.members()[0]?.id || 'cam', evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
   }
   editEvent(id: string): void {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
     const m = parseInt(ev.date.slice(5, 7), 10) - 7;
-    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evWho: ev.who, evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evWho: ev.who, evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
   }
   dpPick(ds: string): void {
     const s = this.ui();
@@ -1291,12 +1291,15 @@ export class FoyerStore {
     const s = this.ui();
     const t = s.evTitle.trim(); if (!t) { this.toast('Donne un titre à l’événement'); return; }
     const time = s.evTime.trim() || '—';
+    // L'heure de fin n'a de sens qu'avec une heure de début et si elle vient
+    // après : sinon on ne la garde pas plutôt que d'afficher « 18:00 – 09:00 ».
+    const endTime = (s.evTime.trim() && s.evEndTime.trim() && s.evEndTime.trim() > s.evTime.trim()) ? s.evEndTime.trim() : null;
     this.mutate((d) => {
       if (s.evEditId) {
         const i = d.events.findIndex((e) => e.id === s.evEditId);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, who: s.evWho, recur: s.evRecur, end: s.evEnd || null };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, who: s.evWho, recur: s.evRecur, end: s.evEnd || null };
       } else {
-        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, who: s.evWho, recur: s.evRecur, end: s.evEnd || null });
+        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, who: s.evWho, recur: s.evRecur, end: s.evEnd || null });
       }
     });
     this.toast(s.evEditId ? 'Événement modifié' : 'Événement ajouté à l’agenda');
