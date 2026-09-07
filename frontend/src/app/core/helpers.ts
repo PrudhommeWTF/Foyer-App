@@ -41,6 +41,20 @@ export function weekDates(offset: number, anchorIso: string): Date[] {
   return out;
 }
 
+/**
+ * Le numéro de semaine ISO 8601 (lundi premier jour, la semaine 1 contient le
+ * premier jeudi de l'année). C'est celui qu'affichent les agendas français.
+ */
+export function isoWeek(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - day + 3); // le jeudi de cette semaine
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const fday = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - fday + 3);
+  return 1 + Math.round((date.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
+}
+
 export function contactIni(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';

@@ -22,6 +22,8 @@ export interface UiState {
   // calendar
   calView: 'month' | 'week' | '3';
   calAnchor: string;
+  /** Mois affiché par le mini-calendrier du panneau latéral (une date de ce mois). */
+  miniAnchor: string;
   // meals
   /**
    * Jour d'ancrage du planning. En vue semaine, la semaine qui le contient ; en
@@ -184,7 +186,7 @@ export function initialUi(): UiState {
   return {
     screen: 'home', selDay: today, moreOpen: false, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
-    calView: 'month', calAnchor: today,
+    calView: 'month', calAnchor: today, miniAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evWho: 'cam', evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: 0,

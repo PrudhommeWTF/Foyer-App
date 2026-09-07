@@ -5,11 +5,11 @@ import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
 import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS } from '../core/constants';
-import { cap, parseDay, dstr } from '../core/helpers';
+import { cap, parseDay, dstr, isoWeek } from '../core/helpers';
 import { Recur } from '../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
 
-interface Chip { title: string; bg: string; fg: string; }
+interface Chip { id: string; title: string; bg: string; fg: string; }
 interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[]; slotEvents: SlotEvent[]; extras: DayExtra[]; more: number; }
 
 @Component({
@@ -49,10 +49,10 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
                 <div class="mcell"
                      [style.background]="c.key === sel() ? 'rgba(229,107,78,.14)' : 'var(--soft)'"
                      [style.border]="cellBorder(c.key)"
-                     (click)="store.patch({ selDay: c.key })">
+                     (click)="addAt(c.key)">
                   <span class="mnum" [style.color]="c.inMonth ? 'var(--ink)' : 'var(--ink3)'">{{ c.num }}</span>
                   @for (chip of c.chips; track $index) {
-                    <div class="chip-ev" [style.background]="chip.bg" [style.color]="chip.fg">{{ chip.title }}</div>
+                    <div class="chip-ev tap" [style.background]="chip.bg" [style.color]="chip.fg" (click)="openEventChip($event, chip.id)">{{ chip.title }}</div>
                   }
                   @for (se of c.slotEvents; track se.id) {
                     <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(se.k)" (click)="openSlot($event, se)">
@@ -129,8 +129,32 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
               <span class="lg-item"><span class="ex-dot" [style.background]="lk.color"></span>{{ lk.label }}</span>
             }
           </div>
-          <div class="side-title f-display">{{ selLabel() }}</div>
-          <div class="side-date">{{ store.fmtNumDate(sel()) }}</div>
+          <!-- Un mini-calendrier plutôt qu'une date en toutes lettres : il montre
+               le mois d'un coup d'oeil et permet de sauter à n'importe quel jour,
+               numéros de semaine compris. -->
+          <div class="mini">
+            <div class="mini-head">
+              <div class="mini-title f-display">{{ miniLabel() }}</div>
+              <div class="mini-navs">
+                <button class="mini-nav" title="Année précédente" (click)="miniNav('year', -1)"><f-icon name="chevronLeft" [size]="13" color="var(--ink2)" [width]="2.6" /><f-icon name="chevronLeft" [size]="13" color="var(--ink2)" [width]="2.6" /></button>
+                <button class="mini-nav" title="Mois précédent" (click)="miniNav('month', -1)"><f-icon name="chevronLeft" [size]="15" color="var(--ink2)" [width]="2.4" /></button>
+                <button class="mini-nav" title="Mois suivant" (click)="miniNav('month', 1)"><f-icon name="chevronRight" [size]="15" color="var(--ink2)" [width]="2.4" /></button>
+                <button class="mini-nav" title="Année suivante" (click)="miniNav('year', 1)"><f-icon name="chevronRight" [size]="13" color="var(--ink2)" [width]="2.6" /><f-icon name="chevronRight" [size]="13" color="var(--ink2)" [width]="2.6" /></button>
+              </div>
+            </div>
+            <div class="mini-grid">
+              <span class="mini-wk mini-corner"></span>
+              @for (w of miniDows; track $index) { <span class="mini-dow">{{ w }}</span> }
+              @for (row of miniRows(); track row.week) {
+                <span class="mini-wk">{{ row.week }}</span>
+                @for (c of row.days; track c.key) {
+                  <button class="mini-day" [class.out]="!c.inMonth" [class.today]="c.today" [class.sel]="c.sel"
+                          [class.has]="c.dots" (click)="pickMini(c.key)">{{ c.num }}</button>
+                }
+              }
+            </div>
+          </div>
+          <div class="side-sel">{{ selLabel() }}</div>
           @for (e of selEvents(); track e.id) {
             <div class="side-ev" [style.border-left]="'4px solid ' + store.memberColor(e.who)" (click)="store.editEvent(e.id)">
               <div class="se-top">
@@ -276,8 +300,28 @@ interface MonthCell { key: string; num: number; inMonth: boolean; chips: Chip[];
     .col-add:hover { background: var(--surface); }
 
     .add-ev { margin-bottom: 6px; }
-    .side-title { font-size: 18px; font-weight: 700; color: var(--ink); text-transform: capitalize; margin: 6px 0 2px; }
-    .side-date { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-bottom: 6px; }
+
+    /* ===== mini-calendrier ===== */
+    .mini { background: var(--surface); border-radius: 16px; padding: 12px 12px 8px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
+    .mini-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .mini-title { font-size: 15px; font-weight: 700; color: var(--ink); text-transform: capitalize; }
+    .mini-navs { display: flex; gap: 2px; }
+    .mini-nav { display: inline-flex; align-items: center; border: none; background: var(--soft); border-radius: 8px; padding: 5px 5px; cursor: pointer; }
+    .mini-nav:hover { background: var(--soft2); }
+    .mini-nav f-icon + f-icon { margin-left: -7px; }
+    .mini-grid { display: grid; grid-template-columns: 22px repeat(7, 1fr); gap: 2px; align-items: center; }
+    .mini-dow { text-align: center; font-size: 10.5px; font-weight: 800; color: var(--ink3); padding: 2px 0; }
+    .mini-wk { text-align: center; font-size: 10px; font-weight: 800; color: var(--ink3); opacity: .7; }
+    .mini-corner { visibility: hidden; }
+    .mini-day { position: relative; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border: none; background: transparent; border-radius: 9px; cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--ink); font-family: inherit; }
+    .mini-day:hover { background: var(--soft); }
+    .mini-day.out { color: var(--ink3); opacity: .55; }
+    .mini-day.today { box-shadow: inset 0 0 0 2px var(--honey); }
+    .mini-day.sel { background: var(--primary); color: #fff; font-weight: 800; box-shadow: none; }
+    .mini-day.has::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
+    .mini-day.sel.has::after { background: #fff; }
+    .side-sel { font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: capitalize; margin: 4px 2px 0; }
+
     .side-ev { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); cursor: pointer; }
     .se-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .se-time { font-size: 16px; font-weight: 700; color: var(--ink); }
@@ -381,7 +425,7 @@ export class CalendarScreen {
         key,
         num: d.getDate(),
         inMonth: d.getMonth() === month,
-        chips: evs.slice(0, 2).map((e) => ({ title: e.title, bg: this.store.tint(this.store.memberColor(e.who)), fg: this.store.memberColor(e.who) })),
+        chips: evs.slice(0, 2).map((e) => ({ id: e.id, title: e.title, bg: this.store.tint(this.store.memberColor(e.who)), fg: this.store.memberColor(e.who) })),
         slotEvents: slotEvents.slice(0, 2),
         extras: extras.slice(0, 2),
         more: hidden,
@@ -416,6 +460,50 @@ export class CalendarScreen {
     ...['holiday', 'school', 'birthday', 'task', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
     { k: 'planning', color: SCHED_COLORS['ecole'], label: 'Emploi du temps' },
   ];
+
+  // ===== mini-calendrier du panneau latéral =====
+  miniDows = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  miniLabel = computed(() => cap(parseDay(this.store.ui().miniAnchor).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
+
+  /** Six semaines du mois affiché, chacune avec son numéro de semaine ISO. */
+  miniRows = computed(() => {
+    const a = parseDay(this.store.ui().miniAnchor);
+    const start = this.monday(new Date(a.getFullYear(), a.getMonth(), 1));
+    const month = a.getMonth();
+    const today = this.store.todayStr();
+    const sel = this.store.ui().selDay;
+    const rows: { week: number; days: { key: string; num: number; inMonth: boolean; today: boolean; sel: boolean; dots: boolean }[] }[] = [];
+    for (let r = 0; r < 6; r++) {
+      const days = [];
+      let week = 0;
+      for (let c = 0; c < 7; c++) {
+        const d = new Date(start); d.setDate(start.getDate() + r * 7 + c);
+        if (c === 0) week = isoWeek(d);
+        const key = dstr(d);
+        const dots = !!this.store.eventsForDay(key).length || !!this.store.slotEventsForDay(key).length || !!this.store.dayExtras(key).length;
+        days.push({ key, num: d.getDate(), inMonth: d.getMonth() === month, today: key === today, sel: key === sel, dots });
+      }
+      rows.push({ week, days });
+    }
+    return rows;
+  });
+
+  miniNav(kind: 'month' | 'year', dir: number): void {
+    const a = parseDay(this.store.ui().miniAnchor);
+    if (kind === 'month') a.setMonth(a.getMonth() + dir); else a.setFullYear(a.getFullYear() + dir);
+    this.store.patch({ miniAnchor: dstr(a) });
+  }
+
+  /** Sauter à une date : on la sélectionne, la vue principale suit, le mini reste sur ce mois. */
+  pickMini(key: string): void {
+    this.store.patch({ selDay: key, calAnchor: key, miniAnchor: key });
+  }
+
+  /** Une pastille d'événement dans une case de mois ouvre l'événement, sans déclencher la création. */
+  openEventChip(e: Event, id: string): void {
+    e.stopPropagation();
+    this.store.editEvent(id);
+  }
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
   dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));

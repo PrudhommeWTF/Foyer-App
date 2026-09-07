@@ -3,7 +3,7 @@
 // hors navigateur.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { contactIni, dstr, keptIni, occursOn, weekDates } from './helpers';
+import { contactIni, dstr, isoWeek, keptIni, occursOn, weekDates } from './helpers';
 import { EventItem } from './models';
 
 const iso = (offset: number, anchor: string): string[] => weekDates(offset, anchor).map(dstr);
@@ -84,4 +84,15 @@ test('un événement « toutes les 2 semaines » revient un jeudi sur deux', () 
 test('« chaque semaine » et « toutes les 2 semaines » ne se confondent pas', () => {
   assert.equal(occursOn(ev({ recur: 'weekly' }), '2026-09-17'), true);
   assert.equal(occursOn(ev({ recur: 'biweekly' }), '2026-09-17'), false);
+});
+
+// ---- numéro de semaine ISO --------------------------------------------------
+
+test('isoWeek suit la norme ISO 8601 (lundi, semaine du premier jeudi)', () => {
+  assert.equal(isoWeek(new Date(2026, 7, 31)), 36, 'lundi 31 août 2026 = semaine 36');
+  assert.equal(isoWeek(new Date(2026, 8, 7)), 37, 'lundi 7 sept. 2026 = semaine 37');
+  // Le 1er janvier 2027 est un vendredi : il appartient encore à la semaine 53 de 2026.
+  assert.equal(isoWeek(new Date(2027, 0, 1)), 53);
+  // Le 4 janvier 2027 (lundi) ouvre la semaine 1 de 2027.
+  assert.equal(isoWeek(new Date(2027, 0, 4)), 1);
 });
