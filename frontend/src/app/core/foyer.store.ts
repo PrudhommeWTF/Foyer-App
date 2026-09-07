@@ -2746,7 +2746,11 @@ export class FoyerStore {
     this.patch({
       screen: 'planning', schedEdit: true, seEditId: null,
       seDow: jour, seWho: [...s.schedWho], seStart: heure, seEnd: '', seLabel: '', seType: 'ecole',
-      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seEvery: 1, seAway: SCHED_AWAY_DEFAULT['ecole'], seSync: false,
+      // La validité part de la première occurrence : une récurrence qu'on met en
+      // place aujourd'hui ne doit pas paraître avoir eu lieu les semaines passées,
+      // ni dans la vue, ni à l'agenda si le créneau y est publié. Modifiable dans
+      // « Période de validité ».
+      seRec: 'weekly', seDate: date, seFrom: date, seUntil: '', seWhen: 'always', seEvery: 1, seAway: SCHED_AWAY_DEFAULT['ecole'], seSync: false,
       seMore: false, seOccDate: date, seScope: 'all', seDelOpen: false, addMenuOpen: false,
     });
   }
@@ -2758,9 +2762,12 @@ export class FoyerStore {
   editSlot(id: string, date = ''): void {
     const it = this._data()?.sched.find((x) => x.id === id); if (!it) return;
     const occ = date || (it.rec === 'once' ? it.date || this.todayStr() : this.schedDate(it.dow));
-    // Les réglages de période ne se déplient d'office que s'ils sont utilisés :
-    // les montrer toujours alourdirait la saisie courante pour rien.
-    const pose = !!(it.from || it.until || (it.when && it.when !== 'always'));
+    // Les réglages de période ne se déplient d'office que s'ils sont **utilisés** :
+    // un simple début de validité déjà passé (celui que reçoit tout nouveau
+    // créneau) n'a rien à montrer, alors qu'une fin, un filtre, un démarrage futur
+    // ou une cadence bimensuelle méritent d'être vus.
+    const startedPlain = !!it.from && !it.until && (!it.when || it.when === 'always') && !(it.interval && it.interval > 1) && it.from <= this.todayStr();
+    const pose = !startedPlain && !!(it.from || it.until || (it.when && it.when !== 'always'));
     this.patch({
       schedEdit: true, seEditId: id, seDow: it.dow, seWho: [...(it.who || [])],
       seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k,
