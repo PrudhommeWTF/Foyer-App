@@ -49,6 +49,22 @@ describe('recentActivity', () => {
     assert.equal(feed[0].at, '2026-09-08T20:00:00.000Z');
   });
 
+  it('inclut les messages horodatés, tronque les longs, ignore ceux sans date', () => {
+    const s = state({
+      msgs: [
+        { who: 'm1', text: 'Le dîner est prêt !', time: '19:02', at: '2026-09-06T17:02:00.000Z' },
+        { who: 'm2', text: 'x'.repeat(200), time: '08:00', at: '2026-09-06T06:00:00.000Z' },
+        { who: 'm1', text: 'Ancien message', time: '10:00' },
+      ] as HouseholdState['msgs'],
+    });
+    const feed = recentActivity(s, 12);
+    assert.equal(feed.length, 2);
+    assert.equal(feed[0].verb, 'a écrit');
+    assert.equal(feed[0].what, 'Le dîner est prêt !');
+    assert.equal(feed[0].where, 'Messagerie');
+    assert.ok(feed[1].what.endsWith('…') && feed[1].what.length <= 121);
+  });
+
   it('respecte la limite', () => {
     const tasks = Array.from({ length: 20 }, (_, i) => ({ id: 't' + i, listId: 'l1', text: 'x', at: `2026-09-${String(i + 1).padStart(2, '0')}T08:00:00.000Z`, by: 'm1' }));
     const s = state({ taskLists: [{ id: 'l1', name: 'L', color: '#111' }] as HouseholdState['taskLists'], tasks: tasks as HouseholdState['tasks'] });

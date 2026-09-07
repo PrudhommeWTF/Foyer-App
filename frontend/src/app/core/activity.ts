@@ -2,10 +2,14 @@
 //
 // Il ne se dérive que des mutations réellement horodatées et attribuées :
 // tâches (création via `at`/`by`, achèvement via `doneAt`/`doneBy` ou l'historique
-// d'une tâche récurrente) et articles de courses (`at`/`by`, l'état donnant le
-// verbe). Les événements, contacts et recettes ne portent ni date de changement
-// ni auteur : les faire figurer ici serait inventer une ligne, pas la refléter.
+// d'une tâche récurrente), articles de courses (`at`/`by`, l'état donnant le
+// verbe), et messages de la messagerie (`at`/`who`). Les événements, contacts et
+// recettes ne portent ni date de changement ni auteur : les faire figurer ici
+// serait inventer une ligne, pas la refléter.
 import { HouseholdState } from './models';
+
+/** Au-delà, un message tronqué : une ligne du fil, pas un pavé. */
+const MSG_MAX = 120;
 
 export interface ActivityEntry {
   /** Instant du changement, ISO complet : c'est la clé de tri. */
@@ -52,6 +56,13 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
     if (!s.at) continue;
     const l = sList(s.listId);
     out.push({ at: s.at, by: s.by ?? null, verb: SHOP_VERB[s.state] || 'a modifié', what: s.name, where: l?.name || 'Courses', color: l?.color || '#4E93B8' });
+  }
+  // Les messages : seuls ceux qui portent un horodatage complet. Les anciens
+  // n'avaient que l'heure (HH:MM), inclassables dans un fil sur plusieurs jours.
+  for (const m of state.msgs || []) {
+    if (!m.at) continue;
+    const what = m.text.length > MSG_MAX ? m.text.slice(0, MSG_MAX).trimEnd() + '…' : m.text;
+    out.push({ at: m.at, by: m.who || null, verb: 'a écrit', what, where: 'Messagerie', color: '#4E93B8' });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
