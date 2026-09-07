@@ -103,6 +103,7 @@ export const ICONS: Record<string, string> = {
   palm: 'M12 22V9M12 9c-3-3-8-2-9 1 3-1 6 0 9 2M12 9c3-3 8-2 9 1-3-1-6 0-9 2M12 9c0-4 3-6 6-6-1 3-3 5-6 6',
   link: 'M9 15l6-6M8 12H6a3 3 0 0 1 0-6h3M16 12h2a3 3 0 0 1 0 6h-3',
   copy: 'M9 9h10v10H9zM5 15H4V4h11v1',
+  pin: 'M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];

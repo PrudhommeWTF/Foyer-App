@@ -33,6 +33,8 @@ export interface EventItem { id: string; date: string; time: string; title: stri
    * Absente, l'événement n'a pas de fin connue.
    */
   endTime?: string | null;
+  /** Lieu, texte libre (« Salle des fêtes », « 12 rue des Lilas »). Publié dans le flux ICS. */
+  place?: string | null;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
    * d'en créer un second pour le même repas, et fait disparaître l'événement

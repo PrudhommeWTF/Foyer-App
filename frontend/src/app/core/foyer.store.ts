@@ -1289,13 +1289,13 @@ export class FoyerStore {
     // Pré-affecté au membre courant : un événement qu'on crée est le plus souvent
     // le sien, et on peut en ajouter d'autres.
     const moi = this.me()?.id;
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evWho: moi ? [moi] : [], evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evWho: moi ? [moi] : [], evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
   }
   editEvent(id: string): void {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
     const m = parseInt(ev.date.slice(5, 7), 10) - 7;
-    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
   }
   dpPick(ds: string): void {
     const s = this.ui();
@@ -1311,12 +1311,13 @@ export class FoyerStore {
     // L'heure de fin n'a de sens qu'avec une heure de début et si elle vient
     // après : sinon on ne la garde pas plutôt que d'afficher « 18:00 – 09:00 ».
     const endTime = (s.evTime.trim() && s.evEndTime.trim() && s.evEndTime.trim() > s.evTime.trim()) ? s.evEndTime.trim() : null;
+    const place = s.evPlace.trim() || null;
     this.mutate((d) => {
       if (s.evEditId) {
         const i = d.events.findIndex((e) => e.id === s.evEditId);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, place, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null };
       } else {
-        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null });
+        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, place, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null });
       }
     });
     this.toast(s.evEditId ? 'Événement modifié' : 'Événement ajouté à l’agenda');
