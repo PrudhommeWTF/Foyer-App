@@ -3,8 +3,8 @@
 // revenir une semaine après la réalisation, pas après l'échéance initiale.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { TaskRec } from './models';
-import { addMonthsClamped, nextOccurrence, recLabel, skipOccurrence, windowEnd } from './recurrence';
+import { TaskItem, TaskRec } from './models';
+import { addMonthsClamped, nextOccurrence, recLabel, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
 
 const rec = (over: Partial<TaskRec> = {}): TaskRec => ({ freq: 'weekly', every: 1, base: 'due', ...over });
 
@@ -105,4 +105,45 @@ test('le libellé dit la règle telle qu’on la lirait', () => {
   assert.equal(recLabel(rec({ freq: 'yearly', grace: 15 })), 'Chaque année, souplesse 15 j');
   assert.equal(recLabel(rec({ freq: 'daily', every: 3, until: '2026-12-31' }), fmt), 'Tous les 3 jours, jusqu\'au 31/12/2026');
   assert.equal(recLabel(rec({ freq: 'monthly', every: 2 })), 'Tous les 2 mois');
+});
+
+// ---- projection au calendrier (taskOccursOn) --------------------------------
+
+const task = (over: Partial<TaskItem> = {}): TaskItem =>
+  ({ id: 't1', listId: 'l1', text: 'Poubelles', who: [], due: '2026-09-08', done: false, ...over });
+
+test('sans récurrence, une tâche ne tombe qu’à son échéance', () => {
+  const t = task({ rec: null });
+  assert.equal(taskOccursOn(t, '2026-09-08'), true);
+  assert.equal(taskOccursOn(t, '2026-09-15'), false);
+});
+
+test('une tâche hebdomadaire se projette sur chaque semaine, à partir de l’échéance', () => {
+  // Mardi 8 sept. 2026, chaque mardi.
+  const t = task({ rec: rec({ freq: 'weekly' }) });
+  assert.equal(taskOccursOn(t, '2026-09-01'), false, 'avant l’échéance courante, rien');
+  assert.equal(taskOccursOn(t, '2026-09-08'), true);
+  assert.equal(taskOccursOn(t, '2026-09-15'), true);
+  assert.equal(taskOccursOn(t, '2026-09-22'), true);
+  assert.equal(taskOccursOn(t, '2026-09-16'), false, 'un autre jour, non');
+});
+
+test('« toutes les 2 semaines » ne se projette qu’une semaine sur deux', () => {
+  const t = task({ rec: rec({ freq: 'weekly', every: 2 }) });
+  assert.equal(taskOccursOn(t, '2026-09-08'), true);
+  assert.equal(taskOccursOn(t, '2026-09-15'), false);
+  assert.equal(taskOccursOn(t, '2026-09-22'), true);
+});
+
+test('la fin de série borne la projection', () => {
+  const t = task({ rec: rec({ freq: 'weekly', until: '2026-09-15' }) });
+  assert.equal(taskOccursOn(t, '2026-09-15'), true);
+  assert.equal(taskOccursOn(t, '2026-09-22'), false);
+});
+
+test('le mode « après la réalisation » ne se projette pas : seule l’échéance courante', () => {
+  // Le futur dépend du jour où on fait la tâche : on n’invente pas de dates.
+  const t = task({ rec: rec({ base: 'done' }) });
+  assert.equal(taskOccursOn(t, '2026-09-08'), true);
+  assert.equal(taskOccursOn(t, '2026-09-15'), false);
 });

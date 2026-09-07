@@ -6,6 +6,7 @@
 // pense.
 import { CAL_KINDS } from './constants';
 import { ageOn, frenchHolidays, isBirthdayOn, occursOn } from './helpers';
+import { taskOccursOn } from './recurrence';
 import { EventItem, HouseholdState } from './models';
 
 /** Un repère de journée qui n'est pas un événement : férié, anniversaire, tâche, échéance. `id` : la tâche qu'un tap ouvre. */
@@ -40,7 +41,10 @@ export function dayExtrasOn(ds: string, input: DayInput): DayExtra[] {
   for (const sh of input.schoolHolidays) { if (ds >= sh.start && ds <= sh.end) { out.push({ kind: 'school', label: sh.name, color: CAL_KINDS['school'].color }); break; } }
   for (const m of d.members) { if (isBirthdayOn(m.birthday, ds)) { const a = ageOn(m.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + m.name, color: m.color, sub: a != null ? a + ' ans' : undefined }); } }
   for (const c of d.contacts) { if (isBirthdayOn(c.birthday, ds)) { const a = ageOn(c.birthday!, ds); out.push({ kind: 'birthday', label: 'Anniv. ' + c.name, color: CAL_KINDS['birthday'].color, sub: a != null ? a + ' ans' : undefined }); } }
-  for (const t of d.tasks) { if (t.due === ds) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: t.done ? 'faite' : (t.time || undefined), id: t.id }); }
+  // Une tâche récurrente apparaît sur chacune de ses occurrences, pas seulement à
+  // son échéance courante : « faite » ne vaut que pour celle-ci, une occurrence
+  // projetée n'a pas encore été faite.
+  for (const t of d.tasks) { if (taskOccursOn(t, ds)) out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: (t.done && t.due === ds) ? 'faite' : (t.time || undefined), id: t.id }); }
   out.push(...(input.external[ds] || []));
   return out;
 }
