@@ -188,10 +188,14 @@ interface DayView { dow: number; date: string; label: string; short: string; num
 
     @if (store.ui().schedEdit) {
       <f-modal [title]="formTitle()" [maxWidth]="520" (close)="store.patch({ schedEdit: false })">
-        <div class="seg">
-          <button [class.active]="store.ui().seRec === 'weekly'" (click)="store.patch({ seRec: 'weekly' })">Toutes les semaines</button>
+        <div class="seg wrap">
+          <button [class.active]="store.ui().seRec === 'weekly' && store.ui().seEvery === 1" (click)="store.setSlotEvery(1)">Toutes les semaines</button>
+          <button [class.active]="store.ui().seRec === 'weekly' && store.ui().seEvery === 2" (click)="store.setSlotEvery(2)">Toutes les 2 semaines</button>
           <button [class.active]="store.ui().seRec === 'once'" (click)="store.patch({ seRec: 'once' })">Une seule fois</button>
         </div>
+        @if (store.ui().seRec === 'weekly' && store.ui().seEvery === 2) {
+          <div class="hint">Une semaine sur deux, à partir du {{ store.fmtNumDate(store.ui().seFrom) }} (le point de départ se règle plus bas).</div>
+        }
 
         @if (store.ui().seRec === 'once') {
           <div class="field-label">Date</div>
@@ -624,9 +628,10 @@ export class PlanningScreen {
 
   /** Ce qui, sur la ligne, dit qu'un créneau n'a pas lieu toute l'année. */
   noteOf(s: SchedSlot): string {
+    const cadence = s.rec === 'weekly' && s.interval && s.interval > 1 ? '1 sem. sur ' + s.interval : '';
     const quand = s.rec === 'once'
       ? (s.srcId ? 'ce jour seulement' : 'ponctuel')
-      : [validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']].filter(Boolean).join(' · ');
+      : [cadence, validityLabel(s, (iso) => this.store.fmtNumDate(iso)), WHEN_LABELS[s.when || 'always']].filter(Boolean).join(' · ');
     return [quand, s.away ? 'dehors' : ''].filter(Boolean).join(' · ');
   }
 

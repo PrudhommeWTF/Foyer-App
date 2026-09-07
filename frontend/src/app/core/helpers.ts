@@ -21,6 +21,9 @@ export function occursOn(ev: EventItem, ds: string): boolean {
   if (r === 'daily') return true;
   if (r === 'weekday') { const w = d.getDay(); return w >= 1 && w <= 5; }
   if (r === 'weekly') return d.getDay() === start.getDay();
+  // Toutes les 2 semaines : même jour, et un nombre pair de semaines depuis la
+  // date de départ. La phase est donc portée par l'événement lui-même.
+  if (r === 'biweekly') return d.getDay() === start.getDay() && Math.round((d.getTime() - start.getTime()) / 86_400_000) % 14 === 0;
   if (r === 'monthly') return d.getDate() === start.getDate();
   return false;
 }

@@ -130,6 +130,8 @@ export interface UiState {
   seDow: number; seWho: string[]; seStart: string; seEnd: string; seLabel: string; seType: SchedType;
   /** Récurrence et période, dans le formulaire. */
   seRec: SchedRec; seDate: string; seFrom: string; seUntil: string; seWhen: SchedWhen;
+  /** Une semaine sur `seEvery` pour une règle hebdomadaire (1 = toutes, 2 = une sur deux). */
+  seEvery: number;
   /** Le créneau se passe hors du foyer : c'est ce qui retire un couvert. */
   seAway: boolean;
   /** Le créneau est publié à l'agenda : ses occurrences y apparaissent. */
@@ -206,7 +208,7 @@ export function initialUi(): UiState {
     fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
     schedWho: [], schedDow: weekdayOf(today), schedAnchor: today, schedEdit: false, seEditId: null,
     seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
-    seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seAway: true, seSync: false,
+    seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seEvery: 1, seAway: true, seSync: false,
     seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false, schedMove: null,
     schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
     familyOpen: false, famNameField: '',

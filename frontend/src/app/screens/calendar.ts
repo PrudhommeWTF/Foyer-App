@@ -345,7 +345,7 @@ export class CalendarScreen {
   d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
 
   weekdays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
-  recurOpts: Recur[] = ['none', 'daily', 'weekday', 'weekly', 'monthly'];
+  recurOpts: Recur[] = ['none', 'daily', 'weekday', 'weekly', 'biweekly', 'monthly'];
 
   cv = computed(() => this.store.ui().calView);
   sel = computed(() => this.store.ui().selDay);

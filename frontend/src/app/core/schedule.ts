@@ -10,8 +10,16 @@
 // filtre pas, il laisse passer. L'inverse (un écran vide tant qu'on n'a pas
 // cliqué) était la raison pour laquelle le module ne servait à rien.
 import { SCHED_DAYS } from './constants';
-import { frenchHolidays, weekdayOf } from './helpers';
+import { frenchHolidays, parseDay, weekdayOf } from './helpers';
 import { Member, SchedSlot, SchedType } from './models';
+
+/** Le lundi de la semaine d'une date ISO, en millisecondes : sert à compter les semaines entières. */
+function mondayMs(iso: string): number {
+  const d = parseDay(iso);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 /** Le nom du jour, pour l'affichage. `dow` va de 1 (lundi) à 7 (dimanche). */
 export function dowLabel(dow: number): string {
@@ -88,6 +96,15 @@ export function occursOn(s: SchedSlot, date: string, cal: CalendarFacts = NO_CAL
   if (s.from && date < s.from) return false;
   if (s.until && date > s.until) return false;
   if ((s.skip || []).includes(date)) return false;
+
+  // Une semaine sur N : la phase se compte en semaines entières depuis `from`.
+  // Sans `from`, l'ancre manque et on affiche toutes les semaines plutôt que de
+  // deviner une parité, dans l'esprit du reste du moteur (afficher, pas cacher).
+  const step = s.interval && s.interval > 1 ? s.interval : 1;
+  if (step > 1 && s.from) {
+    const weeks = Math.round((mondayMs(date) - mondayMs(s.from)) / (7 * 86_400_000));
+    if (weeks % step !== 0) return false;
+  }
 
   const when = s.when || 'always';
   if (when === 'always') return true;

@@ -159,7 +159,7 @@ export function grad(c: string): string {
 }
 
 export const RECUR_LABELS: Record<string, string> = {
-  none: '', daily: 'Chaque jour', weekday: 'En semaine', weekly: 'Chaque semaine', monthly: 'Chaque mois',
+  none: '', daily: 'Chaque jour', weekday: 'En semaine', weekly: 'Chaque semaine', biweekly: 'Toutes les 2 semaines', monthly: 'Chaque mois',
 };
 
 // La liste des académies vit désormais dans le registre des paramètres

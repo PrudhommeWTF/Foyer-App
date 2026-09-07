@@ -356,3 +356,42 @@ test('un créneau ponctuel publié ne sort qu’à sa date', () => {
   assert.equal(slotEventsOn([ponctuel], '2026-09-10').length, 1);
   assert.equal(slotEventsOn([ponctuel], '2026-09-17').length, 0);
 });
+
+// ---- une semaine sur deux --------------------------------------------------
+//
+// La phase se compte en semaines entières depuis le début de validité `from`.
+// Sans `from`, l'ancre manque : on affiche toutes les semaines plutôt que de
+// deviner une parité, comme le reste du moteur affiche au lieu de cacher.
+
+test('une semaine sur deux : la phase part du début de validité', () => {
+  // Jeudi 10 sept. 2026, puis un jeudi sur deux.
+  const s = slot({ dow: 4, rec: 'weekly', interval: 2, from: '2026-09-10' });
+  assert.equal(occursOn(s, '2026-09-10'), true, 'la semaine de départ compte');
+  assert.equal(occursOn(s, '2026-09-17'), false, 'la semaine suivante saute');
+  assert.equal(occursOn(s, '2026-09-24'), true, 'deux semaines plus tard, oui');
+  assert.equal(occursOn(s, '2026-10-01'), false);
+  assert.equal(occursOn(s, '2026-10-08'), true);
+});
+
+test('l’ancre se compte par semaine, quel que soit le jour de `from`', () => {
+  // `from` un lundi, créneau le jeudi : la parité suit la semaine, pas le jour.
+  const s = slot({ dow: 4, rec: 'weekly', interval: 2, from: '2026-09-07' });
+  assert.equal(occursOn(s, '2026-09-10'), true, 'même semaine que le lundi de départ');
+  assert.equal(occursOn(s, '2026-09-17'), false);
+  assert.equal(occursOn(s, '2026-09-24'), true);
+});
+
+test('interval 1 ou absent revient à toutes les semaines', () => {
+  const chaque = slot({ dow: 4, rec: 'weekly', interval: 1, from: '2026-09-10' });
+  assert.equal(occursOn(chaque, '2026-09-17'), true);
+  const sansInterval = slot({ dow: 4, rec: 'weekly', from: '2026-09-10' });
+  assert.equal(occursOn(sansInterval, '2026-09-17'), true);
+});
+
+test('sans début de validité, une cadence sur deux ne cache rien', () => {
+  // Faute d'ancre, on affiche toutes les semaines : mieux vaut un créneau en
+  // trop qu'un rendez-vous invisible.
+  const s = slot({ dow: 4, rec: 'weekly', interval: 2 });
+  assert.equal(occursOn(s, '2026-09-10'), true);
+  assert.equal(occursOn(s, '2026-09-17'), true);
+});
