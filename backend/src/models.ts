@@ -25,6 +25,8 @@ export interface EventItem { id: string; date: string; time: string; title: stri
   endTime?: string | null;
   /** Lieu, texte libre. Publié dans le flux ICS (LOCATION). */
   place?: string | null;
+  /** Journée entière (pas d'heure), pouvant s'étaler sur plusieurs jours via `end`. */
+  allDay?: boolean;
   /**
    * Créneau de repas à l'origine de l'événement (« 2026-08-21-soir »). Il évite
    * d'en créer un second pour le même repas, et fait disparaître l'événement

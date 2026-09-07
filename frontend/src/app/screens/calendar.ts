@@ -11,7 +11,11 @@ import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
 
 /** Un élément d'agenda du jour : un événement propre, ou une occurrence de créneau publié. Trié par heure, les deux mêlés. */
 type DayItem = { t: string; kind: 'event'; ev: EventItem } | { t: string; kind: 'slot'; se: SlotEvent };
-interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem[]; extras: DayExtra[]; more: number; }
+/** `covered` : au moins une barre « journée entière » traverse ce jour (il n'est donc pas libre). */
+interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem[]; extras: DayExtra[]; more: number; covered: boolean; }
+/** Une barre d'événement sur la journée entière dans une semaine du mois : de la colonne `col`, sur `span` jours, sur la voie `lane`. */
+interface Bar { id: string; ev: EventItem; col: number; span: number; lane: number; startsHere: boolean; endsHere: boolean; }
+interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; }
 
 @Component({
   selector: 'screen-calendar',
@@ -45,30 +49,43 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
             <div class="dow-row">
               @for (w of weekdays; track w) { <div class="dow">{{ w }}</div> }
             </div>
-            <div class="month-grid">
-              @for (c of monthCells(); track c.key) {
-                <div class="mcell"
-                     [style.background]="c.key === sel() ? 'rgba(229,107,78,.14)' : 'var(--soft)'"
-                     [style.border]="cellBorder(c.key)"
-                     (click)="cellClick(c)" (dblclick)="addAt(c.key)">
-                  <span class="mnum" [style.color]="c.inMonth ? 'var(--ink)' : 'var(--ink3)'">{{ c.num }}</span>
-                  @for (it of c.items; track $index) {
-                    @if (it.kind === 'event') {
-                      <div class="chip-ev tap" [style.background]="store.tint(eventColor(it.ev))" [style.color]="eventColor(it.ev)" (click)="openEventChip($event, it.ev.id)">{{ it.ev.title }}</div>
-                    } @else {
-                      <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
-                        <f-icon name="planning" [size]="10" [color]="slotColor(it.se.k)" [width]="2.4" />
-                        <span class="ex-lbl">{{ it.se.title }}</span>
+            <div class="month">
+              @for (wk of weeks(); track wk.key) {
+                <div class="week" [style.--lanes]="wk.lanes">
+                  <div class="week-cells">
+                    @for (c of wk.days; track c.key) {
+                      <div class="mcell" [class.sel]="c.key === sel()" [class.today]="c.key === store.todayStr()" [class.dim]="!c.inMonth"
+                           (click)="cellClick(c)" (dblclick)="addAt(c.key)">
+                        <span class="mnum">{{ c.num }}</span>
+                        @for (it of c.items; track $index) {
+                          @if (it.kind === 'event') {
+                            <div class="chip-ev tap" [style.background]="store.tint(eventColor(it.ev))" [style.color]="eventColor(it.ev)" (click)="openEventChip($event, it.ev.id)">{{ it.ev.title }}</div>
+                          } @else {
+                            <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
+                              <f-icon name="planning" [size]="10" [color]="slotColor(it.se.k)" [width]="2.4" />
+                              <span class="ex-lbl">{{ it.se.title }}</span>
+                            </div>
+                          }
+                        }
+                        @for (ex of c.extras; track $index) {
+                          <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
+                            <span class="ex-dot" [style.background]="ex.color"></span>
+                            <span class="ex-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
+                          </div>
+                        }
+                        @if (c.more) { <span class="more">+{{ c.more }}</span> }
                       </div>
                     }
-                  }
-                  @for (ex of c.extras; track $index) {
-                    <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
-                      <span class="ex-dot" [style.background]="ex.color"></span>
-                      <span class="ex-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
+                  </div>
+                  @if (wk.bars.length) {
+                    <div class="week-bars">
+                      @for (b of wk.bars; track b.id) {
+                        <div class="bar tap" [class.ol]="!b.startsHere" [class.or]="!b.endsHere"
+                             [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1"
+                             [style.background]="eventColor(b.ev)" (click)="openEventChip($event, b.ev.id)">{{ b.startsHere ? b.ev.title : '' }}</div>
+                      }
                     </div>
                   }
-                  @if (c.more) { <span class="more">+{{ c.more }} autre{{ c.more > 1 ? 's' : '' }}</span> }
                 </div>
               }
             </div>
@@ -207,16 +224,22 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
           <input class="input" [ngModel]="store.ui().evTitle" (ngModelChange)="store.patch({ evTitle: $event })"
                  placeholder="Ex : Rendez-vous dentiste" style="margin-bottom:18px" />
 
-          <div class="ev-times">
-            <div>
-              <div class="fl">Heure de début</div>
-              <input class="input" type="time" [ngModel]="store.ui().evTime" (ngModelChange)="store.setEventStart($event)" />
+          <label class="allday" (click)="store.patch({ evAllDay: !store.ui().evAllDay })">
+            <span class="box" [class.on]="store.ui().evAllDay">@if (store.ui().evAllDay) { <f-icon name="check" [size]="13" color="#fff" [width]="3.2" /> }</span>
+            <span>Journée entière</span>
+          </label>
+          @if (!store.ui().evAllDay) {
+            <div class="ev-times">
+              <div>
+                <div class="fl">Heure de début</div>
+                <input class="input" type="time" [ngModel]="store.ui().evTime" (ngModelChange)="store.setEventStart($event)" />
+              </div>
+              <div>
+                <div class="fl">Heure de fin (option.)</div>
+                <input class="input" type="time" [ngModel]="store.ui().evEndTime" (ngModelChange)="store.patch({ evEndTime: $event })" [disabled]="!store.ui().evTime" />
+              </div>
             </div>
-            <div>
-              <div class="fl">Heure de fin (option.)</div>
-              <input class="input" type="time" [ngModel]="store.ui().evEndTime" (ngModelChange)="store.patch({ evEndTime: $event })" [disabled]="!store.ui().evTime" />
-            </div>
-          </div>
+          }
 
           <div class="fl">Lieu (option.)</div>
           <input class="input" [ngModel]="store.ui().evPlace" (ngModelChange)="store.patch({ evPlace: $event })"
@@ -287,12 +310,25 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
     .navs { display: flex; gap: 8px; }
     .nav-btn { width: 38px; height: 38px; border: none; border-radius: 12px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
-    .dow-row { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px; margin-bottom: 8px; }
+    .dow-row { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; margin-bottom: 6px; }
     .dow { text-align: center; font-size: 12px; font-weight: 800; color: var(--ink3); padding: 4px; }
-    .month-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px; }
-    .mcell { min-height: 92px; border-radius: 14px; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; overflow: hidden; }
-    .mnum { font-size: 13px; font-weight: 800; align-self: flex-end; }
-    .chip-ev { border-radius: 6px; padding: 2px 6px; font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Cases resserrées (gap 2px, coins peu arrondis) : une barre « journée
+       entière » peut alors s'étaler d'une case à l'autre en une ligne continue,
+       posée dans .week-bars par-dessus la semaine. Le haut de chaque case laisse
+       la place aux voies de barres (--lanes, porté par la semaine). */
+    .month { display: flex; flex-direction: column; gap: 2px; }
+    .week { position: relative; }
+    .week-cells { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+    .mcell { position: relative; min-height: 94px; border-radius: 5px; padding: calc(26px + var(--lanes,0) * 20px) 6px 6px; background: var(--soft); cursor: pointer; display: flex; flex-direction: column; gap: 3px; box-sizing: border-box; overflow: hidden; }
+    .mcell.dim { opacity: .5; }
+    .mcell.sel { box-shadow: inset 0 0 0 2px var(--primary); }
+    .mcell.today:not(.sel) { box-shadow: inset 0 0 0 2px var(--honey); }
+    .mnum { position: absolute; top: 5px; right: 8px; font-size: 13px; font-weight: 800; color: var(--ink2); }
+    .week-bars { position: absolute; top: 24px; left: 0; right: 0; display: grid; grid-template-columns: repeat(7,1fr); grid-auto-rows: 18px; gap: 2px; pointer-events: none; z-index: 1; }
+    .bar { pointer-events: auto; height: 16px; align-self: center; border-radius: 5px; padding: 0 7px; font-size: 10.5px; font-weight: 800; line-height: 16px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+    .bar.ol { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -2px; padding-left: 9px; }
+    .bar.or { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -2px; }
+    .chip-ev { border-radius: 5px; padding: 2px 6px; font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .more { font-size: 10px; font-weight: 800; color: var(--ink3); }
     @media (max-width: 860px) { .mcell { min-height: 68px; } }
 
@@ -377,6 +413,9 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
     .chip-ex.slotev { gap: 3px; }
 
     .fl { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .allday { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; cursor: pointer; font-size: 14px; font-weight: 800; color: var(--ink); }
+    .allday .box { width: 20px; height: 20px; flex: none; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 2px var(--line); display: flex; align-items: center; justify-content: center; }
+    .allday .box.on { background: var(--primary); box-shadow: none; }
     .ev-times { display: flex; gap: 12px; margin-bottom: 18px; }
     .ev-times > div { flex: 1; min-width: 0; }
     .ev-times .input { width: 100%; }
@@ -423,32 +462,58 @@ export class CalendarScreen {
     return cap(this.rangeLabel(start, end));
   });
 
-  monthCells = computed<MonthCell[]>(() => {
+  /** Un événement occupe-t-il la journée entière ? Le drapeau, ou l'absence d'heure. */
+  private isAllDay(ev: EventItem): boolean { return !!ev.allDay || !ev.time || ev.time === '—'; }
+
+  /**
+   * Le mois par **semaines**, chacune portant ses barres d'événements « journée
+   * entière » : un tel événement, surtout multi-jours, s'y dessine comme une
+   * ligne continue traversant les jours, plutôt qu'une pastille répétée dans
+   * chaque case. Les événements horaires et les repères restent dans les cases.
+   */
+  weeks = computed<WeekRow[]>(() => {
     const a = parseDay(this.store.ui().calAnchor);
-    const first = new Date(a.getFullYear(), a.getMonth(), 1);
-    const start = this.monday(first);
+    const start = this.monday(new Date(a.getFullYear(), a.getMonth(), 1));
     const month = a.getMonth();
-    const out: MonthCell[] = [];
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const key = dstr(d);
-      const items = this.dayItems(key);
-      const extras = this.store.dayExtras(key);
-      // Le compteur porte sur les événements et créneaux publiés (mêlés) **et**
-      // les repères : sans cela, une échéance de contrat disparaissait sans
-      // laisser de trace le jour où elle tombait après un férié et un anniversaire.
-      const hidden = Math.max(0, items.length - 3) + Math.max(0, extras.length - 2);
-      out.push({
-        key,
-        num: d.getDate(),
-        inMonth: d.getMonth() === month,
-        items: items.slice(0, 3),
-        extras: extras.slice(0, 2),
-        more: hidden,
-      });
+    const allDay = (this.store.data()?.events || []).filter((e) => (e.recur || 'none') === 'none' && this.isAllDay(e));
+    const dayIx = (iso: string, ws: string) => Math.round((parseDay(iso).getTime() - parseDay(ws).getTime()) / 86_400_000);
+    const rows: WeekRow[] = [];
+    for (let w = 0; w < 6; w++) {
+      const wsD = new Date(start); wsD.setDate(start.getDate() + w * 7);
+      const weekStart = dstr(wsD);
+      const weD = new Date(wsD); weD.setDate(wsD.getDate() + 6);
+      const weekEnd = dstr(weD);
+      // Barres : les événements « journée entière » qui touchent la semaine,
+      // rangés par voie pour ne pas se chevaucher (le plus tôt et le plus long d'abord).
+      const overlap = allDay.filter((e) => (e.end || e.date) >= weekStart && e.date <= weekEnd)
+        .sort((x, y) => x.date.localeCompare(y.date) || (y.end || y.date).localeCompare(x.end || x.date));
+      const laneEnd: number[] = [];
+      const bars: Bar[] = [];
+      const covered = new Set<number>();
+      for (const e of overlap) {
+        const endRange = e.end || e.date;
+        const s = e.date < weekStart ? weekStart : e.date;
+        const en = endRange > weekEnd ? weekEnd : endRange;
+        const col = dayIx(s, weekStart) + 1;
+        const span = dayIx(en, weekStart) - dayIx(s, weekStart) + 1;
+        let lane = laneEnd.findIndex((end) => end < col);
+        if (lane === -1) { lane = laneEnd.length; laneEnd.push(0); }
+        laneEnd[lane] = col + span - 1;
+        for (let c = col; c < col + span; c++) covered.add(c);
+        bars.push({ id: e.id + ':' + weekStart, ev: e, col, span, lane, startsHere: s === e.date, endsHere: en === endRange });
+      }
+      const days: MonthCell[] = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(wsD); d.setDate(wsD.getDate() + i); const key = dstr(d);
+        // Les événements « journée entière » non récurrents sont des barres, pas des pastilles de case.
+        const items = this.dayItems(key).filter((it) => it.kind !== 'event' || !((it.ev.recur || 'none') === 'none' && this.isAllDay(it.ev)));
+        const extras = this.store.dayExtras(key);
+        const hidden = Math.max(0, items.length - 2) + Math.max(0, extras.length - 2);
+        days.push({ key, num: d.getDate(), inMonth: d.getMonth() === month, items: items.slice(0, 2), extras: extras.slice(0, 2), more: hidden, covered: covered.has(i + 1) });
+      }
+      rows.push({ key: weekStart, days, bars, lanes: laneEnd.length });
     }
-    return out;
+    return rows;
   });
 
   cols = computed(() => {
@@ -544,7 +609,7 @@ export class CalendarScreen {
    * « Ajouter un événement » du panneau.
    */
   cellClick(c: MonthCell): void {
-    if (c.items.length) this.store.patch({ selDay: c.key });
+    if (c.items.length || c.extras.length || c.covered) this.store.patch({ selDay: c.key });
     else this.addAt(c.key);
   }
 
@@ -596,12 +661,6 @@ export class CalendarScreen {
 
   recurLabel(r: Recur): string {
     return r === 'none' ? 'Ponctuel' : RECUR_LABELS[r];
-  }
-
-  cellBorder(key: string): string {
-    if (key === this.store.ui().selDay) return '2px solid var(--primary)';
-    if (key === this.store.todayStr()) return '2px solid var(--honey)';
-    return '2px solid transparent';
   }
 
   setView(v: 'month' | 'week' | '3'): void { this.store.patch({ calView: v }); }

@@ -49,7 +49,7 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): str
   const mname = (id: string): string => state.members.find((m) => m.id === id)?.name || '';
   const L: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Foyer//Calendrier//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${icsEsc(state.familyName)}`];
   for (const ev of state.events) {
-    const allDay = !ev.time || ev.time === '—';
+    const allDay = ev.allDay || !ev.time || ev.time === '—';
     L.push('BEGIN:VEVENT', `UID:${ev.id}@foyer`, `DTSTAMP:${dtstamp}`);
     if (allDay) {
       L.push(`DTSTART;VALUE=DATE:${icsDate(ev.date)}`);
