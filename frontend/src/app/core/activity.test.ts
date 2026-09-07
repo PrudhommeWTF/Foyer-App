@@ -1,28 +1,31 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { recentActivity, relTime } from './activity';
-import { HouseholdState } from './models';
+import { HouseholdState, Message, ShopItem, ShopList, TaskItem, TaskList } from './models';
+
+// Fabriques typées : les fixtures ne portent que ce que le fil lit, mais restent
+// de vrais objets du domaine (le typecheck de la CI, tsconfig.test.json, les vérifie).
+const tList = (over: Partial<TaskList>): TaskList => ({ id: 'l1', name: 'Liste', color: '#111', icon: 'maison', kind: 'taches', scope: 'shared', position: 0, ...over });
+const task = (over: Partial<TaskItem>): TaskItem => ({ id: 't', listId: 'l1', text: 'x', who: [], due: null, done: false, ...over });
+const sList = (over: Partial<ShopList>): ShopList => ({ id: 's1', name: 'Courses', color: '#222', icon: 'panier', ...over });
+const shop = (over: Partial<ShopItem>): ShopItem => ({ id: 'a', name: 'Article', qty: '', aisleId: 'x', state: 'a-prendre', listId: 's1', ...over });
+const msg = (over: Partial<Message>): Message => ({ who: 'm1', text: '', time: '00:00', ...over });
 
 // Un état minimal : seuls les champs que le fil lit comptent. Le reste est vide.
 function state(over: Partial<HouseholdState>): HouseholdState {
-  return {
-    taskLists: [], tasks: [], shopLists: [], shop: [],
-    ...over,
-  } as unknown as HouseholdState;
+  return { taskLists: [], tasks: [], shopLists: [], shop: [], msgs: [], ...over } as HouseholdState;
 }
 
 describe('recentActivity', () => {
   it('mêle tâches et courses, du plus récent au plus ancien', () => {
     const s = state({
-      taskLists: [{ id: 'l1', name: 'Maison', color: '#111' }] as HouseholdState['taskLists'],
+      taskLists: [tList({ id: 'l1', name: 'Maison' })],
       tasks: [
-        { id: 't1', listId: 'l1', text: 'Ranger', at: '2026-09-01T08:00:00.000Z', by: 'm1' },
-        { id: 't2', listId: 'l1', text: 'Balayer', at: '2026-09-03T08:00:00.000Z', by: 'm2', done: true, doneAt: '2026-09-04T09:00:00.000Z', doneBy: 'm2' },
-      ] as HouseholdState['tasks'],
-      shopLists: [{ id: 's1', name: 'Drive', color: '#222' }] as HouseholdState['shopLists'],
-      shop: [
-        { id: 'a1', name: 'Lait', listId: 's1', state: 'panier', at: '2026-09-05T10:00:00.000Z', by: 'm1' },
-      ] as HouseholdState['shop'],
+        task({ id: 't1', text: 'Ranger', at: '2026-09-01T08:00:00.000Z', by: 'm1' }),
+        task({ id: 't2', text: 'Balayer', at: '2026-09-03T08:00:00.000Z', by: 'm2', done: true, doneAt: '2026-09-04T09:00:00.000Z', doneBy: 'm2' }),
+      ],
+      shopLists: [sList({ id: 's1', name: 'Drive' })],
+      shop: [shop({ id: 'a1', name: 'Lait', state: 'panier', at: '2026-09-05T10:00:00.000Z', by: 'm1' })],
     });
     const feed = recentActivity(s, 12);
     // 2 ajouts de tâche + 1 achèvement + 1 course = 4 entrées, triées desc.
@@ -37,11 +40,11 @@ describe('recentActivity', () => {
 
   it('déplie une ligne par achèvement d’une tâche récurrente', () => {
     const s = state({
-      taskLists: [{ id: 'l1', name: 'Corvées', color: '#111' }] as HouseholdState['taskLists'],
+      taskLists: [tList({ id: 'l1', name: 'Corvées' })],
       tasks: [
-        { id: 't1', listId: 'l1', text: 'Poubelles', at: '2026-08-01T08:00:00.000Z', by: 'm1', rec: 'weekly',
-          history: [{ at: '2026-09-01T20:00:00.000Z', by: 'm1', due: '2026-09-01' }, { at: '2026-09-08T20:00:00.000Z', by: 'm2', due: '2026-09-08' }] },
-      ] as HouseholdState['tasks'],
+        task({ id: 't1', text: 'Poubelles', at: '2026-08-01T08:00:00.000Z', by: 'm1',
+          history: [{ at: '2026-09-01T20:00:00.000Z', by: 'm1', due: '2026-09-01' }, { at: '2026-09-08T20:00:00.000Z', by: 'm2', due: '2026-09-08' }] }),
+      ],
     });
     const feed = recentActivity(s, 12);
     const done = feed.filter((e) => e.verb === 'a terminé');
@@ -52,10 +55,10 @@ describe('recentActivity', () => {
   it('inclut les messages horodatés, tronque les longs, ignore ceux sans date', () => {
     const s = state({
       msgs: [
-        { who: 'm1', text: 'Le dîner est prêt !', time: '19:02', at: '2026-09-06T17:02:00.000Z' },
-        { who: 'm2', text: 'x'.repeat(200), time: '08:00', at: '2026-09-06T06:00:00.000Z' },
-        { who: 'm1', text: 'Ancien message', time: '10:00' },
-      ] as HouseholdState['msgs'],
+        msg({ who: 'm1', text: 'Le dîner est prêt !', time: '19:02', at: '2026-09-06T17:02:00.000Z' }),
+        msg({ who: 'm2', text: 'x'.repeat(200), time: '08:00', at: '2026-09-06T06:00:00.000Z' }),
+        msg({ who: 'm1', text: 'Ancien message', time: '10:00' }),
+      ],
     });
     const feed = recentActivity(s, 12);
     assert.equal(feed.length, 2);
@@ -66,8 +69,8 @@ describe('recentActivity', () => {
   });
 
   it('respecte la limite', () => {
-    const tasks = Array.from({ length: 20 }, (_, i) => ({ id: 't' + i, listId: 'l1', text: 'x', at: `2026-09-${String(i + 1).padStart(2, '0')}T08:00:00.000Z`, by: 'm1' }));
-    const s = state({ taskLists: [{ id: 'l1', name: 'L', color: '#111' }] as HouseholdState['taskLists'], tasks: tasks as HouseholdState['tasks'] });
+    const tasks = Array.from({ length: 20 }, (_, i) => task({ id: 't' + i, at: `2026-09-${String(i + 1).padStart(2, '0')}T08:00:00.000Z`, by: 'm1' }));
+    const s = state({ taskLists: [tList({ id: 'l1', name: 'L' })], tasks });
     assert.equal(recentActivity(s, 5).length, 5);
   });
 });
