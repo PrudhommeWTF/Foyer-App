@@ -7,8 +7,21 @@ il faut décider si une demande nouvelle entre dans le modèle ou le casse.
 Le module décrit le **rythme récurrent de la semaine**. Il ne remplace pas
 l'Agenda, qui gère les événements ponctuels et datés. Ce sont deux objets
 différents, et ils le restent : pas de fusion des vues, pas de sortie de
-l'emploi du temps dans le flux ICS, pas de conversion d'un créneau en événement
-de calendrier.
+l'emploi du temps dans le flux ICS.
+
+Une exception, **choisie et réversible** : un créneau peut être **publié à
+l'agenda** (case « Publier à l'agenda » du formulaire, champ `sync`). Ses
+occurrences apparaissent alors dans le Calendrier partagé, pour qui ne regarde
+que lui. Ce n'est **pas une conversion** : rien n'est recopié dans `events`.
+Les occurrences sont **dérivées à la volée** par `slotEventsOn`, qui s'appuie
+sur `occursOn` (voir plus bas). La récurrence réelle du créneau (période de
+validité, filtre scolaire/vacances, dates sautées) est donc respectée par
+construction, et modifier ou arrêter le créneau met l'agenda à jour sans qu'une
+occurrence périmée puisse survivre. Ces occurrences dérivées restent en lecture
+seule dans le Calendrier : les toucher ouvre leur créneau source, jamais une
+copie. Elles ne partent pas non plus dans le flux ICS, qui ne porte que les
+`events` stockés : la règle « pas de sortie de l'emploi du temps dans l'ICS »
+tient toujours.
 
 ## Le principe qui commande tout le reste
 
@@ -47,6 +60,7 @@ export interface SchedSlot {
   when?: 'always' | 'school' | 'holidays';
   skip?: string[];          // occurrences annulées (l'EXDATE d'iCalendar)
   srcId?: string;           // occurrence détachée : la série dont elle vient
+  sync?: boolean;           // publié à l'agenda : ses occurrences y apparaissent (dérivées, jamais copiées)
 }
 ```
 

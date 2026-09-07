@@ -127,6 +127,8 @@ export interface SchedSlot {
   when?: string;
   skip?: string[];
   srcId?: string;
+  /** Créneau publié à l'agenda : ses occurrences apparaissent dans le calendrier. Voir docs/emploi-du-temps.md. */
+  sync?: boolean;
 }
 /**
  * Le repli d'identité du document : le membre qui compte quand la session ne dit

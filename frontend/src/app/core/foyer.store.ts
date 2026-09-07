@@ -21,7 +21,7 @@ import { Allergene, normaliseName } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
-import { CalendarFacts, SchedScope, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotsOn } from './schedule';
+import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotEventsOn, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
@@ -1250,6 +1250,25 @@ export class FoyerStore {
   // ---- events -----------------------------------------------------------
   eventsForDay(ds: string): HouseholdState['events'] {
     return eventsOn(this._data()?.events || [], ds);
+  }
+
+  /**
+   * Les créneaux de l'emploi du temps **publiés à l'agenda** qui tombent ce
+   * jour-là. Dérivés à la volée, jamais stockés : la récurrence réelle du
+   * créneau est respectée, et rien de périmé ne traîne dans le document.
+   */
+  slotEventsForDay(ds: string): SlotEvent[] {
+    return slotEventsOn(this._data()?.sched || [], ds, this.calendar());
+  }
+
+  /**
+   * Depuis l'agenda, ouvrir le créneau source à sa date : on édite l'emploi du
+   * temps, pas une copie. La question « cette fois ou toute la série » se pose
+   * alors comme partout ailleurs dans le module.
+   */
+  openSlotEvent(slotId: string, date: string): void {
+    this.patch({ screen: 'planning' });
+    this.editSlot(slotId, date);
   }
   openEvent(): void {
     const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
@@ -2727,7 +2746,7 @@ export class FoyerStore {
     this.patch({
       screen: 'planning', schedEdit: true, seEditId: null,
       seDow: jour, seWho: [...s.schedWho], seStart: heure, seEnd: '', seLabel: '', seType: 'ecole',
-      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seAway: SCHED_AWAY_DEFAULT['ecole'],
+      seRec: 'weekly', seDate: date, seFrom: '', seUntil: '', seWhen: 'always', seAway: SCHED_AWAY_DEFAULT['ecole'], seSync: false,
       seMore: false, seOccDate: date, seScope: 'all', seDelOpen: false, addMenuOpen: false,
     });
   }
@@ -2745,7 +2764,7 @@ export class FoyerStore {
     this.patch({
       schedEdit: true, seEditId: id, seDow: it.dow, seWho: [...(it.who || [])],
       seStart: it.start || '', seEnd: it.end || '', seLabel: it.label, seType: it.k,
-      seRec: it.rec === 'once' ? 'once' : 'weekly', seDate: it.date || occ, seAway: !!it.away,
+      seRec: it.rec === 'once' ? 'once' : 'weekly', seDate: it.date || occ, seAway: !!it.away, seSync: !!it.sync,
       seFrom: it.from || '', seUntil: it.until || '', seWhen: it.when || 'always',
       seMore: pose, seOccDate: occ, seScope: 'all', seDelOpen: false,
     });
@@ -2764,7 +2783,7 @@ export class FoyerStore {
     if (s.seRec === 'weekly' && s.seFrom && s.seUntil && s.seUntil < s.seFrom) {
       this.toast('La fin de période est avant son début'); return null;
     }
-    const commun = { who: [...s.seWho], start, end: s.seEnd.trim(), label, k: s.seType, ...(s.seAway ? { away: true } : {}) };
+    const commun = { who: [...s.seWho], start, end: s.seEnd.trim(), label, k: s.seType, ...(s.seAway ? { away: true } : {}), ...(s.seSync ? { sync: true } : {}) };
     return s.seRec === 'once'
       ? { ...commun, rec: 'once', dow: weekdayOf(s.seDate), date: s.seDate }
       : {
