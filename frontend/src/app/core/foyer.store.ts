@@ -1924,7 +1924,7 @@ export class FoyerStore {
     const me = this.currentMemberId() || this._data()?.profile.memberId || this.members()[0]?.id || 'cam';
     const now = new Date();
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    this.mutate((d) => { d.msgs.push({ who: me, text: t, time }); });
+    this.mutate((d) => { d.msgs.push({ who: me, text: t, time, at: now.toISOString() }); });
     this.patch({ newMsg: '' });
   }
 

@@ -132,11 +132,10 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'notifications', group: 'moi', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'membres', group: 'cercle', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres, et qui peut se connecter.' },
   { id: 'calendriers', group: 'cercle', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
-  { id: 'accueil', group: 'modules', label: 'Accueil', desc: 'L’ordre des tuiles de l’écran d’accueil, et ce qui en décide.' },
   { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
   { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
-  { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.' },
-  { id: 'finances', group: 'modules', label: 'Finances', desc: 'Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.' },
+  { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date.' },
+  { id: 'finances', group: 'modules', label: 'Finances', desc: 'Quand un compteur d’énergie réclame un nouveau relevé.' },
   { id: 'documents', group: 'modules', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -286,15 +285,6 @@ export const REGISTRY = [
   },
   // ---- repas et cuisine ---------------------------------------------------
   {
-    key: 'homeOrder',
-    type: 'text', scope: 'foyer', section: 'accueil', module: 'Accueil',
-    custom: true,
-    label: 'Ordre des tuiles de l’accueil',
-    desc: 'Fige l’ordre des tuiles de l’accueil. Tant qu’il est vide, les règles de contexte remontent ce qui compte selon l’heure et le jour ; dès qu’un ordre est choisi, il l’emporte, plus rien ne bouge et plus rien ne se replie. Une tuile ajoutée par une mise à jour vient à la fin.',
-    default: '',
-    maxLength: 300,
-  },
-  {
     key: 'mealTimeMorning',
     type: 'time', scope: 'foyer', section: 'repas', module: 'Repas',
     label: 'Heure du petit-déjeuner',
@@ -372,13 +362,6 @@ export const REGISTRY = [
 
   // ---- tâches -------------------------------------------------------------
   {
-    key: 'taskLateDays',
-    type: 'int', scope: 'foyer', section: 'taches', module: 'Tâches',
-    label: 'Au-delà de ce retard, une tâche passe derrière',
-    desc: 'Une tâche en retard depuis plus longtemps cesse d’être l’affaire du jour et descend sous les tâches d’aujourd’hui. Elle n’est ni effacée ni masquée : elle cesse seulement de passer devant.',
-    default: 30, min: 1, max: 365,
-  },
-  {
     key: 'taskDefaultRemind',
     type: 'enum', scope: 'foyer', section: 'taches', module: 'Tâches',
     label: 'Rappel proposé pour une nouvelle tâche datée',
@@ -394,13 +377,6 @@ export const REGISTRY = [
   },
 
   // ---- finances -----------------------------------------------------------
-  {
-    key: 'deadlineHorizonDays',
-    type: 'int', scope: 'foyer', section: 'finances', module: 'Finances',
-    label: 'Horizon des échéances sur l’accueil',
-    desc: 'Une fenêtre de résiliation ou une reconduction plus lointaine que cela n’apparaît pas sur l’accueil : elle n’appelle aucun geste aujourd’hui. L’écran Contrats les montre toutes, quoi qu’il arrive.',
-    default: 60, min: 7, max: 365,
-  },
   {
     key: 'readingDueDays',
     type: 'int', scope: 'foyer', section: 'finances', module: 'Énergie',

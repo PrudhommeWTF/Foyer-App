@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HouseholdState, ShopItem, TaskItem } from './models';
 import type { TaskOp } from './task-ops';
-import type { RulesOutcome } from './home-context';
 import { SettingDecl, SettingSection } from './settings/registry';
 
 /**
@@ -365,9 +364,6 @@ export class ApiService {
   icsRegenerate(): Promise<{ token: string }> { return this.request('calendar/ics/regenerate', { method: 'POST' }); }
 
   /** Version que le serveur exécute. Sans appel sortant, contrairement à updateCheck. */
-  /** Les règles de contexte de l'accueil, telles qu'elles s'appliquent réellement. */
-  homeRules(): Promise<RulesOutcome> { return this.request('home/rules'); }
-
   systemVersion(): Promise<{ current: string; selfUpdate: boolean; selfUpdateReason?: 'coupee' | 'absente'; repo: string }> { return this.request('system/version'); }
 
   // ---- exploitation ----

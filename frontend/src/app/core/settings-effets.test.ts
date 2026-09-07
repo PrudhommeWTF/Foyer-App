@@ -69,8 +69,6 @@ describe('les valeurs par défaut du registre sont celles du code d’avant', ()
   // à la mise à jour, sans que personne n'ait rien demandé.
   const vide = { settings: {} };
   it('reprend les constantes que le code portait en dur', () => {
-    assert.equal(setting('taskLateDays', vide), 30);
-    assert.equal(setting('deadlineHorizonDays', vide), 60);
     assert.equal(setting('stockDays', vide), 21);
     assert.equal(setting('suggestRepeatDays', vide), 15);
     assert.equal(setting('suggestForgottenDays', vide), 21);

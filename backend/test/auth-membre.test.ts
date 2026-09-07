@@ -21,7 +21,7 @@ after(async () => { await arreter(ctx); });
 /** Tout ce qu'un compte sans membre ne doit pas atteindre, en lecture comme en écriture. */
 const INTERDIT: [string, string][] = [
   ['GET', '/state'], ['PUT', '/state'], ['GET', '/live'],
-  ['GET', '/members/accounts'], ['GET', '/home/rules'], ['GET', '/calendar/school-holidays'],
+  ['GET', '/members/accounts'], ['GET', '/calendar/school-holidays'],
   ['GET', '/calendar/ics'], ['GET', '/settings'], ['PATCH', '/settings'],
   ['GET', '/system/version'], ['GET', '/system/update-check'], ['GET', '/system/update-status'],
   ['GET', '/finances/bootstrap'], ['GET', '/finances/transactions'],

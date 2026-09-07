@@ -82,16 +82,6 @@ Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.
 
 Le comportement de chaque écran de l’application.
 
-### Accueil
-
-L’ordre des tuiles de l’écran d’accueil, et ce qui en décide.
-
-| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
-|---|---|---|---|---|---|---|---|
-| `homeOrder` | Ordre des tuiles de l’accueil | Foyer | texte | _(vide)_ | 300 caractères au maximum | Accueil | — |
-
-- **Ordre des tuiles de l’accueil** (`homeOrder`) : Fige l’ordre des tuiles de l’accueil. Tant qu’il est vide, les règles de contexte remontent ce qui compte selon l’heure et le jour ; dès qu’un ordre est choisi, il l’emporte, plus rien ne bouge et plus rien ne se replie. Une tuile ajoutée par une mise à jour vient à la fin.
-
 ### Repas et cuisine
 
 Planning des repas, suggestions et génération des courses.
@@ -126,26 +116,22 @@ Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L
 
 ### Tâches
 
-Ce qui compte encore comme l’affaire du jour, et ce qui rappelle.
+Le rappel proposé quand une tâche reçoit une date.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `taskLateDays` | Au-delà de ce retard, une tâche passe derrière | Foyer | entier | `30` | de 1 à 365 | Tâches | — |
 | `taskDefaultRemind` | Rappel proposé pour une nouvelle tâche datée | Foyer | liste | _(vide)_ | _(vide)_, `at`, `1h`, `eve`, `morning` | Tâches | — |
 
-- **Au-delà de ce retard, une tâche passe derrière** (`taskLateDays`) : Une tâche en retard depuis plus longtemps cesse d’être l’affaire du jour et descend sous les tâches d’aujourd’hui. Elle n’est ni effacée ni masquée : elle cesse seulement de passer devant.
 - **Rappel proposé pour une nouvelle tâche datée** (`taskDefaultRemind`) : Ce que le formulaire coche d’avance quand on donne une date à une tâche. Cela ne change aucune tâche existante, et reste modifiable tâche par tâche.
 
 ### Finances
 
-Ce qui remonte sur l’accueil, et quand un compteur réclame un relevé.
+Quand un compteur d’énergie réclame un nouveau relevé.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `deadlineHorizonDays` | Horizon des échéances sur l’accueil | Foyer | entier | `60` | de 7 à 365 | Finances | — |
 | `readingDueDays` | Relevé de compteur attendu après | Foyer | entier | `30` | de 7 à 365 | Énergie | — |
 
-- **Horizon des échéances sur l’accueil** (`deadlineHorizonDays`) : Une fenêtre de résiliation ou une reconduction plus lointaine que cela n’apparaît pas sur l’accueil : elle n’appelle aucun geste aujourd’hui. L’écran Contrats les montre toutes, quoi qu’il arrive.
 - **Relevé de compteur attendu après** (`readingDueDays`) : Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.
 
 ### Documents

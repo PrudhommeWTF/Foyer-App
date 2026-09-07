@@ -65,7 +65,7 @@ compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier dé
 
 | Module | En bref |
 |---|---|
-| 🏠 **Accueil** | Le tableau de bord du jour : agenda, tâches dues aujourd'hui, dîner et couverts, courses, finances, anniversaires, échéances. Les gestes du quotidien se font ici (cocher, reporter, ajouter une ligne), avec annulation de quelques secondes. L'ordre des tuiles suit le moment de la journée et le type de jour (école, week-end, vacances). [Détails](docs/accueil-contrat-de-tuile.md) |
+| 🏠 **Accueil** | Le mur de la famille : un fil de ce qui a récemment changé (tâches cochées, articles ajoutés aux courses), et un bandeau qui donne d'un coup d'oeil les prochains rendez-vous, les dernières tâches, les repas du jour et un sommaire des finances. Chaque bloc mène à son écran d'un tap. |
 | 📅 **Calendrier** | Vues 3 jours, semaine et mois, récurrence (quotidienne, en semaine, hebdomadaire, une semaine sur deux, mensuelle), couleur par membre. Superpose tâches planifiées, jours fériés, vacances scolaires, anniversaires, échéances de contrat et les **créneaux d'emploi du temps publiés à l'agenda** (identifiés comme tels, ouverts en un tap sur leur créneau source). Partage en lecture seule par flux **ICS** (Google Agenda, Apple Calendrier). |
 | 🛒 **Courses** | Multi-listes, rayons réordonnables à l'ordre de votre magasin, coche en un tap, articles pris regroupés en bas. Génération automatique depuis le menu de la semaine, avec un rapport avant d'écrire. Export CSV. Écriture article par article : coche à plusieurs et hors ligne sans conflit. [Détails](docs/cuisine-architecture.md) |
 | ✅ **Tâches** | Saisie en un champ, affectation à un, plusieurs ou aucun membre, récurrence native (à date fixe ou après réalisation), sous-tâches, modèles, listes typées (corvées, checklists) et vue « À moi ». **Rappels sur le téléphone (Web Push)**, réglés tâche par tâche. Reliée au reste : contrats, documents, courses, emploi du temps et agenda. [Détails](docs/taches.md) |
@@ -411,7 +411,6 @@ conservée dans [`docs/`](docs/).
 
 | Sujet | Document |
 |---|---|
-| Accueil (contrat de tuile, contexte) | [`docs/accueil-contrat-de-tuile.md`](docs/accueil-contrat-de-tuile.md), [`docs/accueil-contexte.md`](docs/accueil-contexte.md) |
 | Tâches (récurrence, rappels, hors ligne) | [`docs/taches.md`](docs/taches.md), [`docs/taches-notifications.md`](docs/taches-notifications.md) |
 | Cuisine (recettes → repas → courses) | [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md) |
 | Finances (architecture et cahier de recette) | [`docs/finances-architecture.md`](docs/finances-architecture.md), [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md) |

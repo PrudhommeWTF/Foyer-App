@@ -188,7 +188,10 @@ export interface TaskItem {
   /** Ordre manuel, posé au glisser-déposer. Décide là où aucune date ne décide. */
   pos?: number;
 }
-export interface Message { who: string; text: string; time: string; }
+// `time` est l'heure d'affichage (HH:MM). `at` est l'horodatage complet (ISO),
+// ajouté pour situer un message dans le fil d'activité de l'accueil ; absent des
+// messages antérieurs, qui restent lisibles dans la messagerie via `time`.
+export interface Message { who: string; text: string; time: string; at?: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
 // `fileId` désigne un fichier servi par /api/files : comme les photos de
