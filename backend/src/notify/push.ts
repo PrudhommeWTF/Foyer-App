@@ -60,7 +60,10 @@ let sender: Sender = async (d, p) => {
   await webpush.sendNotification(
     { endpoint: d.endpoint, keys: { p256dh: d.p256dh, auth: d.auth } },
     JSON.stringify(p),
-    { TTL: 6 * 3600, vapidDetails: { subject: subject(), publicKey: keys.publicKey, privateKey: keys.privateKey } },
+    // Un timeout borne l'envoi : sans lui, `web-push` n'en impose aucun, et un
+    // hôte qui accepte la connexion sans jamais répondre tiendrait le socket
+    // ouvert indéfiniment (slow-loris).
+    { TTL: 6 * 3600, timeout: 10000, vapidDetails: { subject: subject(), publicKey: keys.publicKey, privateKey: keys.privateKey } },
   );
 };
 let keys = { publicKey: '', privateKey: '' };
@@ -191,6 +194,23 @@ export function isSubscription(v: unknown): v is { endpoint: string; keys: { p25
   const s = v as { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } } | null;
   return !!s && typeof s.endpoint === 'string' && /^https:\/\//.test(s.endpoint) && !!s.keys
     && typeof s.keys.p256dh === 'string' && typeof s.keys.auth === 'string';
+}
+
+/**
+ * Les domaines des services push des navigateurs. Le serveur émet un POST vers
+ * l'endpoint d'un abonnement : sans contrôle d'hôte, un membre pourrait faire
+ * pointer cet envoi sur une adresse interne (`https://192.168.1.1/`) et s'en
+ * servir pour cartographier le réseau du foyer (SSRF aveugle). Ces quatre
+ * domaines couvrent Chrome/Android (FCM), Firefox, Edge/Windows et Safari/Apple,
+ * soit la totalité des navigateurs qui savent s'abonner au Web Push.
+ */
+const PUSH_HOSTS = ['fcm.googleapis.com', 'push.services.mozilla.com', 'notify.windows.com', 'push.apple.com'];
+
+/** Vrai si l'endpoint vise un service push connu, et non une adresse arbitraire. */
+export function isPushEndpointAllowed(endpoint: string): boolean {
+  let host: string;
+  try { host = new URL(endpoint).hostname.toLowerCase(); } catch { return false; }
+  return PUSH_HOSTS.some((h) => host === h || host.endsWith('.' + h));
 }
 
 export interface SentRow { key: string; memberId: string; kind: string; taskId: string | null; title: string; status: SendStatus; error: string | null; sentAt: string; }

@@ -50,7 +50,7 @@ import { conflictOf, isUpToDate } from './state/concurrency';
 import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
 import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
-import { setting } from './settings/registry';
+import { declOf, setting } from './settings/registry';
 import { freshStatus } from './update-status';
 import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 import { LogLevel, log, setLogLevelSource } from './log';
@@ -1130,6 +1130,11 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
 api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, res: Response) => {
   const academie = String(req.query['academie'] || '').trim();
   if (!academie) { res.json({ holidays: [], academie: '' }); return; }
+  // Le nom d'académie est interpolé dans la clause `where` de la requête
+  // OpenDataSoft : on n'accepte donc que les valeurs de la liste fermée du
+  // registre, jamais une chaîne libre venue du client.
+  const known = (declOf('academie')?.options || []).some((o) => o.value && o.value === academie);
+  if (!known) { res.status(400).json({ holidays: [], academie, error: 'Académie inconnue' }); return; }
   const cache = getSchoolHolidaysCache(academie);
   if (cache && Date.now() - cache.fetchedAt < HOLIDAYS_TTL) { res.json({ holidays: cache.data, academie, cached: true }); return; }
   try {

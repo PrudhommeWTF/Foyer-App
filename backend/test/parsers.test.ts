@@ -252,6 +252,16 @@ describe('tableurs', () => {
     assert.match(r.rejected[0].reason, /Date illisible/);
   });
 
+  it('refuse une colonne au-delà de la limite d’Excel sans tenter d’allouer', () => {
+    // `<c r="AAAAAAA1">` donne un index de ~8 milliards : matérialiser la ligne
+    // tuerait le processus par OOM. Le fichier pèse pourtant quelques octets, donc
+    // passe sous la borne anti-zip-bomb. Le lecteur doit refuser net.
+    const piege = makeZip([{ name: 'xl/worksheets/sheet1.xml',
+      data: utf8('<?xml version="1.0"?><worksheet><sheetData><row r="1"><c r="AAAAAAA1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>') }]);
+    assert.throws(() => parseFile(piege, 'piege.xlsx'),
+      (e: Error) => e instanceof UnsupportedFile && /limite d’Excel|illisible/.test(e.message));
+  });
+
   it('lit un faux .xls qui est en réalité un tableau HTML', () => {
     const html = `<html><body><table>
       <tr><th>Date</th><th>Description</th><th>Compte</th><th>Montant</th></tr>

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { migrateHousehold } from '../src/storage/schema';
-import { addDevice, detailOf, initPush, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, setSender } from '../src/notify/push';
+import { addDevice, detailOf, initPush, isPushEndpointAllowed, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, setSender } from '../src/notify/push';
 import { SchedulerDeps, tick } from '../src/notify/scheduler';
 import { applyTaskOps, initTasks, onAssigned } from '../src/tasks/repo';
 import { TaskItem } from '../src/tasks/ops';
@@ -31,6 +31,30 @@ beforeEach(() => {
     const code = failWith[d.endpoint];
     if (code) { const e = new Error('push refusé') as Error & { statusCode: number }; e.statusCode = code; throw e; }
     sent.push({ endpoint: d.endpoint, title: p.title, kind: p.kind });
+  });
+});
+
+describe('l’endpoint d’abonnement ne peut viser qu’un service push connu', () => {
+  it('accepte les fournisseurs des navigateurs', () => {
+    for (const e of [
+      'https://fcm.googleapis.com/fcm/send/abc',
+      'https://updates.push.services.mozilla.com/wpush/v2/xyz',
+      'https://web.push.apple.com/QID',
+      'https://wns2-by3p.notify.windows.com/w/?token=z',
+    ]) assert.equal(isPushEndpointAllowed(e), true, e);
+  });
+
+  it('refuse une adresse interne ou un domaine arbitraire', () => {
+    // C'est la SSRF que ça ferme : un membre ne peut pas faire poster le serveur
+    // sur le routeur du foyer ni sur un domaine à lui.
+    for (const e of [
+      'https://192.168.1.1/',
+      'https://169.254.169.254/latest/meta-data/',
+      'https://[::1]/',
+      'https://attaquant.example/collecte',
+      'https://fcm.googleapis.com.attaquant.example/',
+      'pas-une-url',
+    ]) assert.equal(isPushEndpointAllowed(e), false, e);
   });
 });
 
