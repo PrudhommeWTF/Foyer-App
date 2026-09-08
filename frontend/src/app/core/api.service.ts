@@ -366,6 +366,10 @@ export class ApiService {
   schoolHolidays(academie: string): Promise<{ holidays: { name: string; start: string; end: string; zone: string }[]; academie: string; error?: string }> {
     return this.request('calendar/school-holidays?academie=' + encodeURIComponent(academie));
   }
+  /** Suggestions de lieu (Base Adresse Nationale), relayées par le serveur. Voir places.ts. */
+  placeSuggest(q: string): Promise<{ suggestions: string[] }> {
+    return this.request('places/suggest?q=' + encodeURIComponent(q));
+  }
   icsInfo(): Promise<{ token: string }> { return this.request('calendar/ics'); }
   icsRegenerate(): Promise<{ token: string }> { return this.request('calendar/ics/regenerate', { method: 'POST' }); }
 

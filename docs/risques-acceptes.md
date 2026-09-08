@@ -184,15 +184,27 @@ partir des journaux, lui persistant.
 
 ### La sortie réseau reste possible vers Internet
 
-**Le risque.** L'import de recette va chercher une page à une adresse que vous
-collez. Les adresses privées sont refusées, la connexion est ouverte sur
-l'adresse déjà validée (plus de réidentification DNS possible), la taille et la
-durée sont bornées. Mais le serveur peut toujours joindre **Internet**.
+**Le risque.** Trois sorties existent, toutes déclenchées par un geste et
+bornées :
+- **L'import de recette** va chercher une page à une adresse que vous collez.
+  Les adresses privées sont refusées, la connexion est ouverte sur l'adresse
+  déjà validée (plus de réidentification DNS possible), la taille et la durée
+  sont bornées.
+- **Les vacances scolaires** et **l'autocomplétion du lieu** interrogent chacune
+  un hôte **fixe** de service public (`data.education.gouv.fr`,
+  `api-adresse.data.gouv.fr`), jamais une adresse choisie par l'utilisateur :
+  pas de surface SSRF, juste le texte de la recherche qui part au service. La
+  suggestion de lieu est débattue, plafonnée par adresse et sans clé ni compte.
 
-**Pourquoi c'est acceptable.** C'est la fonctionnalité elle-même.
+Dans les trois cas, le serveur peut joindre **Internet**.
 
-**Ce qui le lèverait.** Le réglage « Importer une recette depuis une adresse
-web » coupe cette sortie entièrement, depuis l'application.
+**Pourquoi c'est acceptable.** C'est la fonctionnalité elle-même, et les deux
+hôtes fixes sont des services publics français, du même niveau de confiance.
+
+**Ce qui le lèverait.** Chaque sortie a son interrupteur, depuis l'application :
+« Importer une recette depuis une adresse web » pour les recettes, « Suggérer
+des lieux à la saisie » pour l'autocomplétion. Les vacances scolaires se coupent
+en laissant l'académie « Non définie ».
 
 ### Le contenu n'est pas chiffré au repos
 

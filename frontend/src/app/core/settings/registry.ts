@@ -208,6 +208,13 @@ export const REGISTRY = [
     default: false,
   },
   {
+    key: 'placeSuggest',
+    type: 'bool', scope: 'foyer', section: 'calendriers', module: 'Calendriers',
+    label: 'Suggérer des lieux à la saisie',
+    desc: 'Quand vous renseignez le lieu d’un événement, le champ propose des adresses de la Base Adresse Nationale (service public français, api-adresse.data.gouv.fr). C’est une requête sortante, déclenchée par votre frappe, sans clé ni compte. Coupé, le champ reste une simple saisie libre.',
+    default: true,
+  },
+  {
     key: 'prefNotifs',
     type: 'bool', scope: 'personnel', section: 'notifications', module: 'Notifications',
     label: 'Alertes dans l’application',
