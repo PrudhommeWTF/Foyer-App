@@ -46,6 +46,7 @@ import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { calendarFacts } from './schedule';
+import { suggestPlaces } from './places';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
@@ -335,6 +336,19 @@ const icsLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de requêtes sur le flux de calendrier.' },
+});
+
+/**
+ * L'autocomplétion de lieu tape un service public externe à chaque frappe
+ * (débattue côté client) : un plafond poli, par adresse, évite d'en faire un
+ * relais de requêtes.
+ */
+const placesLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de recherches de lieu, réessayez dans un instant.' },
 });
 
 interface AuthedRequest extends Request {
@@ -1227,6 +1241,14 @@ api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, r
     if (cache) { res.json({ holidays: cache.data, academie, stale: true }); return; }
     res.json({ holidays: [], academie, error: 'Service de vacances scolaires indisponible' });
   }
+});
+
+// Autocomplétion du lieu d'un événement, relayée vers la Base Adresse Nationale.
+// Coupable par le réglage `placeSuggest` : éteint, la route ne sort pas et rend
+// une liste vide (le champ reste une saisie libre). Voir places.ts.
+api.get('/places/suggest', auth, requireMember, placesLimiter, async (req: Request, res: Response) => {
+  if (effectiveSetting('placeSuggest') !== true) { res.json({ suggestions: [] }); return; }
+  res.json({ suggestions: await suggestPlaces(String(req.query['q'] || '')) });
 });
 
 // Le jeton donne un accès permanent et SANS authentification à tout le

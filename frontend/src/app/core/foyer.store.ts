@@ -1345,6 +1345,16 @@ export class FoyerStore {
   }
 
   /** Ajoute ou retire un membre de l'événement en cours d'édition. Aucun membre est licite (événement du foyer). */
+  /**
+   * Suggestions de lieu pour le champ « Lieu » d'un événement. Gardé par le
+   * réglage `placeSuggest` : éteint, aucune requête ne part. Une panne rend une
+   * liste vide, le champ restant une saisie libre.
+   */
+  placeSuggestions(q: string): Promise<string[]> {
+    if (this.setting('placeSuggest') !== true) return Promise.resolve([]);
+    return this.api.placeSuggest(q).then((r) => r.suggestions).catch(() => []);
+  }
+
   toggleEvWho(id: string): void {
     const cur = this.ui().evWho;
     this.patch({ evWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });

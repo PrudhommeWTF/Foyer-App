@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
@@ -247,8 +247,20 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
           }
 
           <div class="fl">Lieu (option.)</div>
-          <input class="input" [ngModel]="store.ui().evPlace" (ngModelChange)="store.patch({ evPlace: $event })"
-                 placeholder="Ex : Salle des fêtes, 12 rue des Lilas" style="margin-bottom:18px" />
+          <div class="place-field">
+            <input class="input" [ngModel]="store.ui().evPlace" (ngModelChange)="onPlaceInput($event)"
+                   (focus)="placeFocused.set(true)" (blur)="onPlaceBlur()" autocomplete="off"
+                   placeholder="Ex : Salle des fêtes, 12 rue des Lilas" />
+            @if (placeFocused() && placeSug().length) {
+              <div class="place-sug">
+                @for (s of placeSug(); track s) {
+                  <button type="button" class="place-opt" (mousedown)="pickPlace(s)">
+                    <f-icon name="pin" [size]="14" color="var(--ink3)" [width]="2" /> <span>{{ s }}</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
 
           <div class="fl">Date</div>
           <div class="dp">
@@ -456,6 +468,16 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     .seg-recur { display: flex; flex-wrap: wrap; gap: 8px; }
     .seg-recur button { border: none; padding: 9px 14px; border-radius: 11px; font-size: 13px; font-weight: 800; cursor: pointer; background: var(--soft); color: var(--ink2); }
     .seg-recur button.active { background: var(--primary); color: #fff; }
+    .place-field { position: relative; margin-bottom: 18px; }
+    .place-sug { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); background: var(--surface);
+                 border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px rgba(0,0,0,.12);
+                 overflow: hidden; max-height: 240px; overflow-y: auto; }
+    .place-opt { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: none;
+                 background: none; padding: 10px 13px; font-size: 13.5px; font-weight: 600; color: var(--ink);
+                 cursor: pointer; }
+    .place-opt + .place-opt { border-top: 1px solid var(--line); }
+    .place-opt:hover { background: var(--soft); }
+    .place-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .modal-foot { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
     .modal-foot .btn-primary { flex: 1; }
     .del { color: var(--primary); }
@@ -715,6 +737,33 @@ export class CalendarScreen {
 
   /** Les pastilles d'un événement : ses membres, dans l'ordre du foyer. */
   eventBadges(ev: EventItem): WhoBadge[] { return whoBadges({ who: ev.who }, this.d().members); }
+
+  // ---- autocomplétion du lieu -------------------------------------------
+  /** Suggestions courantes, et si la liste est ouverte (au focus du champ). */
+  readonly placeSug = signal<string[]>([]);
+  readonly placeFocused = signal(false);
+  private placeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** La frappe met à jour le champ et, débattue, demande des suggestions. */
+  onPlaceInput(v: string): void {
+    this.store.patch({ evPlace: v });
+    if (this.placeTimer) clearTimeout(this.placeTimer);
+    if (v.trim().length < 3) { this.placeSug.set([]); return; }
+    this.placeTimer = setTimeout(() => void this.loadPlaceSug(v.trim()), 250);
+  }
+
+  private async loadPlaceSug(q: string): Promise<void> {
+    const sug = await this.store.placeSuggestions(q);
+    // La frappe a pu continuer : on ne garde le résultat que s'il vaut encore
+    // pour ce que le champ contient.
+    if (this.store.ui().evPlace.trim() === q) this.placeSug.set(sug);
+  }
+
+  /** Un lieu choisi remplit le champ et referme la liste. `mousedown` précède le blur. */
+  pickPlace(s: string): void { this.store.patch({ evPlace: s }); this.placeSug.set([]); this.placeFocused.set(false); }
+
+  /** Le blur ferme la liste, mais après le mousedown d'un choix éventuel. */
+  onPlaceBlur(): void { setTimeout(() => { this.placeFocused.set(false); this.placeSug.set([]); }, 150); }
 
   /** Couleur d'un événement : celle de son premier membre, ou la couleur « Événement » quand il n'en porte aucun. */
   eventColor(ev: EventItem): string { return ev.who.length ? this.store.memberColor(ev.who[0]) : CAL_KINDS['event'].color; }

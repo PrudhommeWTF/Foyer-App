@@ -74,9 +74,11 @@ Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.
 |---|---|---|---|---|---|---|---|
 | `academie` | Académie | Foyer | liste | _(vide)_ | _(vide)_, `Aix-Marseille`, `Amiens`, `Besançon`, `Bordeaux`, `Clermont-Ferrand`, `Corse`, `Créteil`, `Dijon`, `Grenoble`, `Lille`, `Limoges`, `Lyon`, `Montpellier`, `Nancy-Metz`, `Nantes`, `Nice`, `Normandie`, `Orléans-Tours`, `Paris`, `Poitiers`, `Reims`, `Rennes`, `Strasbourg`, `Toulouse`, `Versailles` | Calendriers | — |
 | `icsTasks` | Inclure les tâches datées dans le flux partagé | Foyer | oui / non | désactivé | — | Calendriers | — |
+| `placeSuggest` | Suggérer des lieux à la saisie | Foyer | oui / non | activé | — | Calendriers | — |
 
 - **Académie** (`academie`) : Fixe la zone de vacances scolaires. Elle colore le calendrier, décide des créneaux « seulement en période scolaire » de l’emploi du temps, et fait passer l’accueil en rythme de vacances.
 - **Inclure les tâches datées dans le flux partagé** (`icsTasks`) : Les tâches à faire qui ont une date apparaissent dans les agendas abonnés au lien ICS, préfixées « Tâche : ». Une tâche faite en disparaît ; une série n’y met que sa prochaine occurrence.
+- **Suggérer des lieux à la saisie** (`placeSuggest`) : Quand vous renseignez le lieu d’un événement, le champ propose des adresses de la Base Adresse Nationale (service public français, api-adresse.data.gouv.fr). C’est une requête sortante, déclenchée par votre frappe, sans clé ni compte. Coupé, le champ reste une simple saisie libre.
 
 ## Les modules
 
