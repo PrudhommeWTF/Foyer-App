@@ -84,27 +84,52 @@ connexion à une application dont on a déjà les données n'est plus le sujet.
 **Ce qui le lèverait vraiment.** Le chiffrement du volume au niveau de l'hôte
 Proxmox (LUKS), qui protège la base **et** tout le reste au repos.
 
-### Un compte administrateur compromis donne root sur la machine
+### L'auto-mise à jour peut mener à root
 
 **Le risque.** L'auto-mise à jour est restée activée, à votre demande. Le
 mécanisme est bien conçu (le service ne détient aucun droit supplémentaire : il
-dépose un fichier, une unité systemd root fait le travail), mais la chaîne
-« compte administrateur volé » vers « exécution de code en root sur le
-conteneur » existe.
+dépose un fichier, une unité systemd root fait le travail, et le tag est
+doublement validé, sans injection possible), mais trois chaînes vers
+« exécution de code en root sur le conteneur » existent :
+
+- **Compte administrateur volé.** Qui connaît le mot de passe d'un administrateur
+  peut déclencher une mise à jour, donc faire télécharger et compiler du code
+  depuis le dépôt GitHub configuré.
+- **Dépôt GitHub compromis (chaîne d'approvisionnement).** L'archive téléchargée
+  est compilée et exécutée en root **sans vérification d'intégrité** (ni
+  signature ni empreinte). Une compromission du dépôt donnerait donc root sur
+  toutes les installations en auto-mise à jour.
+- **Retour arrière forcé.** Le helper root installe **le tag qu'on lui nomme sans
+  vérifier qu'il est plus récent** que la version en place. Une exécution de code
+  sous le compte de service (via une éventuelle faille applicative) pourrait donc
+  écrire un vieux tag et réinstaller une version vulnérable connue.
 
 **Ce qui a été fait.** La mise à jour redemande le mot de passe, ce qui ferme le
 cas du jeton dérobé sur un téléphone déverrouillé. Le lancement et les refus
-sont journalisés.
+sont journalisés. Le transport est en HTTPS (l'archive n'est pas altérable en
+vol).
 
-**Ce qui reste.** Quelqu'un qui connaît le mot de passe d'un administrateur peut
-toujours déclencher une mise à jour, donc faire télécharger et exécuter du code
-depuis le dépôt GitHub configuré.
+**Pourquoi les parades « propres » n'ont pas été retenues.** Vérifier une
+signature demanderait de détenir et de faire tourner une clé privée de release,
+une responsabilité opérationnelle disproportionnée pour une application familiale
+auto-hébergée ; une simple empreinte publiée ne protège pas de la compromission
+du dépôt (l'attaquant la republierait) ; l'attestation de provenance GitHub
+ajouterait une dépendance réseau et outillage à chaque mise à jour. Quant à un
+garde anti-retour-arrière, il gênerait le retour arrière **légitime** qu'un
+exploitant peut vouloir faire pour de bonnes raisons. Aucune ne vaut son coût
+ici : le vrai contrôle est de décider si la machine se met à jour toute seule.
 
-**Ce qui le lèverait.** `SELF_UPDATE=false` dans `/etc/foyer/foyer.env`, et une
-mise à jour manuelle par `deploy/lxc/update.sh`. Une commande, à votre main.
-Ou, plus fin, la restriction par IP des chemins `/api/system/` à votre réseau
-(section 7.2 du rapport d'audit) : un mot de passe volé ne donne alors plus
-l'administration depuis l'extérieur.
+**Ce qui le lève.** Relancer `deploy/lxc/install.sh` avec `SELF_UPDATE=false` :
+l'unité systemd `path`, son service et le helper root `foyer-self-update.sh` sont
+alors **retirés du disque** (pas seulement désactivés), et les trois chaînes sont
+coupées d'un coup. Éditer seul `FOYER_SELF_UPDATE=false` dans
+`/etc/foyer/foyer.env` ne suffit pas : l'unité déjà posée resterait active.
+Ensuite, les mises à jour (y compris un retour arrière vers un tag précis) se
+font à la main par `deploy/lxc/update.sh`, en root, à votre intention.
+**Recommandé dès que le domaine est public.** La disponibilité d'une nouvelle
+version reste affichée dans tous les cas. Plus fin encore, la restriction par IP
+des chemins `/api/system/` à votre réseau (section 7.2 du rapport d'audit) ferme
+la première chaîne sans toucher aux mises à jour.
 
 ### Le jeton du flux ICS
 
