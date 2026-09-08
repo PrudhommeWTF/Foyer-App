@@ -230,21 +230,16 @@ app.use(cors({
 // disque et sont servis par /api/files. Le plafond peut donc redescendre à ce
 // que pèse réellement un foyer, texte compris, au lieu des 15 Mo qu'il fallait
 // pour un état bourré de data-URL.
-app.use(express.json({ limit: '4mb' }));
-
-// Sans ce garde, un état trop gros ressort en page HTML d'Express, sans dire
-// pourquoi ni quoi faire. Ce cas ne devrait plus se produire : s'il se produit,
-// c'est presque toujours qu'une pièce n'a pas su être décodée à la migration et
-// pèse encore dans l'état, et le journal de démarrage la nomme.
-app.use((err: Error & { type?: string }, _req: Request, res: Response, next: NextFunction) => {
-  if (err?.type !== 'entity.too.large') { next(err); return; }
-  res.status(413).json({
-    error: 'Enregistrement refusé : le document du foyer dépasse la taille maximale (4 Mo). '
-      + 'Les fichiers et les photos sont rangés sur le disque, pas dans l’état : un état de cette taille '
-      + 'signale qu’il en reste, en général une pièce que la migration n’a pas su décoder. '
-      + 'Le journal de démarrage (journalctl -u foyer) nomme les fiches concernées.',
-  });
-});
+// Le corps JSON est parsé PAR ROUTE (et par sous-routeur), chacun avec sa propre
+// limite, plutôt que par un parseur global. Monté globalement, body-parser
+// marque la requête (`req._body`) dès le premier passage, et tous les parseurs
+// posés ensuite, plus fins, étaient sans effet : les limites des sous-routeurs
+// (courses, tâches, rappels, recettes, réglages) ne bornaient rien, et à
+// l'inverse /finances/restore, qui veut 64 Mo, était plafonné à la limite
+// globale de 4 Mo. `jsonDoc` porte le document du foyer (gros), `jsonSmall` le
+// reste des routes de server.ts (identifiants, réglages ponctuels).
+const jsonDoc = express.json({ limit: '4mb' });
+const jsonSmall = express.json({ limit: '256kb' });
 
 /**
  * Le garde-fou grossier des routes d'identifiants : il borne le débit brut, pas
@@ -518,7 +513,7 @@ api.get('/setup/status', (_req, res) => {
   res.json({ needsSetup: countUsers() === 0 });
 });
 
-api.post('/setup', authLimiter, route(async (req, res) => {
+api.post('/setup', authLimiter, jsonSmall, route(async (req, res) => {
   if (countUsers() > 0) {
     res.status(409).json({ error: 'La configuration a déjà été effectuée' });
     return;
@@ -572,7 +567,7 @@ api.post('/setup', authLimiter, route(async (req, res) => {
   res.status(201).json({ token, user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
 }));
 
-api.post('/auth/login', authLimiter, route(async (req, res) => {
+api.post('/auth/login', authLimiter, jsonSmall, route(async (req, res) => {
   const { email, password } = req.body || {};
   // « Se souvenir de moi » (défaut oui) : décide de la durée du cookie, et
   // voyage jusqu'au second facteur via le défi pour ne pas être perdu en route.
@@ -648,7 +643,7 @@ api.post('/auth/login', authLimiter, route(async (req, res) => {
  * le mot de passe les essaierait toutes en une soirée, et le second facteur ne
  * serait qu'un ralentisseur.
  */
-api.post('/auth/login/totp', authLimiter, route(async (req, res) => {
+api.post('/auth/login/totp', authLimiter, jsonSmall, route(async (req, res) => {
   const adresse = req.ip || 'inconnue';
   const now = Date.now();
 
@@ -731,7 +726,7 @@ api.get('/state', auth, requireMember, (_req, res) => {
   res.json(getHousehold());
 });
 
-api.put('/state', auth, requireMember, (req: AuthedRequest, res: Response) => {
+api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Response) => {
   // La charpente est vérifiée avant tout le reste, et le refus nomme le champ :
   // sans cela, un tableau remplacé par un nombre s'enregistrait sans un mot et
   // rendait l'écran illisible pour toute la famille. Voir state/validate.ts.
@@ -895,7 +890,7 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
  * autres sessions** : c'est le but. La session en cours, elle, reçoit un jeton
  * neuf, sinon on se déconnecterait soi-même en se protégeant.
  */
-api.put('/me/credentials', authLimiter, auth, route(async (req, res) => {
+api.put('/me/credentials', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!await verifier(String(req.body?.currentPassword ?? ''), user.password_hash)) {
@@ -952,7 +947,7 @@ api.put('/me/credentials', authLimiter, auth, route(async (req, res) => {
  * l'application d'authentification fermerait le compte au prochain démarrage,
  * et il faudrait un administrateur pour le rouvrir.
  */
-api.post('/me/totp/start', authLimiter, auth, route(async (req, res) => {
+api.post('/me/totp/start', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
@@ -980,7 +975,7 @@ api.post('/me/totp/start', authLimiter, auth, route(async (req, res) => {
  * second facteur s'active. Les codes de secours ne sont montrés qu'ici, une
  * seule fois : ils ne sont pas rangés en clair.
  */
-api.post('/me/totp/enable', authLimiter, auth, route(async (req, res) => {
+api.post('/me/totp/enable', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!user.totp_pending) {
@@ -1005,7 +1000,7 @@ api.post('/me/totp/enable', authLimiter, auth, route(async (req, res) => {
  * passe seul suffirait à qui l'a volé, ce qui reviendrait à ne pas avoir de
  * second facteur du tout.
  */
-api.post('/me/totp/disable', authLimiter, auth, route(async (req, res) => {
+api.post('/me/totp/disable', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
@@ -1030,7 +1025,7 @@ api.post('/me/totp/disable', authLimiter, auth, route(async (req, res) => {
  * Refaire ses codes de secours, quand il n'en reste plus assez ou qu'on a perdu
  * le papier. Les anciens cessent immédiatement de valoir.
  */
-api.post('/me/totp/recovery', authLimiter, auth, route(async (req, res) => {
+api.post('/me/totp/recovery', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
@@ -1062,7 +1057,7 @@ api.get('/members/accounts', auth, requireAdmin, (_req, res) => {
   res.json({ accounts });
 });
 
-api.post('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
+api.post('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(async (req, res) => {
   const memberId = req.params.memberId;
   const state = getHousehold().state as HouseholdState;
   const member = state.members.find((m) => m.id === memberId);
@@ -1077,7 +1072,7 @@ api.post('/members/:memberId/account', auth, requireAdmin, route(async (req, res
   res.status(201).json({ memberId, email: email.toLowerCase() });
 }));
 
-api.put('/members/:memberId/account', auth, requireAdmin, route(async (req, res) => {
+api.put('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(async (req, res) => {
   const memberId = req.params.memberId;
   const user = getUserByMemberId(memberId);
   if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
@@ -1109,7 +1104,7 @@ api.put('/members/:memberId/account', auth, requireAdmin, route(async (req, res)
  * fermerait un compte définitivement. Le mot de passe de l'administrateur est
  * redemandé, et le geste est journalisé.
  */
-api.post('/members/:memberId/totp/reset', auth, requireAdmin, route(async (req, res) => {
+api.post('/members/:memberId/totp/reset', auth, requireAdmin, jsonSmall, route(async (req, res) => {
   const moi = req.user ? getUserById(req.user.id) : undefined;
   if (!moi || !await verifier(String(req.body?.password ?? ''), moi.password_hash)) {
     res.status(403).json({ error: 'Mot de passe incorrect. Ce geste retire la protection d’un autre compte : il se confirme par votre mot de passe.' });
@@ -1297,7 +1292,7 @@ api.get('/system/update-check', auth, requireMember, async (_req, res) => {
 // Trigger a self-update. The backend only drops a trigger file; a root-owned
 // systemd path unit (installed alongside the helper) performs the actual
 // download/build/restart, so the service keeps its hardening (no sudo).
-api.post('/system/update', auth, requireAdmin, route(async (req, res) => {
+api.post('/system/update', auth, requireAdmin, jsonSmall, route(async (req, res) => {
   const cap = selfUpdateCapacite();
   if (!cap.possible) {
     res.status(400).json({
@@ -1427,6 +1422,22 @@ api.get('/system/update-status', auth, requireMember, (_req, res) => {
 });
 
 app.use('/api', api);
+
+// Un corps trop gros ressortait en page HTML d'Express, sans dire pourquoi ni
+// quoi faire. Ce gestionnaire d'erreur est monté APRÈS l'API : les parseurs
+// vivant désormais dans les routes, c'est ici que leur erreur « entity.too.large »
+// remonte. Le message vise le cas de loin le plus courant, le document du foyer
+// (jsonDoc, 4 Mo) : s'il déborde, c'est presque toujours qu'une pièce n'a pas su
+// être décodée à la migration et pèse encore dans l'état, que le journal nomme.
+app.use((err: Error & { type?: string }, _req: Request, res: Response, next: NextFunction) => {
+  if (err?.type !== 'entity.too.large') { next(err); return; }
+  res.status(413).json({
+    error: 'Enregistrement refusé : le document du foyer dépasse la taille maximale (4 Mo). '
+      + 'Les fichiers et les photos sont rangés sur le disque, pas dans l’état : un état de cette taille '
+      + 'signale qu’il en reste, en général une pièce que la migration n’a pas su décoder. '
+      + 'Le journal de démarrage (journalctl -u foyer) nomme les fiches concernées.',
+  });
+});
 
 // ---- Static frontend (single-container deployment) ----
 if (fs.existsSync(STATIC_DIR)) {
