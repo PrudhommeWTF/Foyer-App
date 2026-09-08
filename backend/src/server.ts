@@ -562,11 +562,21 @@ api.post('/setup', authLimiter, route(async (req, res) => {
     members: normMembers.map((m) => ({ id: m.id, name: m.name, role: m.role, color: m.color, birthday: m.birthday, email: m.email || undefined })),
   });
 
-  const adminUser = createUserWithMember(String(admin.email), await hacher(String(admin.password)), String(admin.name).trim(), state.members[0].id);
+  // Hacher d'abord (asynchrone), écrire ensuite, en une seule transaction. Sinon
+  // un INSERT qui échoue à mi-chemin (double soumission, disque plein) laisse un
+  // admin sans foyer : countUsers() > 0 fait alors répondre 409 à /setup, et
+  // l'installation est bloquée sans interface pour s'en sortir. Tout ou rien.
+  const adminHash = await hacher(String(admin.password));
+  const memberCreds: { email: string; hash: string; name: string; id: string }[] = [];
   for (const m of normMembers) {
-    if (m.email && m.password) createUserWithMember(m.email, await hacher(m.password), m.name, m.id);
+    if (m.email && m.password) memberCreds.push({ email: m.email, hash: await hacher(m.password), name: m.name, id: m.id });
   }
-  saveHousehold(state);
+  const adminUser = db.transaction(() => {
+    const au = createUserWithMember(String(admin.email), adminHash, String(admin.name).trim(), state.members[0].id);
+    for (const c of memberCreds) createUserWithMember(c.email, c.hash, c.name, c.id);
+    saveHousehold(state);
+    return au;
+  })();
   const token = sign(adminUser);
   setSessionCookie(req, res, token, true);
   res.status(201).json({ token, user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
@@ -1209,7 +1219,7 @@ async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
   return out;
 }
 
-api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, res: Response) => {
+api.get('/calendar/school-holidays', auth, requireMember, route(async (req, res) => {
   const academie = String(req.query['academie'] || '').trim();
   if (!academie) { res.json({ holidays: [], academie: '' }); return; }
   // Le nom d'académie est interpolé dans la clause `where` de la requête
@@ -1227,7 +1237,7 @@ api.get('/calendar/school-holidays', auth, requireMember, async (req: Request, r
     if (cache) { res.json({ holidays: cache.data, academie, stale: true }); return; }
     res.json({ holidays: [], academie, error: 'Service de vacances scolaires indisponible' });
   }
-});
+}));
 
 // Le jeton donne un accès permanent et SANS authentification à tout le
 // calendrier du foyer, horaires des enfants compris, et il survit à la
@@ -1276,7 +1286,7 @@ api.get('/system/version', auth, requireMember, (_req, res) => {
 // Savoir qu'une version existe et pouvoir l'installer sont deux choses
 // différentes : la disponibilité s'affiche partout, y compris en Docker, où
 // c'est l'exploitant qui tire l'image. Seul le bouton dépend de la capacité.
-api.get('/system/update-check', auth, requireMember, async (_req, res) => {
+api.get('/system/update-check', auth, requireMember, route(async (_req, res) => {
   const current = currentVersion();
   const cap = selfUpdateCapacite();
   const socle = { current, selfUpdate: cap.possible, selfUpdateReason: cap.raison, channel: canalCourant() };
@@ -1292,7 +1302,7 @@ api.get('/system/update-check', auth, requireMember, async (_req, res) => {
   } catch (e) {
     res.json({ ...socle, error: 'Vérification impossible : ' + (e as Error).message });
   }
-});
+}));
 
 // Trigger a self-update. The backend only drops a trigger file; a root-owned
 // systemd path unit (installed alongside the helper) performs the actual
