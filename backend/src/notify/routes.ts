@@ -53,11 +53,19 @@ export function pushRouter(memberOf: (req: Request) => string | null, appUrl: ()
   r.post('/test', async (req: Request, res: Response) => {
     const me = memberOf(req);
     if (!me) { res.status(400).json({ error: 'Ce compte n’est rattaché à aucun membre du foyer.' }); return; }
-    const key = 'test|' + Date.now().toString(36);
-    const report = await notify(key, [me], { kind: 'test', title: 'Foyer : test', body: 'Si vous lisez ceci, les rappels arrivent sur cet appareil.', url: appUrl() });
-    const m = report.members[0];
-    log.info(`Notifications : test pour ${me} → ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
-    res.json(m);
+    // `notify` peut rejeter (base, envoi) : sans ce filet, la promesse rejetée
+    // laissait la requête sans réponse. Ce routeur n'a pas le wrapper route() de
+    // server.ts, d'où le try/catch local.
+    try {
+      const key = 'test|' + Date.now().toString(36);
+      const report = await notify(key, [me], { kind: 'test', title: 'Foyer : test', body: 'Si vous lisez ceci, les rappels arrivent sur cet appareil.', url: appUrl() });
+      const m = report.members[0];
+      log.info(`Notifications : test pour ${me} → ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
+      res.json(m);
+    } catch (e) {
+      log.erreur('Notifications : test impossible', e);
+      res.status(500).json({ error: 'Erreur interne du serveur.' });
+    }
   });
 
   return r;
