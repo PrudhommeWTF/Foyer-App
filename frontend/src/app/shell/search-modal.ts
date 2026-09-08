@@ -7,12 +7,12 @@ import { tint } from '../core/constants';
 
 const KIND_LABEL: Record<string, string> = {
   contact: 'Contact', task: 'Tâche', event: 'Agenda', shop: 'Course',
-  recipe: 'Recette', file: 'Document', fin: 'Finances', member: 'Membre', message: 'Message',
+  recipe: 'Recette', file: 'Document', fin: 'Finances', member: 'Membre',
 };
 
 /**
  * Global search palette: fuzzy-ish (accent/case-insensitive) matching across
- * contacts, tasks, events, courses, recipes, documents, members and messages,
+ * contacts, tasks, events, courses, recipes, documents and members,
  * plus finance operations (searched server-side, since they live in tables).
  * Selecting a result navigates to its screen and opens its detail.
  */

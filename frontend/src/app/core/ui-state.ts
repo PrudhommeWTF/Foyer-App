@@ -86,9 +86,6 @@ export interface UiState {
   /** Choix d'un modèle pour créer une liste. */
   tplOpen: boolean;
 
-  // messages
-  newMsg: string;
-
   // contacts
   contactSearch: string; contactCat: string;
   contactForm: boolean; coEditId: string | null;
@@ -189,7 +186,7 @@ export interface UiState {
  */
 const SCREEN_KEY = 'foyer.screen';
 const KNOWN_SCREENS: ReadonlySet<string> = new Set([
-  'home', 'calendar', 'courses', 'taches', 'messages', 'contacts',
+  'home', 'calendar', 'courses', 'taches', 'contacts',
   'documents', 'finances', 'repas', 'recettes', 'planning', 'settings',
 ]);
 export function rememberScreen(screen: string): void {
@@ -215,7 +212,6 @@ export function initialUi(): UiState {
     taskEdit: null, taskNew: false, showDone: false, showArchived: false,
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
     tplOpen: false,
-    newMsg: '',
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     docFolder: null, docSearch: '',

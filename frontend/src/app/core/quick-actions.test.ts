@@ -18,7 +18,7 @@ const doc = (): HouseholdState => ({
   familyName: 'Foyer',
   members: [{ id: 'me', name: 'Thomas', role: 'Papa', color: '#E56B4E', ini: 'TH' }],
   events: [], aisles: [], articles: [], shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [],
-  msgs: [], contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
+  contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
   profile: { memberId: 'm1' },
   settings: {},
 });

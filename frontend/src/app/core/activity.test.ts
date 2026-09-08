@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { recentActivity, relTime } from './activity';
-import { HouseholdState, Message, ShopItem, ShopList, TaskItem, TaskList } from './models';
+import { HouseholdState, ShopItem, ShopList, TaskItem, TaskList } from './models';
 
 // Fabriques typées : les fixtures ne portent que ce que le fil lit, mais restent
 // de vrais objets du domaine (le typecheck de la CI, tsconfig.test.json, les vérifie).
@@ -9,11 +9,10 @@ const tList = (over: Partial<TaskList>): TaskList => ({ id: 'l1', name: 'Liste',
 const task = (over: Partial<TaskItem>): TaskItem => ({ id: 't', listId: 'l1', text: 'x', who: [], due: null, done: false, ...over });
 const sList = (over: Partial<ShopList>): ShopList => ({ id: 's1', name: 'Courses', color: '#222', icon: 'panier', ...over });
 const shop = (over: Partial<ShopItem>): ShopItem => ({ id: 'a', name: 'Article', qty: '', aisleId: 'x', state: 'a-prendre', listId: 's1', ...over });
-const msg = (over: Partial<Message>): Message => ({ who: 'm1', text: '', time: '00:00', ...over });
 
 // Un état minimal : seuls les champs que le fil lit comptent. Le reste est vide.
 function state(over: Partial<HouseholdState>): HouseholdState {
-  return { taskLists: [], tasks: [], shopLists: [], shop: [], msgs: [], ...over } as HouseholdState;
+  return { taskLists: [], tasks: [], shopLists: [], shop: [], ...over } as HouseholdState;
 }
 
 describe('recentActivity', () => {
@@ -50,22 +49,6 @@ describe('recentActivity', () => {
     const done = feed.filter((e) => e.verb === 'a terminé');
     assert.equal(done.length, 2);
     assert.equal(feed[0].at, '2026-09-08T20:00:00.000Z');
-  });
-
-  it('inclut les messages horodatés, tronque les longs, ignore ceux sans date', () => {
-    const s = state({
-      msgs: [
-        msg({ who: 'm1', text: 'Le dîner est prêt !', time: '19:02', at: '2026-09-06T17:02:00.000Z' }),
-        msg({ who: 'm2', text: 'x'.repeat(200), time: '08:00', at: '2026-09-06T06:00:00.000Z' }),
-        msg({ who: 'm1', text: 'Ancien message', time: '10:00' }),
-      ],
-    });
-    const feed = recentActivity(s, 12);
-    assert.equal(feed.length, 2);
-    assert.equal(feed[0].verb, 'a écrit');
-    assert.equal(feed[0].what, 'Le dîner est prêt !');
-    assert.equal(feed[0].where, 'Messagerie');
-    assert.ok(feed[1].what.endsWith('…') && feed[1].what.length <= 121);
   });
 
   it('respecte la limite', () => {
