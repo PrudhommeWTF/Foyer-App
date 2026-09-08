@@ -6,8 +6,9 @@ il faut décider si une demande nouvelle entre dans le modèle ou le casse.
 
 Le module décrit le **rythme récurrent de la semaine**. Il ne remplace pas
 l'Agenda, qui gère les événements ponctuels et datés. Ce sont deux objets
-différents, et ils le restent : pas de fusion des vues, pas de sortie de
-l'emploi du temps dans le flux ICS.
+différents, et ils le restent : pas de fusion des vues, et l'emploi du temps ne
+déborde dans le Calendrier ni dans le flux ICS que par une **publication
+explicite**, créneau par créneau (voir ci-dessous).
 
 Une exception, **choisie et réversible** : un créneau peut être **publié à
 l'agenda** (case « Publier à l'agenda » du formulaire, champ `sync`). Ses
@@ -19,9 +20,11 @@ validité, filtre scolaire/vacances, dates sautées) est donc respectée par
 construction, et modifier ou arrêter le créneau met l'agenda à jour sans qu'une
 occurrence périmée puisse survivre. Ces occurrences dérivées restent en lecture
 seule dans le Calendrier : les toucher ouvre leur créneau source, jamais une
-copie. Elles ne partent pas non plus dans le flux ICS, qui ne porte que les
-`events` stockés : la règle « pas de sortie de l'emploi du temps dans l'ICS »
-tient toujours.
+copie. Elles partent **aussi dans le flux ICS partagé**, dérivées de la même
+façon côté serveur (`publishedSlotOccurrences`, port fidèle de `occursOn`) sur
+une fenêtre glissante de quelques mois : un agenda externe voit donc l'école ou
+le sport comme le Calendrier les montre, filtre scolaire/vacances compris. Seuls
+les créneaux **non publiés** restent hors de l'Agenda et de l'ICS.
 
 ## Le principe qui commande tout le reste
 

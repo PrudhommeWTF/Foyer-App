@@ -6,6 +6,13 @@
 import { HouseholdState } from './seed';
 import { Deadline } from './finances/contracts';
 import { setting } from './settings/registry';
+import { CalendarFacts, NO_CALENDAR, addDaysIso, publishedSlotOccurrences } from './schedule';
+
+// Fenêtre glissante des créneaux d'emploi du temps publiés : quelques semaines
+// en arrière (l'agenda garde le passé proche) et six mois devant. Un créneau
+// hebdomadaire y tient en une trentaine d'occurrences, dérivées à la volée.
+const SLOT_PAST_DAYS = 31;
+const SLOT_AHEAD_DAYS = 183;
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 const icsDate = (ds: string): string => ds.replace(/-/g, '');
@@ -44,7 +51,7 @@ const DEADLINE_DETAIL: Record<string, string> = {
  * C'est ce qui permet de le tester sans base et de garder la requête là où elle
  * a un sens.
  */
-export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): string {
+export function buildIcs(state: HouseholdState, deadlines: Deadline[] = [], cal: CalendarFacts = NO_CALENDAR, today: string = new Date().toISOString().slice(0, 10)): string {
   const dtstamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '').slice(0, 15) + 'Z';
   const mname = (id: string): string => state.members.find((m) => m.id === id)?.name || '';
   const L: string[] = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Foyer//Calendrier//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${icsEsc(state.familyName)}`];
@@ -68,6 +75,24 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = []): str
     if (ev.place) L.push(`LOCATION:${icsEsc(ev.place)}`);
     const who = (ev.who || []).map(mname).filter(Boolean).join(', ');
     if (who) L.push(`DESCRIPTION:${icsEsc(who)}`);
+    L.push('END:VEVENT');
+  }
+
+  // Les créneaux d'emploi du temps publiés à l'agenda : dérivés à la volée sur une
+  // fenêtre glissante, comme à l'écran, en respectant récurrence, validité, dates
+  // sautées et filtre scolaire/vacances. Rien n'est stocké, donc rien de périmé.
+  const from = addDaysIso(today, -SLOT_PAST_DAYS);
+  const to = addDaysIso(today, SLOT_AHEAD_DAYS);
+  for (const occ of publishedSlotOccurrences(state.sched || [], from, to, cal)) {
+    const [sh, sm] = occ.start.split(':');
+    // Fin explicite si elle vient après le début, sinon une heure par défaut.
+    const [eh, em] = (occ.end && occ.end > occ.start) ? occ.end.split(':') : [String(Math.min(+sh + 1, 23)), sm];
+    L.push('BEGIN:VEVENT', `UID:slot-${occ.slotId}-${occ.date}@foyer`, `DTSTAMP:${dtstamp}`);
+    L.push(`DTSTART:${icsDate(occ.date)}T${pad2(+sh)}${pad2(+sm)}00`);
+    L.push(`DTEND:${icsDate(occ.date)}T${pad2(+eh)}${pad2(+em)}00`);
+    L.push(`SUMMARY:${icsEsc(occ.label)}`, 'CATEGORIES:Emploi du temps');
+    const swho = occ.who.map(mname).filter(Boolean).join(', ');
+    if (swho) L.push(`DESCRIPTION:${icsEsc(swho)}`);
     L.push('END:VEVENT');
   }
 

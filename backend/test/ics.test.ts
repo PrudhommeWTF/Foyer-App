@@ -50,6 +50,20 @@ describe('flux ICS', () => {
     assert.ok(!octobre.includes('20260915'));
   });
 
+  it('publie les créneaux d’emploi du temps synchronisés, pas les autres', () => {
+    const slot = { id: 's1', who: [], dow: 1, start: '08:30', end: '16:30', label: 'École', k: 'ecole', rec: 'weekly', sync: true };
+    const off = { ...slot, id: 's2', label: 'Piano', sync: false };
+    const ics = buildIcs(state({ sched: [slot, off] as HouseholdState['sched'] }), [], undefined, '2026-09-07');
+    const l = lines(ics);
+    // 2026-09-07 est un lundi (dow=1) : l'occurrence tombe ce jour, dans la fenêtre.
+    assert.ok(l.includes('UID:slot-s1-2026-09-07@foyer'));
+    assert.ok(l.includes('DTSTART:20260907T083000'));
+    assert.ok(l.includes('DTEND:20260907T163000'));
+    assert.ok(l.includes('SUMMARY:École'));
+    assert.ok(l.includes('CATEGORIES:Emploi du temps'));
+    assert.ok(!ics.includes('Piano'), 'un créneau non publié ne doit pas apparaître');
+  });
+
   it('ne réveille personne sauf pour la date limite de résiliation', () => {
     const preavis = buildIcs(state(), [deadline({ kind: 'preavis' })]);
     assert.ok(preavis.includes('BEGIN:VALARM'));
