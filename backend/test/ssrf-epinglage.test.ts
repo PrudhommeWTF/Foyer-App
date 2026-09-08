@@ -83,6 +83,23 @@ describe('les plages que le serveur n’a rien à aller chercher', () => {
     for (const ip of ['2002:c0a8:0101::1', '64:ff9b::c0a8:101']) assert.equal(isPrivateAddress(ip), true, ip);
   });
 
+  it('le v4 mappé est jugé sur sa partie v4 quelle que soit la notation', () => {
+    // Le contournement : la forme hexadécimale d'une adresse mappée est la même
+    // adresse que la forme pointée, et doit être bloquée pareil. 127.0.0.1,
+    // 169.254.169.254 (métadonnées cloud) et 192.168.1.1 (LAN), en pointé, en
+    // hexadécimal, en forme longue, et en v4-compatible ::/96.
+    for (const ip of [
+      '::ffff:127.0.0.1', '::ffff:7f00:1', '0:0:0:0:0:ffff:7f00:1',
+      '::ffff:169.254.169.254', '::ffff:a9fe:a9fe',
+      '::ffff:192.168.1.1', '::ffff:c0a8:0101',
+      '::7f00:1', '::c0a8:101',
+    ]) assert.equal(isPrivateAddress(ip), true, ip);
+  });
+
+  it('le v4 mappé public reste passant', () => {
+    for (const ip of ['::ffff:203.0.113.10', '::ffff:cb00:710a']) assert.equal(isPrivateAddress(ip), false, ip);
+  });
+
   it('les plages de documentation restent passantes : elles ne mènent nulle part', () => {
     // Les interdire ne protégerait de rien (elles ne sont routables nulle part)
     // et priverait les tests et la documentation d'adresses publiques factices.

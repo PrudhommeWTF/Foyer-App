@@ -74,19 +74,53 @@ export function isPrivateAddress(ip: string): boolean {
     return false;
   }
   if (v === 6) {
-    const s = ip.toLowerCase().replace(/^\[|\]$/g, '');
+    const s = ip.toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
     if (s === '::' || s === '::1') return true;
     if (s.startsWith('fe80') || s.startsWith('fc') || s.startsWith('fd')) return true;
     if (s.startsWith('ff')) return true;                  // multicast
     if (s.startsWith('2002:')) return true;               // 6to4, qui encapsule du v4
     if (s.startsWith('64:ff9b:')) return true;            // NAT64, qui traduit vers du v4
-    // Adresse IPv4 encapsulée : on la juge sur sa partie v4.
-    const m = /(?:^::ffff:|^::)((?:\d{1,3}\.){3}\d{1,3})$/.exec(s);
-    if (m) return isPrivateAddress(m[1]);
+    // Adresse IPv4 encapsulée : on la juge sur sa partie v4, **quelle que soit la
+    // notation**. La juger sur la forme textuelle (::ffff:127.0.0.1) laissait
+    // passer la forme hexadécimale équivalente (::ffff:7f00:1), pourtant la même
+    // adresse. On lit donc les 32 derniers bits numériquement : 96 bits de tête à
+    // zéro désignent une adresse mappée (::ffff:/96) ou compatible (::/96,
+    // obsolète), et dans les deux cas c'est l'IPv4 qui décide.
+    const g = ipv6Groups(s);
+    if (g && g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0
+        && (g[5] === 0xffff || g[5] === 0)) {
+      return isPrivateAddress(`${g[6] >> 8}.${g[6] & 0xff}.${g[7] >> 8}.${g[7] & 0xff}`);
+    }
     return false;
   }
   // Ni v4 ni v6 : on ne sait pas, donc on refuse.
   return true;
+}
+
+/**
+ * Les huit groupes de 16 bits d'une IPv6 déjà validée par `net.isIP`, ou null si
+ * illisible. Gère la compression `::` et l'IPv4 pointée en queue (les 32 bits
+ * qu'elle porte deviennent les deux derniers groupes), pour que l'extraction de
+ * la partie v4 ne dépende jamais de la façon dont l'adresse est écrite.
+ */
+function ipv6Groups(s: string): number[] | null {
+  let head = s;
+  const dotted = /(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (dotted) {
+    const p = dotted[1].split('.').map(Number);
+    if (p.some((n) => n > 255)) return null;
+    head = s.slice(0, dotted.index) + ((p[0] << 8) | p[1]).toString(16) + ':' + ((p[2] << 8) | p[3]).toString(16);
+  }
+  const [left, right, extra] = head.split('::');
+  if (extra !== undefined) return null;                   // deux `::` : impossible
+  const lead = left ? left.split(':') : [];
+  const trail = right === undefined ? null : (right ? right.split(':') : []);
+  const groups = trail === null
+    ? lead
+    : [...lead, ...Array(Math.max(0, 8 - lead.length - trail.length)).fill('0'), ...trail];
+  if (groups.length !== 8) return null;
+  const nums = groups.map((h) => parseInt(h || '0', 16));
+  return nums.some((n) => !Number.isFinite(n) || n < 0 || n > 0xffff) ? null : nums;
 }
 
 /** Une adresse validée, et **l'adresse IP** sur laquelle on ouvrira la connexion. */
