@@ -45,6 +45,7 @@ import { initPush, notify, resolveVapidSubject } from './notify/push';
 import { startScheduler } from './notify/scheduler';
 import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
+import { calendarFacts } from './schedule';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
@@ -1168,7 +1169,15 @@ api.get('/calendar/feed.ics', icsLimiter, (req: Request, res: Response) => {
   if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
   res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
   res.setHeader('Content-Disposition', 'inline; filename="foyer.ics"');
-  res.send(buildIcs(state, contractDeadlines(new Date().toISOString().slice(0, 10), DEADLINE_HORIZON_DAYS)));
+  const today = new Date().toISOString().slice(0, 10);
+  // Le filtre scolaire/vacances des créneaux publiés a besoin des vacances de
+  // l'académie du foyer : on les prend dans le cache (rempli par l'usage normal
+  // de l'app), sans appel sortant dans un flux relu en boucle. Cache vide :
+  // vacances inconnues, donc on affiche, comme à l'écran.
+  const academie = setting('academie', state);
+  const cache = academie ? getSchoolHolidaysCache(academie) : null;
+  const schoolHolidays = (cache?.data as { start: string; end: string }[] | undefined) || [];
+  res.send(buildIcs(state, contractDeadlines(today, DEADLINE_HORIZON_DAYS), calendarFacts(schoolHolidays), today));
 });
 
 // ---- System / self-update ----

@@ -103,7 +103,7 @@ appeler, et ce qui sort.
 | `POST /api/setup` | 30 / 15 min | Crée le foyer et le compte admin, **uniquement si zéro compte existe** | Oui. Le garde `countUsers() > 0` est correct : une fois le foyer créé, l'endpoint répond 409. |
 | `POST /api/auth/login` | 30 / 15 min | Jeton JWT ou 401 | Oui. Voir **E2**, **E3** pour ses défauts. |
 | `POST /api/auth/register` | 30 / 15 min | Jeton JWT, compte sans membre | **Non. C'est la faille critique C1.** |
-| `GET /api/calendar/feed.ics?token=` | **aucune** | Tout le calendrier du foyer : événements, échéances de contrat, tâches datées | Par nécessité (Google et Apple Agenda ne savent pas porter de jeton). Le jeton fait 144 bits, il n'est pas devinable. Mais voir **E6**. |
+| `GET /api/calendar/feed.ics?token=` | **aucune** | Tout le calendrier du foyer : événements, échéances de contrat, créneaux d'emploi du temps publiés, tâches datées | Par nécessité (Google et Apple Agenda ne savent pas porter de jeton). Le jeton fait 144 bits, il n'est pas devinable. Mais voir **E6**. |
 
 ### 2.2 Authentification simple, aucun rôle exigé
 
