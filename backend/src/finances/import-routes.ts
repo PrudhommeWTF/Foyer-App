@@ -57,10 +57,14 @@ function readDraft(id: number): { draft: Draft; filename: string; status: import
   return { draft: row.payload as Draft, filename: row.filename, status: row.status };
 }
 
+/** Une valeur mal formée (identifiant, corps) : 400, comme dans les autres routeurs finances. */
+class Invalid extends Error {}
+
 function handler(fn: (req: Request, res: Response) => void) {
   return (req: Request, res: Response): void => {
     try { fn(req, res); }
     catch (e) {
+      if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
       if (e instanceof UnsupportedFile) { res.status(415).json({ error: e.message }); return; }
       log.erreur('Finances/import : erreur inattendue', e);
       res.status(500).json({ error: 'Erreur pendant l’import : ' + (e as Error).message });
@@ -70,7 +74,9 @@ function handler(fn: (req: Request, res: Response) => void) {
 
 const id = (v: unknown): number => {
   const n = parseInt(String(v ?? ''), 10);
-  if (!Number.isInteger(n) || n <= 0) throw new UnsupportedFile('Identifiant invalide.');
+  // Un identifiant invalide est une erreur de forme (400), pas un format de
+  // fichier non pris en charge (415, réservé au contenu de l'import).
+  if (!Number.isInteger(n) || n <= 0) throw new Invalid('Identifiant invalide.');
   return n;
 };
 
