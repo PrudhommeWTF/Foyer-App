@@ -1099,7 +1099,7 @@ api.put('/members/:memberId/account', auth, requireAdmin, route(async (req, res)
   const rawPassword = req.body?.password;
   let email: string | undefined;
   let password: string | undefined;
-  if (rawEmail !== undefined && String(rawEmail).trim() !== user.email) {
+  if (rawEmail !== undefined && String(rawEmail).trim().toLowerCase() !== user.email) {
     email = String(rawEmail).trim();
     if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
     if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
