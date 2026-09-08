@@ -87,9 +87,10 @@ sinon pour toujours à occuper la place qu'on cherche à libérer.
 
 ## Ce qu'il faut savoir avant de s'en servir
 
-- **Le document du foyer est écrit en clair**, comme l'est déjà le jeton de
-  session dans le stockage local. Sur un appareil partagé, c'est à considérer.
-  Il est **effacé à la déconnexion**, des deux magasins.
+- **Le document du foyer est écrit en clair** dans le stockage local. Sur un
+  appareil partagé, c'est à considérer. Il est **effacé à la déconnexion**. Le
+  jeton de session, lui, n'y est plus : il vit dans un cookie `HttpOnly` que le
+  JavaScript ne voit pas.
 - **Un document trop volumineux n'est pas gardé** (au-delà de 10 Mo). La borne
   ne protège plus un quota partagé mais le coût d'écriture : le document est
   réenregistré à chaque sauvegarde, et au-delà de cet ordre de grandeur c'est

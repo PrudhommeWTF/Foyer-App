@@ -133,25 +133,6 @@ réabonner son agenda. Ou couper le partage.
 # Paramètres > Calendriers > bouton de régénération (administrateur)
 ```
 
-### Le jeton de session est lisible par un script dans la page
-
-**Le risque.** Le jeton vit dans `localStorage`, donc tout script s'exécutant
-dans la page pourrait le lire.
-
-**Pourquoi il reste.** Le passage à un cookie `httpOnly` demanderait une
-protection CSRF sur toute l'API, casserait l'abonnement ICS et le service
-worker, et reviendrait à la refonte de l'authentification que vous ne vouliez
-pas. Le rapport d'audit détaille le calcul (constat M11).
-
-**Pourquoi c'est acceptable.** Il faudrait d'abord qu'un script étranger
-s'exécute dans la page, ce qui suppose de franchir : une politique de sécurité
-de contenu sans `unsafe-inline` ni `unsafe-eval` sur les scripts, l'échappement
-par défaut d'Angular, et l'absence totale d'`innerHTML` et de
-`bypassSecurityTrust` dans tout le code. La surface est réellement fermée.
-
-**Ce qui a été fait à la place.** Session ramenée à 7 jours, renouvellement
-silencieux du jeton à mi-vie, déconnexion après 12 h d'inactivité.
-
 ### La disponibilité n'est pas garantie
 
 **Le risque.** Un compte authentifié peut encore consommer beaucoup : un import

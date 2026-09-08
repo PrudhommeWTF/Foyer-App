@@ -180,7 +180,12 @@ export interface SettingsWriteResult {
   version: number;
 }
 
-const TOKEN_KEY = 'foyer.token';
+// Le jeton de session ne vit plus dans le stockage du navigateur : il voyage
+// dans un cookie HttpOnly que le serveur pose et que le JavaScript ne voit pas
+// (voir server.ts). Une faille XSS ne peut donc plus le recopier. Il ne reste
+// ici qu'un drapeau, sans secret : « cet appareil a une session ouverte », qui
+// sert à décider, hors ligne, entre le foyer gardé et l'écran de connexion.
+const SESSION_FLAG = 'foyer.session';
 
 /**
  * Thin API client. Base URL is anchored on the document base href so a single
@@ -190,17 +195,12 @@ const TOKEN_KEY = 'foyer.token';
 export class ApiService {
   private base = new URL('api/', document.baseURI).href;
 
-  // "Remember me": when true the session token lives in localStorage (survives a
-  // browser restart); when false it lives in sessionStorage (cleared on close).
-  private remember = true;
-  setRemember(v: boolean): void { this.remember = v; }
-
-  get token(): string | null { return localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY); }
-  set token(v: string | null) {
-    // Always clear both stores first so the token lives in exactly one place.
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_KEY);
-    if (v) (this.remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, v);
+  /** Cet appareil a-t-il une session ouverte ? Un simple oui/non, jamais le jeton. */
+  hasSession(): boolean {
+    try { return localStorage.getItem(SESSION_FLAG) === '1'; } catch { return false; }
+  }
+  markSession(open: boolean): void {
+    try { if (open) localStorage.setItem(SESSION_FLAG, '1'); else localStorage.removeItem(SESSION_FLAG); } catch { /* stockage indisponible */ }
   }
 
   /** Absolute URL of an API path (base href aware). */
@@ -235,14 +235,13 @@ export class ApiService {
   }
 
   /**
-   * Fetch a file endpoint with the session token and hand back a blob. Used for
-   * the finances CSV export: a plain <a href> would not carry the Authorization
-   * header, and putting the token in the URL would leak it into browser history.
+   * Fetch a file endpoint and hand back a blob. Used for the finances CSV
+   * export. The session cookie is sent automatically (same origin), so a plain
+   * link would work too; this path is kept because it surfaces server errors as
+   * an ApiError instead of navigating away.
    */
   async download(path: string): Promise<Blob> {
-    const headers: Record<string, string> = {};
-    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await this.send(this.base + path, { headers });
+    const res = await this.send(this.base + path, { credentials: 'same-origin' });
     if (!res.ok) await this.fail(res);
     return res.blob();
   }
@@ -253,16 +252,16 @@ export class ApiService {
    */
   async upload<T>(path: string, file: File): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
-    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await this.send(this.base + path, { method: 'POST', headers, body: file });
+    const res = await this.send(this.base + path, { method: 'POST', headers, body: file, credentials: 'same-origin' });
     if (!res.ok) await this.fail(res);
     return res.json() as Promise<T>;
   }
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string>) };
-    if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
-    const res = await this.send(this.base + path, { ...init, headers });
+    // `same-origin` fait porter le cookie de session à chaque appel : c'est lui
+    // qui authentifie, aucun en-tête à poser côté client.
+    const res = await this.send(this.base + path, { ...init, headers, credentials: 'same-origin' });
     if (!res.ok) await this.fail(res);
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
@@ -279,8 +278,15 @@ export class ApiService {
     return this.request('setup', { method: 'POST', body: JSON.stringify(payload) });
   }
 
-  login(email: string, password: string): Promise<LoginResult> {
-    return this.request<LoginResult>('auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  login(email: string, password: string, remember = true): Promise<LoginResult> {
+    // `remember` décide de la durée du cookie côté serveur, et voyage jusqu'au
+    // second facteur via le défi : rien à conserver ici.
+    return this.request<LoginResult>('auth/login', { method: 'POST', body: JSON.stringify({ email, password, remember }) });
+  }
+
+  /** Ferme la session côté serveur : le cookie HttpOnly ne peut pas s'effacer depuis le JavaScript. */
+  logout(): Promise<{ ok: boolean }> {
+    return this.request('auth/logout', { method: 'POST' });
   }
 
   /** Second temps : le code du téléphone, ou un code de secours. */

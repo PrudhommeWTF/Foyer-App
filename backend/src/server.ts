@@ -318,8 +318,8 @@ const DEFI_SECRET = crypto.createHmac('sha256', JWT_SECRET).update('foyer-totp-c
 /** Le défi vit cinq minutes : le temps de sortir son téléphone, pas davantage. */
 const DEFI_MINUTES = 5;
 
-const signerDefi = (u: { id: number; token_version: number }): string =>
-  jwt.sign({ id: u.id, tv: u.token_version }, DEFI_SECRET, { expiresIn: `${DEFI_MINUTES}m` });
+const signerDefi = (u: { id: number; token_version: number }, remember: boolean): string =>
+  jwt.sign({ id: u.id, tv: u.token_version, rm: remember }, DEFI_SECRET, { expiresIn: `${DEFI_MINUTES}m` });
 
 /**
  * Les deux compteurs de tentatives : par compte visé, et par adresse. Voir
@@ -338,15 +338,62 @@ const icsLimiter = rateLimit({
 });
 
 interface AuthedRequest extends Request {
-  user?: { id: number; email: string; tv: number; iat?: number; exp?: number };
+  user?: { id: number; email: string; tv: number; rm?: boolean; iat?: number; exp?: number };
 }
 
-function sign(user: { id: number; email: string; token_version: number }): string {
+function sign(user: { id: number; email: string; token_version: number }, remember = true): string {
   // La durée est un réglage du foyer, lue à chaque connexion : la changer ne
   // touche pas aux sessions déjà ouvertes, qui gardent la durée qu'on leur a
   // donnée. C'est à la connexion suivante que la nouvelle valeur s'applique.
+  //
+  // `rm` (se souvenir de moi) voyage dans le jeton pour que le renouvellement à
+  // mi-vie repose le cookie avec la même durée sans avoir à la redemander.
   const jours = Number(effectiveSetting('sessionDays')) || 30;
-  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version }, JWT_SECRET, { expiresIn: `${jours}d` });
+  return jwt.sign({ id: user.id, email: user.email, tv: user.token_version, rm: remember }, JWT_SECRET, { expiresIn: `${jours}d` });
+}
+
+/**
+ * Le jeton de session voyage désormais dans un cookie `HttpOnly` plutôt que
+ * rendu au JavaScript : une faille XSS ne peut donc plus le recopier, puisque le
+ * script de la page ne le voit pas. Le corps de la réponse continue de porter le
+ * jeton (les scripts d'API et l'en-tête `Authorization: Bearer` restent
+ * acceptés), mais l'application, elle, ne s'appuie que sur le cookie et ne range
+ * plus rien.
+ */
+const SESSION_COOKIE = 'foyer_session';
+
+/** Lit le jeton de session dans l'en-tête Cookie, sans dépendance de parsing. */
+function cookieToken(req: Request): string {
+  const raw = req.headers.cookie;
+  if (!raw) return '';
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0 && part.slice(0, i).trim() === SESSION_COOKIE) return decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return '';
+}
+
+/**
+ * Pose (ou repose) le cookie de session.
+ *
+ * `SameSite=Lax` ferme la CSRF que le cookie rouvrirait : le navigateur ne
+ * l'envoie pas sur une requête déclenchée par un autre site, sauf une simple
+ * navigation de premier niveau, ce qui préserve le confort d'ouvrir l'app depuis
+ * un lien sans exposer les gestes qui modifient (POST/PUT/etc.). `Secure` suit
+ * le protocole réel de la requête (vrai derrière le reverse-proxy HTTPS, faux en
+ * dev sur http, où le cookie doit tout de même partir). Sans `maxAge`, c'est un
+ * cookie de session que le navigateur efface à sa fermeture : c'est le « ne pas
+ * se souvenir de moi ».
+ */
+function setSessionCookie(req: Request, res: Response, token: string, remember: boolean): void {
+  const jours = Number(effectiveSetting('sessionDays')) || 30;
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: req.secure,
+    sameSite: 'lax',
+    path: '/',
+    ...(remember ? { maxAge: jours * 86400_000 } : {}),
+  });
 }
 
 /**
@@ -367,15 +414,18 @@ const pwdMin = (): number => Number(effectiveSetting('passwordMinLength')) || 6;
 const pwdTropCourt = (): string => `Le mot de passe doit faire au moins ${pwdMin()} caractères`;
 
 function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
+  // Le cookie d'abord, l'en-tête `Authorization: Bearer` ensuite : l'application
+  // s'appuie sur le cookie, mais un script d'API qui porte son jeton en en-tête
+  // reste servi.
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const token = cookieToken(req) || (header.startsWith('Bearer ') ? header.slice(7) : '');
   if (!token) {
     res.status(401).json({ error: 'Non authentifié' });
     return;
   }
-  let payload: { id: number; email: string; tv?: number; iat?: number; exp?: number };
+  let payload: { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number };
   try {
-    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; iat?: number; exp?: number };
+    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number };
   } catch {
     res.status(401).json({ error: 'Session expirée' });
     return;
@@ -387,7 +437,7 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
     res.status(401).json({ error: 'Session révoquée' });
     return;
   }
-  req.user = { id: user.id, email: user.email, tv: user.token_version, iat: payload.iat, exp: payload.exp };
+  req.user = { id: user.id, email: user.email, tv: user.token_version, rm: payload.rm ?? true, iat: payload.iat, exp: payload.exp };
   next();
 }
 
@@ -517,11 +567,16 @@ api.post('/setup', authLimiter, route(async (req, res) => {
     if (m.email && m.password) createUserWithMember(m.email, await hacher(m.password), m.name, m.id);
   }
   saveHousehold(state);
-  res.status(201).json({ token: sign(adminUser), user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
+  const token = sign(adminUser);
+  setSessionCookie(req, res, token, true);
+  res.status(201).json({ token, user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
 }));
 
 api.post('/auth/login', authLimiter, route(async (req, res) => {
   const { email, password } = req.body || {};
+  // « Se souvenir de moi » (défaut oui) : décide de la durée du cookie, et
+  // voyage jusqu'au second facteur via le défi pour ne pas être perdu en route.
+  const remember = req.body?.remember !== false;
   if (!email || !password) {
     res.status(400).json({ error: 'Email et mot de passe requis' });
     return;
@@ -563,14 +618,16 @@ api.post('/auth/login', authLimiter, route(async (req, res) => {
   // essayer un million de codes sans jamais recroiser la temporisation.
   if (user.totp_secret) {
     log.info(`Connexion : mot de passe accepté pour ${user.email} depuis ${adresse}, code du second facteur attendu.`);
-    res.json({ totpRequired: true, challenge: signerDefi(user) });
+    res.json({ totpRequired: true, challenge: signerDefi(user, remember) });
     return;
   }
 
   parCompte.succes(cible);
   parAdresse.succes(adresse);
   log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
-  res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
+  const token = sign(user, remember);
+  setSessionCookie(req, res, token, remember);
+  res.json({ token, user: { email: user.email, name: user.name, memberId: user.member_id } });
 }));
 
 // Il n'y a pas d'inscription libre : un accès s'ouvre depuis la fiche d'un
@@ -595,9 +652,9 @@ api.post('/auth/login/totp', authLimiter, route(async (req, res) => {
   const adresse = req.ip || 'inconnue';
   const now = Date.now();
 
-  let charge: { id: number; tv: number };
+  let charge: { id: number; tv: number; rm?: boolean };
   try {
-    charge = jwt.verify(String(req.body?.challenge ?? ''), DEFI_SECRET) as { id: number; tv: number };
+    charge = jwt.verify(String(req.body?.challenge ?? ''), DEFI_SECRET) as { id: number; tv: number; rm?: boolean };
   } catch {
     res.status(401).json({ error: 'Cette demande de connexion a expiré. Reprenez depuis votre mot de passe.' });
     return;
@@ -653,8 +710,22 @@ api.post('/auth/login/totp', authLimiter, route(async (req, res) => {
   parCompte.succes(cible);
   parAdresse.succes(adresse);
   log.info(`Connexion réussie (second facteur) : ${user.email} depuis ${adresse}.`);
-  res.json({ token: sign(user), user: { email: user.email, name: user.name, memberId: user.member_id } });
+  const remember = charge.rm !== false;
+  const token = sign(user, remember);
+  setSessionCookie(req, res, token, remember);
+  res.json({ token, user: { email: user.email, name: user.name, memberId: user.member_id } });
 }));
+
+/**
+ * Efface le cookie de session. Indispensable maintenant qu'il est `HttpOnly` :
+ * le JavaScript ne peut plus le retirer lui-même. Aucune authentification n'est
+ * exigée, effacer son propre cookie ne compromettant rien ; la révocation
+ * serveur, elle, passe toujours par le changement de mot de passe (token_version).
+ */
+api.post('/auth/logout', (_req, res) => {
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  res.json({ ok: true });
+});
 
 api.get('/state', auth, requireMember, (_req, res) => {
   res.json(getHousehold());
@@ -786,6 +857,11 @@ api.get('/live', auth, requireMember, (req: Request, res: Response) => {
 api.get('/me', auth, (req: AuthedRequest, res: Response) => {
   const u = req.user ? getUserById(req.user.id) : undefined;
   if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
+  // Renouvellement à mi-vie : on repose le cookie avec la même durée que la
+  // session, sans rien demander à l'utilisateur. Le jeton reste aussi dans le
+  // corps pour les clients en en-tête Bearer.
+  const renouvele = aRenouveler(req.user) ? sign(u, req.user?.rm ?? true) : '';
+  if (renouvele) setSessionCookie(req, res, renouvele, req.user?.rm ?? true);
   // L'identifiant du membre vient de la fiche telle qu'elle existe, pas de la
   // colonne : un membre retiré du foyer laisse son compte derrière lui, et
   // renvoyer l'identifiant d'une fiche disparue ferait pointer l'application sur
@@ -800,9 +876,9 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
     totpRecoveryLeft: u.totp_secret ? secours : null,
     // Un jeton émis vivait sa durée entière sans jamais tourner : volé le
     // premier jour, il servait encore le dernier. Passé la moitié de sa vie, on
-    // en rend un neuf, que le client range à la place. Rien à faire pour
-    // l'utilisateur, et la fenêtre d'un jeton dérobé se referme d'elle-même.
-    ...(aRenouveler(req.user) ? { token: sign(u) } : {}),
+    // en rend un neuf (cookie reposé ci-dessus). Rien à faire pour l'utilisateur,
+    // et la fenêtre d'un jeton dérobé se referme d'elle-même.
+    ...(renouvele ? { token: renouvele } : {}),
   });
 });
 
@@ -848,7 +924,13 @@ api.put('/me/credentials', authLimiter, auth, route(async (req, res) => {
   const frais = getUserById(user.id);
   if (!frais) { res.status(500).json({ error: 'Compte introuvable après modification' }); return; }
   log.info(`Compte : ${user.email} (depuis ${req.ip || 'adresse inconnue'}) a changé ${email && password ? 'son adresse et son mot de passe' : email ? 'son adresse de connexion' : 'son mot de passe'}.`);
-  res.json({ email: frais.email, token: sign(frais), othersLoggedOut: password !== undefined });
+  // Changer le mot de passe incrémente token_version et invalide donc le cookie
+  // actuel : on repose immédiatement un cookie frais pour ne pas se déconnecter
+  // soi-même en se protégeant.
+  const rester = req.user as AuthedRequest['user'];
+  const token = sign(frais, rester?.rm ?? true);
+  setSessionCookie(req, res, token, rester?.rm ?? true);
+  res.json({ email: frais.email, token, othersLoggedOut: password !== undefined });
 }));
 
 // ---- Second facteur (TOTP), géré par chacun pour lui-même ----
