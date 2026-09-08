@@ -25,7 +25,7 @@ import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSl
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
-import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
@@ -1291,7 +1291,10 @@ export class FoyerStore {
     this.editSlot(slotId, date);
   }
   openEvent(): void {
-    const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
+    // Index de mois absolu (année * 12 + mois - 1) : le sélecteur de date porte
+    // l'année, pas seulement le mois, sinon éditer un événement d'une autre année
+    // ouvrirait le calendrier de la mauvaise année.
+    const m = monthIndex(this.ui().selDay);
     // Participants « Tous » par défaut : un événement du foyer concerne le plus
     // souvent tout le monde (repas, sortie, vacances). La liste vide vaut « Tous » ;
     // on restreint ensuite en cochant des membres. Voir toggleEvWho.
@@ -1300,7 +1303,7 @@ export class FoyerStore {
   editEvent(id: string): void {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
-    const m = parseInt(ev.date.slice(5, 7), 10) - 7;
+    const m = monthIndex(ev.date);
     this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
   }
   dpPick(ds: string): void {

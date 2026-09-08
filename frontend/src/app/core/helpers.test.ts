@@ -3,7 +3,7 @@
 // hors navigateur.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { addHourHHMM, contactIni, dstr, isoWeek, keptIni, occursOn, weekDates } from './helpers';
+import { addHourHHMM, contactIni, dstr, isoWeek, keptIni, monthIndex, monthStart, occursOn, weekDates } from './helpers';
 import { EventItem } from './models';
 
 const iso = (offset: number, anchor: string): string[] => weekDates(offset, anchor).map(dstr);
@@ -13,6 +13,22 @@ test('weekDates suit la date d’ancrage et non une semaine figée', () => {
   // quelle que soit la date du jour.
   assert.notDeepEqual(iso(0, '2026-08-21'), iso(0, '2026-07-15'));
   assert.equal(iso(0, '2026-08-21')[0], '2026-08-17');
+});
+
+test('monthIndex porte l’année, pas seulement le mois', () => {
+  // Le bug corrigé : le sélecteur de date était ancré sur 2026 en dur, si bien
+  // qu'éditer un événement d'une autre année ouvrait la mauvaise année.
+  const i = monthIndex('2027-03-15');
+  const d = monthStart(i);
+  assert.equal(d.getFullYear(), 2027);
+  assert.equal(d.getMonth(), 2); // mars
+  assert.equal(d.getDate(), 1);
+  // Deux années différentes, même mois : index distincts de douze.
+  assert.equal(monthIndex('2027-03-01') - monthIndex('2026-03-01'), 12);
+  // La navigation par ±1 traverse correctement le passage d'année.
+  const dec2025 = monthStart(monthIndex('2026-01-10') - 1);
+  assert.equal(dec2025.getFullYear(), 2025);
+  assert.equal(dec2025.getMonth(), 11); // décembre
 });
 
 test('la semaine commence le lundi et compte sept jours', () => {
