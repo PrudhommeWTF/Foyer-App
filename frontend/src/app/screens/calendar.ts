@@ -90,7 +90,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
               }
             </div>
           } @else {
-            <div class="cols" [style.grid-template-columns]="store.narrow() ? '1fr' : ('repeat(' + cols().length + ',1fr)')">
+            <div class="cols" [style.grid-template-columns]="store.narrow() ? '1fr' : ('repeat(' + cols().length + ',minmax(0,1fr))')">
               @for (col of cols(); track col.key) {
                 <div class="col">
                   <div class="col-head"
@@ -297,12 +297,18 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     </div>
   `,
   styles: [`
+    :host { display: block; container-type: inline-size; }
     .cal-wrap { display: flex; gap: 24px; align-items: flex-start; }
     .cal-card { flex: 1; min-width: 0; }
     .side { width: 320px; flex: none; display: flex; flex-direction: column; gap: 12px; }
     :host-context(.shell.narrow) .cal-wrap { flex-direction: column; }
     :host-context(.shell.narrow) .side { width: auto; }
     @media (max-width: 860px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
+    /* En largeur moyenne (fenêtre pas en plein écran), le bandeau de 320 px laisse
+       trop peu de place aux sept colonnes : on le passe sous le calendrier, qui
+       reprend toute la largeur. Requête de conteneur : c'est la largeur réelle de
+       l'écran Calendrier qui décide, pas celle de la fenêtre. */
+    @container (max-width: 1040px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
     /* Sur mobile, le mini-calendrier et le détail du jour sélectionné n'apportent
        rien de plus que la vue et le bouton d'ajout : on les masque pour garder un
        écran court. Les vues Semaine et 3 jours passent en pile (une colonne). */
@@ -320,7 +326,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     .navs { display: flex; gap: 8px; }
     .nav-btn { width: 38px; height: 38px; border: none; border-radius: 12px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
-    .dow-row { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; margin-bottom: 6px; }
+    .dow-row { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 2px; margin-bottom: 6px; }
     .dow { text-align: center; font-size: 12px; font-weight: 800; color: var(--ink3); padding: 4px; }
     /* Cases resserrées (gap 2px, coins peu arrondis) : une barre « journée
        entière » peut alors s'étaler d'une case à l'autre en une ligne continue,
@@ -328,13 +334,13 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
        la place aux voies de barres (--lanes, porté par la semaine). */
     .month { display: flex; flex-direction: column; gap: 2px; }
     .week { position: relative; }
-    .week-cells { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; }
+    .week-cells { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 2px; }
     .mcell { position: relative; min-height: 94px; border-radius: 5px; padding: calc(26px + var(--lanes,0) * 20px) 6px 6px; background: var(--soft); cursor: pointer; display: flex; flex-direction: column; gap: 3px; box-sizing: border-box; overflow: hidden; }
     .mcell.dim { opacity: .5; }
     .mcell.sel { box-shadow: inset 0 0 0 2px var(--primary); }
     .mcell.today:not(.sel) { box-shadow: inset 0 0 0 2px var(--honey); }
     .mnum { position: absolute; top: 5px; right: 8px; font-size: 13px; font-weight: 800; color: var(--ink2); }
-    .week-bars { position: absolute; top: 24px; left: 0; right: 0; display: grid; grid-template-columns: repeat(7,1fr); grid-auto-rows: 18px; gap: 2px; pointer-events: none; z-index: 1; }
+    .week-bars { position: absolute; top: 24px; left: 0; right: 0; display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); grid-auto-rows: 18px; gap: 2px; pointer-events: none; z-index: 1; }
     .bar { pointer-events: auto; height: 16px; align-self: center; border-radius: 5px; padding: 0 7px; font-size: 10.5px; font-weight: 800; line-height: 16px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
     .bar.ol { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -2px; padding-left: 9px; }
     .bar.or { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -2px; }
@@ -343,7 +349,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     @media (max-width: 860px) { .mcell { min-height: 68px; } }
 
     .cols { display: grid; gap: 10px; align-items: start; }
-    .col { background: var(--soft); border-radius: 16px; padding: 10px; min-height: 300px; display: flex; flex-direction: column; }
+    .col { background: var(--soft); border-radius: 16px; padding: 10px; min-height: 300px; min-width: 0; display: flex; flex-direction: column; }
     /* En pile sur mobile, une colonne pleine largeur par jour : inutile de la
        tenir à 300 px, elle prend la hauteur de son contenu. */
     @media (max-width: 860px) { .col { min-height: 132px; } }
