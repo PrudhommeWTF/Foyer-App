@@ -5,7 +5,7 @@ import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
 import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS } from '../core/constants';
-import { cap, parseDay, dstr, isoWeek } from '../core/helpers';
+import { cap, parseDay, dstr, isoWeek, monthStart } from '../core/helpers';
 import { EventItem, Recur } from '../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
 
@@ -672,7 +672,7 @@ export class CalendarScreen {
   }
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
-  dpLabel = computed(() => cap(new Date(2026, 6 + this.store.ui().dpMonth, 1).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
+  dpLabel = computed(() => cap(monthStart(this.store.ui().dpMonth).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
   dpSummary = computed(() => {
     const s = this.store.ui();
     return s.evEnd ? `Du ${this.fmtSummary(s.evStart)} au ${this.fmtSummary(s.evEnd)}` : `Le ${this.fmtSummary(s.evStart)}`;
@@ -680,7 +680,7 @@ export class CalendarScreen {
 
   dpCells = computed(() => {
     const s = this.store.ui();
-    const base = new Date(2026, 6 + s.dpMonth, 1);
+    const base = monthStart(s.dpMonth);
     const start = this.monday(base);
     const bm = base.getMonth();
     const out = [];

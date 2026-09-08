@@ -7,6 +7,14 @@ export function dstr(d: Date): string { return `${d.getFullYear()}-${pad2(d.getM
 /** Parse a 'YYYY-MM-DD' key into a local Date at midnight. */
 export function parseDay(ds: string): Date { return new Date(ds + 'T00:00:00'); }
 
+/**
+ * Index de mois absolu d'une date ISO (`année * 12 + mois - 1`), et son inverse.
+ * Porter l'année, et pas seulement le mois, est ce qui évite qu'un sélecteur de
+ * date ancré sur une année en dur ouvre la mauvaise quand on change d'année.
+ */
+export function monthIndex(iso: string): number { return (+iso.slice(0, 4)) * 12 + (+iso.slice(5, 7) - 1); }
+export function monthStart(index: number): Date { return new Date(Math.floor(index / 12), index % 12, 1); }
+
 /** Whether an event occurs on a given day, taking recurrence & multi-day ranges into account. */
 export function occursOn(ev: EventItem, ds: string): boolean {
   const r = ev.recur || 'none';
