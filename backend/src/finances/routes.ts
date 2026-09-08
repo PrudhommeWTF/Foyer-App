@@ -213,6 +213,15 @@ const who = (req: Request): string =>
 export function financesRouter(requireAdmin: AdminGuard): Router {
   const r = express.Router();
 
+  // Le corps JSON de ce module est parsé ici, à la limite habituelle. `/restore`
+  // en est exclu : il porte une sauvegarde entière et garde son propre parseur à
+  // 64 Mo (poser un parseur ici le plafonnerait, body-parser ne repassant pas).
+  // Les téléversements bruts (pièces jointes, import) arrivent en
+  // `application/octet-stream` : express.json les laisse filer sans lire le corps,
+  // vers leur `express.raw`.
+  const jsonFin = express.json({ limit: '4mb' });
+  r.use((req: Request, res: Response, next: NextFunction) => (req.path === '/restore' ? next() : jsonFin(req, res, next)));
+
   // Import, deduplication and internal transfers live in their own router.
   r.use(importRouter());
   // Categorisation rules likewise.
