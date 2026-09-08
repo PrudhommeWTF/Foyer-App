@@ -8,12 +8,22 @@
 import { XmlNode, findAll, localName, parseXml } from './xml';
 import { isOle2, isZip, readZip } from './zip';
 
+// Excel s'arrête à la colonne XFD (16384). Une cellule dont la référence va
+// au-delà (`<c r="AAAAAAA1">`, index ~8 milliards) n'est pas un vrai classeur :
+// c'est un fichier de quelques kilooctets, sous le seuil anti-zip-bomb, dont le
+// seul effet serait de faire allouer des milliards de cellules vides et de tuer
+// le processus par OOM. On refuse net au lieu de matérialiser la ligne.
+const MAX_COLUMNS = 16384;
+
 /** Column letters to a 0-based index: A gives 0, AA gives 26. */
 function columnIndex(ref: string): number {
   const letters = /^([A-Z]+)/.exec(ref.toUpperCase());
   if (!letters) return 0;
   let n = 0;
-  for (const ch of letters[1]) n = n * 26 + (ch.charCodeAt(0) - 64);
+  for (const ch of letters[1]) {
+    n = n * 26 + (ch.charCodeAt(0) - 64);
+    if (n > MAX_COLUMNS) throw new Error('Ce fichier .xlsx déclare une colonne au-delà de la limite d’Excel : il est probablement corrompu ou malveillant.');
+  }
   return n - 1;
 }
 

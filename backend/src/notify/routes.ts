@@ -4,7 +4,7 @@
 // retire que ses appareils, mais le journal des envois est celui du foyer :
 // « Marie n'a aucun appareil abonné » est une information pour Thomas aussi.
 import express, { Request, Response, Router } from 'express';
-import { addDevice, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, removeDeviceByEndpoint } from './push';
+import { addDevice, isPushEndpointAllowed, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, removeDeviceByEndpoint } from './push';
 import { log } from '../log';
 
 export function pushRouter(memberOf: (req: Request) => string | null, appUrl: () => string): Router {
@@ -27,6 +27,7 @@ export function pushRouter(memberOf: (req: Request) => string | null, appUrl: ()
     if (!me) { res.status(400).json({ error: 'Ce compte n’est rattaché à aucun membre du foyer.' }); return; }
     const sub = req.body?.subscription;
     if (!isSubscription(sub)) { res.status(400).json({ error: 'Abonnement illisible : le navigateur n’a pas rendu ce qu’on attendait.' }); return; }
+    if (!isPushEndpointAllowed(sub.endpoint)) { res.status(400).json({ error: 'Cet abonnement ne vise pas un service de notifications connu.' }); return; }
     const d = addDevice(me, sub, String(req.body?.ua || req.headers['user-agent'] || ''));
     log.info(`Notifications : appareil abonné pour ${me} (${d.ua.slice(0, 60)}).`);
     res.status(201).json({ id: d.id, ua: d.ua, createdAt: d.createdAt, lastOkAt: d.lastOkAt, lastError: d.lastError });
