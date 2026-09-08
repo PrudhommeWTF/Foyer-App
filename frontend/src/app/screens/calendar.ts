@@ -279,15 +279,24 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
           </div>
           <div class="dp-summary"><f-icon name="calendar" [size]="15" color="#E56B4E" [width]="2" /> <span>{{ dpSummary() }}</span></div>
 
-          <div class="fl">Assigné à</div>
-          <!-- Plusieurs membres possibles : un repas de famille, une sortie, un
-               trajet concernent plus d'une personne. Aucun est licite (événement
-               du foyer). -->
-          <div class="seg-members">
+          <!-- Participants « Tous » par défaut : un événement du foyer concerne le
+               plus souvent tout le monde. La liste vide vaut « Tous » ; cocher des
+               membres restreint. Le cercle de tête bascule sur « Tous », les
+               autres sur chaque membre. -->
+          <div class="fl">Participants : <span class="p-val">{{ evWhoSummary() }}</span></div>
+          <div class="participants">
+            <button type="button" class="pc pc-all" [class.on]="!store.ui().evWho.length"
+                    (click)="store.patch({ evWho: [] })" title="Tous" aria-label="Tous">
+              <span class="pc-face all"><f-icon name="users" [size]="21" color="#fff" [width]="2" /></span>
+              @if (!store.ui().evWho.length) { <span class="pc-tick"><f-icon name="check" [size]="11" color="#fff" [width]="3.6" /></span> }
+            </button>
+            <span class="p-sep"></span>
             @for (m of d().members; track m.id) {
-              <button [style.background]="store.ui().evWho.includes(m.id) ? m.color : 'var(--soft)'"
-                      [style.color]="store.ui().evWho.includes(m.id) ? '#fff' : 'var(--ink2)'"
-                      (click)="store.toggleEvWho(m.id)">{{ m.name }}</button>
+              <button type="button" class="pc" [class.on]="store.ui().evWho.includes(m.id)"
+                      (click)="store.toggleEvWho(m.id)" [title]="m.name" [attr.aria-label]="m.name">
+                <span class="pc-face" [style.background]="m.color">{{ m.ini }}</span>
+                @if (store.ui().evWho.includes(m.id)) { <span class="pc-tick"><f-icon name="check" [size]="11" color="#fff" [width]="3.6" /></span> }
+              </button>
             }
           </div>
 
@@ -463,8 +472,16 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     .dp-cell.ring { box-shadow: inset 0 0 0 2px var(--honey); }
     .dp-summary { display: flex; align-items: center; gap: 8px; margin: 8px 0 20px; }
     .dp-summary span { font-size: 13px; font-weight: 800; color: var(--ink); }
-    .seg-members { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-    .seg-members button { border: none; padding: 9px 14px; border-radius: 11px; font-size: 13px; font-weight: 800; cursor: pointer; }
+    .p-val { color: var(--primary); font-weight: 800; }
+    .participants { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+    .p-sep { width: 1px; align-self: stretch; min-height: 40px; background: var(--line); }
+    .pc { position: relative; padding: 0; border: none; background: none; cursor: pointer; line-height: 0; }
+    .pc-face { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+               border-radius: 999px; color: #fff; font-size: 15px; font-weight: 800; transition: opacity .12s; }
+    .pc-face.all { background: linear-gradient(135deg, #E56B4E, #D9553A); }
+    .pc:not(.on) .pc-face { opacity: .4; }
+    .pc-tick { position: absolute; top: -1px; right: -1px; width: 18px; height: 18px; border-radius: 999px;
+               background: var(--primary); border: 2px solid var(--surface); display: inline-flex; align-items: center; justify-content: center; }
     .seg-recur { display: flex; flex-wrap: wrap; gap: 8px; }
     .seg-recur button { border: none; padding: 9px 14px; border-radius: 11px; font-size: 13px; font-weight: 800; cursor: pointer; background: var(--soft); color: var(--ink2); }
     .seg-recur button.active { background: var(--primary); color: #fff; }
@@ -737,6 +754,13 @@ export class CalendarScreen {
 
   /** Les pastilles d'un événement : ses membres, dans l'ordre du foyer. */
   eventBadges(ev: EventItem): WhoBadge[] { return whoBadges({ who: ev.who }, this.d().members); }
+
+  /** Le résumé affiché en tête du sélecteur : « Tous » quand rien n'est coché, sinon les noms. */
+  evWhoSummary(): string {
+    const ids = this.store.ui().evWho;
+    if (!ids.length) return 'Tous';
+    return this.d().members.filter((m) => ids.includes(m.id)).map((m) => m.name).join(', ') || 'Tous';
+  }
 
   // ---- autocomplétion du lieu -------------------------------------------
   /** Suggestions courantes, et si la liste est ouverte (au focus du champ). */
