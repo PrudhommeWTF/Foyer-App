@@ -350,14 +350,14 @@ export class FoyerStore {
       const status = await this.api.setupStatus();
       if (status.needsSetup) {
         this.needsSetup.set(true);
-        this.api.token = null;
+        this.api.markSession(false);
         this.ready.set(true);
         return;
       }
     } catch {
       /* status unreachable — fall through to normal auth handling */
     }
-    if (this.api.token) {
+    if (this.api.hasSession()) {
       try {
         await this.loadState();
         this.authed.set(true);
@@ -374,7 +374,9 @@ export class FoyerStore {
           if (await this.hydrateFromCache()) this.syncOffline.set(true);
           else this.docError.set((e as Error).message);
         } else {
-          this.api.token = null;
+          // Session refusée (jeton périmé ou révoqué) : on oublie le drapeau, et
+          // l'écran de connexion reprend la main.
+          this.api.markSession(false);
         }
       }
     }
@@ -400,8 +402,8 @@ export class FoyerStore {
   async completeSetup(payload: SetupPayload): Promise<boolean> {
     this.authError.set('');
     try {
-      const res = await this.api.setup(payload);
-      this.api.token = res.token;
+      await this.api.setup(payload);
+      this.api.markSession(true);
       await this.loadState();
       this.needsSetup.set(false);
       this.authed.set(true);
@@ -468,10 +470,9 @@ export class FoyerStore {
     this.patch({ famNameField: state.familyName });
     try {
       const me = await this.api.me();
-      // Le serveur rend un jeton neuf quand celui-ci a passé la moitié de sa
-      // vie : une session active ne se termine donc jamais par une déconnexion
-      // surprise, et un jeton dérobé cesse de servir tout seul.
-      if (me.token) this.api.token = me.token;
+      // Passé la moitié de sa vie, le serveur repose le cookie de session tout
+      // seul : une session active ne se termine jamais par une déconnexion
+      // surprise, et rien n'est à ranger côté client.
       this.myEmail.set(me.email);
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
@@ -754,9 +755,8 @@ export class FoyerStore {
 
   async login(email: string, password: string, remember = true): Promise<boolean> {
     this.authError.set('');
-    this.api.setRemember(remember);
     try {
-      const res = await this.api.login(email, password);
+      const res = await this.api.login(email, password, remember);
       // Second facteur posé : le mot de passe est bon, mais il ne suffit pas.
       // L'écran passe à la saisie du code, sans rien ouvrir entre-temps.
       if (res.totpRequired && res.challenge) {
@@ -795,7 +795,9 @@ export class FoyerStore {
   /** Ce qui est commun aux deux chemins d'entrée, une fois le jeton obtenu. */
   private async entrer(res: { token?: string }): Promise<boolean> {
     if (!res.token) { this.authError.set('Réponse inattendue du serveur.'); return false; }
-    this.api.token = res.token;
+    // Le cookie de session vient d'être posé par le serveur ; on ne garde ici
+    // que le drapeau « session ouverte », jamais le jeton.
+    this.api.markSession(true);
     this.totpChallenge.set('');
     await this.loadState();
     this.authed.set(true);
@@ -828,7 +830,11 @@ export class FoyerStore {
   }
 
   logout(): void {
-    this.api.token = null;
+    // Le cookie de session est HttpOnly : seul le serveur peut l'effacer. Au
+    // pire (hors ligne), le drapeau local tombe quand même et l'appareil revient
+    // à l'écran de connexion ; le cookie, lui, expirera de lui-même.
+    void this.api.logout().catch(() => { /* déconnexion locale de toute façon */ });
+    this.api.markSession(false);
     this.authed.set(false);
     this._data.set(null);
     this.docVersion = 0;
@@ -3217,7 +3223,8 @@ export class FoyerStore {
     if (!password && mail.toLowerCase() === this.myEmail()) { this.toast('Rien à changer.'); return false; }
     try {
       const r = await this.api.updateMyCredentials(currentPassword, mail || undefined, password || undefined);
-      this.api.token = r.token;
+      // Le mot de passe changé a invalidé l'ancien cookie ; le serveur en a
+      // reposé un frais dans la réponse. Rien à ranger côté client.
       this.myEmail.set(r.email);
       await this.refreshAccounts();
       this.patch({ pfEmail: r.email });

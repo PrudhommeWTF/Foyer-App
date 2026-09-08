@@ -12,7 +12,7 @@ Conventions durables pour travailler sur **Foyer** (application de gestion famil
 
 - **Document-store.** Tout l'état du foyer est un **unique document JSON** (`HouseholdState`) stocké dans SQLite, exposé par `GET/PUT /api/state`. Il n'y a pas de tables métier : les entités (membres, événements, tâches, courses, budget, etc.) vivent dans ce blob.
 - **Le store frontend est la source de vérité métier.** Toute la logique (dérivés budget, récurrence agenda, génération de courses, notifications, etc.) est portée fidèlement dans `frontend/src/app/core/foyer.store.ts` à partir de la maquette de design (`docs/`).
-- **Auth JWT** (jsonwebtoken) + mots de passe **bcrypt**. Le jeton porte une `token_version` : changer un mot de passe révoque les sessions.
+- **Auth JWT** (jsonwebtoken) + mots de passe **bcrypt**. Le jeton porte une `token_version` : changer un mot de passe révoque les sessions. Le jeton de session voyage dans un cookie **`HttpOnly` + `SameSite=Lax`** (invisible au JavaScript, donc hors de portée d'un XSS) posé par le serveur ; le front ne stocke qu'un drapeau « session ouverte », jamais le jeton. L'en-tête `Authorization: Bearer` reste accepté en repli pour les scripts d'API. Le flux ICS a son propre jeton (en query), sans rapport avec la session.
 - **`base href` relatif** (`./`) : un seul build fonctionne servi à la racine ou derrière un reverse-proxy sur un sous-chemin. Les URLs sont dérivées de `document.baseURI`.
 - **Version de l'app :** source de vérité = variable d'env `FOYER_VERSION` (injectée au build Docker, ou dans `/etc/foyer/foyer.env` en LXC). Ne jamais réintroduire de fichier `version` séparé.
 
