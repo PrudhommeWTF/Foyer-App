@@ -1292,10 +1292,10 @@ export class FoyerStore {
   }
   openEvent(): void {
     const m = parseInt(this.ui().selDay.slice(5, 7), 10) - 7;
-    // Pré-affecté au membre courant : un événement qu'on crée est le plus souvent
-    // le sien, et on peut en ajouter d'autres.
-    const moi = this.me()?.id;
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: moi ? [moi] : [], evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
+    // Participants « Tous » par défaut : un événement du foyer concerne le plus
+    // souvent tout le monde (repas, sortie, vacances). La liste vide vaut « Tous » ;
+    // on restreint ensuite en cochant des membres. Voir toggleEvWho.
+    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
   }
   editEvent(id: string): void {
     const ev = this._data()?.events.find((e) => e.id === id);
