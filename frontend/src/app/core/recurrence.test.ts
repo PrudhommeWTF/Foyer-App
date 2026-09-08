@@ -4,11 +4,21 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskRec } from './models';
-import { addMonthsClamped, nextOccurrence, recLabel, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
+import { addMonthsClamped, nextOccurrence, occurrenceProgress, recLabel, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
 
 const rec = (over: Partial<TaskRec> = {}): TaskRec => ({ freq: 'weekly', every: 1, base: 'due', ...over });
 
 // ---- après la réalisation ----------------------------------------------------------
+
+test('la barre de progression se remplit vers l’occurrence à venir', () => {
+  const rec: TaskRec = { freq: 'weekly', every: 1, base: 'due' };
+  const due = '2026-09-11'; // vendredi ; l'occurrence précédente est le 2026-09-04
+  assert.equal(occurrenceProgress(rec, due, '2026-09-04'), 0, 'vide au jour de la précédente');
+  assert.equal(occurrenceProgress(rec, due, '2026-09-11'), 1, 'pleine à l’échéance');
+  assert.equal(occurrenceProgress(rec, due, '2026-09-15'), 1, 'pleine (bornée) au-delà de l’échéance');
+  const mid = occurrenceProgress(rec, due, '2026-09-08'); // 4 jours sur 7
+  assert.ok(mid > 0.5 && mid < 0.6, `mi-parcours attendu ~0,57, reçu ${mid}`);
+});
 
 test('la piscine : prévue samedi, faite dimanche avec deux jours de retard, la suivante tombe le dimanche d’après', () => {
   // 2026-09-05 est un samedi, 2026-09-07 un lundi (deux jours de retard).
