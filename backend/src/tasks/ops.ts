@@ -33,7 +33,7 @@ export interface TaskRec {
 }
 /** Le réglage de rappel d'une tâche. Aucun par défaut ; voir notify/reminders.ts pour l'heure qui en découle. */
 export type Remind = 'at' | '1h' | 'eve' | 'morning';
-const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
+export const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
 /** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
 export interface TaskDone { at: string; by: string | null; due: string | null; }
 
