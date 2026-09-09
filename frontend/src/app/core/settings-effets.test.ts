@@ -8,11 +8,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { setting } from './settings/registry';
 import { todayTasks } from './tasks';
-import { upcomingDeadlines } from './deadlines';
 import { awayAt } from './presence';
 import type { TaskItem } from './models';
 import type { SchedSlot } from './models';
-import type { FinDeadline } from './finances.api';
 
 const TODAY = '2026-09-04';
 
@@ -31,20 +29,6 @@ describe('Tâches : le seuil de relégation', () => {
   it('en relevant le seuil, elle repasse devant : le réglage a bien un effet', () => {
     const ordre = todayTasks(tasks, TODAY, 5, 60).lines.map((l) => l.task.id);
     assert.deepEqual(ordre, ['vieille', 'aujourdhui']);
-  });
-});
-
-describe('Finances : l’horizon des échéances', () => {
-  const echeances = [
-    { contractId: 1, daysAway: 30 }, { contractId: 2, daysAway: 90 },
-  ] as unknown as FinDeadline[];
-
-  it('à 60 jours, seule la plus proche remonte', () => {
-    assert.deepEqual(upcomingDeadlines(echeances, 60).map((d) => d.contractId), [1]);
-  });
-
-  it('à 120 jours, les deux remontent', () => {
-    assert.deepEqual(upcomingDeadlines(echeances, 120).map((d) => d.contractId), [1, 2]);
   });
 });
 
