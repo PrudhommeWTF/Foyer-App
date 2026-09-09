@@ -13,6 +13,7 @@ import { CalendarScreen } from '../screens/calendar';
 import { CoursesScreen } from '../screens/courses';
 import { TachesScreen } from '../screens/taches/taches';
 import { ContactsScreen } from '../screens/contacts';
+import { FideliteScreen } from '../screens/fidelite';
 import { FinancesScreen } from '../screens/finances/finances';
 import { RepasScreen } from '../screens/repas';
 import { RecettesScreen } from '../screens/recettes';
@@ -26,7 +27,7 @@ import { SettingsScreen } from '../screens/settings/settings';
   imports: [
     SidebarComponent, TopbarComponent, TabbarComponent, NotificationsComponent,
     FamilyModalComponent, SearchModalComponent, GenerateModal, RepairModal,
-    HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen,
+    HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
     FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
   ],
   template: `
@@ -56,6 +57,7 @@ import { SettingsScreen } from '../screens/settings/settings';
             @case ('courses') { <screen-courses /> }
             @case ('taches') { <screen-taches /> }
             @case ('contacts') { <screen-contacts /> }
+            @case ('fidelite') { <screen-fidelite /> }
             @case ('finances') { <screen-finances /> }
             @case ('repas') { <screen-repas /> }
             @case ('recettes') { <screen-recettes /> }

@@ -78,6 +78,13 @@ export interface TaskTemplate { id: string; name: string; kind: ListKind; color:
 export type { TaskItem } from './tasks/ops';
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 /**
+ * Une carte de fidélité : un code partagé par tout le foyer, réaffiché à l'écran
+ * en QR ou en code-barres. `format` dit comment le redessiner (voir le noyau
+ * frontend cards.ts). Le serveur ne vérifie que la charpente, jamais la validité
+ * du code.
+ */
+export interface LoyaltyCard { id: string; name: string; code: string; format: string; color: string; note?: string; }
+/**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un
  * texte libre (« restes », « pizza », « chez les parents »).
@@ -171,6 +178,7 @@ export interface HouseholdState {
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
   contacts: Contact[];
+  cards: LoyaltyCard[];
   meals: Record<string, MealValue>;
   recipes: Recipe[];
   sched: SchedSlot[];
