@@ -42,8 +42,8 @@ export function occursOn(ev: EventItem, ds: string): boolean {
  * household time zone lives in the store, and a pure function stays testable.
  */
 export function weekDates(offset: number, anchorIso: string): Date[] {
-  const base = parseDay(anchorIso);
-  base.setDate(base.getDate() - ((base.getDay() + 6) % 7) + offset * 7);
+  const base = mondayOf(parseDay(anchorIso));
+  base.setDate(base.getDate() + offset * 7);
   const out: Date[] = [];
   for (let i = 0; i < 7; i++) { const d = new Date(base); d.setDate(base.getDate() + i); out.push(d); }
   return out;
@@ -199,4 +199,18 @@ export function addDaysIso(iso: string, n: number): string {
   const d = parseDay(iso);
   d.setDate(d.getDate() + n);
   return dstr(d);
+}
+
+/** Ramène une date au lundi de sa semaine (muté sur place, et renvoyé). */
+export function mondayOf(d: Date): Date {
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+
+/** Une taille en octets en français : « 12 o », « 340 Ko », « 1,2 Mo », « 3,4 Go ». */
+export function fmtBytes(o: number): string {
+  if (o >= 1073741824) return (o / 1073741824).toFixed(1).replace('.', ',') + ' Go';
+  if (o >= 1048576) return (o / 1048576).toFixed(1).replace('.', ',') + ' Mo';
+  if (o >= 1024) return Math.round(o / 1024) + ' Ko';
+  return o + ' o';
 }

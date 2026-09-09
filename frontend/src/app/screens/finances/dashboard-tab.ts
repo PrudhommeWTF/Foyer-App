@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FinMonthPoint } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
+import { cap } from '../../core/helpers';
 import { IconComponent } from '../../core/icon';
 import { CAT_ICONS } from '../../core/constants';
 
@@ -390,7 +391,7 @@ export class FinancesDashboardTab {
   monthName(month: string): string {
     const [y, m] = month.split('-').map(Number);
     const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return label.charAt(0).toUpperCase() + label.slice(1);
+    return cap(label);
   }
 
   shortMonth(month: string): string {

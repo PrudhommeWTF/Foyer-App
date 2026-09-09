@@ -10,13 +10,12 @@
 // filtre pas, il laisse passer. L'inverse (un écran vide tant qu'on n'a pas
 // cliqué) était la raison pour laquelle le module ne servait à rien.
 import { SCHED_DAYS } from './constants';
-import { frenchHolidays, parseDay, weekdayOf } from './helpers';
+import { frenchHolidays, mondayOf, parseDay, weekdayOf } from './helpers';
 import { Member, SchedSlot, SchedType } from './models';
 
 /** Le lundi de la semaine d'une date ISO, en millisecondes : sert à compter les semaines entières. */
 function mondayMs(iso: string): number {
-  const d = parseDay(iso);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const d = mondayOf(parseDay(iso));
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }

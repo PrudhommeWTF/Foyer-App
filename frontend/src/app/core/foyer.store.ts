@@ -5,6 +5,7 @@ import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, M
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { cardColor } from './cards';
+import { downloadBlob } from './download';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
@@ -3185,7 +3186,7 @@ export class FoyerStore {
   }
 
   async downloadBackup(name: string): Promise<void> {
-    try { this.download(await this.api.downloadBackup(name), name); }
+    try { downloadBlob(await this.api.downloadBackup(name), name); }
     catch (e) { this.toast('Téléchargement impossible : ' + (e as Error).message); }
   }
 
@@ -3208,7 +3209,7 @@ export class FoyerStore {
   async exportSettings(): Promise<void> {
     this.configBusy.set(true);
     try {
-      this.download(await this.api.exportSettings(), `foyer-reglages-${this.todayStr()}.json`);
+      downloadBlob(await this.api.exportSettings(), `foyer-reglages-${this.todayStr()}.json`);
       this.toast('Configuration exportée');
     } catch (e) {
       this.toast('Export impossible : ' + (e as Error).message);
@@ -3346,19 +3347,13 @@ export class FoyerStore {
   }
   exportData(): void {
     const d = this._data(); if (!d) return;
-    this.download(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }), 'foyer-export.json');
+    downloadBlob(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' }), 'foyer-export.json');
     this.toast('Export des données lancé');
   }
 
   // ---- exports du module Cuisine ----------------------------------------
 
   /** Provoque un téléchargement. Le lien est révoqué : sinon le blob reste en mémoire. */
-  private download(blob: Blob, name: string): void {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = name; a.click();
-    // Différé : Safari n'a pas encore commencé le téléchargement au retour du clic.
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-  }
 
   readonly exportBusy = signal(false);
 
@@ -3381,7 +3376,7 @@ export class FoyerStore {
         } catch { manquantes++; }
       }
       const bundle = buildBundle(d.recipes, photos);
-      this.download(new Blob([JSON.stringify(bundle)], { type: 'application/json' }), fileName('carnet-de-recettes', 'json'));
+      downloadBlob(new Blob([JSON.stringify(bundle)], { type: 'application/json' }), fileName('carnet-de-recettes', 'json'));
       this.toast(d.recipes.length + ' recettes exportées' + (manquantes ? ', ' + manquantes + ' photo(s) illisible(s)' : ''));
     } finally { this.exportBusy.set(false); }
   }
@@ -3454,7 +3449,7 @@ export class FoyerStore {
       await navigator.clipboard.writeText(texte);
       this.toast('Recette copiée, prête à être collée');
     } catch {
-      this.download(new Blob([texte], { type: 'text/plain;charset=utf-8' }), fileName(r.name, 'txt'));
+      downloadBlob(new Blob([texte], { type: 'text/plain;charset=utf-8' }), fileName(r.name, 'txt'));
       this.toast('Recette enregistrée en fichier texte');
     }
   }
@@ -3469,7 +3464,7 @@ export class FoyerStore {
     // Le BOM n'est pas décoratif : sans lui, un tableur ouvre le fichier en
     // encodage local et « Épicerie » devient « Ã‰picerie ».
     const csv = '\ufeff' + shopToCsv(items, this.aislesInOrder());
-    this.download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileName(nom, 'csv'));
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileName(nom, 'csv'));
     this.toast(items.length + ' articles exportés');
   }
 

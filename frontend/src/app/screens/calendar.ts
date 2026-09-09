@@ -5,7 +5,7 @@ import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
 import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS } from '../core/constants';
-import { cap, parseDay, dstr, isoWeek, monthStart } from '../core/helpers';
+import { cap, parseDay, dstr, isoWeek, mondayOf, monthStart } from '../core/helpers';
 import { EventItem, Recur } from '../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
 
@@ -695,11 +695,7 @@ export class CalendarScreen {
     return out;
   });
 
-  private monday(d: Date): Date {
-    const x = new Date(d);
-    x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
-    return x;
-  }
+  private monday(d: Date): Date { return mondayOf(new Date(d)); }
 
   private rangeLabel(start: Date, end: Date): string {
     if (start.getMonth() === end.getMonth()) {

@@ -21,7 +21,7 @@
 //
 // L'échéance de la série est **toujours** une date : sans elle, « toutes les
 // semaines » ne veut rien dire. La saisie en pose une par défaut.
-import { addDaysIso, parseDay, weekdayOf } from './helpers';
+import { addDaysIso, pad2, parseDay, weekdayOf } from './helpers';
 import { TaskItem, TaskRec } from './models';
 
 /** Au-delà, on cesse de chercher : une règle qui ne tombe sur rien en cinq ans est vide. */
@@ -32,7 +32,6 @@ const dom = (iso: string): number => parseInt(iso.slice(8, 10), 10);
 const month = (iso: string): number => parseInt(iso.slice(5, 7), 10);
 const year = (iso: string): number => parseInt(iso.slice(0, 4), 10);
 const daysInMonth = (y: number, m: number): number => new Date(y, m, 0).getDate();
-const pad = (n: number): string => String(n).padStart(2, '0');
 /** Le lundi de la semaine d'une date. */
 const mondayOf = (iso: string): string => addDaysIso(iso, 1 - weekdayOf(iso));
 
@@ -41,7 +40,7 @@ export function addMonthsClamped(iso: string, n: number): string {
   const y = year(iso); const m = month(iso); const d = dom(iso);
   const total = y * 12 + (m - 1) + n;
   const ny = Math.floor(total / 12); const nm = (total % 12) + 1;
-  return `${ny}-${pad(nm)}-${pad(Math.min(d, daysInMonth(ny, nm)))}`;
+  return `${ny}-${pad2(nm)}-${pad2(Math.min(d, daysInMonth(ny, nm)))}`;
 }
 
 /** La règle tombe-t-elle ce jour-là, la série étant ancrée sur `origin` ? */
