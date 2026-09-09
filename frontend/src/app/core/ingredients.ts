@@ -312,6 +312,3 @@ function stripPortion(toks: string[]): string[] {
   return toks;
 }
 
-/** Toutes les lignes d'une recette, à plat. */
-export const parseIngredients = (lines: string[], idx: ArticleIndex): ParsedIng[] =>
-  lines.flatMap((l) => parseIngredient(l, idx));
