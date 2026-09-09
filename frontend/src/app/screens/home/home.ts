@@ -32,13 +32,12 @@ const MOD_COLOR: Record<string, string> = {
   planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B',
 };
 
-/** Les sections du carousel mobile, dans l'ordre. Les finances tombent pour un enfant. */
-const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'fin'; label: string }[] = [
+/** Les sections du carousel mobile, dans l'ordre. */
+const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[] = [
   { key: 'activity', label: 'Activité' },
   { key: 'agenda', label: 'Agenda' },
   { key: 'tasks', label: 'Tâches' },
   { key: 'meals', label: 'Repas' },
-  { key: 'fin', label: 'Finances' },
 ];
 
 /**
@@ -200,7 +199,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'fin'; label: s
                     @case ('agenda') { <ng-container [ngTemplateOutlet]="agendaCard" /> }
                     @case ('tasks') { <ng-container [ngTemplateOutlet]="tasksCard" /> }
                     @case ('meals') { <ng-container [ngTemplateOutlet]="mealsCard" /> }
-                    @case ('fin') { <ng-container [ngTemplateOutlet]="finCard" /> }
                   }
                 </div>
               }
@@ -367,8 +365,8 @@ export class HomeScreen {
   // écran le fil prend toute la colonne, il en montre douze.
   readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 4 : 12) : []; });
 
-  /** Les sections présentes : les finances tombent pour un compte enfant. */
-  readonly slides = computed(() => SLIDES.filter((s) => s.key !== 'fin' || this.fin() !== null));
+  /** Les sections du carousel mobile. */
+  readonly slides = computed(() => SLIDES);
 
   /**
    * Les modules ouverts à ce compte, tels que la navigation les groupe. Comme
