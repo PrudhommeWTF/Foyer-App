@@ -8,6 +8,7 @@
 //
 // Aucune table nouvelle : celles-ci ont été posées par la migration 1.
 import type { Database } from 'better-sqlite3';
+import { readMembers, writeMembers as writeMembersTable } from './members';
 import { removeAllFor } from './attachments';
 
 let database: Database;
@@ -108,22 +109,9 @@ interface ContractRow {
 }
 
 /** Personnes concernées, indexées par contrat. */
-function contractMembers(): Map<number, string[]> {
-  const out = new Map<number, string[]>();
-  for (const r of database.prepare(
-    'SELECT contract_id AS id, member_id AS m FROM fin_contract_members ORDER BY contract_id, position, member_id',
-  ).all() as { id: number; m: string }[]) {
-    const list = out.get(r.id);
-    if (list) list.push(r.m); else out.set(r.id, [r.m]);
-  }
-  return out;
-}
-
-function writeMembers(contractId: number, memberIds: string[]): void {
-  database.prepare('DELETE FROM fin_contract_members WHERE contract_id = ?').run(contractId);
-  const stmt = database.prepare('INSERT INTO fin_contract_members (contract_id, member_id, position) VALUES (?, ?, ?)');
-  memberIds.forEach((m, i) => stmt.run(contractId, m, i));
-}
+const contractMembers = (): Map<number, string[]> => readMembers(database, 'fin_contract_members', 'contract_id');
+const writeMembers = (contractId: number, memberIds: string[]): void =>
+  writeMembersTable(database, 'fin_contract_members', 'contract_id', contractId, memberIds);
 
 function refsOf(contractId: number): ContractRef[] {
   return database.prepare('SELECT key, value FROM fin_contract_refs WHERE contract_id = ? ORDER BY position, id')

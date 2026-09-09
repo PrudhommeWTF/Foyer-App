@@ -20,9 +20,7 @@
 // Les migrations sont versionnées et appliquées au démarrage, chacune dans sa
 // transaction. Ne jamais modifier une migration livrée : en ajouter une.
 import type { Database } from 'better-sqlite3';
-import { log } from '../log';
-
-interface Migration { version: number; label: string; up: (db: Database) => void; }
+import { Migration, runMigrations } from './migrate';
 
 const MIGRATIONS: Migration[] = [
   {
@@ -133,33 +131,13 @@ const MIGRATIONS: Migration[] = [
   },
 ];
 
-function currentVersion(db: Database): number {
-  db.exec('CREATE TABLE IF NOT EXISTS hh_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
-  const row = db.prepare("SELECT value FROM hh_meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  return row ? parseInt(row.value, 10) || 0 : 0;
-}
-
 export function migrateHousehold(db: Database): number {
-  const from = currentVersion(db);
-  const pending = MIGRATIONS.filter((m) => m.version > from).sort((a, b) => a.version - b.version);
-  if (!pending.length) return from;
-  for (const m of pending) {
-    try {
-      db.transaction(() => {
-        m.up(db);
-        db.prepare("INSERT INTO hh_meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(m.version));
-      })();
-      log.info(`Foyer : migration ${m.version} appliquée (${m.label}).`);
-    } catch (e) {
-      log.erreur(
-        `ERREUR : la migration Foyer ${m.version} (${m.label}) a échoué : ${(e as Error).message}\n` +
-        `        La base reste en version ${currentVersion(db)}, aucune donnée n'a été modifiée.\n` +
-        "        Restaurez votre sauvegarde si nécessaire (voir README, « Sauvegarde et restauration ») et signalez l'erreur.",
-      );
-      throw e;
-    }
-  }
-  return currentVersion(db);
+  return runMigrations(db, {
+    metaTable: 'hh_meta',
+    label: 'Foyer',
+    restoreHint: 'Restaurez votre sauvegarde si nécessaire (voir README, « Sauvegarde et restauration ») et signalez l’erreur.',
+    migrations: MIGRATIONS,
+  });
 }
 
 // ---- version du document d'état -------------------------------------------
