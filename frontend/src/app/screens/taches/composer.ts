@@ -379,7 +379,7 @@ export class TaskComposerComponent {
   readonly expanded = computed(() => !!this.task() || this.focused() || !!this.text().trim() || !!this.panel());
   readonly members = computed(() => this.store.data()?.members || []);
   readonly whoMembers = computed(() => { const ids = new Set(this.who()); return this.members().filter((m) => ids.has(m.id)); });
-  readonly lists = computed(() => { this.store.ui(); return this.store.visibleTaskLists(); });
+  readonly lists = computed(() => this.store.visibleTaskLists());
   readonly listObj = computed(() => this.lists().find((l) => l.id === this.list()) || null);
   readonly cats = computed(() => this.store.taskCategories());
   readonly quick = computed(() => quickDates(this.store.todayStr()));

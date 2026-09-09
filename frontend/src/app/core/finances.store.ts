@@ -147,6 +147,17 @@ export function fmtEuros(cents: number): string {
 export function fmtEurosInt(cents: number): string {
   return Math.round(cents / 100).toLocaleString('fr-FR');
 }
+/** Regroupe des éléments par clé, en un seul passage : évite un filtre O(n) par ligne. */
+function groupBy<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
+  const map = new Map<K, T[]>();
+  for (const item of items) {
+    const k = key(item);
+    const bucket = map.get(k);
+    if (bucket) bucket.push(item); else map.set(k, [item]);
+  }
+  return map;
+}
+
 /** « 2026-08 » vers « Août 2026 ». */
 export function frMonthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
@@ -355,7 +366,8 @@ export class FinancesStore {
   readonly ledgerAccounts = computed(() => this.accounts().filter((a) => a.kind !== 'credit'));
   readonly activeLedgerAccounts = computed(() => this.ledgerAccounts().filter((a) => !a.archived));
   readonly rootCategories = computed(() => this.categories().filter((c) => c.parentId === null));
-  childrenOf(id: number): FinCategory[] { return this.categories().filter((c) => c.parentId === id); }
+  private readonly childrenByParent = computed(() => groupBy(this.categories(), (c) => c.parentId));
+  childrenOf(id: number): FinCategory[] { return this.childrenByParent().get(id) || []; }
 
   accountName(id: number): string { return this.accounts().find((a) => a.id === id)?.name || 'Compte supprimé'; }
   categoryColor(id: number | null): string { return (id ? this.categories().find((c) => c.id === id)?.color : null) || '#8A7E74'; }
@@ -781,7 +793,8 @@ export class FinancesStore {
     }
   }
 
-  aliasesOf(accountId: number): FinAlias[] { return this.aliases().filter((a) => a.accountId === accountId); }
+  private readonly aliasesByAccount = computed(() => groupBy(this.aliases(), (a) => a.accountId));
+  aliasesOf(accountId: number): FinAlias[] { return this.aliasesByAccount().get(accountId) || []; }
 
   async addAlias(): Promise<void> {
     const u = this.ui();
@@ -1253,7 +1266,8 @@ export class FinancesStore {
   costOf(id: number): FinContractCost | undefined { return this.costs()[id]; }
   piecesOf(id: number): number { return this.pieces()[id] ?? 0; }
   readonly activeContracts = computed(() => this.contracts().filter((c) => c.status === 'actif'));
-  contractsOfAsset(id: number): FinContract[] { return this.contracts().filter((c) => c.assetId === id); }
+  private readonly contractsByAsset = computed(() => groupBy(this.contracts(), (c) => c.assetId));
+  contractsOfAsset(id: number): FinContract[] { return this.contractsByAsset().get(id) || []; }
   readonly looseContracts = computed(() => this.contracts().filter((c) => !c.assetId));
 
   newAsset(): void {

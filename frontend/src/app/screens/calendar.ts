@@ -507,12 +507,18 @@ export class CalendarScreen {
   weekdays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
   recurOpts: Recur[] = ['none', 'daily', 'weekday', 'weekly', 'biweekly', 'monthly'];
 
+  // `ui` est un seul signal : lire `store.ui().calAnchor` directement dans un
+  // computed lourd le lie à *tout* l'état d'interface, si bien que chaque frappe
+  // dans la modale d'événement recalculait 42 jours. Ces computed étroits font
+  // barrière : `weeks`, `cols`... ne repartent que quand leur valeur change.
   cv = computed(() => this.store.ui().calView);
   sel = computed(() => this.store.ui().selDay);
+  calAnchor = computed(() => this.store.ui().calAnchor);
+  miniAnchor = computed(() => this.store.ui().miniAnchor);
 
   headerLabel = computed(() => {
-    const v = this.store.ui().calView;
-    const a = parseDay(this.store.ui().calAnchor);
+    const v = this.cv();
+    const a = parseDay(this.calAnchor());
     if (v === 'month') return cap(a.toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' }));
     const start = v === 'week' ? this.monday(a) : a;
     const end = new Date(start);
@@ -530,7 +536,7 @@ export class CalendarScreen {
    * chaque case. Les événements horaires et les repères restent dans les cases.
    */
   weeks = computed<WeekRow[]>(() => {
-    const a = parseDay(this.store.ui().calAnchor);
+    const a = parseDay(this.calAnchor());
     const start = this.monday(new Date(a.getFullYear(), a.getMonth(), 1));
     const month = a.getMonth();
     const allDay = (this.store.data()?.events || []).filter((e) => (e.recur || 'none') === 'none' && this.isAllDay(e));
@@ -575,12 +581,12 @@ export class CalendarScreen {
   });
 
   cols = computed(() => {
-    const v = this.store.ui().calView;
+    const v = this.cv();
     if (v === 'month') return [];
-    const a = parseDay(this.store.ui().calAnchor);
+    const a = parseDay(this.calAnchor());
     const start = v === 'week' ? this.monday(a) : a;
     const n = v === 'week' ? 7 : 3;
-    const selDay = this.store.ui().selDay;
+    const selDay = this.sel();
     const out = [];
     for (let i = 0; i < n; i++) {
       const d = new Date(start);
@@ -591,8 +597,8 @@ export class CalendarScreen {
     return out;
   });
 
-  selItems = computed(() => this.dayItems(this.store.ui().selDay));
-  selExtras = computed(() => this.store.dayExtras(this.store.ui().selDay));
+  selItems = computed(() => this.dayItems(this.sel()));
+  selExtras = computed(() => this.store.dayExtras(this.sel()));
 
   /**
    * L'agenda d'un jour, événements propres et créneaux publiés **mêlés et triés
@@ -608,7 +614,7 @@ export class CalendarScreen {
 
   /** « 12:00 – 12:45 », ou « 12:00 » sans fin, ou « — » sans heure. */
   timeLabel(ev: EventItem): string { return ev.endTime ? ev.time + ' – ' + ev.endTime : ev.time; }
-  selLabel = computed(() => cap(parseDay(this.store.ui().selDay).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
+  selLabel = computed(() => cap(parseDay(this.sel()).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
 
   legendKinds = [
     ...['holiday', 'school', 'birthday', 'task', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
@@ -617,15 +623,15 @@ export class CalendarScreen {
 
   // ===== mini-calendrier du panneau latéral =====
   miniDows = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-  miniLabel = computed(() => cap(parseDay(this.store.ui().miniAnchor).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
+  miniLabel = computed(() => cap(parseDay(this.miniAnchor()).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
 
   /** Six semaines du mois affiché, chacune avec son numéro de semaine ISO. */
   miniRows = computed(() => {
-    const a = parseDay(this.store.ui().miniAnchor);
+    const a = parseDay(this.miniAnchor());
     const start = this.monday(new Date(a.getFullYear(), a.getMonth(), 1));
     const month = a.getMonth();
     const today = this.store.todayStr();
-    const sel = this.store.ui().selDay;
+    const sel = this.sel();
     const rows: { week: number; days: { key: string; num: number; inMonth: boolean; today: boolean; sel: boolean; dots: boolean }[] }[] = [];
     for (let r = 0; r < 6; r++) {
       const days = [];

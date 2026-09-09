@@ -1440,7 +1440,7 @@ export class FoyerStore {
   }
 
   // ---- rayons -------------------------------------------------------------
-  aislesInOrder(): HouseholdState['aisles'] { return (this._data()?.aisles || []).slice().sort((a, b) => a.position - b.position); }
+  readonly aislesInOrder = computed(() => (this._data()?.aisles || []).slice().sort((a, b) => a.position - b.position));
   newAisle(): void { this.patch({ aiForm: true, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '' }); }
   editAisle(id: string): void { const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return; this.patch({ aiForm: true, aiEditId: id, aiName: a.name, aiColor: a.color, aiKind: a.kind || '' }); }
   saveAisle(): void {
