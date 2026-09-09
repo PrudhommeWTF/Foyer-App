@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, WritableSignal, computed, inject, s
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
+import { AdminStore } from '../../core/admin.store';
 import { IconComponent } from '../../core/icon';
 import { PALETTE } from '../../core/constants';
 import { contactIni, fmtBytes, normText } from '../../core/helpers';
@@ -297,11 +298,11 @@ const GESTES = new Set(['compte', 'membres']);
             <div class="hint" style="margin-bottom:10px">Abonnez Google Agenda, Apple Calendrier… à ce lien (événements du foyer et échéances de contrat, lecture seule).</div>
             @if (!store.isAdmin()) {
               <div class="hint">Ce lien vaut accès au calendrier du foyer sans mot de passe : seul un administrateur peut le voir. Demandez-lui de vous le transmettre.</div>
-            } @else if (store.icsUrl()) {
-              <div class="ics-url">{{ store.icsUrl() }}</div>
+            } @else if (admin.icsUrl()) {
+              <div class="ics-url">{{ admin.icsUrl() }}</div>
               <div class="ics-actions">
                 <button class="btn btn-soft grow" (click)="copyIcs()"><f-icon name="copy" [size]="16" [width]="2" /> {{ copied() ? 'Copié !' : 'Copier le lien' }}</button>
-                <button class="btn btn-ghost" (click)="store.regenerateIcs()" title="Invalide l'ancien lien"><f-icon name="refresh" [size]="16" color="var(--primary)" [width]="2" /></button>
+                <button class="btn btn-ghost" (click)="admin.regenerateIcs()" title="Invalide l'ancien lien"><f-icon name="refresh" [size]="16" color="var(--primary)" [width]="2" /></button>
               </div>
             } @else {
               <div class="hint">Lien indisponible.</div>
@@ -313,7 +314,7 @@ const GESTES = new Set(['compte', 'membres']);
                  push est muet quand il casse, donc tout ce que le serveur sait est montré. -->
             <div class="push">
               <div class="pref-label">Rappels sur cet appareil</div>
-              @switch (store.pushSupport()) {
+              @switch (admin.pushSupport()) {
                 @case ('checking') { <div class="pref-desc">Vérification…</div> }
                 @case ('unsupported') { <div class="pref-desc">Ce navigateur ne sait pas recevoir de rappels. Sur iPhone, ouvrez Foyer depuis l’icône de l’écran d’accueil.</div> }
                 @case ('install') {
@@ -322,18 +323,18 @@ const GESTES = new Set(['compte', 'membres']);
                 @case ('denied') { <div class="pref-desc">Les notifications sont bloquées pour Foyer dans les réglages de cet appareil. Autorisez-les, puis revenez ici.</div> }
                 @case ('off') {
                   <div class="pref-desc">Les rappels d’échéance et les tâches qu’on vous affecte arriveront ici, même l’application fermée.</div>
-                  <button class="btn btn-primary push-btn" [disabled]="store.pushBusy()" (click)="store.enablePush()"><f-icon name="bell" [size]="16" color="#fff" [width]="2.2" /> Activer les rappels sur cet appareil</button>
+                  <button class="btn btn-primary push-btn" [disabled]="admin.pushBusy()" (click)="admin.enablePush()"><f-icon name="bell" [size]="16" color="#fff" [width]="2.2" /> Activer les rappels sur cet appareil</button>
                 }
                 @case ('on') {
                   <div class="pref-desc ok">Activés sur cet appareil.</div>
                   <div class="push-acts">
-                    <button class="btn btn-soft grow" [disabled]="store.pushBusy()" (click)="store.testPush()">Envoyer un test</button>
-                    <button class="btn btn-ghost" [disabled]="store.pushBusy()" (click)="store.disablePush()">Désactiver ici</button>
+                    <button class="btn btn-soft grow" [disabled]="admin.pushBusy()" (click)="admin.testPush()">Envoyer un test</button>
+                    <button class="btn btn-ghost" [disabled]="admin.pushBusy()" (click)="admin.disablePush()">Désactiver ici</button>
                   </div>
                 }
               }
 
-              @if (store.pushStatus(); as ps) {
+              @if (admin.pushStatus(); as ps) {
                 @if (ps.devices.length) {
                   <div class="push-sub">Mes appareils</div>
                   @for (dv of ps.devices; track dv.id) {
@@ -346,7 +347,7 @@ const GESTES = new Set(['compte', 'membres']);
                           @else { abonné le {{ store.fmtNumDate(dv.createdAt.slice(0, 10)) }}, rien d’envoyé encore }
                         </div>
                       </div>
-                      <button class="icon-btn sm" (click)="store.removePushDevice(dv.id)" aria-label="Retirer cet appareil"><f-icon name="x" [size]="15" color="var(--ink2)" [width]="2.2" /></button>
+                      <button class="icon-btn sm" (click)="admin.removePushDevice(dv.id)" aria-label="Retirer cet appareil"><f-icon name="x" [size]="15" color="var(--ink2)" [width]="2.2" /></button>
                     </div>
                   }
                 }
@@ -408,7 +409,7 @@ const GESTES = new Set(['compte', 'membres']);
                         }
                         @case ('exploitation') {
                           <div class="extra-t">État du service</div>
-                          @if (store.systemStatus(); as st) {
+                          @if (admin.systemStatus(); as st) {
                             <div class="etat">
                               <div><span>Version</span><b>{{ st.version }}</b></div>
                               <div><span>En service depuis</span><b>{{ duree(st.uptime) }}</b></div>
@@ -442,21 +443,21 @@ const GESTES = new Set(['compte', 'membres']);
                             <code>tar czf foyer.tar.gz -C {{ dossierParent() }} {{ dossierNom() }}</code>, service arrêté.
                           </div>
                           @if (store.isAdmin()) {
-                            <button class="data-row" [disabled]="store.backupBusy()" (click)="store.makeBackup()">
+                            <button class="data-row" [disabled]="admin.backupBusy()" (click)="admin.makeBackup()">
                               <f-icon name="folder" [size]="18" color="var(--ink2)" [width]="2" />
-                              <span>{{ store.backupBusy() ? 'Sauvegarde en cours…' : 'Sauvegarder maintenant' }}</span>
+                              <span>{{ admin.backupBusy() ? 'Sauvegarde en cours…' : 'Sauvegarder maintenant' }}</span>
                             </button>
                           }
-                          @for (b of store.systemStatus()?.snapshots || []; track b.name) {
+                          @for (b of admin.systemStatus()?.snapshots || []; track b.name) {
                             <div class="sauv">
                               <div class="sauv-b">
                                 <div class="sauv-n">{{ b.name }}</div>
                                 <div class="sauv-m">{{ quand(b.at.replace('T', ' ')) }} · {{ poids(b.bytes) }}</div>
                               </div>
-                              <button class="icon-btn sm" title="Télécharger" (click)="store.downloadBackup(b.name)">
+                              <button class="icon-btn sm" title="Télécharger" (click)="admin.downloadBackup(b.name)">
                                 <f-icon name="download" [size]="16" color="var(--ink2)" [width]="2" />
                               </button>
-                              <button class="icon-btn sm" title="Effacer" (click)="store.deleteBackup(b.name)">
+                              <button class="icon-btn sm" title="Effacer" (click)="admin.deleteBackup(b.name)">
                                 <f-icon name="trash" [size]="16" color="var(--primary)" [width]="2" />
                               </button>
                             </div>
@@ -470,9 +471,9 @@ const GESTES = new Set(['compte', 'membres']);
                           </div>
 
                           <div class="extra-t">Mises à jour</div>
-            @if (store.updating()) {
+            @if (admin.updating()) {
               <div class="upd-badge new"><f-icon name="refresh" [size]="13" color="#D9930F" [width]="3" /> Mise à jour en cours…</div>
-              <div class="upd-cur" style="margin-top:8px">{{ store.updateMsg() || 'Veuillez patienter…' }}</div>
+              <div class="upd-cur" style="margin-top:8px">{{ admin.updateMsg() || 'Veuillez patienter…' }}</div>
               <div class="upd-progress"><span class="upd-bar"></span></div>
               <div class="hint" style="margin-top:8px">Ne fermez pas cette page ; elle se rechargera automatiquement à la fin.</div>
             } @else {
@@ -485,7 +486,7 @@ const GESTES = new Set(['compte', 'membres']);
                     (change)="changerCanal(d, $event)" />
                 </div>
               }
-              @let u = store.updateInfo();
+              @let u = admin.updateInfo();
               @if (u?.updateAvailable) {
                 <div class="upd-badge new">Nouvelle version {{ u!.latestTag }} disponible{{ u!.prerelease ? ' (préversion)' : '' }}</div>
                 @if (u!.name && u!.name !== u!.latestTag) { <div class="hint" style="margin-top:6px">{{ u!.name }}</div> }
@@ -513,10 +514,10 @@ const GESTES = new Set(['compte', 'membres']);
               } @else {
                 <div class="hint">Vérifiez la présence d'une nouvelle version sur GitHub.</div>
               }
-              @if (store.updateMsg()) { <div class="upd-failed">{{ store.updateMsg() }}</div> }
+              @if (admin.updateMsg()) { <div class="upd-failed">{{ admin.updateMsg() }}</div> }
               <div class="upd-actions">
-                <button class="btn btn-soft grow" [disabled]="store.updateChecking()" (click)="store.checkUpdates()">
-                  {{ store.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
+                <button class="btn btn-soft grow" [disabled]="admin.updateChecking()" (click)="admin.checkUpdates()">
+                  {{ admin.updateChecking() ? 'Vérification…' : 'Vérifier les mises à jour' }}
                 </button>
                 @if (u?.updateAvailable && u!.selfUpdate && store.isAdmin()) {
                   <button class="btn btn-primary grow" (click)="doUpdate()">Mettre à jour maintenant</button>
@@ -526,18 +527,18 @@ const GESTES = new Set(['compte', 'membres']);
 
                           <div class="extra-t">Configuration</div>
                           <div class="hint" style="margin:0 0 10px">Vos réglages seuls, dans un fichier lisible. À exporter avant de toucher à quoi que ce soit, et à réimporter après une réinstallation pour ne pas tout reparamétrer de mémoire. Ce n’est pas une sauvegarde des données du foyer.</div>
-                          <button class="data-row" [disabled]="store.configBusy()" (click)="store.exportSettings()">
+                          <button class="data-row" [disabled]="admin.configBusy()" (click)="admin.exportSettings()">
                             <f-icon name="export" [size]="18" color="var(--ink2)" [width]="2" />
                             <span>Exporter la configuration</span>
                           </button>
                           @if (store.isAdmin()) {
-                            <button class="data-row" [disabled]="store.configBusy()" (click)="fichier.click()">
+                            <button class="data-row" [disabled]="admin.configBusy()" (click)="fichier.click()">
                               <f-icon name="upload" [size]="18" color="var(--ink2)" [width]="2" />
-                              <span>{{ store.configBusy() ? 'Lecture du fichier…' : 'Importer une configuration' }}</span>
+                              <span>{{ admin.configBusy() ? 'Lecture du fichier…' : 'Importer une configuration' }}</span>
                             </button>
                             <input #fichier type="file" accept="application/json,.json" hidden (change)="importer($event)" />
                           }
-                          @if (store.configReport(); as r) {
+                          @if (admin.configReport(); as r) {
                             <div class="rapport">
                               <div class="rap-t">Configuration exportée {{ quand(r.generatedAt.replace('T', ' ')) }}{{ r.household ? ', foyer « ' + r.household + ' »' : '' }}</div>
                               @if (r.applied.length) {
@@ -754,6 +755,7 @@ const GESTES = new Set(['compte', 'membres']);
 })
 export class SettingsScreen {
   store = inject(FoyerStore);
+  admin = inject(AdminStore);
   private api = inject(ApiService);
   d = this.store.d;
   copied = signal(false);
@@ -904,10 +906,10 @@ export class SettingsScreen {
   constructor() {
     this.store.patch({ famNameField: this.d().familyName });
     this.store.loadProfileFields();
-    this.store.loadIcs();
-    this.store.checkUpdates();
+    this.admin.loadIcs();
+    this.admin.checkUpdates();
     void this.store.loadSettingsInfo();
-    void this.store.loadSystemStatus();
+    void this.admin.loadSystemStatus();
   }
 
   /** Le canal de mise à jour, rendu à la main dans le bloc « Mises à jour ». */
@@ -920,7 +922,7 @@ export class SettingsScreen {
    */
   async changerCanal(d: SettingDecl, val: boolean | number | string): Promise<void> {
     await this.store.writeDeclared(d, val);
-    await this.store.checkUpdates();
+    await this.admin.checkUpdates();
   }
 
 
@@ -973,7 +975,7 @@ export class SettingsScreen {
   importer(ev: Event): void {
     const input = ev.target as HTMLInputElement;
     const f = input.files?.[0];
-    if (f) void this.store.importSettings(f);
+    if (f) void this.admin.importSettings(f);
     input.value = '';
   }
 
@@ -989,11 +991,11 @@ export class SettingsScreen {
 
   /** Le dossier de données découpé, pour écrire la commande tar sans la deviner. */
   dossierParent(): string {
-    const d = this.store.systemStatus()?.dataDir || '/var/lib/foyer';
+    const d = this.admin.systemStatus()?.dataDir || '/var/lib/foyer';
     return d.slice(0, d.lastIndexOf('/')) || '/';
   }
   dossierNom(): string {
-    const d = this.store.systemStatus()?.dataDir || '/var/lib/foyer';
+    const d = this.admin.systemStatus()?.dataDir || '/var/lib/foyer';
     return d.slice(d.lastIndexOf('/') + 1) || 'foyer';
   }
 
@@ -1026,7 +1028,7 @@ export class SettingsScreen {
     if (!mdp) return;
     this.updOpen.set(false);
     this.updMdp.set('');
-    this.store.applyUpdate(mdp);
+    this.admin.applyUpdate(mdp);
   }
 
   /** « iPhone », « iPad », « Chrome sur Android », « Safari sur Mac » : lisible, pas l'agent complet. */
@@ -1051,7 +1053,7 @@ export class SettingsScreen {
   }
 
   copyIcs(): Promise<void> {
-    return this.copier(this.store.icsUrl(), this.copied, 'Copie impossible : sélectionnez le lien manuellement');
+    return this.copier(this.admin.icsUrl(), this.copied, 'Copie impossible : sélectionnez le lien manuellement');
   }
 }
 
