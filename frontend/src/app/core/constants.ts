@@ -55,7 +55,6 @@ export const ICONS: Record<string, string> = {
   calendar: 'M3 5h18v16H3zM3 9h18M8 3v4M16 3v4',
   courses: 'M4 5h15l-1.6 9H6.5zM6.5 14 5 5 3 4M8 19a1.6 1.6 0 1 0 0 .01M17 19a1.6 1.6 0 1 0 0 .01',
   taches: 'M9 6h11M9 12h11M9 18h11M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2',
-  messages: 'M4 5h16v11H9l-4 3z',
   repas: 'M6 3v18M6 3c-1.5 0-2 2-2 4s.5 4 2 4M18 3v7c0 1 1 1 1 2v9M18 3c1 0 1.5 2 1.5 3.5S18 10 18 10',
   recettes: 'M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM9 4v16M12 8h4M12 12h4',
   budget: 'M4 8h16v11H4zM4 8V5h13v3M15 13h2',
@@ -83,7 +82,6 @@ export const ICONS: Record<string, string> = {
   users: 'M9 8a3 3 0 1 0 .01 0M3 19c0-3 3-5 6-5s6 2 6 5M16 6a3 3 0 0 1 0 6M15 14c3 0 6 2 6 5',
   userPlus: 'M9 8a3 3 0 1 0 .01 0M3 19c0-3 3-5 6-5s6 2 6 5M18 8v6M15 11h6',
   bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
-  send: 'M4 12l16-8-6 16-2-6z',
   folder: 'M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
   // Miroir de « upload ». Son absence rendait le bouton de téléchargement des
@@ -178,7 +176,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
-  messages: 'Messagerie', contacts: 'Contacts importants', documents: 'Documents', finances: 'Finances',
+  contacts: 'Contacts importants', documents: 'Documents', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
 };
 
@@ -188,6 +186,6 @@ export const SCREEN_TITLES: Record<string, string> = {
  * nom de l'onglet suffit à dire où l'on est.
  */
 export const SCREEN_TITLES_SHORT: Record<string, string> = {
-  calendar: 'Agenda', courses: 'Courses', messages: 'Messages', contacts: 'Contacts',
+  calendar: 'Agenda', courses: 'Courses', contacts: 'Contacts',
   repas: 'Repas', recettes: 'Recettes', planning: 'Emploi du temps', settings: 'Réglages',
 };

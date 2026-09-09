@@ -1247,7 +1247,6 @@ export class FoyerStore {
     for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
     for (const f of d.files) if (normText(f.name).includes(q)) push({ kind: 'file', icon: 'documents', color: '#9B6FA8', title: f.name, sub: 'Document', screen: 'documents', id: f.id });
     for (const m of d.members) if (normText(`${m.name} ${m.role}`).includes(q)) push({ kind: 'member', icon: 'users', color: m.color, title: m.name, sub: m.role || 'Membre', screen: 'settings', id: m.id });
-    for (const msg of d.msgs) if (normText(msg.text).includes(q)) push({ kind: 'message', icon: 'messages', color: '#4E93B8', title: msg.text, sub: 'Message' + (msg.who ? ' · ' + mname(msg.who) : ''), screen: 'messages' });
     return hits.slice(0, 40);
   });
 
@@ -1935,16 +1934,6 @@ export class FoyerStore {
   deleteTemplate(id: string): void {
     this.mutate((d) => { d.taskTemplates = d.taskTemplates.filter((t) => t.id !== id); });
     this.toast('Modèle supprimé');
-  }
-
-  // ---- messages ---------------------------------------------------------
-  sendMsg(): void {
-    const t = this.ui().newMsg.trim(); if (!t) return;
-    const me = this.currentMemberId() || this._data()?.profile.memberId || this.members()[0]?.id || 'cam';
-    const now = new Date();
-    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    this.mutate((d) => { d.msgs.push({ who: me, text: t, time, at: now.toISOString() }); });
-    this.patch({ newMsg: '' });
   }
 
   // ---- contacts ---------------------------------------------------------

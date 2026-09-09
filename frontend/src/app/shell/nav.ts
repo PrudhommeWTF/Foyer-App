@@ -28,7 +28,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'calendar', label: 'Calendrier', icon: 'calendar' },
       { id: 'courses', label: 'Listes de courses', icon: 'courses' },
       { id: 'taches', label: 'Tâches', icon: 'taches' },
-      { id: 'messages', label: 'Messagerie', icon: 'messages' },
     ],
   },
   {

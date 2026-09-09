@@ -112,7 +112,11 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 ### 5. Tâches (`taches`) — multi-listes
 - Même modèle que les courses : sélecteur de listes (Toutes + listes avec icône/couleur/compteur), CRUD des listes, filtre. Tâche = `{id,text,who,due,done,prio,listId}`. Priorité (`low/med/high`), assignation à un membre, échéance.
 
-### 6. Messagerie (`messages`)
+### 6. Messagerie (`messages`) — retiré
+
+> **Obsolète.** Ce module a été retiré de l'application (WhatsApp et les SMS
+> couvrent l'usage). La description ci-dessous est conservée telle qu'elle
+> figurait dans la maquette d'origine, à titre historique.
 - Fil de discussion familial (bulles par membre, couleur d'identité). **Envoi de message seul** (pas d'édition/suppression). Champ de saisie + bouton envoyer.
 
 ### 7. Contacts importants (`contacts`)

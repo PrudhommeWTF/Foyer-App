@@ -76,10 +76,6 @@ export interface TaskTemplate { id: string; name: string; kind: ListKind; color:
 // La forme d'une tâche et celle de ses mutations vivent avec le moteur qui les
 // écrit réellement, tâche par tâche (voir tasks/ops.ts).
 export type { TaskItem } from './tasks/ops';
-// `time` est l'heure d'affichage (HH:MM). `at` est l'horodatage complet (ISO),
-// ajouté pour situer un message dans le fil d'activité de l'accueil ; absent des
-// messages antérieurs, qui restent lisibles dans la messagerie via `time`.
-export interface Message { who: string; text: string; time: string; at?: string; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 export interface Folder { id: string; name: string; color: string; }
 // `fileId` désigne un fichier servi par /api/files : les octets ne sont plus
@@ -178,7 +174,6 @@ export interface HouseholdState {
   taskLists: TaskList[];
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
-  msgs: Message[];
   contacts: Contact[];
   folders: Folder[];
   files: FileItem[];

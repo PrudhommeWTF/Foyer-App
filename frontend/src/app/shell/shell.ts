@@ -12,7 +12,6 @@ import { HomeScreen } from '../screens/home/home';
 import { CalendarScreen } from '../screens/calendar';
 import { CoursesScreen } from '../screens/courses';
 import { TachesScreen } from '../screens/taches/taches';
-import { MessagesScreen } from '../screens/messages';
 import { ContactsScreen } from '../screens/contacts';
 import { DocumentsScreen } from '../screens/documents';
 import { FinancesScreen } from '../screens/finances/finances';
@@ -28,7 +27,7 @@ import { SettingsScreen } from '../screens/settings/settings';
   imports: [
     SidebarComponent, TopbarComponent, TabbarComponent, NotificationsComponent,
     FamilyModalComponent, SearchModalComponent, GenerateModal, RepairModal,
-    HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, MessagesScreen, ContactsScreen,
+    HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen,
     DocumentsScreen, FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
   ],
   template: `
@@ -57,7 +56,6 @@ import { SettingsScreen } from '../screens/settings/settings';
             @case ('calendar') { <screen-calendar /> }
             @case ('courses') { <screen-courses /> }
             @case ('taches') { <screen-taches /> }
-            @case ('messages') { <screen-messages /> }
             @case ('contacts') { <screen-contacts /> }
             @case ('documents') { <screen-documents /> }
             @case ('finances') { <screen-finances /> }
