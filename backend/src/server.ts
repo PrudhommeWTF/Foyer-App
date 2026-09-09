@@ -15,6 +15,7 @@ import {
   getHousehold,
   getIcsToken,
   getSchoolHolidaysCache,
+  db,
   getStateByIcsToken,
   getUserById,
   getUserByMemberId,
@@ -43,7 +44,6 @@ import { onAssigned, preserveTasks, taskItemsOf } from './tasks/repo';
 import { pushRouter } from './notify/routes';
 import { initPush, notify, resolveVapidSubject } from './notify/push';
 import { startScheduler } from './notify/scheduler';
-import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { calendarFacts } from './schedule';
 import { suggestPlaces } from './places';
@@ -70,12 +70,19 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const GITHUB_REPO = process.env.FOYER_GITHUB_REPO || 'PrudhommeWTF/Foyer-App';
 
+// La version ne change pas pendant la vie du processus : on la calcule une fois.
+// Elle était relue (et le package.json avec) à chaque appel de /system/version,
+// /system/update-check, /system/status et /system/update-status.
+let versionCache: string | null = null;
 function currentVersion(): string {
+  return (versionCache ??= computeVersion());
+}
+function computeVersion(): string {
   // Source de vérité : la variable FOYER_VERSION (injectée par Docker au build et
-  // par l'installeur LXC dans /etc/foyer/foyer.env). Le fichier <data>/version est
-  // un repli hérité (installs antérieures), retiré à la prochaine mise à jour.
+  // par l'installeur LXC dans /etc/foyer/foyer.env). Le fichier <data>/version d'antan
+  // a disparu : l'installeur comme l'auto-mise à jour le suppriment. À défaut, la
+  // version de package.json.
   if (process.env.FOYER_VERSION) return process.env.FOYER_VERSION.replace(/^v/, '');
-  try { const vf = path.join(DATA_DIR, 'version'); if (fs.existsSync(vf)) return fs.readFileSync(vf, 'utf-8').trim().replace(/^v/, ''); } catch { /* ignore */ }
   try { const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')); return String(pkg.version); } catch { /* ignore */ }
   return '0.0.0';
 }
@@ -1536,7 +1543,7 @@ if (fs.existsSync(STATIC_DIR)) {
   });
 }
 
-export { app, auth, requireAdmin, requireMember };
+export { app };
 
 /**
  * Ce que le service fait en plus de répondre : les rappels et l'écoute réseau.
@@ -1599,7 +1606,7 @@ export function start(): void {
 
   startScheduler({
     tasks: () => (getHousehold().state as HouseholdState).tasks || [],
-    accounts: () => accountsOf().map((a) => a.memberId),
+    accounts: () => listMemberAccounts().map((a) => a.memberId),
     url: appUrl,
     rules: () => ({
       paused: effectiveSetting('pushPaused') === true,

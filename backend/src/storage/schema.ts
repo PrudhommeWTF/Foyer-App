@@ -22,8 +22,6 @@
 import type { Database } from 'better-sqlite3';
 import { log } from '../log';
 
-export const HH_SCHEMA_VERSION = 4;
-
 interface Migration { version: number; label: string; up: (db: Database) => void; }
 
 const MIGRATIONS: Migration[] = [
