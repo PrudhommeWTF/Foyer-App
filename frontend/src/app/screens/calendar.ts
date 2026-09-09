@@ -8,6 +8,7 @@ import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS, SCHED_DAYS } from '../core/
 import { cap, parseDay, dstr, isoWeek, mondayOf, monthStart } from '../core/helpers';
 import { EventItem, Recur } from '../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
+import { HolidayBand, holidayBands } from '../core/agenda';
 
 /** Un élément d'agenda du jour : un événement propre, ou une occurrence de créneau publié. Trié par heure, les deux mêlés. */
 type DayItem = { t: string; kind: 'event'; ev: EventItem } | { t: string; kind: 'slot'; se: SlotEvent };
@@ -15,7 +16,7 @@ type DayItem = { t: string; kind: 'event'; ev: EventItem } | { t: string; kind: 
 interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem[]; extras: DayExtra[]; more: number; covered: boolean; }
 /** Une barre d'événement sur la journée entière dans une semaine du mois : de la colonne `col`, sur `span` jours, sur la voie `lane`. */
 interface Bar { id: string; ev: EventItem; col: number; span: number; lane: number; startsHere: boolean; endsHere: boolean; }
-interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; }
+interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayBand[]; lanes: number; }
 
 @Component({
   selector: 'screen-calendar',
@@ -77,12 +78,17 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
                       </div>
                     }
                   </div>
-                  @if (wk.bars.length) {
+                  @if (wk.bars.length || wk.hbars.length) {
                     <div class="week-bars">
                       @for (b of wk.bars; track b.id) {
                         <div class="bar tap" [class.ol]="!b.startsHere" [class.or]="!b.endsHere"
                              [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1"
                              [style.background]="eventColor(b.ev)" (click)="openEventChip($event, b.ev.id)">{{ b.startsHere ? b.ev.title : '' }}</div>
+                      }
+                      @for (b of wk.hbars; track b.name + b.col) {
+                        <div class="bar hband" [class.ol]="!b.startsHere" [class.or]="!b.endsHere"
+                             [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1"
+                             [style.color]="b.color" [style.background]="store.tint(b.color)">{{ b.startsHere ? b.name : '' }}</div>
                       }
                     </div>
                   }
@@ -90,6 +96,15 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
               }
             </div>
           } @else {
+            @if (dayBands().length) {
+              <div class="col-hbands" [style.grid-template-columns]="'repeat(' + cols().length + ',minmax(0,1fr))'">
+                @for (b of dayBands(); track b.name + b.col) {
+                  <div class="col-hband" [class.ol]="!b.startsHere" [class.or]="!b.endsHere"
+                       [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1"
+                       [style.color]="b.color" [style.background]="store.tint(b.color)">{{ b.name }}</div>
+                }
+              </div>
+            }
             <div class="cols" [style.grid-template-columns]="store.narrow() ? '1fr' : ('repeat(' + cols().length + ',minmax(0,1fr))')">
               @for (col of cols(); track col.key) {
                 <div class="col">
@@ -330,6 +345,10 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
        reprend toute la largeur. Requête de conteneur : c'est la largeur réelle de
        l'écran Calendrier qui décide, pas celle de la fenêtre. */
     @container (max-width: 1040px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
+    /* Le détail du jour : mini-calendrier, libellé de date, événements puis
+       repères, tous espacés du même écart pour que la colonne respire d'un pas
+       régulier plutôt que par à-coups. */
+    .side-detail { display: flex; flex-direction: column; gap: 10px; }
     /* Sur mobile, le mini-calendrier et le détail du jour sélectionné n'apportent
        rien de plus que la vue et le bouton d'ajout : on les masque pour garder un
        écran court. Les vues Semaine et 3 jours passent en pile (une colonne). */
@@ -369,6 +388,13 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     .more { font-size: 10px; font-weight: 800; color: var(--ink3); }
     @media (max-width: 860px) { .mcell { min-height: 68px; } }
 
+    /* Le bandeau des vacances, aligné aux colonnes du dessous (même gabarit et
+       même gouttière de 10 px), posé en barres continues plutôt qu'un repère
+       répété dans chaque colonne. */
+    .col-hbands { display: grid; gap: 6px 10px; grid-auto-rows: 24px; margin-bottom: 8px; }
+    .col-hband { align-self: center; height: 24px; line-height: 24px; border-radius: 9px; padding: 0 12px; font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .col-hband.ol { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+    .col-hband.or { border-top-right-radius: 0; border-bottom-right-radius: 0; }
     .cols { display: grid; gap: 10px; align-items: start; }
     .col { background: var(--soft); border-radius: 16px; padding: 10px; min-height: 300px; min-width: 0; display: flex; flex-direction: column; }
     /* En pile sur mobile, une colonne pleine largeur par jour : inutile de la
@@ -409,7 +435,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     .mini-day.sel { background: var(--primary); color: #fff; font-weight: 800; box-shadow: none; }
     .mini-day.has::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
     .mini-day.sel.has::after { background: #fff; }
-    .side-sel { font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: capitalize; margin: 4px 2px 0; }
+    .side-sel { font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: capitalize; margin: 0 2px; }
 
     .side-ev { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); cursor: pointer; }
     .se-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -435,7 +461,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
     .legend { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 2px 2px 4px; }
     .lg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: var(--ink3); }
     @media (max-width: 520px) { .legend { display: none; } }
-    .side-extras { display: flex; flex-direction: column; gap: 8px; }
+    .side-extras { display: flex; flex-direction: column; gap: 10px; }
     .side-ex { display: flex; align-items: center; gap: 9px; background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 20px -18px rgba(90,60,40,.6); }
     .side-ex .ex-dot { width: 10px; height: 10px; }
     .sx-lbl { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -566,16 +592,23 @@ export class CalendarScreen {
         for (let c = col; c < col + span; c++) covered.add(c);
         bars.push({ id: e.id + ':' + weekStart, ev: e, col, span, lane, startsHere: s === e.date, endsHere: en === endRange });
       }
+      // Les vacances scolaires s'étalent en barres continues, sur leurs propres
+      // voies posées après celles des événements, et non plus en pastille répétée
+      // chaque jour (elles sont donc retirées des repères de case ci-dessous).
+      const eventLanes = laneEnd.length;
+      const hbars = holidayBands(this.store.schoolHolidays(), weekStart, weekEnd, CAL_KINDS['school'].color)
+        .map((b) => ({ ...b, lane: b.lane + eventLanes }));
+      const holidayLanes = hbars.length ? Math.max(...hbars.map((b) => b.lane)) + 1 - eventLanes : 0;
       const days: MonthCell[] = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date(wsD); d.setDate(wsD.getDate() + i); const key = dstr(d);
         // Les événements « journée entière » non récurrents sont des barres, pas des pastilles de case.
         const items = this.dayItems(key).filter((it) => it.kind !== 'event' || !((it.ev.recur || 'none') === 'none' && this.isAllDay(it.ev)));
-        const extras = this.store.dayExtras(key);
+        const extras = this.store.dayExtras(key).filter((e) => e.kind !== 'school');
         const hidden = Math.max(0, items.length - 2) + Math.max(0, extras.length - 2);
         days.push({ key, num: d.getDate(), inMonth: d.getMonth() === month, items: items.slice(0, 2), extras: extras.slice(0, 2), more: hidden, covered: covered.has(i + 1) });
       }
-      rows.push({ key: weekStart, days, bars, lanes: laneEnd.length });
+      rows.push({ key: weekStart, days, bars, hbars, lanes: eventLanes + holidayLanes });
     }
     return rows;
   });
@@ -587,14 +620,29 @@ export class CalendarScreen {
     const start = v === 'week' ? this.monday(a) : a;
     const n = v === 'week' ? 7 : 3;
     const selDay = this.sel();
+    // En colonnes (large), les vacances passent dans le bandeau étalé au-dessus,
+    // pas en repère de jour ; en pile (mobile), pas de bandeau, on les garde par jour.
+    const wide = !this.store.narrow();
     const out = [];
     for (let i = 0; i < n; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), items: this.dayItems(key), extras: this.store.dayExtras(key), isToday: key === this.store.todayStr(), isSel: key === selDay });
+      const extras = wide ? this.store.dayExtras(key).filter((e) => e.kind !== 'school') : this.store.dayExtras(key);
+      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), items: this.dayItems(key), extras, isToday: key === this.store.todayStr(), isSel: key === selDay });
     }
     return out;
+  });
+
+  /** Les vacances scolaires étalées sur la plage visible (semaine ou 3 jours), en barres. Vide en vue mois, en pile mobile, ou sans vacances. */
+  dayBands = computed<HolidayBand[]>(() => {
+    const v = this.cv();
+    if (v === 'month' || this.store.narrow()) return [];
+    const a = parseDay(this.calAnchor());
+    const start = v === 'week' ? this.monday(a) : a;
+    const n = v === 'week' ? 7 : 3;
+    const end = new Date(start); end.setDate(start.getDate() + n - 1);
+    return holidayBands(this.store.schoolHolidays(), dstr(start), dstr(end), CAL_KINDS['school'].color);
   });
 
   selItems = computed(() => this.dayItems(this.sel()));
