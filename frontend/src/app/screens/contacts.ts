@@ -4,6 +4,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { ModalComponent } from '../shared/modal';
+import { ConfirmComponent } from '../shared/confirm';
 import { CONTACT_CATS, CONTACT_CAT_COLORS, tint } from '../core/constants';
 import { contactIni } from '../core/helpers';
 
@@ -11,7 +12,7 @@ import { contactIni } from '../core/helpers';
   selector: 'screen-contacts',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent, ConfirmComponent],
   template: `
     <div class="screen-enter">
       <div class="head-row">
@@ -127,17 +128,9 @@ import { contactIni } from '../core/helpers';
     }
 
     @if (store.ui().contactDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ contactDelId: null })">
-        <div class="del-box">
-          <div class="del-ico"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="del-title">Supprimer ce contact ?</div>
-          <div class="del-text">« {{ delName() }} » sera retiré de vos contacts. Cette action est définitive.</div>
-          <div class="modal-actions">
-            <button class="btn btn-soft btn-block" (click)="store.patch({ contactDelId: null })">Annuler</button>
-            <button class="btn btn-danger btn-block" (click)="store.confirmContactDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer ce contact ?" (cancel)="store.patch({ contactDelId: null })" (confirm)="store.confirmContactDel()">
+        « {{ delName() }} » sera retiré de vos contacts. Cette action est définitive.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -190,12 +183,6 @@ import { contactIni } from '../core/helpers';
     .switch.on .knob { left: 23px; }
 
     .modal-actions { display: flex; gap: 12px; margin-top: 8px; justify-content: flex-end; }
-
-    .del-box { text-align: center; }
-    .del-ico { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: var(--soft); display: flex; align-items: center; justify-content: center; }
-    .del-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); }
-    .del-text { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 22px; }
-    .del-box .modal-actions { justify-content: stretch; }
   `],
 })
 export class ContactsScreen {

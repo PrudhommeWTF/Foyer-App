@@ -5,6 +5,7 @@ import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 
 const FIELDS: { id: FinConditionField; label: string }[] = [
   { id: 'label', label: 'Libellé' },
@@ -33,7 +34,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
   selector: 'fin-rules-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
   template: `
     <div class="intro">
       <div class="intro-txt">
@@ -260,17 +261,9 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     }
 
     @if (store.ui().ruleDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ ruleDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer cette règle ?</div>
-          <div class="confirm-txt">« {{ delName() }} » ne s’appliquera plus. Les opérations qu’elle avait rangées gardent leur catégorie, elles passent simplement en classement manuel.</div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ ruleDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmRuleDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer cette règle ?" (cancel)="store.patch({ ruleDelId: null })" (confirm)="store.confirmRuleDel()">
+        « {{ delName() }} » ne s’appliquera plus. Les opérations qu’elle avait rangées gardent leur catégorie, elles passent simplement en classement manuel.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -348,10 +341,6 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; flex-wrap: wrap; }
     .modal-acts .spacer { flex: 1; }
     .modal-acts .grow { flex: 1; }
-    .confirm { text-align: center; }
-    .confirm-ic { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-title { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-txt { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 0; line-height: 1.5; }
     @media (max-width: 560px) {
       .cond { flex-wrap: wrap; }
       .input.mini, .act-name { width: 100%; }
