@@ -98,6 +98,12 @@ export interface UiState {
   caName: string; caCode: string; caFormat: CardFormat; caColor: string; caNote: string;
   /** L'utilisateur a choisi la couleur : le nom ne la reppropose plus. */
   caColorTouched: boolean;
+  /** Logo choisi (data-URI), ou '' pour le monogramme. */
+  caLogo: string;
+  /** Recherche de logo en cours, et les logos proposés (data-URI) tirés du nom. */
+  logoBusy: boolean; logoOpts: { name: string; domain: string; dataUri: string }[];
+  /** Une recherche a été lancée : distingue « pas encore cherché » de « rien trouvé ». */
+  logoSearched: boolean;
   cardDelId: string | null;
   /** Carte affichée en plein écran (son code réaffiché), ou null. */
   cardShow: string | null;
@@ -222,7 +228,7 @@ export function initialUi(): UiState {
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     cardSearch: '',
-    cardForm: false, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: '#E56B4E', caNote: '', caColorTouched: false, cardDelId: null, cardShow: null, scanOpen: false,
+    cardForm: false, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: '#E56B4E', caNote: '', caColorTouched: false, caLogo: '', logoBusy: false, logoOpts: [], logoSearched: false, cardDelId: null, cardShow: null, scanOpen: false,
     recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
     fRecipeId: '', fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
     fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',

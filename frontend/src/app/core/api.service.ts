@@ -370,6 +370,10 @@ export class ApiService {
   placeSuggest(q: string): Promise<{ suggestions: string[] }> {
     return this.request('places/suggest?q=' + encodeURIComponent(q));
   }
+  /** Logos proposés pour une carte de fidélité, d'après son nom. Relayés par le serveur. Voir logos.ts. */
+  cardLogos(name: string): Promise<{ logos: { name: string; domain: string; dataUri: string }[] }> {
+    return this.request('cards/logos?name=' + encodeURIComponent(name));
+  }
   icsInfo(): Promise<{ token: string }> { return this.request('calendar/ics'); }
   icsRegenerate(): Promise<{ token: string }> { return this.request('calendar/ics/regenerate', { method: 'POST' }); }
 

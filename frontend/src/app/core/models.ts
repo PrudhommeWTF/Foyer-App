@@ -194,13 +194,19 @@ export interface Contact { id: string; name: string; role: string; phone: string
 export type CardFormat = 'qr' | 'ean13' | 'ean8' | 'upca' | 'code128' | 'code39' | 'itf' | 'codabar';
 /**
  * Une carte de fidélité : un code partagé par tout le foyer, réaffiché à l'écran
- * en QR ou en code-barres pour être scanné en caisse. Le logo est un monogramme
- * dérivé du nom (initiales + `color`), jamais un fichier : rien ne va sur le disque.
+ * en QR ou en code-barres pour être scanné en caisse. À défaut de logo, le logo
+ * est un monogramme dérivé du nom (initiales + `color`).
  */
 export interface LoyaltyCard {
   id: string; name: string; code: string; format: CardFormat; color: string;
   /** Texte libre : numéro d'adhérent, date d'expiration, etc. */
   note?: string;
+  /**
+   * Logo choisi, en data-URI. Recherché en ligne d'après le nom (voir logos.ts
+   * côté serveur) et gardé dans le document, jamais sur le disque. Absent : le
+   * monogramme tient lieu de logo.
+   */
+  logo?: string;
 }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert

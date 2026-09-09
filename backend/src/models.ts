@@ -83,7 +83,9 @@ export interface Contact { id: string; name: string; role: string; phone: string
  * frontend cards.ts). Le serveur ne vérifie que la charpente, jamais la validité
  * du code.
  */
-export interface LoyaltyCard { id: string; name: string; code: string; format: string; color: string; note?: string; }
+export interface LoyaltyCard { id: string; name: string; code: string; format: string; color: string; note?: string;
+  /** Logo choisi, en data-URI (recherché en ligne d'après le nom). Absent : le monogramme sert de logo. */
+  logo?: string; }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un

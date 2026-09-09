@@ -1927,25 +1927,42 @@ export class FoyerStore {
   confirmContactDel(): void { const id = this.ui().contactDelId; if (!id) return; this.mutate((d) => { d.contacts = d.contacts.filter((c) => c.id !== id); }); this.patch({ contactDelId: null }); this.toast('Contact supprimé'); }
 
   // ---- cartes de fidélité -----------------------------------------------
-  // Un code partagé par tout le foyer, réaffiché en QR ou code-barres. Rien sur
-  // le disque : le code est du texte, le logo un monogramme dérivé du nom.
-  newCard(): void { this.patch({ cardForm: true, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false }); }
+  // Un code partagé par tout le foyer, réaffiché en QR ou code-barres. Le code
+  // est du texte ; le logo est soit un monogramme dérivé du nom, soit un logo
+  // choisi (recherché en ligne d'après le nom), gardé en data-URI dans le document.
+  private resetLogo(): Partial<UiState> { return { caLogo: '', logoOpts: [], logoBusy: false, logoSearched: false }; }
+  newCard(): void { this.patch({ cardForm: true, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false, ...this.resetLogo() }); }
   editCard(id: string): void {
     const c = this._data()?.cards.find((x) => x.id === id); if (!c) return;
-    this.patch({ cardForm: true, caEditId: id, caName: c.name, caCode: c.code, caFormat: c.format, caColor: c.color, caNote: c.note || '', caColorTouched: true, cardShow: null });
+    this.patch({ cardForm: true, caEditId: id, caName: c.name, caCode: c.code, caFormat: c.format, caColor: c.color, caNote: c.note || '', caColorTouched: true, cardShow: null, ...this.resetLogo(), caLogo: c.logo || '' });
   }
   /** Le scan a rendu un code et son format : la saisie s'ouvre pré-remplie, il ne reste que le nom. */
   cardFromScan(code: string, format: CardFormat): void {
-    this.patch({ cardForm: true, caEditId: null, caName: '', caCode: code, caFormat: format, caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false });
+    this.patch({ cardForm: true, caEditId: null, caName: '', caCode: code, caFormat: format, caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false, ...this.resetLogo() });
   }
-  /** Le nom pilote la couleur suggérée, tant que l'utilisateur ne l'a pas choisie lui-même. */
-  onCardName(v: string): void { this.patch({ caName: v, ...(this.ui().caColorTouched ? {} : { caColor: cardColor(v) }) }); }
+  /** Le nom pilote la couleur suggérée ; changer le nom périme aussi les logos proposés. */
+  onCardName(v: string): void { this.patch({ caName: v, logoOpts: [], logoSearched: false, ...(this.ui().caColorTouched ? {} : { caColor: cardColor(v) }) }); }
   pickCardColor(c: string): void { this.patch({ caColor: c, caColorTouched: true }); }
+  /**
+   * Cherche des logos d'après le nom saisi. Gardé par le réglage `cardLogoSearch`
+   * (le bouton n'apparaît pas s'il est éteint). Une panne ou une liste vide laisse
+   * le monogramme : rien ne casse.
+   */
+  async searchCardLogos(): Promise<void> {
+    const name = this.ui().caName.trim();
+    if (name.length < 2) { this.toast('Écris d’abord le nom de l’enseigne'); return; }
+    this.patch({ logoBusy: true, logoSearched: true });
+    try { this.patch({ logoOpts: (await this.api.cardLogos(name)).logos, logoBusy: false }); }
+    catch { this.patch({ logoOpts: [], logoBusy: false }); }
+  }
+  pickCardLogo(dataUri: string): void { this.patch({ caLogo: dataUri }); }
+  /** Revenir au monogramme : oublier le logo choisi. */
+  useMonogram(): void { this.patch({ caLogo: '' }); }
   saveCard(): void {
     const s = this.ui(); const name = s.caName.trim(); const code = s.caCode.trim();
     if (!name) { this.toast('Donne un nom à la carte'); return; }
     if (!code) { this.toast('Le code est vide : scanne la carte ou saisis-le'); return; }
-    const data = { name, code, format: s.caFormat, color: s.caColor, note: s.caNote.trim() || undefined };
+    const data = { name, code, format: s.caFormat, color: s.caColor, note: s.caNote.trim() || undefined, logo: s.caLogo || undefined };
     this.mutate((d) => {
       if (s.caEditId) { const i = d.cards.findIndex((c) => c.id === s.caEditId); if (i >= 0) d.cards[i] = { ...d.cards[i], ...data }; }
       else d.cards.push({ id: uid('cf'), ...data });

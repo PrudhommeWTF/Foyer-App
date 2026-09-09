@@ -47,6 +47,7 @@ import { db, listMemberAccounts as accountsOf } from './db';
 import { buildIcs } from './ics';
 import { calendarFacts } from './schedule';
 import { suggestPlaces } from './places';
+import { searchLogos } from './logos';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
@@ -344,6 +345,16 @@ const placesLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Trop de recherches de lieu, réessayez dans un instant.' },
+});
+
+// La recherche de logo va chercher plusieurs images dehors : plus lourde qu'une
+// suggestion de lieu, donc plus économe.
+const logosLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Trop de recherches de logo, réessayez dans un instant.' },
 });
 
 interface AuthedRequest extends Request {
@@ -1270,6 +1281,14 @@ api.get('/calendar/school-holidays', auth, requireMember, route(async (req, res)
 api.get('/places/suggest', auth, requireMember, placesLimiter, async (req: Request, res: Response) => {
   if (effectiveSetting('placeSuggest') !== true) { res.json({ suggestions: [] }); return; }
   res.json({ suggestions: await suggestPlaces(String(req.query['q'] || '')) });
+});
+
+// Logos proposés pour une carte de fidélité, à partir de son nom. Coupable par le
+// réglage `cardLogoSearch` : éteint, la route rend une liste vide (le monogramme
+// tient lieu de logo). Voir logos.ts.
+api.get('/cards/logos', auth, requireMember, logosLimiter, async (req: Request, res: Response) => {
+  if (effectiveSetting('cardLogoSearch') !== true) { res.json({ logos: [] }); return; }
+  res.json({ logos: await searchLogos(String(req.query['name'] || '')) });
 });
 
 // Le jeton donne un accès permanent et SANS authentification à tout le

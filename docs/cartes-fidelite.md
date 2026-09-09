@@ -26,12 +26,28 @@ interface LoyaltyCard {
 
 ## Le logo : un monogramme, pas une marque
 
-Le « logo » proposé à l'import est un **monogramme** : les initiales du nom, dans
-une couleur tirée du nom lui-même (stable, la même enseigne garde la même
-pastille). Il n'y a **aucune récupération de logo de marque en ligne** : ce serait
-une requête sortante par carte, une fuite du contenu du foyer, et une dépendance
-réseau pour une application qui marche hors ligne. La couleur est suggérée mais
-modifiable ; dès qu'on la choisit, le nom ne la repropose plus.
+Par défaut, le logo est un **monogramme** : les initiales du nom, dans une couleur
+tirée du nom lui-même (stable, la même enseigne garde la même pastille). La couleur
+est suggérée mais modifiable ; dès qu'on la choisit, le nom ne la repropose plus.
+Le monogramme n'est jamais vide (au moins un « ? ») et marche hors ligne.
+
+En plus, un bouton **« Chercher un logo en ligne »** propose de vrais logos tirés
+du **nom** de l'enseigne. C'est une requête sortante (elle envoie le nom saisi),
+donc **coupable par le réglage `cardLogoSearch`** ; éteint, le bouton disparaît et
+seul le monogramme reste. La source est l'autocomplétion d'entreprises de Clearbit
+(`autocomplete.clearbit.com`, gratuite, sans clé), qui rend plusieurs sociétés
+(nom + domaine) ; le logo de chacune se lit chez `logo.clearbit.com`. **Deux hôtes
+fixes**, jamais une URL choisie par l'utilisateur : pas de SSRF. Le serveur relaie
+la recherche (la CSP interdit au navigateur d'appeler ou d'afficher une ressource
+externe) et renvoie les images **en data-URI**. Une panne, un service indisponible
+ou retiré : aucune option n'est proposée, le monogramme tient lieu de logo.
+
+Le logo choisi est gardé **en data-URI dans le document d'état**, jamais sur le
+disque : la carte reste affichable hors ligne, et le module garde son principe
+(tout dans le document). Les images sont bornées (128 px demandé à la source,
+refus au-delà de 60 Ko) pour ne pas alourdir le document réenvoyé à chaque
+sauvegarde. Formats acceptés : PNG, JPEG, WebP, GIF ; pas de SVG (inutile ici, et
+une image vectorielle peut porter du script).
 
 ## Import : la caméra d'abord, une photo en repli
 
@@ -69,9 +85,13 @@ chargement de l'application, qui reste identique.
 |---|---|
 | `frontend/src/app/core/cards.ts` | Le noyau pur : formats, correspondance vers bwip-js, traduction depuis le scanner, monogramme (initiales et couleur). |
 | `frontend/src/app/core/cards.test.ts` | Formats, traduction d'un format de scan, monogramme stable. |
-| `frontend/src/app/screens/fidelite.ts` | L'écran : liste, affichage plein écran du code, saisie, scan caméra et import photo. |
-| `frontend/src/app/core/models.ts` | `LoyaltyCard`, `CardFormat`, le champ `cards` du document. |
+| `frontend/src/app/screens/fidelite.ts` | L'écran : liste, affichage plein écran du code, saisie, scan caméra, import photo et recherche de logo. |
+| `frontend/src/app/core/models.ts` | `LoyaltyCard` (dont `logo`), `CardFormat`, le champ `cards` du document. |
+| `backend/src/logos.ts` | La recherche de logo relayée : autocomplétion Clearbit + lecture des images, en data-URI, avec dégradation silencieuse. |
+| `backend/test/logos.test.ts` | Le parseur des candidats et le garde sous deux caractères. |
 
-Côté serveur, aucune route dédiée : les cartes vivent dans le document d'état,
-enregistré par `PUT /api/state` comme le reste. La validation vérifie seulement
-la charpente (`cards` est une liste, ses fiches ont un identifiant texte).
+Les cartes vivent dans le document d'état, enregistré par `PUT /api/state` comme
+le reste ; la validation vérifie seulement la charpente (`cards` est une liste,
+ses fiches ont un identifiant texte). La seule route dédiée est
+`GET /api/cards/logos?name=…`, coupable par le réglage `cardLogoSearch`, qui relaie
+la recherche de logo (voir `logos.ts`).

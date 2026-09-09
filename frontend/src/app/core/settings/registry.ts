@@ -355,6 +355,14 @@ export const REGISTRY = [
     envOverride: 'FOYER_RECIPE_IMPORT',
   },
   {
+    key: 'cardLogoSearch',
+    type: 'bool', scope: 'foyer', section: 'acces', module: 'Cartes',
+    label: 'Chercher un logo de carte de fidélité en ligne',
+    desc: 'À la saisie d’une carte, l’application propose des logos tirés du nom de l’enseigne (via autocomplete.clearbit.com, sans clé ni compte). C’est une requête sortante qui envoie le nom saisi. Coupé, seul le monogramme (les initiales) est proposé.',
+    default: true,
+    envOverride: 'FOYER_CARD_LOGO_SEARCH',
+  },
+  {
     key: 'publicUrl',
     type: 'text', scope: 'foyer', section: 'notifications', module: 'Notifications',
     label: 'Adresse publique de Foyer',
