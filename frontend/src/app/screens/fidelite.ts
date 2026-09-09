@@ -35,7 +35,8 @@ import { PALETTE } from '../core/constants';
       <div class="grid">
         @for (c of filtered(); track c.id) {
           <button class="card fid" (click)="store.showCard(c.id)">
-            <f-avatar [ini]="ini(c.name)" [color]="c.color" [size]="52" />
+            @if (c.logo) { <img class="logo-tile" [src]="c.logo" [alt]="c.name" /> }
+            @else { <f-avatar [ini]="ini(c.name)" [color]="c.color" [size]="52" /> }
             <div class="info">
               <div class="name">{{ c.name }}</div>
               <div class="fmt">{{ formatLabel(c.format) }}</div>
@@ -58,7 +59,8 @@ import { PALETTE } from '../core/constants';
       <f-modal [maxWidth]="440" (close)="store.closeCard()">
         <div class="show">
           <div class="show-head">
-            <f-avatar [ini]="ini(c.name)" [color]="c.color" [size]="46" />
+            @if (c.logo) { <img class="logo-tile" [src]="c.logo" [alt]="c.name" /> }
+            @else { <f-avatar [ini]="ini(c.name)" [color]="c.color" [size]="46" /> }
             <div class="sh-name">{{ c.name }}</div>
           </div>
           <div class="code-box">
@@ -97,10 +99,29 @@ import { PALETTE } from '../core/constants';
           <div class="field-label">Nom de l'enseigne</div>
           <input class="input" [ngModel]="store.ui().caName" (ngModelChange)="store.onCardName($event)" placeholder="Ex : Carrefour" />
         </div>
-        <div class="preview">
-          <f-avatar [ini]="ini(store.ui().caName)" [color]="store.ui().caColor" [size]="40" />
-          <span>Logo suggéré : les initiales, dans la couleur choisie.</span>
+        <div class="field-label" style="margin-top:16px">Logo</div>
+        <div class="logo-picker">
+          <!-- Le monogramme est toujours là, sélectionné par défaut. -->
+          <button class="logo-opt" [class.on]="!store.ui().caLogo" (click)="store.useMonogram()" title="Monogramme (initiales)">
+            <f-avatar [ini]="ini(store.ui().caName)" [color]="store.ui().caColor" [size]="46" />
+          </button>
+          @for (o of store.ui().logoOpts; track o.dataUri) {
+            <button class="logo-opt" [class.on]="store.ui().caLogo === o.dataUri" (click)="store.pickCardLogo(o.dataUri)" [title]="o.name">
+              <img [src]="o.dataUri" [alt]="o.name" />
+            </button>
+          }
         </div>
+        @if (store.setting('cardLogoSearch')) {
+          <button class="btn btn-soft sm logo-search" [disabled]="store.ui().logoBusy || store.ui().caName.trim().length < 2" (click)="store.searchCardLogos()">
+            <f-icon name="search" [size]="15" color="var(--ink2)" [width]="2.2" />
+            {{ store.ui().logoBusy ? 'Recherche…' : 'Chercher un logo en ligne' }}
+          </button>
+          @if (store.ui().logoSearched && !store.ui().logoBusy && !store.ui().logoOpts.length) {
+            <div class="hint">Aucun logo trouvé pour ce nom. Le monogramme fera l'affaire.</div>
+          }
+        } @else {
+          <div class="hint">Le monogramme (les initiales dans la couleur choisie) tient lieu de logo. La recherche en ligne est désactivée dans les réglages.</div>
+        }
 
         <div class="field" style="margin-top:16px">
           <div class="field-label">Code de la carte</div>
@@ -187,9 +208,17 @@ import { PALETTE } from '../core/constants';
     .imp { flex: 1; display: flex; align-items: center; gap: 11px; padding: 14px 16px; border-radius: 14px; background: var(--soft); border: none; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--ink2); text-align: left; }
     .imp b { color: var(--ink); font-weight: 800; }
 
-    .preview { display: flex; align-items: center; gap: 11px; margin-top: 12px; font-size: 12.5px; font-weight: 600; color: var(--ink3); }
     .field { margin-bottom: 4px; }
     select.input { appearance: auto; }
+
+    .logo-tile { width: 52px; height: 52px; border-radius: 14px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--line2); flex: none; }
+    .show-head .logo-tile { width: 46px; height: 46px; }
+    .logo-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+    .logo-opt { padding: 3px; border-radius: 14px; background: transparent; border: 2px solid transparent; cursor: pointer; line-height: 0; }
+    .logo-opt.on { border-color: var(--primary); }
+    .logo-opt img { width: 46px; height: 46px; border-radius: 11px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--line2); }
+    .logo-search { margin-top: 12px; }
+    .hint { font-size: 12.5px; font-weight: 600; color: var(--ink3); margin-top: 10px; }
 
     .swatch-row { display: flex; gap: 12px; }
     .swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
