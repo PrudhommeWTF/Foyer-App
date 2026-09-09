@@ -183,7 +183,17 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'fin'; label: s
         }
       </div>
 
-      @if (store.narrow()) {
+      @if (!store.data()) {
+        <!-- ===== aucun document chargé (réseau coupé au démarrage) ===== -->
+        <div class="card no-doc">
+          <f-icon name="urgent" [size]="36" color="#C2503A" [width]="2" />
+          <div class="nd-title">On n'a pas pu charger votre foyer</div>
+          <div class="nd-msg">{{ store.docError() || 'Le serveur est injoignable pour le moment. Vérifiez votre connexion, puis réessayez.' }}</div>
+          <button class="btn btn-primary" (click)="reload()" [disabled]="reloading()">
+            @if (reloading()) { Chargement... } @else { Réessayer }
+          </button>
+        </div>
+      } @else if (store.narrow()) {
         <!-- ===== mobile : carousel + grille de modules ===== -->
         <div class="home-m">
           <div class="carousel">
@@ -236,6 +246,12 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'fin'; label: s
   styles: [`
     .hello { font-size: 40px; color: var(--primary); line-height: .9; font-weight: 700; }
     .home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+
+    /* ===== aucun document chargé ===== */
+    .no-doc { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 44px 24px; max-width: 460px; margin: 0 auto; }
+    .nd-title { font-size: 17px; font-weight: 800; color: var(--ink); }
+    .nd-msg { font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; }
+    .no-doc .btn { margin-top: 6px; }
 
     .home-wrap { display: grid; grid-template-columns: 1fr 344px; gap: 20px; align-items: start; }
     :host-context(.shell.narrow) .home-wrap { grid-template-columns: 1fr; }
@@ -322,6 +338,8 @@ export class HomeScreen {
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
   private readonly pillEls = viewChildren<ElementRef<HTMLElement>>('pillBtn');
   readonly active = signal(0);
+  /** Un rechargement du document est en cours (bouton « Réessayer »). */
+  readonly reloading = signal(false);
   private lastTouch = 0;
   private readonly reduced = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
 
@@ -446,6 +464,13 @@ export class HomeScreen {
     if (c !== this.active()) this.active.set(c);
   }
   onTouch(): void { this.lastTouch = Date.now(); }
+
+  /** Relance le chargement du document ; le store repose `docError` en cas d'échec. */
+  async reload(): Promise<void> {
+    if (this.reloading()) return;
+    this.reloading.set(true);
+    try { await this.store.reloadDocument(); } finally { this.reloading.set(false); }
+  }
   goSlide(i: number): void {
     this.lastTouch = Date.now();
     const el = this.track()?.nativeElement;

@@ -341,70 +341,6 @@ export class FinancesStore {
 
   patch(p: Partial<FinancesUi>): void { this.ui.update((u) => ({ ...u, ...p })); }
 
-  // ---- gestes rapides ------------------------------------------------------
-  // Ils appellent l'API du module, ils ne réimplémentent rien. Ils ne sont pas
-  // optimistes, et c'est délibéré : un total de dépenses qui bouge puis revient
-  // en arrière est pire qu'un total qui arrive une seconde plus tard. Le retour
-  // immédiat est donné par le formulaire, qui se ferme, et par le toast.
-
-  /** Un geste rapide est en cours. Le formulaire s'y accroche pour ne pas partir deux fois. */
-  readonly quickBusy = signal(false);
-
-  /**
-   * Une dépense en espèces, saisie depuis l'accueil. Sans catégorie : la ranger
-   * est le travail des règles et de l'écran Finances, pas d'un geste de cinq
-   * secondes fait dans une file d'attente.
-   */
-  async quickExpense(accountId: number, amount: string, label: string): Promise<void> {
-    if (this.quickBusy()) return;
-    this.quickBusy.set(true);
-    try {
-      const { transaction } = await this.api.createTransaction({
-        accountId, date: this.foyer.todayStr(), amount: '-' + amount.trim().replace(/^[-+]/, ''),
-        kind: 'depense', label: label.trim() || 'Espèces', categoryId: null,
-        notes: '', cleared: true,
-      });
-      await this.loadHome(this.homeMonth());
-      this.foyer.toastWithUndo('Dépense enregistrée', () => void this.undoTransaction(transaction.id));
-    } catch (e) {
-      this.foyer.toast((e as Error).message);
-    } finally {
-      this.quickBusy.set(false);
-    }
-  }
-
-  /**
-   * Retire une opération que l'on vient de créer. C'est la seule suppression
-   * permise depuis l'accueil, et elle ne peut viser que cet identifiant-là.
-   */
-  private async undoTransaction(id: number): Promise<void> {
-    try {
-      await this.api.deleteTransaction(id);
-      await this.loadHome(this.homeMonth());
-      this.foyer.toast('Dépense annulée');
-    } catch (e) {
-      this.foyer.toast('Annulation impossible : ' + (e as Error).message);
-    }
-  }
-
-  /** Un relevé de compteur, saisi depuis l'accueil quand la tuile le réclame. */
-  async quickReading(contractId: number, indexTotal: string): Promise<void> {
-    if (this.quickBusy()) return;
-    this.quickBusy.set(true);
-    try {
-      await this.api.createReading({
-        contractId, date: this.foyer.todayStr(), indexTotal: indexTotal.trim(),
-        indexHp: '', indexHc: '', kwh: '', kwhHp: '', kwhHc: '', cost: '', notes: '',
-      });
-      await this.loadHome(this.homeMonth());
-      this.foyer.toast('Relevé enregistré');
-    } catch (e) {
-      this.foyer.toast((e as Error).message);
-    } finally {
-      this.quickBusy.set(false);
-    }
-  }
-
   /** Current month (YYYY-MM) in the household time zone. */
   private currentMonth(): string { return this.foyer.todayStr().slice(0, 7); }
 
@@ -500,9 +436,6 @@ export class FinancesStore {
     this.ui.set(initialUi(this.currentMonth()));
   }
 
-  /** Les repères de calendrier des échéances, publiés tels quels pour l'accueil. */
-  readonly deadlineExtras = computed(() => this.deadlineDayExtras());
-
   private async refreshReference(): Promise<void> {
     const b = await this.api.bootstrap();
     this.accounts.set(b.accounts);
@@ -548,7 +481,6 @@ export class FinancesStore {
    * avec une étiquette exacte et un chiffre hors sujet.
    */
   readonly homeMonth = computed(() => this.currentMonth());
-  readonly homeMonthLabel = computed(() => frMonthLabel(this.homeMonth()));
   readonly isCurrentMonth = computed(() => this.ui().month === this.currentMonth());
 
   // ---- transactions ------------------------------------------------------
@@ -1315,9 +1247,6 @@ export class FinancesStore {
 
   contractName(id: number | null): string {
     return (id ? this.contracts().find((c) => c.id === id)?.name : null) || '';
-  }
-  assetName(id: number | null): string {
-    return (id ? this.assets().find((a) => a.id === id)?.name : null) || '';
   }
   costOf(id: number): FinContractCost | undefined { return this.costs()[id]; }
   piecesOf(id: number): number { return this.pieces()[id] ?? 0; }

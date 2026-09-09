@@ -3,7 +3,7 @@
 // hors navigateur.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { addHourHHMM, contactIni, dstr, isoWeek, keptIni, monthIndex, monthStart, occursOn, weekDates } from './helpers';
+import { addDaysIso, addHourHHMM, contactIni, dstr, isoWeek, keptIni, monthIndex, monthStart, occursOn, weekDates } from './helpers';
 import { EventItem } from './models';
 
 const iso = (offset: number, anchor: string): string[] => weekDates(offset, anchor).map(dstr);
@@ -122,4 +122,11 @@ test('addHourHHMM ajoute une heure, borne à 23:59, ignore une entrée mal form�
   assert.equal(addHourHHMM('23:00'), '23:59');
   assert.equal(addHourHHMM(''), '');
   assert.equal(addHourHHMM('8h'), '');
+});
+
+// ---- décalage de N jours (report de tâche) ----------------------------------
+
+test('addDaysIso traverse un changement de mois et d’année', () => {
+  assert.equal(addDaysIso('2026-09-30', 1), '2026-10-01');
+  assert.equal(addDaysIso('2026-12-31', 1), '2027-01-01');
 });

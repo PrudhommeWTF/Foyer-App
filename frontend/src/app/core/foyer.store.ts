@@ -16,9 +16,9 @@ import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredie
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
 import { parseQuery, searchRecipes } from './recipe-search';
 import { readRecipeText } from './recipe-text';
-import { paxLabel, presenceAt } from './presence';
+import { presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
-import { Allergene, normaliseName } from './articles';
+import { Allergene } from './articles';
 import {
   ExportedPhoto, ImportError, ImportReport, buildBundle, fileName, parseBundle, planImport, recipeToText, shopToCsv,
 } from './exports';
@@ -26,7 +26,7 @@ import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSl
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
-import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
@@ -112,12 +112,7 @@ export class FoyerStore {
   readonly authError = signal('');
   readonly saveState = signal<SaveState>('idle');
 
-  /**
-   * Quand le document du foyer a été synchronisé avec le serveur, et ce qui
-   * empêche de le refaire. L'accueil s'en sert pour dire « dernière vue connue »
-   * plutôt que de présenter des données figées comme fraîches.
-   */
-  readonly docLoadedAt = signal('');
+  /** Ce qui empêche de charger le document, faute de réseau au démarrage. L'accueil l'affiche avec un bouton « Réessayer ». Vide quand tout va bien. */
   readonly docError = signal('');
   /**
    * Ce qui est à l'écran vient du dernier document gardé, faute de réseau au
@@ -219,30 +214,6 @@ export class FoyerStore {
     return todayIn(this.timeZone);
   });
 
-  /**
-   * L'heure du foyer, HH:MM. Comme le jour, elle suit l'horloge interne : c'est
-   * elle qui fait passer l'accueil d'un moment de la journée au suivant sans
-   * qu'on recharge quoi que ce soit.
-   */
-  readonly nowHm = computed(() => {
-    this.tick();
-    try {
-      return new Intl.DateTimeFormat('en-GB', { timeZone: this.timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
-    } catch {
-      const d = new Date();
-      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-    }
-  });
-
-  /** Le jour est-il férié en France métropolitaine ? Calculé, jamais listé. */
-  isHoliday(ds: string): boolean {
-    return frenchHolidays(parseInt(ds.slice(0, 4), 10)).some((h) => h.date === ds);
-  }
-
-  /** Le jour tombe-t-il dans les vacances scolaires de l'académie configurée ? */
-  isSchoolHoliday(ds: string): boolean {
-    return this.schoolHolidays().some((h) => ds >= h.start && ds <= h.end);
-  }
   /** ISO date → date courte française (24/07/2026). */
   fmtNumDate(iso: string): string { return fmtNumericDate(iso); }
   /** ISO date → long localized label (e.g. « jeudi 24 juillet »). */
@@ -447,7 +418,6 @@ export class FoyerStore {
     this.docVersion = garde.version;
     this.replayQueues();
     this.pending = [];
-    this.docLoadedAt.set(garde.at);
     this.docStaleAt.set(garde.at);
     this.patch({ famNameField: garde.state.familyName });
     return true;
@@ -465,7 +435,6 @@ export class FoyerStore {
     // parti est perdu de toute façon, et le garder ferait réapparaître des
     // modifications que l'utilisateur croit abandonnées.
     this.pending = [];
-    this.docLoadedAt.set(new Date().toISOString());
     this.docError.set('');
     void this.persistDoc();
     this.patch({ famNameField: state.familyName });
@@ -841,7 +810,6 @@ export class FoyerStore {
     this._data.set(null);
     this.docVersion = 0;
     this.pending = [];
-    this.docLoadedAt.set('');
     this.docError.set('');
     this.docStaleAt.set('');
     // Le document gardé porte la vie du foyer : il ne survit pas à une déconnexion.
@@ -993,7 +961,6 @@ export class FoyerStore {
     const rep = rebase(this.normalise(serverState), this.pending);
     this._data.set(rep.state);
     this.replayQueues();
-    this.docLoadedAt.set(new Date().toISOString());
     if (rep.dropped) {
       // Le seul cas où du travail se perd : ce qu'on modifiait n'existe plus.
       // Le taire ferait douter de tout le reste.
@@ -1228,7 +1195,6 @@ export class FoyerStore {
     this.patch({ screen, openRecipeId: null, addMenuOpen: false, notifOpen: false });
   }
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
-  setThemeMode(mode: 'light' | 'dark'): void { this.setSetting('dark', mode === 'dark'); }
 
   // ---- global search ----------------------------------------------------
   openSearch(): void { this.patch({ searchOpen: true, searchQuery: '' }); }
@@ -1385,20 +1351,6 @@ export class FoyerStore {
   setShopState(id: string, state: ShopState): void { this.pushShopOps([{ op: 'set-state', id, state }]); }
 
   /**
-   * Coche un article depuis une liste où il disparaît aussitôt. Comme pour les
-   * tâches, le retour en arrière est offert quelques secondes ; sauf quand
-   * c'était le dernier article et qu'une tâche ouvre la liste : la suite
-   * naturelle est alors de la clore, et c'est elle qui est proposée.
-   */
-  toggleShopWithUndo(id: string): void {
-    const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
-    const avant = it.state;
-    this.setShopState(id, avant === 'panier' ? 'a-prendre' : 'panier');
-    if (this.proposeClosing(it.listId)) return;
-    this.toastWithUndo(avant === 'panier' ? 'Remis dans la liste' : 'Dans le panier', () => this.setShopState(id, avant));
-  }
-
-  /**
    * Le dernier article vient d'être pris et une tâche ouvre cette liste :
    * proposer de la clore, sans la cocher à la place de quiconque. Vrai quand
    * la proposition a été faite.
@@ -1408,37 +1360,6 @@ export class FoyerStore {
     const t = closableShoppingTask(d.tasks, d.shop, listId); if (!t) return false;
     this.toastAction('Tout est dans le panier. Clore « ' + t.text + ' » ?', 'Clore', () => this.toggleTask(t.id));
     return true;
-  }
-
-  /**
-   * Ce que le foyer pourrait vouloir ajouter, dès les premières lettres.
-   *
-   * Deux sources, dans cet ordre : ce qu'on a déjà acheté (l'orthographe et les
-   * quantités du foyer, pas celles d'un référentiel), puis le référentiel
-   * d'articles pour ce qu'on n'a jamais pris. Un article déjà dans la liste
-   * n'est pas proposé : le geste serait un doublon.
-   */
-  shopSuggestions(query: string, limit = 4): string[] {
-    const q = normText(query);
-    if (q.length < 2) return [];
-    const d = this._data(); if (!d) return [];
-    const idx = this.articleIndex();
-    const listId = this.activeShopListId();
-    // L'identité d'un article est sa clé du référentiel quand il en a une : sans
-    // cela, « courgette » serait proposé alors que « Courgettes » est déjà dans
-    // la liste, et le geste rapide fabriquerait des doublons.
-    const identite = (nom: string): string => idx.forms.get(normaliseName(nom)) || normText(nom);
-    const dejaLa = new Set(d.shop.filter((i) => i.listId === listId).map((i) => identite(i.name)));
-    const out: string[] = [];
-    const push = (nom: string): void => {
-      const id = identite(nom);
-      if (!normText(nom).includes(q) || dejaLa.has(id)) return;
-      dejaLa.add(id);
-      out.push(nom);
-    };
-    for (const it of d.shop) push(it.name.trim());
-    for (const a of searchArticles(idx, d.articles, query, limit * 3)) push(a.name);
-    return out.slice(0, limit);
   }
 
   /** Ajoute un article depuis un texte libre, et rend son identifiant. */
@@ -2132,42 +2053,6 @@ export class FoyerStore {
     this.toast(existant ? 'Repas enregistré, événement mis à jour' : 'Repas enregistré et ajouté à l’agenda');
   }
 
-  /**
-   * Remplace le repas d'un créneau par une entrée libre : « finalement, pizza ».
-   *
-   * Ce qui était prévu est écrasé, donc le retour en arrière est offert. Les
-   * couverts et les absences du créneau sont conservés : ce sont les convives
-   * qui décident du nombre de parts, pas le plat. Un événement d'agenda déjà
-   * posé sur ce repas voit son titre suivre, faute de quoi le calendrier
-   * annoncerait encore le gratin.
-   */
-  setMealText(dateStr: string, slot: string, text: string): void {
-    const t = text.trim(); if (!t) return;
-    const key = dateStr + '-' + slot;
-    const avant = this._data()?.meals[key];
-    const value: MealValue = {
-      items: [{ text: t }],
-      ...(avant?.pax ? { pax: avant.pax } : {}),
-      ...(avant?.away?.length ? { away: avant.away } : {}),
-    };
-    this.writeMeal(key, slot, dateStr, value);
-    this.toastWithUndo('Repas remplacé', () => this.writeMeal(key, slot, dateStr, avant));
-  }
-
-  /** Écrit un créneau (ou le vide) en gardant son événement d'agenda cohérent. */
-  private writeMeal(key: string, slot: string, dateStr: string, value: MealValue | undefined): void {
-    const titre = value ? this.titleFor(value, slot) : '';
-    this.mutate((d) => {
-      if (value) d.meals[key] = value; else delete d.meals[key];
-      const i = d.events.findIndex((e) => e.mealKey === key);
-      if (i < 0) return;
-      // Sans repas, l'événement n'a plus d'objet : le garder annoncerait un dîner
-      // annulé. C'est la règle que le module s'est déjà donnée en retirant un repas.
-      if (value) d.events[i] = { ...d.events[i], title: titre, date: dateStr };
-      else d.events.splice(i, 1);
-    });
-  }
-
   /** Titre d'agenda pour un repas donné, réutilisé quand un repas change de créneau. */
   private titleFor(value: MealValue, slotKey: string): string {
     const slot = MEAL_SLOTS.find((x) => x.key === slotKey);
@@ -2227,8 +2112,6 @@ export class FoyerStore {
     const d = this._data();
     return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
   }
-  /** « 3 couverts (Léa absente) », affiché sous le créneau. */
-  paxTextOf(dateStr: string, slot: string): string { return paxLabel(this.presenceOf(dateStr, slot)); }
 
   /**
    * Présence du créneau **en cours d'édition**, dérogations de la modale
