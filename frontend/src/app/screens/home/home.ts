@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, viewChild, viewChildren } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FoyerStore } from '../../core/foyer.store';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
@@ -9,6 +10,7 @@ import { relTime } from '../../core/activity';
 import { EventItem, TaskItem } from '../../core/models';
 import { WhoBadge, whoBadges } from '../../core/schedule';
 import { cap, parseDay } from '../../core/helpers';
+import { navGroupsFor } from '../../shell/nav';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
 type Ahead =
@@ -20,13 +22,36 @@ type FinState =
   | { kind: 'hidden' | 'loading' | 'error' | 'empty' }
   | { kind: 'ok'; month: string; lines: FinLine[] };
 
+/** Une tuile de module de la grille mobile. */
+interface Mod { id: string; label: string; icon: string; color: string; sub: string; }
+
+/** La couleur d'accent de chaque module, pour colorer son icône dans la grille. */
+const MOD_COLOR: Record<string, string> = {
+  calendar: '#E56B4E', courses: '#7A9B76', taches: '#9B6FA8',
+  repas: '#4E93B8', recettes: '#E56B4E', finances: '#7A9B76',
+  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B',
+};
+
+/** Les sections du carousel mobile, dans l'ordre. Les finances tombent pour un enfant. */
+const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'fin'; label: string }[] = [
+  { key: 'activity', label: 'Activité' },
+  { key: 'agenda', label: 'Agenda' },
+  { key: 'tasks', label: 'Tâches' },
+  { key: 'meals', label: 'Repas' },
+  { key: 'fin', label: 'Finances' },
+];
+
 /**
  * L'accueil, façon « mur de la famille ».
  *
- * Une colonne : le fil de ce qui a récemment changé (tâches cochées, articles
- * ajoutés...). Un bandeau à droite : les prochains rendez-vous, les dernières
- * tâches, les repas du jour, et un sommaire des finances. Pas de « bouton
- * exprimez-vous » : le bouton « + » de la barre couvre déjà la création.
+ * Sur grand écran, deux colonnes : le fil de ce qui a récemment changé à gauche,
+ * un bandeau à droite (prochains rendez-vous, dernières tâches, repas du jour,
+ * sommaire des finances).
+ *
+ * Sur petit écran, la même matière tient dans un carousel qui tourne (une section
+ * à la fois, des pastilles pour sauter de l'une à l'autre), suivi d'une grille des
+ * modules du foyer sur deux colonnes. Les cinq cartes sont écrites une seule fois
+ * (des `ng-template`) et rendues aux deux endroits.
  *
  * L'écran compose, il ne calcule pas de règle métier : chaque bloc lit son
  * fournisseur (le store, le fil d'activité, les finances) et se contente de le
@@ -36,8 +61,115 @@ type FinState =
   selector: 'screen-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, WhoComponent],
+  imports: [IconComponent, AvatarComponent, WhoComponent, NgTemplateOutlet],
   template: `
+    <!-- ===== les cinq cartes, écrites une fois ===== -->
+    <ng-template #feedCard>
+      <div class="card feed">
+        <div class="feed-head">
+          <f-icon name="bolt" [size]="17" color="#E56B4E" [width]="2.2" />
+          <span>Activité récente</span>
+        </div>
+        @for (a of activity(); track $index) {
+          <div class="act">
+            <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" />
+            <div class="act-b">
+              <div class="act-l"><b>{{ nm(a.by) }}</b> {{ a.verb }} <b>« {{ a.what }} »</b></div>
+              <div class="act-m">
+                <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
+                <span class="act-t">{{ rel(a.at) }}</span>
+              </div>
+            </div>
+          </div>
+        } @empty {
+          <div class="feed-empty">
+            Rien de récent pour l'instant. Dès qu'une tâche est cochée ou qu'un article rejoint les courses, ça s'affiche ici.
+          </div>
+        }
+      </div>
+    </ng-template>
+
+    <ng-template #agendaCard>
+      <div class="card rc">
+        <div class="rc-head"><span>Prochains évènements</span><button class="rc-link" (click)="store.go('calendar')">Agenda</button></div>
+        @for (a of nextAgenda(); track $index) {
+          @if (a.kind === 'event') {
+            <div class="rc-row ev" (click)="store.editEvent(a.ev.id)">
+              <div class="ev-when" [style.background]="store.tint(evColor(a.ev))" [style.color]="evColor(a.ev)">
+                <span class="ev-day">{{ dayLabel(a.date) }}</span>
+                <span class="ev-time">{{ a.ev.time === '—' ? 'jour.' : a.ev.time }}</span>
+              </div>
+              <div class="rc-main">
+                <div class="rc-title">{{ a.ev.title }}</div>
+                @if (a.ev.who.length) { <f-who [badges]="badges(a.ev)" /> }
+              </div>
+            </div>
+          } @else {
+            <div class="rc-row ev" (click)="store.openTaskItem(a.task.id)">
+              <div class="ev-when" [style.background]="store.tint(a.color)" [style.color]="a.color">
+                <span class="ev-day">{{ dayLabel(a.date) }}</span>
+                <span class="ev-time">@if (a.task.time) { {{ a.task.time }} } @else { <f-icon name="taches" [size]="12" [color]="a.color" [width]="2.4" /> }</span>
+              </div>
+              <div class="rc-main">
+                <div class="rc-title">{{ a.task.text }}</div>
+                <span class="rc-sub">{{ a.list }}</span>
+              </div>
+            </div>
+          }
+        } @empty {
+          <div class="rc-empty">Rien à venir.</div>
+        }
+      </div>
+    </ng-template>
+
+    <ng-template #tasksCard>
+      <div class="card rc">
+        <div class="rc-head"><span>Dernières tâches</span><button class="rc-link" (click)="store.go('taches')">Tâches</button></div>
+        @for (t of latestTasks(); track t.t.id) {
+          <div class="rc-row task" (click)="store.openTaskItem(t.t.id)">
+            <span class="t-dot" [style.background]="t.color" [class.done]="t.t.done"></span>
+            <span class="t-text" [class.strike]="t.t.done">{{ t.t.text }}</span>
+            <span class="t-list">{{ t.list }}</span>
+          </div>
+        } @empty {
+          <div class="rc-empty">Aucune tâche pour l'instant.</div>
+        }
+      </div>
+    </ng-template>
+
+    <ng-template #mealsCard>
+      <div class="card rc">
+        <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
+        @for (m of todayMeals(); track m.key) {
+          <div class="rc-row meal" (click)="store.go('repas')">
+            <span class="m-dot" [style.background]="m.dot"></span>
+            <span class="m-slot">{{ m.short }}</span>
+            <span class="m-dish" [class.none]="!m.label">{{ m.label || 'À planifier' }}</span>
+          </div>
+        }
+      </div>
+    </ng-template>
+
+    <ng-template #finCard>
+      <div class="card rc fin">
+        <div class="rc-head"><span>Finances</span><button class="rc-link" (click)="store.go('finances')">Détails</button></div>
+        @switch (fin()!.kind) {
+          @case ('ok') {
+            <div class="fin-month">{{ finOk().month }}</div>
+            @for (l of finOk().lines; track $index) {
+              <div class="rc-row fin-line">
+                <span class="f-label">{{ l.label }}</span>
+                <span class="f-val" [class.pos]="l.tone === 'pos'" [class.neg]="l.tone === 'neg'">{{ l.value }} €</span>
+              </div>
+            }
+          }
+          @case ('loading') { <div class="rc-empty">Chargement du relevé...</div> }
+          @case ('error') { <div class="rc-empty">Relevé indisponible pour le moment.</div> }
+          @case ('empty') { <div class="rc-empty">Le module Finances n'est pas encore utilisé.</div> }
+        }
+      </div>
+    </ng-template>
+
     <div class="screen-enter">
       <div class="home-head">
         <div>
@@ -51,113 +183,54 @@ type FinState =
         }
       </div>
 
-      <div class="home-wrap">
-        <!-- ===== fil d'activité ===== -->
-        <div class="card feed">
-          <div class="feed-head">
-            <f-icon name="bolt" [size]="17" color="#E56B4E" [width]="2.2" />
-            <span>Activité récente</span>
-          </div>
-          @for (a of activity(); track $index) {
-            <div class="act">
-              <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" />
-              <div class="act-b">
-                <div class="act-l"><b>{{ nm(a.by) }}</b> {{ a.verb }} <b>« {{ a.what }} »</b></div>
-                <div class="act-m">
-                  <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
-                  <span class="act-t">{{ rel(a.at) }}</span>
-                </div>
-              </div>
-            </div>
-          } @empty {
-            <div class="feed-empty">
-              Rien de récent pour l'instant. Dès qu'une tâche est cochée ou qu'un article rejoint les courses, ça s'affiche ici.
-            </div>
-          }
-        </div>
-
-        <!-- ===== bandeau ===== -->
-        <div class="rail">
-          <!-- prochains évènements -->
-          <div class="card rc">
-            <div class="rc-head"><span>Prochains évènements</span><button class="rc-link" (click)="store.go('calendar')">Agenda</button></div>
-            @for (a of nextAgenda(); track $index) {
-              @if (a.kind === 'event') {
-                <div class="rc-row ev" (click)="store.editEvent(a.ev.id)">
-                  <div class="ev-when" [style.background]="store.tint(evColor(a.ev))" [style.color]="evColor(a.ev)">
-                    <span class="ev-day">{{ dayLabel(a.date) }}</span>
-                    <span class="ev-time">{{ a.ev.time === '—' ? 'jour.' : a.ev.time }}</span>
-                  </div>
-                  <div class="rc-main">
-                    <div class="rc-title">{{ a.ev.title }}</div>
-                    @if (a.ev.who.length) { <f-who [badges]="badges(a.ev)" /> }
-                  </div>
-                </div>
-              } @else {
-                <div class="rc-row ev" (click)="store.openTaskItem(a.task.id)">
-                  <div class="ev-when" [style.background]="store.tint(a.color)" [style.color]="a.color">
-                    <span class="ev-day">{{ dayLabel(a.date) }}</span>
-                    <span class="ev-time">@if (a.task.time) { {{ a.task.time }} } @else { <f-icon name="taches" [size]="12" [color]="a.color" [width]="2.4" /> }</span>
-                  </div>
-                  <div class="rc-main">
-                    <div class="rc-title">{{ a.task.text }}</div>
-                    <span class="rc-sub">{{ a.list }}</span>
-                  </div>
-                </div>
-              }
-            } @empty {
-              <div class="rc-empty">Rien à venir.</div>
-            }
-          </div>
-
-          <!-- dernières tâches -->
-          <div class="card rc">
-            <div class="rc-head"><span>Dernières tâches</span><button class="rc-link" (click)="store.go('taches')">Tâches</button></div>
-            @for (t of latestTasks(); track t.t.id) {
-              <div class="rc-row task" (click)="store.openTaskItem(t.t.id)">
-                <span class="t-dot" [style.background]="t.color" [class.done]="t.t.done"></span>
-                <span class="t-text" [class.strike]="t.t.done">{{ t.t.text }}</span>
-                <span class="t-list">{{ t.list }}</span>
-              </div>
-            } @empty {
-              <div class="rc-empty">Aucune tâche pour l'instant.</div>
-            }
-          </div>
-
-          <!-- repas du jour -->
-          <div class="card rc">
-            <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
-            @for (m of todayMeals(); track m.key) {
-              <div class="rc-row meal" (click)="store.go('repas')">
-                <span class="m-dot" [style.background]="m.dot"></span>
-                <span class="m-slot">{{ m.short }}</span>
-                <span class="m-dish" [class.none]="!m.label">{{ m.label || 'À planifier' }}</span>
-              </div>
-            }
-          </div>
-
-          <!-- finances -->
-          @if (fin() !== null) {
-            <div class="card rc fin">
-              <div class="rc-head"><span>Finances</span><button class="rc-link" (click)="store.go('finances')">Détails</button></div>
-              @switch (fin()!.kind) {
-                @case ('ok') {
-                  <div class="fin-month">{{ finOk().month }}</div>
-                  @for (l of finOk().lines; track $index) {
-                    <div class="rc-row fin-line">
-                      <span class="f-label">{{ l.label }}</span>
-                      <span class="f-val" [class.pos]="l.tone === 'pos'" [class.neg]="l.tone === 'neg'">{{ l.value }} €</span>
-                    </div>
+      @if (store.narrow()) {
+        <!-- ===== mobile : carousel + grille de modules ===== -->
+        <div class="home-m">
+          <div class="carousel">
+            <div class="track fscroll-x" #track (scroll)="onScroll(track)" (pointerdown)="onTouch()">
+              @for (sl of slides(); track sl.key) {
+                <div class="slide">
+                  @switch (sl.key) {
+                    @case ('activity') { <ng-container [ngTemplateOutlet]="feedCard" /> }
+                    @case ('agenda') { <ng-container [ngTemplateOutlet]="agendaCard" /> }
+                    @case ('tasks') { <ng-container [ngTemplateOutlet]="tasksCard" /> }
+                    @case ('meals') { <ng-container [ngTemplateOutlet]="mealsCard" /> }
+                    @case ('fin') { <ng-container [ngTemplateOutlet]="finCard" /> }
                   }
-                }
-                @case ('loading') { <div class="rc-empty">Chargement du relevé...</div> }
-                @case ('error') { <div class="rc-empty">Relevé indisponible pour le moment.</div> }
-                @case ('empty') { <div class="rc-empty">Le module Finances n'est pas encore utilisé.</div> }
+                </div>
               }
             </div>
-          }
+            <div class="pills">
+              @for (sl of slides(); track sl.key; let i = $index) {
+                <button #pillBtn class="pill" [class.on]="active() === i" (click)="goSlide(i)">{{ sl.label }}</button>
+              }
+            </div>
+          </div>
+
+          <div class="mods">
+            @for (m of modules(); track m.id) {
+              <button class="mod" (click)="store.go(m.id)">
+                <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="23" [color]="m.color" [width]="2.1" /></span>
+                <span class="mod-b">
+                  <span class="mod-l">{{ m.label }}</span>
+                  <span class="mod-s">{{ m.sub }}</span>
+                </span>
+              </button>
+            }
+          </div>
         </div>
-      </div>
+      } @else {
+        <!-- ===== desktop : fil + bandeau ===== -->
+        <div class="home-wrap">
+          <ng-container [ngTemplateOutlet]="feedCard" />
+          <div class="rail">
+            <ng-container [ngTemplateOutlet]="agendaCard" />
+            <ng-container [ngTemplateOutlet]="tasksCard" />
+            <ng-container [ngTemplateOutlet]="mealsCard" />
+            @if (fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
+          </div>
+        </div>
+      }
     </div>
   `,
   styles: [`
@@ -220,11 +293,37 @@ type FinState =
     .f-val { font-size: 13.5px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
     .f-val.pos { color: #5F9A55; }
     .f-val.neg { color: #C2503A; }
+
+    /* ===== mobile : carousel + grille ===== */
+    .home-m { display: flex; flex-direction: column; gap: 20px; }
+    .fscroll-x { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .fscroll-x::-webkit-scrollbar { display: none; }
+    .track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; align-items: stretch; }
+    .slide { flex: 0 0 100%; scroll-snap-align: center; display: flex; box-sizing: border-box; }
+    .slide > .card { flex: 1; }
+    .pills { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; }
+    .pill { flex: none; border: none; background: var(--soft); color: var(--ink2); border-radius: 20px; padding: 7px 15px; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .pill.on { background: #FCE9E3; color: var(--primary); }
+    :host-context(:root.dark) .pill.on { background: rgba(229,107,78,.18); }
+
+    .mods { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mod { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; text-align: left; min-width: 0; }
+    .mod:active { background: var(--soft); }
+    .mod-ic { width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center; flex: none; }
+    .mod-b { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .mod-l { font-size: 13.5px; font-weight: 800; color: var(--ink); line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+    .mod-s { font-size: 11px; font-weight: 700; color: var(--ink3); line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
   `],
 })
 export class HomeScreen {
   store = inject(FoyerStore);
   private fins = inject(FinancesStore);
+
+  private readonly track = viewChild<ElementRef<HTMLElement>>('track');
+  private readonly pillEls = viewChildren<ElementRef<HTMLElement>>('pillBtn');
+  readonly active = signal(0);
+  private lastTouch = 0;
+  private readonly reduced = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
 
   constructor() {
     // L'accueil demande aux finances le mois courant, une fois, et le laisse
@@ -238,11 +337,34 @@ export class HomeScreen {
       asked = month;
       void this.fins.loadHome(month);
     });
+
+    // Le carousel tourne tout seul (sauf mouvement réduit) : une section toutes
+    // les 6 secondes, mise en pause tant que le doigt est posé récemment.
+    const timer = setInterval(() => this.autoAdvance(), 6000);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+
+    // La pastille active reste visible : la file de pastilles déborde de l'écran,
+    // et une section atteinte hors champ ne se verrait pas sans ça.
+    effect(() => { this.pillEls()[this.active()]?.nativeElement.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); });
   }
 
   readonly hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
 
-  readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, 12) : []; });
+  // Sur petit écran, quatre lignes suffisent (le carousel est court) ; sur grand
+  // écran le fil prend toute la colonne, il en montre douze.
+  readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 4 : 12) : []; });
+
+  /** Les sections présentes : les finances tombent pour un compte enfant. */
+  readonly slides = computed(() => SLIDES.filter((s) => s.key !== 'fin' || this.fin() !== null));
+
+  /** Les modules ouverts à ce compte, tels que la navigation les groupe. */
+  readonly modules = computed<Mod[]>(() => {
+    const d = this.store.data();
+    if (!d) return [];
+    return navGroupsFor(this.store.isChild()).flatMap((g) => g.items).map((it) => ({
+      id: it.id, label: it.label, icon: it.icon, color: MOD_COLOR[it.id] || '#E56B4E', sub: this.moduleSub(it.id),
+    }));
+  });
 
   /**
    * Les 4 prochaines échéances de l'agenda, aujourd'hui compris et jusqu'à deux
@@ -311,6 +433,28 @@ export class HomeScreen {
   /** Vue affinée quand `fin()` vaut « ok », pour l'accès aux champs dans le template. */
   readonly finOk = computed(() => this.fin() as { kind: 'ok'; month: string; lines: FinLine[] });
 
+  // ---- carousel ----
+  onScroll(el: HTMLElement): void {
+    const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+    const c = Math.min(Math.max(i, 0), this.slides().length - 1);
+    if (c !== this.active()) this.active.set(c);
+  }
+  onTouch(): void { this.lastTouch = Date.now(); }
+  goSlide(i: number): void {
+    this.lastTouch = Date.now();
+    const el = this.track()?.nativeElement;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+    this.active.set(i);
+  }
+  private autoAdvance(): void {
+    if (this.reduced || !this.store.narrow()) return;
+    if (Date.now() - this.lastTouch < 7000) return;
+    const el = this.track()?.nativeElement;
+    const n = this.slides().length;
+    if (!el || n < 2) return;
+    el.scrollTo({ left: ((this.active() + 1) % n) * el.clientWidth, behavior: 'smooth' });
+  }
+
   // ---- helpers de rendu ----
   ini(id: string | null): string { return (id && (this.store.data()?.members || []).find((m) => m.id === id)?.ini) || '?'; }
   col(id: string | null): string { return id ? this.store.memberColor(id) : '#8A7E74'; }
@@ -326,5 +470,32 @@ export class HomeScreen {
     if (date === today) return 'Auj.';
     if (date === this.store.addDays(today, 1)) return 'Demain';
     return cap(parseDay(date).toLocaleDateString(this.store.locale, { weekday: 'short', day: 'numeric' }));
+  }
+
+  /** Le sous-titre d'une tuile de module : un compte réel, jamais un décor. */
+  private moduleSub(id: string): string {
+    const d = this.store.data();
+    if (!d) return '';
+    const n = (k: number, one: string, many: string, zero: string) => (k === 0 ? zero : k === 1 ? `1 ${one}` : `${k} ${many}`);
+    switch (id) {
+      case 'calendar': return n(this.store.eventsForDay(this.store.todayStr()).length, 'évènement aujourd’hui', 'évènements aujourd’hui', 'Rien de prévu aujourd’hui');
+      case 'courses': return n(d.shop.filter((s) => s.state === 'a-prendre').length, 'article à prendre', 'articles à prendre', 'Rien à prendre');
+      case 'taches': {
+        const lists = new Set(this.store.visibleTaskLists().map((l) => l.id));
+        return n(d.tasks.filter((t) => !t.done && lists.has(t.listId)).length, 'tâche en cours', 'tâches en cours', 'Tout est fait');
+      }
+      case 'repas': {
+        const days = new Set(this.store.weekDays());
+        let k = 0;
+        for (const [key, v] of Object.entries(d.meals || {})) if (days.has(key.slice(0, 10)) && this.store.mealLabel(v)) k++;
+        return k === 0 ? 'Aucun repas prévu' : n(k, 'repas prévu', 'repas prévus', '');
+      }
+      case 'recettes': return n(d.recipes.length, 'recette', 'recettes', 'Aucune recette');
+      case 'finances': return 'Comptes et budget du mois';
+      case 'planning': return n(d.sched.length, 'créneau', 'créneaux', 'Aucun créneau');
+      case 'contacts': return n(d.contacts.length, 'contact', 'contacts', 'Aucun contact');
+      case 'fidelite': return n(d.cards.length, 'carte', 'cartes', 'Aucune carte');
+      default: return '';
+    }
   }
 }
