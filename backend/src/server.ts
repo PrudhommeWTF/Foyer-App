@@ -32,6 +32,7 @@ import {
   setTotpRecovery,
   totpRecovery,
   updateUserCredentials,
+  UserRow,
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
@@ -463,6 +464,19 @@ function aRenouveler(u: { iat?: number; exp?: number } | undefined, now = Date.n
 /** Longueur minimale exigée d'un mot de passe, et le message qui va avec. */
 const pwdMin = (): number => Number(effectiveSetting('passwordMinLength')) || 6;
 const pwdTropCourt = (): string => `Le mot de passe doit faire au moins ${pwdMin()} caractères`;
+
+/**
+ * Le mot de passe fourni dans le corps est-il bien celui de `user` ?
+ *
+ * Un seul endroit lit le mot de passe du corps (champ `champ`, « password » par
+ * défaut, « currentPassword » pour un changement d'identifiants) et le compare
+ * au condensat. Les gestes sensibles, changer ses identifiants, régler ou
+ * retirer le second facteur, mettre à jour le serveur, se confirment tous par
+ * là : chacun garde son propre refus (statut, message, journal), mais la lecture
+ * du secret et sa comparaison ne s'écrivent qu'ici.
+ */
+const motDePasseBon = (req: Request, user: UserRow, champ = 'password'): Promise<boolean> =>
+  verifier(String(req.body?.[champ] ?? ''), user.password_hash);
 
 function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
   // Le cookie d'abord, l'en-tête `Authorization: Bearer` ensuite : l'application
@@ -962,7 +976,7 @@ api.get('/me', auth, (req: AuthedRequest, res: Response) => {
 api.put('/me/credentials', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
-  if (!await verifier(String(req.body?.currentPassword ?? ''), user.password_hash)) {
+  if (!await motDePasseBon(req, user, 'currentPassword')) {
     res.status(403).json({ error: 'Mot de passe actuel incorrect' });
     return;
   }
@@ -1019,7 +1033,7 @@ api.put('/me/credentials', authLimiter, auth, jsonSmall, route(async (req, res) 
 api.post('/me/totp/start', authLimiter, auth, jsonSmall, route(async (req, res) => {
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
-  if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
+  if (!await motDePasseBon(req, user)) {
     log.attention(`Second facteur : mot de passe incorrect à l’enrôlement de ${user.email}.`);
     res.status(403).json({ error: 'Mot de passe incorrect.' });
     return;
@@ -1073,7 +1087,7 @@ api.post('/me/totp/disable', authLimiter, auth, jsonSmall, route(async (req, res
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
-  if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
+  if (!await motDePasseBon(req, user)) {
     res.status(403).json({ error: 'Mot de passe incorrect.' });
     return;
   }
@@ -1098,7 +1112,7 @@ api.post('/me/totp/recovery', authLimiter, auth, jsonSmall, route(async (req, re
   const user = req.user ? getUserById(req.user.id) : undefined;
   if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
   if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
-  if (!await verifier(String(req.body?.password ?? ''), user.password_hash)) {
+  if (!await motDePasseBon(req, user)) {
     res.status(403).json({ error: 'Mot de passe incorrect.' });
     return;
   }
@@ -1175,7 +1189,7 @@ api.put('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(async
  */
 api.post('/members/:memberId/totp/reset', auth, requireAdmin, jsonSmall, route(async (req, res) => {
   const moi = req.user ? getUserById(req.user.id) : undefined;
-  if (!moi || !await verifier(String(req.body?.password ?? ''), moi.password_hash)) {
+  if (!moi || !await motDePasseBon(req, moi)) {
     res.status(403).json({ error: 'Mot de passe incorrect. Ce geste retire la protection d’un autre compte : il se confirme par votre mot de passe.' });
     return;
   }
@@ -1395,7 +1409,7 @@ api.post('/system/update', auth, requireAdmin, jsonSmall, route(async (req, res)
   // « root sur l'hyperviseur invité ». Un jeton dérobé sur un téléphone
   // déverrouillé ne doit pas suffire : il faut aussi savoir le mot de passe.
   const moi = req.user ? getUserById(req.user.id) : undefined;
-  if (!moi || !await verifier(String(req.body?.password ?? ''), moi.password_hash)) {
+  if (!moi || !await motDePasseBon(req, moi)) {
     log.attention(`Mise à jour refusée : mot de passe incorrect (${req.user?.email || 'compte inconnu'}, depuis ${req.ip}).`);
     res.status(403).json({ error: 'Mot de passe incorrect. Cette mise à jour installe et exécute du code sur le serveur : elle se confirme par votre mot de passe.' });
     return;
