@@ -34,9 +34,11 @@ Le monogramme n'est jamais vide (au moins un « ? ») et marche hors ligne.
 En plus, un bouton **« Chercher un logo en ligne »** propose de vrais logos tirés
 du **nom** de l'enseigne. C'est une requête sortante (elle envoie le nom saisi),
 donc **coupable par le réglage `cardLogoSearch`** ; éteint, le bouton disparaît et
-seul le monogramme reste. La source est l'autocomplétion d'entreprises de Clearbit
-(`autocomplete.clearbit.com`, gratuite, sans clé), qui rend plusieurs sociétés
-(nom + domaine) ; le logo de chacune se lit chez `logo.clearbit.com`. **Deux hôtes
+seul le monogramme reste. Le **nom** donne des domaines via l'autocomplétion
+d'entreprises de Clearbit (`autocomplete.clearbit.com`, gratuite, sans clé) ;
+l'image de chaque domaine est ensuite son **favicon**, récupéré chez des services
+par domaine (DuckDuckGo d'abord, Google en repli). L'ancien service de logos de
+Clearbit (`logo.clearbit.com`) a été fermé par HubSpot, d'où le favicon. **Hôtes
 fixes**, jamais une URL choisie par l'utilisateur : pas de SSRF. Le serveur relaie
 la recherche (la CSP interdit au navigateur d'appeler ou d'afficher une ressource
 externe) et renvoie les images **en data-URI**. Une panne, un service indisponible
@@ -44,10 +46,11 @@ ou retiré : aucune option n'est proposée, le monogramme tient lieu de logo.
 
 Le logo choisi est gardé **en data-URI dans le document d'état**, jamais sur le
 disque : la carte reste affichable hors ligne, et le module garde son principe
-(tout dans le document). Les images sont bornées (128 px demandé à la source,
-refus au-delà de 60 Ko) pour ne pas alourdir le document réenvoyé à chaque
-sauvegarde. Formats acceptés : PNG, JPEG, WebP, GIF ; pas de SVG (inutile ici, et
-une image vectorielle peut porter du script).
+(tout dans le document). Les images sont bornées (refus au-delà de 60 Ko) pour ne
+pas alourdir le document réenvoyé à chaque sauvegarde. Formats acceptés : PNG,
+JPEG, WebP, GIF et l'ICO des favicons ; pas de SVG (inutile ici, et une image
+vectorielle peut porter du script). Un favicon étant petit, le logo peut paraître
+un peu doux à grande taille, mais reste reconnaissable.
 
 ## Import : la caméra d'abord, une photo en repli
 

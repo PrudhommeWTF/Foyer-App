@@ -1,10 +1,12 @@
 // Recherche de logo pour une carte de fidélité.
 //
 // À la saisie d'une carte, on propose des logos tirés du **nom** de l'enseigne.
-// Source : l'autocomplétion d'entreprises de Clearbit (autocomplete.clearbit.com),
-// gratuite et sans clé, qui rend une liste de sociétés (nom + domaine) ; le logo
-// de chacune se lit ensuite chez logo.clearbit.com. Deux hôtes fixes, jamais une
-// URL choisie par l'utilisateur : pas de SSRF possible.
+// Le nom donne des domaines via l'autocomplétion d'entreprises de Clearbit
+// (autocomplete.clearbit.com, gratuite, sans clé) ; l'image de chaque domaine est
+// ensuite son **favicon**, récupéré chez des services par domaine (DuckDuckGo,
+// puis Google en repli). L'ancien service de logos de Clearbit a été fermé par
+// HubSpot, d'où le favicon. Les hôtes sont fixes, jamais une URL choisie par
+// l'utilisateur : pas de SSRF possible.
 //
 // C'est une requête sortante, déclenchée par la frappe et coupable par le réglage
 // `cardLogoSearch`. Le serveur la relaie plutôt que le navigateur, pour garder la
@@ -17,12 +19,21 @@
 import { log } from './log';
 
 const SUGGEST = 'https://autocomplete.clearbit.com/v1/companies/suggest';
-const LOGO = 'https://logo.clearbit.com/';
+/**
+ * Sources d'icône **par domaine**, essayées dans l'ordre : la première image
+ * valable gagne. L'ancien service de logos de Clearbit (logo.clearbit.com) a été
+ * fermé par HubSpot ; on prend le favicon du domaine, qui reste servi partout.
+ * DuckDuckGo répond une image directement ; Google redirige (le fetch suit).
+ */
+const ICON_SOURCES: ((domain: string) => string)[] = [
+  (d) => `https://icons.duckduckgo.com/ip3/${encodeURIComponent(d)}.ico`,
+  (d) => `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=128`,
+];
 const TIMEOUT_MS = 5000;
 /** Un logo au-delà de cette taille n'a rien à faire dans le document d'état, réenvoyé à chaque sauvegarde. */
 const MAX_LOGO_BYTES = 60 * 1024;
-/** Les images qu'on accepte d'embarquer. Pas de SVG : inutile ici, et une image vectorielle peut porter du script. */
-const IMG_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+/** Les images qu'on accepte d'embarquer (dont l'ICO des favicons). Pas de SVG : une image vectorielle peut porter du script. */
+const IMG_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/x-icon', 'image/vnd.microsoft.icon'];
 
 export interface LogoCandidate { name: string; domain: string; }
 
@@ -50,11 +61,19 @@ export function parseLogoCandidates(json: unknown, limit = 5): LogoCandidate[] {
 
 export interface CardLogo { name: string; domain: string; dataUri: string; }
 
-/** Récupère l'image du logo d'un domaine, en data-URI, ou null si rien d'exploitable. */
+/** L'icône d'un domaine, en data-URI : la première source qui rend une image valable. */
 async function fetchLogo(domain: string): Promise<string | null> {
-  const url = LOGO + encodeURIComponent(domain) + '?size=128';
+  for (const src of ICON_SOURCES) {
+    const dataUri = await fetchIcon(src(domain));
+    if (dataUri) return dataUri;
+  }
+  return null;
+}
+
+/** Récupère une image à une URL et la rend en data-URI, ou null si rien d'exploitable. */
+async function fetchIcon(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': 'Foyer' } });
+    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS), headers: { 'User-Agent': 'Foyer' }, redirect: 'follow' });
     if (!res.ok) return null;
     const mime = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
     if (!IMG_MIMES.includes(mime)) return null;
@@ -88,5 +107,10 @@ export async function searchLogos(name: string, limit = 5): Promise<CardLogo[]> 
     const dataUri = await fetchLogo(c.domain);
     return dataUri ? { name: c.name, domain: c.domain, dataUri } : null;
   }));
-  return logos.filter((x): x is CardLogo => !!x);
+  // Deux domaines d'une même enseigne rendent souvent le même favicon : on ne
+  // garde qu'une option par image, pour ne pas proposer deux fois la même.
+  const seen = new Set<string>();
+  const out: CardLogo[] = [];
+  for (const x of logos) if (x && !seen.has(x.dataUri)) { seen.add(x.dataUri); out.push(x); }
+  return out;
 }
