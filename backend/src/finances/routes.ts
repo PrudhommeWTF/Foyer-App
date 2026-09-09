@@ -20,10 +20,7 @@ import { suggestCategory } from './suggest-repo';
 import * as loans from './loans';
 import { ACCOUNT_KINDS, LoanTerms, TX_KINDS, TxKind } from './types';
 import { log } from '../log';
-
-/** Reject with an explicit French message rather than a bare 400. */
-class Invalid extends Error {}
-const fail = (msg: string): never => { throw new Invalid(msg); };
+import { fail, id, makeHandler } from './http';
 
 function str(v: unknown, field: string, { max = 200, required = true } = {}): string {
   const s = String(v ?? '').trim();
@@ -49,12 +46,6 @@ function optionalIsoDate(v: unknown, field: string): string | null {
   return s ? isoDate(s, field) : null;
 }
 
-function id(v: unknown, field: string): number {
-  const n = parseInt(String(v ?? ''), 10);
-  if (!Number.isInteger(n) || n <= 0) fail(`Identifiant invalide pour « ${field} ».`);
-  return n;
-}
-
 function optionalId(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null;
   const n = parseInt(String(v), 10);
@@ -68,17 +59,7 @@ function oneOf<T extends string>(v: unknown, allowed: readonly T[], field: strin
   return s;
 }
 
-/** Wrap a handler so validation errors become 400s with their own message. */
-function handler(fn: (req: Request, res: Response) => void) {
-  return (req: Request, res: Response): void => {
-    try { fn(req, res); }
-    catch (e) {
-      if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      log.erreur('Finances : erreur inattendue', e);
-      res.status(500).json({ error: 'Erreur interne du module Finances : ' + (e as Error).message });
-    }
-  };
-}
+const handler = makeHandler('Finances : erreur inattendue', 'Erreur interne du module Finances : ');
 
 /**
  * Identifiants de membres, dédoublonnés et bornés. Ils viennent du document du

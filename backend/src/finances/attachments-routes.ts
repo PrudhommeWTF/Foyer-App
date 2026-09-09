@@ -3,34 +3,16 @@
 // The whole router sits behind the session guard: a piece is never reachable by
 // its URL alone, contrary to the ICS feed which trades on a secret token.
 import { contentDisposition } from '../headers';
-import express, { Request, Response, Router } from 'express';
+import express, { Request, Router } from 'express';
 import * as attachments from './attachments';
 import { getAsset, getContract } from './contracts';
 import { getTransaction } from './repo';
-import { log } from '../log';
+import { fail, id, makeHandler } from './http';
 
 /** 20 Mo : a scanned invoice weighs a few hundred kilobytes, a phone photo a few megabytes. */
 const MAX_UPLOAD = '20mb';
 
-class Invalid extends Error {}
-const fail = (msg: string): never => { throw new Invalid(msg); };
-
-function handler(fn: (req: Request, res: Response) => void) {
-  return (req: Request, res: Response): void => {
-    try { fn(req, res); }
-    catch (e) {
-      if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      log.erreur('Finances/pièces jointes : erreur inattendue', e);
-      res.status(500).json({ error: 'Erreur sur les pièces jointes : ' + (e as Error).message });
-    }
-  };
-}
-
-const id = (v: unknown, field: string): number => {
-  const n = parseInt(String(v ?? ''), 10);
-  if (!Number.isInteger(n) || n <= 0) fail(`Identifiant invalide pour « ${field} ».`);
-  return n;
-};
+const handler = makeHandler('Finances/pièces jointes : erreur inattendue', 'Erreur sur les pièces jointes : ');
 
 /** Owner of a piece, checked for existence: no attaching to a ghost. */
 function owner(req: Request): { kind: attachments.OwnerKind; id: number } {

@@ -35,6 +35,13 @@ const ACCEPTS: Record<AcceptedKind, { ok: (t: DetectedType | null) => boolean; r
 /** La limite que le foyer s'est fixée, en octets. */
 export type UploadLimit = () => number;
 
+/** L'identifiant de fichier de l'URL, ou null (400 déjà répondu) : même garde pour GET et DELETE. */
+function fileId(req: Request, res: Response): number | null {
+  const id = parseInt(String(req.params['id'] ?? ''), 10);
+  if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return null; }
+  return id;
+}
+
 export function filesRouter(maxBytes: UploadLimit): Router {
   const r = express.Router();
 
@@ -76,8 +83,7 @@ export function filesRouter(maxBytes: UploadLimit): Router {
   });
 
   r.get('/:id', (req: Request, res: Response) => {
-    const id = parseInt(String(req.params['id'] ?? ''), 10);
-    if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return; }
+    const id = fileId(req, res); if (id === null) return;
     const file = files.fileOf(id);
     if (!file) {
       const known = files.get(id);
@@ -106,8 +112,7 @@ export function filesRouter(maxBytes: UploadLimit): Router {
   // retirée du carnet n'a pas à rester sur le disque jusqu'au prochain
   // redémarrage.
   r.delete('/:id', (req: Request, res: Response) => {
-    const id = parseInt(String(req.params['id'] ?? ''), 10);
-    if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return; }
+    const id = fileId(req, res); if (id === null) return;
     if (!files.remove(id)) { res.status(404).json({ error: 'Fichier introuvable.' }); return; }
     res.status(204).end();
   });

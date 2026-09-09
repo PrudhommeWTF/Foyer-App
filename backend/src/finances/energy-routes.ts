@@ -1,29 +1,11 @@
 // HTTP surface of the meter readings, mounted under /api/finances.
-import express, { Request, Response, Router } from 'express';
+import express, { Router } from 'express';
 import * as energy from './energy';
 import { getContract } from './contracts';
 import { isIsoDate, parseCents } from './money';
-import { log } from '../log';
+import { fail, id, makeHandler } from './http';
 
-class Invalid extends Error {}
-const fail = (msg: string): never => { throw new Invalid(msg); };
-
-function handler(fn: (req: Request, res: Response) => void) {
-  return (req: Request, res: Response): void => {
-    try { fn(req, res); }
-    catch (e) {
-      if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      log.erreur('Finances/énergie : erreur inattendue', e);
-      res.status(500).json({ error: 'Erreur sur les relevés : ' + (e as Error).message });
-    }
-  };
-}
-
-const id = (v: unknown, field: string): number => {
-  const n = parseInt(String(v ?? ''), 10);
-  if (!Number.isInteger(n) || n <= 0) fail(`Identifiant invalide pour « ${field} ».`);
-  return n;
-};
+const handler = makeHandler('Finances/énergie : erreur inattendue', 'Erreur sur les relevés : ');
 
 /** An index or a kWh figure: positive, decimals allowed, empty means unknown. */
 const measure = (v: unknown, field: string): number | null => {

@@ -1,14 +1,11 @@
 // HTTP surface of assets, contracts and deadlines, mounted under /api/finances.
-import express, { Request, Response, Router } from 'express';
+import express, { Router } from 'express';
 import * as attachments from './attachments';
 import * as contracts from './contracts';
 import * as savings from './savings';
 import { getAccount, getCategory } from './repo';
 import { isIsoDate, parseCents } from './money';
-import { log } from '../log';
-
-class Invalid extends Error {}
-const fail = (msg: string): never => { throw new Invalid(msg); };
+import { fail, id, makeHandler } from './http';
 
 const ASSET_KINDS: contracts.AssetKind[] = ['immobilier', 'vehicule', 'autre'];
 const ASSET_STATUS: contracts.AssetStatus[] = ['actif', 'vendu'];
@@ -16,22 +13,7 @@ const CONTRACT_KINDS: contracts.ContractKind[] = ['assurance', 'energie', 'telec
 const PERIODICITIES: contracts.Periodicity[] = ['mensuelle', 'trimestrielle', 'semestrielle', 'annuelle', 'ponctuelle'];
 const CONTRACT_STATUS: contracts.ContractStatus[] = ['actif', 'resilie'];
 
-function handler(fn: (req: Request, res: Response) => void) {
-  return (req: Request, res: Response): void => {
-    try { fn(req, res); }
-    catch (e) {
-      if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      log.erreur('Finances/contrats : erreur inattendue', e);
-      res.status(500).json({ error: 'Erreur dans les contrats : ' + (e as Error).message });
-    }
-  };
-}
-
-const id = (v: unknown, field: string): number => {
-  const n = parseInt(String(v ?? ''), 10);
-  if (!Number.isInteger(n) || n <= 0) fail(`Identifiant invalide pour « ${field} ».`);
-  return n;
-};
+const handler = makeHandler('Finances/contrats : erreur inattendue', 'Erreur dans les contrats : ');
 
 const str = (v: unknown, field: string, max = 200): string => {
   const s = String(v ?? '').trim();

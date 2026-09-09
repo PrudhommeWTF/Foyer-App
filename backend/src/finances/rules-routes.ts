@@ -1,14 +1,11 @@
 // HTTP surface of the categorisation rules, mounted under /api/finances.
-import express, { Request, Response, Router } from 'express';
+import express, { Router } from 'express';
 import * as rules from './rules-repo';
 import { getAccount, getCategory } from './repo';
 import { getContract } from './contracts';
 import { ActionKind, Condition, ConditionField, ConditionOp, MatchMode } from './rules';
 import { isIsoDate } from './money';
-import { log } from '../log';
-
-class Invalid extends Error {}
-const fail = (msg: string): never => { throw new Invalid(msg); };
+import { fail, id, makeHandler } from './http';
 
 const FIELDS: ConditionField[] = ['label', 'amount', 'sens', 'account', 'dayOfMonth', 'date'];
 const OPS: Record<ConditionField, ConditionOp[]> = {
@@ -21,22 +18,7 @@ const OPS: Record<ConditionField, ConditionOp[]> = {
 };
 const ACTIONS: ActionKind[] = ['category', 'contract', 'label', 'tag', 'transfer'];
 
-function handler(fn: (req: Request, res: Response) => void) {
-  return (req: Request, res: Response): void => {
-    try { fn(req, res); }
-    catch (e) {
-      if (e instanceof Invalid) { res.status(400).json({ error: e.message }); return; }
-      log.erreur('Finances/règles : erreur inattendue', e);
-      res.status(500).json({ error: 'Erreur dans le moteur de règles : ' + (e as Error).message });
-    }
-  };
-}
-
-const id = (v: unknown, field: string): number => {
-  const n = parseInt(String(v ?? ''), 10);
-  if (!Number.isInteger(n) || n <= 0) fail(`Identifiant invalide pour « ${field} ».`);
-  return n;
-};
+const handler = makeHandler('Finances/règles : erreur inattendue', 'Erreur dans le moteur de règles : ');
 
 /** Validate a condition, refusing anything the engine would silently ignore. */
 function condition(raw: Record<string, unknown>, index: number): Condition {

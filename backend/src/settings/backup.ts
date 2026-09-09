@@ -20,7 +20,7 @@
 //     amputé de ce qui n'existe plus, et le rapport le nomme.
 import { ALL, SettingDecl, checkValue, declOf } from './registry';
 import { Doc, readDoc } from '../state/doc';
-import { applySettings, envValueOf, readSettings } from './repo';
+import { applySettings, envValueOf, obj, readSettings } from './repo';
 
 export const CONFIG_FORMAT = 'foyer.reglages' as const;
 export const CONFIG_VERSION = 1 as const;
@@ -38,7 +38,6 @@ export interface ConfigBackup {
   prefs: Record<string, { name: string; values: Record<string, boolean | number | string> }>;
 }
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
 
 const membersOf = (doc: Doc): { id: string; name: string }[] =>
   (Array.isArray(doc['members']) ? doc['members'] : [])

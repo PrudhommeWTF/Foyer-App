@@ -20,7 +20,7 @@ export interface SettingsView {
   version: number;
 }
 
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {});
+export const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {});
 const settingsOf = (doc: Doc): Record<string, unknown> => obj(doc['settings']);
 const prefsOf = (doc: Doc, memberId: string | null): Record<string, unknown> =>
   (memberId ? obj(obj(doc['prefs'])[memberId]) : {});
