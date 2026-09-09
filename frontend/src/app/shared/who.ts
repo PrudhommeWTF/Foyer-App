@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { AvatarComponent } from './avatar';
 import { WHO_SHOWN, WhoBadge } from '../core/schedule';
 
@@ -19,12 +19,12 @@ import { WHO_SHOWN, WhoBadge } from '../core/schedule';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AvatarComponent],
   template: `
-    @if (badges.length) {
-      <span class="who" [title]="names">
-        @for (b of shown; track b.id) {
-          <f-avatar [ini]="b.ini" [color]="b.color" [size]="size" border="2px solid var(--surface)" />
+    @if (badges().length) {
+      <span class="who" [title]="names()">
+        @for (b of shown(); track b.id) {
+          <f-avatar [ini]="b.ini" [color]="b.color" [size]="size()" border="2px solid var(--surface)" />
         }
-        @if (extra > 0) { <span class="more" [style.height.px]="size" [style.min-width.px]="size">+{{ extra }}</span> }
+        @if (extra() > 0) { <span class="more" [style.height.px]="size()" [style.min-width.px]="size()">+{{ extra() }}</span> }
       </span>
     } @else {
       <span class="none">Sans membre</span>
@@ -42,11 +42,11 @@ import { WHO_SHOWN, WhoBadge } from '../core/schedule';
   `],
 })
 export class WhoComponent {
-  @Input() badges: WhoBadge[] = [];
-  @Input() size = 22;
+  readonly badges = input<WhoBadge[]>([]);
+  readonly size = input(22);
 
-  get shown(): WhoBadge[] { return this.badges.slice(0, WHO_SHOWN); }
-  get extra(): number { return Math.max(0, this.badges.length - WHO_SHOWN); }
+  readonly shown = computed(() => this.badges().slice(0, WHO_SHOWN));
+  readonly extra = computed(() => Math.max(0, this.badges().length - WHO_SHOWN));
   /** Les noms au complet pour le survol : le débordement compté reste consultable. */
-  get names(): string { return this.badges.map((b) => b.name).join(', '); }
+  readonly names = computed(() => this.badges().map((b) => b.name).join(', '));
 }

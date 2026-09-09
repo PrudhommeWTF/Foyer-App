@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { ICONS } from './constants';
 
 /**
@@ -10,21 +10,19 @@ import { ICONS } from './constants';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <svg [attr.width]="size" [attr.height]="size" viewBox="0 0 24 24" fill="none"
-         [attr.stroke]="color" [attr.stroke-width]="width" stroke-linecap="round" stroke-linejoin="round"
+    <svg [attr.width]="size()" [attr.height]="size()" viewBox="0 0 24 24" fill="none"
+         [attr.stroke]="color()" [attr.stroke-width]="width()" stroke-linecap="round" stroke-linejoin="round"
          style="display:block;flex:none">
-      <path [attr.d]="d" />
+      <path [attr.d]="d()" />
     </svg>
   `,
 })
 export class IconComponent {
-  @Input() name = '';
-  @Input() path = '';
-  @Input() size: number | string = 21;
-  @Input() color = 'currentColor';
-  @Input() width: number | string = 2;
+  readonly name = input('');
+  readonly path = input('');
+  readonly size = input<number | string>(21);
+  readonly color = input('currentColor');
+  readonly width = input<number | string>(2);
 
-  get d(): string {
-    return this.path || ICONS[this.name] || '';
-  }
+  readonly d = computed(() => this.path() || ICONS[this.name()] || '');
 }
