@@ -17,7 +17,6 @@
     "@angular/core": "^21.2.22",
     "@angular/forms": "^21.2.22",
     "@angular/platform-browser": "^21.2.22",
-    "@angular/router": "^21.2.22",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "bwip-js": "^4.5.1",
@@ -29,7 +28,6 @@
     "@angular/cli": "^21.2.22",
     "@angular/compiler-cli": "^21.2.22",
     "@types/node": "^22.20.1",
-    "prettier": "^3.8.1",
     "tsx": "^4.20.6",
     "typescript": "~5.9.2"
   }
