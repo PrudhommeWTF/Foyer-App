@@ -13,6 +13,44 @@ import { EventItem, HouseholdState } from './models';
 export interface DayExtra { kind: string; label: string; color: string; sub?: string; id?: string; done?: boolean; }
 export interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
 
+/** Une plage de vacances scolaires posée en barre continue sur une grille : de la colonne `col` (1-based), sur `span` jours, sur la voie `lane`. `startsHere`/`endsHere` disent si la barre commence/finit vraiment ici ou déborde de la plage affichée. */
+export interface HolidayBand { name: string; color: string; col: number; span: number; lane: number; startsHere: boolean; endsHere: boolean; }
+
+/** Jours écoulés depuis l'époque pour une date ISO, en UTC : insensible au fuseau et aux changements d'heure, ce qui suffit pour compter des colonnes. */
+function isoDays(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number);
+  return Math.floor(Date.UTC(y || 1970, (m || 1) - 1, d || 1) / 86_400_000);
+}
+
+/**
+ * Les vacances scolaires qui touchent la plage affichée `[rangeStart, rangeEnd]`,
+ * en barres étalées plutôt qu'en pastille répétée chaque jour. Chaque plage est
+ * bornée à la fenêtre (une barre qui déborde le dit par `startsHere`/`endsHere`),
+ * et rangée par voie pour ne jamais se chevaucher, comme les événements « journée
+ * entière ». Un foyer a une seule académie, donc ses vacances ne se chevauchent
+ * pas : en pratique une seule voie, mais la logique tient si un jour deux plages
+ * se touchent.
+ */
+export function holidayBands(holidays: SchoolHoliday[], rangeStart: string, rangeEnd: string, color: string): HolidayBand[] {
+  const base = isoDays(rangeStart);
+  const touching = holidays
+    .filter((h) => h.end >= rangeStart && h.start <= rangeEnd)
+    .sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end));
+  const laneEnd: number[] = [];
+  const bands: HolidayBand[] = [];
+  for (const h of touching) {
+    const s = h.start < rangeStart ? rangeStart : h.start;
+    const e = h.end > rangeEnd ? rangeEnd : h.end;
+    const col = isoDays(s) - base + 1;
+    const span = isoDays(e) - isoDays(s) + 1;
+    let lane = laneEnd.findIndex((end) => end < col);
+    if (lane === -1) { lane = laneEnd.length; laneEnd.push(0); }
+    laneEnd[lane] = col + span - 1;
+    bands.push({ name: h.name, color, col, span, lane, startsHere: s === h.start, endsHere: e === h.end });
+  }
+  return bands;
+}
+
 /** Les événements d'un jour, dans l'ordre des heures. Une heure vide vaut « — ». */
 export function eventsOn(events: EventItem[], ds: string): EventItem[] {
   return (events || []).filter((e) => occursOn(e, ds)).slice().sort((a, b) => a.time.localeCompare(b.time));
