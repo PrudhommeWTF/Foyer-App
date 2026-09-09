@@ -20,6 +20,8 @@ const OPS_JOURNAL_MAX = 2000;
 export function initTasks(db: Database): void { initDoc(db); }
 
 const items = (doc: Record<string, any>): TaskItem[] => (Array.isArray(doc['tasks']) ? doc['tasks'] : []);
+/** Les tâches d'un document déjà lu, pour partager un seul parse (voir /live). */
+export const taskItemsOf = items;
 
 export interface TasksSnapshot { items: TaskItem[]; version: number }
 
@@ -93,8 +95,10 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
  * téléphone est ignoré, quel que soit son âge. Un client périmé ne peut donc
  * plus transporter les tâches, et aucune coche ne se décoche toute seule.
  */
-export function preserveTasks(incoming: Record<string, any>): { dropped: number; unassigned: number; unlinked: number; orphaned: number } {
-  const { doc } = readDoc();
+export function preserveTasks(incoming: Record<string, any>, current?: Record<string, any>): { dropped: number; unassigned: number; unlinked: number; orphaned: number } {
+  // Comme preserveShopping : réutiliser le document déjà lu par l'appelant plutôt
+  // que de le reparser.
+  const doc = current ?? readDoc().doc;
   const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'));
   incoming['tasks'] = res.items;
   return { dropped: res.dropped, unassigned: res.unassigned, unlinked: res.unlinked, orphaned: res.orphaned };

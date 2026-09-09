@@ -37,9 +37,9 @@ import { financesRouter } from './finances/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
-import { getShopping, preserveShopping } from './shopping/repo';
+import { preserveShopping, shopItemsOf } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
-import { getTasks, onAssigned, preserveTasks } from './tasks/repo';
+import { onAssigned, preserveTasks, taskItemsOf } from './tasks/repo';
 import { pushRouter } from './notify/routes';
 import { initPush, notify, resolveVapidSubject } from './notify/push';
 import { startScheduler } from './notify/scheduler';
@@ -348,6 +348,14 @@ const placesLimiter = rateLimit({
 
 interface AuthedRequest extends Request {
   user?: { id: number; email: string; tv: number; rm?: boolean; iat?: number; exp?: number };
+  /**
+   * Membre du foyer résolu pour cette requête, mémoïsé. `undefined` tant qu'on ne
+   * l'a pas cherché, puis le membre ou `null`. Une seule et même requête interroge
+   * plusieurs fois « qui est-ce » (garde `requireMember`, callbacks du routeur des
+   * réglages, corps de la route) : sans ce cache, chaque appel reparse tout le
+   * document d'état.
+   */
+  member?: HouseholdState['members'][number] | null;
 }
 
 function sign(user: { id: number; email: string; token_version: number }, remember = true): string {
@@ -450,8 +458,13 @@ function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
   next();
 }
 
-/** The household member linked to the authenticated user (or null). */
+/** The household member linked to the authenticated user (or null). Mémoïsé sur la requête. */
 function currentMember(req: AuthedRequest): HouseholdState['members'][number] | null {
+  if (req.member !== undefined) return req.member;
+  return (req.member = resolveMember(req));
+}
+
+function resolveMember(req: AuthedRequest): HouseholdState['members'][number] | null {
   if (!req.user) return null;
   const u = getUserById(req.user.id);
   if (!u || !u.member_id) return null;
@@ -834,7 +847,7 @@ api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Respon
   // That is what makes an overwrite structurally impossible, however stale the
   // client is. Aisles and lists, on the other hand, ARE edited here, so their
   // consequences for the items are applied server-side.
-  const kept = preserveShopping(state as unknown as Record<string, unknown>);
+  const kept = preserveShopping(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>);
   if (kept.movedToFallback || kept.dropped) {
     log.info(
       `Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
@@ -843,7 +856,7 @@ api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Respon
   }
 
   // Same rule for the tasks: written op by op, never by whole-document PUT.
-  const tasks = preserveTasks(state as unknown as Record<string, unknown>);
+  const tasks = preserveTasks(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>);
   if (tasks.dropped || tasks.unassigned || tasks.unlinked || tasks.orphaned) {
     log.info(
       `Tâches : ${tasks.dropped} tâche(s) retirée(s) avec leur liste, ${tasks.unassigned} affectation(s) ` +
@@ -863,13 +876,17 @@ api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Respon
  * trois lignes le reste du temps.
  */
 api.get('/live', auth, requireMember, (req: Request, res: Response) => {
-  const shop = getShopping();
+  // Courses et tâches vivent dans le même document : un seul parse pour les deux,
+  // plutôt qu'un par sous-arbre. Cet endpoint est sondé toutes les cinq secondes
+  // par chaque écran ouvert, c'est le plus chaud du service.
+  const { state, version } = getHousehold();
+  const doc = state as unknown as Record<string, unknown>;
   const since = parseInt(String(req.query['since'] ?? ''), 10);
-  if (Number.isInteger(since) && since === shop.version) {
-    res.json({ version: shop.version, unchanged: true });
+  if (Number.isInteger(since) && since === version) {
+    res.json({ version, unchanged: true });
     return;
   }
-  res.json({ version: shop.version, shop: shop.items, tasks: getTasks().items });
+  res.json({ version, shop: shopItemsOf(doc), tasks: taskItemsOf(doc) });
 });
 
 // ---- Current user ----

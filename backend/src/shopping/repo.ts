@@ -16,6 +16,8 @@ const OPS_JOURNAL_MAX = 2000;
 export function initShopping(db: Database): void { initDoc(db); }
 
 const items = (doc: Record<string, any>): ShopItem[] => (Array.isArray(doc['shop']) ? doc['shop'] : []);
+/** Les articles de courses d'un document déjà lu, pour partager un seul parse (voir /live). */
+export const shopItemsOf = items;
 
 export interface ShoppingSnapshot { items: ShopItem[]; version: number }
 
@@ -67,8 +69,10 @@ export function applyShoppingOps(ops: unknown): ApplyOutcome {
  * téléphone est ignoré, quel que soit son âge. Un client périmé ne peut donc
  * plus transporter la liste, et aucune coche ne se décoche toute seule.
  */
-export function preserveShopping(incoming: Record<string, any>): { movedToFallback: number; dropped: number } {
-  const { doc } = readDoc();
+export function preserveShopping(incoming: Record<string, any>, current?: Record<string, any>): { movedToFallback: number; dropped: number } {
+  // L'appelant a souvent déjà le document du serveur en main (PUT /state le lit
+  // pour la version et les droits) : le lui laisser passer évite un parse de plus.
+  const doc = current ?? readDoc().doc;
   const aisleIds = ids(incoming, 'aisles');
   const listIds = ids(incoming, 'shopLists');
 
