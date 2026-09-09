@@ -10,7 +10,6 @@ export interface IngrRow { id: string; val: string; }
 export interface UiState {
   screen: string;
   selDay: string;
-  moreOpen: boolean;
   toast: string;
   /** Le toast en cours propose-t-il une action ? `toastLabel` la nomme (« Annuler » le plus souvent). */
   toastUndo: boolean; toastLabel: string;
@@ -209,12 +208,21 @@ function persistedScreen(): string {
   try { const s = localStorage.getItem(SCREEN_KEY); return s && KNOWN_SCREENS.has(s) ? s : 'home'; } catch { return 'home'; }
 }
 
+/**
+ * Vue d'agenda à l'ouverture. Le mois donne la vue d'ensemble qu'un grand écran
+ * a la place d'afficher ; sur téléphone il se resserre à quelques pixels par
+ * case, où « 3 jours » se lit bien mieux. Même seuil que le châssis (860 px).
+ */
+function defaultCalView(): UiState['calView'] {
+  try { return window.innerWidth < 860 ? '3' : 'month'; } catch { return 'month'; }
+}
+
 export function initialUi(): UiState {
   const today = todayIn(HOUSEHOLD_TZ);
   return {
-    screen: persistedScreen(), selDay: today, moreOpen: false, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
+    screen: persistedScreen(), selDay: today, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
-    calView: 'month', calAnchor: today, miniAnchor: today,
+    calView: defaultCalView(), calAnchor: today, miniAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1),

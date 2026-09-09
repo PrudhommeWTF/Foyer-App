@@ -48,14 +48,6 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-/** Bottom tab bar (mobile): the 4 primary destinations + a "Plus" sheet. */
-export const MOBILE_TABS: NavItem[] = [
-  { id: 'home', label: 'Accueil', icon: 'home' },
-  { id: 'calendar', label: 'Agenda', icon: 'calendar' },
-  { id: 'courses', label: 'Courses', icon: 'courses' },
-  { id: 'taches', label: 'Tâches', icon: 'taches' },
-];
-
 export const ADD_MENU: { id: string; label: string; sub: string; icon: string; tint: string; color: string }[] = [
   { id: 'event', label: 'Événement', sub: 'Ajouter à l’agenda', icon: 'calendar', tint: '#FCE9E3', color: '#E56B4E' },
   { id: 'task', label: 'Tâche', sub: 'Assigner à un membre', icon: 'taches', tint: '#F2ECF5', color: '#9B6FA8' },
