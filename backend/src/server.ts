@@ -13,16 +13,11 @@ import {
   deleteUser,
   findUserByEmail,
   getHousehold,
-  getIcsToken,
-  getSchoolHolidaysCache,
   db,
-  getStateByIcsToken,
   getUserById,
   getUserByMemberId,
   listMemberAccounts,
   saveHousehold,
-  setIcsToken,
-  setSchoolHolidaysCache,
   SecoursRange,
   activerTotp,
   desactiverTotp,
@@ -36,6 +31,7 @@ import {
 } from './db';
 import { buildInitialState, HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
+import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
@@ -45,17 +41,14 @@ import { onAssigned, preserveTasks, taskItemsOf } from './tasks/repo';
 import { pushRouter } from './notify/routes';
 import { initPush, notify, resolveVapidSubject } from './notify/push';
 import { startScheduler } from './notify/scheduler';
-import { buildIcs } from './ics';
-import { calendarFacts } from './schedule';
 import { suggestPlaces } from './places';
 import { searchLogos } from './logos';
 import { conflictOf, isUpToDate } from './state/concurrency';
 import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
 import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
-import { declOf, setting } from './settings/registry';
+import { setting } from './settings/registry';
 import { freshStatus } from './update-status';
-import { DEADLINE_HORIZON_DAYS, deadlines as contractDeadlines } from './finances/contracts';
 import { LogLevel, log, setLogLevelSource } from './log';
 import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
 import { buildStatus } from './system/status';
@@ -1259,52 +1252,8 @@ api.use('/push', auth, requireMember, pushRouter((req) => currentMember(req as A
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
 api.use('/recipes', auth, requireMember, recipesRouter(() => effectiveSetting('recipeImport') === true));
 
-// ---- School holidays (official FR data, cached) ----
-interface SchoolHoliday { name: string; start: string; end: string; zone: string; }
-const HOLIDAYS_TTL = 7 * 24 * 3600 * 1000;
-
-async function fetchSchoolHolidays(academie: string): Promise<SchoolHoliday[]> {
-  const where = encodeURIComponent(`location="${academie}"`);
-  const url = `https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/records?where=${where}&limit=100&order_by=start_date`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const json = (await res.json()) as { results?: Record<string, string>[] };
-  const seen = new Set<string>();
-  const out: SchoolHoliday[] = [];
-  for (const r of json.results || []) {
-    const pop = (r['population'] || '').toLowerCase();
-    if (pop && pop !== '-' && !pop.includes('lève') && !pop.includes('eleve')) continue; // pupils / unspecified only
-    const name = r['description'] || 'Vacances';
-    const start = (r['start_date'] || '').slice(0, 10);
-    const end = (r['end_date'] || '').slice(0, 10);
-    if (!start || !end) continue;
-    const key = name + start + end;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ name, start, end, zone: r['zones'] || '' });
-  }
-  return out;
-}
-
-api.get('/calendar/school-holidays', auth, requireMember, route(async (req, res) => {
-  const academie = String(req.query['academie'] || '').trim();
-  if (!academie) { res.json({ holidays: [], academie: '' }); return; }
-  // Le nom d'académie est interpolé dans la clause `where` de la requête
-  // OpenDataSoft : on n'accepte donc que les valeurs de la liste fermée du
-  // registre, jamais une chaîne libre venue du client.
-  const known = (declOf('academie')?.options || []).some((o) => o.value && o.value === academie);
-  if (!known) { res.status(400).json({ holidays: [], academie, error: 'Académie inconnue' }); return; }
-  const cache = getSchoolHolidaysCache(academie);
-  if (cache && Date.now() - cache.fetchedAt < HOLIDAYS_TTL) { res.json({ holidays: cache.data, academie, cached: true }); return; }
-  try {
-    const holidays = await fetchSchoolHolidays(academie);
-    setSchoolHolidaysCache(academie, holidays, Date.now());
-    res.json({ holidays, academie });
-  } catch {
-    if (cache) { res.json({ holidays: cache.data, academie, stale: true }); return; }
-    res.json({ holidays: [], academie, error: 'Service de vacances scolaires indisponible' });
-  }
-}));
+// ---- Calendrier partagé (vacances scolaires, lien et flux ICS) : voir calendar/routes.ts ----
+api.use('/calendar', calendarRouter({ auth, requireMember, requireAdmin, icsLimiter, route }));
 
 // Autocomplétion du lieu d'un événement, relayée vers la Base Adresse Nationale.
 // Coupable par le réglage `placeSuggest` : éteint, la route ne sort pas et rend
@@ -1320,44 +1269,6 @@ api.get('/places/suggest', auth, requireMember, placesLimiter, async (req: Reque
 api.get('/cards/logos', auth, requireMember, logosLimiter, async (req: Request, res: Response) => {
   if (effectiveSetting('cardLogoSearch') !== true) { res.json({ logos: [] }); return; }
   res.json({ logos: await searchLogos(String(req.query['name'] || '')) });
-});
-
-// Le jeton donne un accès permanent et SANS authentification à tout le
-// calendrier du foyer, horaires des enfants compris, et il survit à la
-// suppression du compte qui l'a lu. Le lire, comme le créer, est un geste
-// d'administration : c'est le canal d'exfiltration le plus discret de
-// l'application.
-api.get('/calendar/ics', auth, requireAdmin, (_req, res) => {
-  let token = getIcsToken();
-  if (!token) { token = crypto.randomBytes(18).toString('hex'); setIcsToken(token); }
-  res.json({ token });
-});
-
-api.post('/calendar/ics/regenerate', auth, requireAdmin, (_req, res) => {
-  const token = crypto.randomBytes(18).toString('hex');
-  setIcsToken(token);
-  res.json({ token });
-});
-
-// Public — consumed by external calendar apps (Google/Apple), so no auth; the token is the secret.
-// Un agenda relit ce flux quelques fois par heure ; personne n'a de raison d'en
-// demander cent. La limite ne rend pas le jeton devinable (144 bits, il ne
-// l'était pas), elle empêche d'en faire un robinet.
-api.get('/calendar/feed.ics', icsLimiter, (req: Request, res: Response) => {
-  const token = String(req.query['token'] || '');
-  const state = getStateByIcsToken(token) as HouseholdState | null;
-  if (!state) { res.status(404).type('text/plain').send('Calendrier introuvable'); return; }
-  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-  res.setHeader('Content-Disposition', 'inline; filename="foyer.ics"');
-  const today = new Date().toISOString().slice(0, 10);
-  // Le filtre scolaire/vacances des créneaux publiés a besoin des vacances de
-  // l'académie du foyer : on les prend dans le cache (rempli par l'usage normal
-  // de l'app), sans appel sortant dans un flux relu en boucle. Cache vide :
-  // vacances inconnues, donc on affiche, comme à l'écran.
-  const academie = setting('academie', state);
-  const cache = academie ? getSchoolHolidaysCache(academie) : null;
-  const schoolHolidays = (cache?.data as { start: string; end: string }[] | undefined) || [];
-  res.send(buildIcs(state, contractDeadlines(today, DEADLINE_HORIZON_DAYS), calendarFacts(schoolHolidays), today));
 });
 
 // ---- System / self-update ----
