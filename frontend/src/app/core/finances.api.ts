@@ -154,29 +154,29 @@ export class FinancesApi {
   }
 
   createAccount(p: AccountPayload): Promise<{ account: FinAccount }> {
-    return this.api.request('finances/accounts', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/accounts', p);
   }
   updateAccount(id: number, p: AccountPayload): Promise<{ account: FinAccount }> {
-    return this.api.request(`finances/accounts/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/accounts/${id}`, p);
   }
   deleteAccount(id: number): Promise<{ ok: boolean }> {
-    return this.api.request(`finances/accounts/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/accounts/${id}`);
   }
   addAlias(accountId: number, label: string): Promise<{ aliases: FinAlias[] }> {
-    return this.api.request(`finances/accounts/${accountId}/aliases`, { method: 'POST', body: JSON.stringify({ label }) });
+    return this.api.post(`finances/accounts/${accountId}/aliases`, { label });
   }
   deleteAlias(id: number): Promise<{ aliases: FinAlias[] }> {
-    return this.api.request(`finances/aliases/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/aliases/${id}`);
   }
 
   createCategory(p: CategoryPayload): Promise<{ category: FinCategory }> {
-    return this.api.request('finances/categories', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/categories', p);
   }
   updateCategory(id: number, p: CategoryPayload): Promise<{ category: FinCategory }> {
-    return this.api.request(`finances/categories/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/categories/${id}`, p);
   }
   deleteCategory(id: number): Promise<{ categories: FinCategory[] }> {
-    return this.api.request(`finances/categories/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/categories/${id}`);
   }
 
   transactions(q: TxQuery): Promise<{ rows: FinTransaction[]; total: number }> {
@@ -198,13 +198,13 @@ export class FinancesApi {
     return this.api.request('finances/transactions/suggest?label=' + encodeURIComponent(label));
   }
   createTransaction(p: TxPayload): Promise<{ transaction: FinTransaction }> {
-    return this.api.request('finances/transactions', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/transactions', p);
   }
   updateTransaction(id: number, p: TxPayload): Promise<{ transaction: FinTransaction }> {
-    return this.api.request(`finances/transactions/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/transactions/${id}`, p);
   }
   deleteTransaction(id: number): Promise<{ ok: boolean }> {
-    return this.api.request(`finances/transactions/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/transactions/${id}`);
   }
 
   summary(month: string): Promise<{ summary: FinMonthSummary }> {
@@ -213,16 +213,16 @@ export class FinancesApi {
 
   // ---- savings ideas ----
   createSaving(p: FinSavingPayload): Promise<{ saving: FinSaving }> {
-    return this.api.request('finances/savings', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/savings', p);
   }
   updateSaving(id: number, p: FinSavingPayload): Promise<{ saving: FinSaving; totals: FinSavingsTotals }> {
-    return this.api.request(`finances/savings/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/savings/${id}`, p);
   }
   deleteSaving(id: number): Promise<{ savings: FinSaving[]; totals: FinSavingsTotals }> {
-    return this.api.request(`finances/savings/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/savings/${id}`);
   }
   linkSavingTask(id: number, taskId: string | null): Promise<{ saving: FinSaving }> {
-    return this.api.request(`finances/savings/${id}/task`, { method: 'POST', body: JSON.stringify({ taskId }) });
+    return this.api.post(`finances/savings/${id}/task`, { taskId });
   }
 
   // ---- meter readings ----
@@ -230,16 +230,16 @@ export class FinancesApi {
     return this.api.request(`finances/readings?contractId=${contractId}`);
   }
   createReading(p: FinReadingPayload): Promise<{ reading: FinReading }> {
-    return this.api.request('finances/readings', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/readings', p);
   }
   deleteReading(id: number): Promise<{ readings: FinReading[]; periods: FinPeriod[] }> {
-    return this.api.request(`finances/readings/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/readings/${id}`);
   }
 
   // ---- module backup ----
   exportModule(): Promise<Blob> { return this.api.download('finances/export.json'); }
   restoreModule(backup: unknown): Promise<{ report: FinRestoreReport }> {
-    return this.api.request('finances/restore', { method: 'POST', body: JSON.stringify({ confirm: 'REMPLACER', backup }) });
+    return this.api.post('finances/restore', { confirm: 'REMPLACER', backup });
   }
 
   // ---- attachments ----
@@ -251,7 +251,7 @@ export class FinancesApi {
     return this.api.upload(`finances/attachments?owner=${owner}&id=${id}&filename=${encodeURIComponent(file.name)}`, file);
   }
   deleteAttachment(id: number): Promise<{ attachments: FinAttachment[] }> {
-    return this.api.request(`finances/attachments/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/attachments/${id}`);
   }
   /** Fetched with the session token, so a piece is never reachable by URL alone. */
   downloadAttachment(id: number): Promise<Blob> { return this.api.download(`finances/attachments/${id}?download=1`); }
@@ -259,22 +259,22 @@ export class FinancesApi {
   // ---- assets, contracts, deadlines ----
   contracts(): Promise<FinContractsBundle> { return this.api.request('finances/contracts'); }
   createAsset(p: FinAssetPayload): Promise<{ asset: FinAsset }> {
-    return this.api.request('finances/assets', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/assets', p);
   }
   updateAsset(id: number, p: FinAssetPayload): Promise<{ asset: FinAsset }> {
-    return this.api.request(`finances/assets/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/assets/${id}`, p);
   }
   deleteAsset(id: number): Promise<{ assets: FinAsset[]; contracts: FinContract[] }> {
-    return this.api.request(`finances/assets/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/assets/${id}`);
   }
   createContract(p: FinContractPayload): Promise<{ contract: FinContract }> {
-    return this.api.request('finances/contracts', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/contracts', p);
   }
   updateContract(id: number, p: FinContractPayload): Promise<{ contract: FinContract }> {
-    return this.api.request(`finances/contracts/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/contracts/${id}`, p);
   }
   deleteContract(id: number): Promise<{ contracts: FinContract[]; detached: number }> {
-    return this.api.request(`finances/contracts/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/contracts/${id}`);
   }
 
   /** Everything the dashboard shows, in one call. */
@@ -294,17 +294,17 @@ export class FinancesApi {
     return this.api.request(`finances/imports/${id}/preview`);
   }
   mapImportAccount(id: number, label: string, accountId: number): Promise<{ preview: FinImportPreview }> {
-    return this.api.request(`finances/imports/${id}/accounts`, { method: 'POST', body: JSON.stringify({ label, accountId }) });
+    return this.api.post(`finances/imports/${id}/accounts`, { label, accountId });
   }
   /** Range en lot des opérations (des suggestions acceptées après un import). */
   categoriseTransactions(items: { id: number; categoryId: number }[]): Promise<{ changed: number }> {
-    return this.api.request('finances/transactions/categorise', { method: 'POST', body: JSON.stringify({ items }) });
+    return this.api.post('finances/transactions/categorise', { items });
   }
   commitImport(id: number): Promise<{ imported: FinImport; inserted: number; duplicates: number; categorised: FinApplyReport | null; suggestions: FinImportSuggestion[] }> {
-    return this.api.request(`finances/imports/${id}/commit`, { method: 'POST' });
+    return this.api.post(`finances/imports/${id}/commit`);
   }
   discardImport(id: number): Promise<{ cancelled?: boolean; deleted?: number; ungrouped?: number }> {
-    return this.api.request(`finances/imports/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/imports/${id}`);
   }
   imports(): Promise<{ imports: FinImport[] }> { return this.api.request('finances/imports'); }
 
@@ -313,33 +313,33 @@ export class FinancesApi {
     return this.api.request(`finances/transfers/candidates?from=${from}&to=${to}`);
   }
   mergeTransfers(pairs: { debitId: number; creditId: number }[]): Promise<{ merged: number; failed: { error: string }[] }> {
-    return this.api.request('finances/transfers', { method: 'POST', body: JSON.stringify({ pairs }) });
+    return this.api.post('finances/transfers', { pairs });
   }
   transfers(): Promise<{ transfers: FinTransfer[] }> { return this.api.request('finances/transfers'); }
   splitTransfer(group: string): Promise<{ split: number }> {
-    return this.api.request(`finances/transfers/${group}`, { method: 'DELETE' });
+    return this.api.del(`finances/transfers/${group}`);
   }
 
   // ---- categorisation rules ----
   rules(): Promise<{ rules: FinRule[]; tags: FinTag[] }> { return this.api.request('finances/rules'); }
   createRule(p: FinRuleInput): Promise<{ rule: FinRule }> {
-    return this.api.request('finances/rules', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/rules', p);
   }
   updateRule(id: number, p: FinRuleInput): Promise<{ rule: FinRule }> {
-    return this.api.request(`finances/rules/${id}`, { method: 'PUT', body: JSON.stringify(p) });
+    return this.api.put(`finances/rules/${id}`, p);
   }
   deleteRule(id: number): Promise<{ rules: FinRule[] }> {
-    return this.api.request(`finances/rules/${id}`, { method: 'DELETE' });
+    return this.api.del(`finances/rules/${id}`);
   }
   moveRule(id: number, delta: 1 | -1): Promise<{ rules: FinRule[] }> {
-    return this.api.request(`finances/rules/${id}/move`, { method: 'POST', body: JSON.stringify({ delta }) });
+    return this.api.post(`finances/rules/${id}/move`, { delta });
   }
   /** What an unsaved rule would do. Writes nothing. */
   previewRule(p: FinRuleInput): Promise<{ preview: FinRulePreview }> {
-    return this.api.request('finances/rules/preview', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/rules/preview', p);
   }
   applyRules(p: { from?: string; to?: string; accountId?: number; force?: boolean }): Promise<{ report: FinApplyReport }> {
-    return this.api.request('finances/rules/apply', { method: 'POST', body: JSON.stringify(p) });
+    return this.api.post('finances/rules/apply', p);
   }
 }
 

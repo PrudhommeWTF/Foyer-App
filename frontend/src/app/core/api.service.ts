@@ -266,6 +266,19 @@ export class ApiService {
     return (res.status === 204 ? undefined : await res.json()) as T;
   }
 
+  // Les verbes qui écrivent, pour ne plus recopier `{ method, body: JSON.stringify(...) }`
+  // à chaque appel. Le corps est sérialisé ici ; sans corps (DELETE, action sans
+  // charge), rien n'est envoyé. GET reste `request(path)`, PATCH aussi (rare).
+  post<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(path, body === undefined ? { method: 'POST' } : { method: 'POST', body: JSON.stringify(body) });
+  }
+  put<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(path, body === undefined ? { method: 'PUT' } : { method: 'PUT', body: JSON.stringify(body) });
+  }
+  del<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: 'DELETE' });
+  }
+
   setupStatus(): Promise<{ needsSetup: boolean }> {
     return this.request('setup/status');
   }
@@ -275,45 +288,45 @@ export class ApiService {
    * second facteur, et il n'y a pas de second temps à attendre.
    */
   setup(payload: SetupPayload): Promise<{ token: string; user: AuthUser }> {
-    return this.request('setup', { method: 'POST', body: JSON.stringify(payload) });
+    return this.post('setup', payload);
   }
 
   login(email: string, password: string, remember = true): Promise<LoginResult> {
     // `remember` décide de la durée du cookie côté serveur, et voyage jusqu'au
     // second facteur via le défi : rien à conserver ici.
-    return this.request<LoginResult>('auth/login', { method: 'POST', body: JSON.stringify({ email, password, remember }) });
+    return this.post<LoginResult>('auth/login', { email, password, remember });
   }
 
   /** Ferme la session côté serveur : le cookie HttpOnly ne peut pas s'effacer depuis le JavaScript. */
   logout(): Promise<{ ok: boolean }> {
-    return this.request('auth/logout', { method: 'POST' });
+    return this.post('auth/logout');
   }
 
   /** Second temps : le code du téléphone, ou un code de secours. */
   loginTotp(challenge: string, code: string): Promise<LoginResult> {
-    return this.request<LoginResult>('auth/login/totp', { method: 'POST', body: JSON.stringify({ challenge, code }) });
+    return this.post<LoginResult>('auth/login/totp', { challenge, code });
   }
 
   // ---- second facteur, pour son propre compte ----
   totpStart(password: string): Promise<{ secret: string; secretLisible: string; uri: string }> {
-    return this.request('me/totp/start', { method: 'POST', body: JSON.stringify({ password }) });
+    return this.post('me/totp/start', { password });
   }
 
   totpEnable(code: string): Promise<{ enabled: boolean; recovery: string[] }> {
-    return this.request('me/totp/enable', { method: 'POST', body: JSON.stringify({ code }) });
+    return this.post('me/totp/enable', { code });
   }
 
   totpDisable(password: string, code: string): Promise<{ enabled: boolean }> {
-    return this.request('me/totp/disable', { method: 'POST', body: JSON.stringify({ password, code }) });
+    return this.post('me/totp/disable', { password, code });
   }
 
   totpNewRecovery(password: string, code: string): Promise<{ recovery: string[] }> {
-    return this.request('me/totp/recovery', { method: 'POST', body: JSON.stringify({ password, code }) });
+    return this.post('me/totp/recovery', { password, code });
   }
 
   /** Le téléphone d'un membre est perdu : un administrateur retire son second facteur. */
   totpReset(memberId: string, password: string): Promise<{ enabled: boolean }> {
-    return this.request(`members/${encodeURIComponent(memberId)}/totp/reset`, { method: 'POST', body: JSON.stringify({ password }) });
+    return this.post(`members/${encodeURIComponent(memberId)}/totp/reset`, { password });
   }
 
   /** `token` n'est présent que lorsque le serveur en a rendu un neuf. Voir aRenouveler côté serveur. */
@@ -329,15 +342,15 @@ export class ApiService {
   }
 
   createMemberAccount(memberId: string, email: string, password: string): Promise<{ memberId: string; email: string }> {
-    return this.request(`members/${encodeURIComponent(memberId)}/account`, { method: 'POST', body: JSON.stringify({ email, password }) });
+    return this.post(`members/${encodeURIComponent(memberId)}/account`, { email, password });
   }
 
   updateMemberAccount(memberId: string, email?: string, password?: string): Promise<{ memberId: string; email: string }> {
-    return this.request(`members/${encodeURIComponent(memberId)}/account`, { method: 'PUT', body: JSON.stringify({ email, password }) });
+    return this.put(`members/${encodeURIComponent(memberId)}/account`, { email, password });
   }
 
   deleteMemberAccount(memberId: string): Promise<{ ok: boolean }> {
-    return this.request(`members/${encodeURIComponent(memberId)}/account`, { method: 'DELETE' });
+    return this.del(`members/${encodeURIComponent(memberId)}/account`);
   }
 
   // ---- réglages du foyer ----
@@ -354,13 +367,13 @@ export class ApiService {
 
   /** Ses propres identifiants. Le mot de passe actuel est exigé, et un jeton neuf revient. */
   updateMyCredentials(currentPassword: string, email?: string, password?: string): Promise<{ email: string; token: string; othersLoggedOut: boolean }> {
-    return this.request('me/credentials', { method: 'PUT', body: JSON.stringify({ currentPassword, email, password }) });
+    return this.put('me/credentials', { currentPassword, email, password });
   }
 
   exportSettings(): Promise<Blob> { return this.download('settings/export'); }
 
   importSettings(config: unknown): Promise<ConfigImportReport> {
-    return this.request('settings/import', { method: 'POST', body: JSON.stringify({ config }) });
+    return this.post('settings/import', { config });
   }
 
   schoolHolidays(academie: string): Promise<{ holidays: { name: string; start: string; end: string; zone: string }[]; academie: string; error?: string }> {
@@ -375,16 +388,16 @@ export class ApiService {
     return this.request('cards/logos?name=' + encodeURIComponent(name));
   }
   icsInfo(): Promise<{ token: string }> { return this.request('calendar/ics'); }
-  icsRegenerate(): Promise<{ token: string }> { return this.request('calendar/ics/regenerate', { method: 'POST' }); }
+  icsRegenerate(): Promise<{ token: string }> { return this.post('calendar/ics/regenerate'); }
 
   /** Version que le serveur exécute. Sans appel sortant, contrairement à updateCheck. */
   systemVersion(): Promise<{ current: string; selfUpdate: boolean; selfUpdateReason?: 'coupee' | 'absente'; repo: string }> { return this.request('system/version'); }
 
   // ---- exploitation ----
   systemStatus(): Promise<SystemStatus> { return this.request('system/status'); }
-  makeBackup(): Promise<{ snapshot: Snapshot; deleted: string[] }> { return this.request('system/backup', { method: 'POST' }); }
+  makeBackup(): Promise<{ snapshot: Snapshot; deleted: string[] }> { return this.post('system/backup'); }
   deleteBackup(name: string): Promise<{ ok: boolean }> {
-    return this.request('system/backup/' + encodeURIComponent(name), { method: 'DELETE' });
+    return this.del('system/backup/' + encodeURIComponent(name));
   }
   backupUrl(name: string): string { return this.absolute('system/backup/' + encodeURIComponent(name)); }
   downloadBackup(name: string): Promise<Blob> { return this.download('system/backup/' + encodeURIComponent(name)); }
@@ -395,7 +408,7 @@ export class ApiService {
    * téléphone déverrouillé ne doit pas suffire.
    */
   startSystemUpdate(password: string): Promise<{ started?: boolean; error?: string }> {
-    return this.request('system/update', { method: 'POST', body: JSON.stringify({ password }) });
+    return this.post('system/update', { password });
   }
   updateStatus(): Promise<{ state: string; message?: string; current: string }> { return this.request('system/update-status'); }
 
@@ -409,7 +422,7 @@ export class ApiService {
    * renvoie alors son document pour que l'appelant rejoue dessus.
    */
   putState(state: HouseholdState, version?: number): Promise<{ version: number }> {
-    return this.request('state', { method: 'PUT', body: JSON.stringify({ state, version }) });
+    return this.put('state', { state, version });
   }
 
   // ---- courses et tâches --------------------------------------------------
@@ -420,30 +433,30 @@ export class ApiService {
   }
 
   shoppingOps(ops: ShopOp[]): Promise<ShoppingApplied> {
-    return this.request('shopping/ops', { method: 'POST', body: JSON.stringify({ ops }) });
+    return this.post('shopping/ops', { ops });
   }
 
   taskOps(ops: TaskOp[]): Promise<TasksApplied> {
-    return this.request('tasks/ops', { method: 'POST', body: JSON.stringify({ ops }) });
+    return this.post('tasks/ops', { ops });
   }
 
   // ---- rappels par Web Push ----------------------------------------------
   pushStatus(): Promise<PushStatus> { return this.request('push/status'); }
   pushSubscribe(subscription: PushSubscriptionJSON, ua: string): Promise<PushDevice> {
-    return this.request('push/subscribe', { method: 'POST', body: JSON.stringify({ subscription, ua }) });
+    return this.post('push/subscribe', { subscription, ua });
   }
   pushUnsubscribe(endpoint: string): Promise<{ removed: boolean }> {
-    return this.request('push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) });
+    return this.post('push/unsubscribe', { endpoint });
   }
-  pushRemoveDevice(id: number): Promise<{ ok: boolean }> { return this.request('push/subscribe/' + id, { method: 'DELETE' }); }
-  pushTest(): Promise<PushTestResult> { return this.request('push/test', { method: 'POST' }); }
+  pushRemoveDevice(id: number): Promise<{ ok: boolean }> { return this.del('push/subscribe/' + id); }
+  pushTest(): Promise<PushTestResult> { return this.post('push/test'); }
 
   // ---- import de recette --------------------------------------------------
   // Seule sortie réseau du module, faite par le serveur : le navigateur ne peut
   // pas appeler un site tiers (la politique de sécurité du contenu l'interdit,
   // et le partage d'origine du site le refuserait de toute façon).
   importRecipe(url: string, recipeId: string): Promise<RecipeImportResult> {
-    return this.request('recipes/import', { method: 'POST', body: JSON.stringify({ url, recipeId }) });
+    return this.post('recipes/import', { url, recipeId });
   }
 
   // ---- fichiers ----------------------------------------------------------
