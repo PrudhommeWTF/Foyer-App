@@ -164,8 +164,14 @@ export class FoyerStore {
       || null;
   });
 
-  /** Non-null data accessor for use inside authed views. */
-  readonly data = computed(() => this._data());
+  /** Le document du foyer, ou null tant qu'il n'est pas chargé. */
+  readonly data = this._data.asReadonly();
+  /**
+   * Le document, garanti non nul. Réservé aux vues que le châssis ne rend que
+   * lorsqu'il existe (voir shell.ts) : elles l'utilisaient toutes via le même
+   * cast `data as () => NonNullable<...>`, recopié dans treize fichiers.
+   */
+  readonly d = computed(() => this._data()!);
 
   /**
    * Meal slots actually shown. Breakfast is opt-in: it is almost never planned

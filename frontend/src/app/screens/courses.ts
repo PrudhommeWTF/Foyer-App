@@ -414,7 +414,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
 })
 export class CoursesScreen {
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
   readonly LIST_ICONS = LIST_ICONS;
   readonly RAYONS = RAYONS;

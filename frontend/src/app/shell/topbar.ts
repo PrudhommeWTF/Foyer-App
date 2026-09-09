@@ -92,7 +92,7 @@ export class TopbarComponent {
   store = inject(FoyerStore);
   private finances = inject(FinancesStore);
   menu = computed(() => (this.store.isChild() ? ADD_MENU.filter((a) => !AJOUTS_ADULTES.has(a.id)) : ADD_MENU));
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
   title = computed(() => {
     const s = this.store.ui().screen;
     return (this.store.narrow() ? SCREEN_TITLES_SHORT[s] : '') || SCREEN_TITLES[s] || 'Foyer';

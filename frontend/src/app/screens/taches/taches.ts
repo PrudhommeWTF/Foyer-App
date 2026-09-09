@@ -467,7 +467,7 @@ import { TaskComposerComponent } from './composer';
 export class TachesScreen {
   store = inject(FoyerStore);
   fin = inject(FinancesStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
   readonly tint = tint;
   readonly palette = PALETTE;

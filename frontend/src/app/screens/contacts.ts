@@ -200,7 +200,7 @@ import { contactIni } from '../core/helpers';
 })
 export class ContactsScreen {
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
   CONTACT_CATS = CONTACT_CATS;
   CONTACT_CAT_COLORS = CONTACT_CAT_COLORS;

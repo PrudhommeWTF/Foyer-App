@@ -4,7 +4,7 @@ import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
-import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS } from '../core/constants';
+import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS, SCHED_DAYS } from '../core/constants';
 import { cap, parseDay, dstr, isoWeek, mondayOf, monthStart } from '../core/helpers';
 import { EventItem, Recur } from '../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../core/schedule';
@@ -502,9 +502,9 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; lanes: number; 
 })
 export class CalendarScreen {
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
-  weekdays = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+  weekdays = SCHED_DAYS;
   recurOpts: Recur[] = ['none', 'daily', 'weekday', 'weekly', 'biweekly', 'monthly'];
 
   // `ui` est un seul signal : lire `store.ui().calAnchor` directement dans un
@@ -622,7 +622,7 @@ export class CalendarScreen {
   ];
 
   // ===== mini-calendrier du panneau latéral =====
-  miniDows = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  miniDows = DOW.map((d) => d[0]);
   miniLabel = computed(() => cap(parseDay(this.miniAnchor()).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
 
   /** Six semaines du mois affiché, chacune avec son numéro de semaine ISO. */

@@ -243,7 +243,7 @@ import { PALETTE } from '../core/constants';
 })
 export class FideliteScreen implements OnDestroy {
   store = inject(FoyerStore);
-  private d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  private d = this.store.d;
 
   formats = CARD_FORMATS;
   palette = PALETTE;

@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FinMonthPoint } from '../../core/finances.api';
-import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
+import { FinancesStore, fmtEuros, fmtEurosInt, frMonthLabel } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
-import { cap } from '../../core/helpers';
 import { IconComponent } from '../../core/icon';
 import { CAT_ICONS } from '../../core/constants';
 
@@ -388,11 +387,7 @@ export class FinancesDashboardTab {
     return Math.min(100, Math.round((spent / reference) * 100));
   }
 
-  monthName(month: string): string {
-    const [y, m] = month.split('-').map(Number);
-    const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    return cap(label);
-  }
+  readonly monthName = frMonthLabel;
 
   shortMonth(month: string): string {
     const [y, m] = month.split('-').map(Number);
