@@ -136,7 +136,6 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
   { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
-  { id: 'documents', group: 'modules', label: 'Documents', desc: 'Ce que le foyer accepte de ranger sur son disque.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
   { id: 'serveur', group: 'machine', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
@@ -334,6 +333,13 @@ export const REGISTRY = [
     default: 25, min: 5, max: 180,
   },
   {
+    key: 'maxUploadMb',
+    type: 'int', scope: 'foyer', section: 'repas', module: 'Cuisine',
+    label: 'Taille maximale d’une photo de recette',
+    desc: 'En mégaoctets. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.',
+    default: 20, min: 1, max: 20,
+  },
+  {
     key: 'showBreakfast',
     type: 'bool', scope: 'foyer', section: 'repas', module: 'Repas',
     label: 'Afficher le petit-déjeuner',
@@ -397,15 +403,6 @@ export const REGISTRY = [
     label: 'Suggérer une catégorie à partir de',
     desc: 'Combien de fois une même catégorie doit avoir été posée à la main pour un marchand avant que l’application ne la propose pour une nouvelle opération du même marchand. Plus le nombre est élevé, moins il y a de suggestions, mais plus elles sont sûres.',
     default: 2, min: 1, max: 20,
-  },
-
-  // ---- documents ----------------------------------------------------------
-  {
-    key: 'maxUploadMb',
-    type: 'int', scope: 'foyer', section: 'documents', module: 'Documents',
-    label: 'Taille maximale d’un fichier',
-    desc: 'En mégaoctets, pour les documents du foyer comme pour les photos de recettes. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.',
-    default: 20, min: 1, max: 20,
   },
 
   // ---- accès --------------------------------------------------------------

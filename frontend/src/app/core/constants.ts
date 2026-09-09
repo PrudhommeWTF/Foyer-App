@@ -176,7 +176,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
-  contacts: 'Contacts importants', documents: 'Documents', finances: 'Finances',
+  contacts: 'Contacts importants', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
 };
 

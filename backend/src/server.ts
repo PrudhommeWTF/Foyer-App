@@ -1177,7 +1177,6 @@ api.use('/settings', auth, requireMember, settingsRouter({
 // document (a data-URL there was re-sent in full on every single save).
 api.use('/files', auth, requireMember, filesRouter(
   () => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024,
-  (req) => !!currentMember(req as AuthedRequest)?.enfant,
 ));
 
 // The shopping list writes item by item rather than by whole-document PUT.
@@ -1399,7 +1398,6 @@ api.get('/system/status', auth, requireAdmin, (_req, res) => {
       events: (state.events || []).length,
       tasks: (state.tasks || []).length,
       recipes: (state.recipes || []).length,
-      files: (state.files || []).length,
     },
   }));
 });

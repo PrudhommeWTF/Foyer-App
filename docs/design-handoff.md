@@ -122,7 +122,12 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 ### 7. Contacts importants (`contacts`)
 - Recherche live (nom/rôle/téléphone) + filtres par catégorie (Urgences, Santé, École, Famille, Maison, Autre) avec compteurs. Cartes contact : avatar initiales coloré, catégorie, téléphone, email, badge « urgent », actions appeler/modifier/supprimer. CRUD complet (modale formulaire + confirmation de suppression). Contact = `{id,name,role,phone,email,cat,urgent,color,ini}`.
 
-### 8. Documents (`documents`)
+### 8. Documents (`documents`) — retiré
+
+> **Obsolète.** Ce module a été retiré de l'application (les stockages cloud,
+> OneDrive, Google Drive et autres, couvrent l'usage, et ranger les fichiers sur
+> le disque du foyer pesait sur l'espace). La description ci-dessous est
+> conservée telle qu'elle figurait dans la maquette d'origine, à titre historique.
 - Grille de **dossiers** (couleur, compteur) avec CRUD ; navigation dans un dossier (fil « Tous les dossiers ») ; recherche transverse ; liste de fichiers récents. Fichier = `{id,name,folder,type}` (type PDF/IMG/DOC…). CRUD dossiers (suppression en cascade) et fichiers. Upload = ajout d'entrée (démo, pas de vrai stockage).
 
 ### 9. Suivi de budget (`budget`) — remplacé

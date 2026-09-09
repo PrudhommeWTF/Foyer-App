@@ -155,7 +155,7 @@ import { TaskComposerComponent } from './composer';
                 <div class="t-body">
                   <div class="t-text">{{ l.task.text }}</div>
                   <!-- Les liens vers le reste du foyer : un tap, et on y est. -->
-                  @if (l.task.shopListId || l.task.contractId || l.task.docId) {
+                  @if (l.task.shopListId || l.task.contractId) {
                     <div class="links">
                       @if (l.task.shopListId) {
                         <button class="shop-link" (click)="$event.stopPropagation(); store.openShoppingList(l.task.shopListId!)">
@@ -167,12 +167,6 @@ import { TaskComposerComponent } from './composer';
                       @if (l.task.contractId) {
                         <button class="shop-link ext" (click)="$event.stopPropagation(); fin.openContract(l.task.contractId!)">
                           <f-icon name="budget" [size]="14" color="var(--ink2)" [width]="2.2" /> Ouvrir le contrat
-                          <f-icon name="chevronRight" [size]="13" color="var(--ink2)" [width]="2.4" />
-                        </button>
-                      }
-                      @if (l.task.docId) {
-                        <button class="shop-link ext" (click)="$event.stopPropagation(); store.openDocument(l.task.docId!)">
-                          <f-icon name="documents" [size]="14" color="var(--ink2)" [width]="2.2" /> <span class="clip">{{ docName(l.task.docId!) }}</span>
                           <f-icon name="chevronRight" [size]="13" color="var(--ink2)" [width]="2.4" />
                         </button>
                       }
@@ -529,7 +523,6 @@ export class TachesScreen {
   private list(id: string): TaskList | undefined { return this.d().taskLists.find((l) => l.id === id); }
   listColor(id: string): string { return this.list(id)?.color || 'var(--primary)'; }
   listName(id: string): string { return this.list(id)?.name || 'Liste supprimée'; }
-  docName(id: string): string { return this.d().files.find((f) => f.id === id)?.name || 'Document supprimé'; }
   badges(t: TaskItem) { return whoBadges(t, this.d().members); }
   dueOf(t: TaskItem): string { return dueLabel(t.due, t.time, this.store.todayStr(), (iso) => this.store.fmtNumDate(iso), t.rec?.grace); }
   recOf(t: TaskItem): string { return t.rec ? recLabel(t.rec, (iso) => this.store.fmtNumDate(iso)) : ''; }
@@ -561,7 +554,7 @@ export class TachesScreen {
   saveTask(draft: TaskDraft & { scope: 'one' | 'all' }): void {
     const t = this.editing();
     if (t) {
-      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: draft.due ? draft.remind : null, docId: draft.docId }, draft.scope);
+      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: draft.due ? draft.remind : null }, draft.scope);
       if (draft.scope === 'all') this.store.toast(t.rec || draft.rec ? 'Série modifiée' : 'Tâche modifiée');
     } else {
       this.store.createTask(draft);

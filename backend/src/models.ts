@@ -77,10 +77,6 @@ export interface TaskTemplate { id: string; name: string; kind: ListKind; color:
 // écrit réellement, tâche par tâche (voir tasks/ops.ts).
 export type { TaskItem } from './tasks/ops';
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
-export interface Folder { id: string; name: string; color: string; }
-// `fileId` désigne un fichier servi par /api/files : les octets ne sont plus
-// dans le document (voir state/migrations.ts, migration 5).
-export interface FileItem { id: string; name: string; folderId: string; type: string; date: string; fileId?: number | null; }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un
@@ -175,8 +171,6 @@ export interface HouseholdState {
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
   contacts: Contact[];
-  folders: Folder[];
-  files: FileItem[];
   meals: Record<string, MealValue>;
   recipes: Recipe[];
   sched: SchedSlot[];

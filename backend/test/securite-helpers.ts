@@ -27,7 +27,7 @@ export interface Contexte {
   /** Identifiants en base, pour les tests qui manipulent `token_version`. */
   ids: { admin: number; membre: number; enfant: number; sansMembre: number };
   /** Identifiants créés côté Finances et Documents, pour éprouver les accès directs. */
-  pieces: { transactionId: number; pieceFinances: number; document: number; photoRecette: number };
+  pieces: { transactionId: number; pieceFinances: number; photoRecette: number };
 }
 
 /**
@@ -100,8 +100,8 @@ export async function demarrer(): Promise<Contexte> {
   if (marque.status !== 200) throw new Error('marquage enfant échoué : ' + JSON.stringify(marque.json));
   const enfantJeton = (await appel(base, 'POST', '/auth/login', { email: 'enfant@example.fr', password: 'MotDePasseSolide7' })).json.token;
 
-  // De quoi éprouver un accès direct : une opération, sa pièce jointe, un
-  // document de famille et une photo de recette.
+  // De quoi éprouver un accès direct : une opération, sa pièce jointe et une
+  // photo de recette.
   const compte = await appel(base, 'POST', '/finances/accounts', { name: 'Compte joint', kind: 'courant' }, setup.json.token);
   const tx = await appel(base, 'POST', '/finances/transactions', {
     accountId: compte.json.account.id, date: '2026-09-01', amount: '-84,30', label: 'Assurance, ref client 44821',
@@ -109,7 +109,6 @@ export async function demarrer(): Promise<Contexte> {
   const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(64, 0x20)]);
   const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
   const pj = await brut(base, `/finances/attachments?owner=transaction&id=${tx.json.transaction.id}`, PDF, setup.json.token);
-  const doc = await brut(base, '/files?owner=document&id=d1&filename=carte-identite.pdf', PDF, setup.json.token);
   const photo = await brut(base, '/files?owner=recipe&id=r1&filename=tarte.png', PNG, setup.json.token);
 
   const idDe = (email: string): number => {
@@ -128,7 +127,6 @@ export async function demarrer(): Promise<Contexte> {
     pieces: {
       transactionId: tx.json.transaction.id,
       pieceFinances: pj.json.attachment.id,
-      document: doc.json.file.id,
       photoRecette: photo.json.file.id,
     },
   };

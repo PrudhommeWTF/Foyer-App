@@ -28,7 +28,7 @@ const INTERDIT: [string, string][] = [
   ['GET', '/finances/export.json'], ['GET', '/finances/export.csv'],
   ['POST', '/finances/transactions'], ['DELETE', '/finances/transactions/1'],
   ['GET', '/finances/attachments/1'], ['DELETE', '/finances/attachments/1'],
-  ['GET', '/files/1'], ['DELETE', '/files/1'], ['POST', '/files?owner=document&id=d1'],
+  ['GET', '/files/1'], ['DELETE', '/files/1'], ['POST', '/files?owner=recipe&id=r1'],
   ['POST', '/shopping/ops'], ['POST', '/tasks/ops'], ['POST', '/recipes/import'],
   ['GET', '/push/status'],
 ];

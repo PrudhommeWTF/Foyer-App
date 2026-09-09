@@ -2,8 +2,8 @@
 //
 // Trois frontières, et aucune n'était tenue avant cette tranche :
 //
-//   - un compte **enfant** lisait tout le module Finances et tous les documents
-//     de famille, pièces d'identité scannées comprises, et pouvait en supprimer ;
+//   - un compte **enfant** lisait tout le module Finances, pièces jointes
+//     comprises, et pouvait supprimer des opérations ;
 //   - la liste des **adresses de connexion** du foyer était servie à n'importe
 //     quel compte, c'est-à-dire l'inventaire exact des identifiants à attaquer ;
 //   - le **jeton du flux ICS** l'était aussi, et il donne un accès permanent et
@@ -47,38 +47,10 @@ describe('un compte enfant n’entre pas dans Finances', () => {
   });
 });
 
-describe('un compte enfant n’entre pas dans les Documents, mais garde le carnet de recettes', () => {
-  it('un document de famille ne se télécharge pas', async () => {
-    const r = await appel(ctx.base, 'GET', `/files/${ctx.pieces.document}`, undefined, ctx.jetons.enfant);
-    assert.equal(r.status, 403);
-  });
-
-  it('un document de famille ne se supprime pas', async () => {
-    const r = await appel(ctx.base, 'DELETE', `/files/${ctx.pieces.document}`, undefined, ctx.jetons.enfant);
-    assert.equal(r.status, 403);
-    const adulte = await appel(ctx.base, 'GET', `/files/${ctx.pieces.document}`, undefined, ctx.jetons.admin);
-    assert.equal(adulte.status, 200, 'le document est intact');
-  });
-
-  it('on ne dépose pas un document depuis un compte enfant', async () => {
-    const res = await fetch(ctx.base + '/files?owner=document&id=d2&filename=x.pdf', {
-      method: 'POST',
-      headers: { 'content-type': 'application/octet-stream', authorization: 'Bearer ' + ctx.jetons.enfant },
-      body: new Uint8Array(Buffer.from('%PDF-1.7\n' + ' '.repeat(64))),
-    });
-    assert.equal(res.status, 403);
-  });
-
-  it('en revanche la photo d’une recette s’affiche : le carnet est de famille', async () => {
+describe('un compte enfant garde le carnet de recettes', () => {
+  it('la photo d’une recette s’affiche : le carnet est de famille', async () => {
     const r = await appel(ctx.base, 'GET', `/files/${ctx.pieces.photoRecette}`, undefined, ctx.jetons.enfant);
     assert.equal(r.status, 200, 'refuser une photo de recette casserait l’écran sans rien protéger');
-  });
-
-  it('le genre se lit sur la fiche, pas sur ce que l’appelant déclare', async () => {
-    // Même en présentant le document sous une adresse de recette, c'est la fiche
-    // qui décide : l'identifiant est le seul paramètre, il ne se déguise pas.
-    const r = await appel(ctx.base, 'GET', `/files/${ctx.pieces.document}?owner=recipe`, undefined, ctx.jetons.enfant);
-    assert.equal(r.status, 403);
   });
 });
 

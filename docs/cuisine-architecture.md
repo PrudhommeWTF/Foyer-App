@@ -296,8 +296,8 @@ référentiel actuel aurait produit des faux négatifs, ce que ce module refuse.
 |---|---|
 | `GET /api/shopping?since=<version>` | Instantané de la liste. Répond `{ version, unchanged: true }` quand rien n'a bougé. |
 | `POST /api/shopping/ops` | Applique un lot (`add`, `set-state`, `edit`, `remove`). Rend les articles, la version, les opérations retenues et celles écartées avec leur raison. |
-| `POST /api/files?owner=recipe\|document&id=<id>&filename=<nom>` | Range un fichier. Corps : les octets bruts. |
-| `GET /api/files/<id>` | Sert le fichier, en flux (`inline` pour un PDF ou une image, `attachment` sinon). |
+| `POST /api/files?owner=recipe&id=<id>&filename=<nom>` | Range une photo de recette. Corps : les octets bruts. |
+| `GET /api/files/<id>` | Sert le fichier, en flux (`inline` pour une image, `attachment` sinon). |
 | `DELETE /api/files/<id>` | Rend les octets au disque. Appelé à la suppression d'une fiche : la copie d'une pièce d'identité n'a pas à attendre le ménage du prochain démarrage. |
 | `GET /api/finances/attachments-check` | Diagnostic du magasin, désormais **pour les deux tables**. Chaque ligne signalée porte son détenteur. |
 
@@ -900,8 +900,8 @@ farine.
 | `backend/test/shopping-ops.test.ts` | Rejeu, doublons, deux téléphones simultanés, opérations invalides écartées sans bloquer le lot |
 | `backend/test/shopping-repo.test.ts` | Transaction tout ou rien, journal persistant, un `PUT` périmé n'emporte pas la liste |
 | `backend/test/state-migrations.test.ts` | Rejouabilité, aucune perte, sauvegarde écrite avant transformation |
-| `backend/test/household-files.test.ts` | Déduplication entre les deux tables, balayage des orphelins, cohabitation photos de recettes et documents |
-| `backend/test/files-routes.test.ts` | Surface HTTP des fichiers : ce que chaque propriétaire accepte, `inline` contre `attachment`, suppression qui n'emporte pas les octets d'un voisin |
+| `backend/test/household-files.test.ts` | Déduplication entre les deux tables, balayage des orphelins des photos de recettes |
+| `backend/test/files-routes.test.ts` | Surface HTTP des fichiers : une photo de recette doit être une image, `inline` contre `attachment`, suppression qui n'emporte pas les octets d'un voisin |
 | `backend/test/recipe-import.test.ts` | Lecture du JSON-LD sur une vraie page Marmiton, et sur les formes tordues du standard |
 | `backend/test/recipe-fetch.test.ts` | Refus des adresses locales, des protocoles hors web, interrupteur de configuration |
 | `backend/test/recipe-routes.test.ts` | Import bout en bout avec le réseau bouchonné : photo, avertissements, refus |

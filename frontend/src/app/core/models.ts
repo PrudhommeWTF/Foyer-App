@@ -4,7 +4,6 @@ import type { HouseholdSettings, MemberPrefs } from './settings/registry';
 export type Recur = 'none' | 'daily' | 'weekday' | 'weekly' | 'biweekly' | 'monthly';
 export type SchedType = 'ecole' | 'travail' | 'sport' | 'loisir' | 'sante' | 'repas' | 'autre';
 export type ContactCat = 'Urgences' | 'Santé' | 'École' | 'Famille' | 'Maison' | 'Autre';
-export type FileType = 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE';
 
 /**
  * `allerg` et `refuse` portent les contraintes alimentaires : allergènes de la
@@ -178,8 +177,6 @@ export interface TaskItem {
    * c'est l'écran Finances qui le dit.
    */
   contractId?: number | null;
-  /** Document du foyer (FileItem.id) que la tâche ouvre. Tombe avec le document. */
-  docId?: string | null;
   /**
    * Tâche parente, pour une sous-tâche. **Un seul niveau**, dans la même liste.
    * Une sous-tâche est un détail du parent : ni date, ni récurrence, ni rappel.
@@ -189,10 +186,6 @@ export interface TaskItem {
   pos?: number;
 }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
-export interface Folder { id: string; name: string; color: string; }
-// `fileId` désigne un fichier servi par /api/files : comme les photos de
-// recettes, les octets ne sont plus dans le document d'état.
-export interface FileItem { id: string; name: string; folderId: string; type: FileType; date: string; fileId?: number | null; }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un
@@ -348,8 +341,6 @@ export interface HouseholdState {
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
   contacts: Contact[];
-  folders: Folder[];
-  files: FileItem[];
   meals: Record<string, MealValue>;
   recipes: Recipe[];
   sched: SchedSlot[];

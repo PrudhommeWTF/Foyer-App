@@ -111,15 +111,6 @@ export function normText(s: string): string {
   return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 }
 
-export function fileTypeOf(name: string): 'PDF' | 'IMG' | 'DOC' | 'XLS' | 'AUTRE' {
-  const ext = (name.split('.').pop() || '').toLowerCase();
-  if (['pdf'].includes(ext)) return 'PDF';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].includes(ext)) return 'IMG';
-  if (['doc', 'docx', 'txt', 'pages'].includes(ext)) return 'DOC';
-  if (['xls', 'xlsx', 'csv', 'numbers'].includes(ext)) return 'XLS';
-  return 'AUTRE';
-}
-
 export function uid(prefix: string): string {
   return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }

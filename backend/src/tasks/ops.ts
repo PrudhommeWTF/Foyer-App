@@ -76,8 +76,6 @@ export interface TaskItem {
    * disparu entre-temps.
    */
   contractId?: number | null;
-  /** Document du foyer (FileItem.id) que la tâche ouvre. Tombe avec le document. */
-  docId?: string | null;
   /**
    * Tâche parente, pour une sous-tâche. **Un seul niveau** : une sous-tâche ne
    * peut pas en avoir elle-même, et une tâche qui a des sous-tâches ne peut pas
@@ -97,7 +95,7 @@ export interface TaskItem {
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; docId?: string | null; parentId?: string | null; pos?: number | null;
+  contractId?: number | null; parentId?: string | null; pos?: number | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; }
@@ -125,8 +123,6 @@ export interface OpsContext {
   memberIds: Set<string>;
   /** Listes de courses existantes, pour le lien. */
   shopListIds: Set<string>;
-  /** Documents existants, pour le lien. */
-  docIds: Set<string>;
   /** Vrai quand cette opération a déjà été appliquée (rejeu après coupure réseau). */
   alreadyApplied: (opId: string) => boolean;
 }
@@ -230,10 +226,6 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     // Une liste de courses disparue ne fait pas échouer la tâche : le lien tombe.
     f.shopListId = id && ctx.shopListIds.has(id) ? id : null;
   }
-  if (o['docId'] !== undefined) {
-    const id = trimmed(o['docId'], 80);
-    f.docId = id && ctx.docIds.has(id) ? id : null;
-  }
   if (o['pos'] !== undefined) {
     const n = o['pos'];
     if (n === null || n === '') f.pos = null;
@@ -258,7 +250,6 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (!next.note) delete next.note;
   if (!next.cat) delete next.cat;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
-  if (next.docId === null || next.docId === undefined) delete next.docId;
   if (next.contractId === null || next.contractId === undefined) delete next.contractId;
   if (next.parentId === null || next.parentId === undefined) delete next.parentId;
   // Une sous-tâche est un détail du parent : la date, la récurrence et le rappel
@@ -460,7 +451,7 @@ export interface ReconcileReport {
  * l'enregistrement du document complet, dans lequel les tâches ne voyagent
  * plus : il faut donc appliquer ici les conséquences.
  */
-export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>, docIds: Set<string> = new Set()): ReconcileReport {
+export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>): ReconcileReport {
   const kept = items.filter((t) => listIds.has(t.listId));
   const byId = new Map(kept.map((t) => [t.id, t]));
   let unassigned = 0;
@@ -471,7 +462,6 @@ export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Se
     const who = (t.who || []).filter((m) => memberIds.has(m));
     if (who.length !== (t.who || []).length) { unassigned++; next = { ...next, who }; }
     if (t.shopListId && !shopListIds.has(t.shopListId)) { unlinked++; next = { ...next }; delete next.shopListId; }
-    if (t.docId && !docIds.has(t.docId)) { unlinked++; next = { ...next }; delete next.docId; }
     // Un parent parti avec sa liste laisserait une sous-tâche invisible : elle
     // remonte au premier niveau, où elle se voit et se traite.
     const parent = t.parentId ? byId.get(t.parentId) : null;

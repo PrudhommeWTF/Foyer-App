@@ -1,4 +1,4 @@
-import { FileType, ListKind, MealItem, Rayon, Recur, SchedRec, SchedType, SchedWhen, ShopState } from './models';
+import { ListKind, MealItem, Rayon, Recur, SchedRec, SchedType, SchedWhen, ShopState } from './models';
 import { todayIn, weekdayOf } from './helpers';
 import { PasteMode, SchedClip } from './sched-copy';
 import { SchedScope } from './schedule';
@@ -92,11 +92,6 @@ export interface UiState {
   coName: string; coRole: string; coPhone: string; coEmail: string; coCat: string; coColor: string; coUrgent: boolean; coBirthday: string;
   contactDelId: string | null;
 
-  // documents
-  docFolder: string | null; docSearch: string;
-  folderForm: boolean; foEditId: string | null; foName: string; foColor: string; folderDelId: string | null;
-  fileForm: boolean; fiEditId: string | null; fiId: string; fiName: string; fiFolderId: string | null; fiType: FileType; fiFileId: number | null; fiBusy: boolean; fileDelId: string | null;
-
   // recipes
   recipeForm: boolean; editingId: string | null; confirmDelId: string | null; openRecipeId: string | null;
   fRecipeId: string;
@@ -187,7 +182,7 @@ export interface UiState {
 const SCREEN_KEY = 'foyer.screen';
 const KNOWN_SCREENS: ReadonlySet<string> = new Set([
   'home', 'calendar', 'courses', 'taches', 'contacts',
-  'documents', 'finances', 'repas', 'recettes', 'planning', 'settings',
+  'finances', 'repas', 'recettes', 'planning', 'settings',
 ]);
 export function rememberScreen(screen: string): void {
   try { localStorage.setItem(SCREEN_KEY, screen); } catch { /* mode privé : le choix vaut pour la session */ }
@@ -214,9 +209,6 @@ export function initialUi(): UiState {
     tplOpen: false,
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
-    docFolder: null, docSearch: '',
-    folderForm: false, foEditId: null, foName: '', foColor: '#E56B4E', folderDelId: null,
-    fileForm: false, fiEditId: null, fiId: '', fiName: '', fiFolderId: null, fiType: 'PDF', fiFileId: null, fiBusy: false, fileDelId: null,
     recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
     fRecipeId: '', fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
     fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
