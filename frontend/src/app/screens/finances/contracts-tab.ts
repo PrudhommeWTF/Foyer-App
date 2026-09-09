@@ -7,6 +7,7 @@ import { IconComponent } from '../../core/icon';
 import { CAT_ICONS, FILE_TYPE_COLORS } from '../../core/constants';
 import { fmtBytes } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 import { AvatarComponent } from '../../shared/avatar';
 
 const ASSET_KINDS: { id: FinAsset['kind']; label: string; icon: string }[] = [
@@ -43,7 +44,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
   selector: 'fin-contracts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, AvatarComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, AvatarComponent],
   template: `
     <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
     @if (soonDeadlines().length) {
@@ -252,17 +253,9 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     }
 
     @if (store.ui().saDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ saDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer cette piste ?</div>
-          <div class="confirm-txt">Si elle a été menée à bien, passez-la plutôt en « faite » : son gain reste compté dans ce que vous avez obtenu.</div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ saDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmSavingDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer cette piste ?" (cancel)="store.patch({ saDelId: null })" (confirm)="store.confirmSavingDel()">
+        Si elle a été menée à bien, passez-la plutôt en « faite » : son gain reste compté dans ce que vous avez obtenu.
+      </f-confirm>
     }
 
     <!-- FORMULAIRE DE BIEN -->
@@ -561,31 +554,15 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     }
 
     @if (store.ui().asDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ asDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer ce bien ?</div>
-          <div class="confirm-txt">Ses contrats sont conservés, ils passent simplement en « sans bien rattaché ».</div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ asDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmAssetDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer ce bien ?" (cancel)="store.patch({ asDelId: null })" (confirm)="store.confirmAssetDel()">
+        Ses contrats sont conservés, ils passent simplement en « sans bien rattaché ».
+      </f-confirm>
     }
 
     @if (store.ui().coDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ coDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer ce contrat ?</div>
-          <div class="confirm-txt">@if (store.piecesOf(store.ui().coDelId!); as n) { <strong>{{ n }} pièce{{ n > 1 ? 's' : '' }} jointe{{ n > 1 ? 's' : '' }} sera{{ n > 1 ? 'ont' : '' }} supprimée{{ n > 1 ? 's' : '' }} du disque.</strong> } Les opérations rattachées sont conservées, elles perdent seulement leur explication. Si le contrat est simplement terminé, passez-le en « résilié » plutôt que de le supprimer : son historique reste lisible.</div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ coDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmContractDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer ce contrat ?" (cancel)="store.patch({ coDelId: null })" (confirm)="store.confirmContractDel()">
+        @if (store.piecesOf(store.ui().coDelId!); as n) { <strong>{{ n }} pièce{{ n > 1 ? 's' : '' }} jointe{{ n > 1 ? 's' : '' }} sera{{ n > 1 ? 'ont' : '' }} supprimée{{ n > 1 ? 's' : '' }} du disque.</strong> } Les opérations rattachées sont conservées, elles perdent seulement leur explication. Si le contrat est simplement terminé, passez-le en « résilié » plutôt que de le supprimer : son historique reste lisible.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -699,10 +676,6 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; flex-wrap: wrap; }
     .modal-acts .spacer { flex: 1; }
     .modal-acts .grow { flex: 1; }
-    .confirm { text-align: center; }
-    .confirm-ic { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-title { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-txt { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 0; line-height: 1.5; }
   `],
 })
 export class FinancesContractsTab {

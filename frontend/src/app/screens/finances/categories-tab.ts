@@ -4,13 +4,14 @@ import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store'
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
 
 @Component({
   selector: 'fin-categories-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
   template: `
     <div class="bar">
       <div class="hint">Le budget mensuel de référence sert de repère : il ne bloque rien, il situe le réel. Les dépenses d'une sous-catégorie remontent sur sa parente.</div>
@@ -96,20 +97,10 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
     }
 
     @if (store.ui().catDelId) {
-      <f-modal [maxWidth]="420" (close)="store.patch({ catDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer cette catégorie ?</div>
-          <div class="confirm-txt">
-            « {{ delName() }} » sera retirée{{ delChildren() ? ', avec ses ' + delChildren() + ' sous-catégorie' + (delChildren() > 1 ? 's' : '') : '' }}.
-            Les opérations concernées sont conservées et repassent en « Sans catégorie ».
-          </div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ catDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmCategoryDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm [maxWidth]="420" title="Supprimer cette catégorie ?" (cancel)="store.patch({ catDelId: null })" (confirm)="store.confirmCategoryDel()">
+        « {{ delName() }} » sera retirée{{ delChildren() ? ', avec ses ' + delChildren() + ' sous-catégorie' + (delChildren() > 1 ? 's' : '') : '' }}.
+        Les opérations concernées sont conservées et repassent en « Sans catégorie ».
+      </f-confirm>
     }
   `,
   styles: [`
@@ -152,10 +143,6 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
     .icon-opt.on { background: var(--primary); }
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; }
     .modal-acts .grow { flex: 1; }
-    .confirm { text-align: center; }
-    .confirm-ic { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-title { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-txt { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 0; line-height: 1.5; }
   `],
 })
 export class FinancesCategoriesTab {

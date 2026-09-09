@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
+import { ConfirmComponent } from '../shared/confirm';
 import { RECIPE_PALETTE } from '../core/constants';
 import { ALLERGENES } from '../core/articles';
 
@@ -10,7 +11,7 @@ import { ALLERGENES } from '../core/articles';
   selector: 'screen-recettes',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -370,17 +371,9 @@ import { ALLERGENES } from '../core/articles';
     }
 
     @if (store.ui().confirmDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ confirmDelId: null })">
-        <div class="confirm">
-          <div class="warn"><f-icon name="trash" [size]="26" color="#E56B4E" /></div>
-          <div class="confirm-t f-display">Supprimer cette recette ?</div>
-          <div class="confirm-s">Cette recette sera retirée du carnet. Cette action est définitive.</div>
-          <div class="modal-actions">
-            <button class="btn btn-soft grow" (click)="store.patch({ confirmDelId: null })">Annuler</button>
-            <button class="btn btn-danger grow" (click)="store.confirmRecipeDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer cette recette ?" (cancel)="store.patch({ confirmDelId: null })" (confirm)="store.confirmRecipeDel()">
+        Cette recette sera retirée du carnet. Cette action est définitive.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -496,10 +489,6 @@ import { ALLERGENES } from '../core/articles';
     .modal-actions { display: flex; gap: 12px; align-items: center; }
     .modal-actions .grow { flex: 1; }
     .modal-actions .grow2 { flex: 1.4; }
-    .confirm { text-align: center; }
-    .warn { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-t { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-s { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 22px; }
   `],
 })
 export class RecettesScreen {

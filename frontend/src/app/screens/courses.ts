@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
+import { ConfirmComponent } from '../shared/confirm';
 import { LIST_ICONS, PALETTE } from '../core/constants';
 import { RAYONS } from '../core/articles';
 import { Aisle, ShopItem, ShopState } from '../core/models';
@@ -19,7 +20,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
   selector: 'screen-courses',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -293,31 +294,15 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     }
 
     @if (store.ui().shopListDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ shopListDelId: null })">
-        <div class="confirm">
-          <div class="warn"><f-icon name="trash" [size]="26" color="#E56B4E" /></div>
-          <div class="confirm-t f-display">Supprimer cette liste ?</div>
-          <div class="confirm-s">Cette liste et ses articles seront supprimés. Cette action est définitive.</div>
-          <div class="modal-actions">
-            <button class="btn btn-soft grow" (click)="store.patch({ shopListDelId: null })">Annuler</button>
-            <button class="btn btn-danger grow" (click)="store.confirmShopListDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer cette liste ?" (cancel)="store.patch({ shopListDelId: null })" (confirm)="store.confirmShopListDel()">
+        Cette liste et ses articles seront supprimés. Cette action est définitive.
+      </f-confirm>
     }
 
     @if (store.ui().aisleDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ aisleDelId: null })">
-        <div class="confirm">
-          <div class="warn"><f-icon name="trash" [size]="26" color="#E56B4E" /></div>
-          <div class="confirm-t f-display">Supprimer ce rayon ?</div>
-          <div class="confirm-s">Ce rayon sera supprimé. Ses articles passeront dans « À trier ».</div>
-          <div class="modal-actions">
-            <button class="btn btn-soft grow" (click)="store.patch({ aisleDelId: null })">Annuler</button>
-            <button class="btn btn-danger grow" (click)="store.confirmAisleDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer ce rayon ?" (cancel)="store.patch({ aisleDelId: null })" (confirm)="store.confirmAisleDel()">
+        Ce rayon sera supprimé. Ses articles passeront dans « À trier ».
+      </f-confirm>
     }
   `,
   styles: [`
@@ -401,10 +386,6 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .modal-actions .grow { flex: 1; }
     .modal-actions .grow2 { flex: 1.4; }
     .del-btn { width: 50px; height: 50px; flex: none; border-radius: 13px; background: var(--soft2); }
-    .confirm { text-align: center; }
-    .warn { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-t { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-s { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 22px; }
 
     /* Sur large écran, la liste reste une colonne lisible plutôt que de s'étirer. */
     @media (min-width: 861px) {

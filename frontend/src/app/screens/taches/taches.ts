@@ -10,6 +10,7 @@ import { TaskDraft } from '../../core/task-ops';
 import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
 import { occurrenceProgress, recLabel } from '../../core/recurrence';
 import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 import { ReorderDirective } from '../../shared/reorder';
 import { WhoComponent } from '../../shared/who';
 import { TaskComposerComponent } from './composer';
@@ -30,7 +31,7 @@ import { TaskComposerComponent } from './composer';
   selector: 'screen-taches',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ReorderDirective, WhoComponent, TaskComposerComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, WhoComponent, TaskComposerComponent],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -353,17 +354,9 @@ import { TaskComposerComponent } from './composer';
 
     <!-- Supprimer une liste -->
     @if (store.ui().listDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ listDelId: null })">
-        <div class="confirm">
-          <div class="warn"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title">Supprimer cette liste ?</div>
-          <div class="confirm-sub">« {{ delListName() }} » et ses {{ delListCount() }} tâches seront supprimées. Pour la garder sans l’afficher, archivez-la plutôt.</div>
-          <div class="actions">
-            <button class="btn btn-soft grow" (click)="store.patch({ listDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmTaskListDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer cette liste ?" (cancel)="store.patch({ listDelId: null })" (confirm)="store.confirmTaskListDel()">
+        « {{ delListName() }} » et ses {{ delListCount() }} tâches seront supprimées. Pour la garder sans l’afficher, archivez-la plutôt.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -458,10 +451,6 @@ import { TaskComposerComponent } from './composer';
     .actions .grow { flex: 1; }
     .actions .grow2 { flex: 1.4; }
 
-    .confirm { text-align: center; }
-    .warn { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: var(--soft2); display: flex; align-items: center; justify-content: center; }
-    .confirm-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-sub { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 4px; }
   `],
 })
 export class TachesScreen {

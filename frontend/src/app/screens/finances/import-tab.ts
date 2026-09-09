@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 import { FinConfidence, FinTransferCandidate } from '../../core/finances.api';
 
 const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
@@ -16,7 +16,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
   selector: 'fin-import-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ConfirmComponent],
   template: `
     @if (store.ui().importError; as err) {
       <div class="banner err"><f-icon name="urgent" [size]="18" color="#8C3B26" [width]="2.2" /><span>{{ err }}</span></div>
@@ -247,23 +247,14 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     </div>
 
     @if (store.ui().undoImportId) {
-      <f-modal [maxWidth]="440" (close)="store.patch({ undoImportId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Annuler cet import ?</div>
-          <div class="confirm-txt">
-            {{ undoTarget()?.liveRows }} opération{{ (undoTarget()?.liveRows || 0) > 1 ? 's' : '' }} seront retirées.
-            @if (undoTarget()?.editedRows) {
-              <strong>{{ undoTarget()?.editedRows }} d'entre elles ont été modifiées à la main depuis l'import ; ces modifications seront perdues.</strong>
-            }
-            Vous pourrez réimporter le même fichier ensuite, sans doublon.
-          </div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ undoImportId: null })">Garder</button>
-            <button class="btn btn-primary grow" [disabled]="store.ui().importBusy" (click)="store.undoImport()">Annuler l'import</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm [maxWidth]="440" title="Annuler cet import ?" cancelLabel="Garder" confirmLabel="Annuler l'import"
+        [disabled]="store.ui().importBusy" (cancel)="store.patch({ undoImportId: null })" (confirm)="store.undoImport()">
+        {{ undoTarget()?.liveRows }} opération{{ (undoTarget()?.liveRows || 0) > 1 ? 's' : '' }} seront retirées.
+        @if (undoTarget()?.editedRows) {
+          <strong>{{ undoTarget()?.editedRows }} d'entre elles ont été modifiées à la main depuis l'import ; ces modifications seront perdues.</strong>
+        }
+        Vous pourrez réimporter le même fichier ensuite, sans doublon.
+      </f-confirm>
     }
 
     <!-- SAUVEGARDE DU MODULE -->
@@ -286,23 +277,14 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     </div>
 
     @if (store.ui().restorePending) {
-      <f-modal [maxWidth]="460" (close)="store.patch({ restorePending: null, restoreName: '' })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="urgent" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Remplacer toutes les données du module ?</div>
-          <div class="confirm-txt">
-            <strong>{{ store.ui().restoreName }}</strong> va remplacer l'intégralité du module Finances :
-            comptes, opérations, contrats, règles. Ce qui existe aujourd'hui et ne figure pas dans ce
-            fichier sera perdu. Le reste du foyer (agenda, courses, tâches) n'est pas touché.
-            <br /><br />
-            L'opération est en tout ou rien : si le fichier est incohérent, rien ne change.
-          </div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ restorePending: null, restoreName: '' })">Annuler</button>
-            <button class="btn btn-primary grow" [disabled]="store.ui().busy" (click)="store.confirmRestore()">Remplacer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm [maxWidth]="460" icon="urgent" title="Remplacer toutes les données du module ?" confirmLabel="Remplacer"
+        [disabled]="store.ui().busy" (cancel)="store.patch({ restorePending: null, restoreName: '' })" (confirm)="store.confirmRestore()">
+        <strong>{{ store.ui().restoreName }}</strong> va remplacer l'intégralité du module Finances :
+        comptes, opérations, contrats, règles. Ce qui existe aujourd'hui et ne figure pas dans ce
+        fichier sera perdu. Le reste du foyer (agenda, courses, tâches) n'est pas touché.
+        <br /><br />
+        L'opération est en tout ou rien : si le fichier est incohérent, rien ne change.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -390,17 +372,11 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .icov { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .empty { font-size: 13px; font-weight: 700; color: var(--ink3); padding: 10px 0; }
 
-    .modal-acts { display: flex; gap: 12px; margin-top: 22px; }
-    .modal-acts .grow { flex: 1; }
-    .confirm { text-align: center; }
-    .confirm-ic { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
     .panel.backup { background: var(--surface); border-radius: 18px; padding: 18px; margin-top: 18px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
     .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 4px; line-height: 1.55; }
     .backup-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
     .backup-acts label.btn { cursor: pointer; }
-    .confirm-title { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-txt { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 0; line-height: 1.5; }
   `],
 })
 export class FinancesImportTab {

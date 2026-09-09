@@ -4,13 +4,14 @@ import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 import { CAT_ICONS } from '../../core/constants';
 
 @Component({
   selector: 'fin-transactions-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
   template: `
     <div class="bar">
       <div class="sfield">
@@ -171,17 +172,9 @@ import { CAT_ICONS } from '../../core/constants';
     }
 
     @if (store.ui().txDelId) {
-      <f-modal [maxWidth]="400" (close)="store.patch({ txDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer cette opération ?</div>
-          <div class="confirm-txt">« {{ delLabel() }} » sera retirée définitivement. Les soldes de compte seront recalculés.</div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ txDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmTxDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm title="Supprimer cette opération ?" (cancel)="store.patch({ txDelId: null })" (confirm)="store.confirmTxDel()">
+        « {{ delLabel() }} » sera retirée définitivement. Les soldes de compte seront recalculés.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -232,10 +225,6 @@ import { CAT_ICONS } from '../../core/constants';
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; }
     .modal-acts .spacer { flex: 1; }
     .modal-acts .grow { flex: 1; }
-    .confirm { text-align: center; }
-    .confirm-ic { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-title { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-txt { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 0; }
   `],
 })
 export class FinancesTransactionsTab {

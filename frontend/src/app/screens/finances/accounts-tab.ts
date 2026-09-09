@@ -4,6 +4,7 @@ import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
 import { AvatarComponent } from '../../shared/avatar';
 import { AccountKind, FinAccount } from '../../core/finances.api';
 
@@ -18,7 +19,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
   selector: 'fin-accounts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, AvatarComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, AvatarComponent],
   template: `
     <div class="bar">
       <div class="hint">Un compte archivé garde tout son historique mais sort des alertes de mois incomplet.</div>
@@ -205,20 +206,10 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     }
 
     @if (store.ui().acDelId) {
-      <f-modal [maxWidth]="420" (close)="store.patch({ acDelId: null })">
-        <div class="confirm">
-          <div class="confirm-ic"><f-icon name="trash" [size]="26" color="var(--primary)" [width]="2" /></div>
-          <div class="confirm-title f-display">Supprimer ce compte ?</div>
-          <div class="confirm-txt">
-            « {{ delName() }} » et ses libellés d'export seront retirés. Un compte qui porte des
-            opérations ne peut pas être supprimé : archivez-le plutôt.
-          </div>
-          <div class="modal-acts">
-            <button class="btn btn-soft grow" (click)="store.patch({ acDelId: null })">Annuler</button>
-            <button class="btn btn-primary grow" (click)="store.confirmAccountDel()">Supprimer</button>
-          </div>
-        </div>
-      </f-modal>
+      <f-confirm [maxWidth]="420" title="Supprimer ce compte ?" (cancel)="store.patch({ acDelId: null })" (confirm)="store.confirmAccountDel()">
+        « {{ delName() }} » et ses libellés d'export seront retirés. Un compte qui porte des
+        opérations ne peut pas être supprimé : archivez-le plutôt.
+      </f-confirm>
     }
   `,
   styles: [`
@@ -272,10 +263,6 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; }
     .modal-acts .spacer { flex: 1; }
     .modal-acts .grow { flex: 1; }
-    .confirm { text-align: center; }
-    .confirm-ic { width: 56px; height: 56px; margin: 0 auto 16px; border-radius: 50%; background: #FCE9E3; display: flex; align-items: center; justify-content: center; }
-    .confirm-title { font-size: 20px; font-weight: 700; color: var(--ink); }
-    .confirm-txt { font-size: 14px; font-weight: 600; color: var(--ink2); margin: 8px 0 0; line-height: 1.5; }
   `],
 })
 export class FinancesAccountsTab {
