@@ -93,7 +93,6 @@ function ghHeaders(): Record<string, string> {
   return headers;
 }
 
-/** Le canal choisi par le foyer, tel qu'il s'applique vraiment. */
 /**
  * La capacité de la machine à se mettre à jour elle-même, relue à chaque appel :
  * un helper posé ou retiré entre deux requêtes doit se voir sans redémarrage.
@@ -103,6 +102,7 @@ const selfUpdateCapacite = () => capaciteSelfUpdate({
   helper: process.env.FOYER_SELF_UPDATE_HELPER,
 });
 
+/** Le canal choisi par le foyer, tel qu'il s'applique vraiment. */
 const canalCourant = (): Canal => (effectiveSetting('updateChannel') === 'prerelease' ? 'prerelease' : 'latest');
 
 const chercherRelease = (): Promise<Awaited<ReturnType<typeof fetchRelease>>> =>
@@ -432,6 +432,22 @@ function setSessionCookie(req: Request, res: Response, token: string, remember: 
 }
 
 /**
+ * Ouvre une session : signe le jeton, pose le cookie, et rend `{ token, user }`.
+ * C'est la queue commune à la connexion, au second facteur et à la création du
+ * foyer (qui répond en 201). Ce qui précède (temporisation, journal) reste propre
+ * à chaque appelant.
+ */
+function ouvrirSession(
+  req: Request, res: Response,
+  user: { id: number; email: string; token_version: number; name: string; member_id: string | null },
+  remember: boolean, statut = 200,
+): void {
+  const token = sign(user, remember);
+  setSessionCookie(req, res, token, remember);
+  res.status(statut).json({ token, user: { email: user.email, name: user.name, memberId: user.member_id } });
+}
+
+/**
  * Ce jeton a-t-il passé la moitié de sa vie ?
  *
  * On ne renouvelle pas à chaque appel : un jeton neuf toutes les cinq secondes
@@ -617,9 +633,7 @@ api.post('/setup', authLimiter, jsonSmall, route(async (req, res) => {
     saveHousehold(state);
     return au;
   })();
-  const token = sign(adminUser);
-  setSessionCookie(req, res, token, true);
-  res.status(201).json({ token, user: { email: adminUser.email, name: adminUser.name, memberId: adminUser.member_id } });
+  ouvrirSession(req, res, adminUser, true, 201);
 }));
 
 api.post('/auth/login', authLimiter, jsonSmall, route(async (req, res) => {
@@ -675,9 +689,7 @@ api.post('/auth/login', authLimiter, jsonSmall, route(async (req, res) => {
   parCompte.succes(cible);
   parAdresse.succes(adresse);
   log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
-  const token = sign(user, remember);
-  setSessionCookie(req, res, token, remember);
-  res.json({ token, user: { email: user.email, name: user.name, memberId: user.member_id } });
+  ouvrirSession(req, res, user, remember);
 }));
 
 // Il n'y a pas d'inscription libre : un accès s'ouvre depuis la fiche d'un
@@ -761,9 +773,7 @@ api.post('/auth/login/totp', authLimiter, jsonSmall, route(async (req, res) => {
   parAdresse.succes(adresse);
   log.info(`Connexion réussie (second facteur) : ${user.email} depuis ${adresse}.`);
   const remember = charge.rm !== false;
-  const token = sign(user, remember);
-  setSessionCookie(req, res, token, remember);
-  res.json({ token, user: { email: user.email, name: user.name, memberId: user.member_id } });
+  ouvrirSession(req, res, user, remember);
 }));
 
 /**
@@ -1125,7 +1135,7 @@ api.post('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(asyn
   const email = String(req.body?.email || '').trim();
   const password = String(req.body?.password || '');
   if (!EMAIL_RE.test(email)) { res.status(400).json({ error: 'Email invalide' }); return; }
-  if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
+  if (password.length < pwdMin()) { res.status(400).json({ error: pwdTropCourt() }); return; }
   if (findUserByEmail(email)) { res.status(409).json({ error: 'Cet email est déjà utilisé' }); return; }
   createUserWithMember(email, await hacher(password), member.name, memberId);
   res.status(201).json({ memberId, email: email.toLowerCase() });
@@ -1146,7 +1156,7 @@ api.put('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(async
   }
   if (rawPassword !== undefined && String(rawPassword) !== '') {
     password = String(rawPassword);
-    if (password.length < pwdMin()) { res.status(400).json({ error: `Mot de passe : ${pwdMin()} caractères minimum` }); return; }
+    if (password.length < pwdMin()) { res.status(400).json({ error: pwdTropCourt() }); return; }
   }
   if (email === undefined && password === undefined) { res.status(400).json({ error: 'Rien à mettre à jour' }); return; }
   updateUserCredentials(user.id, email, password === undefined ? undefined : await hacher(password));
