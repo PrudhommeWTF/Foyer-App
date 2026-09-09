@@ -30,8 +30,7 @@ const TABLEAUX: Record<string, number> = {
   taskTemplates: 500,
   tasks: 50_000,
   contacts: 5_000,
-  folders: 500,
-  files: 20_000,
+  cards: 2_000,
   recipes: 10_000,
   sched: 20_000,
 };
@@ -95,7 +94,7 @@ export function validateState(state: unknown): void {
 
   // Les identifiants portent les liens entre collections : un identifiant qui
   // n'est pas du texte casse silencieusement chaque rapprochement.
-  for (const cle of ['members', 'events', 'tasks', 'recipes', 'contacts', 'files'] as const) {
+  for (const cle of ['members', 'events', 'tasks', 'recipes', 'contacts', 'cards'] as const) {
     const v = doc[cle];
     if (!Array.isArray(v)) continue;
     const mauvais = v.findIndex((e) => {

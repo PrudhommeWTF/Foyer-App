@@ -1,7 +1,7 @@
-// Fichiers rattachés aux entités du document d'état : les photos de recettes et
-// les pièces du module Documents. Mêmes octets, même déduplication et même
-// balayage que les pièces jointes du module Finances, table distincte parce que
-// le propriétaire est désigné par un identifiant texte.
+// Fichiers rattachés aux entités du document d'état : les photos de recettes.
+// Mêmes octets, même déduplication et même balayage que les pièces jointes du
+// module Finances, table distincte parce que le propriétaire est désigné par un
+// identifiant texte.
 import type { Database } from 'better-sqlite3';
 import { DetectedType, blobPath, registerHolder, releaseBlob, writeBlob } from './blobs';
 
@@ -17,9 +17,16 @@ export function initFiles(db: Database): void {
   });
 }
 
-/** Ce à quoi un fichier peut être rattaché. Un module suivant ajoute son genre ici. */
+/**
+ * Ce à quoi un fichier peut être rattaché. `document` est un genre **hérité** :
+ * le module Documents a été retiré, plus aucun téléversement ne le produit. Il
+ * subsiste dans le type pour que la migration 5 (qui a sorti les pièces jointes
+ * de l'ancien module hors du document d'état) compile, et pour que les fichiers
+ * déjà sur le disque gardent un genre valide. `OWNER_KINDS` ne liste que ce
+ * qu'on accepte encore d'écrire.
+ */
 export type OwnerKind = 'recipe' | 'document';
-export const OWNER_KINDS: OwnerKind[] = ['recipe', 'document'];
+export const OWNER_KINDS: OwnerKind[] = ['recipe'];
 
 export interface StoredFile {
   id: number;
@@ -67,12 +74,6 @@ export function fileOf(id: number): { path: string; mime: string; name: string }
   return abs ? { path: abs, mime: r.mime, name: r.name } : null;
 }
 
-export function listFor(ownerKind: OwnerKind, ownerId: string): StoredFile[] {
-  return (database.prepare(
-    'SELECT * FROM hh_attachments WHERE owner_kind = ? AND owner_id = ? ORDER BY created_at, id',
-  ).all(ownerKind, ownerId) as Row[]).map(toFile);
-}
-
 export function remove(id: number): boolean {
   const r = database.prepare('SELECT rel_path, sha256 FROM hh_attachments WHERE id = ?').get(id) as
     { rel_path: string; sha256: string } | undefined;
@@ -80,19 +81,6 @@ export function remove(id: number): boolean {
   database.prepare('DELETE FROM hh_attachments WHERE id = ?').run(id);
   releaseBlob(r.rel_path, r.sha256);
   return true;
-}
-
-/**
- * Retire les fichiers d'un propriétaire, sauf ceux encore réclamés. Appelé quand
- * une recette est supprimée : sans cela, sa photo resterait sur le disque sans
- * que rien ne la nomme.
- */
-export function removeAllFor(ownerKind: OwnerKind, ownerId: string, keepIds: number[] = []): number {
-  const keep = new Set(keepIds);
-  const ids = (database.prepare('SELECT id FROM hh_attachments WHERE owner_kind = ? AND owner_id = ?')
-    .all(ownerKind, ownerId) as { id: number }[]).map((r) => r.id).filter((id) => !keep.has(id));
-  for (const id of ids) remove(id);
-  return ids.length;
 }
 
 /**

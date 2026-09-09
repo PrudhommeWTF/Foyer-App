@@ -17,7 +17,7 @@ import { Remind, TaskDone, TaskItem, TaskRec } from './models';
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; docId?: string | null; parentId?: string | null; pos?: number | null;
+  contractId?: number | null; parentId?: string | null; pos?: number | null;
 }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
@@ -41,8 +41,6 @@ export type TaskOpDraft = TaskOp extends infer T ? (T extends TaskOp ? Omit<T, '
 /** Ce qu'une saisie produit : les champs d'une tâche neuve. */
 export interface TaskDraft {
   text: string; listId: string; who: string[]; due: string | null; time: string | null; cat: string; note: string; rec: TaskRec | null; remind: Remind | null;
-  /** Le document lié se choisit à la saisie ; le contrat, lui, ne vient que du module Finances. */
-  docId: string | null;
 }
 
 /** Pose les champs, en retirant les clés vides plutôt que de laisser « ». */
@@ -52,7 +50,6 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (!next.note) delete next.note;
   if (!next.cat) delete next.cat;
   if (next.shopListId == null) delete next.shopListId;
-  if (next.docId == null) delete next.docId;
   if (next.contractId == null) delete next.contractId;
   if (next.parentId == null) delete next.parentId;
   // Même règle que le serveur : une sous-tâche ne porte ni date, ni récurrence,
@@ -139,13 +136,13 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
     case 'add': return { op: 'remove', id: op.id };
     case 'remove': {
       if (!before) return null;
-      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind, contractId, docId, parentId, pos } = before;
+      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind, contractId, parentId, pos } = before;
       return {
         op: 'add', id, listId, text, who, due, done,
         ...(done ? { doneAt: doneAt ?? null, doneBy: doneBy ?? null } : {}),
         ...(note ? { note } : {}), ...(cat ? { cat } : {}), ...(time ? { time } : {}), ...(shopListId ? { shopListId } : {}),
         ...(rec ? { rec } : {}), ...(history?.length ? { history } : {}), ...(remind ? { remind } : {}),
-        ...(contractId ? { contractId } : {}), ...(docId ? { docId } : {}),
+        ...(contractId ? { contractId } : {}),
         ...(parentId ? { parentId } : {}), ...(typeof pos === 'number' ? { pos } : {}),
       };
     }

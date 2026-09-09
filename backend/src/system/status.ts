@@ -36,7 +36,7 @@ export interface SystemStatus {
   pushSubject: string;
   snapshots: Snapshot[];
   /** Le document et ses sous-arbres, pour situer ce qui pèse. */
-  counts: { members: number; events: number; tasks: number; recipes: number; files: number };
+  counts: { members: number; events: number; tasks: number; recipes: number };
 }
 
 /** Le dossier où vivent les instantanés de la base. Créé à la première sauvegarde. */

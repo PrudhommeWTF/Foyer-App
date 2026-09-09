@@ -10,7 +10,7 @@ const doc = (): HouseholdState => ({
   shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [
     { id: 't1', text: 'Sortir le verre', who: ['me'], due: null, done: false, listId: 'l1' },
   ],
-  contacts: [], folders: [], files: [], meals: {}, recipes: [], sched: [],
+  contacts: [], cards: [], meals: {}, recipes: [], sched: [],
   profile: { memberId: 'm1' },
   settings: {},
 });

@@ -1,9 +1,10 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, SystemStatus, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
+import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
+import { cardColor } from './cards';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
@@ -25,7 +26,7 @@ import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSl
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
-import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fileTypeOf, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, frenchHolidays, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
@@ -742,6 +743,7 @@ export class FoyerStore {
     s.tasks ||= [];
     s.taskLists ||= [];
     s.taskTemplates ||= [];
+    s.cards ||= [];
     s.settings ||= householdDefaults();
     s.prefs ||= {};
     return s;
@@ -1245,7 +1247,7 @@ export class FoyerStore {
     for (const e of d.events) if (normText(e.title).includes(q)) push({ kind: 'event', icon: 'calendar', color: '#4E93B8', title: e.title, sub: 'Événement · ' + e.date, screen: 'calendar', id: e.id });
     for (const s of d.shop) if (normText(s.name).includes(q)) push({ kind: 'shop', icon: 'panier', color: '#E08D3C', title: s.name, sub: 'Course' + (s.qty ? ' · ' + s.qty : ''), screen: 'courses', id: s.id });
     for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
-    for (const f of d.files) if (normText(f.name).includes(q)) push({ kind: 'file', icon: 'documents', color: '#9B6FA8', title: f.name, sub: 'Document', screen: 'documents', id: f.id });
+    for (const c of d.cards) if (normText(c.name).includes(q)) push({ kind: 'card', icon: 'card', color: c.color || '#4E93B8', title: c.name, sub: 'Carte de fidélité', screen: 'fidelite', id: c.id });
     for (const m of d.members) if (normText(`${m.name} ${m.role}`).includes(q)) push({ kind: 'member', icon: 'users', color: m.color, title: m.name, sub: m.role || 'Membre', screen: 'settings', id: m.id });
     return hits.slice(0, 40);
   });
@@ -1261,6 +1263,7 @@ export class FoyerStore {
       case 'event': this.editEvent(h.id); break;
       case 'shop': this.editShop(h.id); break;
       case 'recipe': this.patch({ openRecipeId: h.id }); break;
+      case 'card': this.showCard(h.id); break;
       case 'member': this.openFamily(); break;
       default: break;
     }
@@ -1658,7 +1661,7 @@ export class FoyerStore {
     const due = draft.due || (draft.rec ? this.todayStr() : null);
     this.pushTaskOps([{
       op: 'add', id, listId, text, who: draft.who, due, time: due ? draft.time || null : null,
-      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: due ? draft.remind : null, docId: draft.docId,
+      cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: due ? draft.remind : null,
     }]);
     return id;
   }
@@ -1675,7 +1678,7 @@ export class FoyerStore {
       const { rec: _rec, ...rest } = fields; void _rec;
       const copy = { ...t, ...rest };
       this.taskOpsWithUndo([
-        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null, contractId: copy.contractId ?? null, docId: copy.docId ?? null },
+        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null, contractId: copy.contractId ?? null },
         { op: 'skip', id, occ: t.due, next },
       ], 'Cette occurrence modifiée, la série continue');
       return;
@@ -1823,11 +1826,11 @@ export class FoyerStore {
    * l'utilisateur peut cocher, déplacer et supprimer doit lui appartenir, pas
    * réapparaître parce qu'une table dit autre chose.
    */
-  addExternalTask(text: string, due: string | null, who: string[] = [], link: { contractId?: number | null; docId?: string | null } = {}): string | null {
+  addExternalTask(text: string, due: string | null, who: string[] = [], link: { contractId?: number | null } = {}): string | null {
     const listId = this.activeTaskListId();
     if (!listId) { this.toast('Créez d’abord une liste de tâches'); return null; }
     const id = uid('t');
-    this.pushTaskOps([{ op: 'add', id, listId, text, who, due, contractId: link.contractId ?? null, docId: link.docId ?? null }]);
+    this.pushTaskOps([{ op: 'add', id, listId, text, who, due, contractId: link.contractId ?? null }]);
     this.toast('Tâche ajoutée');
     return id;
   }
@@ -1836,34 +1839,6 @@ export class FoyerStore {
   editTaskItem(id: string): void { if (this.task(id)) this.patch({ taskEdit: id }); }
   /** Depuis un autre écran (le calendrier) : l'écran Tâches, la tâche ouverte. */
   openTaskItem(id: string): void { if (!this.task(id)) return; this.go('taches'); this.patch({ taskEdit: id }); }
-
-  // ---- liens avec les documents -----------------------------------------------
-
-  /** La tâche encore à faire qui ouvre ce document, s'il y en a une. */
-  documentTask(docId: string): TaskItem | undefined {
-    return (this._data()?.tasks || []).find((t) => t.docId === docId && !t.done);
-  }
-
-  /** « En tâche » depuis un document : une tâche à son nom, sans date, qui l'ouvre en un tap. */
-  taskFromFile(docId: string): void {
-    const f = this._data()?.files.find((x) => x.id === docId); if (!f) return;
-    if (this.documentTask(docId)) { this.toast('La tâche existe déjà'); this.go('taches'); return; }
-    if (this.addExternalTask(f.name, null, [], { docId })) this.toast('Tâche ajoutée : « ' + f.name + ' »');
-  }
-
-  /**
-   * Depuis la tâche, le document : téléchargé tout de suite quand il a un
-   * fichier, sinon montré dans l'écran Documents (une fiche sans pièce jointe
-   * n'a rien d'autre à ouvrir).
-   */
-  openDocument(docId: string): void {
-    const f = this._data()?.files.find((x) => x.id === docId);
-    if (!f) { this.toast('Ce document n’existe plus'); return; }
-    if (f.fileId) { void this.downloadFile(f.id); return; }
-    this.go('documents');
-    this.patch({ docFolder: f.folderId, docSearch: f.name });
-    this.toast('Ce document n’a pas de fichier joint');
-  }
 
   // ---- listes de tâches et modèles -------------------------------------------
   // Elles s'éditent par l'enregistrement du document : ce sont des réglages,
@@ -1951,96 +1926,38 @@ export class FoyerStore {
   }
   confirmContactDel(): void { const id = this.ui().contactDelId; if (!id) return; this.mutate((d) => { d.contacts = d.contacts.filter((c) => c.id !== id); }); this.patch({ contactDelId: null }); this.toast('Contact supprimé'); }
 
-  // ---- documents --------------------------------------------------------
-  newFolder(): void { this.patch({ folderForm: true, foEditId: null, foName: '', foColor: '#E56B4E' }); }
-  editFolder(id: string): void { const f = this._data()?.folders.find((x) => x.id === id); if (!f) return; this.patch({ folderForm: true, foEditId: id, foName: f.name, foColor: f.color }); }
-  saveFolder(): void {
-    const s = this.ui(); const name = s.foName.trim(); if (!name) { this.toast('Donne un nom au dossier'); return; }
+  // ---- cartes de fidélité -----------------------------------------------
+  // Un code partagé par tout le foyer, réaffiché en QR ou code-barres. Rien sur
+  // le disque : le code est du texte, le logo un monogramme dérivé du nom.
+  newCard(): void { this.patch({ cardForm: true, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false }); }
+  editCard(id: string): void {
+    const c = this._data()?.cards.find((x) => x.id === id); if (!c) return;
+    this.patch({ cardForm: true, caEditId: id, caName: c.name, caCode: c.code, caFormat: c.format, caColor: c.color, caNote: c.note || '', caColorTouched: true, cardShow: null });
+  }
+  /** Le scan a rendu un code et son format : la saisie s'ouvre pré-remplie, il ne reste que le nom. */
+  cardFromScan(code: string, format: CardFormat): void {
+    this.patch({ cardForm: true, caEditId: null, caName: '', caCode: code, caFormat: format, caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false });
+  }
+  /** Le nom pilote la couleur suggérée, tant que l'utilisateur ne l'a pas choisie lui-même. */
+  onCardName(v: string): void { this.patch({ caName: v, ...(this.ui().caColorTouched ? {} : { caColor: cardColor(v) }) }); }
+  pickCardColor(c: string): void { this.patch({ caColor: c, caColorTouched: true }); }
+  saveCard(): void {
+    const s = this.ui(); const name = s.caName.trim(); const code = s.caCode.trim();
+    if (!name) { this.toast('Donne un nom à la carte'); return; }
+    if (!code) { this.toast('Le code est vide : scanne la carte ou saisis-le'); return; }
+    const data = { name, code, format: s.caFormat, color: s.caColor, note: s.caNote.trim() || undefined };
     this.mutate((d) => {
-      if (s.foEditId) { const i = d.folders.findIndex((f) => f.id === s.foEditId); if (i >= 0) d.folders[i] = { ...d.folders[i], name, color: s.foColor }; }
-      else d.folders.push({ id: uid('f'), name, color: s.foColor });
+      if (s.caEditId) { const i = d.cards.findIndex((c) => c.id === s.caEditId); if (i >= 0) d.cards[i] = { ...d.cards[i], ...data }; }
+      else d.cards.push({ id: uid('cf'), ...data });
     });
-    this.toast(s.foEditId ? 'Dossier modifié' : 'Dossier créé');
-    this.patch({ folderForm: false, foEditId: null });
+    this.toast(s.caEditId ? 'Carte modifiée' : 'Carte ajoutée');
+    this.patch({ cardForm: false, caEditId: null });
   }
-  async confirmFolderDel(): Promise<void> {
-    const id = this.ui().folderDelId; if (!id) return;
-    const fileIds = (this._data()?.files || []).filter((fl) => fl.folderId === id).map((fl) => fl.fileId).filter((x): x is number => !!x);
-    this.mutate((d) => { d.folders = d.folders.filter((f) => f.id !== id); d.files = d.files.filter((fl) => fl.folderId !== id); });
-    this.patch({ folderDelId: null, docFolder: this.ui().docFolder === id ? null : this.ui().docFolder });
-    this.toast('Dossier supprimé');
-    await this.releaseFiles(fileIds);
-  }
-  // L'identifiant de la fiche est tiré à l'ouverture du formulaire : un fichier a
-  // besoin d'un propriétaire pour être rangé, y compris avant le premier
-  // enregistrement. Même raisonnement que pour la photo d'une recette.
-  newFile(): void { const fld = this.ui().docFolder || this._data()?.folders[0]?.id || null; this.patch({ fileForm: true, fiEditId: null, fiId: uid('d'), fiName: '', fiFolderId: fld, fiType: 'PDF', fiFileId: null, fiBusy: false }); }
-  editFile(id: string): void { const f = this._data()?.files.find((x) => x.id === id); if (!f) return; this.patch({ fileForm: true, fiEditId: id, fiId: id, fiName: f.name, fiFolderId: f.folderId, fiType: f.type, fiFileId: f.fileId ?? null, fiBusy: false }); }
-  /**
-   * Les octets partent sur le disque tout de suite, et non dans le document
-   * d'état : c'est toute la raison de ce module. Le fichier qu'un envoi remplace
-   * n'est pas supprimé ici, parce qu'annuler la modale doit laisser la fiche
-   * intacte ; c'est le ménage du démarrage qui retire ce que plus rien ne cite.
-   */
-  async onFileUpload(file: File): Promise<void> {
-    const ownerId = this.ui().fiId; if (!ownerId) return;
-    this.patch({ fiName: this.ui().fiName.trim() || file.name, fiType: fileTypeOf(file.name), fiBusy: true });
-    try {
-      const res = await this.api.uploadFile('document', ownerId, file);
-      this.patch({ fiFileId: res.file.id });
-    } catch (e) {
-      // Le message du serveur nomme la limite ou le format : le relayer tel quel
-      // vaut mieux qu'un « échec » qui ne dit pas quoi faire.
-      this.toast((e as Error).message);
-    } finally {
-      this.patch({ fiBusy: false });
-    }
-  }
-  /**
-   * Le fichier n'est plus dans la page : il est téléchargé avec la session puis
-   * proposé à l'enregistrement. Une balise <a href="api/files/…"> ne porterait
-   * pas l'en-tête d'autorisation et recevrait un 401.
-   */
-  async downloadFile(id: string): Promise<void> {
-    const f = this._data()?.files.find((x) => x.id === id); if (!f?.fileId) return;
-    try {
-      const url = URL.createObjectURL(await this.api.download('files/' + f.fileId));
-      const a = document.createElement('a');
-      a.href = url; a.download = f.name;
-      a.click();
-      // Révoquée au tour suivant : révoquer dans la foulée du clic annule le
-      // téléchargement sur certains navigateurs.
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) {
-      this.toast((e as Error).message);
-    }
-  }
-  /**
-   * Rend les octets au serveur. Un échec n'est pas une perte : le ménage du
-   * démarrage retire ce que le document ne cite plus. Le faire tout de suite
-   * évite qu'une copie de pièce d'identité reste sur le disque jusque-là.
-   */
-  private async releaseFiles(ids: number[]): Promise<void> {
-    for (const id of ids) await this.api.deleteFile(id).catch(() => undefined);
-  }
-  saveFile(): void {
-    const s = this.ui(); const name = s.fiName.trim(); if (!name) { this.toast('Donne un nom au fichier'); return; } if (!s.fiFolderId) { this.toast('Choisis un dossier'); return; }
-    const now = new Date(); const date = now.getDate() + ' ' + ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'][now.getMonth()] + ' ' + now.getFullYear();
-    this.mutate((d) => {
-      if (s.fiEditId) { const i = d.files.findIndex((f) => f.id === s.fiEditId); if (i >= 0) d.files[i] = { ...d.files[i], name, folderId: s.fiFolderId!, type: s.fiType, fileId: s.fiFileId }; }
-      else d.files.unshift({ id: s.fiId, name, folderId: s.fiFolderId!, type: s.fiType, fileId: s.fiFileId, date });
-    });
-    this.toast(s.fiEditId ? 'Fichier modifié' : 'Fichier ajouté');
-    this.patch({ fileForm: false, fiEditId: null });
-  }
-  async confirmFileDel(): Promise<void> {
-    const id = this.ui().fileDelId; if (!id) return;
-    const fileId = this._data()?.files.find((f) => f.id === id)?.fileId ?? null;
-    this.mutate((d) => { d.files = d.files.filter((f) => f.id !== id); });
-    this.patch({ fileDelId: null });
-    this.toast('Fichier supprimé');
-    await this.releaseFiles(fileId ? [fileId] : []);
-  }
+  confirmCardDel(): void { const id = this.ui().cardDelId; if (!id) return; this.mutate((d) => { d.cards = d.cards.filter((c) => c.id !== id); }); this.patch({ cardDelId: null, cardShow: null }); this.toast('Carte supprimée'); }
+  showCard(id: string): void { this.patch({ cardShow: id }); }
+  closeCard(): void { this.patch({ cardShow: null }); }
+  openScan(): void { this.patch({ scanOpen: true }); }
+  closeScan(): void { this.patch({ scanOpen: false }); }
 
   // ---- meals ------------------------------------------------------------
   // Un créneau porte plusieurs plats, dans l'ordre du service : une entrée, un

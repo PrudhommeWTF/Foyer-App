@@ -8,12 +8,9 @@ import { TaskDraft } from '../../core/task-ops';
 import { REMINDS, REMIND_LABELS, dueLabel, quickDates } from '../../core/tasks';
 import { DOW_SHORT, FREQ_LABELS, recLabel } from '../../core/recurrence';
 import { busyOn, conflictsAt, freestDay, slotLabel } from '../../core/availability';
-import { normText } from '../../core/helpers';
 import { AvatarComponent } from '../../shared/avatar';
 
-type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note' | 'doc' | 'rec';
-/** Au-delà, la liste des documents se cherche plutôt qu'elle ne se lit. */
-const DOCS_SHOWN = 8;
+type Panel = '' | 'who' | 'date' | 'list' | 'cat' | 'note' | 'rec';
 type Scope = 'one' | 'all';
 
 /**
@@ -97,11 +94,6 @@ type Scope = 'one' | 'all';
             <button class="opt" [class.on]="note().trim()" [class.open]="panel() === 'note'" (click)="toggle('note')">
               <f-icon name="edit" [size]="15" color="currentColor" [width]="2.2" /> Note
             </button>
-            @if (files().length || docId()) {
-              <button class="opt" [class.on]="docId()" [class.open]="panel() === 'doc'" (click)="toggle('doc')">
-                <f-icon name="documents" [size]="15" color="currentColor" [width]="2.2" /> <span class="clip">{{ docObj()?.name || 'Document' }}</span>
-              </button>
-            }
             @if (!isSub()) {
               <button class="opt" [class.on]="rec()" [class.open]="panel() === 'rec'" (click)="toggle('rec')">
                 <f-icon name="refresh" [size]="15" color="currentColor" [width]="2.2" /> {{ rec() ? recText() : 'Répéter' }}
@@ -162,20 +154,6 @@ type Scope = 'one' | 'all';
                     <div class="chips"><button class="chip" (click)="setDue(a.suggest)">Jour le plus libre : {{ dayName(a.suggest) }}</button></div>
                   }
                 }
-              </div>
-            }
-            @case ('doc') {
-              <div class="panel">
-                <div class="chips">
-                  <button class="chip" [class.active]="!docId()" (click)="docId.set(null); panel.set('')">Aucun</button>
-                  @for (f of docMatches(); track f.id) {
-                    <button class="chip clip" [class.active]="docId() === f.id" (click)="docId.set(f.id); panel.set('')">{{ f.name }}</button>
-                  }
-                </div>
-                @if (files().length > docsShown || docQuery()) {
-                  <input class="input sm" placeholder="Chercher un document…" [ngModel]="docQuery()" (ngModelChange)="docQuery.set($event)" (keydown.enter)="$event.stopPropagation()" />
-                }
-                <div class="hint">La tâche ouvrira ce document en un tap.</div>
               </div>
             }
             @case ('list') {
@@ -358,9 +336,6 @@ export class TaskComposerComponent {
   readonly list = signal('');
   readonly rec = signal<TaskRec | null>(null);
   readonly remind = signal<Remind | null>(null);
-  readonly docId = signal<string | null>(null);
-  readonly docQuery = signal('');
-  readonly docsShown = DOCS_SHOWN;
   readonly reminds = REMINDS;
   readonly panel = signal<Panel>('');
   /** La question « cette occurrence ou toute la série » est ouverte, pour enregistrer ou supprimer. */
@@ -382,7 +357,6 @@ export class TaskComposerComponent {
         if (t) {
           this.text.set(t.text); this.who.set([...t.who]); this.due.set(t.due); this.time.set(t.time ?? null);
           this.cat.set(t.cat || ''); this.note.set(t.note || ''); this.list.set(t.listId); this.rec.set(t.rec ? { ...t.rec } : null); this.remind.set(t.remind ?? null);
-          this.docId.set(t.docId ?? null);
         } else {
           this.list.set(fallback);
         }
@@ -424,12 +398,6 @@ export class TaskComposerComponent {
   });
   /** Ce que la liste a déjà vu : pas en modification, où l'intitulé est déjà là. */
   readonly suggestions = computed(() => this.task() ? [] : this.store.taskSuggestions(this.list(), this.text()));
-  readonly files = computed(() => this.store.data()?.files || []);
-  readonly docObj = computed(() => this.files().find((f) => f.id === this.docId()) || null);
-  readonly docMatches = computed(() => {
-    const q = normText(this.docQuery());
-    return this.files().filter((f) => !q || normText(f.name).includes(q)).slice(0, DOCS_SHOWN);
-  });
   /**
    * Ce que l'emploi du temps dit des membres affectés, le jour choisi : leurs
    * créneaux, un conflit à l'heure choisie, et le jour le plus libre à venir.
@@ -532,7 +500,7 @@ export class TaskComposerComponent {
   submit(scope: Scope = 'all'): void {
     const text = this.text().trim();
     if (!text) return;
-    this.saved.emit({ text, listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note(), rec: this.rec(), remind: this.due() ? this.remind() : null, docId: this.docId(), scope });
+    this.saved.emit({ text, listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note(), rec: this.rec(), remind: this.due() ? this.remind() : null, scope });
     if (this.task()) return;
     // La liste reste, tout le reste repart à zéro : la tâche suivante n'a pas
     // de raison d'hériter de la date ni du membre de la précédente.
@@ -542,6 +510,6 @@ export class TaskComposerComponent {
   }
 
   private reset(): void {
-    this.text.set(''); this.who.set([]); this.due.set(null); this.time.set(null); this.cat.set(''); this.catFree.set(''); this.note.set(''); this.rec.set(null); this.remind.set(null); this.docId.set(null); this.docQuery.set(''); this.panel.set('');
+    this.text.set(''); this.who.set([]); this.due.set(null); this.time.set(null); this.cat.set(''); this.catFree.set(''); this.note.set(''); this.rec.set(null); this.remind.set(null); this.panel.set('');
   }
 }

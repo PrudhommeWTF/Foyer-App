@@ -96,6 +96,7 @@ Planning des repas, suggestions et génération des courses.
 | `suggestRepeatDays` | Ne pas resservir un plat avant | Foyer | entier | `15` | de 1 à 90 | Cuisine | — |
 | `suggestForgottenDays` | Considérer un plat comme oublié après | Foyer | entier | `21` | de 2 à 365 | Cuisine | — |
 | `suggestQuickMin` | Ce qu’on appelle une recette rapide | Foyer | entier | `25` | de 5 à 180 | Cuisine | — |
+| `maxUploadMb` | Taille maximale d’une photo de recette | Foyer | entier | `20` | de 1 à 20 | Cuisine | — |
 | `showBreakfast` | Afficher le petit-déjeuner | Foyer | oui / non | désactivé | — | Repas | — |
 
 - **Heure du petit-déjeuner** (`mealTimeMorning`) : Heure de référence du créneau du matin. Elle décide de l’heure de l’événement créé quand un repas part à l’agenda, et de qui est compté à table selon l’emploi du temps.
@@ -104,6 +105,7 @@ Planning des repas, suggestions et génération des courses.
 - **Ne pas resservir un plat avant** (`suggestRepeatDays`) : Une recette servie il y a moins de ce nombre de jours est écartée des suggestions du planning. L’écran de suggestion dit combien de recettes il a écartées pour cette raison.
 - **Considérer un plat comme oublié après** (`suggestForgottenDays`) : Passé ce délai sans l’avoir servi, une recette est remise en avant dans les suggestions avec la mention « pas fait depuis longtemps ».
 - **Ce qu’on appelle une recette rapide** (`suggestQuickMin`) : Préparation et cuisson comprises, en minutes. En dessous, la recette est mise en avant les soirs de semaine chargés.
+- **Taille maximale d’une photo de recette** (`maxUploadMb`) : En mégaoctets. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.
 - **Afficher le petit-déjeuner** (`showBreakfast`) : Ajoute la ligne du matin au planning des repas, et donc à la génération des courses. Les repas déjà saisis sont conservés quand la ligne est masquée.
 
 ### Courses
@@ -137,16 +139,6 @@ La catégorisation suggérée des opérations, et quand un compteur d’énergie
 
 - **Relevé de compteur attendu après** (`readingDueDays`) : Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.
 - **Suggérer une catégorie à partir de** (`catSuggestMin`) : Combien de fois une même catégorie doit avoir été posée à la main pour un marchand avant que l’application ne la propose pour une nouvelle opération du même marchand. Plus le nombre est élevé, moins il y a de suggestions, mais plus elles sont sûres.
-
-### Documents
-
-Ce que le foyer accepte de ranger sur son disque.
-
-| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
-|---|---|---|---|---|---|---|---|
-| `maxUploadMb` | Taille maximale d’un fichier | Foyer | entier | `20` | de 1 à 20 | Documents | — |
-
-- **Taille maximale d’un fichier** (`maxUploadMb`) : En mégaoctets, pour les documents du foyer comme pour les photos de recettes. Le serveur refuse de toute façon au-delà de 20 Mo : c’est son plafond technique, celui-ci est le vôtre, en dessous.
 
 ## Serveur et exploitation
 

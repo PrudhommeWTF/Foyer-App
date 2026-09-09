@@ -6,8 +6,8 @@
 
 **L'organisation de toute la famille au même endroit, chez vous, sans compte chez personne.**
 
-Calendrier partagé, courses, tâches, budget, repas, recettes, documents, contacts et
-emplois du temps, dans une seule application chaleureuse que vous hébergez vous-même.
+Calendrier partagé, courses, tâches, budget, repas, recettes, contacts, cartes de
+fidélité et emplois du temps, dans une seule application chaleureuse que vous hébergez vous-même.
 
 <br>
 
@@ -68,13 +68,14 @@ compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier dé
 | 🏠 **Accueil** | Le mur de la famille : un fil de ce qui a récemment changé (tâches cochées, articles ajoutés aux courses), et un bandeau qui donne d'un coup d'oeil les prochains rendez-vous, les dernières tâches, les repas du jour et un sommaire des finances. Chaque bloc mène à son écran d'un tap. |
 | 📅 **Calendrier** | Vues 3 jours, semaine et mois, récurrence (quotidienne, en semaine, hebdomadaire, une semaine sur deux, mensuelle), couleur par membre. Superpose tâches planifiées, jours fériés, vacances scolaires, anniversaires, échéances de contrat et les **créneaux d'emploi du temps publiés à l'agenda** (identifiés comme tels, ouverts en un tap sur leur créneau source). Partage en lecture seule par flux **ICS** (Google Agenda, Apple Calendrier). |
 | 🛒 **Courses** | Multi-listes, rayons réordonnables à l'ordre de votre magasin, coche en un tap, articles pris regroupés en bas. Génération automatique depuis le menu de la semaine, avec un rapport avant d'écrire. Export CSV. Écriture article par article : coche à plusieurs et hors ligne sans conflit. [Détails](docs/cuisine-architecture.md) |
-| ✅ **Tâches** | Saisie en un champ, affectation à un, plusieurs ou aucun membre, récurrence native (à date fixe ou après réalisation), sous-tâches, modèles, listes typées (corvées, checklists) et vue « À moi ». **Rappels sur le téléphone (Web Push)**, réglés tâche par tâche. Reliée au reste : contrats, documents, courses, emploi du temps et agenda. [Détails](docs/taches.md) |
+| ✅ **Tâches** | Saisie en un champ, affectation à un, plusieurs ou aucun membre, récurrence native (à date fixe ou après réalisation), sous-tâches, modèles, listes typées (corvées, checklists) et vue « À moi ». **Rappels sur le téléphone (Web Push)**, réglés tâche par tâche. Reliée au reste : contrats, courses, emploi du temps et agenda. [Détails](docs/taches.md) |
 | 💰 **Finances** | Comptes multi-titulaires, opérations catégorisées, bilan mensuel et annuel, budgets de référence. **Import de relevés** (CSV, OFX, CAMT.053, xlsx) avec déduplication et rapport avant validation. Règles de catégorisation, crédits, biens et contrats avec échéances de résiliation, relevés de compteur, pistes d'économies. [Détails](docs/finances-architecture.md) |
 | 🍽️ **Repas** | Déjeuner et dîner (petit-déjeuner en option) sur 3 ou 7 jours, grille sur écran, pile de jours sur téléphone. Plusieurs plats par créneau, couverts par repas, déplacement par glisser-déposer, recopie d'une période sur une autre, mise à l'agenda des repas avec invités. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients et étapes. **Import depuis l'adresse d'une page de recette** (Marmiton, 750g, Cuisine AZ, blogs) par lecture des données structurées. Recherche en une ligne (« courgette 20min végétarien »), notes de la famille, étiquettes, export et réimport JSON. [Détails](docs/cuisine-architecture.md) |
 | 🗓️ **Emploi du temps** | La semaine type du foyer, un créneau pour un ou plusieurs membres. Copie de journée, récurrence sobre (toutes les semaines ou une sur deux) avec période de validité et filtre période scolaire/vacances. Alimente les couverts du planning repas, et **publie à la demande un créneau au calendrier partagé** (ses occurrences y sont dérivées, jamais recopiées, donc toujours à jour). [Détails](docs/emploi-du-temps.md) |
 | 🥗 **Contraintes alimentaires** | Allergènes (liste européenne) et aliments refusés par membre. Les recettes affichent leurs allergènes et à qui elles ne conviennent pas ; le planning signale le créneau en cause. Honnête sur ses limites : un ingrédient non reconnu n'est pas vérifié, et l'interface le dit. |
-| ☎️ **Contacts · 📁 Documents** | Un carnet de contacts (urgences, santé, école) et des dossiers de documents rangés sur le disque (tous formats), avec recherche transverse. |
+| ☎️ **Contacts** | Un carnet de contacts (urgences, santé, école) avec recherche transverse. |
+| 💳 **Cartes de fidélité** | Les cartes de tout le foyer, une fois pour toutes : **scannées par la caméra** (ou lues sur une photo), leur code (QR ou code-barres) est **réaffiché en grand** à présenter en caisse. Rangées par nom, avec un logo suggéré (un monogramme aux initiales, dans une couleur tirée du nom). Rien ne sort du foyer : le code est du texte, jamais un fichier sur le disque. |
 | ⚙️ **Paramètres** | Thème, membres et accès, rappels sur cet appareil, partage du calendrier, mises à jour. [Registre complet](docs/parametres.md) |
 
 Chaque membre a sa couleur d'identité. Thème clair/sombre synchronisé. Interface responsive
@@ -112,7 +113,7 @@ Foyer-App/
   qu'il était (avec la date, dite en clair), accepte les coches et les envoie au retour du
   réseau. Le cache ne fige pas la version : le HTML d'entrée passe par le réseau d'abord, donc
   une mise à jour est prise au premier chargement en ligne. Voir [`docs/hors-ligne.md`](docs/hors-ligne.md).
-- Les **fichiers** (pièces jointes Finances, photos de recettes, documents du foyer) vivent
+- Les **fichiers** (pièces jointes Finances, photos de recettes) vivent
   sur le disque dans `<données>/pieces`, adressés par leur empreinte, jamais en base64 dans le
   document. `PUT /api/state` accepte donc au plus **4 Mo** : aucun octet de fichier n'y transite.
   Voir [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
@@ -209,7 +210,7 @@ budget). Une base déjà configurée n'est jamais réinitialisée.
   invalide immédiatement tous ses jetons existants.
 - **Autorisations** : seul un administrateur peut ajouter ou retirer un membre ou modifier des
   droits d'administration ; un membre non-admin ne peut éditer que son propre profil. Un compte
-  enfant n'entre ni dans les Finances, ni dans les Documents, ni dans les Paramètres.
+  enfant n'entre ni dans les Finances, ni dans les Paramètres.
 - **Second facteur (TOTP)** : un code à six chiffres en plus du mot de passe, compatible avec
   toutes les applications d'authentification (Aegis, Google Authenticator, 1Password,
   Bitwarden). Facultatif, compte par compte, à poser depuis Paramètres → Mon compte. Dix codes

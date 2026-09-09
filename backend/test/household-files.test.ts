@@ -57,11 +57,12 @@ describe('photos de recettes', () => {
   });
 
   it('la même photo posée deux fois ne coûte qu’un fichier', () => {
-    put('r1', 'a.png', PNG);
-    put('r2', 'b.png', PNG);
+    const a = put('r1', 'a.png', PNG).file;
+    const b = put('r2', 'b.png', PNG).file;
     assert.equal(onDisk().length, 1, 'octets identiques, un seul fichier');
-    assert.equal(files.listFor('recipe', 'r1').length, 1);
-    assert.equal(files.listFor('recipe', 'r2').length, 1);
+    // Deux fiches distinctes, un seul fichier sur le disque.
+    assert.notEqual(a.id, b.id);
+    assert.ok(files.get(a.id) && files.get(b.id));
   });
 
   it('retirer une des deux fiches laisse le fichier en place pour l’autre', () => {
@@ -152,13 +153,6 @@ describe('ménage des photos sans propriétaire', () => {
     assert.equal(onDisk().length, 2);
   });
 
-  it('retire les photos d’un propriétaire disparu, en gardant celles qu’on désigne', () => {
-    const a = put('r1', 'a.png', PNG).file;
-    const b = put('r1', 'b.jpg', JPEG).file;
-    assert.equal(files.removeAllFor('recipe', 'r1', [b.id]), 1);
-    assert.equal(files.get(a.id), null);
-    assert.ok(files.get(b.id));
-  });
 });
 
 describe('détection de type', () => {
@@ -171,27 +165,17 @@ describe('détection de type', () => {
   });
 });
 
-describe('documents du foyer', () => {
-  it('cohabitent avec les photos de recettes sans se marcher dessus', () => {
-    const photo = files.store('recipe', 'r1', 'gratin.png', PNG, detectType(PNG)!).file;
-    const piece = files.store('document', 'd1', 'Passeport.pdf', PDF, detectType(PDF)!).file;
-    assert.equal(files.listFor('recipe', 'r1').length, 1);
-    assert.equal(files.listFor('document', 'd1').length, 1);
-    // Retirer toutes les pièces d'un document ne touche pas au carnet de recettes.
-    assert.equal(files.removeAllFor('document', 'd1'), 1);
-    assert.equal(files.get(piece.id), null);
-    assert.ok(files.get(photo.id));
-  });
-
-  it('le ménage voit les deux genres à la fois', () => {
-    // Le document d'état cite les deux : un ménage qui n'en connaîtrait qu'un
-    // effacerait les fichiers de l'autre au démarrage suivant.
-    const photo = files.store('recipe', 'r1', 'gratin.png', PNG, detectType(PNG)!).file;
-    const piece = files.store('document', 'd1', 'Passeport.pdf', PDF, detectType(PDF)!).file;
-    const orpheline = files.store('document', 'd2', 'Ancien.pdf', JPEG, detectType(JPEG)!).file;
-    assert.equal(files.pruneUnreferenced(new Set([photo.id, piece.id])), 1);
+describe('ménage des photos de recettes', () => {
+  it('retire ce que le document ne cite plus, garde le reste', () => {
+    // Le ménage du démarrage ne connaît que les identifiants encore cités par
+    // le document d'état : une photo remplacée n'y figure plus et s'en va, celle
+    // d'une recette vivante reste.
+    const gardee = files.store('recipe', 'r1', 'gratin.png', PNG, detectType(PNG)!).file;
+    const gardee2 = files.store('recipe', 'r2', 'tarte.jpg', JPEG, detectType(JPEG)!).file;
+    const orpheline = files.store('recipe', 'r3', 'ancienne.pdf', PDF, detectType(PDF)!).file;
+    assert.equal(files.pruneUnreferenced(new Set([gardee.id, gardee2.id])), 1);
     assert.equal(files.get(orpheline.id), null);
-    assert.ok(files.get(photo.id));
-    assert.ok(files.get(piece.id));
+    assert.ok(files.get(gardee.id));
+    assert.ok(files.get(gardee2.id));
   });
 });

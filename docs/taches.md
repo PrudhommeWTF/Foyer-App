@@ -62,7 +62,6 @@ interface TaskItem {
   by?; at?;                   // auteur et date de création
   shopListId?: string | null; // lien vers une liste de courses
   contractId?: number | null; // contrat du module Finances (échéance, piste d'économie)
-  docId?: string | null;      // document du foyer (FileItem.id)
   parentId?: string | null;   // sous-tâche : un seul niveau, dans la liste du parent
   pos?: number;               // ordre manuel, posé au glisser-déposer
   rec?; history?; remind?;    // voir « La récurrence » et « Rappels »
@@ -182,7 +181,7 @@ eux est un document sans série.
 
 | Opération | Champs | Effet |
 |---|---|---|
-| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `contractId`, `docId`, `parentId`, `pos`, `rec`, `remind`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
+| `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `contractId`, `parentId`, `pos`, `rec`, `remind`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
 | `edit` | `id` et les champs à changer | Ne touche que les champs nommés. `who` est remplacé, jamais fusionné. `rec: null` retire la règle. |
 | `done` | `id`, et sur une série `occ`, `next` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). Sur une série : ligne d'historique et échéance avancée à `next` (null : la série s'arrête, la tâche est faite). |
 | `skip` | `id`, `occ`, `next` | Passe l'occurrence courante d'une série sans trace. |
@@ -199,8 +198,8 @@ une tâche sans intitulé, une liste inconnue, une date qui n'est pas
 est pas un, une position qui n'est pas un nombre, un parent inconnu, d'une
 autre liste, déjà sous-tâche, ou qui créerait un second niveau, une opération
 inconnue. Un membre inconnu dans `who` est
-simplement retiré. Un lien vers une liste de courses ou un document disparus
-tombe, la tâche reste.
+simplement retiré. Un lien vers une liste de courses disparue tombe, la tâche
+reste.
 
 Un « report » est un `edit` de `due`. **Annuler** envoie l'opération inverse
 (`reopen` après `done`, `add` avec la tâche telle qu'elle était après `remove`,
@@ -451,17 +450,6 @@ réapparaître ou bouger toute seule.
 - Si la date du contrat bouge après coup, la tâche **ne suit pas** : c'est une
   copie assumée, sinon une tâche qu'on a déplacée à la main reviendrait.
 
-### Documents : un document lié, ouvert en un tap
-
-- Dans la saisie, le bouton **« Document »** (présent dès que le foyer a des
-  documents) choisit un fichier du module Documents ; la tâche porte `docId`.
-  Sur un document, **« En tâche »** crée une tâche à son nom, sans date.
-- Sur la tâche, un tap sur le nom du document le **télécharge** quand il a un
-  fichier joint (un PDF s'ouvre dans le navigateur du téléphone) ; une fiche
-  sans pièce jointe ouvre l'écran Documents, déjà filtré sur elle.
-- Un document supprimé délie les tâches qui l'ouvraient, à l'enregistrement
-  du document d'état (même rattrapage que les listes de courses).
-
 ### Courses : clore la tâche quand la liste est finie
 
 Quand le **dernier article** d'une liste passe dans le panier et qu'une tâche
@@ -533,7 +521,7 @@ curl -s "http://localhost:3000/api/calendar/feed.ics?token=$TOKEN" | grep -c '^S
 | `frontend/src/app/shared/reorder.ts` | Le glisser-déposer, à la poignée, au doigt comme au clavier. Sans dépendance. |
 | `frontend/src/app/core/links.ts` | Les intitulés déposés entre modules, et la tâche à proposer de clore quand la liste de courses est finie. |
 | `backend/src/ics.ts` | Le flux ICS, dont les tâches datées quand `settings.icsTasks` est activé. |
-| `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles, les liens (document, tâche depuis un document, clôture proposée depuis les courses). |
+| `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles, la clôture proposée depuis les courses. |
 | `frontend/src/app/core/finances.store.ts` | `taskFromDeadline`, `taskFromSaving` (la tâche porte le contrat) et `openContract` (le contrat en un tap). |
 | `frontend/src/app/screens/taches/composer.ts` | La saisie rapide et sa barre d'action, réutilisée par l'accueil et la modale de modification. |
 | `frontend/src/app/screens/taches/taches.ts` | L'écran. |
@@ -649,7 +637,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 
 | Fichier | Ce qu'il tient |
 |---|---|
-| `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses, d'un document. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. Les liens : contrat lié, délié, refusé s'il est illisible ; document inconnu qui tombe sans faire échouer ; suppression annulée qui rend les liens. |
+| `backend/test/tasks-ops.test.ts` | Le moteur : une coche posée deux fois reste une coche et garde le premier auteur, deux appareils partis du même état gardent chacun leur travail, une modification ne décoche pas, rejeu après coupure, ajout rejoué sans doublon, opération sans objet acquittée, refus avec raison sans faire tomber le lot, bornes, rattrapage après suppression d'une liste, d'un membre, d'une liste de courses. Les séries : deux appareils qui cochent la même occurrence ne la font avancer qu'une fois, réouverture qui rétablit l'occurrence sans remonter deux fois, saut, fin de série, règle bornée, historique borné. Les liens : contrat lié, délié, refusé s'il est illisible ; suppression annulée qui rend les liens. |
 | `backend/test/ics.test.ts` | Le flux : rien sans le réglage, journée entière ou créneau d'une heure, identifiant stable, une tâche faite ou sans date absente, une série sans `RRULE` et une seule fois, échappement. |
 | `backend/test/tasks-ops.test.ts` (sous-tâches et ordre) | Un seul niveau tenu des deux côtés, parent inconnu ou d'une autre liste refusé avec la raison, date et rappel écartés d'une sous-tâche, promotion au premier niveau à la suppression du parent et au rattrapage, position bornée et arrondie, deux appareils qui réordonnent sans rien perdre. |
 | `backend/test/tasks-repo.test.ts` | La couture avec la base : version qui n'avance pas pour rien, journal qui survit, deux téléphones sur la même tâche, et un `PUT` périmé qui ne peut ni décocher ni ressusciter. |

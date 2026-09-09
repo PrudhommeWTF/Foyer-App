@@ -46,7 +46,6 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
       listIds: idsOf(doc, 'taskLists'),
       memberIds: idsOf(doc, 'members'),
       shopListIds: idsOf(doc, 'shopLists'),
-      docIds: idsOf(doc, 'files'),
       alreadyApplied: (opId) => !!journal.get(opId),
     });
 
@@ -96,7 +95,7 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
  */
 export function preserveTasks(incoming: Record<string, any>): { dropped: number; unassigned: number; unlinked: number; orphaned: number } {
   const { doc } = readDoc();
-  const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'), idsOf(incoming, 'files'));
+  const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'));
   incoming['tasks'] = res.items;
   return { dropped: res.dropped, unassigned: res.unassigned, unlinked: res.unlinked, orphaned: res.orphaned };
 }

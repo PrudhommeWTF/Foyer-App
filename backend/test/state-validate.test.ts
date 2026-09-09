@@ -68,7 +68,7 @@ describe('ce qui a la bonne forme passe', () => {
       stock: { farine: '2026-09-01' },
       settings: { dark: false },
       prefs: { me: { dark: true } },
-      tasks: [], contacts: [], files: [], recipes: [], sched: [],
+      tasks: [], contacts: [], recipes: [], sched: [],
     });
   });
 

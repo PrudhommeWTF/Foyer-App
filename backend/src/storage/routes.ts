@@ -16,43 +16,26 @@ import { log } from '../log';
  */
 const MAX_UPLOAD = '20mb';
 
+/** Les genres qu'on accepte encore d'écrire (voir OWNER_KINDS). */
+type AcceptedKind = 'recipe';
+
 /**
  * Ce que chaque genre de propriétaire accepte. Le type vient des octets, jamais
  * de l'extension : une recette n'a aucune raison d'accepter un PDF déguisé en
- * photo. Un dossier de famille, lui, reçoit des pièces d'identité, des factures
- * et des tableurs : refuser ce que le détecteur ne sait pas nommer écarterait un
- * .odt ou un .txt sans raison, donc les octets inconnus y sont rangés sous le
- * type neutre.
+ * photo.
  */
-const ACCEPTS: Record<files.OwnerKind, { ok: (t: DetectedType | null) => boolean; refus: string }> = {
+const ACCEPTS: Record<AcceptedKind, { ok: (t: DetectedType | null) => boolean; refus: string }> = {
   recipe: {
     ok: (t) => !!t && IMAGE_MIMES.includes(t.mime),
     refus: `Ce format d’image n’est pas pris en charge. Formats acceptés : ${ACCEPTED_IMAGE_LABEL}. `
       + 'Le type est reconnu d’après le contenu du fichier, pas d’après son extension.',
   },
-  document: { ok: () => true, refus: '' },
 };
 
 /** La limite que le foyer s'est fixée, en octets. */
 export type UploadLimit = () => number;
 
-/** Le compte derrière la requête est-il celui d'un enfant du foyer ? */
-export type IsChild = (req: Request) => boolean;
-
-/**
- * Ce qu'un compte enfant a le droit d'atteindre, par genre de propriétaire.
- *
- * Une photo de recette est du contenu de famille : le carnet de cuisine
- * s'ouvre pour tout le monde, et la lui refuser casserait l'écran sans rien
- * protéger. Un document du foyer, lui, est une pièce d'identité, un contrat ou
- * un relevé : cela ne se lit pas, et surtout cela ne se supprime pas, depuis un
- * compte enfant.
- */
-const OUVERT_AUX_ENFANTS: Record<files.OwnerKind, boolean> = { recipe: true, document: false };
-
-const REFUS_ENFANT = 'Les documents du foyer ne sont pas accessibles depuis un compte enfant.';
-
-export function filesRouter(maxBytes: UploadLimit, isChild: IsChild): Router {
+export function filesRouter(maxBytes: UploadLimit): Router {
   const r = express.Router();
 
   r.post('/', express.raw({ type: '*/*', limit: MAX_UPLOAD }), (req: Request, res: Response) => {
@@ -61,7 +44,9 @@ export function filesRouter(maxBytes: UploadLimit, isChild: IsChild): Router {
       res.status(400).json({ error: 'Type de rattachement inconnu : attendu ' + files.OWNER_KINDS.join(', ') + '.' });
       return;
     }
-    if (!OUVERT_AUX_ENFANTS[kind] && isChild(req)) { res.status(403).json({ error: REFUS_ENFANT }); return; }
+    // `OWNER_KINDS` ne contient que les genres écrivables : le garde ci-dessus
+    // le garantit, l'affinage rend ce fait lisible pour ACCEPTS et `store`.
+    const accepted = kind as AcceptedKind;
     const ownerId = String(req.query['id'] ?? '').slice(0, 80);
     if (!ownerId) { res.status(400).json({ error: 'Identifiant de rattachement manquant.' }); return; }
 
@@ -75,14 +60,14 @@ export function filesRouter(maxBytes: UploadLimit, isChild: IsChild): Router {
     // changer depuis l'application sans redémarrer le service.
     const limite = maxBytes();
     if (buf.length > limite) {
-      res.status(413).json({ error: `Ce fichier fait ${Math.ceil(buf.length / 1048576)} Mo, au-delà de la taille maximale réglée pour ce foyer (${Math.round(limite / 1048576)} Mo). Un administrateur peut la relever dans Paramètres, section « Documents ».` });
+      res.status(413).json({ error: `Ce fichier fait ${Math.ceil(buf.length / 1048576)} Mo, au-delà de la taille maximale réglée pour ce foyer (${Math.round(limite / 1048576)} Mo). Un administrateur peut la relever dans Paramètres.` });
       return;
     }
     const type = detectType(buf);
-    if (!ACCEPTS[kind].ok(type)) { res.status(415).json({ error: ACCEPTS[kind].refus }); return; }
+    if (!ACCEPTS[accepted].ok(type)) { res.status(415).json({ error: ACCEPTS[accepted].refus }); return; }
     try {
       const name = String(req.query['filename'] || 'fichier').slice(0, 200);
-      const { file, deduplicated } = files.store(kind, ownerId, name, buf, type ?? GENERIC_TYPE);
+      const { file, deduplicated } = files.store(accepted, ownerId, name, buf, type ?? GENERIC_TYPE);
       res.status(201).json({ file, deduplicated });
     } catch (e) {
       log.erreur('Fichiers : échec de l’enregistrement', e);
@@ -93,16 +78,9 @@ export function filesRouter(maxBytes: UploadLimit, isChild: IsChild): Router {
   r.get('/:id', (req: Request, res: Response) => {
     const id = parseInt(String(req.params['id'] ?? ''), 10);
     if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return; }
-    // Le genre du propriétaire décide, et il se lit sur la fiche : l'appelant ne
-    // choisit pas ce qu'il déclare télécharger.
-    const fiche = files.get(id);
-    if (fiche && !OUVERT_AUX_ENFANTS[fiche.ownerKind] && isChild(req)) {
-      res.status(403).json({ error: REFUS_ENFANT });
-      return;
-    }
     const file = files.fileOf(id);
     if (!file) {
-      const known = fiche;
+      const known = files.get(id);
       if (!known) { res.status(404).json({ error: 'Fichier introuvable.' }); return; }
       res.status(410).json({
         error: 'Le fichier est absent du disque. Restaurez le répertoire « pieces » de vos sauvegardes, '
@@ -124,23 +102,18 @@ export function filesRouter(maxBytes: UploadLimit, isChild: IsChild): Router {
     res.sendFile(file.path);
   });
 
-  // Suppression immédiate, et pas seulement au ménage du démarrage : la copie
-  // d'une pièce d'identité n'a pas à rester sur le disque jusqu'au prochain
-  // redémarrage parce que quelqu'un l'a retirée de l'application.
+  // Suppression immédiate, et pas seulement au ménage du démarrage : une photo
+  // retirée du carnet n'a pas à rester sur le disque jusqu'au prochain
+  // redémarrage.
   r.delete('/:id', (req: Request, res: Response) => {
     const id = parseInt(String(req.params['id'] ?? ''), 10);
     if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return; }
-    const fiche = files.get(id);
-    if (fiche && !OUVERT_AUX_ENFANTS[fiche.ownerKind] && isChild(req)) {
-      res.status(403).json({ error: REFUS_ENFANT });
-      return;
-    }
     if (!files.remove(id)) { res.status(404).json({ error: 'Fichier introuvable.' }); return; }
     res.status(204).end();
   });
 
   // Un fichier trop lourd ressortait en page HTML d'Express, sans dire la limite.
-  // Le scan d'un dossier médical entier atteint vite 20 Mo : autant le dire.
+  // Une photo prise au téléphone atteint vite le plafond : autant le dire.
   r.use((err: Error & { type?: string }, _req: Request, res: Response, next: NextFunction) => {
     if (err?.type !== 'entity.too.large') { next(err); return; }
     res.status(413).json({ error: `Ce fichier dépasse le plafond du serveur (${MAX_UPLOAD.replace('mb', ' Mo')}).` });

@@ -60,6 +60,7 @@ export const ICONS: Record<string, string> = {
   budget: 'M4 8h16v11H4zM4 8V5h13v3M15 13h2',
   planning: 'M3 4h18v17H3zM3 9h18M8 13h3M8 17h3M14 13h3',
   contacts: 'M5 4h11l3 3v13H5zM12 11a2.4 2.4 0 1 0 0-.01M8.5 17c.6-2 6.4-2 7 0',
+  card: 'M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 10h18M7 15h4',
   documents: 'M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
   settings: 'M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2',
   gear: 'M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2',
@@ -176,7 +177,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
-  contacts: 'Contacts importants', documents: 'Documents', finances: 'Finances',
+  contacts: 'Contacts importants', fidelite: 'Cartes de fidélité', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
 };
 
@@ -186,6 +187,6 @@ export const SCREEN_TITLES: Record<string, string> = {
  * nom de l'onglet suffit à dire où l'on est.
  */
 export const SCREEN_TITLES_SHORT: Record<string, string> = {
-  calendar: 'Agenda', courses: 'Courses', contacts: 'Contacts',
+  calendar: 'Agenda', courses: 'Courses', contacts: 'Contacts', fidelite: 'Fidélité',
   repas: 'Repas', recettes: 'Recettes', planning: 'Emploi du temps', settings: 'Réglages',
 };

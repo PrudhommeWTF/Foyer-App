@@ -262,8 +262,8 @@ curl -s localhost:8099/api/setup/status         # {"needsSetup":false}
 sqlite3 /var/lib/foyer/foyer.db "SELECT email, member_id FROM users;"
 ```
 
-Puis, dans l'application : ouvrez un document scanné et une photo de recette.
-C'est le test qui dit vraiment si `pieces/` est revenu avec la base.
+Puis, dans l'application : ouvrez une photo de recette et une pièce jointe
+d'un contrat. C'est le test qui dit vraiment si `pieces/` est revenu avec la base.
 
 ---
 

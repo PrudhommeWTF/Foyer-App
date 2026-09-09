@@ -30,7 +30,6 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   courses: { icon: 'courses', tint: '#EDF2EB', color: '#7A9B76' },
   taches: { icon: 'taches', tint: '#F2ECF5', color: '#9B6FA8' },
   finances: { icon: 'budget', tint: '#EDF2EB', color: '#5F9E6E' },
-  documents: { icon: 'documents', tint: '#FDF0DA', color: '#F0B24B' },
   acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
   serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },
   membres: { icon: 'users', tint: '#E5F0F4', color: '#4E93B8' },
@@ -425,7 +424,7 @@ const GESTES = new Set(['compte', 'membres']);
                               } @else {
                                 <div><span>Espace disque restant</span><b>inconnu sur cette plateforme</b></div>
                               }
-                              <div><span>Contenu</span><b>{{ st.counts.members }} membres · {{ st.counts.events }} événements · {{ st.counts.tasks }} tâches · {{ st.counts.recipes }} recettes · {{ st.counts.files }} documents</b></div>
+                              <div><span>Contenu</span><b>{{ st.counts.members }} membres · {{ st.counts.events }} événements · {{ st.counts.tasks }} tâches · {{ st.counts.recipes }} recettes</b></div>
                               <!-- Un refus d'Apple se présente comme « HTTP 403 » à côté d'un
                                    appareil, sans dire que c'est ce contact qui ne convient pas. -->
                               <div><span>Contact déclaré aux services push</span><b class="chemin">{{ st.pushSubject }}</b></div>

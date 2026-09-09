@@ -156,17 +156,17 @@ test('un rappel sans échéance n’est pas gardé, et annuler la suppression le
 
 // ---- les liens vers le reste du foyer --------------------------------------------
 
-test('annuler une suppression rend la tâche avec son contrat et son document', () => {
-  const t: TaskItem = { id: 't1', listId: 'l1', text: 'Résilier la box', who: [], due: null, done: false, contractId: 7, docId: 'f1' };
-  const back = inverseOf({ op: 'remove', id: 't1' }, t) as { contractId?: number; docId?: string };
+test('annuler une suppression rend la tâche avec son contrat et sa liste de courses', () => {
+  const t: TaskItem = { id: 't1', listId: 'l1', text: 'Résilier la box', who: [], due: null, done: false, contractId: 7, shopListId: 'cl1' };
+  const back = inverseOf({ op: 'remove', id: 't1' }, t) as { contractId?: number; shopListId?: string };
   assert.equal(back.contractId, 7);
-  assert.equal(back.docId, 'f1');
+  assert.equal(back.shopListId, 'cl1');
 });
 
-test('annuler la pose d’un document le retire, et localement la clé tombe au lieu de rester à null', () => {
+test('annuler la pose d’une liste de courses la retire, et localement la clé tombe au lieu de rester à null', () => {
   const t: TaskItem = { id: 't1', listId: 'l1', text: 'Renvoyer le formulaire', who: [], due: null, done: false };
-  const back = inverseOf({ op: 'edit', id: 't1', docId: 'f1' }, t);
-  assert.deepEqual(back, { op: 'edit', id: 't1', docId: null });
-  const after = applyTaskOp(applyTaskOp([t], { op: 'edit', id: 't1', docId: 'f1', opId: 'a' }), { ...back!, opId: 'b' } as TaskOp);
-  assert.equal('docId' in after[0], false);
+  const back = inverseOf({ op: 'edit', id: 't1', shopListId: 'cl1' }, t);
+  assert.deepEqual(back, { op: 'edit', id: 't1', shopListId: null });
+  const after = applyTaskOp(applyTaskOp([t], { op: 'edit', id: 't1', shopListId: 'cl1', opId: 'a' }), { ...back!, opId: 'b' } as TaskOp);
+  assert.equal('shopListId' in after[0], false);
 });
