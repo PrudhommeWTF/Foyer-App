@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
+import { AdminStore } from '../core/admin.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { ModalComponent } from '../shared/modal';
@@ -35,11 +36,11 @@ import { contactIni } from '../core/helpers';
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="40" />
               <div class="minfo">
                 <div class="mname">{{ m.name }} @if (m.admin) { <span class="admin">admin</span> }</div>
-                <div class="mrole">{{ m.role }}@if (store.isAdmin() && store.memberHasAccount(m.id)) { <span class="acct" [title]="store.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }@if (store.isAdmin() && store.memberHasTotp(m.id)) { <span class="acct totp" title="Second facteur actif"><f-icon name="lock" [size]="10" color="#4E93B8" [width]="3" /> 2FA</span> }</div>
+                <div class="mrole">{{ m.role }}@if (store.isAdmin() && admin.memberHasAccount(m.id)) { <span class="acct" [title]="admin.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }@if (store.isAdmin() && admin.memberHasTotp(m.id)) { <span class="acct totp" title="Second facteur actif"><f-icon name="lock" [size]="10" color="#4E93B8" [width]="3" /> 2FA</span> }</div>
               </div>
               @if (store.isAdmin()) {
-                <button class="icon-btn sm" title="Gérer l'accès" (click)="store.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="store.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>
-                @if (store.memberHasTotp(m.id)) {
+                <button class="icon-btn sm" title="Gérer l'accès" (click)="admin.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="admin.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>
+                @if (admin.memberHasTotp(m.id)) {
                   <!-- Téléphone perdu, cassé ou réinitialisé, et codes de secours
                        avec : c'est la sortie de dernier recours. -->
                   <button class="icon-btn sm" title="Retirer son second facteur (téléphone perdu)" (click)="retirerTotp(m.id, m.name)">
@@ -56,7 +57,7 @@ import { contactIni } from '../core/helpers';
     }
 
     @if (store.ui().accountFor) {
-      <f-modal [title]="accEmail() ? 'Gérer l’accès' : 'Créer un accès'" (close)="store.closeAccount()">
+      <f-modal [title]="accEmail() ? 'Gérer l’accès' : 'Créer un accès'" (close)="admin.closeAccount()">
         <p class="confirm" style="margin-bottom:18px">
           {{ accEmail()
             ? ('Ce membre peut se connecter. Modifiez l’email ou définissez un nouveau mot de passe.')
@@ -68,11 +69,11 @@ import { contactIni } from '../core/helpers';
         <input class="input" type="password" [ngModel]="store.ui().acPassword" (ngModelChange)="store.patch({ acPassword: $event })" [placeholder]="accEmail() ? 'Laisser vide pour ne pas changer' : '6 caractères minimum'" style="margin-bottom:18px" />
         <div class="acc-foot">
           @if (accEmail()) {
-            <button class="btn btn-ghost" (click)="store.removeAccount()" [disabled]="store.ui().acBusy">Retirer l'accès</button>
+            <button class="btn btn-ghost" (click)="admin.removeAccount()" [disabled]="store.ui().acBusy">Retirer l'accès</button>
           } @else { <div class="spacer"></div> }
           <div class="spacer"></div>
-          <button class="btn btn-soft" (click)="store.closeAccount()">Annuler</button>
-          <button class="btn btn-primary" (click)="store.saveAccount()" [disabled]="store.ui().acBusy">{{ accEmail() ? 'Enregistrer' : 'Créer l’accès' }}</button>
+          <button class="btn btn-soft" (click)="admin.closeAccount()">Annuler</button>
+          <button class="btn btn-primary" (click)="admin.saveAccount()" [disabled]="store.ui().acBusy">{{ accEmail() ? 'Enregistrer' : 'Créer l’accès' }}</button>
         </div>
       </f-modal>
     }
@@ -188,6 +189,7 @@ import { contactIni } from '../core/helpers';
 export class FamilyModalComponent {
   readonly allergenes = Object.entries(ALLERGENES).map(([key, name]) => ({ key, name }));
   store = inject(FoyerStore);
+  admin = inject(AdminStore);
   palette = PALETTE;
   d = this.store.d;
   ini(): string { return contactIni(this.store.ui().mfName || '?'); }
@@ -202,9 +204,9 @@ export class FamilyModalComponent {
       + 'Son mot de passe seul suffira de nouveau à ouvrir son compte, jusqu’à ce qu’il en repose un.\n'
       + 'Confirmez avec VOTRE mot de passe.',
     );
-    if (mdp) await this.store.resetMemberTotp(memberId, mdp);
+    if (mdp) await this.admin.resetMemberTotp(memberId, mdp);
   }
 
-  accEmail(): string { const id = this.store.ui().accountFor; return id ? this.store.memberAccountEmail(id) : ''; }
+  accEmail(): string { const id = this.store.ui().accountFor; return id ? this.admin.memberAccountEmail(id) : ''; }
   accMemberName(): string { const id = this.store.ui().accountFor; return this.d().members.find((m) => m.id === id)?.name || 'ce membre'; }
 }

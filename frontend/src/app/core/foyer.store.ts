@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, SystemStatus, UpdateInfo, isOffline } from './api.service';
+import { ApiError, ApiService, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
@@ -70,12 +70,6 @@ function loadQueue<T>(key: string): T[] {
   try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
-/** La clé VAPID publique, en base64 URL, vers les octets que `subscribe` attend. */
-function urlBase64ToUint8Array(b64: string): Uint8Array<ArrayBuffer> {
-  const padded = (b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
-  return base64ToBytes(padded);
-}
-
 /** Durée d'un toast simple, et celle d'un toast qui propose de revenir en arrière. */
 const TOAST_MS = 2600;
 const UNDO_MS = 7000;
@@ -137,21 +131,20 @@ export class FoyerStore {
   readonly totpOn = signal(false);
   readonly totpRecoveryLeft = signal<number | null>(null);
   readonly currentMemberId = signal<string | null>(null);
-  readonly accounts = signal<Record<string, string>>({}); // memberId → login email
-  /** Les membres qui ont posé un second facteur. Rempli en même temps que `accounts`. */
-  readonly accountsTotp = signal<Set<string>>(new Set());
   /** L'adresse avec laquelle on s'est connecté, telle que le serveur la connaît. */
   readonly myEmail = signal('');
 
   // Calendar overlays
   readonly schoolHolidays = signal<SchoolHoliday[]>([]);
-  readonly icsToken = signal<string>('');
 
-  // Self-update
-  readonly updateInfo = signal<UpdateInfo | null>(null);
-  readonly updateChecking = signal(false);
-  readonly updating = signal(false);
-  readonly updateMsg = signal('');
+  /**
+   * Signaux de coordination vers AdminStore (dépendance à sens unique : ce
+   * magasin ne connaît pas l'admin). `docLoadedAt` s'incrémente à chaque
+   * document chargé pour armer le bootstrap d'administration ; `accountsRev`
+   * quand la liste des comptes a bougé sans rechargement complet.
+   */
+  readonly docLoadedAt = signal(0);
+  readonly accountsRev = signal(0);
 
   /** The household member for the currently authenticated user (NOT the shared profile). */
   readonly me = computed(() => {
@@ -430,7 +423,7 @@ export class FoyerStore {
     return true;
   }
 
-  private async loadState(): Promise<void> {
+  async loadState(): Promise<void> {
     const { state, version } = await this.api.getState();
     this._data.set(this.normalise(state));
     this.docVersion = version;
@@ -457,131 +450,33 @@ export class FoyerStore {
       this.totpOn.set(me.totp);
       this.totpRecoveryLeft.set(me.totpRecoveryLeft);
     } catch { /* ignore */ }
-    await this.refreshAccounts();
     // Quelle version le serveur exécute réellement : la première question quand
     // un écran ne ressemble pas à ce que la mise à jour annonçait.
     this.api.systemVersion().then((v) => this.version.set(v.current)).catch(() => { /* sans conséquence */ });
     this.loadSchoolHolidays();
-    this.loadIcs();
-    this.resumeUpdateIfRunning();
-    void this.initPush();
     this.veilleInactivite();
-  }
-
-  // ---- rappels par Web Push -------------------------------------------------
-  //
-  // Le navigateur s'abonne auprès du service push de son éditeur et confie
-  // l'abonnement au serveur, qui y enverra les rappels. Sur iPhone, seule une
-  // application ajoutée à l'écran d'accueil peut s'abonner : c'est l'état
-  // « install ». Le reste est muet quand il casse (voir docs/taches.md), d'où
-  // l'état détaillé dans Paramètres.
-
-  /** Où en est cet appareil. */
-  readonly pushSupport = signal<'checking' | 'unsupported' | 'install' | 'denied' | 'off' | 'on'>('checking');
-  readonly pushStatus = signal<PushStatus | null>(null);
-  readonly pushBusy = signal(false);
-  private swReg: ServiceWorkerRegistration | null = null;
-
-  /** iPhone ou iPad, où Safari n'accepte le push que depuis l'écran d'accueil. */
-  private isIos(): boolean {
-    return /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  }
-  private isStandalone(): boolean {
-    return matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & { standalone?: boolean }).standalone;
+    // Le document est chargé : AdminStore s'en saisit pour son bootstrap
+    // (comptes, lien ICS, mises à jour, rappels). Voir docLoadedAt.
+    this.docLoadedAt.update((v) => v + 1);
   }
 
   /**
    * Le service worker, enregistré une fois pour toutes. Il sert deux choses
-   * sans rapport (les rappels et le cache de la coquille), et c'est le même :
-   * un navigateur n'en accepte qu'un par portée.
+   * sans rapport (les rappels Web Push, gérés par AdminStore, et le cache de la
+   * coquille), et c'est le même : un navigateur n'en accepte qu'un par portée.
+   * Public pour qu'AdminStore récupère l'enregistrement sans le réenregistrer.
    */
   private swPromise: Promise<ServiceWorkerRegistration | null> | null = null;
-  private ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  ensureServiceWorker(): Promise<ServiceWorkerRegistration | null> {
     if (this.swPromise) return this.swPromise;
     if (!('serviceWorker' in navigator)) return (this.swPromise = Promise.resolve(null));
     this.swPromise = navigator.serviceWorker.register(new URL('sw.js', document.baseURI).href)
-      .then((reg) => { this.swReg = reg; return reg; })
       .catch((e: Error) => {
         // eslint-disable-next-line no-console
         console.warn('[foyer] service worker refusé : ' + e.message + ' (ni rappels, ni démarrage hors ligne)');
         return null;
       });
     return this.swPromise;
-  }
-
-  async initPush(): Promise<void> {
-    if (!('serviceWorker' in navigator)) { this.pushSupport.set('unsupported'); return; }
-    const reg = await this.ensureServiceWorker();
-    if (!reg) { this.pushSupport.set('unsupported'); return; }
-    if (!('PushManager' in window) || !('Notification' in window)) {
-      this.pushSupport.set(this.isIos() && !this.isStandalone() ? 'install' : 'unsupported');
-      return;
-    }
-    if (Notification.permission === 'denied') { this.pushSupport.set('denied'); }
-    else {
-      const sub = await reg.pushManager.getSubscription();
-      this.pushSupport.set(sub ? 'on' : 'off');
-      // Un abonnement déjà là est redit au serveur : il a pu changer de membre ou être perdu en base.
-      if (sub) this.api.pushSubscribe(sub.toJSON(), navigator.userAgent).catch(() => { /* l'état l'affichera */ });
-    }
-    void this.refreshPushStatus();
-  }
-
-  async refreshPushStatus(): Promise<void> {
-    try { this.pushStatus.set(await this.api.pushStatus()); } catch { /* l'écran dit « indisponible » */ }
-  }
-
-  /** Sur un geste de l'utilisateur, obligatoirement : Safari refuse la demande sinon. */
-  async enablePush(): Promise<void> {
-    if (!this.swReg || this.pushBusy()) return;
-    this.pushBusy.set(true);
-    try {
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { this.pushSupport.set(perm === 'denied' ? 'denied' : 'off'); this.toast('Autorisation refusée : les rappels ne peuvent pas arriver ici.'); return; }
-      const key = this.pushStatus()?.publicKey || (await this.api.pushStatus()).publicKey;
-      const sub = await this.swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
-      await this.api.pushSubscribe(sub.toJSON(), navigator.userAgent);
-      this.pushSupport.set('on');
-      this.toast('Rappels activés sur cet appareil');
-      await this.refreshPushStatus();
-    } catch (e) {
-      this.toast('Activation impossible : ' + (e as Error).message);
-    } finally { this.pushBusy.set(false); }
-  }
-
-  async disablePush(): Promise<void> {
-    if (!this.swReg || this.pushBusy()) return;
-    this.pushBusy.set(true);
-    try {
-      const sub = await this.swReg.pushManager.getSubscription();
-      if (sub) { await this.api.pushUnsubscribe(sub.endpoint).catch(() => { /* l'abonnement local part quand même */ }); await sub.unsubscribe(); }
-      this.pushSupport.set('off');
-      this.toast('Rappels désactivés sur cet appareil');
-      await this.refreshPushStatus();
-    } finally { this.pushBusy.set(false); }
-  }
-
-  async removePushDevice(id: number): Promise<void> {
-    try { await this.api.pushRemoveDevice(id); await this.refreshPushStatus(); this.toast('Appareil retiré'); }
-    catch (e) { this.toast((e as Error).message); }
-  }
-
-  /** Une vraie notification, tout de suite : le seul test qui vaille. */
-  async testPush(): Promise<void> {
-    if (this.pushBusy()) return;
-    this.pushBusy.set(true);
-    try {
-      const r = await this.api.pushTest();
-      // Un envoi partiel n'est pas un envoi réussi : le dire, en nommant ce qui
-      // a échoué. La liste des appareils, elle, dit lequel.
-      this.toast(
-        r.status === 'sent' ? 'Test envoyé à ' + r.devices + (r.devices > 1 ? ' appareils' : ' appareil') + ', il devrait arriver dans la seconde'
-        : r.status === 'partial' ? `Reçu par ${r.devices} appareil sur ${r.total} : ${r.error || 'les autres ont refusé'}`
-        : r.status === 'no-device' ? 'Aucun appareil abonné pour vous'
-        : 'Échec : ' + (r.error || r.status));
-      await this.refreshPushStatus();
-    } catch (e) { this.toast((e as Error).message); }
-    finally { this.pushBusy.set(false); }
   }
 
   // ---- calendar overlays -----------------------------------------------
@@ -591,121 +486,11 @@ export class FoyerStore {
     try { const r = await this.api.schoolHolidays(ac); this.schoolHolidays.set(r.holidays || []); }
     catch { this.schoolHolidays.set([]); }
   }
-  /** Le jeton du flux vaut accès sans mot de passe : le serveur ne le sert qu'à un administrateur. */
-  async loadIcs(): Promise<void> {
-    if (!this.isAdmin()) return;
-    try { const r = await this.api.icsInfo(); this.icsToken.set(r.token); } catch { /* ignore */ }
-  }
-  async regenerateIcs(): Promise<void> {
-    try { const r = await this.api.icsRegenerate(); this.icsToken.set(r.token); this.toast('Nouveau lien de calendrier généré'); }
-    catch (e) { this.toast((e as Error).message); }
-  }
-  icsUrl(): string { const t = this.icsToken(); return t ? new URL('api/calendar/feed.ics?token=' + t, document.baseURI).href : ''; }
-
-  // ---- self-update ------------------------------------------------------
-  async checkUpdates(): Promise<void> {
-    this.updateChecking.set(true);
-    try { this.updateInfo.set(await this.api.updateCheck()); }
-    catch (e) { this.updateInfo.set({ current: '?', selfUpdate: false, error: (e as Error).message }); }
-    this.updateChecking.set(false);
-  }
-
-  async applyUpdate(password: string): Promise<void> {
-    if (this.updating()) return;
-    this.updating.set(true);
-    this.updateMsg.set('Démarrage de la mise à jour…');
-    try {
-      const r = await this.api.startSystemUpdate(password);
-      if (r.error) { this.updating.set(false); this.toast(r.error); return; }
-    } catch (e) { this.updating.set(false); this.toast((e as Error).message); return; }
-    this.pollUpdateStatus();
-  }
-
-  /**
-   * If a self-update is already running on the server (e.g. the page was
-   * reloaded mid-update), resume showing its progress. Called on app load.
-   */
-  async resumeUpdateIfRunning(): Promise<void> {
-    if (this.updating()) return;
-    try {
-      const s = await this.api.updateStatus();
-      if (s.state === 'running') {
-        this.updating.set(true);
-        this.updateMsg.set(s.message || 'Mise à jour en cours…');
-        this.pollUpdateStatus();
-      } else if (s.state === 'error' && s.message) {
-        // Une mise à jour qui a échoué ne doit pas se découvrir en fouillant le
-        // serveur : le panneau Mises à jour l'affiche tant qu'on n'en a pas relancé une.
-        this.updateMsg.set(s.message);
-      }
-    } catch { /* status unreachable — ignore */ }
-  }
-
-  /**
-   * Poll the server update status every 3 s. A total deadline here would lie:
-   * on a small container `npm ci` plus two builds dépassent dix minutes sans
-   * que rien n'aille mal. C'est le serveur qui déclare une mise à jour
-   * interrompue (voir freshStatus), sur l'absence de progression. Il ne reste
-   * donc à juger ici qu'un seul cas : un backend qui ne répond plus du tout.
-   */
-  private pollUpdateStatus(): void {
-    let mute = 0;
-    const poll = async (): Promise<void> => {
-      try {
-        const s = await this.api.updateStatus();
-        mute = 0;
-        if (s.message) this.updateMsg.set(s.message);
-        if (s.state === 'done') { this.updating.set(false); this.toast('Mise à jour installée, rechargement…'); setTimeout(() => location.reload(), 1600); return; }
-        if (s.state === 'error') { this.updating.set(false); this.toast('Échec : ' + (s.message || 'voir les logs')); return; }
-      } catch {
-        // Le service est coupé pendant l'installation : quelques minutes de
-        // silence sont normales, un quart d'heure ne l'est plus.
-        if (++mute > 300) {
-          this.updating.set(false);
-          this.updateMsg.set('Le serveur ne répond plus depuis un quart d’heure. Voir le journal de mise à jour sur le serveur, puis relancez.');
-          return;
-        }
-        this.updateMsg.set('Redémarrage du service…');
-      }
-      setTimeout(poll, 3000);
-    };
-    setTimeout(poll, 3000);
-  }
-
   /** Derived (non-event) calendar items for a day: holidays, school holidays, birthdays, dated tasks. */
   dayExtras(ds: string): DayExtra[] {
     const d = this._data();
     if (!d) return [];
     return dayExtrasOn(ds, { doc: d, schoolHolidays: this.schoolHolidays(), external: this.externalDayExtras() });
-  }
-
-  /** Réservée à un administrateur, comme l'écran qui s'en sert. */
-  async refreshAccounts(): Promise<void> {
-    if (!this.isAdmin()) return;
-    try {
-      const { accounts } = await this.api.memberAccounts();
-      this.accounts.set(Object.fromEntries(accounts.map((a) => [a.memberId, a.email])));
-      this.accountsTotp.set(new Set(accounts.filter((a) => a.totp).map((a) => a.memberId)));
-    } catch { /* ignore */ }
-  }
-
-  memberHasAccount(memberId: string): boolean { return !!this.accounts()[memberId]; }
-  memberAccountEmail(memberId: string): string { return this.accounts()[memberId] || ''; }
-  /** Ce membre a-t-il posé un second facteur ? Réservé à l'écran d'un administrateur. */
-  memberHasTotp(memberId: string): boolean { return this.accountsTotp().has(memberId); }
-
-  /**
-   * Retire le second facteur d'un membre : le téléphone est perdu, cassé ou
-   * réinitialisé, et les codes de secours avec. Le mot de passe de
-   * l'administrateur est redemandé par le serveur.
-   */
-  async resetMemberTotp(memberId: string, password: string): Promise<boolean> {
-    try {
-      await this.api.totpReset(memberId, password);
-      await this.refreshAccounts();
-      this.toast('Second facteur retiré. Ce membre se reconnecte avec son seul mot de passe.');
-      return true;
-    } catch (e) { this.toast((e as Error).message); return false; }
   }
 
   /** Guard against older/partial state documents missing newer keys. */
@@ -828,63 +613,9 @@ export class FoyerStore {
     this.totpRecoveryLeft.set(null);
     this.totpChallenge.set('');
     this.currentMemberId.set(null);
-    this.accounts.set({});
-    this.accountsTotp.set(new Set());
     this.myEmail.set('');
     this.schoolHolidays.set([]);
-    this.icsToken.set('');
     this.revokePhotos();
-  }
-
-  // ---- member login accounts --------------------------------------------
-  async openAccount(memberId: string): Promise<void> {
-    // Ensure the member exists server-side before managing its account.
-    await this.flush();
-    await this.refreshAccounts();
-    this.patch({ accountFor: memberId, acEmail: this.memberAccountEmail(memberId), acPassword: '', acBusy: false });
-  }
-  closeAccount(): void { this.patch({ accountFor: null, acBusy: false }); }
-
-  async saveAccount(): Promise<void> {
-    const s = this.ui();
-    const memberId = s.accountFor;
-    if (!memberId || s.acBusy) return;
-    const email = s.acEmail.trim();
-    const password = s.acPassword;
-    const exists = this.memberHasAccount(memberId);
-    const min = this.setting('passwordMinLength');
-    if (!exists) {
-      if (!/^\S+@\S+\.\S+$/.test(email)) { this.toast('Email invalide'); return; }
-      if (password.length < min) { this.toast(`Mot de passe : ${min} caractères minimum`); return; }
-    } else if (password && password.length < min) {
-      this.toast(`Mot de passe : ${min} caractères minimum`); return;
-    }
-    this.patch({ acBusy: true });
-    try {
-      if (!exists) await this.api.createMemberAccount(memberId, email, password);
-      else await this.api.updateMemberAccount(memberId, email || undefined, password || undefined);
-      await this.refreshAccounts();
-      this.patch({ accountFor: null, acBusy: false });
-      this.toast(exists ? 'Accès mis à jour' : 'Accès créé');
-    } catch (e) {
-      this.patch({ acBusy: false });
-      this.toast((e as Error).message);
-    }
-  }
-
-  async removeAccount(): Promise<void> {
-    const memberId = this.ui().accountFor;
-    if (!memberId) return;
-    this.patch({ acBusy: true });
-    try {
-      await this.api.deleteMemberAccount(memberId);
-      await this.refreshAccounts();
-      this.patch({ accountFor: null, acBusy: false });
-      this.toast('Accès retiré');
-    } catch (e) {
-      this.patch({ acBusy: false });
-      this.toast((e as Error).message);
-    }
   }
 
   // ---- state plumbing ---------------------------------------------------
@@ -2993,7 +2724,6 @@ export class FoyerStore {
   }
   confirmMemberDel(): void {
     const id = this.ui().memberDelId; if (!id) return;
-    const hadAccount = this.memberHasAccount(id);
     // Ses créneaux ne partent pas avec lui : ceux qu'il partageait restent
     // entiers pour les autres, et ceux qui n'étaient qu'à lui deviennent « sans
     // membre », visibles et réparables. Les effacer serait une perte muette.
@@ -3003,9 +2733,10 @@ export class FoyerStore {
       d.sched = d.sched.map((x) => ((x.who || []).includes(id) ? { ...x, who: x.who.filter((w) => w !== id) } : x));
     });
     this.patch({ memberDelId: null, schedWho: this.ui().schedWho.filter((x) => x !== id) });
-    if (hadAccount) {
-      this.flush().then(() => this.api.deleteMemberAccount(id)).then(() => this.refreshAccounts()).catch(() => { /* ignore */ });
-    }
+    // Un éventuel compte de connexion de ce membre est retiré côté serveur, au
+    // mieux : l'appel est sans effet (et son échec sans conséquence) quand il
+    // n'y en avait pas. AdminStore rafraîchit la liste via accountsRev.
+    this.flush().then(() => this.api.deleteMemberAccount(id)).then(() => this.accountsRev.update((v) => v + 1)).catch(() => { /* pas de compte, ou hors ligne */ });
     this.toast(seuls
       ? 'Membre retiré, ' + seuls + (seuls > 1 ? ' créneaux sont désormais sans membre' : ' créneau est désormais sans membre')
       : 'Membre retiré');
@@ -3052,7 +2783,7 @@ export class FoyerStore {
       // Le mot de passe changé a invalidé l'ancien cookie ; le serveur en a
       // reposé un frais dans la réponse. Rien à ranger côté client.
       this.myEmail.set(r.email);
-      await this.refreshAccounts();
+      this.accountsRev.update((v) => v + 1);
       this.patch({ pfEmail: r.email });
       this.toast(r.othersLoggedOut ? 'Identifiants mis à jour, vos autres sessions sont déconnectées' : 'Adresse de connexion mise à jour');
       return true;
@@ -3163,81 +2894,6 @@ export class FoyerStore {
   async loadSettingsInfo(): Promise<void> {
     try { this.settingsInfo.set(await this.api.settings()); }
     catch { /* hors ligne : la page se contente du document, sans le journal */ }
-  }
-
-  // ---- exploitation ------------------------------------------------------
-
-  readonly systemStatus = signal<SystemStatus | null>(null);
-  readonly backupBusy = signal(false);
-
-  async loadSystemStatus(): Promise<void> {
-    try { this.systemStatus.set(await this.api.systemStatus()); }
-    catch { /* non administrateur, ou hors ligne : la section le dit */ }
-  }
-
-  /**
-   * Un instantané cohérent de la base, sans arrêter le service. Il n'emporte ni
-   * les fichiers ni les photos : l'écran le dit, plutôt que de laisser croire à
-   * une sauvegarde complète.
-   */
-  async makeBackup(): Promise<void> {
-    this.backupBusy.set(true);
-    try {
-      const out = await this.api.makeBackup();
-      await this.loadSystemStatus();
-      this.toast(`Sauvegarde écrite : ${out.snapshot.name}`);
-    } catch (e) {
-      this.toast('Sauvegarde impossible : ' + (e as Error).message);
-    } finally { this.backupBusy.set(false); }
-  }
-
-  async downloadBackup(name: string): Promise<void> {
-    try { downloadBlob(await this.api.downloadBackup(name), name); }
-    catch (e) { this.toast('Téléchargement impossible : ' + (e as Error).message); }
-  }
-
-  async deleteBackup(name: string): Promise<void> {
-    if (!confirm(`Effacer la sauvegarde ${name} ? Elle ne sera pas récupérable.`)) return;
-    try { await this.api.deleteBackup(name); await this.loadSystemStatus(); this.toast('Sauvegarde effacée'); }
-    catch (e) { this.toast('Suppression impossible : ' + (e as Error).message); }
-  }
-
-  /**
-   * Le fichier de configuration : l'exporter, le relire.
-   *
-   * Ce n'est pas une sauvegarde des données, et l'écran le dit. C'est le filet
-   * de sécurité avant de toucher aux réglages, et ce qui évite de tout
-   * reparamétrer de mémoire après une réinstallation.
-   */
-  readonly configBusy = signal(false);
-  readonly configReport = signal<ConfigImportReport | null>(null);
-
-  async exportSettings(): Promise<void> {
-    this.configBusy.set(true);
-    try {
-      downloadBlob(await this.api.exportSettings(), `foyer-reglages-${this.todayStr()}.json`);
-      this.toast('Configuration exportée');
-    } catch (e) {
-      this.toast('Export impossible : ' + (e as Error).message);
-    } finally { this.configBusy.set(false); }
-  }
-
-  async importSettings(file: File): Promise<void> {
-    this.configBusy.set(true);
-    this.configReport.set(null);
-    try {
-      const rapport = await this.api.importSettings(JSON.parse(await file.text()));
-      this.configReport.set(rapport);
-      // Le document local ne sait rien de ce que le serveur vient d'écrire : on
-      // le relit en entier plutôt que de deviner, sinon l'écran montre l'état d'avant.
-      await this.loadState();
-      await this.loadSettingsInfo();
-      this.toast(rapport.applied.length ? `${rapport.applied.length} réglage(s) rétabli(s)` : 'Rien à rétablir : tout était déjà en place');
-    } catch (e) {
-      const err = e as ApiError;
-      this.configReport.set(null);
-      this.toast(err instanceof SyntaxError ? 'Ce fichier n’est pas du JSON lisible.' : 'Import impossible : ' + err.message);
-    } finally { this.configBusy.set(false); }
   }
 
   /**
