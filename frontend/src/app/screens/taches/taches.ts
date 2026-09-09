@@ -8,7 +8,7 @@ import { ListKind, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
 import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
-import { recLabel } from '../../core/recurrence';
+import { occurrenceProgress, recLabel } from '../../core/recurrence';
 import { ModalComponent } from '../../shared/modal';
 import { ReorderDirective } from '../../shared/reorder';
 import { WhoComponent } from '../../shared/who';
@@ -145,6 +145,9 @@ import { TaskComposerComponent } from './composer';
             @for (l of g.lines; track l.task.id) {
               <div [attr.data-rid]="l.task.id">
               <div class="task" [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.editTaskItem(l.task.id)">
+                @if (l.task.rec && l.task.due) {
+                  <div class="t-prog" [style.width.%]="taskProgress(l.task) * 100" [style.background]="listColor(l.task.listId)"></div>
+                }
                 @if (canOrder(g)) {
                   <!-- On tire par la poignée, jamais par la ligne : sinon la liste ne défile plus. -->
                   <button class="grip" data-grip (click)="$event.stopPropagation()" [attr.aria-label]="'Déplacer ' + l.task.text">
@@ -397,8 +400,11 @@ import { TaskComposerComponent } from './composer';
     .g-act { border: none; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 9px; cursor: pointer; }
     .list { display: flex; flex-direction: column; gap: 10px; }
 
-    .task { display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 16px; padding: 14px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; }
+    .task { position: relative; display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 16px; padding: 14px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; overflow: hidden; }
     .task.done { background: var(--soft2); box-shadow: none; }
+    /* Barre de progression d'une tâche récurrente, le long de la bordure basse :
+       elle se remplit à mesure que l'occurrence à venir approche. */
+    .t-prog { position: absolute; left: 0; bottom: 0; height: 3px; border-bottom-left-radius: 16px; opacity: .5; transition: width .35s ease; pointer-events: none; }
     /* Une cible de 44 px pour le pouce, dessinée à 24 : le geste du magasin, sans confirmation. */
     .tick { width: 24px; height: 24px; flex: none; border-radius: 8px; border: 2px solid var(--line2); background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; padding: 0; }
     .tick::before { content: ''; position: absolute; inset: -10px; }
@@ -533,6 +539,8 @@ export class TachesScreen {
   badges(t: TaskItem) { return whoBadges(t, this.d().members); }
   dueOf(t: TaskItem): string { return dueLabel(t.due, t.time, this.store.todayStr(), (iso) => this.store.fmtNumDate(iso), t.rec?.grace); }
   recOf(t: TaskItem): string { return t.rec ? recLabel(t.rec, (iso) => this.store.fmtNumDate(iso)) : ''; }
+  /** Remplissage de la barre de progression d'une tâche récurrente (0 à 1), vers l'occurrence à venir. */
+  taskProgress(t: TaskItem): number { return t.rec && t.due ? occurrenceProgress(t.rec, t.due, this.store.todayStr()) : 0; }
   remindOf(t: TaskItem): string { return t.remind ? REMIND_LABELS[t.remind].toLowerCase() : ''; }
   lastDone() { return (this.editing()?.history || []).slice(-5).reverse(); }
   lateLabel(days: number): string {

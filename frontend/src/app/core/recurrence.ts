@@ -106,6 +106,31 @@ export function windowEnd(due: string, rec: TaskRec | null | undefined): string 
   return rec?.grace ? addDaysIso(due, rec.grace) : due;
 }
 
+/** Un pas de cadence EN ARRIÈRE : l'occurrence précédente, une cadence avant `iso`. Miroir de stepFrom. */
+function stepBack(iso: string, rec: TaskRec): string {
+  const n = Math.max(1, rec.every || 1);
+  switch (rec.freq) {
+    case 'daily': return addDaysIso(iso, -n);
+    case 'weekly': return addDaysIso(iso, -7 * n);
+    case 'monthly': return addMonthsClamped(iso, -n);
+    case 'yearly': return addMonthsClamped(iso, -12 * n);
+  }
+}
+
+/**
+ * Où en est le cycle courant d'une série, entre l'occurrence précédente (0) et
+ * l'échéance à venir (1). Sert à remplir une barre le long de la tâche à mesure
+ * que l'occurrence approche : vide au lendemain de la précédente, pleine à
+ * l'échéance et au-delà.
+ */
+export function occurrenceProgress(rec: TaskRec, due: string, today: string): number {
+  if (today >= due) return 1;
+  const start = stepBack(due, rec);
+  if (today <= start) return 0;
+  const total = daysBetween(start, due);
+  return total <= 0 ? 1 : Math.max(0, Math.min(1, daysBetween(start, today) / total));
+}
+
 /**
  * Une tâche a-t-elle une occurrence ce jour-là, pour l'affichage au calendrier ?
  *
