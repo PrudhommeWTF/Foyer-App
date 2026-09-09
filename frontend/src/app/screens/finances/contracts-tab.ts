@@ -5,6 +5,7 @@ import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store'
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { CAT_ICONS, FILE_TYPE_COLORS } from '../../core/constants';
+import { fmtBytes } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
 import { AvatarComponent } from '../../shared/avatar';
 
@@ -821,11 +822,7 @@ export class FinancesContractsTab {
   }
 
   /** Human size: an invoice is « 340 Ko », not 348160 octets. */
-  size(bytes: number): string {
-    if (bytes < 1024) return `${bytes} o`;
-    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
-    return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} Mo`;
-  }
+  size(bytes: number): string { return fmtBytes(bytes); }
 
   /** Send the picked file, then clear the input so the same file can be re-sent. */
   pick(event: Event, contractId: number): void {

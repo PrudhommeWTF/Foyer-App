@@ -21,6 +21,7 @@
 import { RAYON_REPLI, RAYONS, normaliseName } from './articles';
 import { ArticleIndex, ParsedIng, UNIT_BY_KEY, parseIngredient } from './ingredients';
 import { Aisle, Article, MealValue, Rayon, Recipe, ShopItem } from './models';
+import { cap } from './helpers';
 
 export interface PlanSource { recipe: string; raw: string; }
 
@@ -138,7 +139,6 @@ function formatAmount(family: string, total: number, unit?: string): string {
 const formatBucket = (b: Bucket): string =>
   [...b.amounts.entries()].map(([f, a]) => formatAmount(f, a.qty, a.unit)).join(' + ');
 
-const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 /**
  * Durée pendant laquelle un « j'ai déjà ça » continue d'écarter l'article.

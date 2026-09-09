@@ -12,6 +12,8 @@ import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
 import { CAL_KINDS } from './constants';
 import { deadlineLabel, shortDeadlineLabel } from './deadlines';
+import { downloadBlob } from './download';
+import { cap, pad2 } from './helpers';
 
 /**
  * Finances state. Unlike FoyerStore, which holds the whole household as one
@@ -149,7 +151,7 @@ export function fmtEurosInt(cents: number): string {
 export function frMonthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  return label.charAt(0).toUpperCase() + label.slice(1);
+  return cap(label);
 }
 
 /** Parse a typed amount into cents; null when nothing numeric was entered. */
@@ -452,7 +454,7 @@ export class FinancesStore {
   private shiftMonth(month: string, delta: number): string {
     const [y, m] = month.split('-').map(Number);
     const idx = y * 12 + (m - 1) + delta;
-    return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, '0')}`;
+    return `${Math.floor(idx / 12)}-${pad2((idx % 12) + 1)}`;
   }
   prevMonth(): void { this.setMonth(this.shiftMonth(this.ui().month, -1)); }
   nextMonth(): void { this.setMonth(this.shiftMonth(this.ui().month, 1)); }
@@ -487,7 +489,7 @@ export class FinancesStore {
   private monthBounds(month: string): { from: string; to: string } {
     const [y, m] = month.split('-').map(Number);
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
-    return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
+    return { from: `${month}-01`, to: `${month}-${pad2(last)}` };
   }
 
   async reloadTransactions(): Promise<void> {
@@ -1425,12 +1427,7 @@ export class FinancesStore {
   /** Download through the session token rather than a bare link. */
   async openAttachment(a: FinAttachment): Promise<void> {
     try {
-      const url = URL.createObjectURL(await this.api.downloadAttachment(a.id));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = a.name;
-      link.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(await this.api.downloadAttachment(a.id), a.name);
     } catch (e) { this.foyer.toast((e as Error).message); }
   }
 
@@ -1579,12 +1576,7 @@ export class FinancesStore {
   // ---- module backup -----------------------------------------------------
   async exportModule(): Promise<void> {
     try {
-      const url = URL.createObjectURL(await this.api.exportModule());
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `foyer-finances-${this.foyer.todayStr()}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(await this.api.exportModule(), `foyer-finances-${this.foyer.todayStr()}.json`);
       this.foyer.toast('Sauvegarde du module téléchargée');
     } catch (e) { this.foyer.toast((e as Error).message); }
   }
@@ -1620,13 +1612,7 @@ export class FinancesStore {
   // ---- export ------------------------------------------------------------
   async exportCsv(): Promise<void> {
     try {
-      const blob = await this.api.exportCsv();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `foyer-finances-${this.foyer.todayStr()}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(await this.api.exportCsv(), `foyer-finances-${this.foyer.todayStr()}.csv`);
       this.foyer.toast('Export CSV téléchargé');
     } catch (e) {
       this.foyer.toast((e as Error).message);

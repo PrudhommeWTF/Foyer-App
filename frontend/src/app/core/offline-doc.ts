@@ -30,6 +30,8 @@
 //     fige pas l'interface.
 
 /** L'ancienne clé, dans le stockage local. Gardée pour reprendre ce qui y traîne. */
+import { pad2 } from './helpers';
+
 export const DOC_CACHE_KEY = 'foyer.doc';
 
 /**
@@ -90,8 +92,8 @@ export function readDoc<T>(raw: string | null): CachedDoc<T> | null {
 export function staleLabel(at: string, fmt: (iso: string) => string): string {
   const d = new Date(at);
   if (Number.isNaN(d.getTime())) return '';
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
+  const hh = pad2(d.getHours());
+  const mm = pad2(d.getMinutes());
   return `le ${fmt(at.slice(0, 10))} à ${hh}:${mm}`;
 }
 

@@ -1,10 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, WritableSignal, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { PALETTE } from '../../core/constants';
-import { contactIni } from '../../core/helpers';
+import { contactIni, fmtBytes, normText } from '../../core/helpers';
 import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl, declOf } from '../../core/settings/registry';
 import { AvatarComponent } from '../../shared/avatar';
 import { ModalComponent } from '../../shared/modal';
@@ -846,20 +846,22 @@ export class SettingsScreen {
     this.totpBusy.set(false);
   }
 
-  async copierSecret(): Promise<void> {
-    // La clé sans les espaces : c'est ce que l'application attend, les espaces
-    // n'étaient là que pour la relire.
+  /** Copie un texte, lève le drapeau « Copié » 1,8 s, ou signale l'échec. */
+  private async copier(texte: string, drapeau: WritableSignal<boolean>, erreur: string): Promise<void> {
     try {
-      await navigator.clipboard.writeText(this.totpSecretLisible().replace(/\s/g, ''));
-      this.secretCopie.set(true); setTimeout(() => this.secretCopie.set(false), 1800);
-    } catch { this.store.toast('Copie impossible : recopiez la clé à la main.'); }
+      await navigator.clipboard.writeText(texte);
+      drapeau.set(true); setTimeout(() => drapeau.set(false), 1800);
+    } catch { this.store.toast(erreur); }
   }
 
-  async copierSecours(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(this.totpCodes().join('\n'));
-      this.secoursCopies.set(true); setTimeout(() => this.secoursCopies.set(false), 1800);
-    } catch { this.store.toast('Copie impossible : recopiez les codes à la main.'); }
+  // La clé sans les espaces : c'est ce que l'application attend, les espaces
+  // n'étaient là que pour la relire.
+  copierSecret(): Promise<void> {
+    return this.copier(this.totpSecretLisible().replace(/\s/g, ''), this.secretCopie, 'Copie impossible : recopiez la clé à la main.');
+  }
+
+  copierSecours(): Promise<void> {
+    return this.copier(this.totpCodes().join('\n'), this.secoursCopies, 'Copie impossible : recopiez les codes à la main.');
   }
 
   /** Les réglages du serveur, indexés par clé, tels que le serveur les applique. */
@@ -889,14 +891,14 @@ export class SettingsScreen {
    * qu'on a en tête quand on ne sait plus comment le réglage s'appelle.
    */
   readonly trouves = computed<SettingDecl[]>(() => {
-    const m = norm(this.q());
+    const m = normText(this.q());
     return m ? ALL.filter((d) => d.scope !== 'deploiement'
-      && norm(d.label + ' ' + d.desc + ' ' + d.module + ' ' + this.nomSection(d.section)).includes(m)) : [];
+      && normText(d.label + ' ' + d.desc + ' ' + d.module + ' ' + this.nomSection(d.section)).includes(m)) : [];
   });
 
   readonly sectionsTrouvees = computed<Section[]>(() => {
-    const m = norm(this.q());
-    return m ? this.sections().filter((s) => norm(s.label + ' ' + s.desc).includes(m)) : [];
+    const m = normText(this.q());
+    return m ? this.sections().filter((s) => normText(s.label + ' ' + s.desc).includes(m)) : [];
   });
 
   constructor() {
@@ -976,12 +978,7 @@ export class SettingsScreen {
   }
 
   /** « 4,2 Mo », « 812 Ko ». Un chiffre lisible d'un coup d'oeil, pas une précision inutile. */
-  poids(o: number): string {
-    if (o >= 1073741824) return (o / 1073741824).toFixed(1).replace('.', ',') + ' Go';
-    if (o >= 1048576) return (o / 1048576).toFixed(1).replace('.', ',') + ' Mo';
-    if (o >= 1024) return Math.round(o / 1024) + ' Ko';
-    return o + ' o';
-  }
+  poids(o: number): string { return fmtBytes(o); }
 
   /** « 3 jours », « 4 h », « 12 min ». Depuis quand le service tourne. */
   duree(s: number): string {
@@ -1053,13 +1050,9 @@ export class SettingsScreen {
       : s === 'missed' ? 'manqué (service arrêté)' : s;
   }
 
-  async copyIcs(): Promise<void> {
-    try { await navigator.clipboard.writeText(this.store.icsUrl()); this.copied.set(true); setTimeout(() => this.copied.set(false), 1800); }
-    catch { this.store.toast('Copie impossible : sélectionnez le lien manuellement'); }
+  copyIcs(): Promise<void> {
+    return this.copier(this.store.icsUrl(), this.copied, 'Copie impossible : sélectionnez le lien manuellement');
   }
 }
 
 /** Minuscules sans accents : « Académie » se trouve en tapant « academie ». */
-function norm(s: string): string {
-  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-}
