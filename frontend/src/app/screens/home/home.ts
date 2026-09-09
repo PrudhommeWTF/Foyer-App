@@ -176,11 +176,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'fin'; label: s
           <div class="hello f-script">{{ hello() }}</div>
           <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}</div>
         </div>
-        @if (store.data()) {
-          <button class="btn btn-sage" (click)="store.prepareList(store.weekDays())">
-            <f-icon name="bolt" [size]="20" color="#fff" /> Courses de la semaine depuis les repas
-          </button>
-        }
       </div>
 
       @if (!store.data()) {
