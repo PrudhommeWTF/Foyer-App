@@ -116,7 +116,7 @@ const INTRO = [
               @case (3) {
                 <div class="fade">
                   <h2 class="f-display">Ajoutez votre famille</h2>
-                  <p class="sub">Ajoutez les membres du foyer. Donnez-leur un <b>email + mot de passe</b> pour qu'ils puissent se connecter (facultatif — laissez vide pour un simple profil).</p>
+                  <p class="sub">Ajoutez les membres du foyer. Donnez-leur un <b>email + mot de passe</b> pour qu'ils puissent se connecter (facultatif : laissez vide pour un simple profil).</p>
                   <div class="mlist">
                     <div class="mrow you">
                       <f-avatar [ini]="ini()" [color]="color()" [size]="42" />

@@ -26,9 +26,9 @@
 //     une empreinte du contenu : un nouveau build produit de nouveaux noms, il
 //     n'y a donc aucun risque de servir l'ancien code pour le nouveau HTML.
 //
-// Les polices viennent de Google et ne sont pas mises en cache : hors ligne,
-// l'interface se rend avec les polices du système. C'est une différence
-// d'allure, pas de fonctionnement.
+// Les polices sont auto-hébergées (voir src/fonts.css) et servies par le foyer
+// comme le reste des ressources : elles passent donc par le même cache et
+// restent disponibles hors ligne.
 const CACHE = 'foyer-shell-v1';
 /** Au-delà, les fichiers des builds précédents sont élagués, les plus anciens d'abord. */
 const MAX_ENTRIES = 60;
