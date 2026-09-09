@@ -30,11 +30,24 @@ const RANG: Record<LogLevel, number> = { erreur: 0, info: 1, debug: 2 };
  * existe.
  */
 let source: () => LogLevel = () => 'info';
-export function setLogLevelSource(fn: () => LogLevel): void { source = fn; }
+export function setLogLevelSource(fn: () => LogLevel): void { source = fn; cachedAt = 0; }
+
+// Le niveau vient d'un réglage du foyer, dont la lecture reparse tout le document
+// d'état. Une ligne de journal ne peut pas payer ça : on garde la valeur en
+// cache et on ne la relit qu'au plus une fois par seconde. Changer la verbosité
+// pendant qu'on regarde le journal prend effet en moins d'une seconde, ce qui est
+// exactement ce qu'on veut, sans faire d'un `log.info` un `SELECT` + `JSON.parse`.
+const TTL_MS = 1000;
+let cached: LogLevel = 'info';
+let cachedAt = 0;
 
 /** Le niveau en vigueur, avec repli sur `info` si le réglage est illisible. */
 export function level(): LogLevel {
-  try { const l = source(); return l in RANG ? l : 'info'; } catch { return 'info'; }
+  const now = Date.now();
+  if (now - cachedAt < TTL_MS) return cached;
+  cachedAt = now;
+  try { const l = source(); cached = l in RANG ? l : 'info'; } catch { cached = 'info'; }
+  return cached;
 }
 
 const ecrit = (voulu: LogLevel, flux: 'out' | 'err', ligne: string): void => {

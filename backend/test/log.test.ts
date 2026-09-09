@@ -74,3 +74,27 @@ describe('robustesse', () => {
     assert.deepEqual(sortie, ['[foyer] démarrage']);
   });
 });
+
+// Le niveau vient d'un réglage dont la lecture reparse tout le document d'état :
+// une ligne de journal ne peut pas payer ça. La valeur est donc mise en cache et
+// n'est relue qu'au plus une fois par seconde ; poser une nouvelle source remet
+// le cache à zéro, pour qu'un changement de verbosité soit pris sans attendre.
+describe('cache du niveau', () => {
+  it('garde la valeur en cache jusqu’à ce qu’une nouvelle source soit posée', () => {
+    let courant: LogLevel = 'debug';
+    setLogLevelSource(() => courant);
+    log.debug('un');
+    assert.deepEqual(sortie, ['[foyer] un'], 'lu à la source la première fois');
+
+    // La source rend maintenant « erreur », mais sans repasser par
+    // setLogLevelSource : dans la seconde, le cache tient et debug passe encore.
+    courant = 'erreur';
+    log.debug('deux');
+    assert.deepEqual(sortie, ['[foyer] un', '[foyer] deux'], 'la valeur en cache tient');
+
+    // Reposer la source invalide le cache : debug est maintenant tu.
+    setLogLevelSource(() => courant);
+    log.debug('trois');
+    assert.deepEqual(sortie, ['[foyer] un', '[foyer] deux'], 'après invalidation, debug est filtré');
+  });
+});
