@@ -389,17 +389,10 @@ export class FinancesStore {
   async init(force = false): Promise<void> {
     if (this.loaded() && !force) return;
     try {
-      const b = await this.api.bootstrap();
-      this.accounts.set(b.accounts);
-      this.categories.set(b.categories);
-      this.balances.set(b.balances);
-      this.ignoredOps.set(b.ignoredOps);
-      this.loans.set(b.loans);
-      this.coverage.set(b.coverage);
-      this.months.set(b.months);
-      this.aliases.set(b.aliases);
+      await this.refreshReference();
       // Land on the most recent month that actually holds data.
-      if (b.months.length && !b.months.includes(this.ui().month)) this.patch({ month: b.months[0] });
+      const months = this.months();
+      if (months.length && !months.includes(this.ui().month)) this.patch({ month: months[0] });
       this.loaded.set(true);
       this.error.set('');
       this.loadedAt.set(new Date().toISOString());

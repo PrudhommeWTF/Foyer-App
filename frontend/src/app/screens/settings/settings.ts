@@ -755,7 +755,7 @@ const GESTES = new Set(['compte', 'membres']);
 export class SettingsScreen {
   store = inject(FoyerStore);
   private api = inject(ApiService);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
   copied = signal(false);
 
   readonly DEPLOYMENT = DEPLOYMENT;

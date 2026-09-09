@@ -189,7 +189,7 @@ export class FamilyModalComponent {
   readonly allergenes = Object.entries(ALLERGENES).map(([key, name]) => ({ key, name }));
   store = inject(FoyerStore);
   palette = PALETTE;
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
   ini(): string { return contactIni(this.store.ui().mfName || '?'); }
   /**
    * Le téléphone d'un membre est perdu : on retire son second facteur pour qu'il

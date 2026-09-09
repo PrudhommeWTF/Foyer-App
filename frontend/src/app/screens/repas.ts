@@ -505,7 +505,7 @@ const GRID_MIN = 760;
 })
 export class RepasScreen implements AfterViewInit, OnDestroy {
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
   private host = inject(ElementRef<HTMLElement>);
   private ro?: ResizeObserver;
 

@@ -126,7 +126,7 @@ const FOLD_KEY = 'foyer.menuReduit';
 export class SidebarComponent {
   store = inject(FoyerStore);
   groups = computed(() => navGroupsFor(this.store.isChild()));
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
   readonly reduit = signal(read());
 

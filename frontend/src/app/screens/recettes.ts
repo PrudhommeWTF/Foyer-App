@@ -507,7 +507,7 @@ export class RecettesScreen {
   hits = computed(() => this.store.recipeHits());
   etoiles(n: number): string { return '★'.repeat(n) + '☆'.repeat(5 - n); }
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
   /** Le champ est réinitialisé : rechoisir le même fichier doit relancer l'import. */
   onImportFile(ev: Event): void {

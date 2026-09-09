@@ -545,7 +545,7 @@ interface DayView { dow: number; date: string; label: string; short: string; num
 })
 export class PlanningScreen {
   store = inject(FoyerStore);
-  d = this.store.data as () => NonNullable<ReturnType<FoyerStore['data']>>;
+  d = this.store.d;
 
   days = [1, 2, 3, 4, 5, 6, 7];
   scopes: SchedScope[] = ['all', 'future', 'once'];
