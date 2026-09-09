@@ -6,12 +6,10 @@
 // transaction. `fin_meta.schema_version` records the last applied version, so a
 // second boot is a no-op. Never edit a shipped migration: add a new one.
 import type { Database } from 'better-sqlite3';
-import { log } from '../log';
+import { Migration, runMigrations } from '../storage/migrate';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
 export const FIN_SCHEMA_VERSION = 5;
-
-interface Migration { version: number; label: string; up: (db: Database) => void; }
 
 const MIGRATIONS: Migration[] = [
   {
@@ -322,36 +320,15 @@ const MIGRATIONS: Migration[] = [
   },
 ];
 
-function currentVersion(db: Database): number {
-  db.exec('CREATE TABLE IF NOT EXISTS fin_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
-  const row = db.prepare("SELECT value FROM fin_meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  return row ? parseInt(row.value, 10) || 0 : 0;
-}
-
 /**
- * Bring the finances schema up to date. Idempotent: already-applied versions are
- * skipped. Each migration runs in its own transaction, so a failure leaves the
- * database on the previous version rather than half-migrated.
+ * Bring the finances schema up to date. Idempotent, each migration in its own
+ * transaction: a failure leaves the database on the previous version.
  */
 export function migrateFinances(db: Database): number {
-  const from = currentVersion(db);
-  const pending = MIGRATIONS.filter((m) => m.version > from).sort((a, b) => a.version - b.version);
-  if (!pending.length) return from;
-  for (const m of pending) {
-    try {
-      db.transaction(() => {
-        m.up(db);
-        db.prepare("INSERT INTO fin_meta (key, value) VALUES ('schema_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(m.version));
-      })();
-      log.info(`Finances : migration ${m.version} appliquée (${m.label}).`);
-    } catch (e) {
-      log.erreur(
-        `ERREUR : la migration Finances ${m.version} (${m.label}) a échoué : ${(e as Error).message}\n` +
-        `        La base reste en version ${currentVersion(db)}, aucune donnée n'a été modifiée.\n` +
-        `        Restaurez votre sauvegarde si nécessaire (voir deploy/README.md) et signalez l'erreur.`,
-      );
-      throw e;
-    }
-  }
-  return currentVersion(db);
+  return runMigrations(db, {
+    metaTable: 'fin_meta',
+    label: 'Finances',
+    restoreHint: 'Restaurez votre sauvegarde si nécessaire (voir deploy/README.md) et signalez l’erreur.',
+    migrations: MIGRATIONS,
+  });
 }

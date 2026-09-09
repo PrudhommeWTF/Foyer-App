@@ -3,6 +3,7 @@
 // is the whole point of moving finances out of the JSON document.
 import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
+import { readMembers, writeMembers } from './members';
 import { coveredThrough, gapsOver, initImportRepo } from './import-repo';
 import { initAttachments, removeAllFor } from './attachments';
 import { initContracts } from './contracts';
@@ -72,22 +73,9 @@ const toAccount = (r: AccountRow, memberIds: string[] = []): Account => ({
  * famille peut en avoir quatre : la question « à qui est-ce » n'a pas de réponse
  * unique dans un foyer.
  */
-function accountMembers(): Map<number, string[]> {
-  const out = new Map<number, string[]>();
-  for (const r of database.prepare(
-    'SELECT account_id AS id, member_id AS m FROM fin_account_members ORDER BY account_id, position, member_id',
-  ).all() as { id: number; m: string }[]) {
-    const list = out.get(r.id);
-    if (list) list.push(r.m); else out.set(r.id, [r.m]);
-  }
-  return out;
-}
-
-function writeAccountMembers(accountId: number, memberIds: string[]): void {
-  database.prepare('DELETE FROM fin_account_members WHERE account_id = ?').run(accountId);
-  const stmt = database.prepare('INSERT INTO fin_account_members (account_id, member_id, position) VALUES (?, ?, ?)');
-  memberIds.forEach((m, i) => stmt.run(accountId, m, i));
-}
+const accountMembers = (): Map<number, string[]> => readMembers(database, 'fin_account_members', 'account_id');
+const writeAccountMembers = (accountId: number, memberIds: string[]): void =>
+  writeMembers(database, 'fin_account_members', 'account_id', accountId, memberIds);
 
 interface CategoryRow { id: number; parent_id: number | null; name: string; monthly_budget: number; color: string; icon: string; position: number; }
 const toCategory = (r: CategoryRow): Category => ({
