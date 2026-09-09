@@ -110,12 +110,15 @@ import { PALETTE } from '../core/constants';
               <img [src]="o.dataUri" [alt]="o.name" />
             </button>
           }
+          @if (store.setting('cardLogoSearch')) {
+            <!-- La recherche prend place dans la rangée, à la suite des logos. -->
+            <button class="logo-search" [disabled]="store.ui().logoBusy || store.ui().caName.trim().length < 2" (click)="store.searchCardLogos()" title="Chercher un logo en ligne">
+              <f-icon name="search" [size]="16" color="var(--ink2)" [width]="2.2" />
+              <span>{{ store.ui().logoBusy ? 'Recherche…' : 'Chercher un logo' }}</span>
+            </button>
+          }
         </div>
         @if (store.setting('cardLogoSearch')) {
-          <button class="btn btn-soft sm logo-search" [disabled]="store.ui().logoBusy || store.ui().caName.trim().length < 2" (click)="store.searchCardLogos()">
-            <f-icon name="search" [size]="15" color="var(--ink2)" [width]="2.2" />
-            {{ store.ui().logoBusy ? 'Recherche…' : 'Chercher un logo en ligne' }}
-          </button>
           @if (store.ui().logoSearched && !store.ui().logoBusy && !store.ui().logoOpts.length) {
             <div class="hint">Aucun logo trouvé pour ce nom. Le monogramme fera l'affaire.</div>
           }
@@ -213,11 +216,12 @@ import { PALETTE } from '../core/constants';
 
     .logo-tile { width: 52px; height: 52px; border-radius: 14px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--line2); flex: none; }
     .show-head .logo-tile { width: 46px; height: 46px; }
-    .logo-picker { display: flex; flex-wrap: wrap; gap: 10px; }
+    .logo-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
     .logo-opt { padding: 3px; border-radius: 14px; background: transparent; border: 2px solid transparent; cursor: pointer; line-height: 0; }
     .logo-opt.on { border-color: var(--primary); }
     .logo-opt img { width: 46px; height: 46px; border-radius: 11px; object-fit: contain; background: #fff; box-shadow: inset 0 0 0 1px var(--line2); }
-    .logo-search { margin-top: 12px; }
+    .logo-search { display: inline-flex; align-items: center; gap: 8px; height: 52px; padding: 0 16px; border-radius: 14px; background: var(--soft); border: 2px dashed var(--line2); color: var(--ink2); font-size: 13px; font-weight: 700; cursor: pointer; }
+    .logo-search:disabled { opacity: .5; cursor: default; }
     .hint { font-size: 12.5px; font-weight: 600; color: var(--ink3); margin-top: 10px; }
 
     .swatch-row { display: flex; gap: 12px; }
