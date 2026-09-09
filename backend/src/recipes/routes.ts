@@ -87,7 +87,7 @@ export function recipesRouter(importEnabled: ImportSwitch, fetcher: PageFetcher 
       res.json({ recipe: { ...recipe, imageUrl: undefined }, photoId, warnings });
     } catch (e) {
       if (e instanceof FetchError || e instanceof ImportError) {
-        log.attention(`Recettes : import de ${url} refusé — ${e.message}`);
+        log.attention(`Recettes : import de ${url} refusé : ${e.message}`);
         res.status(422).json({ error: e.message });
         return;
       }

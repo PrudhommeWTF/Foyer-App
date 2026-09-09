@@ -1055,7 +1055,7 @@ export class SettingsScreen {
 
   async copyIcs(): Promise<void> {
     try { await navigator.clipboard.writeText(this.store.icsUrl()); this.copied.set(true); setTimeout(() => this.copied.set(false), 1800); }
-    catch { this.store.toast('Copie impossible — sélectionnez le lien manuellement'); }
+    catch { this.store.toast('Copie impossible : sélectionnez le lien manuellement'); }
   }
 }
 

@@ -134,7 +134,7 @@ function resolveJwtSecret(): string {
   }
   const ephemeral = crypto.randomBytes(32).toString('hex');
   // eslint-disable-next-line no-console
-  console.warn('[foyer] ⚠ FOYER_JWT_SECRET absent/faible — secret aléatoire éphémère utilisé (les sessions seront invalidées au redémarrage). Définissez FOYER_JWT_SECRET en production.');
+  console.warn('[foyer] ⚠ FOYER_JWT_SECRET absent/faible : secret aléatoire éphémère utilisé (les sessions seront invalidées au redémarrage). Définissez FOYER_JWT_SECRET en production.');
   return ephemeral;
 }
 const JWT_SECRET = resolveJwtSecret();
