@@ -95,10 +95,3 @@ export interface MonthSummary {
 
 export const ACCOUNT_KINDS: AccountKind[] = ['courant', 'pro', 'epargne', 'credit'];
 export const TX_KINDS: TxKind[] = ['depense', 'recette', 'virement'];
-
-export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
-  courant: 'Compte courant',
-  pro: 'Compte professionnel',
-  epargne: 'Épargne',
-  credit: 'Crédit',
-};

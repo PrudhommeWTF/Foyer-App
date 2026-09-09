@@ -118,4 +118,4 @@ export function removeAllFor(ownerKind: OwnerKind, ownerId: number): number {
 // ---- orphelins -----------------------------------------------------------
 // Le balayage vit dans le magasin, qui seul voit le disque et toutes les tables
 // qui le référencent (voir storage/blobs.ts, sweepOrphans).
-export { sweepOrphans, reportOrphansAtBoot } from '../storage/blobs';
+export { sweepOrphans } from '../storage/blobs';

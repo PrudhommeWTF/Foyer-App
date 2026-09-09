@@ -172,10 +172,9 @@ export function countUsers(): number {
  * il est asynchrone. Cette couche ne fait que du SQL.
  */
 export function createUserWithMember(email: string, passwordHash: string, name: string, memberId: string): UserRow {
-  const hash = passwordHash;
   const info = db
     .prepare('INSERT INTO users (email, password_hash, name, member_id) VALUES (?, ?, ?, ?)')
-    .run(email.toLowerCase(), hash, name, memberId);
+    .run(email.toLowerCase(), passwordHash, name, memberId);
   return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRow;
 }
 

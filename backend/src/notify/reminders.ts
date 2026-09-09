@@ -14,7 +14,6 @@ import type { TaskItem } from '../tasks/ops';
 /** Les réglages de rappel qu'une tâche peut porter. Aucun par défaut. */
 export type Remind = 'at' | '1h' | 'eve' | 'morning';
 export const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
-export const REMIND_LABELS: Record<Remind, string> = { at: 'À l’heure', '1h': '1 h avant', eve: 'La veille à 18 h', morning: 'Le matin à 9 h' };
 
 /** Heure de référence d'une tâche datée sans heure, et heure du rappel « la veille ». */
 export const MORNING = '09:00';
