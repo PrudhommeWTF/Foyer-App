@@ -10,10 +10,7 @@
 // de responsable), et une notification quand quelqu'un d'autre m'affecte une
 // tâche. Rien d'autre.
 import type { TaskItem } from '../tasks/ops';
-
-/** Les réglages de rappel qu'une tâche peut porter. Aucun par défaut. */
-export type Remind = 'at' | '1h' | 'eve' | 'morning';
-export const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
+import { REMINDS } from '../tasks/ops';
 
 /** Heure de référence d'une tâche datée sans heure, et heure du rappel « la veille ». */
 export const MORNING = '09:00';

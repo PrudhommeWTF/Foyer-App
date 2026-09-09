@@ -21,23 +21,35 @@ const STARTER_AISLES = (): HouseholdState['aisles'] => [
 const STARTER_TASK_LIST = (): HouseholdState['taskLists'][number] =>
   ({ id: 'l1', name: 'Maison', color: '#E56B4E', icon: 'maison', kind: 'taches', scope: 'shared', position: 0 });
 
+/**
+ * Le squelette de collections d'un foyer neuf, partagé par EMPTY_STATE et
+ * l'onboarding. Écrit une seule fois pour qu'on ne puisse plus en oublier une
+ * quand on ajoute une collection au document.
+ */
+function scaffold(): Pick<HouseholdState,
+  'events' | 'aisles' | 'articles' | 'shopLists' | 'shop' | 'taskLists' | 'taskTemplates' | 'tasks' | 'contacts' | 'cards' | 'meals' | 'recipes' | 'sched'> {
+  return {
+    events: [],
+    aisles: STARTER_AISLES(),
+    articles: [],
+    shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
+    shop: [],
+    taskLists: [STARTER_TASK_LIST()],
+    taskTemplates: [],
+    tasks: [],
+    contacts: [],
+    cards: [],
+    meals: {},
+    recipes: [],
+    sched: [],
+  };
+}
+
 /** Blank household used as the default before onboarding writes the real state. */
 export const EMPTY_STATE: HouseholdState = {
   familyName: '',
   members: [],
-  events: [],
-  aisles: STARTER_AISLES(),
-  articles: [],
-  shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
-  shop: [],
-  taskLists: [STARTER_TASK_LIST()],
-  taskTemplates: [],
-  tasks: [],
-  contacts: [],
-  cards: [],
-  meals: {},
-  recipes: [],
-  sched: [],
+  ...scaffold(),
   profile: { memberId: '' },
   settings: householdDefaults(),
   prefs: {},
@@ -105,19 +117,7 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
   return {
     familyName: input.household.name.trim(),
     members: [admin, ...others],
-    events: [],
-    aisles: STARTER_AISLES(),
-    articles: [],
-    shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
-    shop: [],
-    taskLists: [STARTER_TASK_LIST()],
-    taskTemplates: [],
-    tasks: [],
-    contacts: [],
-    cards: [],
-    meals: {},
-    recipes: [],
-    sched: [],
+    ...scaffold(),
     profile: { memberId: adminId },
     // Les valeurs par défaut viennent du registre ; l'onboarding n'en pose que
     // deux, celles qu'il a demandées. Le thème est une préférence personnelle :
