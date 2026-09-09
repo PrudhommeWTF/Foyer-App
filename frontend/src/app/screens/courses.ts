@@ -222,6 +222,9 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
             <div class="order-row">
               <span class="s-dot" [style.background]="a.color"></span>
               <span class="order-name">{{ a.name }}</span>
+              <button class="icon-btn sm" (click)="store.editAisle(a.id)" aria-label="Modifier le rayon" title="Modifier">
+                <f-icon name="edit" [size]="15" color="var(--ink2)" [width]="2.2" />
+              </button>
               <button class="icon-btn sm" [disabled]="i === 0" (click)="store.moveAisle(a.id, -1)" aria-label="Monter">
                 <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
               </button>
