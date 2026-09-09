@@ -357,13 +357,19 @@ export class HomeScreen {
   /** Les sections présentes : les finances tombent pour un compte enfant. */
   readonly slides = computed(() => SLIDES.filter((s) => s.key !== 'fin' || this.fin() !== null));
 
-  /** Les modules ouverts à ce compte, tels que la navigation les groupe. */
+  /**
+   * Les modules ouverts à ce compte, tels que la navigation les groupe. Comme
+   * cette grille remplace le menu du bas sur mobile, elle porte aussi l'accès
+   * aux paramètres (adultes), seul point d'entrée qui vivait dans ce menu.
+   */
   readonly modules = computed<Mod[]>(() => {
     const d = this.store.data();
     if (!d) return [];
-    return navGroupsFor(this.store.isChild()).flatMap((g) => g.items).map((it) => ({
+    const mods: Mod[] = navGroupsFor(this.store.isChild()).flatMap((g) => g.items).map((it) => ({
       id: it.id, label: it.label, icon: it.icon, color: MOD_COLOR[it.id] || '#E56B4E', sub: this.moduleSub(it.id),
     }));
+    if (!this.store.isChild()) mods.push({ id: 'settings', label: 'Paramètres', icon: 'gear', color: '#8A7E74', sub: 'Réglages et compte' });
+    return mods;
   });
 
   /**

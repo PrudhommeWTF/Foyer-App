@@ -14,7 +14,7 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
   template: `
     <div class="topbar">
       @if (store.narrow()) {
-        <div class="mbrand"><f-icon name="home" [size]="21" color="#fff" [width]="2.2" /></div>
+        <button class="mbrand" (click)="store.go('home')" title="Accueil" aria-label="Accueil"><f-icon name="home" [size]="21" color="#fff" [width]="2.2" /></button>
       }
       <div class="title f-display">{{ title() }}</div>
       <div class="spacer"></div>
@@ -57,7 +57,7 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
   `,
   styles: [`
     .topbar { height: 74px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 40px; border-bottom: 1px solid var(--line); background: var(--bg); }
-    .mbrand { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: none; border-radius: 11px; background: linear-gradient(135deg, #E56B4E, #D9553A); box-shadow: 0 8px 16px -6px rgba(229,107,78,.6); }
+    .mbrand { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; flex: none; border: none; padding: 0; cursor: pointer; border-radius: 11px; background: linear-gradient(135deg, #E56B4E, #D9553A); box-shadow: 0 8px 16px -6px rgba(229,107,78,.6); }
     .title { font-size: 26px; font-weight: 700; color: var(--ink); }
     /* Une seule ligne, toujours : la barre a une hauteur fixe, et un titre qui
        passe à la ligne déborde par-dessus le contenu. */

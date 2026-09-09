@@ -2,7 +2,6 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestro
 import { FoyerStore } from '../core/foyer.store';
 import { SidebarComponent } from './sidebar';
 import { TopbarComponent } from './topbar';
-import { TabbarComponent } from './tabbar';
 import { NotificationsComponent } from './notifications';
 import { GenerateModal } from './generate-modal';
 import { RepairModal } from './repair-modal';
@@ -25,7 +24,7 @@ import { SettingsScreen } from '../screens/settings/settings';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    SidebarComponent, TopbarComponent, TabbarComponent, NotificationsComponent,
+    SidebarComponent, TopbarComponent, NotificationsComponent,
     FamilyModalComponent, SearchModalComponent, GenerateModal, RepairModal,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
     FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
@@ -67,7 +66,6 @@ import { SettingsScreen } from '../screens/settings/settings';
           } }
         </div>
       </div>
-      @if (store.narrow() && store.data()) { <app-tabbar /> }
     </div>
 
     @if (store.ui().genOpen) { <app-generate-modal /> }
@@ -86,8 +84,8 @@ import { SettingsScreen } from '../screens/settings/settings';
       font-size: 12.5px; font-weight: 700;
     }
     .content { flex: 1; overflow-y: auto; padding: 28px 40px; }
-    .content.mobile-pad { padding: 20px 16px 90px; }
-    @media (max-width: 860px) { .content { padding: 20px 16px 90px; } }
+    .content.mobile-pad { padding: 20px 16px 28px; }
+    @media (max-width: 860px) { .content { padding: 20px 16px 28px; } }
   `],
 })
 export class ShellComponent implements AfterViewInit, OnDestroy {

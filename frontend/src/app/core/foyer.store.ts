@@ -1225,7 +1225,7 @@ export class FoyerStore {
         : 'Cet écran est réservé aux adultes du foyer.');
       return;
     }
-    this.patch({ screen, openRecipeId: null, moreOpen: false, addMenuOpen: false, notifOpen: false });
+    this.patch({ screen, openRecipeId: null, addMenuOpen: false, notifOpen: false });
   }
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
   setThemeMode(mode: 'light' | 'dark'): void { this.setSetting('dark', mode === 'dark'); }

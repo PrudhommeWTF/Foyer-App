@@ -10,7 +10,6 @@ export interface IngrRow { id: string; val: string; }
 export interface UiState {
   screen: string;
   selDay: string;
-  moreOpen: boolean;
   toast: string;
   /** Le toast en cours propose-t-il une action ? `toastLabel` la nomme (« Annuler » le plus souvent). */
   toastUndo: boolean; toastLabel: string;
@@ -212,7 +211,7 @@ function persistedScreen(): string {
 export function initialUi(): UiState {
   const today = todayIn(HOUSEHOLD_TZ);
   return {
-    screen: persistedScreen(), selDay: today, moreOpen: false, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
+    screen: persistedScreen(), selDay: today, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: 'month', calAnchor: today, miniAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
