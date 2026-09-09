@@ -1,9 +1,10 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, ConfigImportReport, PushStatus, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, SystemStatus, UpdateInfo, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
+import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
+import { cardColor } from './cards';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex } from './ingredients';
@@ -742,6 +743,7 @@ export class FoyerStore {
     s.tasks ||= [];
     s.taskLists ||= [];
     s.taskTemplates ||= [];
+    s.cards ||= [];
     s.settings ||= householdDefaults();
     s.prefs ||= {};
     return s;
@@ -1245,6 +1247,7 @@ export class FoyerStore {
     for (const e of d.events) if (normText(e.title).includes(q)) push({ kind: 'event', icon: 'calendar', color: '#4E93B8', title: e.title, sub: 'Événement · ' + e.date, screen: 'calendar', id: e.id });
     for (const s of d.shop) if (normText(s.name).includes(q)) push({ kind: 'shop', icon: 'panier', color: '#E08D3C', title: s.name, sub: 'Course' + (s.qty ? ' · ' + s.qty : ''), screen: 'courses', id: s.id });
     for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
+    for (const c of d.cards) if (normText(c.name).includes(q)) push({ kind: 'card', icon: 'card', color: c.color || '#4E93B8', title: c.name, sub: 'Carte de fidélité', screen: 'fidelite', id: c.id });
     for (const m of d.members) if (normText(`${m.name} ${m.role}`).includes(q)) push({ kind: 'member', icon: 'users', color: m.color, title: m.name, sub: m.role || 'Membre', screen: 'settings', id: m.id });
     return hits.slice(0, 40);
   });
@@ -1260,6 +1263,7 @@ export class FoyerStore {
       case 'event': this.editEvent(h.id); break;
       case 'shop': this.editShop(h.id); break;
       case 'recipe': this.patch({ openRecipeId: h.id }); break;
+      case 'card': this.showCard(h.id); break;
       case 'member': this.openFamily(); break;
       default: break;
     }
@@ -1921,6 +1925,39 @@ export class FoyerStore {
     this.patch({ contactForm: false, coEditId: null });
   }
   confirmContactDel(): void { const id = this.ui().contactDelId; if (!id) return; this.mutate((d) => { d.contacts = d.contacts.filter((c) => c.id !== id); }); this.patch({ contactDelId: null }); this.toast('Contact supprimé'); }
+
+  // ---- cartes de fidélité -----------------------------------------------
+  // Un code partagé par tout le foyer, réaffiché en QR ou code-barres. Rien sur
+  // le disque : le code est du texte, le logo un monogramme dérivé du nom.
+  newCard(): void { this.patch({ cardForm: true, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false }); }
+  editCard(id: string): void {
+    const c = this._data()?.cards.find((x) => x.id === id); if (!c) return;
+    this.patch({ cardForm: true, caEditId: id, caName: c.name, caCode: c.code, caFormat: c.format, caColor: c.color, caNote: c.note || '', caColorTouched: true, cardShow: null });
+  }
+  /** Le scan a rendu un code et son format : la saisie s'ouvre pré-remplie, il ne reste que le nom. */
+  cardFromScan(code: string, format: CardFormat): void {
+    this.patch({ cardForm: true, caEditId: null, caName: '', caCode: code, caFormat: format, caColor: cardColor(''), caNote: '', caColorTouched: false, scanOpen: false });
+  }
+  /** Le nom pilote la couleur suggérée, tant que l'utilisateur ne l'a pas choisie lui-même. */
+  onCardName(v: string): void { this.patch({ caName: v, ...(this.ui().caColorTouched ? {} : { caColor: cardColor(v) }) }); }
+  pickCardColor(c: string): void { this.patch({ caColor: c, caColorTouched: true }); }
+  saveCard(): void {
+    const s = this.ui(); const name = s.caName.trim(); const code = s.caCode.trim();
+    if (!name) { this.toast('Donne un nom à la carte'); return; }
+    if (!code) { this.toast('Le code est vide : scanne la carte ou saisis-le'); return; }
+    const data = { name, code, format: s.caFormat, color: s.caColor, note: s.caNote.trim() || undefined };
+    this.mutate((d) => {
+      if (s.caEditId) { const i = d.cards.findIndex((c) => c.id === s.caEditId); if (i >= 0) d.cards[i] = { ...d.cards[i], ...data }; }
+      else d.cards.push({ id: uid('cf'), ...data });
+    });
+    this.toast(s.caEditId ? 'Carte modifiée' : 'Carte ajoutée');
+    this.patch({ cardForm: false, caEditId: null });
+  }
+  confirmCardDel(): void { const id = this.ui().cardDelId; if (!id) return; this.mutate((d) => { d.cards = d.cards.filter((c) => c.id !== id); }); this.patch({ cardDelId: null, cardShow: null }); this.toast('Carte supprimée'); }
+  showCard(id: string): void { this.patch({ cardShow: id }); }
+  closeCard(): void { this.patch({ cardShow: null }); }
+  openScan(): void { this.patch({ scanOpen: true }); }
+  closeScan(): void { this.patch({ scanOpen: false }); }
 
   // ---- meals ------------------------------------------------------------
   // Un créneau porte plusieurs plats, dans l'ordre du service : une entrée, un

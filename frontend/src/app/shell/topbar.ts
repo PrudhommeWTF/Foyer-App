@@ -110,6 +110,7 @@ export class TopbarComponent {
       case 'tx': s.patch({ screen: 'finances' }); this.finances.init().then(() => this.finances.newTx()); break;
       case 'slot': s.newSlot(); break;
       case 'contact': s.patch({ screen: 'contacts' }); s.newContact(); break;
+      case 'card': s.patch({ screen: 'fidelite' }); s.newCard(); break;
       case 'member': s.newMember(); break;
     }
   }

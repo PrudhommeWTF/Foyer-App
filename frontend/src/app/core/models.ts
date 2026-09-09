@@ -187,6 +187,22 @@ export interface TaskItem {
 }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 /**
+ * Les symbologies qu'on sait lire à la caméra **et** réafficher (voir cards.ts).
+ * Le format est stocké avec le code : sans lui, on ne saurait pas si « 3560070…»
+ * se redessine en EAN-13 ou en QR.
+ */
+export type CardFormat = 'qr' | 'ean13' | 'ean8' | 'upca' | 'code128' | 'code39' | 'itf' | 'codabar';
+/**
+ * Une carte de fidélité : un code partagé par tout le foyer, réaffiché à l'écran
+ * en QR ou en code-barres pour être scanné en caisse. Le logo est un monogramme
+ * dérivé du nom (initiales + `color`), jamais un fichier : rien ne va sur le disque.
+ */
+export interface LoyaltyCard {
+  id: string; name: string; code: string; format: CardFormat; color: string;
+  /** Texte libre : numéro d'adhérent, date d'expiration, etc. */
+  note?: string;
+}
+/**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un
  * texte libre (« restes », « pizza », « chez les parents »).
@@ -341,6 +357,7 @@ export interface HouseholdState {
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
   contacts: Contact[];
+  cards: LoyaltyCard[];
   meals: Record<string, MealValue>;
   recipes: Recipe[];
   sched: SchedSlot[];
