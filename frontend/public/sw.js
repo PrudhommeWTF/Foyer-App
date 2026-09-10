@@ -175,7 +175,13 @@ self.addEventListener('push', (event) => {
     tag: data.tag || undefined,
     data: { url: data.url || self.registration.scope },
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil((async () => {
+    await self.registration.showNotification(title, options);
+    // La pastille sur l'icône : hors de l'app, le service worker ne connaît pas
+    // le compte exact des non-lus, il pose donc un simple repère. L'app, à son
+    // ouverture, le remplace par le nombre réel (voir foyer.store.ts).
+    if (navigator.setAppBadge) { try { await navigator.setAppBadge(); } catch { /* pastille indisponible */ } }
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {

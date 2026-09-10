@@ -258,6 +258,18 @@ export class FoyerStore {
       document.documentElement.classList.toggle('dark', setting('dark', this._data(), this.currentMemberId()));
     });
 
+    // La pastille sur l'icône de l'app suit le nombre de notifications non lues :
+    // le même compteur que la cloche, porté sur l'icône (écran d'accueil, dock).
+    // Quand l'app tourne, c'est elle qui pose le nombre exact ; le service worker
+    // ne pose qu'un repère à la réception d'un push, faute de connaître le compte.
+    // L'API n'existe pas partout (Firefox, iOS < 16.4) : elle est testée, et
+    // setAppBadge(0) efface la pastille, comme clearAppBadge, d'où un seul appel.
+    effect(() => {
+      const n = this.unreadCount();
+      const nav = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<unknown> };
+      nav.setAppBadge?.(n).catch(() => { /* pastille indisponible sur ce navigateur */ });
+    });
+
     // Les photos sont téléchargées avec la session dès qu'une recette en cite
     // une. `untracked` évite que la mise en cache relance l'effet en boucle.
     effect(() => {
