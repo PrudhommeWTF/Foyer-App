@@ -39,7 +39,7 @@ import { preserveShopping, shopItemsOf } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
 import { onAssigned, preserveTasks, taskItemsOf } from './tasks/repo';
 import { pushRouter } from './notify/routes';
-import { initPush, notify, resolveVapidSubject } from './notify/push';
+import { initPush, notify } from './notify/push';
 import { startScheduler } from './notify/scheduler';
 import { suggestPlaces } from './places';
 import { searchLogos } from './logos';
@@ -48,12 +48,9 @@ import { StateInvalide, validateState } from './state/validate';
 import { settingsRouter } from './settings/routes';
 import { deploymentView, effectiveSetting, envOverrides, foreignPrefsChanged, settingsChanged } from './settings/repo';
 import { setting } from './settings/registry';
-import { freshStatus } from './update-status';
 import { LogLevel, log, setLogLevelSource } from './log';
-import { BackupRefused, makeSnapshot, removeSnapshot, snapshotPath } from './system/backup';
-import { buildStatus } from './system/status';
-import { selfUpdateCapacite as capaciteSelfUpdate } from './system/self-update';
-import { Canal, fetchRelease, semverCmp } from './system/releases';
+import { currentVersion } from './system/version';
+import { systemRouter } from './system/routes';
 import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './auth/throttle';
 import { aRehacher, hacher, verifier } from './auth/passwords';
 import {
@@ -62,46 +59,6 @@ import {
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
-const GITHUB_REPO = process.env.FOYER_GITHUB_REPO || 'PrudhommeWTF/Foyer-App';
-
-// La version ne change pas pendant la vie du processus : on la calcule une fois.
-// Elle était relue (et le package.json avec) à chaque appel de /system/version,
-// /system/update-check, /system/status et /system/update-status.
-let versionCache: string | null = null;
-function currentVersion(): string {
-  return (versionCache ??= computeVersion());
-}
-function computeVersion(): string {
-  // Source de vérité : la variable FOYER_VERSION (injectée par Docker au build et
-  // par l'installeur LXC dans /etc/foyer/foyer.env). Le fichier <data>/version d'antan
-  // a disparu : l'installeur comme l'auto-mise à jour le suppriment. À défaut, la
-  // version de package.json.
-  if (process.env.FOYER_VERSION) return process.env.FOYER_VERSION.replace(/^v/, '');
-  try { const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8')); return String(pkg.version); } catch { /* ignore */ }
-  return '0.0.0';
-}
-
-function ghHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'Foyer-App' };
-  if (process.env.FOYER_GITHUB_TOKEN) headers['Authorization'] = 'Bearer ' + process.env.FOYER_GITHUB_TOKEN;
-  return headers;
-}
-
-/**
- * La capacité de la machine à se mettre à jour elle-même, relue à chaque appel :
- * un helper posé ou retiré entre deux requêtes doit se voir sans redémarrage.
- */
-const selfUpdateCapacite = () => capaciteSelfUpdate({
-  refus: process.env.FOYER_SELF_UPDATE,
-  helper: process.env.FOYER_SELF_UPDATE_HELPER,
-});
-
-/** Le canal choisi par le foyer, tel qu'il s'applique vraiment. */
-const canalCourant = (): Canal => (effectiveSetting('updateChannel') === 'prerelease' ? 'prerelease' : 'latest');
-
-const chercherRelease = (): Promise<Awaited<ReturnType<typeof fetchRelease>>> =>
-  fetchRelease(GITHUB_REPO, canalCourant(), ghHeaders());
-
 const PORT = parseInt(process.env.PORT || '8099', 10);
 
 /**
@@ -1271,163 +1228,8 @@ api.get('/cards/logos', auth, requireMember, logosLimiter, async (req: Request, 
   res.json({ logos: await searchLogos(String(req.query['name'] || '')) });
 });
 
-// ---- System / self-update ----
-api.get('/system/version', auth, requireMember, (_req, res) => {
-  const cap = selfUpdateCapacite();
-  res.json({ current: currentVersion(), selfUpdate: cap.possible, selfUpdateReason: cap.raison, repo: GITHUB_REPO });
-});
-
-// Savoir qu'une version existe et pouvoir l'installer sont deux choses
-// différentes : la disponibilité s'affiche partout, y compris en Docker, où
-// c'est l'exploitant qui tire l'image. Seul le bouton dépend de la capacité.
-api.get('/system/update-check', auth, requireMember, route(async (_req, res) => {
-  const current = currentVersion();
-  const cap = selfUpdateCapacite();
-  const socle = { current, selfUpdate: cap.possible, selfUpdateReason: cap.raison, channel: canalCourant() };
-  try {
-    const rel = await chercherRelease();
-    const latest = rel.tag.replace(/^v/, '');
-    res.json({
-      ...socle, latest, latestTag: rel.tag, name: rel.name,
-      notes: rel.body.slice(0, 2000), url: rel.url, publishedAt: rel.publishedAt,
-      prerelease: rel.prerelease,
-      updateAvailable: semverCmp(latest, current) > 0,
-    });
-  } catch (e) {
-    res.json({ ...socle, error: 'Vérification impossible : ' + (e as Error).message });
-  }
-}));
-
-// Trigger a self-update. The backend only drops a trigger file; a root-owned
-// systemd path unit (installed alongside the helper) performs the actual
-// download/build/restart, so the service keeps its hardening (no sudo).
-api.post('/system/update', auth, requireAdmin, jsonSmall, route(async (req, res) => {
-  const cap = selfUpdateCapacite();
-  if (!cap.possible) {
-    res.status(400).json({
-      error: cap.raison === 'coupee'
-        ? 'Mise à jour depuis l’interface refusée sur ce serveur (FOYER_SELF_UPDATE). Mettez à jour depuis la machine.'
-        : 'Ce serveur n’a pas le dispositif de mise à jour en un clic. Mettez à jour depuis la machine : « bash deploy/lxc/update.sh » en LXC, « docker compose pull && docker compose up -d » en Docker.',
-    });
-    return;
-  }
-  // Le mot de passe, redemandé ici et nulle part ailleurs.
-  //
-  // Ce bouton fait exécuter du code en root sur la machine : le service dépose
-  // un fichier, une unité systemd root télécharge la dernière version et la
-  // compile. Le dispositif est bien conçu (le service ne détient aucun droit
-  // supplémentaire), mais il fait de « compte administrateur volé » un
-  // « root sur l'hyperviseur invité ». Un jeton dérobé sur un téléphone
-  // déverrouillé ne doit pas suffire : il faut aussi savoir le mot de passe.
-  const moi = req.user ? getUserById(req.user.id) : undefined;
-  if (!moi || !await motDePasseBon(req, moi)) {
-    log.attention(`Mise à jour refusée : mot de passe incorrect (${req.user?.email || 'compte inconnu'}, depuis ${req.ip}).`);
-    res.status(403).json({ error: 'Mot de passe incorrect. Cette mise à jour installe et exécute du code sur le serveur : elle se confirme par votre mot de passe.' });
-    return;
-  }
-  // Quelle version, exactement ?
-  //
-  // Le helper root sait trouver « la dernière release » tout seul, et
-  // /releases/latest ignore les préversions : sur le canal « préversions », il
-  // installerait donc la stable pendant que l'écran annonce une rc. On lui
-  // nomme la version, il n'a plus à choisir. Une résolution ratée reste sans
-  // conséquence sur le canal stable (le helper retombe sur son propre calcul,
-  // à l'identique), mais elle est bloquante sur le canal préversion : mieux
-  // vaut ne rien installer qu'installer autre chose que ce qui est affiché.
-  const canal = canalCourant();
-  let cible = '';
-  try { cible = (await chercherRelease()).tag; }
-  catch (e) {
-    if (canal === 'prerelease') {
-      res.status(502).json({ error: 'Version à installer indéterminable : ' + (e as Error).message });
-      return;
-    }
-  }
-  log.info(`Mise à jour lancée par ${moi.email} depuis ${req.ip}${cible ? ` (${cible})` : ''}.`);
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(path.join(DATA_DIR, 'update-status.json'), JSON.stringify({ state: 'running', message: 'Mise à jour lancée…', ts: Date.now() }));
-    // Le contenu de ce fichier est lu par un script qui tourne EN ROOT : rien
-    // n'y passe qui ne soit un tag de version, et le helper le revalide de son
-    // côté. Sans tag reconnaissable (ancien helper, résolution ratée), il
-    // retrouve son comportement d'avant, ce qui garde les deux compatibles.
-    const declencheur = /^v?\d[\w.+-]*$/.test(cible) ? `tag=${cible}\n` : String(Date.now());
-    fs.writeFileSync(path.join(DATA_DIR, '.update-trigger'), declencheur);
-    res.json({ started: true, tag: cible || undefined });
-  } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
-  }
-}));
-
-/**
- * L'état du service : version, place restante, poids des données, sauvegardes.
- * Réservé aux administrateurs : c'est de l'exploitation, et le chemin des
- * données n'a pas à circuler plus loin que nécessaire.
- */
-api.get('/system/status', auth, requireAdmin, (_req, res) => {
-  const state = getHousehold().state as HouseholdState;
-  res.json(buildStatus({
-    version: currentVersion(),
-    dataDir: DATA_DIR,
-    pushSubject: resolveVapidSubject({ env: process.env.FOYER_VAPID_SUBJECT, publicUrl: String(effectiveSetting('publicUrl') || '') }).subject,
-    dbPath: process.env.FOYER_DB_PATH || path.join(DATA_DIR, 'foyer.db'),
-    counts: {
-      members: (state.members || []).length,
-      events: (state.events || []).length,
-      tasks: (state.tasks || []).length,
-      recipes: (state.recipes || []).length,
-    },
-  }));
-});
-
-/**
- * Un instantané cohérent de la base, sans arrêter le service (VACUUM INTO).
- * Il n'emporte ni les fichiers ni les photos : l'écran le dit et donne la
- * commande d'archive complète.
- */
-api.post('/system/backup', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
-  try {
-    const keep = Number(effectiveSetting('backupKeep')) || 7;
-    const out = makeSnapshot(db, DATA_DIR, keep);
-    log.info(`Sauvegarde : ${out.snapshot.name} (${Math.round(out.snapshot.bytes / 1024)} Ko) écrite par ${currentMember(req)?.id || '(membre inconnu)'}`
-      + (out.deleted.length ? `, ${out.deleted.length} ancienne(s) effacée(s)` : '') + '.');
-    res.json(out);
-  } catch (e) {
-    if (e instanceof BackupRefused) { res.status(409).json({ error: e.message }); return; }
-    log.erreur('Sauvegarde impossible', e);
-    res.status(500).json({ error: 'Sauvegarde impossible : ' + (e as Error).message });
-  }
-});
-
-api.get('/system/backup/:name', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
-  const p = snapshotPath(DATA_DIR, String(req.params.name));
-  if (!p) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
-  // Une base entière quitte la machine : c'est le genre de geste qu'on veut
-  // pouvoir dater après coup, pas reconstituer de mémoire.
-  log.info(`Sauvegarde ${req.params.name} téléchargée par ${req.user?.email || '(compte inconnu)'}.`);
-  res.download(p);
-});
-
-api.delete('/system/backup/:name', auth, requireAdmin, (req: Request, res: Response) => {
-  if (!removeSnapshot(DATA_DIR, String(req.params.name))) { res.status(404).json({ error: 'Sauvegarde introuvable.' }); return; }
-  log.info(`Sauvegarde ${req.params.name} effacée.`);
-  res.json({ ok: true });
-});
-
-api.get('/system/update-status', auth, requireMember, (_req, res) => {
-  try {
-    const p = path.join(DATA_DIR, 'update-status.json');
-    if (fs.existsSync(p)) {
-      // Une mise à jour interrompue laissait ce fichier sur « running » pour
-      // toujours, et l'interface bloquée sur « Mise à jour en cours… », sans
-      // aucun bouton. Voir update-status.ts.
-      const status = freshStatus(JSON.parse(fs.readFileSync(p, 'utf-8')), Date.now(), path.join(DATA_DIR, 'update.log'));
-      res.json({ ...status, current: currentVersion() });
-      return;
-    }
-  } catch { /* fichier illisible : on repart d'un état neutre plutôt que de bloquer */ }
-  res.json({ state: 'idle', current: currentVersion() });
-});
+// ---- System / self-update / exploitation (voir system/routes.ts) ----
+api.use('/system', auth, systemRouter({ requireAdmin, requireMember, jsonSmall, route, motDePasseBon, currentMember, dataDir: DATA_DIR }));
 
 app.use('/api', api);
 
