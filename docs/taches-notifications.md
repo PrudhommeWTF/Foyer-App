@@ -279,3 +279,29 @@ déclencher un `pushsubscriptionchange` (bouton *Push*/*Dispatch*), puis vérifi
 qu'un nouvel appareil apparaît dans Paramètres → Notifications et que l'ancien
 disparaît au rappel suivant. Le comportement 404/410 côté serveur, lui, est
 couvert par `backend/test/push.test.ts`.
+
+## 10. Activation sur l'appareil
+
+L'enregistrement de l'appareil est **imposé par le Web Push** et ne peut pas
+être contourné : l'autorisation doit être demandée sur un geste de
+l'utilisateur (Safari refuse sinon), l'abonnement est créé par le navigateur,
+et son adresse est transmise au serveur. Ce geste incontournable est mis au
+bon endroit, au bon moment, plutôt qu'enfoui dans les réglages :
+
+- **Proposé sur l'accueil**, au premier lancement de l'app installée : une
+  carte d'invitation (« Activer », « Plus tard ») n'apparaît que si le canal
+  est prêt mais éteint et si l'app tourne installée. « Plus tard » ne repropose
+  pas avant 14 jours sur cet appareil (un timestamp en `localStorage`, pas un
+  réglage du foyer).
+- **Renouvelé automatiquement** par le service worker quand le service push
+  change l'adresse d'abonnement (voir section 9).
+- **Contrôlable dans Paramètres → Notifications** : l'état de l'appareil, la
+  liste des appareils du membre, l'envoi d'un test, la désactivation ici, le
+  retrait d'un appareil, le journal des envois. Le bouton « Activer » y reste,
+  comme secours.
+
+**Limite Apple.** Sur iPhone, seule l'application **ajoutée à l'écran
+d'accueil** peut demander l'autorisation : dans un onglet Safari, rien n'est
+proposé (l'accueil reste muet, le message d'installation vit dans Paramètres).
+Et un **refus système n'est pas reproposé** par iOS : il faut l'autoriser dans
+les réglages de l'appareil. C'est voulu, la carte d'accueil ne revient pas.
