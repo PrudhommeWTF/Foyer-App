@@ -1,7 +1,8 @@
-import { Injectable, effect, inject, signal, untracked } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, ConfigImportReport, PushStatus, SystemStatus, UpdateInfo } from './api.service';
 import { downloadBlob } from './download';
 import { FoyerStore } from './foyer.store';
+import { pushInviteVisible } from './push-invite';
 
 /** La clé VAPID publique, en base64 URL, vers les octets que `subscribe` attend. */
 function urlBase64ToUint8Array(b64: string): Uint8Array<ArrayBuffer> {
@@ -49,6 +50,14 @@ export class AdminStore {
   readonly pushStatus = signal<PushStatus | null>(null);
   readonly pushBusy = signal(false);
   private swReg: ServiceWorkerRegistration | null = null;
+  /** Report de l'invitation d'accueil, en millisecondes (0 = aucun). Lu une fois, tenu ici. */
+  private readonly pushSnoozeUntil = signal<number>(this.readPushSnooze());
+  /**
+   * Faut-il proposer l'activation sur l'accueil ? Canal prêt mais éteint, app
+   * installée, aucun report en cours. Sur iPhone non installé (`install`), rien
+   * n'est proposé ici : le message d'installation reste dans Paramètres.
+   */
+  readonly pushInvite = computed(() => pushInviteVisible(this.pushSupport(), this.isStandalone(), this.pushSnoozeUntil(), Date.now()));
 
   // ---- exploitation -----------------------------------------------------
   readonly systemStatus = signal<SystemStatus | null>(null);
@@ -266,6 +275,24 @@ export class AdminStore {
   }
   private isStandalone(): boolean {
     return matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & { standalone?: boolean }).standalone;
+  }
+
+  /**
+   * Le report de l'invitation vit sur l'appareil, pas dans le foyer : c'est un
+   * choix d'affichage local, comme l'écran retenu. Un timestamp ISO en
+   * localStorage, lu une fois puis tenu par un signal pour que le computed n'ait
+   * pas à toucher le stockage à chaque cycle.
+   */
+  private static readonly PUSH_INVITE_KEY = 'foyer.push-invite-until';
+  private readPushSnooze(): number {
+    try { const v = localStorage.getItem(AdminStore.PUSH_INVITE_KEY); if (!v) return 0; const t = Date.parse(v); return Number.isFinite(t) ? t : 0; }
+    catch { return 0; }
+  }
+  /** « Plus tard » : on ne repropose pas avant 14 jours sur cet appareil. */
+  snoozePushInvite(): void {
+    const until = Date.now() + 14 * 24 * 60 * 60 * 1000;
+    try { localStorage.setItem(AdminStore.PUSH_INVITE_KEY, new Date(until).toISOString()); } catch { /* mode privé : le report vaut pour la session */ }
+    this.pushSnoozeUntil.set(until);
   }
 
   async initPush(): Promise<void> {

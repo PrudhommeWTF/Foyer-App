@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, viewChild, viewChildren } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FoyerStore } from '../../core/foyer.store';
+import { AdminStore } from '../../core/admin.store';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
@@ -61,6 +62,18 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, AvatarComponent, WhoComponent, NgTemplateOutlet],
   template: `
+    <!-- Invitation à activer les rappels, au premier lancement installé. -->
+    <ng-template #pushCard>
+      <div class="card push-invite">
+        <div class="pi-head"><f-icon name="bell" [size]="18" color="var(--primary)" [width]="2.2" /><span>Recevoir les rappels sur cet appareil</span></div>
+        <p class="pi-text">Tâches à faire, affectations, échéances : Foyer vous préviendra ici, même l'app fermée.</p>
+        <div class="pi-actions">
+          <button class="btn btn-primary" (click)="admin.enablePush()" [disabled]="admin.pushBusy()">Activer</button>
+          <button class="btn btn-ghost" (click)="admin.snoozePushInvite()">Plus tard</button>
+        </div>
+      </div>
+    </ng-template>
+
     <!-- ===== les cinq cartes, écrites une fois ===== -->
     <ng-template #feedCard>
       <div class="card feed">
@@ -176,6 +189,8 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
         </div>
       </div>
 
+      @if (store.data() && admin.pushInvite()) { <ng-container [ngTemplateOutlet]="pushCard" /> }
+
       @if (!store.data()) {
         <!-- ===== aucun document chargé (réseau coupé au démarrage) ===== -->
         <div class="card no-doc">
@@ -244,6 +259,12 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .nd-title { font-size: 17px; font-weight: 800; color: var(--ink); }
     .nd-msg { font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; }
     .no-doc .btn { margin-top: 6px; }
+
+    /* ===== invitation aux rappels ===== */
+    .push-invite { background: var(--soft); padding: 18px 20px; margin-bottom: 18px; }
+    .pi-head { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 800; color: var(--ink); }
+    .pi-text { margin: 8px 0 14px; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; }
+    .pi-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
     .home-wrap { display: grid; grid-template-columns: 1fr 344px; gap: 20px; align-items: start; }
     :host-context(.shell.narrow) .home-wrap { grid-template-columns: 1fr; }
@@ -325,6 +346,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
 })
 export class HomeScreen {
   store = inject(FoyerStore);
+  admin = inject(AdminStore);
   private fins = inject(FinancesStore);
 
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
