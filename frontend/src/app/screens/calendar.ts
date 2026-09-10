@@ -650,7 +650,10 @@ export class CalendarScreen {
   display = computed(() => this.store.ui().calDisplay);
   sel = computed(() => this.store.ui().selDay);
   calAnchor = computed(() => this.store.ui().calAnchor);
-  miniAnchor = computed(() => this.store.ui().miniAnchor);
+  // Le mini-calendrier partage l'ancre de la vue principale : naviguer d'un côté
+  // (flèches de la vue, « Aujourd'hui », ou flèches mois/année du mini) suit de
+  // l'autre, sans deux ancres à tenir d'accord.
+  miniAnchor = computed(() => this.store.ui().calAnchor);
 
   /** Les heures pleines, pour la gouttière et les lignes de la grille horaire. */
   readonly tgHours = Array.from({ length: 24 }, (_, h) => h);
@@ -895,15 +898,20 @@ export class CalendarScreen {
     return rows;
   });
 
+  /**
+   * Les flèches mois / année du mini déplacent l'ancre partagée : la vue
+   * principale suit d'autant. On vise le 1er du mois visé plutôt que de décaler
+   * la date en place, pour qu'un 31 janvier ne saute pas février.
+   */
   miniNav(kind: 'month' | 'year', dir: number): void {
-    const a = parseDay(this.store.ui().miniAnchor);
-    if (kind === 'month') a.setMonth(a.getMonth() + dir); else a.setFullYear(a.getFullYear() + dir);
-    this.store.patch({ miniAnchor: dstr(a) });
+    const a = parseDay(this.store.ui().calAnchor);
+    const next = kind === 'month' ? new Date(a.getFullYear(), a.getMonth() + dir, 1) : new Date(a.getFullYear() + dir, a.getMonth(), 1);
+    this.store.patch({ calAnchor: dstr(next) });
   }
 
-  /** Sauter à une date : on la sélectionne, la vue principale suit, le mini reste sur ce mois. */
+  /** Sauter à une date : on la sélectionne, la vue principale s'y ancre, le mini suit. */
   pickMini(key: string): void {
-    this.store.patch({ selDay: key, calAnchor: key, miniAnchor: key });
+    this.store.patch({ selDay: key, calAnchor: key });
   }
 
   /** Une pastille d'événement dans une case de mois ouvre l'événement, sans déclencher la création. */
