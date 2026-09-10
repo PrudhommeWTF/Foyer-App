@@ -20,6 +20,11 @@ export interface UiState {
 
   // calendar
   calView: 'month' | 'week' | '3';
+  /**
+   * Jour d'ancrage de la vue : le mois affiché, ou une date de la semaine / des
+   * trois jours montrés. Le mini-calendrier du panneau latéral en dérive son
+   * mois, si bien que naviguer d'un côté suit de l'autre.
+   */
   calAnchor: string;
   /**
    * Affichage des vues Semaine et 3 jours : la grille horaire (24 h, les
@@ -27,8 +32,6 @@ export interface UiState {
    * empilée. Choix d'affichage local, comme la vue ; sans effet en vue Mois.
    */
   calDisplay: 'grid' | 'list';
-  /** Mois affiché par le mini-calendrier du panneau latéral (une date de ce mois). */
-  miniAnchor: string;
   // meals
   /**
    * Jour d'ancrage du planning. En vue semaine, la semaine qui le contient ; en
@@ -238,7 +241,7 @@ export function initialUi(): UiState {
   return {
     screen: persistedScreen(), selDay: today, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
-    calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(), miniAnchor: today,
+    calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(),
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1),
