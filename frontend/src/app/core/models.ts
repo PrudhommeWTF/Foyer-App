@@ -46,6 +46,10 @@ export interface EventItem { id: string; date: string; time: string; title: stri
    * quand le repas est retiré : sans lui, l'agenda garderait un dîner annulé.
    */
   mealKey?: string | null;
+  /** Auteur et date de création. Absents sur les événements d'avant leur suivi. */
+  by?: string | null; at?: string | null;
+  /** Dernier auteur d'une modification, et sa date. Absents tant que l'événement n'a pas été retouché depuis sa création. */
+  upBy?: string | null; upAt?: string | null;
 }
 /**
  * Un rayon du magasin. `kind` est facultatif : il relie un rayon du foyer à un
@@ -155,6 +159,8 @@ export interface TaskItem {
   doneAt?: string | null; doneBy?: string | null;
   /** Auteur et date de création. */
   by?: string | null; at?: string | null;
+  /** Dernier auteur d'une modification, et sa date. Absents tant qu'aucune retouche n'a eu lieu depuis la création. */
+  upBy?: string | null; upAt?: string | null;
   /**
    * Liste de courses que cette tâche ouvre. La tâche reste entièrement à
    * l'utilisateur (il la coche, la déplace, la supprime) : le lien n'est qu'un

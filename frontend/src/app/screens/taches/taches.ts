@@ -13,6 +13,7 @@ import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
 import { ReorderDirective } from '../../shared/reorder';
 import { WhoComponent } from '../../shared/who';
+import { StampComponent } from '../../shared/stamp';
 import { TaskComposerComponent } from './composer';
 
 /**
@@ -31,7 +32,7 @@ import { TaskComposerComponent } from './composer';
   selector: 'screen-taches',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, WhoComponent, TaskComposerComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, WhoComponent, TaskComposerComponent, StampComponent],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -279,6 +280,10 @@ import { TaskComposerComponent } from './composer';
               <div class="hist-line">{{ store.fmtNumDate(h.at.slice(0, 10)) }}{{ h.by ? ' par ' + store.memberName(h.by) : '' }}@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
             }
           </div>
+        }
+        @if (editing(); as t) {
+          <f-stamp [fem]="true" [createdBy]="store.memberName(t.by || '')" [createdAt]="t.at"
+                   [modifiedBy]="store.memberName(t.upBy || '')" [modifiedAt]="t.upAt" />
         }
       </f-modal>
     }

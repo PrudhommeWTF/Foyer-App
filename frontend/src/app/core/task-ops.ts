@@ -83,7 +83,9 @@ export function applyTaskOp(items: TaskItem[], op: TaskOp): TaskItem[] {
       if (idx < 0) break;
       const { op: _op, opId: _id, at: _at, by: _by, id: _tid, ...fields } = op;
       void _op; void _id; void _at; void _by; void _tid;
-      out[idx] = assign(out[idx], fields);
+      const next = assign(out[idx], fields);
+      // Toute retouche estampille « modifié », sauf un simple réordonnancement (pos seul).
+      out[idx] = Object.keys(fields).some((k) => k !== 'pos') ? { ...next, upBy: by, upAt: at } : next;
       break;
     }
     case 'done': {
