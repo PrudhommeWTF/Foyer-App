@@ -198,7 +198,7 @@ const GESTES = new Set(['compte', 'membres']);
                 }
                 @case ('denied') { <div class="pref-desc">Les notifications sont bloquées pour Foyer dans les réglages de cet appareil. Autorisez-les, puis revenez ici.</div> }
                 @case ('off') {
-                  <div class="pref-desc">Les rappels d’échéance et les tâches qu’on vous affecte arriveront ici, même l’application fermée.</div>
+                  <div class="pref-desc">Les rappels ne sont pas activés sur cet appareil. Foyer vous le propose sur l’accueil ; vous pouvez aussi les activer ici.</div>
                   <button class="btn btn-primary push-btn" [disabled]="admin.pushBusy()" (click)="admin.enablePush()"><f-icon name="bell" [size]="16" color="#fff" [width]="2.2" /> Activer les rappels sur cet appareil</button>
                 }
                 @case ('on') {
