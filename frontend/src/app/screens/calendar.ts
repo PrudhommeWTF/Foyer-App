@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
+import { AdminStore } from '../core/admin.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
@@ -17,7 +18,7 @@ type DayItem = { t: string; kind: 'event'; ev: EventItem } | { t: string; kind: 
 interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem[]; extras: DayExtra[]; more: number; covered: boolean; }
 /** Une barre d'événement sur la journée entière dans une semaine du mois : de la colonne `col`, sur `span` jours, sur la voie `lane`. */
 interface Bar { id: string; ev: EventItem; col: number; span: number; lane: number; startsHere: boolean; endsHere: boolean; }
-interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayBand[]; lanes: number; }
+interface WeekRow { key: string; week: number; days: MonthCell[]; bars: Bar[]; hbars: HolidayBand[]; lanes: number; }
 /** Un élément posé dans la grille horaire : sa place en pourcentage de la journée, et sa colonne de chevauchement. */
 interface PlacedItem { it: DayItem; top: number; height: number; left: number; width: number; }
 /** Une colonne-jour de la grille horaire : en-tête, bandeau « journée entière » et éléments horaires posés. */
@@ -30,7 +31,7 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
   imports: [FormsModule, IconComponent, ModalComponent, WhoComponent, StampComponent],
   template: `
     <div class="screen-enter">
-      <div class="cal-wrap">
+      <div class="cal-wrap" [class.no-side]="!store.ui().calSide && !store.narrow()">
         <!-- ===== calendar card ===== -->
         <div class="card cal-card">
           <div class="cal-head">
@@ -54,6 +55,12 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
                 <button class="nav-btn" (click)="nav(-1)"><f-icon name="chevronLeft" [size]="18" color="var(--ink2)" [width]="2.2" /></button>
                 <button class="nav-btn" (click)="nav(1)"><f-icon name="chevronRight" [size]="18" color="var(--ink2)" [width]="2.2" /></button>
               </div>
+              @if (!store.narrow()) {
+                <button class="nav-btn side-toggle" [class.active]="store.ui().calSide" (click)="toggleSide()"
+                        [title]="store.ui().calSide ? 'Masquer le panneau' : 'Afficher le panneau'" [attr.aria-label]="store.ui().calSide ? 'Masquer le panneau' : 'Afficher le panneau'">
+                  <f-icon [name]="store.ui().calSide ? 'eye' : 'eyeOff'" [size]="17" [color]="store.ui().calSide ? 'var(--primary)' : 'var(--ink2)'" [width]="2.2" />
+                </button>
+              }
             </div>
           </div>
 
@@ -65,9 +72,10 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
               @for (wk of weeks(); track wk.key) {
                 <div class="week" [style.--lanes]="wk.lanes">
                   <div class="week-cells">
-                    @for (c of wk.days; track c.key) {
+                    @for (c of wk.days; track c.key; let first = $first) {
                       <div class="mcell" [class.sel]="c.key === sel()" [class.today]="c.key === store.todayStr()" [class.dim]="!c.inMonth"
                            (click)="cellClick(c)" (dblclick)="addAt(c.key)">
+                        @if (first) { <span class="wknum" title="Semaine">S{{ wk.week }}</span> }
                         <span class="mnum">{{ c.num }}</span>
                         @for (it of c.items; track $index) {
                           @if (it.kind === 'event') {
@@ -224,9 +232,18 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
         <!-- ===== agenda side panel ===== -->
         <div class="side">
           <button class="btn btn-primary btn-block add-ev" (click)="store.openEvent()"><f-icon name="plus" [size]="18" color="#fff" /> Ajouter un événement</button>
-          <div class="legend">
-            @for (lk of legendKinds; track lk.k) {
-              <span class="lg-item"><span class="ex-dot" [style.background]="lk.color"></span>{{ lk.label }}</span>
+          @if (admin.icsUrl()) {
+            <button class="btn btn-soft btn-block ics-btn" (click)="copyIcs()"><f-icon name="copy" [size]="16" color="var(--ink2)" [width]="2.2" /> Copier le lien du calendrier (ICS)</button>
+          }
+          <!-- Filtres : chaque case montre ou cache un type d'élément dans toutes les vues. -->
+          <div class="filters">
+            @for (fk of filterKinds; track fk.k) {
+              <button class="filt" [class.off]="!shown(fk.k)" (click)="toggleKind(fk.k)" [attr.aria-pressed]="shown(fk.k)">
+                <span class="filt-box" [style.background]="shown(fk.k) ? fk.color : 'transparent'" [style.border-color]="fk.color">
+                  @if (shown(fk.k)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
+                </span>
+                <span class="filt-lbl">{{ fk.label }}</span>
+              </button>
             }
           </div>
           <!-- Sur mobile, le mini-calendrier et le détail du jour sélectionné sont
@@ -410,6 +427,9 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
     .cal-wrap { display: flex; gap: 24px; align-items: flex-start; }
     .cal-card { flex: 1; min-width: 0; }
     .side { width: 320px; flex: none; display: flex; flex-direction: column; gap: 12px; }
+    /* Panneau masqué : le calendrier reprend toute la largeur (grand écran seulement). */
+    .cal-wrap.no-side .side { display: none; }
+    .nav-btn.side-toggle.active { background: var(--soft2); }
     :host-context(.shell.narrow) .cal-wrap { flex-direction: column; }
     :host-context(.shell.narrow) .side { width: auto; }
     @media (max-width: 860px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
@@ -454,6 +474,8 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
     .mcell.sel { box-shadow: inset 0 0 0 2px var(--primary); }
     .mcell.today:not(.sel) { box-shadow: inset 0 0 0 2px var(--honey); }
     .mnum { position: absolute; top: 5px; right: 8px; font-size: 13px; font-weight: 800; color: var(--ink2); }
+    /* Le numéro de semaine, dans la première case de chaque ligne, face au jour. */
+    .wknum { position: absolute; top: 5px; left: 8px; font-size: 11px; font-weight: 800; color: var(--ink3); opacity: .8; }
     .week-bars { position: absolute; top: 24px; left: 0; right: 0; display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); grid-auto-rows: 18px; gap: 2px; pointer-events: none; z-index: 1; }
     .bar { pointer-events: auto; height: 16px; align-self: center; border-radius: 5px; padding: 0 7px; font-size: 10.5px; font-weight: 800; line-height: 16px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
     .bar.ol { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -2px; padding-left: 9px; }
@@ -461,6 +483,9 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
     .chip-ev { border-radius: 5px; padding: 2px 6px; font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .more { font-size: 10px; font-weight: 800; color: var(--ink3); }
     @media (max-width: 860px) { .mcell { min-height: 68px; } }
+    /* Sur grand écran, le mois occupe la hauteur disponible vers le bas : les six
+       lignes se partagent l'espace, plus lisible qu'un mois tassé en haut. */
+    @media (min-width: 861px) { .mcell { min-height: max(94px, calc((100vh - 268px) / 6)); } }
 
     /* Le bandeau des vacances, aligné aux colonnes du dessous (même gabarit et
        même gouttière de 10 px), posé en barres continues plutôt qu'un repère
@@ -567,9 +592,13 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
     .chip-ex { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 5px; background: var(--surface); font-size: 10px; font-weight: 800; color: var(--ink2); white-space: nowrap; overflow: hidden; }
     .col-ex { display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 10px; padding: 6px 9px; font-size: 12px; font-weight: 800; color: var(--ink2); }
     .col-ex .ex-sub { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--ink3); flex: none; }
-    .legend { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 2px 2px 4px; }
-    .lg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: var(--ink3); }
-    @media (max-width: 520px) { .legend { display: none; } }
+    /* Filtres d'affichage : la légende devient une rangée de cases à cocher, une
+       par type. Décochée, le type disparaît de toutes les vues. */
+    .filters { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 2px 2px 4px; }
+    .filt { display: inline-flex; align-items: center; gap: 6px; border: none; background: var(--soft); border-radius: 20px; padding: 5px 11px 5px 6px; cursor: pointer; font-size: 11.5px; font-weight: 800; color: var(--ink2); }
+    .filt.off { opacity: .55; }
+    .filt-box { width: 16px; height: 16px; flex: none; border-radius: 5px; border: 2px solid; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .ics-btn { margin-bottom: 2px; }
     .side-extras { display: flex; flex-direction: column; gap: 10px; }
     .side-ex { display: flex; align-items: center; gap: 9px; background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 20px -18px rgba(90,60,40,.6); }
     .side-ex .ex-dot { width: 10px; height: 10px; }
@@ -637,10 +666,25 @@ interface GridCol { key: string; dow: string; num: number; isToday: boolean; isS
 })
 export class CalendarScreen {
   store = inject(FoyerStore);
+  admin = inject(AdminStore);
   d = this.store.d;
 
   weekdays = SCHED_DAYS;
   recurOpts: Recur[] = ['none', 'daily', 'weekday', 'weekly', 'biweekly', 'monthly'];
+
+  /** Types d'éléments qu'on peut montrer ou cacher, avec leur pastille de légende. */
+  filterKinds = [
+    { k: 'event', color: CAL_KINDS['event'].color, label: 'Événements' },
+    { k: 'planning', color: SCHED_COLORS['ecole'], label: 'Emploi du temps' },
+    ...['task', 'birthday', 'holiday', 'school', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
+  ];
+  /** Les types masqués, en ensemble : le filtre s'applique partout où un élément est produit. */
+  hidden = computed(() => new Set(this.store.ui().calHidden));
+  shown(k: string): boolean { return !this.hidden().has(k); }
+  toggleKind(k: string): void {
+    const cur = this.store.ui().calHidden;
+    this.store.patch({ calHidden: cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k] });
+  }
 
   // `ui` est un seul signal : lire `store.ui().calAnchor` directement dans un
   // computed lourd le lie à *tout* l'état d'interface, si bien que chaque frappe
@@ -681,7 +725,7 @@ export class CalendarScreen {
     const a = parseDay(this.calAnchor());
     const start = this.monday(new Date(a.getFullYear(), a.getMonth(), 1));
     const month = a.getMonth();
-    const allDay = (this.store.data()?.events || []).filter((e) => (e.recur || 'none') === 'none' && this.isAllDay(e));
+    const allDay = this.hidden().has('event') ? [] : (this.store.data()?.events || []).filter((e) => (e.recur || 'none') === 'none' && this.isAllDay(e));
     const dayIx = (iso: string, ws: string) => Math.round((parseDay(iso).getTime() - parseDay(ws).getTime()) / 86_400_000);
     const rows: WeekRow[] = [];
     for (let w = 0; w < 6; w++) {
@@ -712,7 +756,7 @@ export class CalendarScreen {
       // voies posées après celles des événements, et non plus en pastille répétée
       // chaque jour (elles sont donc retirées des repères de case ci-dessous).
       const eventLanes = laneEnd.length;
-      const hbars = holidayBands(this.store.schoolHolidays(), weekStart, weekEnd, CAL_KINDS['school'].color)
+      const hbars = (this.hidden().has('school') ? [] : holidayBands(this.store.schoolHolidays(), weekStart, weekEnd, CAL_KINDS['school'].color))
         .map((b) => ({ ...b, lane: b.lane + eventLanes }));
       const holidayLanes = hbars.length ? Math.max(...hbars.map((b) => b.lane)) + 1 - eventLanes : 0;
       const days: MonthCell[] = [];
@@ -720,11 +764,11 @@ export class CalendarScreen {
         const d = new Date(wsD); d.setDate(wsD.getDate() + i); const key = dstr(d);
         // Les événements « journée entière » non récurrents sont des barres, pas des pastilles de case.
         const items = this.dayItems(key).filter((it) => it.kind !== 'event' || !((it.ev.recur || 'none') === 'none' && this.isAllDay(it.ev)));
-        const extras = this.store.dayExtras(key).filter((e) => e.kind !== 'school');
+        const extras = this.visExtras(key).filter((e) => e.kind !== 'school');
         const hidden = Math.max(0, items.length - 2) + Math.max(0, extras.length - 2);
         days.push({ key, num: d.getDate(), inMonth: d.getMonth() === month, items: items.slice(0, 2), extras: extras.slice(0, 2), more: hidden, covered: covered.has(i + 1) });
       }
-      rows.push({ key: weekStart, days, bars, hbars, lanes: eventLanes + holidayLanes });
+      rows.push({ key: weekStart, week: isoWeek(wsD), days, bars, hbars, lanes: eventLanes + holidayLanes });
     }
     return rows;
   });
@@ -744,7 +788,7 @@ export class CalendarScreen {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      const extras = wide ? this.store.dayExtras(key).filter((e) => e.kind !== 'school') : this.store.dayExtras(key);
+      const extras = wide ? this.visExtras(key).filter((e) => e.kind !== 'school') : this.visExtras(key);
       out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), items: this.dayItems(key), extras, isToday: key === this.store.todayStr(), isSel: key === selDay });
     }
     return out;
@@ -779,7 +823,7 @@ export class CalendarScreen {
       }
       const timed = this.layoutDay(rest);
       // Comme en liste, les vacances passent dans le bandeau étalé au-dessus en large, et restent par jour en pile.
-      const extras = wide ? this.store.dayExtras(key).filter((e) => e.kind !== 'school') : this.store.dayExtras(key);
+      const extras = wide ? this.visExtras(key).filter((e) => e.kind !== 'school') : this.visExtras(key);
       out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), isToday: key === today, isSel: key === selDay, allDay, extras, timed });
     }
     return out;
@@ -844,11 +888,18 @@ export class CalendarScreen {
     const start = v === 'week' ? this.monday(a) : a;
     const n = v === 'week' ? 7 : 3;
     const end = new Date(start); end.setDate(start.getDate() + n - 1);
+    if (this.hidden().has('school')) return [];
     return holidayBands(this.store.schoolHolidays(), dstr(start), dstr(end), CAL_KINDS['school'].color);
   });
 
   selItems = computed(() => this.dayItems(this.sel()));
-  selExtras = computed(() => this.store.dayExtras(this.sel()));
+  selExtras = computed(() => this.visExtras(this.sel()));
+
+  /** Les repères d'un jour, moins les types masqués par les filtres. */
+  private visExtras(key: string): DayExtra[] {
+    const h = this.hidden();
+    return h.size ? this.store.dayExtras(key).filter((e) => !h.has(e.kind)) : this.store.dayExtras(key);
+  }
 
   /**
    * L'agenda d'un jour, événements propres et créneaux publiés **mêlés et triés
@@ -857,19 +908,15 @@ export class CalendarScreen {
    * (« — », événement sur la journée) passe en tête.
    */
   dayItems(key: string): DayItem[] {
-    const evs: DayItem[] = this.store.eventsForDay(key).map((ev) => ({ t: /^\d\d:\d\d/.test(ev.time) ? ev.time : '', kind: 'event', ev }));
-    const slots: DayItem[] = this.store.slotEventsForDay(key).map((se) => ({ t: se.time, kind: 'slot', se }));
+    const h = this.hidden();
+    const evs: DayItem[] = h.has('event') ? [] : this.store.eventsForDay(key).map((ev) => ({ t: /^\d\d:\d\d/.test(ev.time) ? ev.time : '', kind: 'event', ev }));
+    const slots: DayItem[] = h.has('planning') ? [] : this.store.slotEventsForDay(key).map((se) => ({ t: se.time, kind: 'slot', se }));
     return [...evs, ...slots].sort((a, b) => a.t.localeCompare(b.t));
   }
 
   /** « 12:00 – 12:45 », ou « 12:00 » sans fin, ou « — » sans heure. */
   timeLabel(ev: EventItem): string { return ev.endTime ? ev.time + ' – ' + ev.endTime : ev.time; }
   selLabel = computed(() => cap(parseDay(this.sel()).toLocaleDateString(this.store.locale, { weekday: 'long', day: 'numeric', month: 'long' })));
-
-  legendKinds = [
-    ...['holiday', 'school', 'birthday', 'task', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
-    { k: 'planning', color: SCHED_COLORS['ecole'], label: 'Emploi du temps' },
-  ];
 
   // ===== mini-calendrier du panneau latéral =====
   miniDows = DOW.map((d) => d[0]);
@@ -984,6 +1031,16 @@ export class CalendarScreen {
   setDisplay(v: 'grid' | 'list'): void { this.store.patch({ calDisplay: v }); }
   /** Sélectionne le jour d'une colonne (le panneau latéral le détaille) sans ouvrir la création. */
   selectDay(key: string): void { this.store.patch({ selDay: key }); }
+  /** Affiche ou masque le bandeau de droite ; le calendrier reprend alors toute la largeur. */
+  toggleSide(): void { this.store.patch({ calSide: !this.store.ui().calSide }); }
+
+  /** Copie le lien du flux ICS dans le presse-papiers, pour l'abonner depuis un autre agenda. */
+  async copyIcs(): Promise<void> {
+    const url = this.admin.icsUrl();
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); this.store.toast('Lien du calendrier copié'); }
+    catch { this.store.toast('Copie impossible sur ce navigateur'); }
+  }
 
   goToday(): void { this.store.patch({ calAnchor: this.store.todayStr(), selDay: this.store.todayStr() }); }
 
