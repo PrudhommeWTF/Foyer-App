@@ -21,6 +21,12 @@ export interface UiState {
   // calendar
   calView: 'month' | 'week' | '3';
   calAnchor: string;
+  /**
+   * Affichage des vues Semaine et 3 jours : la grille horaire (24 h, les
+   * événements posés à leur heure, les chevauchements côte à côte) ou la liste
+   * empilée. Choix d'affichage local, comme la vue ; sans effet en vue Mois.
+   */
+  calDisplay: 'grid' | 'list';
   /** Mois affiché par le mini-calendrier du panneau latéral (une date de ce mois). */
   miniAnchor: string;
   // meals
@@ -217,12 +223,22 @@ function defaultCalView(): UiState['calView'] {
   try { return window.innerWidth < 860 ? '3' : 'month'; } catch { return 'month'; }
 }
 
+/**
+ * Affichage par défaut des vues à colonnes. La grille horaire donne le meilleur
+ * de la journée sur grand écran ; sur téléphone, sept colonnes de 24 h se lisent
+ * mal au doigt, la liste empilée y démarre donc, l'utilisateur bascule à sa
+ * guise. Même seuil que le châssis (860 px).
+ */
+function defaultCalDisplay(): UiState['calDisplay'] {
+  try { return window.innerWidth < 860 ? 'list' : 'grid'; } catch { return 'grid'; }
+}
+
 export function initialUi(): UiState {
   const today = todayIn(HOUSEHOLD_TZ);
   return {
     screen: persistedScreen(), selDay: today, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
-    calView: defaultCalView(), calAnchor: today, miniAnchor: today,
+    calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(), miniAnchor: today,
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1),

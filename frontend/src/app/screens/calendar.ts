@@ -18,6 +18,10 @@ interface MonthCell { key: string; num: number; inMonth: boolean; items: DayItem
 /** Une barre d'événement sur la journée entière dans une semaine du mois : de la colonne `col`, sur `span` jours, sur la voie `lane`. */
 interface Bar { id: string; ev: EventItem; col: number; span: number; lane: number; startsHere: boolean; endsHere: boolean; }
 interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayBand[]; lanes: number; }
+/** Un élément posé dans la grille horaire : sa place en pourcentage de la journée, et sa colonne de chevauchement. */
+interface PlacedItem { it: DayItem; top: number; height: number; left: number; width: number; }
+/** Une colonne-jour de la grille horaire : en-tête, bandeau « journée entière » et éléments horaires posés. */
+interface GridCol { key: string; dow: string; num: number; isToday: boolean; isSel: boolean; allDay: EventItem[]; extras: DayExtra[]; timed: PlacedItem[]; }
 
 @Component({
   selector: 'screen-calendar',
@@ -40,6 +44,12 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
                 <button [class.active]="cv() === 'week'" (click)="setView('week')">Semaine</button>
                 <button [class.active]="cv() === 'month'" (click)="setView('month')">Mois</button>
               </div>
+              @if (cv() !== 'month') {
+                <div class="seg2 disp" title="Affichage des vues Semaine et 3 jours">
+                  <button [class.active]="display() === 'grid'" (click)="setDisplay('grid')" title="Grille horaire (24 h)"><f-icon name="clock" [size]="15" [color]="display() === 'grid' ? 'var(--ink)' : 'var(--ink2)'" [width]="2.2" /></button>
+                  <button [class.active]="display() === 'list'" (click)="setDisplay('list')" title="Liste"><f-icon name="taches" [size]="15" [color]="display() === 'list' ? 'var(--ink)' : 'var(--ink2)'" [width]="2.2" /></button>
+                </div>
+              }
               <div class="navs">
                 <button class="nav-btn" (click)="nav(-1)"><f-icon name="chevronLeft" [size]="18" color="var(--ink2)" [width]="2.2" /></button>
                 <button class="nav-btn" (click)="nav(1)"><f-icon name="chevronRight" [size]="18" color="var(--ink2)" [width]="2.2" /></button>
@@ -106,13 +116,69 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
                 }
               </div>
             }
+            @if (display() === 'grid') {
+              <div class="tgrid" [class.narrow]="store.narrow()" [style.--cols]="grid().length">
+                <div class="tg-row tg-heads">
+                  <div class="tg-gutter-cell"></div>
+                  @for (col of grid(); track col.key) {
+                    <div class="tg-head"
+                         [style.background]="col.isSel ? 'var(--primary)' : (col.isToday ? 'var(--honey)' : 'var(--surface)')"
+                         [style.color]="(col.isSel || col.isToday) ? '#fff' : 'var(--ink2)'"
+                         (click)="selectDay(col.key)" (dblclick)="addAt(col.key)">
+                      <span class="col-dow">{{ col.dow }}</span>
+                      <span class="col-num f-display">{{ col.num }}</span>
+                    </div>
+                  }
+                </div>
+                <!-- Le bandeau « journée entière » : événements sans heure et repères (tâches, anniversaires, vacances en pile), qui ne tiennent pas dans l'horaire. -->
+                <div class="tg-row tg-allday">
+                  <div class="tg-gutter-cell tg-ad-label">jour.</div>
+                  @for (col of grid(); track col.key) {
+                    <div class="tg-ad-cell">
+                      @for (ev of col.allDay; track ev.id) {
+                        <div class="tg-ad-chip tap" [style.background]="store.tint(eventColor(ev))" [style.color]="eventColor(ev)" (click)="store.editEvent(ev.id)">{{ ev.title }}</div>
+                      }
+                      @for (ex of col.extras; track $index) {
+                        <div class="tg-ad-chip" [class.tap]="ex.id" [style.background]="store.tint(ex.color)" [style.color]="ex.color" (click)="openExtra($event, ex)"><span [class.strike]="ex.done">{{ ex.label }}</span></div>
+                      }
+                    </div>
+                  }
+                </div>
+                <!-- La grille des 24 heures : gouttière des heures, puis une colonne par jour où les événements sont posés à leur heure, les chevauchements côte à côte. -->
+                <div class="tg-row tg-body">
+                  <div class="tg-gutter">
+                    @for (h of tgHours; track h) { <div class="tg-hour"><span>{{ h }}</span></div> }
+                  </div>
+                  @for (col of grid(); track col.key) {
+                    <div class="tg-col" [class.today]="col.isToday">
+                      @for (h of tgHours; track h) { <div class="tg-line"></div> }
+                      @for (p of col.timed; track $index) {
+                        @if (p.it.kind === 'event') {
+                          <div class="tg-ev" [style.top.%]="p.top" [style.height.%]="p.height" [style.left.%]="p.left" [style.width.%]="p.width"
+                               [style.background]="store.tint(eventColor(p.it.ev))" [style.color]="eventColor(p.it.ev)" [style.border-left]="'3px solid ' + eventColor(p.it.ev)" (click)="store.editEvent(p.it.ev.id)">
+                            <span class="tg-ev-t">{{ timeLabel(p.it.ev) }}</span>
+                            <span class="tg-ev-title">{{ p.it.ev.title }}</span>
+                          </div>
+                        } @else {
+                          <div class="tg-ev slotev" [style.top.%]="p.top" [style.height.%]="p.height" [style.left.%]="p.left" [style.width.%]="p.width"
+                               [style.background]="store.tint(slotColor(p.it.se.k))" [style.color]="slotColor(p.it.se.k)" [style.border-left]="'3px solid ' + slotColor(p.it.se.k)" (click)="openSlot($event, p.it.se)">
+                            <span class="tg-ev-t">{{ p.it.se.time }}{{ p.it.se.end ? ' – ' + p.it.se.end : '' }}</span>
+                            <span class="tg-ev-title">{{ p.it.se.title }}</span>
+                          </div>
+                        }
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            } @else {
             <div class="cols" [style.grid-template-columns]="store.narrow() ? '1fr' : ('repeat(' + cols().length + ',minmax(0,1fr))')">
               @for (col of cols(); track col.key) {
                 <div class="col">
                   <div class="col-head"
                        [style.background]="col.isSel ? 'var(--primary)' : (col.isToday ? 'var(--honey)' : 'var(--surface)')"
                        [style.color]="(col.isSel || col.isToday) ? '#fff' : 'var(--ink2)'"
-                       (click)="addAt(col.key)">
+                       (click)="selectDay(col.key)" (dblclick)="addAt(col.key)">
                     <span class="col-dow">{{ col.dow }}</span>
                     <span class="col-num f-display">{{ col.num }}</span>
                   </div>
@@ -151,6 +217,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
                 </div>
               }
             </div>
+            }
           }
         </div>
 
@@ -369,6 +436,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
     .seg2 { display: flex; gap: 3px; background: var(--soft); border-radius: 12px; padding: 4px; }
     .seg2 button { padding: 7px 13px; border: none; background: transparent; border-radius: 9px; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
     .seg2 button.active { background: var(--surface); color: var(--ink); box-shadow: 0 4px 10px -6px rgba(90,60,40,.5); }
+    .seg2.disp button { padding: 7px 9px; display: inline-flex; align-items: center; }
     .navs { display: flex; gap: 8px; }
     .nav-btn { width: 38px; height: 38px; border: none; border-radius: 12px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
@@ -419,6 +487,41 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
     .col-empty { flex: 1; min-height: 60px; display: flex; align-items: center; justify-content: center; color: var(--ink3); font-size: 12px; font-weight: 700; cursor: pointer; }
     .col-add { border: none; background: transparent; display: flex; align-items: center; justify-content: center; padding: 6px; cursor: pointer; border-radius: 9px; }
     .col-add:hover { background: var(--surface); }
+
+    /* ===== grille horaire (vues Semaine / 3 jours) ===== */
+    /* Toutes les rangées (en-têtes, bandeau journée, corps) partagent le même
+       gabarit de colonnes : la gouttière des heures puis une colonne par jour,
+       si bien que tout s'aligne verticalement. Les 24 heures tiennent d'un bloc,
+       sans défilement interne. */
+    .tgrid { --gutter: 46px; --hour-h: 27px; }
+    .tgrid.narrow { --gutter: 32px; --hour-h: 24px; }
+    .tg-row { display: grid; grid-template-columns: var(--gutter) repeat(var(--cols,3), minmax(0,1fr)); gap: 0 6px; }
+    .tg-heads { margin-bottom: 6px; }
+    .tg-head { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 11px; padding: 8px 6px; cursor: pointer; }
+    .tg-head .col-dow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+    .tg-head .col-num { font-size: 17px; font-weight: 700; }
+    .tg-allday { margin-bottom: 6px; }
+    .tg-gutter-cell { min-width: 0; }
+    .tg-ad-label { display: flex; align-items: flex-start; justify-content: flex-end; padding: 3px 6px 0 0; font-size: 9.5px; font-weight: 800; color: var(--ink3); }
+    .tg-ad-cell { display: flex; flex-direction: column; gap: 3px; background: var(--soft); border-radius: 8px; padding: 3px; min-width: 0; }
+    .tg-ad-chip { border-radius: 5px; padding: 2px 6px; font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tg-ad-chip.tap { cursor: pointer; }
+    .tg-ad-chip .strike { text-decoration: line-through; opacity: .7; }
+    .tg-body { align-items: start; }
+    .tg-gutter { height: calc(24 * var(--hour-h)); }
+    .tg-hour { height: var(--hour-h); border-top: 1px solid var(--line); text-align: right; padding-right: 6px; }
+    .tg-hour span { font-size: 9.5px; font-weight: 800; color: var(--ink3); display: inline-block; transform: translateY(-6px); }
+    .tg-col { position: relative; height: calc(24 * var(--hour-h)); background: var(--soft); border-radius: 10px; overflow: hidden; min-width: 0; }
+    .tg-col.today { background: color-mix(in srgb, var(--honey) 14%, var(--soft)); }
+    .tg-line { height: var(--hour-h); border-top: 1px solid var(--line); }
+    .tg-line:first-child { border-top: none; }
+    /* Un événement posé à son heure : la teinte de son membre en fond, sa couleur
+       en texte et en filet. La largeur se partage quand plusieurs se chevauchent. */
+    .tg-ev { position: absolute; overflow: hidden; border-radius: 6px; padding: 1px 5px; cursor: pointer; box-sizing: border-box; box-shadow: 0 4px 10px -8px rgba(90,60,40,.7); }
+    .tg-ev-t { display: block; font-size: 9.5px; font-weight: 800; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tg-ev-title { display: block; font-size: 11px; font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
+    .tgrid.narrow .tg-ev { padding: 1px 3px; }
+    .tgrid.narrow .tg-ev-t { display: none; }
 
     .add-ev { margin-bottom: 6px; }
 
@@ -544,9 +647,13 @@ export class CalendarScreen {
   // dans la modale d'événement recalculait 42 jours. Ces computed étroits font
   // barrière : `weeks`, `cols`... ne repartent que quand leur valeur change.
   cv = computed(() => this.store.ui().calView);
+  display = computed(() => this.store.ui().calDisplay);
   sel = computed(() => this.store.ui().selDay);
   calAnchor = computed(() => this.store.ui().calAnchor);
   miniAnchor = computed(() => this.store.ui().miniAnchor);
+
+  /** Les heures pleines, pour la gouttière et les lignes de la grille horaire. */
+  readonly tgHours = Array.from({ length: 24 }, (_, h) => h);
 
   headerLabel = computed(() => {
     const v = this.cv();
@@ -639,6 +746,92 @@ export class CalendarScreen {
     }
     return out;
   });
+
+  /**
+   * Les colonnes de la grille horaire (Semaine ou 3 jours). Chaque colonne porte
+   * son bandeau « journée entière » (événements sans heure et repères) et ses
+   * événements horaires posés à leur heure, les chevauchements répartis côte à
+   * côte. Vide en vue Mois.
+   */
+  grid = computed<GridCol[]>(() => {
+    const v = this.cv();
+    if (v === 'month') return [];
+    const a = parseDay(this.calAnchor());
+    const start = v === 'week' ? this.monday(a) : a;
+    const n = v === 'week' ? 7 : 3;
+    const wide = !this.store.narrow();
+    const today = this.store.todayStr();
+    const selDay = this.sel();
+    const out: GridCol[] = [];
+    for (let i = 0; i < n; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = dstr(d);
+      const items = this.dayItems(key);
+      const allDay: EventItem[] = [];
+      const rest: DayItem[] = [];
+      for (const it of items) {
+        if (it.kind === 'event' && this.isAllDay(it.ev)) allDay.push(it.ev);
+        else rest.push(it);
+      }
+      const timed = this.layoutDay(rest);
+      // Comme en liste, les vacances passent dans le bandeau étalé au-dessus en large, et restent par jour en pile.
+      const extras = wide ? this.store.dayExtras(key).filter((e) => e.kind !== 'school') : this.store.dayExtras(key);
+      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), isToday: key === today, isSel: key === selDay, allDay, extras, timed });
+    }
+    return out;
+  });
+
+  /** Minutes depuis minuit d'une heure « HH:MM », 0 si illisible. */
+  private mins(t: string): number { const m = /^(\d\d):(\d\d)/.exec(t); return m ? (+m[1]) * 60 + (+m[2]) : 0; }
+
+  /**
+   * Pose les éléments horaires d'un jour dans la grille : chacun à sa hauteur
+   * (début et durée en pourcentage de la journée), les chevauchements répartis
+   * en colonnes côte à côte. Un groupe d'événements qui se recouvrent partage sa
+   * largeur ; deux groupes disjoints repartent chacun sur toute la largeur.
+   */
+  private layoutDay(items: DayItem[]): PlacedItem[] {
+    const MIN_DUR = 30; // durée d'affichage d'un événement sans heure de fin
+    const evs = items
+      .map((it) => {
+        const startT = it.kind === 'event' ? it.ev.time : it.se.time;
+        const endT = it.kind === 'event' ? (it.ev.endTime || '') : (it.se.end || '');
+        const s = Math.max(0, Math.min(1439, this.mins(startT)));
+        let e = endT ? this.mins(endT) : s + MIN_DUR;
+        if (e <= s) e = Math.min(1440, s + MIN_DUR);
+        return { it, s, e, col: 0, cols: 1 };
+      })
+      .sort((a, b) => a.s - b.s || a.e - b.e);
+    const placed: typeof evs = [];
+    let cluster: typeof evs = [];
+    let clusterEnd = -1;
+    const flush = (): void => {
+      const cols = Math.max(...cluster.map((p) => p.col)) + 1;
+      for (const p of cluster) p.cols = cols;
+      placed.push(...cluster);
+      cluster = [];
+    };
+    for (const ev of evs) {
+      if (cluster.length && ev.s >= clusterEnd) { flush(); clusterEnd = -1; }
+      // Première colonne libre : celle dont le dernier événement s'achève avant celui-ci.
+      const colEnd: number[] = [];
+      for (const p of cluster) colEnd[p.col] = Math.max(colEnd[p.col] ?? -1, p.e);
+      let col = 0;
+      while (colEnd[col] !== undefined && colEnd[col] > ev.s) col++;
+      ev.col = col;
+      cluster.push(ev);
+      clusterEnd = Math.max(clusterEnd, ev.e);
+    }
+    if (cluster.length) flush();
+    return placed.map((p) => ({
+      it: p.it,
+      top: (p.s / 1440) * 100,
+      height: Math.max(1.8, ((p.e - p.s) / 1440) * 100),
+      left: (p.col / p.cols) * 100,
+      width: 100 / p.cols,
+    }));
+  }
 
   /** Les vacances scolaires étalées sur la plage visible (semaine ou 3 jours), en barres. Vide en vue mois, en pile mobile, ou sans vacances. */
   dayBands = computed<HolidayBand[]>(() => {
@@ -780,6 +973,9 @@ export class CalendarScreen {
   }
 
   setView(v: 'month' | 'week' | '3'): void { this.store.patch({ calView: v }); }
+  setDisplay(v: 'grid' | 'list'): void { this.store.patch({ calDisplay: v }); }
+  /** Sélectionne le jour d'une colonne (le panneau latéral le détaille) sans ouvrir la création. */
+  selectDay(key: string): void { this.store.patch({ selDay: key }); }
 
   goToday(): void { this.store.patch({ calAnchor: this.store.todayStr(), selDay: this.store.todayStr() }); }
 
