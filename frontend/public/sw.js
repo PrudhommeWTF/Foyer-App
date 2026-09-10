@@ -127,6 +127,43 @@ self.addEventListener('fetch', (event) => {
   })());
 });
 
+/** Clé VAPID en base64url vers les octets que `subscribe` attend, quand il faut la relire du serveur. */
+function vapidKeyToBytes(b64) {
+  const padded = (b64 + '='.repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(padded);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// Le service push (Apple, Google) renouvelle parfois un abonnement de son côté :
+// l'adresse change, et sans réaction l'appareil cesse de recevoir les rappels
+// sans le moindre signe, jusqu'à ce qu'on retourne dans Paramètres. Le service
+// worker se réabonne alors seul et redit l'abonnement au serveur. La clé
+// publique vient de l'ancien abonnement si le navigateur la fournit, sinon de
+// GET api/push/status (le cookie de session HttpOnly part avec la requête).
+// Muet quand ça casse : si la session a expiré, le prochain lancement de l'app,
+// qui redit déjà l'abonnement courant, rattrapera.
+self.addEventListener('pushsubscriptionchange', (event) => event.waitUntil((async () => {
+  try {
+    let appServerKey = event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey;
+    if (!appServerKey) {
+      const r = await fetch(new URL('api/push/status', self.registration.scope).href, { credentials: 'include' });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (!data || !data.publicKey) return;
+      appServerKey = vapidKeyToBytes(data.publicKey);
+    }
+    const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appServerKey });
+    await fetch(new URL('api/push/subscribe', self.registration.scope).href, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub.toJSON(), ua: navigator.userAgent }),
+    });
+  } catch (e) { /* silencieux : le prochain lancement de l'app rattrapera */ }
+})()));
+
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: 'Foyer', body: event.data ? event.data.text() : '' }; }

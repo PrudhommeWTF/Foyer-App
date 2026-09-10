@@ -253,3 +253,29 @@ sqlite3 /var/lib/foyer/foyer.db "SELECT * FROM hh_notif_sent ORDER BY sent_at DE
 Dès vos réponses, l'implémentation suit : socle, canal, écran Paramètres,
 tests du planificateur (heures, fuseau, report, série, redémarrage) et de
 l'idempotence des envois, documentation dans `docs/taches.md` et le README.
+
+## 9. Réabonnement automatique
+
+Apple et Google renouvellent parfois un abonnement de leur côté : l'adresse
+d'abonnement change, et sans réaction l'appareil cesse de recevoir les rappels
+en silence, jusqu'à ce que quelqu'un retourne dans Paramètres. Le service
+worker (`frontend/public/sw.js`) écoute donc `pushsubscriptionchange` : il se
+réabonne seul et redit l'abonnement au serveur (`POST api/push/subscribe`,
+cookie de session inclus). La clé publique vient de l'ancien abonnement quand
+le navigateur la fournit, sinon d'un `GET api/push/status`. Tout se fait en
+silence : si la session a expiré, le prochain lancement de l'application, qui
+redit déjà l'abonnement courant, rattrapera.
+
+Côté serveur, rien de neuf n'est nécessaire : la nouvelle adresse est un
+appareil de plus (`addDevice` déduplique sur l'adresse exacte), et l'ancienne,
+désormais morte, part au premier envoi qui la trouve. `notify()` retire tout
+appareil dont le service push répond **404 ou 410** et garde la trace de
+l'échec au journal (`hh_notif_sent`), au lieu de laisser une erreur permanente.
+
+**Vérification manuelle.** Ce gestionnaire ne se teste pas sous Node (pas de
+`ServiceWorkerGlobalScope`). Sur Android, Chrome expose
+`chrome://serviceworker-internals` : y retrouver l'enregistrement de Foyer et
+déclencher un `pushsubscriptionchange` (bouton *Push*/*Dispatch*), puis vérifier
+qu'un nouvel appareil apparaît dans Paramètres → Notifications et que l'ancien
+disparaît au rappel suivant. Le comportement 404/410 côté serveur, lui, est
+couvert par `backend/test/push.test.ts`.
