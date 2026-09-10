@@ -57,6 +57,9 @@ export interface TaskItem {
   /** Auteur et date de création. */
   by?: string | null;
   at?: string | null;
+  /** Dernier auteur d'une modification, et sa date. Absents tant qu'aucune retouche n'a eu lieu depuis la création. */
+  upBy?: string | null;
+  upAt?: string | null;
   /**
    * Liste de courses que cette tâche ouvre. La tâche reste entièrement à
    * l'utilisateur (il la coche, la déplace, la supprime) : le lien n'est qu'un
@@ -365,7 +368,10 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         const cible: TaskItem = { ...out[idx], listId: read.fields.listId ?? out[idx].listId };
         const p = o['parentId'] !== undefined ? readParent(o['parentId'], out, cible) : { parentId: out[idx].parentId ?? null };
         if ('reason' in p) { skipped.push({ opId, reason: p.reason }); break; }
-        out[idx] = assign(out[idx], { ...read.fields, parentId: p.parentId });
+        const next = assign(out[idx], { ...read.fields, parentId: p.parentId });
+        // Toute retouche estampille « modifié », sauf un simple réordonnancement (pos seul).
+        const changed = [...Object.keys(read.fields), ...(o['parentId'] !== undefined ? ['parentId'] : [])];
+        out[idx] = changed.some((k) => k !== 'pos') ? { ...next, upBy: by, upAt: at } : next;
         applied.push(opId);
         break;
       }

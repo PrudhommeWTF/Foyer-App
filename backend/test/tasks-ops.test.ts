@@ -46,6 +46,22 @@ test('deux appareils partis du même état : la coche de l’un et la modificati
   assert.equal(apresB.items.length, 2, 'aucune tâche n’a disparu');
 });
 
+test('une retouche estampille « modifié » : dernier auteur et date, sans toucher à la création', () => {
+  const depart = [task({ by: 'me', at: '2026-09-01T09:00:00Z' })];
+  const r = applyOps(depart, [op({ op: 'edit', id: 't1', text: 'Sortir les poubelles ce soir', by: 'm1', at: '2026-09-03T20:00:00Z' })], ctx());
+  assert.equal(r.items[0].upBy, 'm1');
+  assert.equal(r.items[0].upAt, '2026-09-03T20:00:00Z');
+  assert.equal(r.items[0].by, 'me', 'la création reste celle d’origine');
+  assert.equal(r.items[0].at, '2026-09-01T09:00:00Z');
+});
+
+test('un réordonnancement (pos seul) n’estampille pas « modifié »', () => {
+  const r = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 2, by: 'm1', at: '2026-09-03T20:00:00Z' })], ctx());
+  assert.equal(r.items[0].pos, 2);
+  assert.equal(r.items[0].upBy, undefined, 'glisser une tâche n’est pas une modification à afficher');
+  assert.equal(r.items[0].upAt, undefined);
+});
+
 test('une modification de B sur la tâche que A vient de cocher ne la décoche pas', () => {
   const apresA = applyOps([task()], [op({ op: 'done', id: 't1', by: 'me' })], ctx());
   const apresB = applyOps(apresA.items, [op({ op: 'edit', id: 't1', due: '2026-09-06', by: 'm1' })], ctx());

@@ -4,6 +4,7 @@ import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
+import { StampComponent } from '../shared/stamp';
 import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS, SCHED_DAYS } from '../core/constants';
 import { cap, parseDay, dstr, isoWeek, mondayOf, monthStart } from '../core/helpers';
 import { EventItem, Recur } from '../core/models';
@@ -22,7 +23,7 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
   selector: 'screen-calendar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, WhoComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, WhoComponent, StampComponent],
   template: `
     <div class="screen-enter">
       <div class="cal-wrap">
@@ -321,6 +322,11 @@ interface WeekRow { key: string; days: MonthCell[]; bars: Bar[]; hbars: HolidayB
               <button [class.active]="store.ui().evRecur === r" (click)="store.patch({ evRecur: r })">{{ recurLabel(r) }}</button>
             }
           </div>
+
+          @if (evStamp(); as ev) {
+            <f-stamp [createdBy]="store.memberName(ev.by || '')" [createdAt]="ev.at"
+                     [modifiedBy]="store.memberName(ev.upBy || '')" [modifiedAt]="ev.upAt" />
+          }
 
           <div class="modal-foot">
             @if (store.ui().evEditId) {
@@ -726,6 +732,8 @@ export class CalendarScreen {
   }
 
   modalTitle = computed(() => (this.store.ui().evEditId ? "Modifier l'événement" : 'Nouvel événement'));
+  /** L'événement en cours d'édition, pour l'attribution en pied de modale. Null à la création. */
+  evStamp = computed(() => { const id = this.store.ui().evEditId; return id ? this.d().events.find((e) => e.id === id) ?? null : null; });
   dpLabel = computed(() => cap(monthStart(this.store.ui().dpMonth).toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })));
   dpSummary = computed(() => {
     const s = this.store.ui();

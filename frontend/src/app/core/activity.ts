@@ -3,8 +3,10 @@
 // Il ne se dérive que des mutations réellement horodatées et attribuées :
 // tâches (création via `at`/`by`, achèvement via `doneAt`/`doneBy` ou l'historique
 // d'une tâche récurrente) et articles de courses (`at`/`by`, l'état donnant le
-// verbe). Les événements, contacts et recettes ne portent ni date de changement
-// ni auteur : les faire figurer ici serait inventer une ligne, pas la refléter.
+// verbe). Les événements portent désormais leur auteur (affiché sur leur fiche),
+// mais restent hors de ce fil : l'agenda les montre déjà, les répéter ici ferait
+// doublon. Contacts et recettes n'ont ni date de changement ni auteur : les faire
+// figurer serait inventer une ligne, pas la refléter.
 import { HouseholdState } from './models';
 
 export interface ActivityEntry {

@@ -1028,12 +1028,14 @@ export class FoyerStore {
     const endTime = s.evAllDay ? null : ((s.evTime.trim() && s.evEndTime.trim() && s.evEndTime.trim() > s.evTime.trim()) ? s.evEndTime.trim() : null);
     const place = s.evPlace.trim() || null;
     const allDay = s.evAllDay || undefined;
+    const by = this.me()?.id ?? null;
+    const now = new Date().toISOString();
     this.mutate((d) => {
       if (s.evEditId) {
         const i = d.events.findIndex((e) => e.id === s.evEditId);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null, upBy: by, upAt: now };
       } else {
-        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null });
+        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null, by, at: now });
       }
     });
     this.toast(s.evEditId ? 'Événement modifié' : 'Événement ajouté à l’agenda');
@@ -1775,15 +1777,17 @@ export class FoyerStore {
     const titre = this.titleFor(value, e.slot);
     const key = e.dateStr + '-' + e.slot;
     const existant = this.mealEvent(key);
+    const by = this.me()?.id ?? null;
+    const now = new Date().toISOString();
     this.mutate((d) => {
       d.meals[key] = value;
       if (existant) {
         const i = d.events.findIndex((x) => x.id === existant.id);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: heure || '—' };
+        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: heure || '—', upBy: by, upAt: now };
       } else {
         d.events.push({
           id: uid('e'), date: e.dateStr, title: titre, time: heure || '—',
-          who: [this.me()?.id || this.members()[0]?.id].filter((x): x is string => !!x), recur: 'none', end: null, mealKey: key,
+          who: [by || this.members()[0]?.id].filter((x): x is string => !!x), recur: 'none', end: null, mealKey: key, by, at: now,
         });
       }
     });

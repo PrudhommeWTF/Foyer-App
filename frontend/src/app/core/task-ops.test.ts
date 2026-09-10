@@ -27,6 +27,19 @@ test('reporter à demain déplace l’échéance et rien d’autre', () => {
   assert.equal(out[0].time, '18:00');
 });
 
+test('une retouche estampille « modifié » : dernier auteur et date', () => {
+  const out = applyTaskOp([task()], { ...op({ op: 'edit', id: 't1', text: 'Notaire (relance)' }), by: 'lea', at: '2026-09-03T08:00:00Z' });
+  assert.equal(out[0].upBy, 'lea');
+  assert.equal(out[0].upAt, '2026-09-03T08:00:00Z');
+});
+
+test('un simple réordonnancement (pos seul) n’estampille pas « modifié »', () => {
+  const out = applyTaskOp([task()], op({ op: 'edit', id: 't1', pos: 3 }));
+  assert.equal(out[0].pos, 3);
+  assert.equal(out[0].upBy, undefined, 'glisser une tâche dans la liste n’est pas une modification à afficher');
+  assert.equal(out[0].upAt, undefined);
+});
+
 test('annuler un report ramène exactement l’état d’avant, y compris « pas de date »', () => {
   const avant = task({ due: null });
   const report: TaskOpDraft = { op: 'edit', id: 't1', due: addDaysIso(TODAY, 1) };
