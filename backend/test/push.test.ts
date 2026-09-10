@@ -118,6 +118,30 @@ describe('envoi', () => {
     assert.match(listDevices('m1')[0].lastError!, /500/);
   });
 
+  it('un abonnement expiré (404) retire l’appareil et laisse une trace au journal', async () => {
+    addDevice('m1', sub('a'), 'iPhone');
+    failWith['https://push.example/a'] = 404;
+    const r = await notify('k404', ['m1'], { kind: 'reminder', title: 'Plombier', body: '' });
+    assert.equal(r.members[0].status, 'failed', 'le seul appareil est mort : l’envoi a échoué');
+    assert.match(r.members[0].error!, /HTTP 404/);
+    assert.equal(listDevices('m1').length, 0, 'l’appareil au 404 a été retiré, pas gardé en erreur permanente');
+    assert.equal(recentSends()[0].status, 'failed', 'le journal garde la trace de l’échec');
+  });
+
+  // Ce que le réabonnement du service worker déclenche : le service push a
+  // renouvelé l'abonnement (nouvelle adresse), le SW a réenregistré la nouvelle,
+  // et l'ancienne, morte, part au premier envoi qui la trouve en 410.
+  it('après renouvellement, l’ancienne adresse morte est élaguée et la nouvelle reçoit', async () => {
+    addDevice('m1', sub('ancienne'), 'iPhone'); // l'abonnement d'origine
+    addDevice('m1', sub('nouvelle'), 'iPhone'); // celui que le SW vient de réenregistrer
+    failWith['https://push.example/ancienne'] = 410;
+    const r = await notify('krenew', ['m1'], { kind: 'reminder', title: 'Plombier', body: '' });
+    assert.equal(r.members[0].status, 'partial');
+    assert.equal(listDevices('m1').length, 1, 'seule la nouvelle adresse subsiste');
+    assert.equal(listDevices('m1')[0].endpoint, 'https://push.example/nouvelle');
+    assert.equal(sent.some((s) => s.endpoint === 'https://push.example/nouvelle'), true, 'la nouvelle adresse a bien reçu');
+  });
+
   // Le cas réel : un iPhone qui reçoit, un Mac qui refuse. Le journal notait
   // « envoyé » et jetait l'échec, donc un appareil muet passait pour un succès.
   it('un envoi qui n’atteint qu’une partie des appareils ne se présente pas comme réussi', async () => {
