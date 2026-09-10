@@ -10,14 +10,27 @@ import { FinancesContractsTab } from './contracts-tab';
 import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
 
-const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrats' | 'regles' | 'import'; label: string }[] = [
-  { id: 'transactions', label: 'Opérations' },
-  { id: 'bilan', label: 'Bilan' },
-  { id: 'comptes', label: 'Comptes' },
-  { id: 'categories', label: 'Catégories' },
-  { id: 'contrats', label: 'Contrats' },
-  { id: 'regles', label: 'Règles' },
-  { id: 'import', label: 'Import' },
+type TabId = 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrats' | 'regles' | 'import';
+/**
+ * Les onglets rangés en trois familles : « Suivi » (l'argent au quotidien),
+ * « Organisation » (les structures qui classent) et « Données » (ce qui entre et
+ * sort). La barre les affiche par grappes, séparées d'un filet, chacune coiffée
+ * d'un petit intitulé, pour qu'une rangée de sept ne se lise plus d'un bloc.
+ */
+const GROUPS: { label: string; tabs: { id: TabId; label: string }[] }[] = [
+  { label: 'Suivi', tabs: [
+    { id: 'transactions', label: 'Opérations' },
+    { id: 'bilan', label: 'Bilan' },
+    { id: 'comptes', label: 'Comptes' },
+  ] },
+  { label: 'Organisation', tabs: [
+    { id: 'categories', label: 'Catégories' },
+    { id: 'contrats', label: 'Contrats' },
+    { id: 'regles', label: 'Règles' },
+  ] },
+  { label: 'Données', tabs: [
+    { id: 'import', label: 'Import' },
+  ] },
 ];
 
 @Component({
@@ -43,9 +56,17 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrat
         </div>
       }
 
-      <div class="seg tabs">
-        @for (t of tabs; track t.id) {
-          <button [class.active]="store.ui().tab === t.id" (click)="store.patch({ tab: t.id })">{{ t.label }}</button>
+      <div class="tabgroups">
+        @for (g of groups; track g.label; let last = $last) {
+          <div class="tabgroup">
+            <span class="tg-label">{{ g.label }}</span>
+            <div class="seg">
+              @for (t of g.tabs; track t.id) {
+                <button [class.active]="store.ui().tab === t.id" (click)="store.patch({ tab: t.id })">{{ t.label }}</button>
+              }
+            </div>
+          </div>
+          @if (!last) { <span class="tg-div"></span> }
         }
       </div>
 
@@ -108,7 +129,14 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrat
   styles: [`
     .screen-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
     .screen-title { font-size: 30px; font-weight: 700; color: var(--ink); }
-    .tabs { margin-bottom: 20px; }
+    /* Les onglets par familles : chaque grappe porte son intitulé, un filet les
+       sépare. Sur téléphone, les grappes passent à la ligne, chacune restant
+       lisible. */
+    .tabgroups { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 20px; }
+    .tabgroup { display: flex; align-items: center; gap: 10px; }
+    .tg-label { font-size: 10px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .07em; white-space: nowrap; }
+    .tg-div { width: 1px; align-self: stretch; min-height: 28px; background: var(--line); }
+    @media (max-width: 720px) { .tg-div { display: none; } .tabgroups { gap: 8px 12px; } }
 
     .banner { display: flex; align-items: flex-start; gap: 12px; border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; font-size: 13.5px; font-weight: 700; }
     .banner.warn { background: #FDF0DA; color: #7A5C12; }
@@ -148,7 +176,7 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrat
 export class FinancesScreen {
   store = inject(FinancesStore);
   foyer = inject(FoyerStore);
-  tabs = TABS;
+  groups = GROUPS;
   fmtInt = fmtEurosInt;
 
   constructor() { void this.store.init(); }
