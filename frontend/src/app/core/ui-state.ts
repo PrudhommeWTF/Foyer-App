@@ -32,6 +32,14 @@ export interface UiState {
    * empilée. Choix d'affichage local, comme la vue ; sans effet en vue Mois.
    */
   calDisplay: 'grid' | 'list';
+  /** Le bandeau de droite (mini-calendrier, détail du jour) est-il affiché ? Sur grand écran seulement. */
+  calSide: boolean;
+  /**
+   * Types d'éléments masqués dans le calendrier (« event », « planning »,
+   * « task », « birthday », « holiday », « school », « echeance »). Vide = tout
+   * s'affiche. Filtre d'affichage local, comme la vue.
+   */
+  calHidden: string[];
   // meals
   /**
    * Jour d'ancrage du planning. En vue semaine, la semaine qui le contient ; en
@@ -241,7 +249,7 @@ export function initialUi(): UiState {
   return {
     screen: persistedScreen(), selDay: today, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
-    calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(),
+    calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(), calSide: true, calHidden: [],
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1),
