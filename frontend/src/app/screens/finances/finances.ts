@@ -53,22 +53,22 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrat
         <div class="synth">
           <div class="synth-top">
             <div class="nav">
-              <button class="nav-btn" (click)="store.prevMonth()" aria-label="Mois précédent"><f-icon name="chevronLeft" [size]="17" color="#fff" [width]="2.2" /></button>
+              <button class="nav-btn" (click)="store.prevMonth()" aria-label="Mois précédent"><f-icon name="chevronLeft" [size]="17" color="var(--ink2)" [width]="2.2" /></button>
               <div class="nav-label">
                 <div class="nav-month f-display">{{ store.monthLabel() }}</div>
                 <div class="nav-tag">{{ store.isCurrentMonth() ? 'Ce mois-ci' : 'Historique' }}</div>
               </div>
-              <button class="nav-btn" (click)="store.nextMonth()" aria-label="Mois suivant"><f-icon name="chevronRight" [size]="17" color="#fff" [width]="2.2" /></button>
+              <button class="nav-btn" (click)="store.nextMonth()" aria-label="Mois suivant"><f-icon name="chevronRight" [size]="17" color="var(--ink2)" [width]="2.2" /></button>
             </div>
           </div>
           @if (store.summary(); as s) {
-            <div class="overline light">Dépenses du mois</div>
+            <div class="overline">Dépenses du mois</div>
             <div class="big f-display">{{ fmtInt(s.expense) }} €</div>
             <div class="sub">{{ s.budgetTotal > 0 ? 'sur ' + fmtInt(s.budgetTotal) + ' € de budget de référence' : 'aucun budget de référence défini' }}</div>
             <div class="mini">
-              <div><div class="overline light">Ressources</div><div class="mini-val f-display" style="color:#8FBF86">+{{ fmtInt(s.income) }} €</div></div>
-              <div><div class="overline light">Dépenses</div><div class="mini-val f-display" style="color:#F0A98B">−{{ fmtInt(s.expense) }} €</div></div>
-              <div><div class="overline light">Solde</div><div class="mini-val f-display" [style.color]="s.balance >= 0 ? '#8FBF86' : '#F0A98B'">{{ s.balance > 0 ? '+' : '' }}{{ fmtInt(s.balance) }} €</div></div>
+              <div class="stat"><div class="overline">Ressources</div><div class="mini-val pos f-display">+{{ fmtInt(s.income) }} €</div></div>
+              <div class="stat"><div class="overline">Dépenses</div><div class="mini-val neg f-display">−{{ fmtInt(s.expense) }} €</div></div>
+              <div class="stat"><div class="overline">Solde</div><div class="mini-val f-display" [class.pos]="s.balance >= 0" [class.neg]="s.balance < 0">{{ s.balance > 0 ? '+' : '' }}{{ fmtInt(s.balance) }} €</div></div>
             </div>
           } @else {
             <div class="sub loading">Chargement…</div>
@@ -121,19 +121,27 @@ const TABS: { id: 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrat
     .banner-hint { margin-top: 6px; font-size: 12.5px; font-weight: 700; opacity: .8; }
     .banner-act { margin-left: auto; background: rgba(0,0,0,.08); border: none; border-radius: 10px; padding: 7px 13px; font-size: 12.5px; font-weight: 800; color: inherit; cursor: pointer; font-family: inherit; }
 
-    .synth { background: linear-gradient(135deg, #3A302A, #5A4A3E); border-radius: 24px; padding: 28px; color: #fff; margin-bottom: 18px; box-shadow: 0 18px 34px -18px rgba(58,48,42,.6); }
-    .synth-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    /* Le résumé du mois : une carte claire, comme le reste de l'app (mêmes jetons
+       d'ombre et de rayon), et non plus un bloc sombre à part. Les trois chiffres
+       tiennent dans des tuiles douces, avec le vert « entrée » et le rouge
+       « sortie » communs à l'accueil. */
+    .synth { background: var(--surface); border-radius: var(--r-card-lg, 24px); padding: 24px 26px; color: var(--ink); margin-bottom: 18px; box-shadow: var(--sh-card); }
+    .synth-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .nav { display: flex; align-items: center; gap: 12px; }
-    .nav-btn { width: 36px; height: 36px; border: none; border-radius: 11px; background: rgba(255,255,255,.14); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .nav-label { text-align: center; min-width: 170px; }
-    .nav-month { font-size: 19px; font-weight: 700; }
-    .nav-tag { font-size: 11px; font-weight: 800; opacity: .6; text-transform: uppercase; letter-spacing: .05em; }
-    .overline.light { opacity: .65; }
-    .big { font-size: 46px; font-weight: 700; margin: 8px 0 4px; }
-    .sub { font-size: 14px; font-weight: 700; opacity: .7; }
+    .nav-btn { width: 38px; height: 38px; border: none; border-radius: 12px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .nav-btn:hover { background: var(--soft2); }
+    .nav-label { min-width: 150px; }
+    .nav-month { font-size: 20px; font-weight: 700; color: var(--ink); text-transform: capitalize; }
+    .nav-tag { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; }
+    .overline { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; }
+    .big { font-size: 44px; font-weight: 700; color: var(--ink); margin: 6px 0 2px; }
+    .sub { font-size: 13.5px; font-weight: 700; color: var(--ink3); }
     .sub.loading { padding: 14px 0; }
-    .mini { display: flex; gap: 26px; margin-top: 20px; flex-wrap: wrap; }
-    .mini-val { font-size: 20px; font-weight: 700; }
+    .mini { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
+    .stat { flex: 1; min-width: 130px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
+    .mini-val { font-size: 20px; font-weight: 700; color: var(--ink); margin-top: 3px; }
+    .mini-val.pos { color: #5F9A55; }
+    .mini-val.neg { color: #C2503A; }
     @media (max-width: 640px) { .big { font-size: 36px; } .synth { padding: 20px; } }
   `],
 })
