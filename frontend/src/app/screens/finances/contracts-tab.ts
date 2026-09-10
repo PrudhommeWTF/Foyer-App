@@ -72,7 +72,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
                 </button>
               }
               @if (d.kind === 'preavis') {
-                <f-icon name="urgent" [size]="17" [color]="d.daysAway < 0 ? 'var(--ink3)' : '#C6492F'" [width]="2.2" />
+                <f-icon name="urgent" [size]="17" [color]="d.daysAway < 0 ? 'var(--ink3)' : '#C2503A'" [width]="2.2" />
               }
             </div>
           }
@@ -162,7 +162,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
             </div>
             <div>
               <div class="overline">Déjà obtenu</div>
-              <div class="t-val f-display" style="color:#6E9E5F">{{ fmtInt(t.done) }} € <span class="t-unit">par an</span></div>
+              <div class="t-val f-display" style="color:#5F9A55">{{ fmtInt(t.done) }} € <span class="t-unit">par an</span></div>
               <div class="t-sub">estimation, le coût réel des contrats fait foi</div>
             </div>
           </div>
@@ -243,7 +243,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         <div class="hint sm">Le gain est une estimation, pas une mesure. C'est le coût réel du contrat, une fois la piste appliquée, qui dira ce qu'elle a vraiment rapporté.</div>
         <div class="modal-acts">
           @if (store.ui().saId) {
-            <button class="btn btn-danger" (click)="store.patch({ saDelId: store.ui().saId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ saDelId: store.ui().saId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ saForm: false })">Annuler</button>
@@ -294,7 +294,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         <input class="input" [ngModel]="store.ui().asNotes" (ngModelChange)="store.patch({ asNotes: $event })" placeholder="Facultatif" />
         <div class="modal-acts">
           @if (store.ui().asId) {
-            <button class="btn btn-danger" (click)="store.patch({ asDelId: store.ui().asId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ asDelId: store.ui().asId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ asForm: false })">Annuler</button>
@@ -544,7 +544,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
 
         <div class="modal-acts">
           @if (store.ui().coId) {
-            <button class="btn btn-danger" (click)="store.patch({ coDelId: store.ui().coId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ coDelId: store.ui().coId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ coForm: false })">Annuler</button>
@@ -566,7 +566,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     }
   `,
   styles: [`
-    .panel { background: var(--surface); border-radius: 18px; padding: 18px; margin-bottom: 14px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .panel { background: var(--surface); border-radius: 18px; padding: 18px; margin-bottom: 14px; box-shadow: var(--sh-card); }
     .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
 
@@ -606,7 +606,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .saving.done, .saving.dropped { opacity: .6; }
     .saving.done .s-title { text-decoration: line-through; }
     .s-check { width: 22px; height: 22px; flex: none; border-radius: 7px; border: 2px solid var(--line2); background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
-    .s-check.on { background: #6E9E5F; border-color: #6E9E5F; }
+    .s-check.on { background: #5F9A55; border-color: #5F9A55; }
     .s-body { flex: 1; min-width: 0; cursor: pointer; }
     .s-title { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
     .s-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -640,8 +640,8 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .e-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
     .e-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .e-trend { font-size: 16px; font-weight: 800; text-align: right; }
-    .e-trend.up { color: #C6492F; }
-    .e-trend.down { color: #6E9E5F; }
+    .e-trend.up { color: #C2503A; }
+    .e-trend.down { color: #5F9A55; }
     .e-trend-sub { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .readings { display: flex; flex-direction: column; gap: 6px; }
     .reading { display: flex; align-items: center; gap: 10px; background: var(--soft); border-radius: 11px; padding: 7px 10px; font-size: 12.5px; font-weight: 700; }

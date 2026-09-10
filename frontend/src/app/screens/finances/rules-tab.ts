@@ -251,7 +251,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
 
         <div class="modal-acts">
           @if (store.ui().ruleId) {
-            <button class="btn btn-danger" (click)="store.patch({ ruleDelId: store.ui().ruleId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ ruleDelId: store.ui().ruleId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" [disabled]="store.ui().ruleBusy" (click)="store.previewRule()">Tester</button>
@@ -267,7 +267,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     }
   `,
   styles: [`
-    .intro { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; background: var(--surface); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .intro { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; background: var(--surface); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; box-shadow: var(--sh-card); }
     .intro-txt { flex: 1; min-width: 260px; font-size: 13px; font-weight: 700; color: var(--ink2); line-height: 1.55; }
     .intro-acts { display: flex; gap: 10px; flex-wrap: wrap; }
     .check.force { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 12.5px; font-weight: 700; color: var(--ink3); cursor: pointer; }
@@ -285,7 +285,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     .report-n { font-variant-numeric: tabular-nums; font-weight: 800; }
 
     .rules { display: flex; flex-direction: column; gap: 10px; }
-    .rule { display: flex; align-items: center; gap: 13px; background: var(--surface); border-radius: 16px; padding: 12px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .rule { display: flex; align-items: center; gap: 13px; background: var(--surface); border-radius: 16px; padding: 12px 16px; box-shadow: var(--sh-card); }
     .rule.off { opacity: .55; }
     .rule-ord { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
     .ord { width: 26px; height: 20px; border: none; border-radius: 7px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -302,13 +302,13 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .16s ease; }
     .toggle.on .knob { left: 21px; }
 
-    .empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin: 6px auto 0; max-width: 460px; line-height: 1.55; }
 
     .tags-block { margin-top: 22px; }
     .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-    .tagchip { border: none; border-radius: 20px; padding: 6px 13px; background: var(--surface); font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .tagchip { border: none; border-radius: 20px; padding: 6px 13px; background: var(--surface); font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; box-shadow: var(--sh-card); }
     .tagn { color: var(--ink3); }
 
     .sec { margin-top: 22px; }

@@ -196,7 +196,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
 
         <div class="modal-acts">
           @if (store.ui().acId) {
-            <button class="btn btn-danger" (click)="store.patch({ acDelId: store.ui().acId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ acDelId: store.ui().acId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ acForm: false })">Annuler</button>
@@ -226,7 +226,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
 
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
     :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
-    .card { background: var(--surface); border-radius: 18px; padding: 18px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; }
+    .card { background: var(--surface); border-radius: 18px; padding: 18px; box-shadow: var(--sh-card); cursor: pointer; }
     .card:hover { background: var(--soft); }
     .card.arch { opacity: .62; }
     .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
@@ -242,7 +242,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     .fill { height: 100%; border-radius: 99px; background: #B8735A; }
     .field-label.sm { font-size: 10.5px; }
     .anchor { margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.35; }
-    .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
 

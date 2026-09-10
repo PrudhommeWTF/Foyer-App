@@ -34,7 +34,7 @@ const PAD_T = 10;
           @let delta = d.month.expense - p.expense;
           <div class="card">
             <div class="overline">Par rapport à {{ monthName(p.month).toLowerCase() }}</div>
-            <div class="big f-display" [style.color]="delta > 0 ? '#C6492F' : '#6E9E5F'">
+            <div class="big f-display" [style.color]="delta > 0 ? '#C2503A' : '#5F9A55'">
               {{ delta > 0 ? '+' : '−' }}{{ fmtInt(abs(delta)) }} €
             </div>
             <div class="delta muted">{{ fmtInt(d.month.expense) }} € dépensés contre {{ fmtInt(p.expense) }} €</div>
@@ -61,7 +61,7 @@ const PAD_T = 10;
 
         <div class="card">
           <div class="overline">Année {{ d.year.year }}</div>
-          <div class="big f-display" [style.color]="d.year.balance >= 0 ? '#6E9E5F' : '#C6492F'">
+          <div class="big f-display" [style.color]="d.year.balance >= 0 ? '#5F9A55' : '#C2503A'">
             {{ d.year.balance > 0 ? '+' : '' }}{{ fmtInt(d.year.balance) }} €
           </div>
           <div class="delta muted">{{ fmtInt(d.year.income) }} € reçus, {{ fmtInt(d.year.expense) }} € dépensés sur {{ d.year.months }} mois</div>
@@ -163,7 +163,7 @@ const PAD_T = 10;
                 </div>
                 <div class="track">
                   <div class="fill" [style.width.%]="pct(c.spent, c.budget)"
-                       [style.background]="c.budget > 0 && c.spent > c.budget ? '#C6492F' : c.color"></div>
+                       [style.background]="c.budget > 0 && c.spent > c.budget ? '#C2503A' : c.color"></div>
                 </div>
               </div>
             } @empty {
@@ -218,7 +218,7 @@ const PAD_T = 10;
               </div>
               <div class="track">
                 <div class="fill" [style.width.%]="pct(c.spent, c.budget || maxYearSpent())"
-                     [style.background]="c.budget > 0 && c.spent > c.budget ? '#C6492F' : c.color"></div>
+                     [style.background]="c.budget > 0 && c.spent > c.budget ? '#C2503A' : c.color"></div>
               </div>
             </div>
           } @empty {
@@ -232,11 +232,11 @@ const PAD_T = 10;
   `,
   styles: [`
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 14px; }
-    .card { background: var(--surface); border-radius: 18px; padding: 16px 18px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .card { background: var(--surface); border-radius: 18px; padding: 16px 18px; box-shadow: var(--sh-card); }
     .big { font-size: 27px; font-weight: 700; color: var(--ink); margin: 6px 0 4px; }
     .delta { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 800; }
-    .delta.up { color: #C6492F; }
-    .delta.down { color: #6E9E5F; }
+    .delta.up { color: #C2503A; }
+    .delta.down { color: #5F9A55; }
     .delta.muted { color: var(--ink3); font-weight: 700; }
 
     .warn { display: flex; align-items: flex-start; gap: 12px; background: #FDF0DA; color: #7A5C12; border-radius: 16px; padding: 13px 16px; margin-bottom: 14px; }
@@ -244,7 +244,7 @@ const PAD_T = 10;
     .warn-title { font-size: 13.5px; font-weight: 800; }
     .warn-txt { font-size: 12.5px; font-weight: 700; opacity: .85; margin-top: 3px; line-height: 1.5; }
 
-    .panel { background: var(--surface); border-radius: 18px; padding: 18px; margin-bottom: 14px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .panel { background: var(--surface); border-radius: 18px; padding: 18px; margin-bottom: 14px; box-shadow: var(--sh-card); }
     .panel.loading { color: var(--ink3); font-weight: 700; font-size: 13.5px; text-align: center; padding: 40px; }
     .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
     .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
@@ -278,7 +278,7 @@ const PAD_T = 10;
     .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
     .row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
     .row-val { flex: none; font-variant-numeric: tabular-nums; }
-    .row-val.over { color: #C6492F; }
+    .row-val.over { color: #C2503A; }
     .row-of { color: var(--ink3); font-weight: 700; }
     .track { height: 7px; border-radius: 20px; background: var(--soft2); margin-top: 5px; overflow: hidden; }
     .fill { height: 100%; border-radius: 20px; }

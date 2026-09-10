@@ -45,7 +45,6 @@ const GROUPS: { label: string; tabs: { id: TabId; label: string }[] }[] = [
           <div class="screen-title f-display">Finances</div>
           <div class="screen-sub">{{ accountCount() }} · {{ store.total() }} opération{{ store.total() > 1 ? 's' : '' }} sur la période</div>
         </div>
-        <button class="btn btn-soft" (click)="store.exportCsv()"><f-icon name="export" [size]="17" color="var(--ink2)" /> Exporter en CSV</button>
       </div>
 
       @if (store.error(); as err) {

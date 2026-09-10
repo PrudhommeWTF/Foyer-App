@@ -7,9 +7,9 @@ import { ConfirmComponent } from '../../shared/confirm';
 import { FinConfidence, FinTransferCandidate } from '../../core/finances.api';
 
 const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
-  forte: { label: 'Confiance forte', color: '#6E9E5F' },
+  forte: { label: 'Confiance forte', color: '#5F9A55' },
   moyenne: { label: 'À vérifier', color: '#E08D3C' },
-  faible: { label: 'Douteux', color: '#C6492F' },
+  faible: { label: 'Douteux', color: '#C2503A' },
 };
 
 @Component({
@@ -257,6 +257,15 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </f-confirm>
     }
 
+    <!-- EXPORTS -->
+    <div class="panel">
+      <div class="panel-title">Exporter</div>
+      <div class="panel-sub">Vos opérations dans un tableur (CSV), pour les retravailler ailleurs. La sauvegarde complète du module (JSON) est ci-dessous.</div>
+      <div class="backup-acts">
+        <button class="btn btn-soft" (click)="store.exportCsv()"><f-icon name="export" [size]="16" color="var(--ink2)" /> Exporter les opérations (CSV)</button>
+      </div>
+    </div>
+
     <!-- SAUVEGARDE DU MODULE -->
     <div class="panel backup">
       <div class="panel-title">Sauvegarde du module Finances</div>
@@ -302,7 +311,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .drop-title { font-size: 15.5px; font-weight: 800; color: var(--ink); margin-top: 6px; }
     .drop-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); max-width: 460px; line-height: 1.45; }
 
-    .card { background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); margin-bottom: 18px; }
+    .card { background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: var(--sh-card); margin-bottom: 18px; }
     .ch { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
     .rh { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
     .rmeta { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 3px; line-height: 1.45; max-width: 640px; }
@@ -314,7 +323,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .fig-l { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; opacity: .7; margin-top: 2px; }
 
     .unknowns { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
-    .ul-hint { font-size: 11.5px; font-weight: 800; color: #6E9E5F; margin-top: 3px; }
+    .ul-hint { font-size: 11.5px; font-weight: 800; color: #5F9A55; margin-top: 3px; }
     .unknown { display: flex; align-items: center; gap: 11px; background: var(--soft2); border-radius: 14px; padding: 12px 14px; flex-wrap: wrap; }
     .ul { flex: 1 1 220px; min-width: 0; }
     .ul-label { font-size: 13.5px; font-weight: 800; color: var(--ink); word-break: break-word; }
@@ -372,7 +381,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .icov { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .empty { font-size: 13px; font-weight: 700; color: var(--ink3); padding: 10px 0; }
 
-    .panel.backup { background: var(--surface); border-radius: 18px; padding: 18px; margin-top: 18px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .panel.backup { background: var(--surface); border-radius: 18px; padding: 18px; margin-top: 18px; box-shadow: var(--sh-card); }
     .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 4px; line-height: 1.55; }
     .backup-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
