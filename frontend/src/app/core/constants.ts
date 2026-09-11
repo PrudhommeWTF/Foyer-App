@@ -79,6 +79,9 @@ export const ICONS: Record<string, string> = {
   moon: 'M20 14.5A8 8 0 0 1 9.5 4 7 7 0 1 0 20 14.5z',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 .01 0',
   eyeOff: 'M4 4l16 16M2 12s4-7 10-7c1.5 0 2.9.35 4.1.9M22 12s-4 7-10 7c-1.5 0-2.9-.35-4.1-.9',
+  // Panneau latéral droit : un cadre dont la colonne de droite, détachée par un
+  // filet, figure le panneau. Sert de bascule afficher / masquer.
+  panelRight: 'M3 5h18v14H3z M15 5v14',
   phone: 'M5 4h4l1.5 5-2 1a11 11 0 0 0 5 5l1-2 5 1.5V19a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z',
   users: 'M9 8a3 3 0 1 0 .01 0M3 19c0-3 3-5 6-5s6 2 6 5M16 6a3 3 0 0 1 0 6M15 14c3 0 6 2 6 5',
   userPlus: 'M9 8a3 3 0 1 0 .01 0M3 19c0-3 3-5 6-5s6 2 6 5M18 8v6M15 11h6',
