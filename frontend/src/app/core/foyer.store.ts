@@ -1114,18 +1114,33 @@ export class FoyerStore {
     return true;
   }
 
-  /** Ajoute un article depuis un texte libre, et rend son identifiant. */
-  addShop(name: string): string | null {
+  /**
+   * Ajoute un article depuis un texte libre, et rend son identifiant. Les
+   * attributs (quantité, rayon, liste) sont facultatifs : sans eux, on retombe
+   * sur la quantité vide, le rayon « À trier » et la liste active, comme avant.
+   */
+  addShop(name: string, opts?: { qty?: string; aisleId?: string; listId?: string }): string | null {
     const t = name.trim(); if (!t) return null;
-    const listId = this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return null; }
+    const listId = opts?.listId || this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return null; }
     const id = uid('s');
-    this.pushShopOps([{ op: 'add', id, name: t, qty: '', aisleId: this.defaultAisleId(), listId }]);
+    this.pushShopOps([{ op: 'add', id, name: t, qty: opts?.qty?.trim() || '', aisleId: opts?.aisleId || this.defaultAisleId(), listId }]);
     return id;
   }
 
   addShopQuick(): void {
     if (this.addShop(this.ui().newShop)) this.patch({ newShop: '' });
   }
+
+  /**
+   * Y a-t-il des repas planifiés sur la semaine que « Générer » utilise ? Le
+   * bouton ne s'affiche que si oui, pour ne pas proposer une génération qui
+   * répondrait « aucun repas planifié ».
+   */
+  readonly weekHasMeals = computed(() => {
+    const d = this._data(); if (!d) return false;
+    const slots = this.mealSlots();
+    return this.weekDays().some((ds) => slots.some((sl) => (d.meals[`${ds}-${sl.key}`]?.items?.length ?? 0) > 0));
+  });
   activeShopListId(): string {
     const s = this.ui();
     return s.activeShopList !== 'all' ? s.activeShopList : (this._data()?.shopLists[0]?.id || '');
