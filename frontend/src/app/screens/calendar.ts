@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { AdminStore } from '../core/admin.store';
@@ -38,6 +38,16 @@ const CELL_PAD_BOTTOM = 6;
 const CHIP_H = 16;         // hauteur d'une pastille (.chip-ev / .chip-ex)
 const CHIP_GAP = 3;        // gouttière verticale entre pastilles
 const MORE_H = 13;         // hauteur de la mention « +x »
+
+// La grille horaire des vues Semaine / 3 jours (`.tg-body`) tenait sur 24 heures
+// d'une hauteur fixe (`--hour-h`), laissant du vide sous elle sur grand écran.
+// On mesure la place réellement disponible sous son haut (le bandeau « journée
+// entière » qui la précède peut grandir) et on étire l'heure pour l'occuper,
+// sans jamais descendre sous la hauteur de base (fenêtre courte : la grille
+// garde sa taille lisible et la page défile, comme avant).
+const HOUR_H_MIN = 27;         // --hour-h de base (grand écran)
+const HOUR_H_MIN_NARROW = 24;  // --hour-h de base (mobile)
+const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas de la fenêtre
 
 @Component({
   selector: 'screen-calendar',
@@ -140,7 +150,7 @@ const MORE_H = 13;         // hauteur de la mention « +x »
               </div>
             }
             @if (display() === 'grid') {
-              <div class="tgrid" [class.narrow]="store.narrow()" [style.--cols]="grid().length">
+              <div class="tgrid" [class.narrow]="store.narrow()" [style.--cols]="grid().length" [style.--hour-h]="hourH() + 'px'">
                 <div class="tg-row tg-heads">
                   <div class="tg-gutter-cell"></div>
                   @for (col of grid(); track col.key) {
@@ -724,12 +734,40 @@ export class CalendarScreen {
   private readViewport(): { w: number; h: number } {
     try { return { w: window.innerWidth, h: window.innerHeight }; } catch { return { w: 1280, h: 900 }; }
   }
+  private readonly host = inject(ElementRef<HTMLElement>);
+
+  // La hauteur d'une heure dans la grille Semaine / 3 jours, étirée pour remplir
+  // la fenêtre. Mesurée après rendu : le haut de la grille dépend du bandeau
+  // « journée entière » qui la précède, dont la hauteur varie selon les repères.
+  readonly hourH = signal(HOUR_H_MIN);
+
   constructor() {
     try {
       const onResize = () => this.viewport.set(this.readViewport());
       window.addEventListener('resize', onResize, { passive: true });
       inject(DestroyRef).onDestroy(() => window.removeEventListener('resize', onResize));
     } catch { /* pas de fenêtre (SSR) : la valeur par défaut suffit */ }
+
+    // Recalcule après chaque rendu qui touche la grille : changement de vue, de
+    // données (bandeau « journée entière »), ou de taille de fenêtre. Le haut de
+    // la grille ne dépendant pas de `--hour-h`, la mesure converge en un tour :
+    // sa propre écriture relance l'effet, qui remesure la même valeur et s'arrête.
+    afterRenderEffect(() => {
+      this.cv(); this.display(); this.grid(); this.viewport();
+      this.measureGridHour();
+    });
+  }
+
+  /** Étire l'heure pour que la grille horaire descende près du bas de la fenêtre. */
+  private measureGridHour(): void {
+    const body = this.host.nativeElement.querySelector('.tg-body') as HTMLElement | null;
+    if (!body) return;
+    let winH: number;
+    try { winH = window.innerHeight; } catch { return; }
+    const min = this.store.narrow() ? HOUR_H_MIN_NARROW : HOUR_H_MIN;
+    const avail = winH - body.getBoundingClientRect().top - GRID_BOTTOM_GAP;
+    const next = Math.max(min, Math.round(avail / 24));
+    if (Math.abs(next - this.hourH()) > 0.5) this.hourH.set(next);
   }
 
   /** Hauteur d'une case du mois, telle que la CSS la fixe (min-height). */
