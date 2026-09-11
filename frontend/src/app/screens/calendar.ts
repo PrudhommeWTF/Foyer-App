@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { AdminStore } from '../core/admin.store';
@@ -23,6 +23,21 @@ interface WeekRow { key: string; week: number; days: MonthCell[]; bars: Bar[]; h
 interface PlacedItem { it: DayItem; top: number; height: number; left: number; width: number; }
 /** Une colonne-jour de la grille horaire : en-tête, bandeau « journée entière » et éléments horaires posés. */
 interface GridCol { key: string; dow: string; num: number; isToday: boolean; isSel: boolean; allDay: EventItem[]; extras: DayExtra[]; timed: PlacedItem[]; }
+
+// Gabarit d'une case du mois, en miroir de la CSS `.mcell` : la hauteur d'une
+// case (min-height), l'espace réservé en haut (numéro du jour + voies de barres
+// « journée entière ») et la hauteur d'une pastille. La vue mois s'en sert pour
+// remplir chaque case jusqu'au bord avant de replier le surplus en « +x »,
+// plutôt qu'un plafond fixe. Recalculé à chaque changement de taille de fenêtre.
+const CELL_CHROME = 268;   // espace vertical hors grille (cf. calc((100vh - 268)/6))
+const CELL_MIN = 94;       // min-height plancher sur grand écran
+const CELL_MIN_NARROW = 68; // min-height sur mobile (max-width: 860px)
+const CELL_PAD_TOP = 26;   // padding haut de base (numéro du jour)
+const CELL_LANE_H = 20;    // hauteur d'une voie de barre (par --lanes)
+const CELL_PAD_BOTTOM = 6;
+const CHIP_H = 16;         // hauteur d'une pastille (.chip-ev / .chip-ex)
+const CHIP_GAP = 3;        // gouttière verticale entre pastilles
+const MORE_H = 13;         // hauteur de la mention « +x »
 
 @Component({
   selector: 'screen-calendar',
@@ -702,6 +717,42 @@ export class CalendarScreen {
   /** Les heures pleines, pour la gouttière et les lignes de la grille horaire. */
   readonly tgHours = Array.from({ length: 24 }, (_, h) => h);
 
+  // La taille de la fenêtre, suivie en direct : la vue mois calcule combien de
+  // pastilles tiennent dans une case à partir de la hauteur disponible, et doit
+  // donc se recalculer quand l'utilisateur redimensionne la fenêtre.
+  private readonly viewport = signal(this.readViewport());
+  private readViewport(): { w: number; h: number } {
+    try { return { w: window.innerWidth, h: window.innerHeight }; } catch { return { w: 1280, h: 900 }; }
+  }
+  constructor() {
+    try {
+      const onResize = () => this.viewport.set(this.readViewport());
+      window.addEventListener('resize', onResize, { passive: true });
+      inject(DestroyRef).onDestroy(() => window.removeEventListener('resize', onResize));
+    } catch { /* pas de fenêtre (SSR) : la valeur par défaut suffit */ }
+  }
+
+  /** Hauteur d'une case du mois, telle que la CSS la fixe (min-height). */
+  private cellHeight(): number {
+    const { w, h } = this.viewport();
+    if (w <= 860) return CELL_MIN_NARROW;
+    return Math.max(CELL_MIN, (h - CELL_CHROME) / 6);
+  }
+
+  /**
+   * Combien de pastilles tiennent dans une case du mois, selon sa hauteur
+   * disponible (la case, moins le numéro du jour et les `lanes` voies de barres),
+   * et la hauteur d'une pastille. `full` : le nombre affichable sans « +x » ;
+   * `withMore` : le nombre affichable en réservant la ligne « +x ».
+   */
+  private cellCapacity(lanes: number): { full: number; withMore: number } {
+    const content = this.cellHeight() - (CELL_PAD_TOP + lanes * CELL_LANE_H) - CELL_PAD_BOTTOM;
+    const stride = CHIP_H + CHIP_GAP;
+    const full = Math.max(0, Math.floor((content + CHIP_GAP) / stride));
+    const withMore = Math.max(0, Math.floor((content - MORE_H) / stride));
+    return { full, withMore };
+  }
+
   headerLabel = computed(() => {
     const v = this.cv();
     const a = parseDay(this.calAnchor());
@@ -759,14 +810,26 @@ export class CalendarScreen {
       const hbars = (this.hidden().has('school') ? [] : holidayBands(this.store.schoolHolidays(), weekStart, weekEnd, CAL_KINDS['school'].color))
         .map((b) => ({ ...b, lane: b.lane + eventLanes }));
       const holidayLanes = hbars.length ? Math.max(...hbars.map((b) => b.lane)) + 1 - eventLanes : 0;
+      // Combien de pastilles tiennent dans une case de cette semaine : la hauteur
+      // dépend des voies de barres qui rabotent le haut de chaque case.
+      const cap = this.cellCapacity(eventLanes + holidayLanes);
       const days: MonthCell[] = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date(wsD); d.setDate(wsD.getDate() + i); const key = dstr(d);
         // Les événements « journée entière » non récurrents sont des barres, pas des pastilles de case.
         const items = this.dayItems(key).filter((it) => it.kind !== 'event' || !((it.ev.recur || 'none') === 'none' && this.isAllDay(it.ev)));
         const extras = this.visExtras(key).filter((e) => e.kind !== 'school');
-        const hidden = Math.max(0, items.length - 2) + Math.max(0, extras.length - 2);
-        days.push({ key, num: d.getDate(), inMonth: d.getMonth() === month, items: items.slice(0, 2), extras: extras.slice(0, 2), more: hidden, covered: covered.has(i + 1) });
+        // On remplit la case jusqu'au bord ; le surplus se replie en « +x », et
+        // seulement s'il déborde vraiment. Les pastilles d'abord, puis les repères.
+        const total = items.length + extras.length;
+        let vItems = items, vExtras = extras, more = 0;
+        if (total > cap.full) {
+          const k = Math.min(cap.withMore, total);
+          vItems = items.slice(0, k);
+          vExtras = extras.slice(0, Math.max(0, k - vItems.length));
+          more = total - (vItems.length + vExtras.length);
+        }
+        days.push({ key, num: d.getDate(), inMonth: d.getMonth() === month, items: vItems, extras: vExtras, more, covered: covered.has(i + 1) });
       }
       rows.push({ key: weekStart, week: isoWeek(wsD), days, bars, hbars, lanes: eventLanes + holidayLanes });
     }
