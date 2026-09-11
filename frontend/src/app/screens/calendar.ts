@@ -83,7 +83,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
               @if (!store.narrow()) {
                 <button class="nav-btn side-toggle" [class.active]="store.ui().calSide" (click)="toggleSide()"
                         [title]="store.ui().calSide ? 'Masquer le panneau' : 'Afficher le panneau'" [attr.aria-label]="store.ui().calSide ? 'Masquer le panneau' : 'Afficher le panneau'">
-                  <f-icon [name]="store.ui().calSide ? 'chevronRight' : 'chevronLeft'" [size]="17" [color]="store.ui().calSide ? 'var(--primary)' : 'var(--ink2)'" [width]="2.2" />
+                  <f-icon name="panelRight" [size]="17" [color]="store.ui().calSide ? 'var(--primary)' : 'var(--ink2)'" [width]="2.2" />
                 </button>
               }
             </div>
