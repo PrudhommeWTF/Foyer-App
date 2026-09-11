@@ -4,22 +4,24 @@ import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ConfirmComponent } from '../../shared/confirm';
+import { CheckComponent } from '../../shared/check';
+import { AlertComponent } from '../../shared/alert';
 import { FinConfidence, FinTransferCandidate } from '../../core/finances.api';
 
 const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
-  forte: { label: 'Confiance forte', color: '#6E9E5F' },
+  forte: { label: 'Confiance forte', color: '#5F9A55' },
   moyenne: { label: 'À vérifier', color: '#E08D3C' },
-  faible: { label: 'Douteux', color: '#C6492F' },
+  faible: { label: 'Douteux', color: '#C2503A' },
 };
 
 @Component({
   selector: 'fin-import-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ConfirmComponent, CheckComponent, AlertComponent],
   template: `
     @if (store.ui().importError; as err) {
-      <div class="banner err"><f-icon name="urgent" [size]="18" color="#8C3B26" [width]="2.2" /><span>{{ err }}</span></div>
+      <f-alert kind="error" class="mb"><span>{{ err }}</span></f-alert>
     }
 
     <!-- DÉPÔT DU FICHIER -->
@@ -53,13 +55,10 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
 
         <!-- Comptes inconnus : bloquant, et jamais créés d'office -->
         @if (p.unknownAccounts.length) {
-          <div class="banner warn">
-            <f-icon name="urgent" [size]="18" color="#B8860B" [width]="2.2" />
-            <div>
-              <div class="banner-title">{{ p.unknownAccounts.length }} libellé{{ p.unknownAccounts.length > 1 ? 's' : '' }} de compte non reconnu{{ p.unknownAccounts.length > 1 ? 's' : '' }}</div>
-              <div class="banner-hint">Rattachez chacun à un compte. Un libellé qui porte exactement le nom d'un de vos comptes est déjà proposé, il reste à confirmer. Aucun compte n'est créé automatiquement : deviner serait plus risqué qu'utile. Le rattachement est mémorisé pour les imports suivants.</div>
-            </div>
-          </div>
+          <f-alert kind="warn" class="mb">
+            <div class="banner-title">{{ p.unknownAccounts.length }} libellé{{ p.unknownAccounts.length > 1 ? 's' : '' }} de compte non reconnu{{ p.unknownAccounts.length > 1 ? 's' : '' }}</div>
+            <div class="banner-hint">Rattachez chacun à un compte. Un libellé qui porte exactement le nom d'un de vos comptes est déjà proposé, il reste à confirmer. Aucun compte n'est créé automatiquement : deviner serait plus risqué qu'utile. Le rattachement est mémorisé pour les imports suivants.</div>
+          </f-alert>
           <div class="unknowns">
             @for (u of p.unknownAccounts; track u.label) {
               <div class="unknown">
@@ -81,23 +80,22 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
           </div>
         }
 
-        <!-- Détail par compte -->
+        <!-- Détail par compte, en cartes plutôt qu'en tableau, comme le reste de l'app. -->
         @if (p.perAccount.length) {
-          <div class="table-wrap">
-            <table class="tbl">
-              <thead><tr><th>Compte</th><th>Période</th><th class="n">Opérations</th><th class="n">Déjà en base</th><th class="n">Nouvelles</th></tr></thead>
-              <tbody>
-                @for (a of p.perAccount; track a.accountId) {
-                  <tr>
-                    <td>{{ a.name }}</td>
-                    <td class="dim">{{ foyer.fmtNumDate(a.from) }} → {{ foyer.fmtNumDate(a.to) }}</td>
-                    <td class="n">{{ a.total }}</td>
-                    <td class="n dim">{{ a.duplicates }}</td>
-                    <td class="n strong">{{ a.toInsert }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+          <div class="pa-list">
+            @for (a of p.perAccount; track a.accountId) {
+              <div class="pa-row">
+                <div class="pa-main">
+                  <div class="pa-name">{{ a.name }}</div>
+                  <div class="pa-period">{{ foyer.fmtNumDate(a.from) }} → {{ foyer.fmtNumDate(a.to) }}</div>
+                </div>
+                <div class="pa-nums">
+                  <div class="pa-stat"><span class="pa-k">Opérations</span><span class="pa-v">{{ a.total }}</span></div>
+                  <div class="pa-stat"><span class="pa-k">Déjà en base</span><span class="pa-v dim">{{ a.duplicates }}</span></div>
+                  <div class="pa-stat"><span class="pa-k">Nouvelles</span><span class="pa-v strong">{{ a.toInsert }}</span></div>
+                </div>
+              </div>
+            }
           </div>
         }
 
@@ -141,9 +139,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
         </button>
         @for (s of store.catSuggest(); track s.id) {
           <div class="cand" [class.on]="store.isCatPicked(s.id)" (click)="store.toggleCatPick(s.id)">
-            <span class="tick" [class.on]="store.isCatPicked(s.id)">
-              @if (store.isCatPicked(s.id)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }
-            </span>
+            <f-check [checked]="store.isCatPicked(s.id)" />
             <div class="cand-body">
               <div class="cand-legs"><span class="leg">{{ s.label }}</span></div>
               <div class="cand-why">→ {{ store.categoryPath(s.categoryId) }} · {{ s.via === 'merchant' ? 'déjà classé ainsi ' + s.seen + '×' : 'libellé ressemblant' }}</div>
@@ -178,9 +174,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
           @if (group.key !== 'faible' || store.ui().showWeakCandidates) {
             @for (c of group.items; track store.pairKey(c)) {
               <div class="cand" [class.on]="store.isPicked(c)" (click)="store.togglePick(c)">
-                <span class="tick" [class.on]="store.isPicked(c)">
-                  @if (store.isPicked(c)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }
-                </span>
+                <f-check [checked]="store.isPicked(c)" />
                 <div class="cand-body">
                   <div class="cand-legs">
                     <span class="leg">{{ c.debit.accountName }} · {{ foyer.fmtNumDate(c.debit.date) }} · « {{ c.debit.label }} »</span>
@@ -257,6 +251,15 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </f-confirm>
     }
 
+    <!-- EXPORTS -->
+    <div class="panel">
+      <div class="panel-title">Exporter</div>
+      <div class="panel-sub">Vos opérations dans un tableur (CSV), pour les retravailler ailleurs. La sauvegarde complète du module (JSON) est ci-dessous.</div>
+      <div class="backup-acts">
+        <button class="btn btn-soft" (click)="store.exportCsv()"><f-icon name="export" [size]="16" color="var(--ink2)" /> Exporter les opérations (CSV)</button>
+      </div>
+    </div>
+
     <!-- SAUVEGARDE DU MODULE -->
     <div class="panel backup">
       <div class="panel-title">Sauvegarde du module Finances</div>
@@ -288,11 +291,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     }
   `,
   styles: [`
-    .banner { display: flex; align-items: flex-start; gap: 12px; border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; font-size: 13.5px; font-weight: 700; }
-    .banner.warn { background: #FDF0DA; color: #7A5C12; }
-    .banner.err { background: #FCE9E3; color: #8C3B26; align-items: center; }
-    :host-context(.dark) .banner.warn { background: #3A3123; color: #E8C88A; }
-    :host-context(.dark) .banner.err { background: #3A2622; color: #F0A98B; }
+    f-alert.mb { display: block; margin-bottom: 16px; }
     .banner-title { font-weight: 800; margin-bottom: 4px; }
     .banner-hint { font-size: 12.5px; font-weight: 700; opacity: .85; line-height: 1.45; }
 
@@ -302,7 +301,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .drop-title { font-size: 15.5px; font-weight: 800; color: var(--ink); margin-top: 6px; }
     .drop-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); max-width: 460px; line-height: 1.45; }
 
-    .card { background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); margin-bottom: 18px; }
+    .card { background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: var(--sh-card); margin-bottom: 18px; }
     .ch { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
     .rh { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
     .rmeta { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 3px; line-height: 1.45; max-width: 640px; }
@@ -314,7 +313,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .fig-l { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; opacity: .7; margin-top: 2px; }
 
     .unknowns { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
-    .ul-hint { font-size: 11.5px; font-weight: 800; color: #6E9E5F; margin-top: 3px; }
+    .ul-hint { font-size: 11.5px; font-weight: 800; color: #5F9A55; margin-top: 3px; }
     .unknown { display: flex; align-items: center; gap: 11px; background: var(--soft2); border-radius: 14px; padding: 12px 14px; flex-wrap: wrap; }
     .ul { flex: 1 1 220px; min-width: 0; }
     .ul-label { font-size: 13.5px; font-weight: 800; color: var(--ink); word-break: break-word; }
@@ -325,13 +324,16 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .sel { flex: none; width: 250px; max-width: 100%; height: 40px; padding: 0 12px; text-overflow: ellipsis; }
     .unknown .btn { flex: none; }
 
-    .table-wrap { overflow-x: auto; margin-bottom: 16px; }
-    .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .tbl th { text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink3); padding: 0 10px 8px 0; white-space: nowrap; }
-    .tbl td { padding: 8px 10px 8px 0; font-weight: 700; color: var(--ink); border-top: 1px solid var(--line); white-space: nowrap; }
-    .tbl .n { text-align: right; font-variant-numeric: tabular-nums; }
-    .tbl .dim { color: var(--ink3); }
-    .tbl .strong { color: var(--primary); font-weight: 800; }
+    .pa-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .pa-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; background: var(--soft); border-radius: 12px; padding: 12px 14px; }
+    .pa-name { font-size: 13.5px; font-weight: 800; color: var(--ink); }
+    .pa-period { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .pa-nums { display: flex; gap: 20px; }
+    .pa-stat { display: flex; flex-direction: column; align-items: flex-end; }
+    .pa-k { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink3); }
+    .pa-v { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .pa-v.dim { color: var(--ink3); }
+    .pa-v.strong { color: var(--primary); }
 
     .note { font-size: 12.5px; font-weight: 700; color: var(--ink2); background: var(--soft2); border-radius: 12px; padding: 11px 13px; line-height: 1.45; margin-bottom: 14px; }
     .rejected { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 14px; }
@@ -345,9 +347,6 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .cand { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; cursor: pointer; border: 2px solid transparent; }
     .cand:hover { background: var(--soft); }
     .cand.on { background: var(--soft); border-color: var(--primary); }
-    .tick { width: 20px; height: 20px; flex: none; border-radius: 6px; border: 2px solid var(--line2); display: flex; align-items: center; justify-content: center; }
-    .tick.on { background: var(--primary); border-color: var(--primary); }
-    .tick.sm { width: 18px; height: 18px; }
     .cand-body { flex: 1; min-width: 0; }
     .cand-legs { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--ink); }
     .leg { word-break: break-word; }
@@ -372,7 +371,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .icov { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .empty { font-size: 13px; font-weight: 700; color: var(--ink3); padding: 10px 0; }
 
-    .panel.backup { background: var(--surface); border-radius: 18px; padding: 18px; margin-top: 18px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .panel.backup { background: var(--surface); border-radius: 18px; padding: 18px; margin-top: 18px; box-shadow: var(--sh-card); }
     .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 4px; line-height: 1.55; }
     .backup-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }

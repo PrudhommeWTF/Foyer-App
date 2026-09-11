@@ -6,6 +6,9 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
+import { ToggleComponent } from '../../shared/toggle';
+import { CheckComponent } from '../../shared/check';
+import { AlertComponent } from '../../shared/alert';
 
 const FIELDS: { id: FinConditionField; label: string }[] = [
   { id: 'label', label: 'Libellé' },
@@ -34,7 +37,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
   selector: 'fin-rules-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ToggleComponent, CheckComponent, AlertComponent],
   template: `
     <div class="intro">
       <div class="intro-txt">
@@ -49,13 +52,13 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
       </div>
     </div>
 
-    <label class="check force">
-      <input type="checkbox" [ngModel]="store.ui().applyForce" (ngModelChange)="store.patch({ applyForce: $event })" />
+    <label class="check force" (click)="store.patch({ applyForce: !store.ui().applyForce })">
+      <f-check [checked]="store.ui().applyForce" />
       <span>Écraser aussi les catégories corrigées à la main (à n’utiliser qu’après un grand ménage)</span>
     </label>
 
     @if (store.ui().ruleError; as err) {
-      <div class="banner err"><f-icon name="urgent" [size]="18" color="var(--primary)" [width]="2.2" /><span>{{ err }}</span></div>
+      <f-alert kind="error" class="mb"><span>{{ err }}</span></f-alert>
     }
 
     @if (store.applyReport(); as r) {
@@ -77,9 +80,9 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
       @for (r of store.rules(); track r.id; let i = $index) {
         <div class="rule" [class.off]="!r.enabled">
           <div class="rule-ord">
-            <button class="ord" [disabled]="i === 0" aria-label="Monter la règle" (click)="store.moveRule(r.id, -1)"><f-icon name="chevronLeft" [size]="13" color="var(--ink2)" [width]="2.6" /></button>
+            <button class="ord" [disabled]="i === 0" aria-label="Monter la règle" (click)="store.moveRule(r.id, -1)"><f-icon name="arrowUp" [size]="14" color="var(--ink2)" [width]="2.6" /></button>
             <span class="ord-n">{{ i + 1 }}</span>
-            <button class="ord" [disabled]="i + 1 >= store.rules().length" aria-label="Descendre la règle" (click)="store.moveRule(r.id, 1)"><f-icon name="chevronRight" [size]="13" color="var(--ink2)" [width]="2.6" /></button>
+            <button class="ord" [disabled]="i + 1 >= store.rules().length" aria-label="Descendre la règle" (click)="store.moveRule(r.id, 1)"><f-icon name="arrowDown" [size]="14" color="var(--ink2)" [width]="2.6" /></button>
           </div>
           <div class="rule-body" (click)="store.editRule(r.id)">
             <div class="rule-name">
@@ -90,7 +93,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
             <div class="rule-when">Si {{ r.matchMode === 'all' ? 'toutes' : 'au moins une' }} : {{ describeConditions(r) }}</div>
             <div class="rule-then">Alors {{ describeActions(r) }}</div>
           </div>
-          <button class="toggle" [class.on]="r.enabled" [attr.aria-label]="r.enabled ? 'Désactiver la règle' : 'Activer la règle'" (click)="store.toggleRule(r.id)"><span class="knob"></span></button>
+          <f-toggle [on]="r.enabled" (toggled)="store.toggleRule(r.id)" [attr.aria-label]="r.enabled ? 'Désactiver la règle' : 'Activer la règle'" />
         </div>
       } @empty {
         <div class="empty">
@@ -218,16 +221,16 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
           </div>
         </div>
 
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().ruleStop" (ngModelChange)="store.patch({ ruleStop: $event })" />
+        <label class="check" (click)="store.patch({ ruleStop: !store.ui().ruleStop })">
+          <f-check [checked]="store.ui().ruleStop" />
           <span>Arrêter là : ne pas évaluer les règles suivantes sur les opérations retenues</span>
         </label>
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().ruleEnabled" (ngModelChange)="store.patch({ ruleEnabled: $event })" />
+        <label class="check" (click)="store.patch({ ruleEnabled: !store.ui().ruleEnabled })">
+          <f-check [checked]="store.ui().ruleEnabled" />
           <span>Règle active</span>
         </label>
 
-        @if (store.ui().ruleError; as err) { <div class="banner err inmodal"><f-icon name="urgent" [size]="17" color="var(--primary)" [width]="2.2" /><span>{{ err }}</span></div> }
+        @if (store.ui().ruleError; as err) { <f-alert kind="error" class="inmodal"><span>{{ err }}</span></f-alert> }
 
         @if (store.rulePreview(); as p) {
           <div class="preview">
@@ -251,7 +254,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
 
         <div class="modal-acts">
           @if (store.ui().ruleId) {
-            <button class="btn btn-danger" (click)="store.patch({ ruleDelId: store.ui().ruleId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ ruleDelId: store.ui().ruleId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" [disabled]="store.ui().ruleBusy" (click)="store.previewRule()">Tester</button>
@@ -267,14 +270,13 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     }
   `,
   styles: [`
-    .intro { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; background: var(--surface); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .intro { display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; background: var(--surface); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; box-shadow: var(--sh-card); }
     .intro-txt { flex: 1; min-width: 260px; font-size: 13px; font-weight: 700; color: var(--ink2); line-height: 1.55; }
     .intro-acts { display: flex; gap: 10px; flex-wrap: wrap; }
     .check.force { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 12.5px; font-weight: 700; color: var(--ink3); cursor: pointer; }
 
-    .banner { display: flex; align-items: center; gap: 12px; border-radius: 16px; padding: 13px 16px; margin-bottom: 16px; font-size: 13.5px; font-weight: 700; background: #FCE9E3; color: #8C3B26; }
-    :host-context(.dark) .banner { background: #3A2622; color: #F0A98B; }
-    .banner.inmodal { margin: 16px 0 0; }
+    f-alert.mb { display: block; margin-bottom: 16px; }
+    f-alert.inmodal { display: block; margin-top: 16px; }
 
     .report { background: var(--soft); border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; }
     .report-head { display: flex; align-items: center; gap: 10px; }
@@ -285,30 +287,24 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     .report-n { font-variant-numeric: tabular-nums; font-weight: 800; }
 
     .rules { display: flex; flex-direction: column; gap: 10px; }
-    .rule { display: flex; align-items: center; gap: 13px; background: var(--surface); border-radius: 16px; padding: 12px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .rule { display: flex; align-items: center; gap: 13px; background: var(--surface); border-radius: 16px; padding: 12px 16px; box-shadow: var(--sh-card); }
     .rule.off { opacity: .55; }
     .rule-ord { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
     .ord { width: 26px; height: 20px; border: none; border-radius: 7px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .ord:first-child f-icon { transform: rotate(90deg); }
-    .ord:last-child f-icon { transform: rotate(90deg); }
     .ord:disabled { opacity: .3; cursor: default; }
     .ord-n { font-size: 11px; font-weight: 800; color: var(--ink3); }
     .rule-body { flex: 1; min-width: 0; cursor: pointer; }
     .rule-name { font-weight: 800; font-size: 14.5px; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
     .rule-when, .rule-then { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tag { background: var(--soft2); border-radius: 20px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; color: var(--ink2); }
-    .toggle { width: 42px; height: 24px; flex: none; border: none; border-radius: 20px; background: var(--soft2); position: relative; cursor: pointer; padding: 0; }
-    .toggle.on { background: var(--primary); }
-    .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .16s ease; }
-    .toggle.on .knob { left: 21px; }
 
-    .empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin: 6px auto 0; max-width: 460px; line-height: 1.55; }
 
     .tags-block { margin-top: 22px; }
     .tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-    .tagchip { border: none; border-radius: 20px; padding: 6px 13px; background: var(--surface); font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .tagchip { border: none; border-radius: 20px; padding: 6px 13px; background: var(--surface); font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; box-shadow: var(--sh-card); }
     .tagn { color: var(--ink3); }
 
     .sec { margin-top: 22px; }

@@ -110,7 +110,7 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
 
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
     :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
-    .card { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .card { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: var(--sh-card); }
     .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .idz { display: flex; align-items: center; gap: 11px; min-width: 0; }
     .chip { width: 34px; height: 34px; flex: none; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
@@ -124,7 +124,7 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
     .sub-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sub-budget { font-size: 11.5px; font-weight: 800; color: var(--ink3); }
     .addsub { display: flex; align-items: center; gap: 6px; margin-top: 12px; background: none; border: none; padding: 0; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; font-family: inherit; }
-    .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
 

@@ -5,13 +5,14 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
+import { CheckComponent } from '../../shared/check';
 import { CAT_ICONS } from '../../core/constants';
 
 @Component({
   selector: 'fin-transactions-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent],
   template: `
     <div class="bar">
       <div class="sfield">
@@ -63,7 +64,7 @@ import { CAT_ICONS } from '../../core/constants';
               @if (t.cleared) { <span class="tag">pointée</span> }
             </div>
           </div>
-          <div class="tx-amt" [style.color]="t.amount > 0 ? '#6E9E5F' : 'var(--ink)'">{{ t.amount > 0 ? '+' : '−' }}{{ fmt(abs(t.amount)) }} €</div>
+          <div class="tx-amt" [style.color]="t.amount > 0 ? '#5F9A55' : 'var(--ink)'">{{ t.amount > 0 ? '+' : '−' }}{{ fmt(abs(t.amount)) }} €</div>
         </div>
       } @empty {
         <div class="tx-empty">
@@ -146,8 +147,8 @@ import { CAT_ICONS } from '../../core/constants';
         }
         <div class="field-label">Notes</div>
         <input class="input" [ngModel]="store.ui().txNotes" (ngModelChange)="store.patch({ txNotes: $event })" placeholder="Facultatif" />
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().txCleared" (ngModelChange)="store.patch({ txCleared: $event })" />
+        <label class="check" (click)="store.patch({ txCleared: !store.ui().txCleared })">
+          <f-check [checked]="store.ui().txCleared" />
           <span>Opération pointée sur le relevé</span>
         </label>
         @if (store.ui().txId) {
@@ -162,7 +163,7 @@ import { CAT_ICONS } from '../../core/constants';
         }
         <div class="modal-acts">
           @if (store.ui().txId) {
-            <button class="btn btn-danger" (click)="store.patch({ txDelId: store.ui().txId })"><f-icon name="trash" [size]="16" color="var(--primary)" /> Supprimer</button>
+            <button class="btn btn-danger" (click)="store.patch({ txDelId: store.ui().txId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
           }
           <div class="spacer"></div>
           <button class="btn btn-soft" (click)="store.patch({ txForm: false })">Annuler</button>
@@ -180,17 +181,17 @@ import { CAT_ICONS } from '../../core/constants';
   styles: [`
     .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
     .spacer { flex: 1; }
-    .sfield { display: flex; align-items: center; gap: 9px; background: var(--surface); border-radius: 13px; padding: 0 14px; height: 42px; flex: 1; min-width: 220px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .sfield { display: flex; align-items: center; gap: 9px; background: var(--surface); border-radius: 13px; padding: 0 14px; height: 42px; flex: 1; min-width: 220px; box-shadow: var(--sh-card); }
     .sinput { flex: 1; border: none; outline: none; background: transparent; font-size: 13.5px; font-weight: 700; color: var(--ink); font-family: inherit; min-width: 0; }
     .sinput::placeholder { color: var(--ink3); font-weight: 600; }
-    .sel { height: 42px; padding: 0 12px; max-width: 230px; border: none; font-size: 13.5px; font-weight: 700; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
-    .chip { height: 42px; padding: 0 15px; border-radius: 13px; border: none; background: var(--surface); font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .sel { height: 42px; padding: 0 12px; max-width: 230px; border: none; font-size: 13.5px; font-weight: 700; box-shadow: var(--sh-card); }
+    .chip { height: 42px; padding: 0 15px; border-radius: 13px; border: none; background: var(--surface); font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; box-shadow: var(--sh-card); }
     .chip.on { background: var(--primary); color: #fff; }
     .chip.clear { background: var(--soft2); box-shadow: none; }
     .count { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-bottom: 12px; }
 
     .tx-list { display: flex; flex-direction: column; gap: 10px; }
-    .tx { display: flex; align-items: center; gap: 13px; background: var(--surface); border-radius: 16px; padding: 13px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; }
+    .tx { display: flex; align-items: center; gap: 13px; background: var(--surface); border-radius: 16px; padding: 13px 16px; box-shadow: var(--sh-card); cursor: pointer; }
     .tx:hover { background: var(--soft); }
     .tx-chip { width: 38px; height: 38px; flex: none; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
     .tx-body { flex: 1; min-width: 0; }
@@ -199,12 +200,12 @@ import { CAT_ICONS } from '../../core/constants';
     .tx-meta .muted { font-style: italic; }
     .tag { background: var(--soft2); border-radius: 20px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; }
     .tx-amt { font-size: 15px; font-weight: 800; flex: none; font-variant-numeric: tabular-nums; }
-    .tx-empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .tx-empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
     .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
 
     .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; font-size: 13px; font-weight: 800; color: var(--ink2); }
-    .pg { width: 34px; height: 34px; border: none; border-radius: 11px; background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); }
+    .pg { width: 34px; height: 34px; border: none; border-radius: 11px; background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--sh-card); }
     .pg:disabled { opacity: .35; cursor: default; }
 
     .frow { display: flex; gap: 12px; }
