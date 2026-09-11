@@ -3,6 +3,7 @@ import { FinMonthPoint } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt, frMonthLabel } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
+import { AlertComponent } from '../../shared/alert';
 import { CAT_ICONS } from '../../core/constants';
 
 // Two series, so colour is the identity channel and has to survive colour
@@ -26,7 +27,7 @@ const PAD_T = 10;
   selector: 'fin-dashboard-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, AlertComponent],
   template: `
     @if (store.dashboard(); as d) {
       <!-- COMPARAISON DU MOIS -->
@@ -71,16 +72,13 @@ const PAD_T = 10;
       </div>
 
       @if (yearWarning()) {
-        <div class="warn">
-          <f-icon name="urgent" [size]="17" color="#B8860B" [width]="2.2" />
-          <div>
-            <div class="warn-title">Le cumul {{ d.year.year }} est sous-estimé</div>
-            <div class="warn-txt">
-              {{ d.year.incompleteMonths.length }} mois de l'année ne sont pas entièrement couverts par vos imports :
-              {{ incompleteLabel(d.year.incompleteMonths) }}. Les totaux ci-dessus comptent ce qui est là, pas ce qui manque.
-            </div>
+        <f-alert kind="warn" class="mb">
+          <div class="warn-title">Le cumul {{ d.year.year }} est sous-estimé</div>
+          <div class="warn-txt">
+            {{ d.year.incompleteMonths.length }} mois de l'année ne sont pas entièrement couverts par vos imports :
+            {{ incompleteLabel(d.year.incompleteMonths) }}. Les totaux ci-dessus comptent ce qui est là, pas ce qui manque.
           </div>
-        </div>
+        </f-alert>
       }
 
       <!-- DOUZE MOIS -->
@@ -241,8 +239,7 @@ const PAD_T = 10;
     .delta.down { color: #5F9A55; }
     .delta.muted { color: var(--ink3); font-weight: 700; }
 
-    .warn { display: flex; align-items: flex-start; gap: 12px; background: #FDF0DA; color: #7A5C12; border-radius: 16px; padding: 13px 16px; margin-bottom: 14px; }
-    :host-context(.dark) .warn { background: #3A3123; color: #E8C88A; }
+    f-alert.mb { display: block; margin-bottom: 14px; }
     .warn-title { font-size: 13.5px; font-weight: 800; }
     .warn-txt { font-size: 12.5px; font-weight: 700; opacity: .85; margin-top: 3px; line-height: 1.5; }
 

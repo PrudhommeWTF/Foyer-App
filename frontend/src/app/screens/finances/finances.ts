@@ -9,6 +9,7 @@ import { FinancesCategoriesTab } from './categories-tab';
 import { FinancesContractsTab } from './contracts-tab';
 import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
+import { AlertComponent } from '../../shared/alert';
 
 type TabId = 'transactions' | 'bilan' | 'comptes' | 'categories' | 'contrats' | 'regles' | 'import';
 /**
@@ -37,7 +38,7 @@ const GROUPS: { label: string; tabs: { id: TabId; label: string }[] }[] = [
   selector: 'screen-finances',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, FinancesTransactionsTab, FinancesDashboardTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesContractsTab, FinancesRulesTab, FinancesImportTab],
+  imports: [IconComponent, AlertComponent, FinancesTransactionsTab, FinancesDashboardTab, FinancesAccountsTab, FinancesCategoriesTab, FinancesContractsTab, FinancesRulesTab, FinancesImportTab],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -48,11 +49,9 @@ const GROUPS: { label: string; tabs: { id: TabId; label: string }[] }[] = [
       </div>
 
       @if (store.error(); as err) {
-        <div class="banner err">
-          <f-icon name="urgent" [size]="18" color="var(--primary)" [width]="2.2" />
-          <span>{{ err }}</span>
-          <button class="banner-act" (click)="reload()">Réessayer</button>
-        </div>
+        <f-alert kind="error" class="mb">
+          <div class="al-row"><span>{{ err }}</span><button class="banner-act" (click)="reload()">Réessayer</button></div>
+        </f-alert>
       }
 
       <div class="tabgroups">
@@ -97,18 +96,15 @@ const GROUPS: { label: string; tabs: { id: TabId; label: string }[] }[] = [
 
         <!-- Un mois incomplet produit des chiffres plausibles mais faux : on le dit. -->
         @if (store.summary()?.incomplete) {
-          <div class="banner warn">
-            <f-icon name="urgent" [size]="18" color="#B8860B" [width]="2.2" />
-            <div>
-              <div class="banner-title">Mois incomplet, les chiffres ci-dessus sont sous-estimés</div>
-              <div class="banner-txt">
-                @for (g of missingGroups(); track g.date) {
-                  <span class="miss">{{ g.label }} : données jusqu'au {{ g.date }}</span>
-                }
-              </div>
-              <div class="banner-hint">Importez les relevés manquants (onglet Import), ou archivez le compte s'il n'est plus suivi.</div>
+          <f-alert kind="warn" class="mb">
+            <div class="banner-title">Mois incomplet, les chiffres ci-dessus sont sous-estimés</div>
+            <div class="banner-txt">
+              @for (g of missingGroups(); track g.date) {
+                <span class="miss">{{ g.label }} : données jusqu'au {{ g.date }}</span>
+              }
             </div>
-          </div>
+            <div class="banner-hint">Importez les relevés manquants (onglet Import), ou archivez le compte s'il n'est plus suivi.</div>
+          </f-alert>
         }
 
         @if (store.ui().tab === 'bilan') { <fin-dashboard-tab /> } @else { <fin-transactions-tab /> }
@@ -137,11 +133,8 @@ const GROUPS: { label: string; tabs: { id: TabId; label: string }[] }[] = [
     .tg-div { width: 1px; align-self: stretch; min-height: 28px; background: var(--line); }
     @media (max-width: 720px) { .tg-div { display: none; } .tabgroups { gap: 8px 12px; } }
 
-    .banner { display: flex; align-items: flex-start; gap: 12px; border-radius: 16px; padding: 14px 16px; margin-bottom: 18px; font-size: 13.5px; font-weight: 700; }
-    .banner.warn { background: #FDF0DA; color: #7A5C12; }
-    .banner.err { background: #FCE9E3; color: #8C3B26; align-items: center; }
-    :host-context(.dark) .banner.warn { background: #3A3123; color: #E8C88A; }
-    :host-context(.dark) .banner.err { background: #3A2622; color: #F0A98B; }
+    f-alert.mb { display: block; margin-bottom: 18px; }
+    .al-row { display: flex; align-items: center; gap: 12px; width: 100%; }
     .banner-title { font-weight: 800; margin-bottom: 4px; }
     .banner-txt { display: flex; flex-wrap: wrap; gap: 6px 14px; }
     .miss { font-weight: 700; }

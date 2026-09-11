@@ -5,6 +5,7 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ConfirmComponent } from '../../shared/confirm';
 import { CheckComponent } from '../../shared/check';
+import { AlertComponent } from '../../shared/alert';
 import { FinConfidence, FinTransferCandidate } from '../../core/finances.api';
 
 const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
@@ -17,10 +18,10 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
   selector: 'fin-import-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ConfirmComponent, CheckComponent],
+  imports: [FormsModule, IconComponent, ConfirmComponent, CheckComponent, AlertComponent],
   template: `
     @if (store.ui().importError; as err) {
-      <div class="banner err"><f-icon name="urgent" [size]="18" color="#8C3B26" [width]="2.2" /><span>{{ err }}</span></div>
+      <f-alert kind="error" class="mb"><span>{{ err }}</span></f-alert>
     }
 
     <!-- DÉPÔT DU FICHIER -->
@@ -54,13 +55,10 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
 
         <!-- Comptes inconnus : bloquant, et jamais créés d'office -->
         @if (p.unknownAccounts.length) {
-          <div class="banner warn">
-            <f-icon name="urgent" [size]="18" color="#B8860B" [width]="2.2" />
-            <div>
-              <div class="banner-title">{{ p.unknownAccounts.length }} libellé{{ p.unknownAccounts.length > 1 ? 's' : '' }} de compte non reconnu{{ p.unknownAccounts.length > 1 ? 's' : '' }}</div>
-              <div class="banner-hint">Rattachez chacun à un compte. Un libellé qui porte exactement le nom d'un de vos comptes est déjà proposé, il reste à confirmer. Aucun compte n'est créé automatiquement : deviner serait plus risqué qu'utile. Le rattachement est mémorisé pour les imports suivants.</div>
-            </div>
-          </div>
+          <f-alert kind="warn" class="mb">
+            <div class="banner-title">{{ p.unknownAccounts.length }} libellé{{ p.unknownAccounts.length > 1 ? 's' : '' }} de compte non reconnu{{ p.unknownAccounts.length > 1 ? 's' : '' }}</div>
+            <div class="banner-hint">Rattachez chacun à un compte. Un libellé qui porte exactement le nom d'un de vos comptes est déjà proposé, il reste à confirmer. Aucun compte n'est créé automatiquement : deviner serait plus risqué qu'utile. Le rattachement est mémorisé pour les imports suivants.</div>
+          </f-alert>
           <div class="unknowns">
             @for (u of p.unknownAccounts; track u.label) {
               <div class="unknown">
@@ -293,11 +291,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     }
   `,
   styles: [`
-    .banner { display: flex; align-items: flex-start; gap: 12px; border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; font-size: 13.5px; font-weight: 700; }
-    .banner.warn { background: #FDF0DA; color: #7A5C12; }
-    .banner.err { background: #FCE9E3; color: #8C3B26; align-items: center; }
-    :host-context(.dark) .banner.warn { background: #3A3123; color: #E8C88A; }
-    :host-context(.dark) .banner.err { background: #3A2622; color: #F0A98B; }
+    f-alert.mb { display: block; margin-bottom: 16px; }
     .banner-title { font-weight: 800; margin-bottom: 4px; }
     .banner-hint { font-size: 12.5px; font-weight: 700; opacity: .85; line-height: 1.45; }
 

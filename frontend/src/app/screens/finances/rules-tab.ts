@@ -8,6 +8,7 @@ import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
 import { ToggleComponent } from '../../shared/toggle';
 import { CheckComponent } from '../../shared/check';
+import { AlertComponent } from '../../shared/alert';
 
 const FIELDS: { id: FinConditionField; label: string }[] = [
   { id: 'label', label: 'Libellé' },
@@ -36,7 +37,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
   selector: 'fin-rules-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ToggleComponent, CheckComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ToggleComponent, CheckComponent, AlertComponent],
   template: `
     <div class="intro">
       <div class="intro-txt">
@@ -57,7 +58,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     </label>
 
     @if (store.ui().ruleError; as err) {
-      <div class="banner err"><f-icon name="urgent" [size]="18" color="var(--primary)" [width]="2.2" /><span>{{ err }}</span></div>
+      <f-alert kind="error" class="mb"><span>{{ err }}</span></f-alert>
     }
 
     @if (store.applyReport(); as r) {
@@ -229,7 +230,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
           <span>Règle active</span>
         </label>
 
-        @if (store.ui().ruleError; as err) { <div class="banner err inmodal"><f-icon name="urgent" [size]="17" color="var(--primary)" [width]="2.2" /><span>{{ err }}</span></div> }
+        @if (store.ui().ruleError; as err) { <f-alert kind="error" class="inmodal"><span>{{ err }}</span></f-alert> }
 
         @if (store.rulePreview(); as p) {
           <div class="preview">
@@ -274,9 +275,8 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     .intro-acts { display: flex; gap: 10px; flex-wrap: wrap; }
     .check.force { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 12.5px; font-weight: 700; color: var(--ink3); cursor: pointer; }
 
-    .banner { display: flex; align-items: center; gap: 12px; border-radius: 16px; padding: 13px 16px; margin-bottom: 16px; font-size: 13.5px; font-weight: 700; background: #FCE9E3; color: #8C3B26; }
-    :host-context(.dark) .banner { background: #3A2622; color: #F0A98B; }
-    .banner.inmodal { margin: 16px 0 0; }
+    f-alert.mb { display: block; margin-bottom: 16px; }
+    f-alert.inmodal { display: block; margin-top: 16px; }
 
     .report { background: var(--soft); border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; }
     .report-head { display: flex; align-items: center; gap: 10px; }
