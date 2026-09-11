@@ -6,6 +6,8 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
+import { ToggleComponent } from '../../shared/toggle';
+import { CheckComponent } from '../../shared/check';
 
 const FIELDS: { id: FinConditionField; label: string }[] = [
   { id: 'label', label: 'Libellé' },
@@ -34,7 +36,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
   selector: 'fin-rules-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ToggleComponent, CheckComponent],
   template: `
     <div class="intro">
       <div class="intro-txt">
@@ -49,8 +51,8 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
       </div>
     </div>
 
-    <label class="check force">
-      <input type="checkbox" [ngModel]="store.ui().applyForce" (ngModelChange)="store.patch({ applyForce: $event })" />
+    <label class="check force" (click)="store.patch({ applyForce: !store.ui().applyForce })">
+      <f-check [checked]="store.ui().applyForce" />
       <span>Écraser aussi les catégories corrigées à la main (à n’utiliser qu’après un grand ménage)</span>
     </label>
 
@@ -77,9 +79,9 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
       @for (r of store.rules(); track r.id; let i = $index) {
         <div class="rule" [class.off]="!r.enabled">
           <div class="rule-ord">
-            <button class="ord" [disabled]="i === 0" aria-label="Monter la règle" (click)="store.moveRule(r.id, -1)"><f-icon name="chevronLeft" [size]="13" color="var(--ink2)" [width]="2.6" /></button>
+            <button class="ord" [disabled]="i === 0" aria-label="Monter la règle" (click)="store.moveRule(r.id, -1)"><f-icon name="arrowUp" [size]="14" color="var(--ink2)" [width]="2.6" /></button>
             <span class="ord-n">{{ i + 1 }}</span>
-            <button class="ord" [disabled]="i + 1 >= store.rules().length" aria-label="Descendre la règle" (click)="store.moveRule(r.id, 1)"><f-icon name="chevronRight" [size]="13" color="var(--ink2)" [width]="2.6" /></button>
+            <button class="ord" [disabled]="i + 1 >= store.rules().length" aria-label="Descendre la règle" (click)="store.moveRule(r.id, 1)"><f-icon name="arrowDown" [size]="14" color="var(--ink2)" [width]="2.6" /></button>
           </div>
           <div class="rule-body" (click)="store.editRule(r.id)">
             <div class="rule-name">
@@ -90,7 +92,7 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
             <div class="rule-when">Si {{ r.matchMode === 'all' ? 'toutes' : 'au moins une' }} : {{ describeConditions(r) }}</div>
             <div class="rule-then">Alors {{ describeActions(r) }}</div>
           </div>
-          <button class="toggle" [class.on]="r.enabled" [attr.aria-label]="r.enabled ? 'Désactiver la règle' : 'Activer la règle'" (click)="store.toggleRule(r.id)"><span class="knob"></span></button>
+          <f-toggle [on]="r.enabled" (toggled)="store.toggleRule(r.id)" [attr.aria-label]="r.enabled ? 'Désactiver la règle' : 'Activer la règle'" />
         </div>
       } @empty {
         <div class="empty">
@@ -218,12 +220,12 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
           </div>
         </div>
 
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().ruleStop" (ngModelChange)="store.patch({ ruleStop: $event })" />
+        <label class="check" (click)="store.patch({ ruleStop: !store.ui().ruleStop })">
+          <f-check [checked]="store.ui().ruleStop" />
           <span>Arrêter là : ne pas évaluer les règles suivantes sur les opérations retenues</span>
         </label>
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().ruleEnabled" (ngModelChange)="store.patch({ ruleEnabled: $event })" />
+        <label class="check" (click)="store.patch({ ruleEnabled: !store.ui().ruleEnabled })">
+          <f-check [checked]="store.ui().ruleEnabled" />
           <span>Règle active</span>
         </label>
 
@@ -289,18 +291,12 @@ const ACTIONS: { id: FinActionKind; label: string; short: string }[] = [
     .rule.off { opacity: .55; }
     .rule-ord { display: flex; flex-direction: column; align-items: center; gap: 1px; flex: none; }
     .ord { width: 26px; height: 20px; border: none; border-radius: 7px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .ord:first-child f-icon { transform: rotate(90deg); }
-    .ord:last-child f-icon { transform: rotate(90deg); }
     .ord:disabled { opacity: .3; cursor: default; }
     .ord-n { font-size: 11px; font-weight: 800; color: var(--ink3); }
     .rule-body { flex: 1; min-width: 0; cursor: pointer; }
     .rule-name { font-weight: 800; font-size: 14.5px; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
     .rule-when, .rule-then { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tag { background: var(--soft2); border-radius: 20px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; color: var(--ink2); }
-    .toggle { width: 42px; height: 24px; flex: none; border: none; border-radius: 20px; background: var(--soft2); position: relative; cursor: pointer; padding: 0; }
-    .toggle.on { background: var(--primary); }
-    .knob { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .16s ease; }
-    .toggle.on .knob { left: 21px; }
 
     .empty { background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
     .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }

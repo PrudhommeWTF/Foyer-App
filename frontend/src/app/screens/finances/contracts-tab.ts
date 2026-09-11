@@ -8,7 +8,8 @@ import { CAT_ICONS, FILE_TYPE_COLORS } from '../../core/constants';
 import { fmtBytes } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
-import { AvatarComponent } from '../../shared/avatar';
+import { MemberPickerComponent } from '../../shared/member-picker';
+import { CheckComponent } from '../../shared/check';
 
 const ASSET_KINDS: { id: FinAsset['kind']; label: string; icon: string }[] = [
   { id: 'immobilier', label: 'Bien immobilier', icon: 'maison' },
@@ -44,7 +45,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
   selector: 'fin-contracts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, AvatarComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, MemberPickerComponent, CheckComponent],
   template: `
     <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
     @if (soonDeadlines().length) {
@@ -172,10 +173,10 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
       <div class="clist">
         @for (s of store.savings(); track s.id) {
           <div class="saving" [class.done]="s.status === 'faite'" [class.dropped]="s.status === 'abandonnee'">
-            <button class="s-check" [class.on]="s.status === 'faite'"
+            <button class="s-check-btn"
                     [attr.aria-label]="s.status === 'faite' ? 'Rouvrir la piste' : 'Marquer comme faite'"
                     (click)="store.setSavingStatus(s.id, s.status === 'faite' ? 'idee' : 'faite')">
-              @if (s.status === 'faite') { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }
+              <f-check [checked]="s.status === 'faite'" />
             </button>
             <div class="s-body" (click)="store.editSaving(s.id)">
               <div class="s-title">
@@ -391,18 +392,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
           </div>
         </div>
         <div class="field-label">Personnes concernées</div>
-        <div class="picker">
-          @for (m of members(); track m.id) {
-            <button class="pick" [class.on]="store.ui().coMembers.includes(m.id)"
-                    [style.border-color]="store.ui().coMembers.includes(m.id) ? m.color : 'transparent'"
-                    (click)="store.toggleMember('coMembers', m.id)">
-              <f-avatar [ini]="foyer.memberIni(m.id)" [color]="m.color" [size]="22" />
-              {{ m.name }}
-            </button>
-          } @empty {
-            <div class="hint">Aucun membre déclaré dans le foyer.</div>
-          }
-        </div>
+        <f-member-picker [members]="members()" [selected]="store.ui().coMembers" (toggle)="store.toggleMember('coMembers', $event)" />
         <div class="hint sm">Une mutuelle peut couvrir toute la famille. Aucune sélectionnée veut dire « le foyer ».</div>
 
         <div class="sec-label">Références</div>
@@ -605,8 +595,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .saving { display: flex; align-items: center; gap: 11px; border-radius: 13px; padding: 9px 11px; background: var(--soft); }
     .saving.done, .saving.dropped { opacity: .6; }
     .saving.done .s-title { text-decoration: line-through; }
-    .s-check { width: 22px; height: 22px; flex: none; border-radius: 7px; border: 2px solid var(--line2); background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
-    .s-check.on { background: #5F9A55; border-color: #5F9A55; }
+    .s-check-btn { flex: none; border: none; background: none; padding: 0; cursor: pointer; display: inline-flex; }
     .s-body { flex: 1; min-width: 0; cursor: pointer; }
     .s-title { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
     .s-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -653,9 +642,6 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .readd { flex: none; height: 42px; }
     .r-use { flex: 1; min-width: 0; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .r-use.gap { font-style: italic; color: var(--ink3); }
-    .picker { display: flex; gap: 8px; flex-wrap: wrap; }
-    .pick { display: inline-flex; align-items: center; gap: 7px; border: 2px solid transparent; border-radius: 20px; padding: 4px 12px 4px 4px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
-    .pick.on { background: var(--soft); color: var(--ink); }
     .pieces { display: flex; flex-direction: column; gap: 6px; }
     .piece { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 11px; padding: 7px 10px; }
     .p-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

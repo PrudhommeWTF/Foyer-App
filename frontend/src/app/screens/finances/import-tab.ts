@@ -4,6 +4,7 @@ import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ConfirmComponent } from '../../shared/confirm';
+import { CheckComponent } from '../../shared/check';
 import { FinConfidence, FinTransferCandidate } from '../../core/finances.api';
 
 const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
@@ -16,7 +17,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
   selector: 'fin-import-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ConfirmComponent, CheckComponent],
   template: `
     @if (store.ui().importError; as err) {
       <div class="banner err"><f-icon name="urgent" [size]="18" color="#8C3B26" [width]="2.2" /><span>{{ err }}</span></div>
@@ -81,23 +82,22 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
           </div>
         }
 
-        <!-- Détail par compte -->
+        <!-- Détail par compte, en cartes plutôt qu'en tableau, comme le reste de l'app. -->
         @if (p.perAccount.length) {
-          <div class="table-wrap">
-            <table class="tbl">
-              <thead><tr><th>Compte</th><th>Période</th><th class="n">Opérations</th><th class="n">Déjà en base</th><th class="n">Nouvelles</th></tr></thead>
-              <tbody>
-                @for (a of p.perAccount; track a.accountId) {
-                  <tr>
-                    <td>{{ a.name }}</td>
-                    <td class="dim">{{ foyer.fmtNumDate(a.from) }} → {{ foyer.fmtNumDate(a.to) }}</td>
-                    <td class="n">{{ a.total }}</td>
-                    <td class="n dim">{{ a.duplicates }}</td>
-                    <td class="n strong">{{ a.toInsert }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+          <div class="pa-list">
+            @for (a of p.perAccount; track a.accountId) {
+              <div class="pa-row">
+                <div class="pa-main">
+                  <div class="pa-name">{{ a.name }}</div>
+                  <div class="pa-period">{{ foyer.fmtNumDate(a.from) }} → {{ foyer.fmtNumDate(a.to) }}</div>
+                </div>
+                <div class="pa-nums">
+                  <div class="pa-stat"><span class="pa-k">Opérations</span><span class="pa-v">{{ a.total }}</span></div>
+                  <div class="pa-stat"><span class="pa-k">Déjà en base</span><span class="pa-v dim">{{ a.duplicates }}</span></div>
+                  <div class="pa-stat"><span class="pa-k">Nouvelles</span><span class="pa-v strong">{{ a.toInsert }}</span></div>
+                </div>
+              </div>
+            }
           </div>
         }
 
@@ -141,9 +141,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
         </button>
         @for (s of store.catSuggest(); track s.id) {
           <div class="cand" [class.on]="store.isCatPicked(s.id)" (click)="store.toggleCatPick(s.id)">
-            <span class="tick" [class.on]="store.isCatPicked(s.id)">
-              @if (store.isCatPicked(s.id)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }
-            </span>
+            <f-check [checked]="store.isCatPicked(s.id)" />
             <div class="cand-body">
               <div class="cand-legs"><span class="leg">{{ s.label }}</span></div>
               <div class="cand-why">→ {{ store.categoryPath(s.categoryId) }} · {{ s.via === 'merchant' ? 'déjà classé ainsi ' + s.seen + '×' : 'libellé ressemblant' }}</div>
@@ -178,9 +176,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
           @if (group.key !== 'faible' || store.ui().showWeakCandidates) {
             @for (c of group.items; track store.pairKey(c)) {
               <div class="cand" [class.on]="store.isPicked(c)" (click)="store.togglePick(c)">
-                <span class="tick" [class.on]="store.isPicked(c)">
-                  @if (store.isPicked(c)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.6" /> }
-                </span>
+                <f-check [checked]="store.isPicked(c)" />
                 <div class="cand-body">
                   <div class="cand-legs">
                     <span class="leg">{{ c.debit.accountName }} · {{ foyer.fmtNumDate(c.debit.date) }} · « {{ c.debit.label }} »</span>
@@ -334,13 +330,16 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .sel { flex: none; width: 250px; max-width: 100%; height: 40px; padding: 0 12px; text-overflow: ellipsis; }
     .unknown .btn { flex: none; }
 
-    .table-wrap { overflow-x: auto; margin-bottom: 16px; }
-    .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .tbl th { text-align: left; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink3); padding: 0 10px 8px 0; white-space: nowrap; }
-    .tbl td { padding: 8px 10px 8px 0; font-weight: 700; color: var(--ink); border-top: 1px solid var(--line); white-space: nowrap; }
-    .tbl .n { text-align: right; font-variant-numeric: tabular-nums; }
-    .tbl .dim { color: var(--ink3); }
-    .tbl .strong { color: var(--primary); font-weight: 800; }
+    .pa-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .pa-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; background: var(--soft); border-radius: 12px; padding: 12px 14px; }
+    .pa-name { font-size: 13.5px; font-weight: 800; color: var(--ink); }
+    .pa-period { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .pa-nums { display: flex; gap: 20px; }
+    .pa-stat { display: flex; flex-direction: column; align-items: flex-end; }
+    .pa-k { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink3); }
+    .pa-v { font-size: 15px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .pa-v.dim { color: var(--ink3); }
+    .pa-v.strong { color: var(--primary); }
 
     .note { font-size: 12.5px; font-weight: 700; color: var(--ink2); background: var(--soft2); border-radius: 12px; padding: 11px 13px; line-height: 1.45; margin-bottom: 14px; }
     .rejected { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-bottom: 14px; }
@@ -354,9 +353,6 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .cand { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; cursor: pointer; border: 2px solid transparent; }
     .cand:hover { background: var(--soft); }
     .cand.on { background: var(--soft); border-color: var(--primary); }
-    .tick { width: 20px; height: 20px; flex: none; border-radius: 6px; border: 2px solid var(--line2); display: flex; align-items: center; justify-content: center; }
-    .tick.on { background: var(--primary); border-color: var(--primary); }
-    .tick.sm { width: 18px; height: 18px; }
     .cand-body { flex: 1; min-width: 0; }
     .cand-legs { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--ink); }
     .leg { word-break: break-word; }

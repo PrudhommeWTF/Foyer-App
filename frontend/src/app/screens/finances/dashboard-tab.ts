@@ -10,8 +10,10 @@ import { CAT_ICONS } from '../../core/constants';
 // deuteranope, where 8 is the floor. The house blue, one step deeper, reaches
 // 16.1 and passes every check in both themes. Green stays on the transaction
 // rows, where the sign already carries the meaning.
-const INCOME = '#3B8CBD';
-const EXPENSE = '#E56B4E';
+// Les couleurs de signe du module : vert « entrée », rouge « sortie », les
+// mêmes que les tuiles du résumé, pour que le graphique parle le même langage.
+const INCOME = '#5F9A55';
+const EXPENSE = '#C2503A';
 
 /** Chart geometry, in the SVG's own units; the box is scaled by the browser. */
 const W = 720;

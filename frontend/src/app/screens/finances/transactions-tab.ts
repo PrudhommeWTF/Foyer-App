@@ -5,13 +5,14 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
+import { CheckComponent } from '../../shared/check';
 import { CAT_ICONS } from '../../core/constants';
 
 @Component({
   selector: 'fin-transactions-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent],
   template: `
     <div class="bar">
       <div class="sfield">
@@ -146,8 +147,8 @@ import { CAT_ICONS } from '../../core/constants';
         }
         <div class="field-label">Notes</div>
         <input class="input" [ngModel]="store.ui().txNotes" (ngModelChange)="store.patch({ txNotes: $event })" placeholder="Facultatif" />
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().txCleared" (ngModelChange)="store.patch({ txCleared: $event })" />
+        <label class="check" (click)="store.patch({ txCleared: !store.ui().txCleared })">
+          <f-check [checked]="store.ui().txCleared" />
           <span>Opération pointée sur le relevé</span>
         </label>
         @if (store.ui().txId) {

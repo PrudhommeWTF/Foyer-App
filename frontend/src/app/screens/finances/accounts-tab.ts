@@ -5,7 +5,10 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
-import { AvatarComponent } from '../../shared/avatar';
+import { WhoComponent } from '../../shared/who';
+import { MemberPickerComponent } from '../../shared/member-picker';
+import { CheckComponent } from '../../shared/check';
+import { whoBadges } from '../../core/schedule';
 import { AccountKind, FinAccount } from '../../core/finances.api';
 
 const KINDS: { k: AccountKind; label: string; color: string }[] = [
@@ -19,7 +22,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
   selector: 'fin-accounts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, AvatarComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, WhoComponent, MemberPickerComponent, CheckComponent],
   template: `
     <div class="bar">
       <div class="hint">Un compte archivé garde tout son historique mais sort des alertes de mois incomplet.</div>
@@ -36,11 +39,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
               @if (a.archived) { <div class="badge muted">Archivé</div> }
             </div>
             @if (a.memberIds.length) {
-              <div class="holders">
-                @for (m of knownMembers(a.memberIds); track m) {
-                  <f-avatar [ini]="foyer.memberIni(m)" [color]="foyer.memberColor(m)" [size]="26" />
-                }
-              </div>
+              <f-who [badges]="holderBadges(a.memberIds)" [size]="26" />
             }
           </div>
           <div class="name">{{ a.name }}</div>
@@ -94,18 +93,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
         </div>
 
         <div class="field-label">Titulaires</div>
-        <div class="picker">
-          @for (m of members(); track m.id) {
-            <button class="pick" [class.on]="store.ui().acMembers.includes(m.id)"
-                    [style.border-color]="store.ui().acMembers.includes(m.id) ? m.color : 'transparent'"
-                    (click)="store.toggleMember('acMembers', m.id)">
-              <f-avatar [ini]="foyer.memberIni(m.id)" [color]="m.color" [size]="22" />
-              {{ m.name }}
-            </button>
-          } @empty {
-            <div class="hint">Aucun membre déclaré dans le foyer.</div>
-          }
-        </div>
+        <f-member-picker [members]="members()" [selected]="store.ui().acMembers" (toggle)="store.toggleMember('acMembers', $event)" />
         <div class="hint sm">Un compte joint en a deux. Aucun sélectionné veut dire « le foyer ».</div>
 
         @if (store.ui().acKind === 'credit') {
@@ -167,8 +155,8 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
           </div>
         }
 
-        <label class="check">
-          <input type="checkbox" [ngModel]="store.ui().acArchived" (ngModelChange)="store.patch({ acArchived: $event })" />
+        <label class="check" (click)="store.patch({ acArchived: !store.ui().acArchived })">
+          <f-check [checked]="store.ui().acArchived" />
           <span>Compte archivé (historique conservé, plus d'alerte de mois incomplet)</span>
         </label>
 
@@ -213,11 +201,6 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     }
   `,
   styles: [`
-    .holders { display: flex; gap: -4px; }
-    .holders f-avatar + f-avatar { margin-left: -8px; }
-    .picker { display: flex; gap: 8px; flex-wrap: wrap; }
-    .pick { display: inline-flex; align-items: center; gap: 7px; border: 2px solid transparent; border-radius: 20px; padding: 4px 12px 4px 4px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
-    .pick.on { background: var(--surface); color: var(--ink); box-shadow: 0 6px 14px -10px rgba(90,60,40,.6); }
     .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); line-height: 1.5; }
     .hint.sm { margin-top: 8px; }
     .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -272,11 +255,8 @@ export class FinancesAccountsTab {
   fmt = fmtEuros;
 
   members = computed(() => this.foyer.data()?.members || []);
-  /** Titulaires encore présents dans le foyer : un membre supprimé n'a plus d'avatar. */
-  knownMembers(ids: string[]): string[] {
-    const known = this.members();
-    return ids.filter((id) => known.some((m) => m.id === id));
-  }
+  /** Les titulaires en pastilles, un membre supprimé du foyer tombant de lui-même. */
+  holderBadges(ids: string[]) { return whoBadges({ who: ids }, this.members()); }
   kindLabel(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.label || k; }
   kindColor(k: AccountKind): string { return KINDS.find((x) => x.k === k)?.color || '#8A7E74'; }
   cov(id: number) { return this.store.coverageOf(id); }
