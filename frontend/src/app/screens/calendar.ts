@@ -83,7 +83,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
               @if (!store.narrow()) {
                 <button class="nav-btn side-toggle" [class.active]="store.ui().calSide" (click)="toggleSide()"
                         [title]="store.ui().calSide ? 'Masquer le panneau' : 'Afficher le panneau'" [attr.aria-label]="store.ui().calSide ? 'Masquer le panneau' : 'Afficher le panneau'">
-                  <f-icon [name]="store.ui().calSide ? 'eye' : 'eyeOff'" [size]="17" [color]="store.ui().calSide ? 'var(--primary)' : 'var(--ink2)'" [width]="2.2" />
+                  <f-icon [name]="store.ui().calSide ? 'chevronRight' : 'chevronLeft'" [size]="17" [color]="store.ui().calSide ? 'var(--primary)' : 'var(--ink2)'" [width]="2.2" />
                 </button>
               }
             </div>
@@ -180,7 +180,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                 <!-- La grille des 24 heures : gouttière des heures, puis une colonne par jour où les événements sont posés à leur heure, les chevauchements côte à côte. -->
                 <div class="tg-row tg-body">
                   <div class="tg-gutter">
-                    @for (h of tgHours; track h) { <div class="tg-hour"><span>{{ h }}</span></div> }
+                    @for (h of tgHours; track h) { <div class="tg-hour"><span>{{ hourLabel(h) }}</span></div> }
                   </div>
                   @for (col of grid(); track col.key) {
                     <div class="tg-col" [class.today]="col.isToday">
@@ -543,8 +543,11 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
        gabarit de colonnes : la gouttière des heures puis une colonne par jour,
        si bien que tout s'aligne verticalement. Les 24 heures tiennent d'un bloc,
        sans défilement interne. */
-    .tgrid { --gutter: 46px; --hour-h: 27px; }
-    .tgrid.narrow { --gutter: 32px; --hour-h: 24px; }
+    /* Gouttière des heures : au plus juste sous l'entête « jour. » (le plus large
+       des libellés de la colonne, « 23h » tenant dedans), plutôt qu'une colonne
+       large à moitié vide. */
+    .tgrid { --gutter: 28px; --hour-h: 27px; }
+    .tgrid.narrow { --gutter: 28px; --hour-h: 24px; }
     .tg-row { display: grid; grid-template-columns: var(--gutter) repeat(var(--cols,3), minmax(0,1fr)); gap: 0 6px; }
     .tg-heads { margin-bottom: 6px; }
     .tg-head { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 11px; padding: 8px 6px; cursor: pointer; }
@@ -726,6 +729,9 @@ export class CalendarScreen {
 
   /** Les heures pleines, pour la gouttière et les lignes de la grille horaire. */
   readonly tgHours = Array.from({ length: 24 }, (_, h) => h);
+
+  /** Étiquette d'heure de la gouttière : deux chiffres et un « h » (01h, 02h, …). */
+  hourLabel(h: number): string { return String(h).padStart(2, '0') + 'h'; }
 
   // La taille de la fenêtre, suivie en direct : la vue mois calcule combien de
   // pastilles tiennent dans une case à partir de la hauteur disponible, et doit
