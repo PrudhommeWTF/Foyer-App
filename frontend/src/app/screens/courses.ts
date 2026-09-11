@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
@@ -46,15 +46,22 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
         <div class="chip-new" (click)="store.newShopList()">
           <f-icon name="plus" [size]="15" color="#E56B4E" [width]="2.6" /> Nouvelle liste
         </div>
+        @if (store.weekHasMeals()) {
+          <button class="chip-gen" (click)="store.prepareList(store.weekDays())" title="Ajoute les ingrédients des repas prévus cette semaine">
+            <f-icon name="bolt" [size]="15" color="#fff" [width]="2.4" /> Générer depuis le planning des repas
+          </button>
+        }
       </div>
 
-      <!-- Ajout rapide : trois taps au maximum, champ puis suggestion ou Entrée -->
+      <!-- Ajout rapide : le champ, puis suggestion ou Entrée. Au focus, les
+           attributs (quantité, rayon, liste) se règlent dessous, avant de valider,
+           sans ouvrir la fiche complète, comme la saisie d'une tâche. -->
       <div class="quick">
         <input class="input" placeholder="Ajouter un article…" enterkeyhint="done"
                autocomplete="off" autocapitalize="sentences"
                [ngModel]="store.ui().newShop" (ngModelChange)="store.patch({ newShop: $event })"
-               (keydown.enter)="store.addShopQuick()">
-        <button class="add-btn" (click)="store.addShopQuick()" aria-label="Ajouter">
+               (focus)="qaOpen()" (keydown.enter)="addQuick()" (keydown.escape)="qaClose()">
+        <button class="add-btn" (click)="addQuick()" aria-label="Ajouter">
           <f-icon name="plus" [size]="22" color="#fff" [width]="2.6" />
         </button>
       </div>
@@ -63,6 +70,36 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
           @for (sg of suggestions(); track sg) {
             <button class="sugg-chip" (click)="addSuggestion(sg)">{{ sg }}</button>
           }
+        </div>
+      }
+
+      @if (qaExpanded()) {
+        <div class="qa-more">
+          <div class="qa-field qa-qty">
+            <span class="field-label">Quantité</span>
+            <input class="input" placeholder="x1" enterkeyhint="done" autocomplete="off"
+                   [ngModel]="qaQty()" (ngModelChange)="qaQty.set($event)" (keydown.enter)="addQuick()" (keydown.escape)="qaClose()">
+          </div>
+          <div class="qa-field">
+            <span class="field-label">Rayon</span>
+            <div class="seg-wrap qa-seg">
+              @for (a of store.aislesInOrder(); track a.id) {
+                <div class="seg-opt" [class.on]="qaAisle() === a.id" (click)="qaAisle.set(a.id)">
+                  <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
+                </div>
+              }
+            </div>
+          </div>
+          <div class="qa-field">
+            <span class="field-label">Liste</span>
+            <div class="seg-wrap qa-seg">
+              @for (l of lists(); track l.id) {
+                <div class="seg-opt" [class.on]="qaList() === l.id" (click)="qaList.set(l.id)">
+                  <span class="s-dot" [style.background]="l.color"></span>{{ l.name }}
+                </div>
+              }
+            </div>
+          </div>
         </div>
       }
 
@@ -160,11 +197,6 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
         </div>
       }
 
-      <div class="gen-card" (click)="store.prepareList(store.weekDays())">
-        <f-icon name="bolt" [size]="22" color="#fff" />
-        <div class="gen-t">Générer depuis les repas</div>
-        <div class="gen-s">Ajoute les ingrédients des repas prévus cette semaine</div>
-      </div>
     </div>
 
     <!-- Article -->
@@ -358,9 +390,17 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .who { width: 10px; height: 10px; border-radius: 50%; flex: none; }
     .empty { color: var(--ink2); font-weight: 700; font-size: 14px; padding: 24px 0; }
 
-    .gen-card { background: linear-gradient(135deg,#7A9B76,#5F7E5C); border-radius: var(--r-card-lg); padding: 20px; cursor: pointer; box-shadow: 0 14px 26px -14px rgba(95,126,92,.6); margin-top: 24px; }
-    .gen-t { color: #fff; font-weight: 800; font-size: 16px; margin-top: 8px; }
-    .gen-s { color: #fff; opacity: .85; font-size: 13px; font-weight: 600; margin-top: 4px; }
+    /* Bouton « Générer », en tête à droite de « Nouvelle liste » : une pastille
+       pleine (vert repas) pour se distinguer des puces de liste et de l'action
+       en pointillés « Nouvelle liste ». */
+    .chip-gen { display: inline-flex; align-items: center; gap: 7px; padding: 11px 15px; border: none; border-radius: var(--r-chip); font-size: 13px; font-weight: 800; cursor: pointer; color: #fff; background: linear-gradient(135deg,#7A9B76,#5F7E5C); box-shadow: 0 8px 18px -12px rgba(95,126,92,.7); font-family: inherit; }
+
+    /* Le repli d'attributs sous le champ d'ajout, révélé au focus. */
+    .qa-more { display: flex; flex-direction: column; gap: 4px; padding: 14px; margin-bottom: 14px; background: var(--surface); border-radius: var(--r-card); box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); }
+    .qa-field { display: flex; flex-direction: column; }
+    .qa-qty .input { max-width: 140px; }
+    /* Marge basse réduite : ici les rangées s'enchaînent, contrairement à la fiche. */
+    .qa-seg { margin-bottom: 8px; }
 
     .order-list { display: flex; flex-direction: column; gap: 8px; }
     .order-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: var(--soft); }
@@ -452,9 +492,39 @@ export class CoursesScreen {
     return out;
   });
 
+  // Repli d'attributs de l'ajout rapide (quantité, rayon, liste), révélé quand
+  // le champ prend le focus, comme la saisie d'une tâche. L'état vit dans le
+  // composant : il est éphémère et ne concerne que cette saisie en cours.
+  readonly qaFocused = signal(false);
+  readonly qaQty = signal('');
+  readonly qaAisle = signal('');
+  readonly qaList = signal('');
+  /** Ouvert tant que le champ est actif ou qu'un article est en train d'être saisi. */
+  readonly qaExpanded = computed(() => this.qaFocused() || !!this.store.ui().newShop.trim());
+
+  /** Focus du champ : on déplie et on garnit rayon et liste de leurs valeurs par défaut. */
+  qaOpen(): void {
+    if (!this.qaAisle()) this.qaAisle.set(this.store.defaultAisleId());
+    if (!this.qaList()) this.qaList.set(this.store.activeShopListId());
+    this.qaFocused.set(true);
+  }
+  qaClose(): void { this.qaFocused.set(false); }
+
+  /**
+   * Ajoute l'article avec les attributs choisis. On garde le rayon et la liste
+   * pour l'article suivant (on range souvent plusieurs choses au même endroit),
+   * on remet à zéro le nom et la quantité, et on laisse le repli ouvert.
+   */
+  addQuick(): void {
+    const id = this.store.addShop(this.store.ui().newShop, { qty: this.qaQty(), aisleId: this.qaAisle() || undefined, listId: this.qaList() || undefined });
+    if (id) { this.store.patch({ newShop: '' }); this.qaQty.set(''); }
+  }
+
   addSuggestion(name: string): void {
-    this.store.patch({ newShop: name });
-    this.store.addShopQuick();
+    if (this.store.addShop(name, { qty: this.qaQty(), aisleId: this.qaAisle() || undefined, listId: this.qaList() || undefined })) {
+      this.store.patch({ newShop: '' });
+      this.qaQty.set('');
+    }
   }
 
   countFor(id: string): number { return this.d().shop.filter((x) => x.listId === id && x.state === 'a-prendre').length; }
