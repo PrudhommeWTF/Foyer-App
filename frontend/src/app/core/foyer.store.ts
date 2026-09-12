@@ -1258,7 +1258,12 @@ export class FoyerStore {
 
   private applyTaskLocally(op: TaskOp): void {
     const cur = this._data(); if (!cur) return;
-    this._data.set({ ...cur, tasks: applyTaskOp(cur.tasks, op) });
+    // La remise à zéro pose aussi lastResetAt sur la liste (comme le serveur) :
+    // affichage immédiat, sans PUT du document (le reset le persiste déjà).
+    const taskLists = op.op === 'reset'
+      ? cur.taskLists.map((l) => (l.id === op.id ? { ...l, lastResetAt: op.at ?? new Date().toISOString() } : l))
+      : cur.taskLists;
+    this._data.set({ ...cur, tasks: applyTaskOp(cur.tasks, op), taskLists });
   }
 
   /** Empile une ou plusieurs opérations : affichage immédiat, envoi groupé. */
@@ -1505,6 +1510,17 @@ export class FoyerStore {
     this.taskOpsWithUndo(ops, ops.length + (ops.length > 1 ? ' cases décochées' : ' case décochée'));
   }
 
+  /**
+   * Remet une liste de préparation à zéro : les articles restent, les coches
+   * s'effacent, la liste porte la date du geste. Opération ciblée, comme une
+   * coche ; pas d'annulation (l'écran a demandé confirmation).
+   */
+  resetList(listId: string): void {
+    this.patch({ prepResetId: null });
+    this.pushTaskOps([{ op: 'reset', id: listId }]);
+    this.toast('Liste remise à zéro');
+  }
+
   /** Décalage en jours sur une date ISO, dans le calendrier du foyer. */
   addDays = addDaysIso;
 
@@ -1533,29 +1549,48 @@ export class FoyerStore {
   // pas des coches, et le serveur en tire lui-même les conséquences pour les tâches.
 
   newTaskList(kind: ListKind = 'taches'): void {
-    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: kind === 'taches' ? 'maison' : 'checklist', lKind: kind, lScope: 'shared' });
+    const icon = kind === 'taches' ? 'maison' : kind === 'preparation' ? 'valise' : 'checklist';
+    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: icon, lKind: kind, lScope: 'shared', lForMember: null, lDeparture: '', lRemind: 3 });
   }
   editTaskList(id: string): void {
     const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return;
-    this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope });
+    this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope,
+      lForMember: l.forMember ?? null, lDeparture: l.departure ?? '', lRemind: l.remindDaysBefore ?? 3 });
+  }
+  /** Les champs propres à une liste de préparation, ou de quoi les effacer si elle n'en est pas (ou plus) une. */
+  private prepFields(): Partial<TaskList> {
+    const s = this.ui();
+    if (s.lKind !== 'preparation') return { forMember: null, departure: null, remindDaysBefore: null, lastResetAt: null };
+    const remind = Math.min(30, Math.max(1, Math.round(s.lRemind || 3)));
+    return { forMember: s.lForMember || null, departure: s.lDeparture || null, remindDaysBefore: remind };
   }
   saveTaskList(): void {
     const s = this.ui(); const name = s.lName.trim(); if (!name) { this.toast('Donne un nom à la liste'); return; }
+    // Une liste de préparation est toujours partagée : l'enfant coche son sac.
+    const scope = s.lKind === 'preparation' ? 'shared' : s.lScope;
+    const extra = this.prepFields();
     if (s.listEditId) {
-      this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon, kind: s.lKind, scope: s.lScope }; });
+      const before = this._data()?.taskLists.find((l) => l.id === s.listEditId);
+      this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon, kind: s.lKind, scope, ...extra }; });
       this.toast('Liste modifiée');
       this.patch({ listForm: false, listEditId: null });
+      // Nouveau départ : la date a changé et des affaires restent cochées de la
+      // dernière fois. On propose de repartir de zéro dans la foulée.
+      const hasChecked = (this._data()?.tasks || []).some((t) => t.listId === s.listEditId && t.done);
+      if (s.lKind === 'preparation' && extra.departure && before?.departure !== extra.departure && hasChecked) {
+        this.patch({ prepResetId: s.listEditId });
+      }
       return;
     }
-    const id = this.createTaskList(name, s.lColor, s.lIcon, s.lKind, s.lScope);
+    const id = this.createTaskList(name, s.lColor, s.lIcon, s.lKind, scope, extra);
     this.patch({ listForm: false, activeList: id });
     this.toast('Liste créée');
   }
-  private createTaskList(name: string, color: string, icon: string, kind: ListKind, scope: string): string {
+  private createTaskList(name: string, color: string, icon: string, kind: ListKind, scope: string, extra: Partial<TaskList> = {}): string {
     const id = uid('l');
     this.mutate((d) => {
       const position = d.taskLists.reduce((m, l) => Math.max(m, l.position ?? 0), -1) + 1;
-      d.taskLists.push({ id, name, color, icon, kind, scope, position });
+      d.taskLists.push({ id, name, color, icon, kind, scope, position, ...extra });
     });
     return id;
   }

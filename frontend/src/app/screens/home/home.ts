@@ -7,7 +7,7 @@ import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
 import { WhoComponent } from '../../shared/who';
 import { recentActivity, relTime } from '../../core/activity';
-import { EventItem, TaskItem } from '../../core/models';
+import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { WhoBadge, whoBadges } from '../../core/schedule';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
@@ -136,6 +136,12 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     <ng-template #tasksCard>
       <div class="card rc">
         <div class="rc-head"><span>Dernières tâches</span><button class="rc-link" (click)="store.go('taches')">Tâches</button></div>
+        @for (a of prepAlerts(); track a.list.id) {
+          <div class="rc-row prep" (click)="openPrep(a.list.id)">
+            <f-icon name="suitcase" [size]="14" [color]="a.list.color" [width]="2.2" />
+            <span class="prep-line">{{ prepLine(a) }}</span>
+          </div>
+        }
         @for (t of latestTasks(); track t.t.id) {
           <div class="rc-row task" (click)="store.openTaskItem(t.t.id)">
             <span class="t-dot" [style.background]="t.color" [class.done]="t.t.done"></span>
@@ -291,6 +297,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .rc-link:hover { background: var(--soft2); }
     .rc-empty { font-size: 12.5px; font-weight: 700; color: var(--ink3); padding: 6px 2px 4px; }
     .rc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; }
+    .rc-row.prep .prep-line { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rc-row:first-of-type { border-top: none; }
 
     /* prochains évènements */
@@ -394,6 +401,32 @@ export class HomeScreen {
    * cette grille remplace le menu du bas sur mobile, elle porte aussi l'accès
    * aux paramètres (adultes), seul point d'entrée qui vivait dans ce menu.
    */
+  /**
+   * Les départs proches : une liste de préparation dans sa fenêtre de rappel
+   * (J-N à J-0) où il reste des affaires à préparer. La ligne d'accueil s'efface
+   * dès que tout est prêt ou le départ passé.
+   */
+  readonly prepAlerts = computed<{ list: TaskList; days: number; remaining: number }[]>(() => {
+    const d = this.store.data();
+    if (!d) return [];
+    const today = parseDay(this.store.todayStr());
+    const out: { list: TaskList; days: number; remaining: number }[] = [];
+    for (const l of this.store.visibleTaskLists()) {
+      if (l.kind !== 'preparation' || !l.departure) continue;
+      const days = Math.round((parseDay(l.departure).getTime() - today.getTime()) / 86_400_000);
+      if (days < 0 || days > (l.remindDaysBefore ?? 3)) continue;
+      const remaining = (d.tasks || []).filter((t) => t.listId === l.id && !t.done).length;
+      if (remaining > 0) out.push({ list: l, days, remaining });
+    }
+    return out.sort((a, b) => a.days - b.days);
+  });
+  prepLine(a: { list: TaskList; days: number; remaining: number }): string {
+    const nom = a.list.forMember ? this.store.memberName(a.list.forMember) : a.list.name;
+    const quand = a.days > 1 ? `dans ${a.days} jours` : a.days === 1 ? 'demain' : 'aujourd’hui';
+    return `Départ de ${nom} ${quand} : ${a.remaining} affaire${a.remaining > 1 ? 's' : ''} à préparer`;
+  }
+  openPrep(id: string): void { this.store.go('taches'); this.store.patch({ activeList: id }); }
+
   readonly modules = computed<Mod[]>(() => {
     const d = this.store.data();
     if (!d) return [];

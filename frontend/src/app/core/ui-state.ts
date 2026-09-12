@@ -99,6 +99,10 @@ export interface UiState {
   // listes de tâches
   activeList: string; listForm: boolean; listEditId: string | null;
   lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
+  /** Champs propres aux listes de préparation (kind 'preparation'). */
+  lForMember: string | null; lDeparture: string; lRemind: number;
+  /** Liste dont on demande la remise à zéro (modale de confirmation). */
+  prepResetId: string | null;
   /** Choix d'un modèle pour créer une liste. */
   tplOpen: boolean;
 
@@ -259,6 +263,7 @@ export function initialUi(): UiState {
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
     taskEdit: null, taskNew: false, showDone: false, showArchived: false,
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
+    lForMember: null, lDeparture: '', lRemind: 3, prepResetId: null,
     tplOpen: false,
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,

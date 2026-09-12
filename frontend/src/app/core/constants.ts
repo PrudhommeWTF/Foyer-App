@@ -89,6 +89,8 @@ export const ICONS: Record<string, string> = {
   userPlus: 'M9 8a3 3 0 1 0 .01 0M3 19c0-3 3-5 6-5s6 2 6 5M18 8v6M15 11h6',
   bolt: 'M13 2 4 14h7l-1 8 9-12h-7z',
   folder: 'M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z',
+  // Valise, pour les listes de préparation (le trousseau d'un départ).
+  suitcase: 'M5 8h14v11H5zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M5 13h14',
   upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
   // Miroir de « upload ». Son absence rendait le bouton de téléchargement des
   // documents invisible : un carré vide, cliquable, que rien n'expliquait.

@@ -83,6 +83,13 @@ export function dayExtrasOn(ds: string, input: DayInput): DayExtra[] {
   // son échéance courante : « faite » ne vaut que pour celle-ci, une occurrence
   // projetée n'a pas encore été faite.
   for (const t of d.tasks) { if (taskOccursOn(t, ds)) { const fait = t.done && t.due === ds; out.push({ kind: 'task', label: t.text, color: CAL_KINDS['task'].color, sub: fait ? 'faite' : (t.time || undefined), id: t.id, done: fait }); } }
+  // Le départ d'une liste de préparation marque son jour, sans créer d'événement.
+  for (const l of d.taskLists) {
+    if (l.kind === 'preparation' && l.departure === ds) {
+      const nom = l.forMember ? d.members.find((m) => m.id === l.forMember)?.name : '';
+      out.push({ kind: 'departure', label: nom ? 'Départ de ' + nom : 'Départ : ' + l.name, color: l.color });
+    }
+  }
   out.push(...(input.external[ds] || []));
   return out;
 }

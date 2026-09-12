@@ -9,6 +9,7 @@ import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
 import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
 import { occurrenceProgress, recLabel } from '../../core/recurrence';
+import { parseDay } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
 import { ReorderDirective } from '../../shared/reorder';
@@ -109,7 +110,7 @@ import { TaskComposerComponent } from './composer';
           <button class="btn btn-soft sm" (click)="store.saveListAsTemplate(l.id)" title="Retenir cette liste pour la refaire plus tard">
             <f-icon name="copy" [size]="15" color="var(--ink2)" [width]="2.2" /> En modèle
           </button>
-          @if (l.kind !== 'taches') {
+          @if (l.kind !== 'taches' && l.kind !== 'preparation') {
             <button class="btn btn-soft sm" (click)="store.uncheckAll(l.id)"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout décocher</button>
           }
         } @else {
@@ -124,6 +125,28 @@ import { TaskComposerComponent } from './composer';
           </div>
         }
       </div>
+
+      <!-- En-tête d'une liste de préparation : le départ, la progression, la remise à zéro. -->
+      @if (activeObj(); as l) {
+        @if (l.kind === 'preparation') {
+          @let p = prepProgress(l.id);
+          <div class="prep-head" [style.border-left]="'4px solid ' + l.color">
+            <div class="prep-info">
+              <div class="prep-dep" [class.past]="isDeparturePast(l)">
+                <f-icon name="suitcase" [size]="15" [color]="isDeparturePast(l) ? 'var(--ink3)' : l.color" [width]="2.2" />
+                <span>{{ departureText(l) }}@if (isDeparturePast(l)) {<span class="prep-past"> · départ passé</span>}</span>
+              </div>
+              <div class="prep-prog">{{ p.done }} / {{ p.total }} préparé{{ p.done > 1 ? 's' : '' }}</div>
+            </div>
+            <div class="prep-acts">
+              @if (isDeparturePast(l)) {
+                <button class="btn btn-soft sm" (click)="store.editTaskList(l.id)"><f-icon name="calendar" [size]="15" color="var(--ink2)" [width]="2.2" /> Nouveau départ</button>
+              }
+              <button class="btn btn-soft sm" [disabled]="!p.total" (click)="store.patch({ prepResetId: l.id })"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout remettre à zéro</button>
+            </div>
+          </div>
+        }
+      }
 
       <!-- Saisie rapide. Pas dans « À moi » : cette vue rassemble, elle ne range pas. -->
       @if (!lists().length) {
@@ -298,17 +321,44 @@ import { TaskComposerComponent } from './composer';
         <div class="field-label mt">Type</div>
         <div class="seg">
           @for (k of kinds; track k) {
-            <button [class.active]="store.ui().lKind === k" (click)="store.patch({ lKind: k })">{{ kindLabel(k) }}</button>
+            <button [class.active]="store.ui().lKind === k" (click)="pickKind(k)">{{ kindLabel(k) }}</button>
           }
         </div>
         <div class="plan-hint">{{ kindHint(store.ui().lKind) }}</div>
 
-        <div class="field-label mt">Qui la voit</div>
-        <div class="seg">
-          <button [class.active]="store.ui().lScope === 'shared'" (click)="store.patch({ lScope: 'shared' })">Tout le foyer</button>
-          <button [class.active]="store.ui().lScope !== 'shared'" (click)="store.patch({ lScope: store.currentMemberId() || 'shared' })">Moi seulement</button>
-        </div>
-        @if (store.ui().lScope !== 'shared') { <div class="plan-hint">Cachée aux autres membres, pas chiffrée.</div> }
+        @if (store.ui().lKind === 'preparation') {
+          <div class="field-label mt">Pour qui</div>
+          <div class="seg-wrap">
+            <button class="seg-opt" [class.on]="!store.ui().lForMember" (click)="store.patch({ lForMember: null })">Personne</button>
+            @for (m of members(); track m.id) {
+              <button class="seg-opt" [class.on]="store.ui().lForMember === m.id" (click)="store.patch({ lForMember: m.id })">
+                <span class="s-dot" [style.background]="m.color"></span>{{ m.name }}
+              </button>
+            }
+          </div>
+
+          <div class="prep-two">
+            <div class="grow">
+              <div class="field-label">Date de départ</div>
+              <input class="input" type="date" [ngModel]="store.ui().lDeparture" (ngModelChange)="store.patch({ lDeparture: $event })" />
+            </div>
+            <div class="prep-remind">
+              <div class="field-label">Rappel</div>
+              <div class="remind-row">
+                <span>J -</span>
+                <input class="input" type="number" min="1" max="30" [ngModel]="store.ui().lRemind" (ngModelChange)="store.patch({ lRemind: +$event })" />
+              </div>
+            </div>
+          </div>
+          <div class="plan-hint">Un rappel {{ store.ui().lRemind }} jour{{ store.ui().lRemind > 1 ? 's' : '' }} avant le départ, tant qu'il reste des affaires à préparer. La liste est partagée : l'enfant peut cocher son sac.</div>
+        } @else {
+          <div class="field-label mt">Qui la voit</div>
+          <div class="seg">
+            <button [class.active]="store.ui().lScope === 'shared'" (click)="store.patch({ lScope: 'shared' })">Tout le foyer</button>
+            <button [class.active]="store.ui().lScope !== 'shared'" (click)="store.patch({ lScope: store.currentMemberId() || 'shared' })">Moi seulement</button>
+          </div>
+          @if (store.ui().lScope !== 'shared') { <div class="plan-hint">Cachée aux autres membres, pas chiffrée.</div> }
+        }
 
         <div class="field-label mt">Couleur</div>
         <div class="swatch-row">
@@ -361,6 +411,13 @@ import { TaskComposerComponent } from './composer';
     @if (store.ui().listDelId) {
       <f-confirm title="Supprimer cette liste ?" (cancel)="store.patch({ listDelId: null })" (confirm)="store.confirmTaskListDel()">
         « {{ delListName() }} » et ses {{ delListCount() }} tâches seront supprimées. Pour la garder sans l’afficher, archivez-la plutôt.
+      </f-confirm>
+    }
+
+    <!-- Remettre à zéro une liste de préparation -->
+    @if (store.ui().prepResetId) {
+      <f-confirm title="Tout remettre à zéro ?" confirmLabel="Remettre à zéro" (cancel)="store.patch({ prepResetId: null })" (confirm)="store.resetList(store.ui().prepResetId!)">
+        Les affaires de « {{ resetName() }} » restent, les coches sont effacées. La liste est prête pour le prochain départ.
       </f-confirm>
     }
   `,
@@ -441,6 +498,26 @@ import { TaskComposerComponent } from './composer';
 
     .field-label.mt { margin-top: 18px; }
     .plan-hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
+
+    /* Champs d'une liste de préparation dans la modale. */
+    .seg-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .seg-opt { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 2px solid transparent; border-radius: 11px; font-size: 13px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); font-family: inherit; }
+    .seg-opt.on { background: var(--primary); color: #fff; }
+    .seg-opt .s-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+    .prep-two { display: flex; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
+    .prep-two .grow { flex: 1; min-width: 160px; }
+    .prep-remind { width: 130px; }
+    .remind-row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: var(--ink2); }
+    .remind-row .input { width: 68px; }
+
+    /* Bandeau d'en-tête d'une liste de préparation. */
+    .prep-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: var(--surface); border-radius: var(--r-card, 16px); padding: 12px 16px; margin-bottom: 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
+    .prep-info { min-width: 0; }
+    .prep-dep { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .prep-dep.past { color: var(--ink3); }
+    .prep-past { font-weight: 800; color: var(--ink3); }
+    .prep-prog { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin-top: 3px; }
+    .prep-acts { display: flex; gap: 8px; flex-wrap: wrap; }
     .icon-grid { display: flex; flex-wrap: wrap; gap: 9px; }
     .ic-cell { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .ic-cell.on { box-shadow: inset 0 0 0 2px currentColor; }
@@ -517,8 +594,43 @@ export class TachesScreen {
   kindHint(k: ListKind): string {
     return k === 'taches' ? 'L’affaire du jour : compte dans « Toutes » et sur l’accueil.'
       : k === 'corvees' ? 'Des cases à cocher, lisibles par un enfant. Hors de « Toutes » et de l’accueil.'
+      : k === 'preparation' ? 'Le trousseau d’un départ : rempli à l’avance, coché au moment de partir, remis à zéro pour la fois suivante. Visible par l’enfant.'
       : 'Valise, fournitures, idées : une liste qu’on refait. Hors de « Toutes » et de l’accueil.';
   }
+
+  /** Changer de type propose l'icône par défaut du type, tant qu'on n'en a pas choisi une autre exprès. */
+  pickKind(k: ListKind): void {
+    const defaults: Record<ListKind, string> = { taches: 'maison', corvees: 'checklist', checklist: 'checklist', preparation: 'valise' };
+    const cur = this.store.ui().lIcon;
+    const wasDefault = Object.values(defaults).includes(cur);
+    this.store.patch({ lKind: k, ...(wasDefault ? { lIcon: defaults[k] } : {}) });
+  }
+
+  // ---- listes de préparation -------------------------------------------------
+  members = computed(() => this.d().members);
+  memberName(id: string | null | undefined): string { return id ? this.store.memberName(id) : ''; }
+
+  /** Progression d'une liste de préparation : préparés sur total. */
+  prepProgress(listId: string): { done: number; total: number } {
+    const items = this.d().tasks.filter((t) => t.listId === listId);
+    return { done: items.filter((t) => t.done).length, total: items.length };
+  }
+  /** Jours d'ici au départ ( >0 avenir, 0 aujourd'hui, <0 passé ), ou null sans date. */
+  daysToDeparture(l: TaskList): number | null {
+    if (!l.departure) return null;
+    const today = parseDay(this.store.todayStr()), dep = parseDay(l.departure);
+    return Math.round((dep.getTime() - today.getTime()) / 86_400_000);
+  }
+  /** « Départ de Nolan, samedi 12 juillet, dans 9 jours » ; « Aucune date de départ » sans date. */
+  departureText(l: TaskList): string {
+    const who = l.forMember ? 'Départ de ' + this.memberName(l.forMember) : 'Départ';
+    if (!l.departure) return l.forMember ? who + ', sans date' : 'Aucune date de départ';
+    const n = this.daysToDeparture(l)!;
+    const quand = n > 1 ? `dans ${n} jours` : n === 1 ? 'demain' : n === 0 ? 'aujourd’hui' : n === -1 ? 'hier' : `il y a ${-n} jours`;
+    return `${who}, ${this.store.fmtLongDate(l.departure)}, ${quand}`;
+  }
+  isDeparturePast(l: TaskList): boolean { const n = this.daysToDeparture(l); return n !== null && n < 0; }
+  resetName = computed(() => this.d().taskLists.find((l) => l.id === this.store.ui().prepResetId)?.name || '');
   undoneCount(listId: string): number { return openCount(this.d().tasks.filter((t) => t.listId === listId)); }
   private list(id: string): TaskList | undefined { return this.d().taskLists.find((l) => l.id === id); }
   listColor(id: string): string { return this.list(id)?.color || 'var(--primary)'; }

@@ -30,7 +30,9 @@ export type TaskOp =
   | (OpBase & { op: 'skip'; id: string; occ: string; next: string | null })
   /** Sur une série : `occ` l'échéance à rétablir, celle de la dernière réalisation. */
   | (OpBase & { op: 'reopen'; id: string; occ?: string })
-  | (OpBase & { op: 'remove'; id: string });
+  | (OpBase & { op: 'remove'; id: string })
+  /** Remise à zéro d'une liste de préparation : `id` est la liste, ses articles redeviennent à préparer. */
+  | (OpBase & { op: 'reset'; id: string });
 
 /**
  * Une opération avant qu'on ne l'estampille. Le conditionnel distribue sur
@@ -116,6 +118,13 @@ export function applyTaskOp(items: TaskItem[], op: TaskOp): TaskItem[] {
     case 'remove':
       if (idx >= 0) out.splice(idx, 1);
       break;
+    case 'reset':
+      // `op.id` est la liste : tous ses articles redeviennent à préparer.
+      for (let i = 0; i < out.length; i++) {
+        const t = out[i];
+        if (t.listId === op.id && (t.done || t.doneAt || t.doneBy)) out[i] = { ...t, done: false, doneAt: null, doneBy: null };
+      }
+      break;
   }
   return out;
 }
@@ -160,5 +169,8 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
       }
       return { op: 'edit', id, ...back };
     }
+    // Une remise à zéro n'a pas d'annulation : les coches d'avant sont perdues,
+    // et c'est une action confirmée, pas un geste d'un tap.
+    case 'reset': return null;
   }
 }
