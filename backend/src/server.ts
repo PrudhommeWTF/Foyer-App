@@ -499,6 +499,11 @@ export function start(): void {
 
   startScheduler({
     tasks: () => (getHousehold().state as HouseholdState).tasks || [],
+    lists: () => (getHousehold().state as HouseholdState).taskLists || [],
+    members: () => {
+      const accts = new Set(listMemberAccounts().map((a) => a.memberId));
+      return (getHousehold().state as HouseholdState).members.map((m) => ({ id: m.id, name: m.name, adult: !m.enfant, hasAccount: accts.has(m.id) }));
+    },
     accounts: () => listMemberAccounts().map((a) => a.memberId),
     url: appUrl,
     rules: () => ({

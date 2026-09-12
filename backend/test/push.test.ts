@@ -184,6 +184,8 @@ describe('envoi', () => {
 describe('planificateur', () => {
   const deps = (tasks: TaskItem[], log: string[], over: Partial<SchedulerDeps> = {}): SchedulerDeps => ({
     tasks: () => tasks,
+    lists: () => [],
+    members: () => [],
     accounts: () => ['me', 'm1'],
     url: () => '',
     // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
@@ -214,6 +216,21 @@ describe('planificateur', () => {
     await tick(deps([task()], log), '2026-09-05T18:00');
     await tick(deps([task({ due: '2026-09-06' })], log), '2026-09-06T18:00');
     assert.equal(sent.length, 2);
+  });
+
+  it('rappel de préparation : envoyé une fois dans la fenêtre, à l’enfant à compte et aux adultes', async () => {
+    addDevice('nolan', sub('a'), ''); addDevice('m1', sub('b'), '');
+    const log: string[] = [];
+    const over: Partial<SchedulerDeps> = {
+      lists: () => [{ id: 'L', name: 'Trousseau colo', kind: 'preparation', forMember: 'nolan', departure: '2026-09-05', remindDaysBefore: 3 }],
+      members: () => [{ id: 'm1', name: 'Maman', adult: true, hasAccount: true }, { id: 'nolan', name: 'Nolan', adult: false, hasAccount: true }],
+    };
+    const tasks = [task({ id: 'p1', listId: 'L', due: null, remind: null }), task({ id: 'p2', listId: 'L', due: null, remind: null })];
+    await tick(deps(tasks, log, over), '2026-09-03T18:00');
+    assert.deepEqual(sent.map((s) => s.endpoint.slice(-1)).sort(), ['a', 'b'], 'Nolan et Maman, une fois chacun');
+    assert.ok(log.some((l) => l.includes('préparation') && l.includes('Trousseau colo')));
+    await tick(deps(tasks, log, over), '2026-09-03T18:01');
+    assert.equal(sent.length, 2, 'même jour, même clé : rien de plus');
   });
 });
 
