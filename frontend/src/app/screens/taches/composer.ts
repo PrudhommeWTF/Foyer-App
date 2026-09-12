@@ -306,7 +306,7 @@ type Scope = 'one' | 'all';
     .foot { display: flex; gap: 12px; align-items: center; margin-top: 18px; }
     .foot .grow { flex: 1; }
     .foot .grow2 { flex: 1.4; }
-    .foot .del { width: 50px; flex: none; padding: 0; }
+    .foot .del { width: 50px; flex: none; padding: 0; align-self: stretch; }
   `],
 })
 export class TaskComposerComponent {
