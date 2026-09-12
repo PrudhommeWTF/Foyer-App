@@ -28,8 +28,8 @@ export const SHOP_STATES: ShopState[] = ['a-prendre', 'panier', 'indisponible'];
  * l'installation ; « À trier » reste reconnu pour les foyers créés avant ce nom.
  * Le repli s'identifie donc par son nom, pas par un identifiant fixe.
  */
-export const FALLBACK_AISLE_NAME = 'Non classé';
-export const FALLBACK_AISLE_NAMES = [FALLBACK_AISLE_NAME, 'À trier'];
+export const FALLBACK_AISLE_NAME = '📦 Non classé';
+export const FALLBACK_AISLE_NAMES = [FALLBACK_AISLE_NAME, 'Non classé', 'À trier'];
 export const isFallbackAisleName = (name: unknown): boolean =>
   typeof name === 'string' && FALLBACK_AISLE_NAMES.includes(name);
 
