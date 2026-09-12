@@ -5,8 +5,8 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { articleKey, createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
-import { buildArticleIndex } from './ingredients';
+import { articleKey, createArticle, learnRayon, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
+import { buildArticleIndex, resolveArticleKey } from './ingredients';
 import { Article, Recipe } from './models';
 
 const recette = (id: string, name: string, ingr: string[]): Recipe =>
@@ -199,4 +199,35 @@ test('réparer toutes les formes du carnet réel amène le taux à 100 %', () =>
   const fin = scanRecipes(etat.recipes, buildArticleIndex(articles));
   assert.equal(fin.groups.length, 0);
   assert.equal(fin.rate, 100);
+});
+
+// ---- apprentissage du rayon (learning) -------------------------------------
+
+test('apprendre le rayon d’un nom inconnu crée l’article et le range', () => {
+  const idx = idxDe();
+  assert.equal(resolveArticleKey('Croquettes chien', idx), undefined, 'inconnu au départ');
+  const articles = learnRayon([], 'Croquettes chien', 'epicerie', idx);
+  const idx2 = idxDe(articles);
+  const key = resolveArticleKey('Croquettes chien', idx2);
+  assert.ok(key, 'le nom appris devrait désormais se résoudre');
+  assert.equal(idx2.byKey.get(key!)?.rayon, 'epicerie');
+});
+
+test('apprendre corrige le rayon d’un article de la base sans le perdre', () => {
+  const idx = idxDe();
+  const key = resolveArticleKey('lait', idx);
+  assert.ok(key, 'la base devrait connaître « lait »');
+  const base = idx.byKey.get(key!)!.rayon;
+  const cible = base === 'epicerie' ? 'frais' : 'epicerie';
+  const articles = learnRayon([], 'lait', cible, idx);
+  const idx2 = idxDe(articles);
+  assert.equal(idx2.byKey.get(resolveArticleKey('lait', idx2)!)?.rayon, cible);
+});
+
+test('apprendre ne réécrit rien quand la base range déjà ainsi', () => {
+  const idx = idxDe();
+  const key = resolveArticleKey('lait', idx)!;
+  const before: Article[] = [];
+  // Même rayon que la base : rien à retenir, la liste est rendue à l’identique.
+  assert.equal(learnRayon(before, 'lait', idx.byKey.get(key)!.rayon, idx), before);
 });

@@ -84,7 +84,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
             <span class="field-label">Rayon</span>
             <div class="seg-wrap qa-seg">
               @for (a of store.aislesInOrder(); track a.id) {
-                <div class="seg-opt" [class.on]="qaAisle() === a.id" (click)="qaAisle.set(a.id)">
+                <div class="seg-opt" [class.on]="qaAisle() === a.id" (click)="pickAisle(a.id)">
                   <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
                 </div>
               }
@@ -497,33 +497,39 @@ export class CoursesScreen {
   // composant : il est éphémère et ne concerne que cette saisie en cours.
   readonly qaFocused = signal(false);
   readonly qaQty = signal('');
-  readonly qaAisle = signal('');
   readonly qaList = signal('');
+  /** Rayon forcé à la main, ou `null` : dans ce cas on suit ce que le nom évoque. */
+  readonly qaAisleOverride = signal<string | null>(null);
+  /** Le rayon retenu : le choix manuel, sinon celui déduit du nom (référentiel + appris). */
+  readonly qaAisle = computed(() => this.qaAisleOverride() ?? this.store.resolveAisleForName(this.store.ui().newShop));
   /** Ouvert tant que le champ est actif ou qu'un article est en train d'être saisi. */
   readonly qaExpanded = computed(() => this.qaFocused() || !!this.store.ui().newShop.trim());
 
-  /** Focus du champ : on déplie et on garnit rayon et liste de leurs valeurs par défaut. */
+  /** Focus du champ : on déplie et on garnit la liste de sa valeur par défaut. */
   qaOpen(): void {
-    if (!this.qaAisle()) this.qaAisle.set(this.store.defaultAisleId());
     if (!this.qaList()) this.qaList.set(this.store.activeShopListId());
     this.qaFocused.set(true);
   }
-  qaClose(): void { this.qaFocused.set(false); }
+  qaClose(): void { this.qaFocused.set(false); this.qaAisleOverride.set(null); }
+  pickAisle(id: string): void { this.qaAisleOverride.set(id); }
 
   /**
-   * Ajoute l'article avec les attributs choisis. On garde le rayon et la liste
-   * pour l'article suivant (on range souvent plusieurs choses au même endroit),
-   * on remet à zéro le nom et la quantité, et on laisse le repli ouvert.
+   * Ajoute l'article au rayon retenu (choisi ou déduit du nom) et à la liste. Un
+   * rayon choisi à la main est retenu pour ce nom, comme le module Finances
+   * retient la catégorie d'un libellé. On vide le nom, la quantité et le choix de
+   * rayon (le suivant se déduira de son propre nom), la liste reste.
    */
-  addQuick(): void {
-    const id = this.store.addShop(this.store.ui().newShop, { qty: this.qaQty(), aisleId: this.qaAisle() || undefined, listId: this.qaList() || undefined });
-    if (id) { this.store.patch({ newShop: '' }); this.qaQty.set(''); }
-  }
+  addQuick(): void { this.commitAdd(this.store.ui().newShop); }
+  addSuggestion(name: string): void { this.commitAdd(name); }
 
-  addSuggestion(name: string): void {
-    if (this.store.addShop(name, { qty: this.qaQty(), aisleId: this.qaAisle() || undefined, listId: this.qaList() || undefined })) {
+  private commitAdd(name: string): void {
+    const forced = this.qaAisleOverride();
+    const aisleId = forced ?? this.store.resolveAisleForName(name);
+    if (this.store.addShop(name, { qty: this.qaQty(), aisleId, listId: this.qaList() || undefined })) {
+      if (forced) this.store.learnAisle(name, forced);
       this.store.patch({ newShop: '' });
       this.qaQty.set('');
+      this.qaAisleOverride.set(null);
     }
   }
 

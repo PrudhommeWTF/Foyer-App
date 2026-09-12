@@ -20,7 +20,7 @@
  */
 import { Allergene, normaliseName } from './articles';
 import { Article, Rayon, Recipe } from './models';
-import { ArticleIndex, parseIngredient } from './ingredients';
+import { ArticleIndex, parseIngredient, resolveArticleKey } from './ingredients';
 
 /** Une apparition d'une forme non reconnue, dans une recette précise. */
 export interface RepairUse { recipeId: string; recipeName: string; raw: string; }
@@ -140,6 +140,34 @@ export function createArticle(articles: Article[], draft: ArticleDraft, form: st
     ...(draft.pantry ? { pantry: true } : {}),
     ...(draft.allerg.length ? { allerg: [...draft.allerg] } : {}),
   }];
+}
+
+/**
+ * Apprend qu'un article se range à tel rayon, en écrivant une correction côté
+ * foyer qui gagne sur la base intégrée. Réutilisée à chaque fois qu'un rayon est
+ * choisi à la main pour un article de courses : la fois suivante, le même nom
+ * atterrit tout seul au bon endroit, comme le module Finances retient la
+ * catégorie d'un libellé.
+ *
+ * Le rayon est un **type** (`legumes`, `frais`, …), pas un identifiant de rayon
+ * du foyer : il survit au renommage et à la réorganisation des rayons. Un rayon
+ * sans type (« À trier ») n'apprend donc rien, et l'appelant s'abstient.
+ *
+ * Rien n'est écrit quand la base sait déjà ranger ce nom à ce rayon.
+ */
+export function learnRayon(articles: Article[], name: string, rayon: Rayon, idx: ArticleIndex): Article[] {
+  const t = name.trim();
+  if (!t) return articles;
+  const key = resolveArticleKey(t, idx);
+  if (key) {
+    if (idx.byKey.get(key)?.rayon === rayon) return articles;
+    const i = articles.findIndex((a) => a.key === key);
+    if (i >= 0) return articles.map((a, n) => (n === i ? { ...a, rayon } : a));
+    const base = idx.byKey.get(key)!;
+    return [...articles, { key: base.key, name: base.name, syn: [], rayon,
+      ...(base.pantry ? { pantry: true } : {}), ...(base.allerg.length ? { allerg: [...base.allerg] } : {}) }];
+  }
+  return createArticle(articles, { name: t, rayon, pantry: false, allerg: [] }, t, idx);
 }
 
 /**

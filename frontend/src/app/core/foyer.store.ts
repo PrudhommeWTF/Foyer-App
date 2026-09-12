@@ -8,12 +8,12 @@ import { cardColor } from './cards';
 import { downloadBlob } from './download';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
-import { buildArticleIndex } from './ingredients';
-import { PlanLine, PlanReport, buildPlan, keyOfLine } from './shopping-plan';
+import { buildArticleIndex, resolveArticleKey } from './ingredients';
+import { PlanLine, PlanReport, aisleForRayon, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
 import { closableShoppingTask, mealEventTitle, shoppingTaskLabel } from './links';
 import { moveMeal } from './meal-move';
-import { createArticle, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
+import { createArticle, learnRayon, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
 import { parseQuery, searchRecipes } from './recipe-search';
 import { readRecipeText } from './recipe-text';
@@ -1123,8 +1123,40 @@ export class FoyerStore {
     const t = name.trim(); if (!t) return null;
     const listId = opts?.listId || this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return null; }
     const id = uid('s');
-    this.pushShopOps([{ op: 'add', id, name: t, qty: opts?.qty?.trim() || '', aisleId: opts?.aisleId || this.defaultAisleId(), listId }]);
+    // Sans rayon imposé, on le déduit du nom : le référentiel (base + ce que le
+    // foyer a appris) range « bananes » aux fruits sans qu'on ait à le dire.
+    const aisleId = opts?.aisleId || this.resolveAisleForName(t);
+    this.pushShopOps([{ op: 'add', id, name: t, qty: opts?.qty?.trim() || '', aisleId, listId }]);
     return id;
+  }
+
+  /**
+   * Rayon où atterrit un article saisi, déduit de son nom via le référentiel
+   * (base intégrée + corrections du foyer). Retombe sur « À trier » quand le nom
+   * n'évoque rien de connu.
+   */
+  resolveAisleForName(name: string): string {
+    const d = this._data(); if (!d) return this.defaultAisleId();
+    const key = resolveArticleKey(name, this.articleIndex());
+    const rayon = key ? this.articleIndex().byKey.get(key)?.rayon : undefined;
+    return rayon ? aisleForRayon(d.aisles, rayon, this.defaultAisleId()) : this.defaultAisleId();
+  }
+
+  /**
+   * Retient qu'un article se range à ce rayon, dès qu'il est choisi à la main.
+   * Le rayon est typé (le `kind` du rayon du foyer) : « À trier » et les rayons
+   * sans type n'apprennent rien. Silencieux si la base rangeait déjà ainsi.
+   */
+  learnAisle(name: string, aisleId: string): void {
+    const d = this._data(); if (!d) return;
+    const rayon = d.aisles.find((a) => a.id === aisleId)?.kind;
+    if (!rayon) return;
+    const cur = d.articles || [];
+    if (learnRayon(cur, name, rayon, this.articleIndex()) === cur) return; // rien à apprendre
+    // Recalculé dans la mutation : si l'ajout de l'article (file de courses) ou un
+    // autre appareil a devancé l'écriture, le rejeu part des articles à jour du
+    // serveur, pas d'un instantané périmé.
+    this.mutate((s) => { s.articles = learnRayon(s.articles || [], name, rayon, buildArticleIndex(s.articles || [])); });
   }
 
   addShopQuick(): void {
@@ -1170,6 +1202,8 @@ export class FoyerStore {
     } else {
       this.pushShopOps([{ op: 'add', id: uid('s'), name, qty, aisleId: s.shAisleId, listId: s.shListId }]);
     }
+    // Le rayon a été choisi à la main dans la fiche : on le retient pour ce nom.
+    this.learnAisle(name, s.shAisleId);
     this.toast(s.shEditId ? 'Article modifié' : 'Article ajouté');
     this.patch({ showShop: false, shEditId: null });
   }

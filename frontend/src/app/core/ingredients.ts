@@ -283,6 +283,15 @@ const dropConnectors = (words: string[]): string[] => {
 };
 
 /**
+ * Résout un nom de produit libre en clé d'article du référentiel (base +
+ * articles du foyer), ou `undefined` si rien ne correspond. Exposé pour placer
+ * un article de courses au bon rayon dès la saisie, comme à la génération.
+ */
+export function resolveArticleKey(name: string, idx: ArticleIndex): string | undefined {
+  return resolve(name, idx);
+}
+
+/**
  * Cherche l'article correspondant à un nom de produit.
  *
  * En cas d'échec, le nom est raccourci par la droite, mais **jamais au travers
