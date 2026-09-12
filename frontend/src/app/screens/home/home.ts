@@ -29,7 +29,7 @@ interface Mod { id: string; label: string; icon: string; color: string; sub: str
 const MOD_COLOR: Record<string, string> = {
   calendar: '#E56B4E', courses: '#7A9B76', taches: '#9B6FA8',
   repas: '#4E93B8', recettes: '#E56B4E', finances: '#7A9B76',
-  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B',
+  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8',
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */
@@ -573,6 +573,7 @@ export class HomeScreen {
       case 'planning': return n(d.sched.length, 'créneau', 'créneaux', 'Aucun créneau');
       case 'contacts': return n(d.contacts.length, 'contact', 'contacts', 'Aucun contact');
       case 'fidelite': return n(d.cards.length, 'carte', 'cartes', 'Aucune carte');
+      case 'lieux': return n((d.places || []).length, 'lieu', 'lieux', 'Aucun lieu');
       default: return '';
     }
   }

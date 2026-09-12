@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
+import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
+import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { cardColor } from './cards';
@@ -66,6 +66,7 @@ function loadReadNotifs(): Set<string> {
  */
 const SHOP_QUEUE_KEY = 'foyer.shopQueue';
 const TASK_QUEUE_KEY = 'foyer.taskQueue';
+const PLACE_QUEUE_KEY = 'foyer.placeQueue';
 function loadQueue<T>(key: string): T[] {
   try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
 }
@@ -228,15 +229,19 @@ export class FoyerStore {
   /** Opérations en attente d'acquittement, persistées (voir SHOP_QUEUE_KEY, TASK_QUEUE_KEY). */
   private shopQueue = signal<ShopOp[]>(loadQueue<ShopOp>(SHOP_QUEUE_KEY));
   private taskQueue = signal<TaskOp[]>(loadQueue<TaskOp>(TASK_QUEUE_KEY));
+  private placeQueue = signal<PlaceOp[]>(loadQueue<PlaceOp>(PLACE_QUEUE_KEY));
   /** Nombre de gestes pas encore partis. Affiché : sans cela le doute est total. */
   readonly shopPending = computed(() => this.shopQueue().length);
   readonly taskPending = computed(() => this.taskQueue().length);
+  readonly placePending = computed(() => this.placeQueue().length);
   /** Le serveur n'a pas répondu au dernier envoi ou sondage. */
   readonly syncOffline = signal(false);
   private shopFlushing = false;
   private taskFlushing = false;
+  private placeFlushing = false;
   private shopFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private taskFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private placeFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private livePollTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
@@ -293,7 +298,7 @@ export class FoyerStore {
     // batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
     effect(() => {
       const screen = this.ui().screen;
-      const cadence = !this.authed() ? 0 : screen === 'courses' || screen === 'taches' ? LIVE_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
+      const cadence = !this.authed() ? 0 : screen === 'courses' || screen === 'taches' || screen === 'lieux' ? LIVE_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
       if (cadence) this.startLivePolling(cadence); else this.stopLivePolling();
     });
 
@@ -314,7 +319,7 @@ export class FoyerStore {
       if (!this.authed()) return;
       void this.flushQueues();
       if (this.saveState() === 'error') void this.flush();
-      if (this.ui().screen === 'courses' || this.ui().screen === 'taches') void this.pollLive();
+      if (this.ui().screen === 'courses' || this.ui().screen === 'taches' || this.ui().screen === 'lieux') void this.pollLive();
     });
     setInterval(() => this.advanceClock(), 60_000);
   }
@@ -516,6 +521,8 @@ export class FoyerStore {
     s.tasks ||= [];
     s.taskLists ||= [];
     s.taskTemplates ||= [];
+    s.places ||= [];
+    s.placeItems ||= [];
     s.cards ||= [];
     s.settings ||= householdDefaults();
     s.prefs ||= {};
@@ -735,10 +742,11 @@ export class FoyerStore {
   private replayQueues(): void {
     for (const op of this.shopQueue()) this.applyShopLocally(op);
     for (const op of this.taskQueue()) this.applyTaskLocally(op);
+    for (const op of this.placeQueue()) this.applyPlaceLocally(op);
   }
 
   private async flushQueues(): Promise<void> {
-    await Promise.all([this.flushShopQueue(), this.flushTaskQueue()]);
+    await Promise.all([this.flushShopQueue(), this.flushTaskQueue(), this.flushPlaceQueue()]);
   }
 
   private saveShopQueue(q: ShopOp[]): void {
@@ -843,6 +851,99 @@ export class FoyerStore {
     for (const op of this.taskQueue()) this.applyTaskLocally(op);
   }
 
+  // ---- lieux : mêmes rouages que les courses, sur deux collections ---------
+  private savePlaceQueue(q: PlaceOp[]): void {
+    this.placeQueue.set(q);
+    try { localStorage.setItem(PLACE_QUEUE_KEY, JSON.stringify(q)); } catch { /* quota : la file reste en mémoire */ }
+  }
+
+  /** Application locale naïve : la coche s'affiche au doigt levé, le serveur écrase ensuite. */
+  private applyPlaceLocally(op: PlaceOp): void {
+    const cur = this._data(); if (!cur) return;
+    let places = cur.places;
+    let items = cur.placeItems;
+    switch (op.op) {
+      case 'place-add':
+        if (!places.some((p) => p.id === op.id)) places = [...places, {
+          id: op.id, name: op.name, color: op.color || '#4E93B8', icon: op.icon || 'map-pin', position: places.length,
+          ...(op.note ? { note: op.note } : {}), by: op.by ?? null, at: op.at ?? null,
+        }];
+        break;
+      case 'place-edit':
+        places = places.map((p) => (p.id === op.id ? {
+          ...p,
+          ...(op.name !== undefined ? { name: op.name } : {}),
+          ...(op.color !== undefined ? { color: op.color } : {}),
+          ...(op.icon !== undefined ? { icon: op.icon } : {}),
+          ...(op.note !== undefined ? { note: op.note || null } : {}),
+          ...(op.position !== undefined ? { position: op.position } : {}),
+        } : p));
+        break;
+      case 'place-remove':
+        places = places.filter((p) => p.id !== op.id);
+        items = items.filter((i) => i.placeId !== op.id);
+        break;
+      case 'add':
+        if (!items.some((i) => i.id === op.id)) items = [...items, {
+          id: op.id, placeId: op.placeId, name: op.name, qty: op.qty || '', state: op.state || 'la-bas',
+          by: op.by ?? null, at: op.at ?? null,
+        }];
+        break;
+      case 'set-state':
+        items = items.map((i) => (i.id === op.id ? { ...i, state: op.state, by: op.by ?? null, at: op.at ?? null } : i));
+        break;
+      case 'edit':
+        items = items.map((i) => (i.id === op.id ? {
+          ...i,
+          ...(op.name !== undefined ? { name: op.name } : {}),
+          ...(op.qty !== undefined ? { qty: op.qty } : {}),
+          ...(op.placeId !== undefined ? { placeId: op.placeId } : {}),
+        } : i));
+        break;
+      case 'remove':
+        items = items.filter((i) => i.id !== op.id);
+        break;
+    }
+    this._data.set({ ...cur, places, placeItems: items });
+  }
+
+  /** Empile une ou plusieurs opérations : affichage immédiat, envoi groupé. */
+  private pushPlaceOps(ops: PlaceOpDraft[]): void {
+    const by = this.me()?.id ?? null;
+    const at = new Date().toISOString();
+    const full = ops.map((o) => ({ ...o, opId: uid('op'), by, at }) as PlaceOp);
+    for (const op of full) this.applyPlaceLocally(op);
+    this.savePlaceQueue([...this.placeQueue(), ...full]);
+    if (this.placeFlushTimer) clearTimeout(this.placeFlushTimer);
+    this.placeFlushTimer = setTimeout(() => void this.flushPlaceQueue(), 300);
+  }
+
+  async flushPlaceQueue(): Promise<void> {
+    if (this.placeFlushing || !this.authed()) return;
+    const batch = this.placeQueue();
+    if (!batch.length) return;
+    this.placeFlushing = true;
+    try {
+      const res = await this.api.placesOps(batch);
+      this.syncOffline.set(false);
+      const settled = new Set([...res.applied, ...res.skipped.map((k) => k.opId)]);
+      this.savePlaceQueue(this.placeQueue().filter((o) => !settled.has(o.opId)));
+      this.adoptPlaces(res.places, res.items);
+      if (res.skipped.length) this.toast(res.skipped.length === 1 ? res.skipped[0].reason : res.skipped.length + ' modifications refusées');
+    } catch {
+      this.syncOffline.set(true);
+    } finally {
+      this.placeFlushing = false;
+    }
+  }
+
+  /** Remplace lieux et affaires par ceux du serveur, puis rejoue la file par-dessus. */
+  private adoptPlaces(places?: Place[], items?: PlaceItem[]): void {
+    const cur = this._data(); if (!cur) return;
+    this._data.set({ ...cur, ...(places ? { places } : {}), ...(items ? { placeItems: items } : {}) });
+    for (const op of this.placeQueue()) this.applyPlaceLocally(op);
+  }
+
   /**
    * Sondage différentiel des deux sous-arbres : sans changement, la réponse
    * tient en trois lignes. La version n'est retenue qu'ici : une réponse à un
@@ -857,6 +958,7 @@ export class FoyerStore {
       if (snap.unchanged) return;
       if (snap.shop) this.adoptShop(snap.shop);
       if (snap.tasks) this.adoptTasks(snap.tasks);
+      if (snap.places || snap.placeItems) this.adoptPlaces(snap.places, snap.placeItems);
     } catch {
       this.syncOffline.set(true);
     }
@@ -1237,6 +1339,73 @@ export class FoyerStore {
     this.mutate((d) => { d.shopLists = d.shopLists.filter((l) => l.id !== id); d.shop = d.shop.filter((x) => x.listId !== id); });
     this.patch({ shopListDelId: null, activeShopList: this.ui().activeShopList === id ? 'all' : this.ui().activeShopList });
     this.toast('Liste supprimée');
+  }
+
+  // ---- lieux (inventaires par lieu de vacances) --------------------------
+  // Comme les courses, tout passe par des opérations : ni les lieux ni les
+  // affaires ne voyagent dans l'enregistrement du document complet.
+
+  /** Les lieux, dans leur ordre. */
+  placesInOrder(): Place[] {
+    return [...(this._data()?.places || [])].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
+  /** Les affaires d'un lieu. */
+  itemsOfPlace(placeId: string): PlaceItem[] {
+    return (this._data()?.placeItems || []).filter((i) => i.placeId === placeId);
+  }
+
+  openPlace(): void {
+    this.patch({ placeForm: true, plEditId: null, plName: '', plColor: '#4E93B8', plIcon: 'voyage', plNote: '' });
+  }
+  editPlace(id: string): void {
+    const p = this._data()?.places.find((x) => x.id === id); if (!p) return;
+    this.patch({ placeForm: true, plEditId: id, plName: p.name, plColor: p.color, plIcon: p.icon || 'voyage', plNote: p.note || '' });
+  }
+  savePlace(): void {
+    const s = this.ui(); const name = s.plName.trim(); if (!name) { this.toast('Donne un nom au lieu'); return; }
+    const note = s.plNote.trim();
+    if (s.plEditId) {
+      this.pushPlaceOps([{ op: 'place-edit', id: s.plEditId, name, color: s.plColor, icon: s.plIcon, note }]);
+      this.toast('Lieu modifié');
+      this.patch({ placeForm: false, plEditId: null });
+    } else {
+      const id = uid('lieu');
+      this.pushPlaceOps([{ op: 'place-add', id, name, color: s.plColor, icon: s.plIcon, ...(note ? { note } : {}) }]);
+      this.patch({ placeForm: false });
+      this.toast('Lieu créé');
+    }
+  }
+  confirmPlaceDel(): void {
+    const id = this.ui().placeDelId; if (!id) return;
+    this.pushPlaceOps([{ op: 'place-remove', id }]);
+    this.patch({ placeDelId: null });
+    this.toast('Lieu supprimé');
+  }
+
+  /** Ajoute une affaire à un lieu, restée là-bas par défaut. */
+  addPlaceItem(placeId: string, name: string): void {
+    const t = name.trim(); if (!t) return;
+    this.pushPlaceOps([{ op: 'add', id: uid('pi'), placeId, name: t }]);
+  }
+  /** Les deux gestes : « J'ai laissé » (là-bas) et « J'ai ramené » (ici). */
+  setPlaceItemState(id: string, state: PlaceItemState): void { this.pushPlaceOps([{ op: 'set-state', id, state }]); }
+
+  editPlaceItem(id: string): void {
+    const it = this._data()?.placeItems.find((x) => x.id === id); if (!it) return;
+    this.patch({ showPlaceItem: true, piEditId: id, piName: it.name, piQty: it.qty, piPlaceId: it.placeId });
+  }
+  savePlaceItem(): void {
+    const s = this.ui(); const id = s.piEditId; if (!id) return;
+    const name = s.piName.trim(); if (!name) { this.toast('Donne un nom à l’affaire'); return; }
+    this.pushPlaceOps([{ op: 'edit', id, name, qty: s.piQty.trim(), placeId: s.piPlaceId }]);
+    this.patch({ showPlaceItem: false, piEditId: null });
+    this.toast('Affaire modifiée');
+  }
+  delPlaceItem(): void {
+    const id = this.ui().piEditId; if (!id) return;
+    this.pushPlaceOps([{ op: 'remove', id }]);
+    this.patch({ showPlaceItem: false, piEditId: null });
+    this.toast('Affaire supprimée');
   }
 
   // ---- rayons -------------------------------------------------------------

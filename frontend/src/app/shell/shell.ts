@@ -18,6 +18,7 @@ import { RepasScreen } from '../screens/repas';
 import { RecettesScreen } from '../screens/recettes';
 import { PlanningScreen } from '../screens/planning';
 import { SettingsScreen } from '../screens/settings/settings';
+import { LieuxScreen } from '../screens/lieux';
 
 @Component({
   selector: 'app-shell',
@@ -27,7 +28,7 @@ import { SettingsScreen } from '../screens/settings/settings';
     SidebarComponent, TopbarComponent, NotificationsComponent,
     FamilyModalComponent, SearchModalComponent, GenerateModal, RepairModal,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
-    FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen,
+    FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen,
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
@@ -55,6 +56,7 @@ import { SettingsScreen } from '../screens/settings/settings';
             @case ('calendar') { <screen-calendar /> }
             @case ('courses') { <screen-courses /> }
             @case ('taches') { <screen-taches /> }
+            @case ('lieux') { <screen-lieux /> }
             @case ('contacts') { <screen-contacts /> }
             @case ('fidelite') { <screen-fidelite /> }
             @case ('finances') { <screen-finances /> }
