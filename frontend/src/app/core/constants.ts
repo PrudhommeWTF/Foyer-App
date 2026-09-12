@@ -109,6 +109,9 @@ export const ICONS: Record<string, string> = {
   pin: 'M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
   // Repère de carte, pour l'écran Lieux (inventaires par lieu de vacances).
   'map-pin': 'M12 21s6-5.7 6-11a6 6 0 1 0-12 0c0 5.3 6 11 6 11z M12 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
+  // Poignée de glisser-déposer : six points (bouts ronds), l'affordance
+  // universelle du « tirer pour réordonner ». Rendue avec un trait épais.
+  grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];

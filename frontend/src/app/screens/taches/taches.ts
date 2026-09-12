@@ -201,7 +201,7 @@ import { TaskComposerComponent } from './composer';
                 @if (canOrder(g)) {
                   <!-- On tire par la poignée, jamais par la ligne : sinon la liste ne défile plus. -->
                   <button class="grip" data-grip (click)="$event.stopPropagation()" [attr.aria-label]="'Déplacer ' + l.task.text">
-                    <f-icon name="planning" [size]="15" color="var(--ink3)" [width]="2.2" />
+                    <f-icon name="grip" [size]="18" color="var(--ink3)" [width]="3" />
                   </button>
                 }
                 <button class="tick" (click)="$event.stopPropagation(); store.toggleTask(l.task.id)" [attr.aria-label]="'Cocher ' + l.task.text"></button>
@@ -248,7 +248,7 @@ import { TaskComposerComponent } from './composer';
                   @for (sb of l.subs; track sb.id) {
                     <div class="sub" [attr.data-rid]="sb.id">
                       <button class="grip sm" data-grip [attr.aria-label]="'Déplacer ' + sb.text">
-                        <f-icon name="planning" [size]="13" color="var(--ink3)" [width]="2.2" />
+                        <f-icon name="grip" [size]="16" color="var(--ink3)" [width]="2.8" />
                       </button>
                       <button class="tick sm" [class.on]="sb.done" (click)="store.toggleTask(sb.id)" [attr.aria-label]="(sb.done ? 'Rouvrir ' : 'Cocher ') + sb.text">
                         @if (sb.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
@@ -302,7 +302,7 @@ import { TaskComposerComponent } from './composer';
                 @for (sb of editSubs(); track sb.id) {
                   <div class="sub-edit" [attr.data-rid]="sb.id">
                     <button class="grip sm" data-grip [attr.aria-label]="'Déplacer ' + sb.text">
-                      <f-icon name="planning" [size]="13" color="var(--ink3)" [width]="2.2" />
+                      <f-icon name="grip" [size]="16" color="var(--ink3)" [width]="2.8" />
                     </button>
                     <button class="tick sm" [class.on]="sb.done" (click)="store.toggleTask(sb.id)" [attr.aria-label]="(sb.done ? 'Rouvrir ' : 'Cocher ') + sb.text">
                       @if (sb.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
