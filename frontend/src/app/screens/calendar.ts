@@ -667,7 +667,13 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .allday .box.on { background: var(--primary); box-shadow: none; }
     .ev-times { display: flex; gap: 12px; margin-bottom: 18px; }
     .ev-times > div { flex: 1; min-width: 0; }
-    .ev-times .input { width: 100%; }
+    .ev-times .input { width: 100%; min-width: 0; box-sizing: border-box; }
+    /* Sur téléphone, les deux champs d'heure passent l'un sous l'autre. Le champ
+       « time » natif d'iOS a une largeur minimale qui déborde une demi-colonne
+       (les deux se chevauchaient) ; empilés, chacun prend toute la largeur et son
+       libellé tient sur une ligne. La modale occupe toute la fenêtre sur mobile,
+       le seuil se lit donc sur la largeur de la fenêtre. */
+    @media (max-width: 560px) { .ev-times { flex-direction: column; gap: 14px; } }
     .dp { background: var(--soft); border: 2px solid var(--line); border-radius: 16px; padding: 14px; margin-bottom: 8px; }
     .dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .dp-nav { width: 30px; height: 30px; border: none; border-radius: 9px; background: var(--surface); display: flex; align-items: center; justify-content: center; cursor: pointer; }
