@@ -5,7 +5,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem } from '../src/tasks/ops';
-import { assignedBy, dueReminders, fireAt, parisWall, wallAdd, whenLabel } from '../src/notify/reminders';
+import { PrepList, PrepMember, assignedBy, dueReminders, fireAt, parisWall, preparationDue, wallAdd, whenLabel } from '../src/notify/reminders';
 
 const task = (over: Partial<TaskItem> = {}): TaskItem =>
   ({ id: 't1', listId: 'l1', text: 'Rappeler le plombier', who: ['m1'], due: '2026-09-05', time: '18:00', done: false, remind: 'at', ...over });
@@ -82,4 +82,69 @@ test('affectation : les membres nouvellement affectés, sauf l’auteur du geste
   assert.deepEqual(assignedBy(task({ who: ['m1'] }), task({ who: ['m1'] }), 'me'), [], 'rien de nouveau');
   assert.deepEqual(assignedBy(undefined, task({ who: ['me'] }), 'me'), [], 'je ne me notifie pas moi-même');
   assert.deepEqual(assignedBy(undefined, task({ who: ['m1'], done: true }), 'me'), [], 'une tâche faite n’affecte personne');
+});
+
+// --- Rappels de préparation (départ J-N) ------------------------------------
+
+const prepList = (over: Partial<PrepList> = {}): PrepList =>
+  ({ id: 'L', name: 'Trousseau colo', kind: 'preparation', forMember: 'nolan', departure: '2026-09-05', remindDaysBefore: 3, ...over });
+const prepMembers: PrepMember[] = [
+  { id: 'papa', name: 'Papa', adult: true, hasAccount: true },
+  { id: 'maman', name: 'Maman', adult: true, hasAccount: true },
+  { id: 'nolan', name: 'Nolan', adult: false, hasAccount: true },
+];
+const unprep = [{ listId: 'L', done: false }, { listId: 'L', done: false }];
+
+test('préparation : rappel dans la fenêtre J-N, muet avant, muet le jour du départ et après', () => {
+  const on = (day: string): boolean => preparationDue([prepList()], unprep, prepMembers, day + 'T18:00').length > 0;
+  assert.equal(on('2026-09-01'), false, 'J-4 : hors fenêtre');
+  assert.equal(on('2026-09-02'), true, 'J-3 : premier jour de la fenêtre');
+  assert.equal(on('2026-09-04'), true, 'la veille : dernier jour');
+  assert.equal(on('2026-09-05'), false, 'le jour du départ : plus rien');
+  assert.equal(on('2026-09-06'), false, 'après : plus rien');
+});
+
+test('préparation : rien avant 18 h, quelque chose à partir de 18 h', () => {
+  assert.equal(preparationDue([prepList()], unprep, prepMembers, '2026-09-03T17:59').length, 0);
+  assert.equal(preparationDue([prepList()], unprep, prepMembers, '2026-09-03T18:00').length, 1);
+});
+
+test('préparation : liste entièrement préparée, sans date, ou d’un autre type = silence', () => {
+  assert.equal(preparationDue([prepList()], [{ listId: 'L', done: true }], prepMembers, '2026-09-03T18:00').length, 0, 'tout coché');
+  assert.equal(preparationDue([prepList()], [], prepMembers, '2026-09-03T18:00').length, 0, 'aucun article');
+  assert.equal(preparationDue([prepList({ departure: null })], unprep, prepMembers, '2026-09-03T18:00').length, 0, 'sans date');
+  assert.equal(preparationDue([prepList({ kind: 'taches' })], unprep, prepMembers, '2026-09-03T18:00').length, 0, 'liste ordinaire');
+});
+
+test('préparation : destinataires = adultes à compte + l’enfant concerné s’il a un compte', () => {
+  const h = preparationDue([prepList()], unprep, prepMembers, '2026-09-03T18:00')[0];
+  assert.deepEqual([...h.memberIds].sort(), ['maman', 'nolan', 'papa'], 'les deux adultes et Nolan (qui a un compte)');
+  // Nolan sans compte : il ne peut pas recevoir, seuls les adultes restent.
+  const sans = prepMembers.map((m) => (m.id === 'nolan' ? { ...m, hasAccount: false } : m));
+  assert.deepEqual([...preparationDue([prepList()], unprep, sans, '2026-09-03T18:00')[0].memberIds].sort(), ['maman', 'papa']);
+});
+
+test('préparation : le corps compte les jours et les affaires ; la clé porte le jour', () => {
+  const h = preparationDue([prepList()], unprep, prepMembers, '2026-09-02T18:00')[0];
+  assert.equal(h.title, 'Trousseau colo');
+  assert.equal(h.body, 'Départ de Nolan dans 3 jours : il reste 2 affaires à préparer.');
+  assert.equal(h.key, 'prep|L|2026-09-02');
+  // La veille : un seul jour, et une seule affaire restante s'accordent au singulier.
+  const veille = preparationDue([prepList()], [{ listId: 'L', done: false }], prepMembers, '2026-09-04T18:00')[0];
+  assert.equal(veille.body, 'Départ de Nolan dans 1 jour : il reste 1 affaire à préparer.');
+  assert.equal(veille.key, 'prep|L|2026-09-04');
+});
+
+test('préparation : sans membre concerné, le corps dit « Départ »', () => {
+  const h = preparationDue([prepList({ forMember: null })], unprep, prepMembers, '2026-09-03T18:00')[0];
+  assert.equal(h.body, 'Départ dans 2 jours : il reste 2 affaires à préparer.');
+});
+
+test('préparation : remindDaysBefore borné à [1, 30], défaut 3', () => {
+  const win = (n: number | null | undefined, day: string): boolean =>
+    preparationDue([prepList({ remindDaysBefore: n })], unprep, prepMembers, day + 'T18:00').length > 0;
+  assert.equal(win(undefined, '2026-09-02'), true, 'défaut 3 : J-3 dans la fenêtre');
+  assert.equal(win(0, '2026-09-04'), true, '0 ramené à 1 : la veille');
+  assert.equal(win(0, '2026-09-03'), false, '0 ramené à 1 : J-2 hors fenêtre');
+  assert.equal(win(99, '2026-08-20'), true, '99 ramené à 30 : J-16 encore dans la fenêtre');
 });

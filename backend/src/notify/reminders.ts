@@ -142,3 +142,58 @@ export function assignedBy(before: TaskItem | undefined, after: TaskItem | undef
   const avant = new Set(before?.who || []);
   return after.who.filter((m) => !avant.has(m) && m !== by);
 }
+
+/** Une liste de préparation vue par le planificateur : de quoi décider du rappel. */
+export interface PrepList { id: string; name: string; kind: string; forMember?: string | null; departure?: string | null; remindDaysBefore?: number | null; }
+/** Un membre vu par le planificateur : adulte (destinataire par défaut) et disposant d'un compte (donc d'appareils). */
+export interface PrepMember { id: string; name: string; adult: boolean; hasAccount: boolean; }
+
+/** Jours pleins entre deux jours « AAAA-MM-JJ » (positif si `to` est après `from`). */
+function dayDiff(from: string, to: string): number {
+  const [y1, m1, d1] = from.split('-').map(Number);
+  const [y2, m2, d2] = to.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+}
+
+/**
+ * Les rappels de préparation dus : pour chaque liste de préparation datée, un
+ * rappel par jour à partir de 18 h, du jour « départ - N » à la veille du
+ * départ, tant qu'il reste au moins un article non préparé. Le défaut de N est 3,
+ * borné à [1, 30]. Destinataires : les adultes du foyer, plus le membre concerné
+ * s'il a un compte. Une seule notification par liste et par jour, la clé portant
+ * le jour.
+ *
+ * Pas de « manqué » ici : un rappel raté à 18 h part encore le soir même (même
+ * clé), et le lendemain rouvre une fenêtre neuve. Rien à rattraper.
+ */
+export function preparationDue(lists: PrepList[], tasks: Pick<TaskItem, 'listId' | 'done'>[], members: PrepMember[], nowWall: string): ReminderHit[] {
+  const hits: ReminderHit[] = [];
+  // Avant 18 h, le rappel du jour n'est pas encore dû.
+  if (nowWall.slice(11, 16) < EVE) return hits;
+  const today = nowWall.slice(0, 10);
+  const adults = members.filter((m) => m.adult && m.hasAccount).map((m) => m.id);
+  const accounts = new Set(members.filter((m) => m.hasAccount).map((m) => m.id));
+  const name = (id: string): string => members.find((m) => m.id === id)?.name || '';
+  for (const l of lists || []) {
+    if (l.kind !== 'preparation' || !l.departure) continue;
+    const n = Math.min(30, Math.max(1, l.remindDaysBefore ?? 3));
+    const first = wallAdd(l.departure + 'T00:00', -n * 24 * 60).slice(0, 10);
+    // Fenêtre [départ - N, veille du départ] : rien avant, rien le jour du départ ni après.
+    if (today < first || today >= l.departure) continue;
+    const reste = (tasks || []).filter((t) => t.listId === l.id && !t.done).length;
+    if (!reste) continue;
+    const jours = dayDiff(today, l.departure);
+    const qui = l.forMember ? name(l.forMember) : '';
+    const recipients = new Set(adults);
+    if (l.forMember && accounts.has(l.forMember)) recipients.add(l.forMember);
+    hits.push({
+      key: `prep|${l.id}|${today}`,
+      taskId: l.id,
+      memberIds: [...recipients],
+      title: l.name,
+      body: `${qui ? 'Départ de ' + qui : 'Départ'} dans ${jours} jour${jours > 1 ? 's' : ''} : il reste ${reste} affaire${reste > 1 ? 's' : ''} à préparer.`,
+      fireAt: today + 'T' + EVE,
+    });
+  }
+  return hits;
+}
