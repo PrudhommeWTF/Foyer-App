@@ -29,6 +29,8 @@ const TABLEAUX: Record<string, number> = {
   taskLists: 500,
   taskTemplates: 500,
   tasks: 50_000,
+  places: 500,
+  placeItems: 20_000,
   contacts: 5_000,
   cards: 2_000,
   recipes: 10_000,

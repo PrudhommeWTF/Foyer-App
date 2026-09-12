@@ -2,6 +2,7 @@
 // fields (planned/birthday/academie) are additive and backward-compatible.
 import type { ShopItem } from './shopping/ops';
 import type { TaskItem } from './tasks/ops';
+import type { Place, PlaceItem } from './places/ops';
 import type { HouseholdSettings, MemberPrefs } from './settings/registry';
 
 // `allerg` et `refuse` portent les contraintes alimentaires du membre : voir
@@ -90,6 +91,8 @@ export interface TaskTemplate { id: string; name: string; kind: ListKind; color:
 // La forme d'une tâche et celle de ses mutations vivent avec le moteur qui les
 // écrit réellement, tâche par tâche (voir tasks/ops.ts).
 export type { TaskItem } from './tasks/ops';
+// La forme des lieux et de leurs affaires vit avec le moteur qui les écrit.
+export type { Place, PlaceItem, PlaceItemState } from './places/ops';
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 /**
  * Une carte de fidélité : un code partagé par tout le foyer, réaffiché à l'écran
@@ -193,6 +196,9 @@ export interface HouseholdState {
   taskLists: TaskList[];
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
+  /** Lieux de vacances et affaires qui y restent : écrits par opérations (voir places/ops.ts). */
+  places: Place[];
+  placeItems: PlaceItem[];
   contacts: Contact[];
   cards: LoyaltyCard[];
   meals: Record<string, MealValue>;
