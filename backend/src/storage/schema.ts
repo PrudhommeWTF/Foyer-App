@@ -7,9 +7,10 @@
 //     milieu de l'état. Chaque sauvegarde renvoyait le document entier, donc
 //     toutes les photos du carnet, y compris pour cocher un article de courses
 //     en 4G dans un magasin.
-//   - `hh_shop_ops` et `hh_task_ops` : les identifiants des opérations de
-//     courses et de tâches déjà appliquées, pour qu'un rejeu après coupure
-//     réseau ne ressuscite pas un article ou une tâche supprimés entre-temps.
+//   - `hh_shop_ops`, `hh_task_ops` et `hh_place_ops` : les identifiants des
+//     opérations de courses, de tâches et de lieux déjà appliquées, pour qu'un
+//     rejeu après coupure réseau ne ressuscite pas un article, une tâche ou une
+//     affaire supprimés entre-temps.
 //   - `hh_push_subs` et `hh_notif_sent` : les appareils abonnés aux rappels et
 //     le journal de ce qui leur a été envoyé (voir notify/push.ts).
 //   - `hh_settings_log` : qui a changé quel réglage, quand, et pour quelle
@@ -126,6 +127,20 @@ const MIGRATIONS: Migration[] = [
           at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE INDEX idx_hh_settings_log_at ON hh_settings_log(at DESC);
+      `);
+    },
+  },
+  {
+    version: 5,
+    label: 'journal des opérations de lieux',
+    up: (db) => {
+      db.exec(`
+        -- Même rôle que hh_shop_ops, pour les lieux et leurs affaires (voir
+        -- places/repo.ts).
+        CREATE TABLE hh_place_ops (
+          op_id TEXT PRIMARY KEY,
+          applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
       `);
     },
   },

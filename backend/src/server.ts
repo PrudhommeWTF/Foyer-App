@@ -20,6 +20,8 @@ import { recipesRouter } from './recipes/routes';
 import { preserveShopping, shopItemsOf } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
 import { onAssigned, preserveTasks, taskItemsOf } from './tasks/repo';
+import { placesRouter } from './places/routes';
+import { placeItemsOf, placesOf, preservePlaces } from './places/repo';
 import { pushRouter } from './notify/routes';
 import { initPush, notify } from './notify/push';
 import { startScheduler } from './notify/scheduler';
@@ -297,20 +299,24 @@ api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Respon
     );
   }
 
+  // Same rule for the places and their items: written op by op, never by
+  // whole-document PUT. Nothing to reconcile against other collections here.
+  preservePlaces(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>);
+
   const result = saveHousehold(state);
   res.json(result);
 });
 
 /**
- * Instantané des sous-arbres qui s'écrivent par opérations : courses et tâches.
- * `since` évite de les renvoyer quand rien n'a bougé : les écrans sondent toutes
- * les cinq secondes tant qu'ils sont visibles, autant que la réponse tienne en
- * trois lignes le reste du temps.
+ * Instantané des sous-arbres qui s'écrivent par opérations : courses, tâches et
+ * lieux. `since` évite de les renvoyer quand rien n'a bougé : les écrans sondent
+ * toutes les cinq secondes tant qu'ils sont visibles, autant que la réponse
+ * tienne en trois lignes le reste du temps.
  */
 api.get('/live', auth, requireMember, (req: Request, res: Response) => {
-  // Courses et tâches vivent dans le même document : un seul parse pour les deux,
-  // plutôt qu'un par sous-arbre. Cet endpoint est sondé toutes les cinq secondes
-  // par chaque écran ouvert, c'est le plus chaud du service.
+  // Courses, tâches et lieux vivent dans le même document : un seul parse pour
+  // les trois, plutôt qu'un par sous-arbre. Cet endpoint est sondé toutes les
+  // cinq secondes par chaque écran ouvert, c'est le plus chaud du service.
   const { state, version } = getHousehold();
   const doc = state as unknown as Record<string, unknown>;
   const since = parseInt(String(req.query['since'] ?? ''), 10);
@@ -318,7 +324,7 @@ api.get('/live', auth, requireMember, (req: Request, res: Response) => {
     res.json({ version, unchanged: true });
     return;
   }
-  res.json({ version, shop: shopItemsOf(doc), tasks: taskItemsOf(doc) });
+  res.json({ version, shop: shopItemsOf(doc), tasks: taskItemsOf(doc), places: placesOf(doc), placeItems: placeItemsOf(doc) });
 });
 
 // ---- Finances (relational tables, granular operations) ----
@@ -350,6 +356,10 @@ api.use('/shopping', auth, requireMember, shoppingRouter());
 
 // Tâches : même dispositif, même raison. Voir tasks/ops.ts.
 api.use('/tasks', auth, requireMember, tasksRouter());
+
+// Lieux de vacances et affaires qui y restent : écrits par opérations, comme les
+// courses et les tâches, pour rester hors du chemin du PUT du document complet.
+api.use('/places', auth, requireMember, placesRouter());
 
 // Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
 //

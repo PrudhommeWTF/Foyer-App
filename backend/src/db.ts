@@ -9,6 +9,7 @@ import { migrateHousehold, setStateVersion, stateVersion } from './storage/schem
 import * as files from './storage/files';
 import { initShopping } from './shopping/repo';
 import { initTasks } from './tasks/repo';
+import { initPlaces } from './places/repo';
 import { STATE_VERSION, fileStorer, migrateState } from './state/migrations';
 import { log } from './log';
 
@@ -74,6 +75,7 @@ migrateHousehold(db);
 files.initFiles(db);
 initShopping(db);
 initTasks(db);
+initPlaces(db);
 migrateHouseholdDocument();
 
 // Fichiers qu'aucune entité du document ne cite plus (recette supprimée, photo
