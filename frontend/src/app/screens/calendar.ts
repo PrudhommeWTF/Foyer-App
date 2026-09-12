@@ -467,14 +467,19 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     /* Panneau masqué : le calendrier reprend toute la largeur (grand écran seulement). */
     .cal-wrap.no-side .side { display: none; }
     .nav-btn.side-toggle.active { background: var(--soft2); }
-    :host-context(.shell.narrow) .cal-wrap { flex-direction: column; }
+    /* En pile, les cartes s'étirent à toute la largeur : sans « stretch », un
+       flex en colonne aligné « flex-start » les dimensionne à leur contenu, et
+       un libellé long (« Emploi du temps », une tâche non coupée) les fait
+       déborder à droite. Le conteneur (container-type sur :host) entraînerait
+       alors aussi la modale, posée en position fixe. */
+    :host-context(.shell.narrow) .cal-wrap { flex-direction: column; align-items: stretch; }
     :host-context(.shell.narrow) .side { width: auto; }
-    @media (max-width: 860px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
+    @media (max-width: 860px) { .cal-wrap { flex-direction: column; align-items: stretch; } .side { width: auto; } }
     /* En largeur moyenne (fenêtre pas en plein écran), le bandeau de 320 px laisse
        trop peu de place aux sept colonnes : on le passe sous le calendrier, qui
        reprend toute la largeur. Requête de conteneur : c'est la largeur réelle de
        l'écran Calendrier qui décide, pas celle de la fenêtre. */
-    @container (max-width: 1040px) { .cal-wrap { flex-direction: column; } .side { width: auto; } }
+    @container (max-width: 1040px) { .cal-wrap { flex-direction: column; align-items: stretch; } .side { width: auto; } }
     /* Le détail du jour : mini-calendrier, libellé de date, événements puis
        repères, tous espacés du même écart pour que la colonne respire d'un pas
        régulier plutôt que par à-coups. */
@@ -489,7 +494,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .head-left { display: flex; align-items: center; gap: 12px; }
     .cal-title { font-size: 22px; font-weight: 700; color: var(--ink); }
     .today-btn { border: none; font-size: 12.5px; font-weight: 800; color: var(--ink2); background: var(--soft); border-radius: 10px; padding: 7px 12px; cursor: pointer; }
-    .head-right { display: flex; align-items: center; gap: 12px; }
+    .head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .seg2 { display: flex; gap: 3px; background: var(--soft); border-radius: 12px; padding: 4px; }
     .seg2 button { padding: 7px 13px; border: none; background: transparent; border-radius: 9px; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
     .seg2 button.active { background: var(--surface); color: var(--ink); box-shadow: 0 4px 10px -6px rgba(90,60,40,.5); }
@@ -626,7 +631,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     /* ===== informational overlay items (holidays, school, birthdays, tasks) ===== */
     .ex-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
     .tap { cursor: pointer; }
-    .ex-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ex-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* Une tâche faite est barrée dans le calendrier comme dans sa liste. */
     .ex-lbl.strike, .sx-lbl.strike { text-decoration: line-through; color: var(--ink3); }
     .chip-ex { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 5px; background: var(--surface); font-size: 10px; font-weight: 800; color: var(--ink2); white-space: nowrap; overflow: hidden; }
