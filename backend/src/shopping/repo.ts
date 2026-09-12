@@ -8,7 +8,7 @@
 // de s'écraser.
 import type { Database } from 'better-sqlite3';
 import { docDb, idsOf as ids, initDoc, readDoc, writeDoc } from '../state/doc';
-import { ApplyResult, ShopItem, applyOps, reconcile } from './ops';
+import { ApplyResult, FALLBACK_AISLE_NAME, ShopItem, applyOps, isFallbackAisleName, reconcile } from './ops';
 
 /** Au-delà, le journal des opérations est élagué : c'est une mémoire courte contre les rejeux, pas un historique. */
 const OPS_JOURNAL_MAX = 2000;
@@ -77,11 +77,13 @@ export function preserveShopping(incoming: Record<string, any>, current?: Record
   const listIds = ids(incoming, 'shopLists');
 
   // Le rayon de repli doit exister dans le document entrant, sinon les articles
-  // rescapés atterriraient dans un rayon que l'écran ne sait pas afficher.
+  // rescapés atterriraient dans un rayon que l'écran ne sait pas afficher. Il
+  // s'identifie par son nom (« Non classé », ou « À trier » pour les foyers
+  // d'avant ce nom) ; recréé sous le nom par défaut s'il manque tout à fait.
   const incomingAisles = Array.isArray(incoming['aisles']) ? incoming['aisles'] : [];
-  let fallback = incomingAisles.find((a: any) => a?.name === 'À trier');
+  let fallback = incomingAisles.find((a: any) => isFallbackAisleName(a?.name));
   if (!fallback) {
-    fallback = { id: 'a-tri', name: 'À trier', color: '#8A7E74', position: incomingAisles.length };
+    fallback = { id: 'a-repli', name: FALLBACK_AISLE_NAME, color: '#8A7E74', position: incomingAisles.length };
     incomingAisles.push(fallback);
     incoming['aisles'] = incomingAisles;
     aisleIds.add(String(fallback.id));

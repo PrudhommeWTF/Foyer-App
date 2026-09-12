@@ -319,6 +319,9 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
           }
         </div>
         <div class="modal-actions">
+          @if (store.ui().aiEditId && store.ui().aiEditId !== store.defaultAisleId()) {
+            <button class="icon-btn del-btn" (click)="askDeleteAisle()" aria-label="Supprimer le rayon"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
+          }
           <button class="btn btn-soft grow" (click)="store.patch({ aiForm: false })">Annuler</button>
           <button class="btn btn-primary grow2" (click)="store.saveAisle()">Enregistrer</button>
         </div>
@@ -333,7 +336,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
 
     @if (store.ui().aisleDelId) {
       <f-confirm title="Supprimer ce rayon ?" (cancel)="store.patch({ aisleDelId: null })" (confirm)="store.confirmAisleDel()">
-        Ce rayon sera supprimé. Ses articles passeront dans « À trier ».
+        Ce rayon sera supprimé. Ses articles passeront dans le rayon de repli.
       </f-confirm>
     }
   `,
@@ -532,6 +535,9 @@ export class CoursesScreen {
       this.qaAisleOverride.set(null);
     }
   }
+
+  /** Ferme la fiche du rayon et demande confirmation de sa suppression. */
+  askDeleteAisle(): void { const id = this.store.ui().aiEditId; if (id) this.store.patch({ aiForm: false, aisleDelId: id }); }
 
   countFor(id: string): number { return this.d().shop.filter((x) => x.listId === id && x.state === 'a-prendre').length; }
 

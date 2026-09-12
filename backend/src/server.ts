@@ -284,7 +284,7 @@ api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Respon
   const kept = preserveShopping(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>);
   if (kept.movedToFallback || kept.dropped) {
     log.info(
-      `Courses : ${kept.movedToFallback} article(s) déplacé(s) vers « À trier » ` +
+      `Courses : ${kept.movedToFallback} article(s) déplacé(s) vers le rayon de repli ` +
       `et ${kept.dropped} retiré(s) avec leur liste, à la suite d'une édition des rayons ou des listes.`,
     );
   }

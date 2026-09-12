@@ -157,7 +157,7 @@ test('la liste sort dans l’ordre des allées, puis par nom', () => {
 
 test('un article d’un rayon supprimé n’est pas perdu', () => {
   const csv = shopToCsv([article({ name: 'Orphelin', aisleId: 'a9' })], RAYONS);
-  assert.match(csv, /À trier;Orphelin/);
+  assert.match(csv, /Non classé;Orphelin/);
 });
 
 test('les guillemets et points-virgules ne cassent pas le tableau', () => {
