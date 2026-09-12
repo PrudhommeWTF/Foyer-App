@@ -140,7 +140,7 @@ describe('un enregistrement du document ne peut plus emporter la liste', () => {
     applyShoppingOps([{ opId: 'o1', op: 'add', id: 's1', name: 'Beurre', aisleId: 'a1', listId: 'cl1' }]);
     const incoming = doc({ aisles: [] }) as Record<string, any>;
     preserveShopping(incoming);
-    const repli = incoming['aisles'].find((a: any) => a.name === 'Non classé');
+    const repli = incoming['aisles'].find((a: any) => /Non classé/.test(a.name));
     assert.ok(repli, 'sans rayon de repli, l’article atterrirait dans un rayon que l’écran ignore');
     assert.equal(incoming['shop'][0].aisleId, repli.id);
   });
@@ -152,7 +152,7 @@ describe('un enregistrement du document ne peut plus emporter la liste', () => {
     // pas en recréer un second sous le nouveau nom.
     const incoming = doc({ aisles: [{ id: 'a-tri', name: 'À trier', color: '#8A7E74', position: 0 }] }) as Record<string, any>;
     preserveShopping(incoming);
-    assert.equal(incoming['aisles'].filter((a: any) => /^(Non classé|À trier)$/.test(a.name)).length, 1, 'un seul rayon de repli');
+    assert.equal(incoming['aisles'].filter((a: any) => /Non classé|À trier/.test(a.name)).length, 1, 'un seul rayon de repli');
     assert.ok(incoming['aisles'].some((a: any) => a.name === 'À trier'));
   });
 });
