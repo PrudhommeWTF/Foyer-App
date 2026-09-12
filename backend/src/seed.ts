@@ -3,18 +3,45 @@
 // default used before that. Only DATA fields are persisted; ephemeral UI state
 // lives in the frontend.
 import { HouseholdState } from './models';
+import { FALLBACK_AISLE_NAME } from './shopping/ops';
 import { householdDefaults, memberDefaults } from './settings/registry';
 
 /**
  * Rayons de départ. Leur `position` donne l'ordre de parcours du magasin, que
  * l'écran Courses laisse réordonner : c'est ce qui fait qu'une liste se lit dans
- * l'ordre des allées plutôt que dans l'ordre de saisie.
+ * l'ordre des allées plutôt que dans l'ordre de saisie. Le premier, « Non
+ * classé », est le rayon de repli (voir FALLBACK_AISLE_NAME).
+ *
+ * Le `kind` relie un rayon du foyer à un type du référentiel (voir articles.ts) :
+ * il range automatiquement les ingrédients générés depuis les repas. Les huit
+ * types existent ici ; les autres rayons sont des catégories que le foyer
+ * remplit à la main.
  */
 const STARTER_AISLES = (): HouseholdState['aisles'] => [
-  { id: 'a1', name: 'Fruits & légumes', color: '#7A9B76', position: 0, kind: 'legumes' },
-  { id: 'a2', name: 'Frais', color: '#4E93B8', position: 1, kind: 'frais' },
-  { id: 'a3', name: 'Épicerie', color: '#F0B24B', position: 2, kind: 'epicerie' },
-  { id: 'a4', name: 'À trier', color: '#8A7E74', position: 3 },
+  { id: 'a-repli', name: FALLBACK_AISLE_NAME, color: '#8A7E74', position: 0 },
+  { id: 'a-legumes', name: 'Fruits & Légumes', color: '#7A9B76', position: 1, kind: 'legumes' },
+  { id: 'a-viande', name: 'Viande', color: '#E56B4E', position: 2, kind: 'viande' },
+  { id: 'a-poisson', name: 'Poissonnerie', color: '#4E93B8', position: 3 },
+  { id: 'a-boulangerie', name: 'Boulangerie', color: '#F0B24B', position: 4, kind: 'boulangerie' },
+  { id: 'a-frais', name: 'Frais', color: '#4E93B8', position: 5, kind: 'frais' },
+  { id: 'a-surgele', name: 'Surgelés', color: '#4E93B8', position: 6, kind: 'surgele' },
+  { id: 'a-boisson', name: 'Boissons', color: '#9B6FA8', position: 7, kind: 'boisson' },
+  { id: 'a-feculents', name: 'Pâtes, Riz, Féculents', color: '#F0B24B', position: 8 },
+  { id: 'a-epicerie', name: 'Epicerie salée', color: '#F0B24B', position: 9, kind: 'epicerie' },
+  { id: 'a-conserves', name: 'Conserves', color: '#C77DA5', position: 10 },
+  { id: 'a-plats', name: 'Plats cuisinés', color: '#E56B4E', position: 11 },
+  { id: 'a-sauces', name: 'Sauces & Condiments', color: '#E56B4E', position: 12 },
+  { id: 'a-petitdej', name: 'Petit déjeuner', color: '#F0B24B', position: 13 },
+  { id: 'a-biscuits', name: 'Biscuits & Gâteaux', color: '#C77DA5', position: 14 },
+  { id: 'a-confiserie', name: 'Confiserie', color: '#C77DA5', position: 15 },
+  { id: 'a-dessert', name: 'Dessert', color: '#C77DA5', position: 16 },
+  { id: 'a-hygiene', name: 'Beauté & Hygiène', color: '#9B6FA8', position: 17 },
+  { id: 'a-bebe', name: 'Bébé', color: '#4E93B8', position: 18 },
+  { id: 'a-entretien', name: 'Entretien', color: '#7A9B76', position: 19, kind: 'entretien' },
+  { id: 'a-animaux', name: 'Animaux', color: '#8A7E74', position: 20 },
+  { id: 'a-maison', name: 'Maison & Jardin', color: '#7A9B76', position: 21 },
+  { id: 'a-scolaire', name: 'Fourniture scolaire', color: '#4E93B8', position: 22 },
+  { id: 'a-monde', name: 'Rayon du monde', color: '#F0B24B', position: 23 },
 ];
 
 /** La liste de tâches de départ : partagée, l'affaire du jour, sans rien dedans. */

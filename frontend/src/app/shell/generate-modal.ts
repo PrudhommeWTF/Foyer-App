@@ -3,6 +3,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { PlanLine, scaleLabel } from '../core/shopping-plan';
+import { FALLBACK_AISLE_NAME } from '../core/constants';
 
 interface Groupe { name: string; color: string; lines: PlanLine[]; }
 
@@ -179,6 +180,6 @@ export class GenerateModal {
   /** Rayon où atterrit ce qui n'a pas été reconnu, nommé tel qu'il l'est chez soi. */
   fallbackName = computed(() => {
     const d = this.store.data();
-    return d?.aisles.find((a) => a.id === this.store.defaultAisleId())?.name || 'À trier';
+    return d?.aisles.find((a) => a.id === this.store.defaultAisleId())?.name || FALLBACK_AISLE_NAME;
   });
 }

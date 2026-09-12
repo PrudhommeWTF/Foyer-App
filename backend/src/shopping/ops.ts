@@ -22,6 +22,17 @@
 export type ShopState = 'a-prendre' | 'panier' | 'indisponible';
 export const SHOP_STATES: ShopState[] = ['a-prendre', 'panier', 'indisponible'];
 
+/**
+ * Le rayon de repli reçoit les articles dont le rayon a disparu, et sert de
+ * défaut à une saisie libre. « Non classé » est son nom par défaut à
+ * l'installation ; « À trier » reste reconnu pour les foyers créés avant ce nom.
+ * Le repli s'identifie donc par son nom, pas par un identifiant fixe.
+ */
+export const FALLBACK_AISLE_NAME = 'Non classé';
+export const FALLBACK_AISLE_NAMES = [FALLBACK_AISLE_NAME, 'À trier'];
+export const isFallbackAisleName = (name: unknown): boolean =>
+  typeof name === 'string' && FALLBACK_AISLE_NAMES.includes(name);
+
 export interface ShopItem {
   id: string;
   name: string;

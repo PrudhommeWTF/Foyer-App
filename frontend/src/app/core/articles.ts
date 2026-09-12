@@ -55,10 +55,10 @@ export const RAYONS: { key: Rayon; name: string }[] = [
 ];
 
 /**
- * Repli quand le foyer n'a pas de rayon du type voulu : les quatre rayons créés
- * à l'installation sont « Fruits & légumes », « Frais », « Épicerie » et
- * « À trier ». Une boucherie va donc au frais tant qu'aucun rayon boucherie
- * n'existe, plutôt qu'à trier.
+ * Repli quand le foyer n'a pas de rayon du type voulu. À l'installation les huit
+ * types existent (voir backend seed.ts), mais un foyer peut en supprimer : une
+ * boucherie va alors au frais tant qu'aucun rayon boucherie n'existe, plutôt
+ * qu'au rayon de repli.
  */
 export const RAYON_REPLI: Record<Rayon, Rayon> = {
   legumes: 'legumes', viande: 'frais', frais: 'frais', surgele: 'frais',

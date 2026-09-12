@@ -140,8 +140,19 @@ describe('un enregistrement du document ne peut plus emporter la liste', () => {
     applyShoppingOps([{ opId: 'o1', op: 'add', id: 's1', name: 'Beurre', aisleId: 'a1', listId: 'cl1' }]);
     const incoming = doc({ aisles: [] }) as Record<string, any>;
     preserveShopping(incoming);
-    const tri = incoming['aisles'].find((a: any) => a.name === 'À trier');
-    assert.ok(tri, 'sans rayon de repli, l’article atterrirait dans un rayon que l’écran ignore');
-    assert.equal(incoming['shop'][0].aisleId, tri.id);
+    const repli = incoming['aisles'].find((a: any) => a.name === 'Non classé');
+    assert.ok(repli, 'sans rayon de repli, l’article atterrirait dans un rayon que l’écran ignore');
+    assert.equal(incoming['shop'][0].aisleId, repli.id);
+  });
+
+  it('« À trier » reste reconnu comme repli pour les foyers d’avant « Non classé »', () => {
+    seed();
+    applyShoppingOps([{ opId: 'o1', op: 'add', id: 's1', name: 'Beurre', aisleId: 'a1', listId: 'cl1' }]);
+    // Un foyer plus ancien : son repli s'appelle encore « À trier ». On ne doit
+    // pas en recréer un second sous le nouveau nom.
+    const incoming = doc({ aisles: [{ id: 'a-tri', name: 'À trier', color: '#8A7E74', position: 0 }] }) as Record<string, any>;
+    preserveShopping(incoming);
+    assert.equal(incoming['aisles'].filter((a: any) => /^(Non classé|À trier)$/.test(a.name)).length, 1, 'un seul rayon de repli');
+    assert.ok(incoming['aisles'].some((a: any) => a.name === 'À trier'));
   });
 });

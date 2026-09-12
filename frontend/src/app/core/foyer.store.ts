@@ -28,7 +28,7 @@ import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoP
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
 import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
-import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, tint, grad } from './constants';
+import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
 import { mealItemName, mealNames, recipeTime } from './meals';
@@ -1279,10 +1279,10 @@ export class FoyerStore {
     const s = this.ui();
     return s.activeShopList !== 'all' ? s.activeShopList : (this._data()?.shopLists[0]?.id || '');
   }
-  /** Rayon de repli d'un article saisi à la volée : « À trier », créé au besoin. */
+  /** Rayon de repli d'un article saisi à la volée : « Non classé » (ou « À trier »), sinon le dernier. */
   defaultAisleId(): string {
     const aisles = this._data()?.aisles || [];
-    return (aisles.find((a) => a.name === 'À trier') || aisles[aisles.length - 1] || aisles[0])?.id || '';
+    return (aisles.find((a) => isFallbackAisleName(a.name)) || aisles[aisles.length - 1] || aisles[0])?.id || '';
   }
   openShop(): void {
     this.patch({ showShop: true, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: this.defaultAisleId(), shListId: this.activeShopListId() });
@@ -1438,7 +1438,7 @@ export class FoyerStore {
   confirmAisleDel(): void {
     const id = this.ui().aisleDelId; if (!id) return;
     const fallback = this.defaultAisleId();
-    if (id === fallback) { this.patch({ aisleDelId: null }); this.toast('« À trier » sert de rayon de repli, il ne peut pas être supprimé'); return; }
+    if (id === fallback) { this.patch({ aisleDelId: null }); this.toast('Ce rayon sert de repli, il ne peut pas être supprimé'); return; }
     this.mutate((d) => {
       d.aisles = d.aisles.filter((x) => x.id !== id);
       d.aisles.forEach((a, i) => { a.position = i; });

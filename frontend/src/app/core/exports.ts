@@ -14,6 +14,7 @@
 // dans un nom d'article et les fichiers d'import trafiqués.
 
 import { Aisle, Recipe, ShopItem } from './models';
+import { FALLBACK_AISLE_NAME } from './constants';
 
 // ---- carnet de recettes ----------------------------------------------------
 
@@ -230,7 +231,7 @@ export function shopToCsv(items: ShopItem[], aisles: Aisle[]): string {
   const lignes = [['Rayon', 'Article', 'Quantité', 'État'].join(';')];
   for (const i of tries) {
     lignes.push([
-      csvCell(nom.get(i.aisleId) || 'À trier'),
+      csvCell(nom.get(i.aisleId) || FALLBACK_AISLE_NAME),
       csvCell(i.name),
       csvCell(i.qty || ''),
       csvCell(ETATS[i.state] || i.state),
