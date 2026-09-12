@@ -152,8 +152,8 @@ export const PALETTE = ['#E56B4E', '#7A9B76', '#4E93B8', '#F0B24B', '#9B6FA8', '
  * nom par défaut ; « À trier » reste reconnu pour les foyers créés avant ce nom.
  * Il s'identifie par son nom, pas par un identifiant fixe (voir backend seed.ts).
  */
-export const FALLBACK_AISLE_NAME = 'Non classé';
-export const FALLBACK_AISLE_NAMES = [FALLBACK_AISLE_NAME, 'À trier'];
+export const FALLBACK_AISLE_NAME = '📦 Non classé';
+export const FALLBACK_AISLE_NAMES = [FALLBACK_AISLE_NAME, 'Non classé', 'À trier'];
 export const isFallbackAisleName = (name: string | undefined): boolean => !!name && FALLBACK_AISLE_NAMES.includes(name);
 export const RECIPE_PALETTE = ['#7A9B76', '#F0B24B', '#E56B4E', '#9B6FA8'];
 export const CAT_PALETTE = ['#7A9B76', '#E56B4E', '#4E93B8', '#F0B24B', '#9B6FA8', '#6E9E5F'];
