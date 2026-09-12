@@ -42,6 +42,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Le foyer',
     items: [
+      { id: 'lieux', label: 'Lieux de vacances', icon: 'map-pin' },
       { id: 'contacts', label: 'Contacts', icon: 'contacts' },
       { id: 'fidelite', label: 'Cartes de fidélité', icon: 'card' },
     ],

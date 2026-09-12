@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HouseholdState, ShopItem, TaskItem } from './models';
+import { HouseholdState, Place, PlaceItem, PlaceItemState, ShopItem, TaskItem } from './models';
 import type { TaskOp } from './task-ops';
 import { SettingDecl, SettingSection } from './settings/registry';
 
@@ -63,7 +63,7 @@ export interface StoredFile { id: number; name: string; mime: string; size: numb
  * Instantané des sous-arbres qui s'écrivent par opérations : courses et tâches.
  * `unchanged` évite de les renvoyer pour rien.
  */
-export interface LiveSnapshot { version: number; shop?: ShopItem[]; tasks?: TaskItem[]; unchanged?: boolean; }
+export interface LiveSnapshot { version: number; shop?: ShopItem[]; tasks?: TaskItem[]; places?: Place[]; placeItems?: PlaceItem[]; unchanged?: boolean; }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
 export type ShopOp =
@@ -79,6 +79,20 @@ export type ShopOp =
  */
 export type ShopOpDraft = ShopOp extends infer T ? (T extends ShopOp ? Omit<T, 'opId' | 'by' | 'at'> : never) : never;
 
+/**
+ * Opérations sur les lieux et leurs affaires. Un seul flux porte les deux : les
+ * lieux (place-*) et les affaires (add/set-state/edit/remove). Voir places/ops.ts.
+ */
+export type PlaceOp =
+  | (OpBase & { op: 'place-add'; id: string; name: string; color?: string; icon?: string; note?: string })
+  | (OpBase & { op: 'place-edit'; id: string; name?: string; color?: string; icon?: string; note?: string; position?: number })
+  | (OpBase & { op: 'place-remove'; id: string })
+  | (OpBase & { op: 'add'; id: string; placeId: string; name: string; qty?: string; state?: PlaceItemState })
+  | (OpBase & { op: 'set-state'; id: string; state: PlaceItemState })
+  | (OpBase & { op: 'edit'; id: string; name?: string; qty?: string; placeId?: string })
+  | (OpBase & { op: 'remove'; id: string });
+export type PlaceOpDraft = PlaceOp extends infer T ? (T extends PlaceOp ? Omit<T, 'opId' | 'by' | 'at'> : never) : never;
+
 /** Ce que le serveur rend d'un lot : l'état résultant, et le sort de chaque opération. */
 export interface OpsApplied<T> {
   version: number;
@@ -89,6 +103,14 @@ export interface OpsApplied<T> {
 }
 export type ShoppingApplied = OpsApplied<ShopItem>;
 export type TasksApplied = OpsApplied<TaskItem>;
+/** Un lot de lieux rend les deux collections, lieux et affaires, plus le sort de chaque opération. */
+export interface PlacesApplied {
+  version: number;
+  places: Place[];
+  items: PlaceItem[];
+  applied: string[];
+  skipped: { opId: string; reason: string }[];
+}
 
 /** Recette lue sur une page externe, prête à remplir le formulaire. */
 export interface ImportedRecipe {
@@ -438,6 +460,10 @@ export class ApiService {
 
   taskOps(ops: TaskOp[]): Promise<TasksApplied> {
     return this.post('tasks/ops', { ops });
+  }
+
+  placesOps(ops: PlaceOp[]): Promise<PlacesApplied> {
+    return this.post('places/ops', { ops });
   }
 
   // ---- rappels par Web Push ----------------------------------------------

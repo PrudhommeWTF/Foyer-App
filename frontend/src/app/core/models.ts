@@ -90,6 +90,24 @@ export interface ShopItem {
   art?: string | null; gen?: boolean | null;
 }
 /**
+ * Un lieu de vacances et les affaires qui y restent d'une fois sur l'autre (la
+ * maison de la montagne, le mobil-home au bord de mer). Contrairement à une
+ * liste de préparation, un inventaire ne se remet jamais à zéro : il dit ce qui
+ * est là-bas. `state` a deux valeurs, posées par les deux gestes « J'ai laissé »
+ * et « J'ai ramené ». Écrits par opérations, comme les courses (voir places/ops).
+ */
+export interface Place {
+  id: string; name: string; color: string; icon: string; position: number;
+  /** Note libre (adresse, code de la boîte à clés, etc.). */
+  note?: string | null;
+  by?: string | null; at?: string | null;
+}
+export type PlaceItemState = 'la-bas' | 'ici';
+export interface PlaceItem {
+  id: string; placeId: string; name: string; qty: string; state: PlaceItemState;
+  by?: string | null; at?: string | null;
+}
+/**
  * Type d'une liste de tâches. Seules les listes `taches` sont l'affaire du
  * jour : elles comptent dans « Toutes » et sur l'accueil. Une liste de corvées
  * ou une checklist (valise, fournitures, idées) vit dans son propre onglet,
@@ -121,6 +139,8 @@ export interface TaskList {
   remindDaysBefore?: number | null;
   /** Dernier « tout remettre à zéro », pour l'afficher. */
   lastResetAt?: string | null;
+  /** Lieu de destination (voir Place) : l'écran montre alors ce qui y est déjà, pour ne pas l'emporter. */
+  placeId?: string | null;
 }
 /** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
 export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }
@@ -381,6 +401,9 @@ export interface HouseholdState {
   taskLists: TaskList[];
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];
+  /** Lieux de vacances et affaires qui y restent : écrits par opérations (voir places.ops). */
+  places: Place[];
+  placeItems: PlaceItem[];
   contacts: Contact[];
   cards: LoyaltyCard[];
   meals: Record<string, MealValue>;

@@ -38,7 +38,7 @@ répertoire de données demeure une sauvegarde complète.
 ## Le modèle
 
 ```ts
-type ListKind = 'taches' | 'corvees' | 'checklist';
+type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation';
 
 interface TaskList {
   id; name; color; icon;
@@ -46,6 +46,12 @@ interface TaskList {
   scope: string;       // 'shared', ou l'id du membre pour une liste privée
   position: number;
   archived?: boolean;
+  // Listes de préparation (kind 'preparation') uniquement, voir plus bas.
+  forMember?: string | null;     // membre concerné par le départ
+  departure?: string | null;     // date de départ, AAAA-MM-JJ
+  remindDaysBefore?: number | null; // rappel J-N, défaut 3, borné [1, 30]
+  lastResetAt?: string | null;   // dernier « tout remettre à zéro »
+  placeId?: string | null;       // lieu de destination lié (voir docs/lieux.md)
 }
 
 interface TaskTemplate { id; name; kind; color; icon; items: string[]; }
@@ -87,6 +93,41 @@ Ce que ces choix impliquent à l'écran :
 - **Une sous-tâche est un détail, pas une tâche de plus.** Elle ne compte dans
   aucun compteur, ne monte pas sur l'accueil, et ne fait pas de ligne à elle
   seule. Voir « Sous-tâches » plus bas.
+
+## Listes de préparation
+
+Le quatrième type de liste, `preparation`, est le **trousseau d'un départ** :
+le sac d'une colonie, les affaires pour les grands-parents. On le remplit à
+l'avance, on le coche au moment de partir, et on le **remet à zéro** pour la
+fois suivante. Une affaire à préparer est une tâche ordinaire : `done` veut dire
+« préparée », il n'y a pas de champ de plus sur `TaskItem`.
+
+Ce qui distingue ce type, ce sont quatre champs sur la liste et deux
+comportements :
+
+- **Toujours partagée.** `scope` est forcé à `'shared'` : l'enfant concerné doit
+  pouvoir cocher son propre sac. Le sélecteur « qui la voit » disparaît du
+  formulaire au profit des champs de départ.
+- **Datée et nominative.** `forMember` (le membre qui part) et `departure` (la
+  date) sont facultatifs ; ensemble ils donnent l'en-tête « Départ de Nolan,
+  mardi 15 septembre, dans 3 jours » et l'entrée d'agenda du départ.
+- **Réutilisable.** « Tout remettre à zéro » efface les coches sans toucher aux
+  articles : le trousseau reste, prêt pour le prochain départ. C'est une
+  **opération** dédiée (voir plus bas), pas un PUT du document, et elle pose
+  `lastResetAt`. Changer la date de départ sur une liste encore cochée propose
+  la remise à zéro dans la foulée.
+- **Elle rappelle.** À J-`remindDaysBefore` (défaut 3, borné à `[1, 30]`) et
+  jusqu'à la veille, un rappel part tant qu'il reste au moins une affaire à
+  préparer. Voir « Rappels et notifications ».
+
+Hors de « Toutes » et de l'accueil comme les corvées et les checklists : une
+préparation n'est pas l'affaire du jour. Elle remonte tout de même sur l'accueil
+**à l'approche du départ**, dans la fenêtre du rappel, tant qu'il reste des
+affaires à préparer.
+
+Une préparation peut être **liée à un lieu** (`placeId`) : l'écran montre alors
+ce qui est déjà sur place, pour ne pas l'emporter, et propose d'ajouter ce qui
+reste à la maison. Voir `docs/lieux.md`.
 
 ## La récurrence
 
@@ -187,6 +228,13 @@ eux est un document sans série.
 | `skip` | `id`, `occ`, `next` | Passe l'occurrence courante d'une série sans trace. |
 | `reopen` | `id`, et sur une série `occ` | Rouverte. Sur une série : rétablit l'occurrence soldée. |
 | `remove` | `id` | Supprimée. |
+| `reset` | `id` (une liste) | **Liste de préparation uniquement.** Efface `done`/`doneAt`/`doneBy` sur toutes ses affaires et pose `lastResetAt` sur la liste, dans la même transaction. Refusée si la liste n'est pas de type `preparation` ou n'existe plus. |
+
+`reset` est la seule opération qui vise une liste, pas une tâche, et la seule
+qui écrit aussi dans `taskLists` (le `lastResetAt`) : le tout dans la même
+transaction SQLite que l'effacement des coches, pour qu'un autre appareil ne
+lise jamais un état à moitié remis à zéro. Elle n'a pas d'inverse (« Annuler »
+rend `null`) : re-cocher trente affaires à la main n'aurait aucun sens.
 
 Chaque opération porte `opId` (généré par le client), `by`, `at`. Une
 opération sur une tâche disparue est **acquittée** (sans objet), pas refusée :
@@ -254,6 +302,14 @@ est en place, et comment l'exploiter.
 |---|---|---|
 | **Rappel d'échéance** | À l'heure choisie sur la tâche : à l'heure (9 h sans heure), 1 h avant, la veille à 18 h, le matin à 9 h. **Aucun rappel par défaut**, réglé tâche par tâche dans le panneau « Date » du composeur. | Les membres affectés. Une tâche sans responsable rappelle **tous les comptes** du foyer. |
 | **Tâche qui m'est affectée** | Tout de suite, quand quelqu'un d'autre m'affecte une tâche (création ou modification). Pas quand je m'affecte moi-même, pas pour une tâche faite. | Le membre affecté. |
+| **Départ approche** (liste de préparation) | À 18 h chaque jour, du jour `départ - remindDaysBefore` à la veille, tant qu'il reste au moins une affaire à préparer. Une seule notification par liste et par jour. | Le membre concerné (`forMember`) s'il a un compte, plus les adultes du foyer. |
+
+Le rappel de départ compte les jours et les affaires restantes (« Départ de
+Nolan dans 3 jours : il reste 6 affaires à préparer. ») et ouvre l'application au
+tap. Sa clé de journal est `prep|<listId>|<date>` : un rappel raté à 18 h part
+encore le soir même, et le lendemain rouvre une fenêtre neuve, sans « manqué » à
+rattraper. La préférence par membre est la même que pour les rappels d'échéance
+(`wants(memberId, 'reminder')`).
 
 Rien d'autre : pas de « Marie a coché », pas de résumé. Une série récurrente
 rappelle son occurrence courante, puis la suivante quand elle arrive. Une

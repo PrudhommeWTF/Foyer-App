@@ -101,10 +101,18 @@ export interface UiState {
   lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
   /** Champs propres aux listes de préparation (kind 'preparation'). */
   lForMember: string | null; lDeparture: string; lRemind: number;
+  /** Lieu de destination lié à la préparation, ou '' : l'écran montre alors son inventaire. */
+  lPlace: string;
   /** Liste dont on demande la remise à zéro (modale de confirmation). */
   prepResetId: string | null;
   /** Choix d'un modèle pour créer une liste. */
   tplOpen: boolean;
+
+  // lieux (inventaires par lieu de vacances)
+  placeForm: boolean; plEditId: string | null;
+  plName: string; plColor: string; plIcon: string; plNote: string; placeDelId: string | null;
+  /** Modale d'une affaire (renommer, quantité, changer de lieu). */
+  showPlaceItem: boolean; piEditId: string | null; piName: string; piQty: string; piPlaceId: string;
 
   // contacts
   contactSearch: string; contactCat: string;
@@ -219,7 +227,7 @@ export interface UiState {
  */
 const SCREEN_KEY = 'foyer.screen';
 const KNOWN_SCREENS: ReadonlySet<string> = new Set([
-  'home', 'calendar', 'courses', 'taches', 'contacts', 'fidelite',
+  'home', 'calendar', 'courses', 'taches', 'lieux', 'contacts', 'fidelite',
   'finances', 'repas', 'recettes', 'planning', 'settings',
 ]);
 export function rememberScreen(screen: string): void {
@@ -263,8 +271,10 @@ export function initialUi(): UiState {
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
     taskEdit: null, taskNew: false, showDone: false, showArchived: false,
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
-    lForMember: null, lDeparture: '', lRemind: 3, prepResetId: null,
+    lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
     tplOpen: false,
+    placeForm: false, plEditId: null, plName: '', plColor: '#4E93B8', plIcon: 'voyage', plNote: '', placeDelId: null,
+    showPlaceItem: false, piEditId: null, piName: '', piQty: '', piPlaceId: '',
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     cardSearch: '',

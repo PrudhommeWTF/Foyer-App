@@ -107,6 +107,8 @@ export const ICONS: Record<string, string> = {
   cake: 'M4 21h16M5 21v-7h14v7M4 14a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2M12 12V8M9 5.5a1 1 0 1 0 3 0c0-1-1.5-2.5-1.5-2.5S9 4.5 9 5.5zM15 5.5a1 1 0 1 0 0 .01',
   copy: 'M9 9h10v10H9zM5 15H4V4h11v1',
   pin: 'M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  // Repère de carte, pour l'écran Lieux (inventaires par lieu de vacances).
+  'map-pin': 'M12 21s6-5.7 6-11a6 6 0 1 0-12 0c0 5.3 6 11 6 11z M12 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4z',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];
@@ -181,6 +183,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
+  lieux: 'Lieux de vacances',
   contacts: 'Contacts importants', fidelite: 'Cartes de fidélité', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
 };
@@ -191,6 +194,6 @@ export const SCREEN_TITLES: Record<string, string> = {
  * nom de l'onglet suffit à dire où l'on est.
  */
 export const SCREEN_TITLES_SHORT: Record<string, string> = {
-  calendar: 'Agenda', courses: 'Courses', contacts: 'Contacts', fidelite: 'Fidélité',
+  calendar: 'Agenda', courses: 'Courses', contacts: 'Contacts', fidelite: 'Fidélité', lieux: 'Lieux',
   repas: 'Repas', recettes: 'Recettes', planning: 'Emploi du temps', settings: 'Réglages',
 };

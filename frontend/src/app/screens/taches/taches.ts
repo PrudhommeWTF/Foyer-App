@@ -4,7 +4,7 @@ import { FoyerStore } from '../../core/foyer.store';
 import { FinancesStore } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { LIST_ICONS, PALETTE, tint } from '../../core/constants';
-import { ListKind, TaskItem, TaskList } from '../../core/models';
+import { ListKind, Place, PlaceItem, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
 import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
@@ -145,6 +145,31 @@ import { TaskComposerComponent } from './composer';
               <button class="btn btn-soft sm" [disabled]="!p.total" (click)="store.patch({ prepResetId: l.id })"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout remettre à zéro</button>
             </div>
           </div>
+
+          <!-- Croisement avec l'inventaire du lieu de destination : ce qui est
+               déjà là-bas (à ne pas emporter) et ce qui reste à remporter. -->
+          @if (placeOf(l); as pl) {
+            @let there = alreadyThere(pl.id);
+            @let bring = toBring(l);
+            <div class="prep-place" [style.border-left]="'4px solid ' + pl.color">
+              <div class="pp-head"><f-icon name="map-pin" [size]="14" [color]="pl.color" [width]="2.2" /> <span>{{ pl.name }}</span></div>
+              @if (there.length) {
+                <div class="pp-line"><span class="pp-tag">Déjà sur place</span>
+                  @for (i of there; track i.id) { <span class="pp-chip">{{ i.name }}</span> }
+                </div>
+              }
+              @if (bring.length) {
+                <div class="pp-line"><span class="pp-tag">À remporter</span>
+                  @for (i of bring; track i.id) {
+                    <button class="pp-chip add" (click)="store.addPrepArticle(l.id, i.name)"><f-icon name="plus" [size]="12" color="#5F7E5C" [width]="2.8" /> {{ i.name }}</button>
+                  }
+                </div>
+              }
+              @if (!there.length && !bring.length) {
+                <div class="pp-empty">Rien de noté à « {{ pl.name }} » pour l’instant.</div>
+              }
+            </div>
+          }
         }
       }
 
@@ -351,6 +376,19 @@ import { TaskComposerComponent } from './composer';
             </div>
           </div>
           <div class="plan-hint">Un rappel {{ store.ui().lRemind }} jour{{ store.ui().lRemind > 1 ? 's' : '' }} avant le départ, tant qu'il reste des affaires à préparer. La liste est partagée : l'enfant peut cocher son sac.</div>
+
+          @if (places().length) {
+            <div class="field-label mt">Lieu de destination <span class="opt">(facultatif)</span></div>
+            <div class="seg-wrap">
+              <button class="seg-opt" [class.on]="!store.ui().lPlace" (click)="store.patch({ lPlace: '' })">Aucun</button>
+              @for (p of places(); track p.id) {
+                <button class="seg-opt" [class.on]="store.ui().lPlace === p.id" (click)="store.patch({ lPlace: p.id })">
+                  <span class="s-dot" [style.background]="p.color"></span>{{ p.name }}
+                </button>
+              }
+            </div>
+            <div class="plan-hint">L’écran montrera ce qui est déjà sur place, pour ne pas l’emporter, et proposera d’ajouter ce qui reste à la maison.</div>
+          }
         } @else {
           <div class="field-label mt">Qui la voit</div>
           <div class="seg">
@@ -518,6 +556,17 @@ import { TaskComposerComponent } from './composer';
     .prep-past { font-weight: 800; color: var(--ink3); }
     .prep-prog { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin-top: 3px; }
     .prep-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .opt { color: var(--ink3); font-weight: 700; }
+
+    /* Croisement avec l'inventaire du lieu de destination. */
+    .prep-place { background: var(--surface); border-radius: var(--r-card, 16px); padding: 12px 16px; margin: -6px 0 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
+    .pp-head { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+    .pp-line { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 6px; }
+    .pp-tag { font-size: 11.5px; font-weight: 800; color: var(--ink3); margin-right: 2px; }
+    .pp-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 10px; font-size: 12.5px; font-weight: 800; background: var(--soft2); color: var(--ink2); border: none; font-family: inherit; }
+    .pp-chip.add { background: #EDF2EB; color: #5F7E5C; cursor: pointer; }
+    .pp-empty { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
+
     .icon-grid { display: flex; flex-wrap: wrap; gap: 9px; }
     .ic-cell { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .ic-cell.on { box-shadow: inset 0 0 0 2px currentColor; }
@@ -630,6 +679,23 @@ export class TachesScreen {
     return `${who}, ${this.store.fmtLongDate(l.departure)}, ${quand}`;
   }
   isDeparturePast(l: TaskList): boolean { const n = this.daysToDeparture(l); return n !== null && n < 0; }
+
+  // ---- croisement avec les lieux (inventaire du lieu de destination) ---------
+  /** Les lieux, pour le sélecteur du formulaire de préparation. */
+  places = computed(() => this.store.placesInOrder());
+  /** Le lieu lié à une préparation, s'il existe encore. */
+  placeOf(l: TaskList): Place | null { return l.placeId ? this.places().find((p) => p.id === l.placeId) ?? null : null; }
+  /** Ce qui est déjà sur place (état « là-bas ») : à ne pas emporter. */
+  alreadyThere(placeId: string): PlaceItem[] { return this.store.itemsOfPlace(placeId).filter((i) => i.state === 'la-bas'); }
+  /**
+   * Ce qui est ramené à la maison (état « ici ») et n'est pas déjà dans la
+   * préparation : à remporter, ajoutable en un geste. Comparé par nom normalisé.
+   */
+  toBring(l: TaskList): PlaceItem[] {
+    if (!l.placeId) return [];
+    const dansListe = new Set(this.d().tasks.filter((t) => t.listId === l.id).map((t) => t.text.trim().toLowerCase()));
+    return this.store.itemsOfPlace(l.placeId).filter((i) => i.state === 'ici' && !dansListe.has(i.name.trim().toLowerCase()));
+  }
   resetName = computed(() => this.d().taskLists.find((l) => l.id === this.store.ui().prepResetId)?.name || '');
   undoneCount(listId: string): number { return openCount(this.d().tasks.filter((t) => t.listId === listId)); }
   private list(id: string): TaskList | undefined { return this.d().taskLists.find((l) => l.id === id); }
