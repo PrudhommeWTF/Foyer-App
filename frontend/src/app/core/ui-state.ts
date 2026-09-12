@@ -78,6 +78,8 @@ export interface UiState {
   showEvent: boolean; evEditId: string | null;
   evTitle: string; evTime: string; evEndTime: string; evPlace: string; evAllDay: boolean; evWho: string[]; evRecur: Recur; evEnd: string; evStart: string;
   evPickStart: boolean; dpMonth: number;
+  /** Le mini-calendrier est-il déplié ? Ouvert d'office à une création sans date choisie, replié en modification et à une création sur un jour précis. */
+  evCalOpen: boolean;
 
   // shop item modal
   showShop: boolean; shEditId: string | null;
@@ -264,7 +266,7 @@ export function initialUi(): UiState {
     calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(), calSide: true, calHidden: [],
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
-    showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1),
+    showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1), evCalOpen: false,
     showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
     aisleOrderOpen: false,
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,

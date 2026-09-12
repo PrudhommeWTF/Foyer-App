@@ -388,21 +388,33 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
           </div>
 
           <div class="fl">Date</div>
-          <div class="dp">
-            <div class="dp-head">
-              <button class="dp-nav" (click)="store.patch({ dpMonth: store.ui().dpMonth - 1 })"><f-icon name="chevronLeft" [size]="15" color="var(--ink2)" [width]="2.4" /></button>
-              <div class="dp-label f-display">{{ dpLabel() }}</div>
-              <button class="dp-nav" (click)="store.patch({ dpMonth: store.ui().dpMonth + 1 })"><f-icon name="chevronRight" [size]="15" color="var(--ink2)" [width]="2.4" /></button>
+          <!-- Le mini-calendrier prend beaucoup de place : on ne le déplie que
+               lorsqu'il n'y a pas de date déjà choisie (création globale). Sinon
+               (modification, ou création sur un jour précis), une ligne compacte
+               affiche la date et « Changer » déplie le calendrier à la demande. -->
+          @if (store.ui().evCalOpen) {
+            <div class="dp">
+              <div class="dp-head">
+                <button class="dp-nav" (click)="store.patch({ dpMonth: store.ui().dpMonth - 1 })"><f-icon name="chevronLeft" [size]="15" color="var(--ink2)" [width]="2.4" /></button>
+                <div class="dp-label f-display">{{ dpLabel() }}</div>
+                <button class="dp-nav" (click)="store.patch({ dpMonth: store.ui().dpMonth + 1 })"><f-icon name="chevronRight" [size]="15" color="var(--ink2)" [width]="2.4" /></button>
+              </div>
+              <div class="dp-dow"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+              <div class="dp-grid">
+                @for (c of dpCells(); track c.key) {
+                  <div class="dp-cell" [class.sel]="c.sel" [class.between]="c.between" [class.ring]="c.isToday && !c.sel"
+                       [style.opacity]="c.inMonth ? 1 : 0.35" (click)="store.dpPick(c.key)">{{ c.num }}</div>
+                }
+              </div>
             </div>
-            <div class="dp-dow"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
-            <div class="dp-grid">
-              @for (c of dpCells(); track c.key) {
-                <div class="dp-cell" [class.sel]="c.sel" [class.between]="c.between" [class.ring]="c.isToday && !c.sel"
-                     [style.opacity]="c.inMonth ? 1 : 0.35" (click)="store.dpPick(c.key)">{{ c.num }}</div>
-              }
-            </div>
-          </div>
-          <div class="dp-summary"><f-icon name="calendar" [size]="15" color="#E56B4E" [width]="2" /> <span>{{ dpSummary() }}</span></div>
+            <div class="dp-summary"><f-icon name="calendar" [size]="15" color="#E56B4E" [width]="2" /> <span>{{ dpSummary() }}</span></div>
+          } @else {
+            <button type="button" class="date-compact" (click)="store.patch({ evCalOpen: true })">
+              <f-icon name="calendar" [size]="16" color="#E56B4E" [width]="2" />
+              <span class="dc-label">{{ dpSummary() }}</span>
+              <span class="dc-change">Changer</span>
+            </button>
+          }
 
           <!-- Participants « Tous » par défaut : un événement du foyer concerne le
                plus souvent tout le monde. La liste vide vaut « Tous » ; cocher des
@@ -664,6 +676,11 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .dp-cell.ring { box-shadow: inset 0 0 0 2px var(--honey); }
     .dp-summary { display: flex; align-items: center; gap: 8px; margin: 8px 0 20px; }
     .dp-summary span { font-size: 13px; font-weight: 800; color: var(--ink); }
+    /* Ligne compacte de date : la date choisie, et « Changer » pour déplier le calendrier. */
+    .date-compact { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 15px; margin-bottom: 20px; border: 2px solid var(--line); border-radius: 14px; background: var(--soft); cursor: pointer; font: inherit; text-align: left; }
+    .date-compact .dc-label { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .date-compact .dc-change { font-size: 13px; font-weight: 800; color: #E56B4E; }
+    .date-compact:hover { border-color: var(--line2); }
     .p-val { color: var(--primary); font-weight: 800; }
     .participants { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
     .p-sep { width: 1px; align-self: stretch; min-height: 40px; background: var(--line); }
@@ -1162,7 +1179,7 @@ export class CalendarScreen {
 
   addAt(key: string): void {
     this.store.patch({ selDay: key });
-    this.store.openEvent();
+    this.store.openEvent(key);
   }
 
   /** Un repère qui est une tâche s'ouvre d'un tap ; les autres (férié, anniversaire, échéance) restent des repères. */

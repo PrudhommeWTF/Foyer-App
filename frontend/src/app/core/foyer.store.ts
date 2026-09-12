@@ -1110,21 +1110,27 @@ export class FoyerStore {
     this.patch({ screen: 'planning' });
     this.editSlot(slotId, date);
   }
-  openEvent(): void {
+  /**
+   * Ouvre la création d'un événement. `pickedDate` la date choisie d'avance
+   * (clic sur un jour) : dans ce cas le mini-calendrier reste replié, on a déjà
+   * la date. Sans elle (ajout global), il s'ouvre pour choisir le jour.
+   */
+  openEvent(pickedDate?: string): void {
+    const start = pickedDate ?? this.ui().selDay;
     // Index de mois absolu (année * 12 + mois - 1) : le sélecteur de date porte
     // l'année, pas seulement le mois, sinon éditer un événement d'une autre année
     // ouvrirait le calendrier de la mauvaise année.
-    const m = monthIndex(this.ui().selDay);
+    const m = monthIndex(start);
     // Participants « Tous » par défaut : un événement du foyer concerne le plus
     // souvent tout le monde (repas, sortie, vacances). La liste vide vaut « Tous » ;
     // on restreint ensuite en cochant des membres. Voir toggleEvWho.
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: this.ui().selDay, evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: start, evPickStart: true, dpMonth: m, evCalOpen: pickedDate == null });
   }
   editEvent(id: string): void {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
     const m = monthIndex(ev.date);
-    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m });
+    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m, evCalOpen: false });
   }
   dpPick(ds: string): void {
     const s = this.ui();
