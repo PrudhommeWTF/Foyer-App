@@ -101,6 +101,8 @@ export interface UiState {
   lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
   /** Champs propres aux listes de préparation (kind 'preparation'). */
   lForMember: string | null; lDeparture: string; lRemind: number;
+  /** Lieu de destination lié à la préparation, ou '' : l'écran montre alors son inventaire. */
+  lPlace: string;
   /** Liste dont on demande la remise à zéro (modale de confirmation). */
   prepResetId: string | null;
   /** Choix d'un modèle pour créer une liste. */
@@ -269,7 +271,7 @@ export function initialUi(): UiState {
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
     taskEdit: null, taskNew: false, showDone: false, showArchived: false,
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
-    lForMember: null, lDeparture: '', lRemind: 3, prepResetId: null,
+    lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
     tplOpen: false,
     placeForm: false, plEditId: null, plName: '', plColor: '#4E93B8', plIcon: 'voyage', plNote: '', placeDelId: null,
     showPlaceItem: false, piEditId: null, piName: '', piQty: '', piPlaceId: '',

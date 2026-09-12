@@ -1562,6 +1562,13 @@ export class FoyerStore {
     return id;
   }
 
+  /** Reprend une affaire de l'inventaire d'un lieu comme article à préparer dans une liste. */
+  addPrepArticle(listId: string, name: string): void {
+    const text = name.trim(); if (!text) return;
+    this.pushTaskOps([{ op: 'add', id: uid('t'), listId, text, who: [], due: null }]);
+    this.toast('Ajouté à préparer');
+  }
+
   /**
    * Modifie une tâche. Sur une série, « cette occurrence seulement » détache
    * une copie ponctuelle qui porte la modification, et fait avancer la série :
@@ -1753,19 +1760,19 @@ export class FoyerStore {
 
   newTaskList(kind: ListKind = 'taches'): void {
     const icon = kind === 'taches' ? 'maison' : kind === 'preparation' ? 'valise' : 'checklist';
-    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: icon, lKind: kind, lScope: 'shared', lForMember: null, lDeparture: '', lRemind: 3 });
+    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: icon, lKind: kind, lScope: 'shared', lForMember: null, lDeparture: '', lRemind: 3, lPlace: '' });
   }
   editTaskList(id: string): void {
     const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return;
     this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope,
-      lForMember: l.forMember ?? null, lDeparture: l.departure ?? '', lRemind: l.remindDaysBefore ?? 3 });
+      lForMember: l.forMember ?? null, lDeparture: l.departure ?? '', lRemind: l.remindDaysBefore ?? 3, lPlace: l.placeId ?? '' });
   }
   /** Les champs propres à une liste de préparation, ou de quoi les effacer si elle n'en est pas (ou plus) une. */
   private prepFields(): Partial<TaskList> {
     const s = this.ui();
-    if (s.lKind !== 'preparation') return { forMember: null, departure: null, remindDaysBefore: null, lastResetAt: null };
+    if (s.lKind !== 'preparation') return { forMember: null, departure: null, remindDaysBefore: null, lastResetAt: null, placeId: null };
     const remind = Math.min(30, Math.max(1, Math.round(s.lRemind || 3)));
-    return { forMember: s.lForMember || null, departure: s.lDeparture || null, remindDaysBefore: remind };
+    return { forMember: s.lForMember || null, departure: s.lDeparture || null, remindDaysBefore: remind, placeId: s.lPlace || null };
   }
   saveTaskList(): void {
     const s = this.ui(); const name = s.lName.trim(); if (!name) { this.toast('Donne un nom à la liste'); return; }

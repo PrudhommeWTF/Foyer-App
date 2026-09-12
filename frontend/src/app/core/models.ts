@@ -139,6 +139,8 @@ export interface TaskList {
   remindDaysBefore?: number | null;
   /** Dernier « tout remettre à zéro », pour l'afficher. */
   lastResetAt?: string | null;
+  /** Lieu de destination (voir Place) : l'écran montre alors ce qui y est déjà, pour ne pas l'emporter. */
+  placeId?: string | null;
 }
 /** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
 export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }
