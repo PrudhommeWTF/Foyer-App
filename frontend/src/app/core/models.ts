@@ -96,7 +96,7 @@ export interface ShopItem {
  * sans peser sur la journée. C'est ce qui range « la tâche qui n'aurait jamais
  * dû en être une » : une liste d'idées est une checklist, hors du quotidien.
  */
-export type ListKind = 'taches' | 'corvees' | 'checklist';
+export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation';
 export interface TaskList {
   id: string; name: string; color: string; icon: string;
   kind: ListKind;
@@ -108,6 +108,19 @@ export interface TaskList {
   scope: string;
   position: number;
   archived?: boolean;
+  /**
+   * Listes de préparation (kind 'preparation') : le trousseau d'un départ,
+   * rempli à l'avance, coché au moment de partir, remis à zéro pour la fois
+   * suivante. Ces quatre champs ne concernent qu'elles.
+   */
+  /** Membre concerné par le départ. La liste reste partagée (l'enfant coche son sac). */
+  forMember?: string | null;
+  /** Date du départ, AAAA-MM-JJ. Porte la date à la place des articles. */
+  departure?: string | null;
+  /** Rappel J-N tant qu'il reste des articles non préparés. 3 par défaut. */
+  remindDaysBefore?: number | null;
+  /** Dernier « tout remettre à zéro », pour l'afficher. */
+  lastResetAt?: string | null;
 }
 /** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
 export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }

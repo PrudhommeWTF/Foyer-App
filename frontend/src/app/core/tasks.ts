@@ -128,8 +128,8 @@ export function visibleLists(lists: TaskList[], me: string | null, includeArchiv
 }
 
 /** L'ordre des types dans les puces : l'affaire du jour d'abord. */
-export const KIND_ORDER: ListKind[] = ['taches', 'corvees', 'checklist'];
-export const KIND_LABELS: Record<ListKind, string> = { taches: 'Tâches', corvees: 'Corvées', checklist: 'Checklist' };
+export const KIND_ORDER: ListKind[] = ['taches', 'corvees', 'checklist', 'preparation'];
+export const KIND_LABELS: Record<ListKind, string> = { taches: 'Tâches', corvees: 'Corvées', checklist: 'Checklist', preparation: 'Préparation' };
 
 /**
  * Les tâches de l'affaire du jour : celles des listes « tâches » visibles, plus

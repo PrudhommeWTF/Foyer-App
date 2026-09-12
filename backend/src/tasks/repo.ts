@@ -44,8 +44,10 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
     const { doc, version } = readDoc();
     const before = items(doc);
     const journal = database.prepare('SELECT 1 FROM hh_task_ops WHERE op_id = ?');
+    const taskLists = (): Record<string, any>[] => (Array.isArray(doc['taskLists']) ? doc['taskLists'] : []);
     const result = applyOps(before, ops, {
       listIds: idsOf(doc, 'taskLists'),
+      listKind: (id) => taskLists().find((l) => l['id'] === id)?.['kind'] as string | undefined,
       memberIds: idsOf(doc, 'members'),
       shopListIds: idsOf(doc, 'shopLists'),
       alreadyApplied: (opId) => !!journal.get(opId),
@@ -72,6 +74,12 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
     }
 
     doc['tasks'] = result.items;
+    // Une remise à zéro pose aussi `lastResetAt` sur la liste, qui vit dans le
+    // document : c'est écrit dans la même transaction que les coches effacées.
+    if (result.listResets.length) {
+      const byId = new Map(result.listResets.map((r) => [r.listId, r.at]));
+      doc['taskLists'] = taskLists().map((l) => (byId.has(l['id']) ? { ...l, lastResetAt: byId.get(l['id']) } : l));
+    }
     const nextVersion = writeDoc(doc);
 
     const remember = database.prepare('INSERT OR IGNORE INTO hh_task_ops (op_id) VALUES (?)');

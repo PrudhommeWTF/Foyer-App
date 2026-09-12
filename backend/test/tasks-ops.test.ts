@@ -6,12 +6,17 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskOp, applyOps, reconcile } from '../src/tasks/ops';
 
-const ctx = (opts: { applied?: string[]; lists?: string[]; members?: string[]; shopLists?: string[] } = {}) => ({
-  listIds: new Set(opts.lists ?? ['l1', 'l2']),
-  memberIds: new Set(opts.members ?? ['me', 'm1']),
-  shopListIds: new Set(opts.shopLists ?? ['cl1']),
-  alreadyApplied: (id: string) => (opts.applied ?? []).includes(id),
-});
+const ctx = (opts: { applied?: string[]; lists?: string[]; members?: string[]; shopLists?: string[]; kinds?: Record<string, string> } = {}) => {
+  const lists = new Set(opts.lists ?? ['l1', 'l2']);
+  const kinds = opts.kinds ?? {};
+  return {
+    listIds: lists,
+    listKind: (id: string) => (lists.has(id) ? (kinds[id] ?? 'taches') : undefined),
+    memberIds: new Set(opts.members ?? ['me', 'm1']),
+    shopListIds: new Set(opts.shopLists ?? ['cl1']),
+    alreadyApplied: (id: string) => (opts.applied ?? []).includes(id),
+  };
+};
 
 const task = (over: Partial<TaskItem> = {}): TaskItem => ({
   id: 't1', listId: 'l1', text: 'Sortir les poubelles', who: ['me'], due: '2026-09-05', done: false, ...over,
@@ -399,4 +404,47 @@ test('deux appareils qui réordonnent en même temps : le dernier lot reçu fait
   const deux = applyOps(un.items, [op({ op: 'edit', id: 'b', pos: 0 }), op({ op: 'edit', id: 'c', pos: 1 })], ctx());
   assert.deepEqual(deux.items.map((t) => [t.id, t.pos]), [['a', 1], ['b', 0], ['c', 1]]);
   assert.equal(deux.items.length, 3, 'aucune tâche perdue dans la bagarre');
+});
+
+// ---- remise à zéro d'une liste de préparation ------------------------------
+
+test('« reset » sur une liste de préparation efface les coches et garde les articles', () => {
+  const items = [
+    task({ id: 'a1', listId: 'lp', text: 'Doudou', done: true, doneAt: '2026-07-01T10:00:00Z', doneBy: 'me' }),
+    task({ id: 'a2', listId: 'lp', text: 'Gourde', done: true, doneAt: '2026-07-01T10:01:00Z', doneBy: 'm1' }),
+    task({ id: 'a3', listId: 'lp', text: 'Casquette', done: false }),
+  ];
+  const r = applyOps(items, [op({ op: 'reset', id: 'lp', at: '2026-07-10T18:00:00Z' })],
+    ctx({ lists: ['lp'], kinds: { lp: 'preparation' } }));
+  assert.equal(r.applied.length, 1);
+  assert.equal(r.items.length, 3, 'les articles restent, seules les coches s’effacent');
+  assert.ok(r.items.every((t) => !t.done), 'tout est redevenu à préparer');
+  assert.ok(r.items.every((t) => !t.doneAt && !t.doneBy), 'plus aucune trace de coche');
+  assert.deepEqual(r.listResets, [{ listId: 'lp', at: '2026-07-10T18:00:00Z' }], 'la liste porte la date du reset');
+});
+
+test('« reset » est refusé sur une liste qui n’est pas de préparation', () => {
+  const items = [task({ id: 'a1', listId: 'l1', done: true, doneBy: 'me' })];
+  const r = applyOps(items, [op({ op: 'reset', id: 'l1' })], ctx());
+  assert.equal(r.applied.length, 0);
+  assert.equal(r.skipped.length, 1);
+  assert.equal(r.items[0].done, true, 'une liste de tâches garde ses coches');
+  assert.deepEqual(r.listResets, []);
+});
+
+test('« reset » sur une liste disparue est écarté, sans rien casser', () => {
+  const r = applyOps([], [op({ op: 'reset', id: 'nawak' })], ctx({ lists: ['lp'], kinds: { lp: 'preparation' } }));
+  assert.equal(r.applied.length, 0);
+  assert.equal(r.skipped.length, 1);
+});
+
+test('« reset » déjà appliqué est acquitté sans être rejoué (file hors ligne)', () => {
+  const items = [task({ id: 'a1', listId: 'lp', done: true, doneBy: 'me' })];
+  const one = op({ op: 'reset', id: 'lp', at: '2026-07-10T18:00:00Z' });
+  const r1 = applyOps(items, [one], ctx({ lists: ['lp'], kinds: { lp: 'preparation' } }));
+  assert.equal(r1.items[0].done, false);
+  // Rejeu : acquitté, mais pas re-remis à zéro (rien à faire), et sans nouvelle date.
+  const r2 = applyOps(r1.items, [one], ctx({ lists: ['lp'], kinds: { lp: 'preparation' }, applied: [one.opId] }));
+  assert.equal(r2.applied.length, 1);
+  assert.deepEqual(r2.listResets, [], 'un rejeu ne repose pas lastResetAt');
 });
