@@ -66,7 +66,7 @@ export type { ShopItem, ShopState } from './shopping/ops';
  * jour : elles comptent dans « Toutes » et sur l'accueil. Une liste de corvées
  * ou une checklist (valise, fournitures, idées) vit dans son propre onglet.
  */
-export type ListKind = 'taches' | 'corvees' | 'checklist';
+export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation';
 export interface TaskList {
   id: string; name: string; color: string; icon: string;
   kind: ListKind;
@@ -74,6 +74,16 @@ export interface TaskList {
   scope: string;
   position: number;
   archived?: boolean;
+  // Listes de préparation (kind 'preparation') : trousseau d'un départ, coché au
+  // départ puis remis à zéro. Ces champs ne concernent qu'elles.
+  /** Membre concerné par le départ (la liste reste partagée). */
+  forMember?: string | null;
+  /** Date du départ, AAAA-MM-JJ. */
+  departure?: string | null;
+  /** Rappel J-N tant qu'il reste des articles non préparés. 3 par défaut. */
+  remindDaysBefore?: number | null;
+  /** Dernier « tout remettre à zéro », pour l'afficher. */
+  lastResetAt?: string | null;
 }
 /** Un modèle de liste : un nom, un type, des intitulés. On en fait une liste en un geste. */
 export interface TaskTemplate { id: string; name: string; kind: ListKind; color: string; icon: string; items: string[]; }

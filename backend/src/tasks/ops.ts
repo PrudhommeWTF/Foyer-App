@@ -117,11 +117,19 @@ export type TaskOp =
   | (Base & { op: 'skip'; id: string; occ: string; next: string | null })
   /** Sur une série, `occ` est l'échéance à rétablir : celle de la dernière réalisation. */
   | (Base & { op: 'reopen'; id: string; occ?: string })
-  | (Base & { op: 'remove'; id: string });
+  | (Base & { op: 'remove'; id: string })
+  /**
+   * Remise à zéro d'une liste de **préparation** : `id` est la liste. Toutes ses
+   * tâches redeviennent à préparer (les articles restent, les coches s'effacent).
+   * Refusée sur une liste d'un autre type, qui garde sa sémantique.
+   */
+  | (Base & { op: 'reset'; id: string });
 
 export interface OpsContext {
   /** Listes existantes. Une tâche ne peut pas atterrir dans une liste inconnue. */
   listIds: Set<string>;
+  /** Type d'une liste, pour n'autoriser `reset` que sur une liste de préparation. */
+  listKind: (listId: string) => string | undefined;
   /** Membres existants. Un membre inconnu est retiré de l'affectation, sans faire échouer l'opération. */
   memberIds: Set<string>;
   /** Listes de courses existantes, pour le lien. */
@@ -140,6 +148,11 @@ export interface ApplyResult {
    * différées : un client qui les garderait en file les rejouerait sans fin.
    */
   skipped: SkippedOp[];
+  /**
+   * Listes remises à zéro par une opération `reset` : l'appelant y pose
+   * `lastResetAt` sur la liste (qui vit dans le document, hors des tâches).
+   */
+  listResets: { listId: string; at: string }[];
 }
 
 export const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -309,9 +322,10 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
   const out: TaskItem[] = items.map((i) => ({ ...i }));
   const applied: string[] = [];
   const skipped: SkippedOp[] = [];
+  const listResets: { listId: string; at: string }[] = [];
   const seen = new Set<string>();
 
-  if (!Array.isArray(ops)) return { items: out, applied, skipped: [{ opId: '', reason: 'Lot d’opérations illisible.' }] };
+  if (!Array.isArray(ops)) return { items: out, applied, skipped: [{ opId: '', reason: 'Lot d’opérations illisible.' }], listResets };
 
   for (const raw of ops) {
     const o = (raw ?? {}) as Record<string, unknown>;
@@ -431,12 +445,26 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         applied.push(opId);
         break;
       }
+      case 'reset': {
+        // `id` est la liste. La remise à zéro ne vaut que pour une liste de
+        // préparation : les autres gardent leurs coches, qui portent un sens.
+        const kind = ctx.listKind(id);
+        if (kind === undefined) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
+        if (kind !== 'preparation') { skipped.push({ opId, reason: 'Seule une liste de préparation se remet à zéro.' }); break; }
+        for (let i = 0; i < out.length; i++) {
+          const t = out[i];
+          if (t.listId === id && (t.done || t.doneAt || t.doneBy)) out[i] = { ...t, done: false, doneAt: null, doneBy: null };
+        }
+        listResets.push({ listId: id, at });
+        applied.push(opId);
+        break;
+      }
       default:
         skipped.push({ opId, reason: 'Opération inconnue : ' + str(o['op']) });
     }
   }
 
-  return { items: out, applied, skipped };
+  return { items: out, applied, skipped, listResets };
 }
 
 export interface ReconcileReport {
