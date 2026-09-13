@@ -39,7 +39,7 @@ import { AuthedRequest, apiTokenLimiter, auth, currentMember, denyToken, denyTok
 import { authRouter } from './auth/routes';
 import { tokensRouter } from './auth/tokens-routes';
 import { mcpRouter } from './mcp/server';
-import { mcpChallenge, oauthAuthMiddleware } from './oauth/server';
+import { mcpChallenge, oauthAuthMiddleware, oauthLimiter } from './oauth/server';
 import { oauthLoginRouter } from './oauth/login';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
@@ -446,6 +446,9 @@ app.use('/api', api);
 // vivent là où le client les cherche. La page de connexion et de consentement
 // (/oauth/login) est servie par le backend, sans dépendre de l'application.
 // Tout est gouverné par `mcpEnabled` et l'« Adresse publique de Foyer ».
+// Le limiteur (créé une fois, voir oauth/server.ts) borne ces points ; les
+// limiteurs internes du SDK sont coupés car son routeur est fabriqué à la volée.
+app.use(['/authorize', '/token', '/register', '/revoke', '/.well-known', '/oauth/login'], oauthLimiter);
 app.use(oauthAuthMiddleware);
 app.use(oauthLoginRouter());
 

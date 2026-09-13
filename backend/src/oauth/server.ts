@@ -8,10 +8,23 @@
 // éteint (les endpoints répondent comme des chemins inconnus), et on le dit une
 // fois dans le journal. Le réglage `mcpEnabled` gouverne OAuth comme le reste.
 import { NextFunction, Request, RequestHandler, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { foyerOAuthProvider } from './provider';
 import { effectiveSetting } from '../settings/repo';
 import { log } from '../log';
+
+/**
+ * Le limiteur des points OAuth, créé **une seule fois** au chargement du module.
+ * Les limiteurs internes du SDK sont désactivés (voir plus bas) : express-rate-limit
+ * refuse qu'on en crée un pendant une requête, or le routeur d'autorisation est
+ * construit paresseusement (l'émetteur peut changer). On borne donc ces points
+ * ici, à un endroit sûr. Monté sur les chemins OAuth par server.ts.
+ */
+export const oauthLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 60, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Trop de requêtes OAuth, réessayez dans un instant.' },
+});
 
 /** OAuth suit l'interrupteur des assistants. */
 export const oauthEnabled = (): boolean => effectiveSetting('mcpEnabled') === true;
@@ -41,7 +54,15 @@ export function oauthAuthMiddleware(req: Request, res: Response, next: NextFunct
   warned = false;
   if (!cache || cache.issuer !== iss) {
     try {
-      cache = { issuer: iss, handler: mcpAuthRouter({ provider: foyerOAuthProvider, issuerUrl: new URL(iss), scopesSupported: ['read', 'write'], resourceName: 'Foyer' }) };
+      cache = { issuer: iss, handler: mcpAuthRouter({
+        provider: foyerOAuthProvider, issuerUrl: new URL(iss), scopesSupported: ['read', 'write'], resourceName: 'Foyer',
+        // Le SDK crée sinon ses propres limiteurs express-rate-limit ; comme ce
+        // routeur est fabriqué à la volée (pendant une requête), v7 refuse
+        // (ERR_ERL_CREATED_IN_REQUEST_HANDLER). On les coupe et on borne les
+        // chemins nous-mêmes via `oauthLimiter` (voir server.ts).
+        authorizationOptions: { rateLimit: false }, clientRegistrationOptions: { rateLimit: false },
+        tokenOptions: { rateLimit: false }, revocationOptions: { rateLimit: false },
+      }) };
     } catch (e) {
       log.erreur('OAuth : adresse publique invalide, endpoints OAuth désactivés', e);
       next();

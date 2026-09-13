@@ -40,6 +40,23 @@ function redirectToClient(res: Response, redirectUri: string, params: Record<str
   res.redirect(302, url.href);
 }
 
+/**
+ * Envoie la page de consentement avec une CSP adaptée. La CSP globale (helmet)
+ * pose `form-action 'self'` ; or ce formulaire, une fois « Autoriser » cliqué,
+ * renvoie le navigateur vers l'adresse de retour du client (claude.ai, ChatGPT…),
+ * une autre origine. Chromium vérifie `form-action` jusqu'à la cible de la
+ * redirection : sans l'origine du client, il refuse silencieusement l'envoi et
+ * « rien ne se passe » au clic. On autorise donc, pour cette page seulement,
+ * l'origine de retour de ce client précis (rien de plus large). La page est
+ * autonome (styles en ligne, aucun script) : le reste est verrouillé.
+ */
+function sendConsent(res: Response, status: number, reqToken: string, r: OAuthRequest, opts: { error?: string; email?: string; scope?: string } = {}): void {
+  let clientOrigin = '';
+  try { clientOrigin = new URL(r.redirectUri).origin; } catch { /* déjà validée en amont */ }
+  res.setHeader('Content-Security-Policy', `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${clientOrigin}; base-uri 'none'; frame-ancestors 'none'`);
+  res.status(status).type('html').send(page(reqToken, r, opts));
+}
+
 /** La page complète : en-tête Foyer, formulaire de connexion, choix de portée, boutons. */
 function page(reqToken: string, r: OAuthRequest, opts: { error?: string; email?: string; scope?: string } = {}): string {
   const scope = opts.scope === 'write' ? 'write' : 'read';
@@ -113,7 +130,7 @@ export function oauthLoginRouter(): Router {
     try { ar = verifyOAuthRequest(String(req.query['req'] ?? '')); }
     catch { errorPage(res, 'Cette demande de connexion a expiré. Relancez la connexion depuis votre application.'); return; }
     if (!checkClientRedirect(ar.clientId, ar.redirectUri)) { errorPage(res, 'Demande d’autorisation invalide.'); return; }
-    res.type('html').send(page(String(req.query['req']), ar, { scope: ar.scopes.includes('write') ? 'write' : 'read' }));
+    sendConsent(res, 200, String(req.query['req']), ar, { scope: ar.scopes.includes('write') ? 'write' : 'read' });
   });
 
   r.post('/oauth/login', loginLimiter, async (req: Request, res: Response) => {
@@ -134,7 +151,7 @@ export function oauthLoginRouter(): Router {
     const adresse = req.ip || 'inconnue';
     const nowMs = Date.now();
     const scope: 'read' | 'write' = req.body?.scope === 'write' ? 'write' : 'read';
-    const render = (error: string): void => { res.status(401).type('html').send(page(reqToken, ar, { error, email, scope })); };
+    const render = (error: string): void => { sendConsent(res, 401, reqToken, ar, { error, email, scope }); };
 
     const attente = Math.max(parCompte.attente(cible, nowMs), parAdresse.attente(adresse, nowMs));
     if (attente > 0) { render(messageAttente(attente)); return; }

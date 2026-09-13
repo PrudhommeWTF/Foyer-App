@@ -132,6 +132,21 @@ describe('OAuth 2.1', () => {
     assert.equal(after.status, 401, 'jeton révoqué');
   });
 
+  it('la page de consentement autorise le renvoi vers le client (CSP form-action)', async () => {
+    // Sans l'origine du client dans form-action, Chromium refuse silencieusement
+    // l'envoi du formulaire au clic sur « Autoriser » (la redirection de retour
+    // vise une autre origine) : « rien ne se passe ». On vérifie donc que la
+    // page pose une CSP qui autorise cette origine précise, en plus de 'self'.
+    const { json: c } = await registerClient(['https://claude.ai/cb']);
+    const authUrl = root + '/authorize?' + form({ response_type: 'code', client_id: c.client_id!, redirect_uri: 'https://claude.ai/cb', code_challenge: pkce().challenge, code_challenge_method: 'S256', state: 'stcsp', scope: 'read write' }).toString();
+    const loginLoc = (await fetch(authUrl, { redirect: 'manual' })).headers.get('location') || '';
+    const pageRes = await fetch(root + loginLoc);
+    const csp = pageRes.headers.get('content-security-policy') || '';
+    const fa = (csp.match(/form-action ([^;]*)/) || [])[1] || '';
+    assert.ok(/'self'/.test(fa), "form-action inclut 'self' (envoi vers /oauth/login)");
+    assert.ok(/https:\/\/claude\.ai/.test(fa), 'form-action inclut l’origine de retour du client');
+  });
+
   it('/mcp sans jeton provoque la découverte (401 + WWW-Authenticate)', async () => {
     const r = await fetch(ctx.base + '/mcp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
     assert.equal(r.status, 401);
