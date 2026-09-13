@@ -35,8 +35,9 @@ import { setting } from './settings/registry';
 import { LogLevel, log, setLogLevelSource } from './log';
 import { currentVersion } from './system/version';
 import { systemRouter } from './system/routes';
-import { AuthedRequest, auth, currentMember, motDePasseBon, requireAdmin, requireAdulte, requireMember, route } from './auth/session';
+import { AuthedRequest, apiTokenLimiter, auth, currentMember, denyToken, denyTokenSystem, denyTokenWrite, motDePasseBon, requireAdmin, requireAdulte, requireMember, requireScope, route } from './auth/session';
 import { authRouter } from './auth/routes';
+import { tokensRouter } from './auth/tokens-routes';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const PORT = parseInt(process.env.PORT || '8099', 10);
@@ -193,11 +194,31 @@ api.get('/health', (_req, res) => res.json({ ok: true }));
 // identifiants, l'enrôlement du second facteur, et la gestion des accès des membres.
 api.use(authRouter());
 
-api.get('/state', auth, requireMember, (_req, res) => {
+// Jetons d'accès par membre (voir auth/tokens-routes.ts) : lister, créer, révoquer.
+api.use(tokensRouter());
+
+/**
+ * Le laissez-passer d'un jeton d'accès, posé juste après `auth` sur les routeurs
+ * qu'un jeton a le droit de toucher : il borne le débit du jeton (compteur
+ * commun à toute l'API) et refuse une écriture faite avec un jeton `read`. Une
+ * session de navigateur n'est jamais gênée (pas de `req.apiToken`). Les modules
+ * fermés aux jetons (finances, comptes, sécurité, système, notifications) posent
+ * `denyToken` à la place. Voir auth/session.ts.
+ */
+const tokenGate = [apiTokenLimiter, requireScope('write')];
+
+/** Ferme /calendar aux jetons : l'auth de ce routeur est interne, on lit donc l'en-tête brut. */
+function denyTokenCalendar(req: Request, res: Response, next: NextFunction): void {
+  const h = req.headers.authorization || '';
+  if (h.startsWith('Bearer foyer_')) { res.status(403).json({ error: 'Cette action n’est pas accessible par un jeton d’accès.' }); return; }
+  next();
+}
+
+api.get('/state', auth, ...tokenGate, requireMember, (_req, res) => {
   res.json(getHousehold());
 });
 
-api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Response) => {
+api.put('/state', auth, ...tokenGate, requireMember, jsonDoc, (req: AuthedRequest, res: Response) => {
   // La charpente est vérifiée avant tout le reste, et le refus nomme le champ :
   // sans cela, un tableau remplacé par un nombre s'enregistrait sans un mot et
   // rendait l'écran illisible pour toute la famille. Voir state/validate.ts.
@@ -313,7 +334,7 @@ api.put('/state', auth, requireMember, jsonDoc, (req: AuthedRequest, res: Respon
  * toutes les cinq secondes tant qu'ils sont visibles, autant que la réponse
  * tienne en trois lignes le reste du temps.
  */
-api.get('/live', auth, requireMember, (req: Request, res: Response) => {
+api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response) => {
   // Courses, tâches et lieux vivent dans le même document : un seul parse pour
   // les trois, plutôt qu'un par sous-arbre. Cet endpoint est sondé toutes les
   // cinq secondes par chaque écran ouvert, c'est le plus chaud du service.
@@ -330,12 +351,12 @@ api.get('/live', auth, requireMember, (req: Request, res: Response) => {
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, requireAdulte, financesRouter(requireAdmin));
+api.use('/finances', auth, apiTokenLimiter, denyToken, requireAdulte, financesRouter(requireAdmin));
 
 // Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
 // plutôt que par enregistrement du document entier, pour que deux
 // administrateurs qui règlent deux choses ne s'écrasent pas.
-api.use('/settings', auth, requireMember, settingsRouter({
+api.use('/settings', auth, apiTokenLimiter, denyTokenWrite, requireMember, settingsRouter({
   memberId: (req) => currentMember(req as AuthedRequest)?.id ?? null,
   isAdmin: (req) => !!currentMember(req as AuthedRequest)?.admin,
   isChild: (req) => !!currentMember(req as AuthedRequest)?.enfant,
@@ -346,20 +367,20 @@ api.use('/settings', auth, requireMember, settingsRouter({
 
 // Recipe photos and other household files: bytes on disk, never in the state
 // document (a data-URL there was re-sent in full on every single save).
-api.use('/files', auth, requireMember, filesRouter(
+api.use('/files', auth, ...tokenGate, requireMember, filesRouter(
   () => Number(effectiveSetting('maxUploadMb')) * 1024 * 1024,
 ));
 
 // The shopping list writes item by item rather than by whole-document PUT.
 // See shopping/ops.ts for why: two phones ticking at once is the common case.
-api.use('/shopping', auth, requireMember, shoppingRouter());
+api.use('/shopping', auth, ...tokenGate, requireMember, shoppingRouter());
 
 // Tâches : même dispositif, même raison. Voir tasks/ops.ts.
-api.use('/tasks', auth, requireMember, tasksRouter());
+api.use('/tasks', auth, ...tokenGate, requireMember, tasksRouter());
 
 // Lieux de vacances et affaires qui y restent : écrits par opérations, comme les
 // courses et les tâches, pour rester hors du chemin du PUT du document complet.
-api.use('/places', auth, requireMember, placesRouter());
+api.use('/places', auth, ...tokenGate, requireMember, placesRouter());
 
 // Rappels par Web Push : abonnement des appareils, état, test. Voir notify/push.ts.
 //
@@ -369,19 +390,21 @@ api.use('/places', auth, requireMember, placesRouter());
 // quand c'était une adresse locale, d'où l'intérêt de pouvoir la poser sans
 // éditer un fichier sur le serveur.
 const appUrl = (): string => String(effectiveSetting('publicUrl') || '');
-api.use('/push', auth, requireMember, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
+api.use('/push', auth, apiTokenLimiter, denyToken, requireMember, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une
 // URL, déclenché par l'utilisateur, journalisé, coupable par FOYER_RECIPE_IMPORT.
-api.use('/recipes', auth, requireMember, recipesRouter(() => effectiveSetting('recipeImport') === true));
+api.use('/recipes', auth, ...tokenGate, requireMember, recipesRouter(() => effectiveSetting('recipeImport') === true));
 
 // ---- Calendrier partagé (vacances scolaires, lien et flux ICS) : voir calendar/routes.ts ----
-api.use('/calendar', calendarRouter({ auth, requireMember, requireAdmin, icsLimiter, route }));
+// Fermé aux jetons : l'auth de ce routeur est interne (le flux ICS a son propre
+// jeton en query), on filtre donc sur l'en-tête brut avant d'y entrer.
+api.use('/calendar', denyTokenCalendar, calendarRouter({ auth, requireMember, requireAdmin, icsLimiter, route }));
 
 // Autocomplétion du lieu d'un événement, relayée vers la Base Adresse Nationale.
 // Coupable par le réglage `placeSuggest` : éteint, la route ne sort pas et rend
 // une liste vide (le champ reste une saisie libre). Voir places.ts.
-api.get('/places/suggest', auth, requireMember, placesLimiter, async (req: Request, res: Response) => {
+api.get('/places/suggest', auth, ...tokenGate, requireMember, placesLimiter, async (req: Request, res: Response) => {
   if (effectiveSetting('placeSuggest') !== true) { res.json({ suggestions: [] }); return; }
   res.json({ suggestions: await suggestPlaces(String(req.query['q'] || '')) });
 });
@@ -389,13 +412,13 @@ api.get('/places/suggest', auth, requireMember, placesLimiter, async (req: Reque
 // Logos proposés pour une carte de fidélité, à partir de son nom. Coupable par le
 // réglage `cardLogoSearch` : éteint, la route rend une liste vide (le monogramme
 // tient lieu de logo). Voir logos.ts.
-api.get('/cards/logos', auth, requireMember, logosLimiter, async (req: Request, res: Response) => {
+api.get('/cards/logos', auth, ...tokenGate, requireMember, logosLimiter, async (req: Request, res: Response) => {
   if (effectiveSetting('cardLogoSearch') !== true) { res.json({ logos: [] }); return; }
   res.json({ logos: await searchLogos(String(req.query['name'] || '')) });
 });
 
 // ---- System / self-update / exploitation (voir system/routes.ts) ----
-api.use('/system', auth, systemRouter({ requireAdmin, requireMember, jsonSmall, route, motDePasseBon, currentMember, dataDir: DATA_DIR }));
+api.use('/system', auth, apiTokenLimiter, denyTokenSystem, systemRouter({ requireAdmin, requireMember, jsonSmall, route, motDePasseBon, currentMember, dataDir: DATA_DIR }));
 
 app.use('/api', api);
 

@@ -8,12 +8,14 @@
 // Le secret ne sort jamais du module : on n'exporte que des fonctions qui
 // signent ou vérifient, jamais la clé elle-même.
 import { NextFunction, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { HouseholdState } from '../models';
-import { UserRow, getHousehold, getUserById } from '../db';
+import { UserRow, getApiTokenByHash, getHousehold, getUserById, touchApiToken } from '../db';
 import { effectiveSetting } from '../settings/repo';
 import { hacher, verifier } from './passwords';
+import { estJeton, hashJeton } from './tokens';
 import { log } from '../log';
 
 /**
@@ -55,6 +57,14 @@ export interface AuthedRequest extends Request {
    * document d'état.
    */
   member?: HouseholdState['members'][number] | null;
+  /**
+   * Jeton d'accès (assistant, script) qui porte cette requête, quand elle n'est
+   * pas une session de navigateur. Présent uniquement pour un `Authorization:
+   * Bearer foyer_…` valide. Les gardes s'en servent pour brider la portée (un
+   * jeton `read` ne peut pas écrire) et fermer les modules qu'un jeton ne gère
+   * jamais (comptes, sécurité, finances, système).
+   */
+  apiToken?: { id: number; name: string; scope: 'read' | 'write' };
 }
 
 /**
@@ -213,6 +223,17 @@ export const pwdTropCourt = (): string => `Le mot de passe doit faire au moins $
 export const motDePasseBon = (req: Request, user: UserRow, champ = 'password'): Promise<boolean> =>
   verifier(String(req.body?.[champ] ?? ''), user.password_hash);
 
+/**
+ * Dernière utilisation d'un jeton, notée au plus une fois par minute.
+ *
+ * Sans ce garde-mémoire, chaque requête d'un assistant qui sonde toutes les
+ * cinq secondes écrirait en base : la colonne `last_used_at` n'a pas besoin
+ * d'être à la seconde près, seulement de dire « aujourd'hui » ou « il y a un
+ * mois ». La carte se vide au redémarrage, au prix d'une écriture de plus.
+ */
+const dernierToucher = new Map<number, number>();
+const TOUCHER_MS = 60_000;
+
 export function auth(req: AuthedRequest, res: Response, next: NextFunction): void {
   // Le cookie d'abord, l'en-tête `Authorization: Bearer` ensuite : l'application
   // s'appuie sur le cookie, mais un script d'API qui porte son jeton en en-tête
@@ -223,6 +244,36 @@ export function auth(req: AuthedRequest, res: Response, next: NextFunction): voi
     res.status(401).json({ error: 'Non authentifié' });
     return;
   }
+
+  // Jeton d'accès par membre : porté en en-tête `Bearer foyer_…`, jamais dans un
+  // cookie (un onglet de navigateur ne doit pas pouvoir être piloté par ce
+  // biais). On cherche par le condensat, on refuse un jeton inconnu ou révoqué,
+  // et on pose `req.user` comme pour une session, plus `req.apiToken` pour les
+  // gardes de portée.
+  if (estJeton(token) && !cookieToken(req)) {
+    const row = getApiTokenByHash(hashJeton(token));
+    if (!row || row.revoked_at) {
+      res.status(401).json({ error: 'Jeton d’accès invalide ou révoqué' });
+      return;
+    }
+    const u = getUserById(row.user_id);
+    if (!u) {
+      res.status(401).json({ error: 'Jeton d’accès invalide ou révoqué' });
+      return;
+    }
+    const now = Date.now();
+    const vu = dernierToucher.get(row.id) ?? 0;
+    if (now - vu > TOUCHER_MS) {
+      dernierToucher.set(row.id, now);
+      try { touchApiToken(row.id, String(req.headers['user-agent'] || '')); } catch { /* pas grave */ }
+      if (!vu) log.info(`Jeton : première utilisation de « ${row.name} » (${u.email}) depuis ${req.ip || 'adresse inconnue'}.`);
+    }
+    req.user = { id: u.id, email: u.email, tv: u.token_version };
+    req.apiToken = { id: row.id, name: row.name, scope: row.scope };
+    next();
+    return;
+  }
+
   let payload: { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number };
   try {
     payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number };
@@ -309,6 +360,76 @@ export function requireAdulte(req: AuthedRequest, res: Response, next: NextFunct
   if (!m) { requireMember(req, res, next); return; }
   if (m.enfant) {
     res.status(403).json({ error: 'Ce module n’est pas accessible depuis un compte enfant.' });
+    return;
+  }
+  next();
+}
+
+// ---- Gardes propres aux jetons d'accès ----
+// Un jeton agit au nom d'un membre, avec ses droits, et jamais plus : il ne
+// gère ni les comptes, ni la sécurité, ni le système, ni les finances. Ces
+// gardes ferment ces portes côté serveur, quel que soit le rôle du membre. Une
+// session de navigateur (pas de `req.apiToken`) n'est jamais gênée par eux.
+
+/** Une méthode qui ne change rien : lisible par un jeton `read`. */
+const lecture = (m: string): boolean => m === 'GET' || m === 'HEAD' || m === 'OPTIONS';
+
+/**
+ * Débit d'un jeton : 120 requêtes par minute, comptées par identifiant de jeton,
+ * distinct du garde-fou des connexions. Une seule instance, réutilisée sur tous
+ * les routeurs, pour que le compteur soit commun à toute l'API. Les sessions de
+ * navigateur sont ignorées (pas de `req.apiToken`).
+ */
+export const apiTokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => String((req as AuthedRequest).apiToken?.id ?? ''),
+  skip: (req: Request) => !(req as AuthedRequest).apiToken,
+  message: { error: 'Trop de requêtes pour ce jeton d’accès, réessayez dans un instant.' },
+});
+
+/**
+ * Refuse en 403 toute écriture faite avec un jeton `read`. Sans effet sur une
+ * lecture, sur un jeton `write`, ou sur une session de navigateur.
+ */
+export function requireScope(scope: 'write'): (req: AuthedRequest, res: Response, next: NextFunction) => void {
+  return (req, res, next) => {
+    const t = req.apiToken;
+    if (t && !lecture(req.method) && t.scope !== scope) {
+      res.status(403).json({ error: 'Ce jeton d’accès est en lecture seule.' });
+      return;
+    }
+    next();
+  };
+}
+
+/** Ferme une route à tout jeton d'accès (comptes, sécurité, système, notifications). */
+export function denyToken(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (req.apiToken) {
+    res.status(403).json({ error: 'Cette action n’est pas accessible par un jeton d’accès.' });
+    return;
+  }
+  next();
+}
+
+/** Ferme les écritures d'une route à tout jeton, en laissant passer la lecture (réglages : lisibles, non modifiables). */
+export function denyTokenWrite(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (req.apiToken && !lecture(req.method)) {
+    res.status(403).json({ error: 'Cette action n’est pas accessible par un jeton d’accès.' });
+    return;
+  }
+  next();
+}
+
+/**
+ * Le système est fermé aux jetons, à une exception près : la version courante,
+ * en lecture, qu'un assistant peut légitimement vouloir afficher.
+ */
+export function denyTokenSystem(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (req.apiToken && !(lecture(req.method) && req.path === '/version')) {
+    res.status(403).json({ error: 'Cette action n’est pas accessible par un jeton d’accès.' });
     return;
   }
   next();

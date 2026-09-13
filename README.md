@@ -295,6 +295,34 @@ d'origine** est écrite dans `<données>/backups/` avant toute transformation.
   `…/api/calendar/feed.ics?token=…` (jeton secret) à ajouter dans Google Agenda, Apple
   Calendrier, etc., en lecture seule. Un administrateur peut régénérer le lien (invalide l'ancien).
 
+## 🔑 Accès par jeton (assistants, scripts)
+
+Chacun peut ouvrir des **jetons d'accès** depuis *Paramètres → Mon compte*, pour qu'un script
+ou un assistant lise et agisse dans le foyer **en son nom**, avec **ses droits** (jamais plus).
+
+- **Format** : `foyer_` suivi de 40 caractères aléatoires. Le secret n'est affiché **qu'une
+  fois**, à la création (copiez-le tout de suite) ; en base, seul son SHA-256 est rangé.
+- **Portées** : `read` (lecture seule) ou `write` (lecture **et** écriture). Le rôle du membre
+  s'applique en plus : un enfant garde ses restrictions.
+- **Hors de portée d'un jeton**, quelle que soit la portée : les **Finances**, les **réglages**
+  (en écriture), la **gestion des comptes et de la sécurité** (mot de passe, second facteur), le
+  **système** (sauf la version, en lecture) et les **notifications**. Un jeton ne peut pas non
+  plus créer d'autre jeton.
+- **Révocation** : depuis le même écran. Un administrateur voit et révoque aussi les jetons de
+  n'importe quel membre (*Gestion de la famille → accès du membre*). **Changer son mot de passe
+  ne révoque pas** les jetons (contrairement aux sessions) : c'est un choix, révoquez-les
+  explicitement. Supprimer le compte les supprime.
+
+Le jeton se porte en en-tête `Authorization: Bearer` (jamais dans un cookie) :
+
+```bash
+curl -H "Authorization: Bearer foyer_votre_secret" https://foyer.exemple.fr/api/live
+# ajouter une course :
+curl -X POST https://foyer.exemple.fr/api/shopping/ops \
+  -H "Authorization: Bearer foyer_votre_secret" -H "Content-Type: application/json" \
+  -d '{"ops":[{"op":"add","opId":"1","id":"x1","name":"Lait","listId":"cl1","aisleId":"a-repli"}]}'
+```
+
 ## 🔄 Mises à jour depuis l'interface
 
 *Paramètres → Mises à jour* affiche la version installée et **vérifie** la dernière version

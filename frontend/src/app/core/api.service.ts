@@ -22,6 +22,18 @@ export class ApiError extends Error {
 export const isOffline = (e: unknown): boolean => e instanceof ApiError && e.status === 0;
 
 export interface AuthUser { email: string; name: string; memberId: string | null; }
+
+/** La vue publique d'un jeton d'accès : tout sauf le secret, qui n'apparaît qu'à la création. */
+export interface ApiTokenView {
+  id: number;
+  name: string;
+  prefix: string;
+  scope: 'read' | 'write';
+  created_at: string;
+  last_used_at: string | null;
+  last_used_ua: string | null;
+  revoked_at: string | null;
+}
 /**
  * Ce que rend le premier temps de la connexion.
  *
@@ -373,6 +385,29 @@ export class ApiService {
 
   deleteMemberAccount(memberId: string): Promise<{ ok: boolean }> {
     return this.del(`members/${encodeURIComponent(memberId)}/account`);
+  }
+
+  // ---- Jetons d'accès (assistants, scripts) ----
+  //
+  // Un jeton agit au nom d'un membre, avec ses droits. Le secret n'est rendu
+  // qu'à la création, jamais ensuite : la liste ne porte que la vue publique.
+
+  listMyTokens(): Promise<{ tokens: ApiTokenView[] }> { return this.request('me/tokens'); }
+
+  /** Crée un jeton (le mot de passe courant est exigé) et rend le secret, une seule fois. */
+  createMyToken(name: string, scope: 'read' | 'write', password: string): Promise<ApiTokenView & { token: string }> {
+    return this.post('me/tokens', { name, scope, password });
+  }
+
+  revokeMyToken(id: number): Promise<{ ok: boolean }> { return this.del(`me/tokens/${id}`); }
+
+  /** Les jetons d'un membre, vus par un administrateur. */
+  listMemberTokens(memberId: string): Promise<{ tokens: ApiTokenView[] }> {
+    return this.request(`members/${encodeURIComponent(memberId)}/tokens`);
+  }
+
+  revokeMemberToken(memberId: string, id: number): Promise<{ ok: boolean }> {
+    return this.del(`members/${encodeURIComponent(memberId)}/tokens/${id}`);
   }
 
   // ---- réglages du foyer ----
