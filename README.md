@@ -314,8 +314,12 @@ ou un assistant lise et agisse dans le foyer **en son nom**, avec **ses droits**
   explicitement. Supprimer le compte les supprime.
 
 Un assistant (Claude, ChatGPT, un client MCP) se branche via le **serveur MCP** :
-voir [`docs/assistants.md`](docs/assistants.md). Pour un script, le jeton se
-porte en en-tête `Authorization: Bearer` (jamais dans un cookie) :
+voir [`docs/assistants.md`](docs/assistants.md). Claude Code, Claude Desktop et
+les clients MCP portent le jeton en en-tête ; **claude.ai (web et mobile) et
+ChatGPT** passent par **OAuth**, qui exige que l'**« Adresse publique de Foyer »**
+(`FOYER_PUBLIC_URL`, ou *Paramètres → Notifications*) soit renseignée. Pour un
+script, le jeton se porte en en-tête `Authorization: Bearer` (jamais dans un
+cookie) :
 
 ```bash
 curl -H "Authorization: Bearer foyer_votre_secret" https://foyer.exemple.fr/api/live

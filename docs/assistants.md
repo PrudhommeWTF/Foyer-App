@@ -72,11 +72,35 @@ Configurez un serveur MCP **HTTP (Streamable HTTP)** avec :
 
 ### claude.ai (web, iPhone) et ChatGPT
 
-Les connecteurs personnalisés de claude.ai et de ChatGPT n'acceptent pas un
-en-tête Bearer statique : ils attendent un flux **OAuth**. Ce n'est **pas encore
-disponible** dans Foyer (prévu dans une prochaine étape). En attendant, ces
-clients ne peuvent pas se brancher ; Foyer ne fournit pas non plus de pont local
-`stdio`.
+Les connecteurs personnalisés de claude.ai (web et mobile) et de ChatGPT
+n'acceptent pas un en-tête Bearer statique : ils passent par **OAuth**. Foyer
+est son propre serveur d'autorisation, il n'y a **rien à configurer d'autre**
+que deux prérequis :
+
+1. Le réglage **« Ouvrir le serveur pour les assistants (MCP) »** activé
+   (*Paramètres → Accès et comptes*).
+2. L'**« Adresse publique de Foyer »** renseignée (*Paramètres → Notifications*,
+   ou la variable `FOYER_PUBLIC_URL`), par ex. `https://foyer.exemple.fr`. Sans
+   elle, OAuth reste éteint (le journal le rappelle).
+
+Ensuite, côté client :
+
+- **claude.ai** : *Paramètres → Connecteurs → Ajouter un connecteur
+  personnalisé*, coller l'URL `https://foyer.exemple.fr/api/mcp`.
+- **ChatGPT** : *Paramètres → Connecteurs → créer*, même URL.
+
+Le client découvre tout seul l'autorisation (enregistrement dynamique,
+découverte), puis **ouvre la page de connexion de Foyer** : email, mot de passe,
+code du second facteur si activé, et choix de la portée (lecture seule / lecture
+et écriture). Après « Autoriser », le connecteur est relié. L'accès obtenu est,
+en base, **un jeton comme les autres** (nommé d'après le client, « claude.ai ») :
+il se **révoque dans Paramètres → Mon compte**, au même endroit que les jetons
+créés à la main.
+
+Le jeton d'accès dure 30 jours et se renouvelle tout seul (jeton de
+rafraîchissement de 90 jours, en rotation). Les adresses de redirection
+acceptées à l'enregistrement sont limitées à `https://` (plus `http://localhost`
+pour un outil local).
 
 ## Vérifier que ça marche
 

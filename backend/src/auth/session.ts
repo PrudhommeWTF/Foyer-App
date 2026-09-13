@@ -99,6 +99,22 @@ const DEFI_SECRET = crypto.createHmac('sha256', JWT_SECRET).update('foyer-totp-c
 /** Le défi vit cinq minutes : le temps de sortir son téléphone, pas davantage. */
 const DEFI_MINUTES = 5;
 
+/**
+ * Le secret qui signe la **demande d'autorisation OAuth** portée jusqu'à la page
+ * de connexion (client, redirection, défi PKCE, état). Dérivé de celui des
+ * sessions mais distinct, comme le défi du second facteur : ce jeton n'ouvre
+ * rien, il ne transporte qu'une demande le temps que la personne se connecte.
+ */
+const OAUTH_REQ_SECRET = crypto.createHmac('sha256', JWT_SECRET).update('foyer-oauth-authrequest').digest('hex');
+
+/** Ce que la page de connexion OAuth doit connaître pour finir le flux après authentification. */
+export interface OAuthRequest {
+  clientId: string; clientName: string; redirectUri: string; codeChallenge: string;
+  state: string; resource: string; scopes: string[];
+}
+export const signOAuthRequest = (r: OAuthRequest): string => jwt.sign(r, OAUTH_REQ_SECRET, { expiresIn: '15m' });
+export const verifyOAuthRequest = (token: string): OAuthRequest => jwt.verify(token, OAUTH_REQ_SECRET) as OAuthRequest;
+
 export const signerDefi = (u: { id: number; token_version: number }, remember: boolean): string =>
   jwt.sign({ id: u.id, tv: u.token_version, rm: remember }, DEFI_SECRET, { expiresIn: `${DEFI_MINUTES}m` });
 
@@ -254,6 +270,13 @@ export function auth(req: AuthedRequest, res: Response, next: NextFunction): voi
     const row = getApiTokenByHash(hashJeton(token));
     if (!row || row.revoked_at) {
       res.status(401).json({ error: 'Jeton d’accès invalide ou révoqué' });
+      return;
+    }
+    // Un jeton émis par OAuth expire (30 jours) : passé ce délai, le client le
+    // renouvelle avec son jeton de rafraîchissement. Un jeton créé à la main n'a
+    // pas d'expiration (expires_at nul).
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) {
+      res.status(401).json({ error: 'Jeton d’accès expiré' });
       return;
     }
     const u = getUserById(row.user_id);
