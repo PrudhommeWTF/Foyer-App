@@ -14,6 +14,8 @@ export interface ActivityEntry {
   at: string;
   /** Auteur (identifiant de membre), ou null si le geste n'en portait pas. */
   by: string | null;
+  /** Nom du jeton d'accès quand le geste vient d'un assistant, sinon null. Affiché « (via un assistant) ». */
+  via?: string | null;
   /** « a ajouté », « a terminé », « a mis au panier »... */
   verb: string;
   /** Ce qui a changé : l'intitulé de la tâche ou de l'article. */
@@ -42,7 +44,7 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
     const l = tList(t.listId);
     const where = l?.name || 'Tâches';
     const color = l?.color || '#7A9B76';
-    if (t.at) out.push({ at: t.at, by: t.by ?? null, verb: 'a ajouté', what: t.text, where, color });
+    if (t.at) out.push({ at: t.at, by: t.by ?? null, via: t.via ?? null, verb: 'a ajouté', what: t.text, where, color });
     if (t.history?.length) {
       for (const h of t.history) if (h.at) out.push({ at: h.at, by: h.by, verb: 'a terminé', what: t.text, where, color });
     } else if (t.done && t.doneAt) {
@@ -53,7 +55,7 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
   for (const s of state.shop || []) {
     if (!s.at) continue;
     const l = sList(s.listId);
-    out.push({ at: s.at, by: s.by ?? null, verb: SHOP_VERB[s.state] || 'a modifié', what: s.name, where: l?.name || 'Courses', color: l?.color || '#4E93B8' });
+    out.push({ at: s.at, by: s.by ?? null, via: s.via ?? null, verb: SHOP_VERB[s.state] || 'a modifié', what: s.name, where: l?.name || 'Courses', color: l?.color || '#4E93B8' });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }

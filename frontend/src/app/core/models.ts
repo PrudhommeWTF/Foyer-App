@@ -88,6 +88,8 @@ export interface ShopItem {
    * qu'elle a elle-même produit, et ne touche jamais un ajout fait à la main.
    */
   art?: string | null; gen?: boolean | null;
+  /** Nom du jeton d'accès quand l'état vient d'un assistant (posé par le serveur MCP). */
+  via?: string | null;
 }
 /**
  * Un lieu de vacances et les affaires qui y restent d'une fois sur l'autre (la
@@ -192,6 +194,8 @@ export interface TaskItem {
   doneAt?: string | null; doneBy?: string | null;
   /** Auteur et date de création. */
   by?: string | null; at?: string | null;
+  /** Nom du jeton d'accès quand la tâche a été créée par un assistant (posé par le serveur MCP). */
+  via?: string | null;
   /** Dernier auteur d'une modification, et sa date. Absents tant qu'aucune retouche n'a eu lieu depuis la création. */
   upBy?: string | null; upAt?: string | null;
   /**

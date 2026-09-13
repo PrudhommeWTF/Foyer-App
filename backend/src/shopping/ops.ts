@@ -50,9 +50,16 @@ export interface ShopItem {
   /** Membre qui a posé l'état courant, et quand. Sert à l'afficher, pas à arbitrer. */
   by?: string | null;
   at?: string | null;
+  /**
+   * Nom du jeton d'accès quand l'état courant vient d'un assistant (« Claude
+   * iPhone »), sinon absent. Renseigné uniquement par le serveur MCP : le fil
+   * d'activité affiche alors « (via un assistant) ». Suit `by` : la dernière
+   * écriture le pose ou l'efface, cohérent avec l'état affiché.
+   */
+  via?: string | null;
 }
 
-interface Base { opId: string; by?: string | null; at?: string | null; }
+interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
 export type ShopOp =
   | (Base & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean })
   | (Base & { op: 'set-state'; id: string; state: ShopState })
@@ -112,6 +119,9 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
     if (!id) { skipped.push({ opId, reason: 'Opération sans article visé.' }); continue; }
     const at = trimmed(o['at'], 40) || new Date().toISOString();
     const by = trimmed(o['by'], 80) || null;
+    // Provenance assistant, posée uniquement par le serveur MCP. Suit `by` :
+    // absente, elle efface une provenance précédente (l'écriture n'en a pas).
+    const via = trimmed(o['via'], 80) || null;
     const idx = out.findIndex((i) => i.id === id);
 
     switch (o['op']) {
@@ -127,6 +137,7 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
         if (!ctx.aisleIds.has(aisleId)) { skipped.push({ opId, reason: 'Le rayon visé n’existe plus.' }); break; }
         out.push({
           id, name, qty: trimmed(o['qty'], 40), aisleId, state: 'a-prendre', listId, by, at,
+          ...(via ? { via } : {}),
           ...(o['art'] ? { art: trimmed(o['art'], 80) } : {}),
           ...(o['gen'] ? { gen: true } : {}),
         });
@@ -140,6 +151,8 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
         const state = str(o['state']) as ShopState;
         if (!SHOP_STATES.includes(state)) { skipped.push({ opId, reason: 'État d’article inconnu.' }); break; }
         out[idx] = { ...out[idx], state, by, at };
+        // La provenance suit l'état affiché : posée par un assistant, effacée sinon.
+        if (via) out[idx].via = via; else delete out[idx].via;
         applied.push(opId);
         break;
       }

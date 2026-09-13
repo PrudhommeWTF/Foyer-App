@@ -363,6 +363,13 @@ export const REGISTRY = [
     envOverride: 'FOYER_CARD_LOGO_SEARCH',
   },
   {
+    key: 'mcpEnabled',
+    type: 'bool', scope: 'foyer', section: 'acces', module: 'Assistants',
+    label: 'Ouvrir le serveur pour les assistants (MCP)',
+    desc: 'Expose le point d’entrée /mcp pour qu’un assistant (Claude, ChatGPT, un client MCP) puisse lire et agir dans le foyer, au nom du membre dont il porte le jeton d’accès. Éteint (par défaut), /mcp répond « introuvable ». Les finances et les réglages restent hors de portée, quel que soit le réglage. Ouvrez des jetons dans « Mon compte ».',
+    default: false,
+  },
+  {
     key: 'publicUrl',
     type: 'text', scope: 'foyer', section: 'notifications', module: 'Notifications',
     label: 'Adresse publique de Foyer',

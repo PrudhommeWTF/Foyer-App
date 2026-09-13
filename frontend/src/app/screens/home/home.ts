@@ -85,7 +85,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
           <div class="act">
             <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" />
             <div class="act-b">
-              <div class="act-l"><b>{{ nm(a.by) }}</b> {{ a.verb }} <b>« {{ a.what }} »</b></div>
+              <div class="act-l"><b>{{ nm(a.by) }}</b>@if (a.via) { <span class="act-via">via un assistant</span>} {{ a.verb }} <b>« {{ a.what }} »</b></div>
               <div class="act-m">
                 <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
                 <span class="act-t">{{ rel(a.at) }}</span>
@@ -286,6 +286,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .act-l b { color: var(--ink); font-weight: 800; }
     .act-m { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
     .act-where { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+    .act-via { font-size: 10.5px; font-weight: 800; color: var(--violet); background: rgba(155,111,168,.14); padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
     .act-t { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .feed-empty { padding: 30px 10px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 13.5px; line-height: 1.5; }
 

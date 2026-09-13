@@ -313,7 +313,9 @@ ou un assistant lise et agisse dans le foyer **en son nom**, avec **ses droits**
   ne révoque pas** les jetons (contrairement aux sessions) : c'est un choix, révoquez-les
   explicitement. Supprimer le compte les supprime.
 
-Le jeton se porte en en-tête `Authorization: Bearer` (jamais dans un cookie) :
+Un assistant (Claude, ChatGPT, un client MCP) se branche via le **serveur MCP** :
+voir [`docs/assistants.md`](docs/assistants.md). Pour un script, le jeton se
+porte en en-tête `Authorization: Bearer` (jamais dans un cookie) :
 
 ```bash
 curl -H "Authorization: Bearer foyer_votre_secret" https://foyer.exemple.fr/api/live
@@ -445,6 +447,7 @@ conservée dans [`docs/`](docs/).
 | Finances (architecture et cahier de recette) | [`docs/finances-architecture.md`](docs/finances-architecture.md), [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md) |
 | Emploi du temps | [`docs/emploi-du-temps.md`](docs/emploi-du-temps.md) |
 | Hors ligne | [`docs/hors-ligne.md`](docs/hors-ligne.md) |
+| Assistants (serveur MCP) | [`docs/assistants.md`](docs/assistants.md) |
 | Paramètres (registre) | [`docs/parametres.md`](docs/parametres.md) |
 | Sécurité et mise en ligne | [`docs/audit-securite.md`](docs/audit-securite.md), [`docs/mise-en-ligne-checklist.md`](docs/mise-en-ligne-checklist.md) |
 | Sauvegarde et restauration | [`docs/sauvegarde-restauration.md`](docs/sauvegarde-restauration.md) |
