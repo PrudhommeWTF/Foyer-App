@@ -38,6 +38,7 @@ import { systemRouter } from './system/routes';
 import { AuthedRequest, apiTokenLimiter, auth, currentMember, denyToken, denyTokenSystem, denyTokenWrite, motDePasseBon, requireAdmin, requireAdulte, requireMember, requireScope, route } from './auth/session';
 import { authRouter } from './auth/routes';
 import { tokensRouter } from './auth/tokens-routes';
+import { mcpRouter } from './mcp/server';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const PORT = parseInt(process.env.PORT || '8099', 10);
@@ -419,6 +420,19 @@ api.get('/cards/logos', auth, ...tokenGate, requireMember, logosLimiter, async (
 
 // ---- System / self-update / exploitation (voir system/routes.ts) ----
 api.use('/system', auth, apiTokenLimiter, denyTokenSystem, systemRouter({ requireAdmin, requireMember, jsonSmall, route, motDePasseBon, currentMember, dataDir: DATA_DIR }));
+
+// ---- Serveur MCP pour les assistants (voir mcp/server.ts) ----
+// Désactivé par défaut : tant que le réglage mcpEnabled est faux, /mcp répond
+// 404, avant même l'authentification. Sinon : jeton d'accès obligatoire (une
+// session de navigateur est refusée dans le routeur), et le limiteur par jeton.
+// Les outils agissent au nom du membre du jeton, avec ses droits ; aucun
+// n'expose les finances ni les réglages.
+api.use('/mcp',
+  (_req: Request, res: Response, next: NextFunction) => {
+    if (effectiveSetting('mcpEnabled') !== true) { res.status(404).json({ error: 'Introuvable' }); return; }
+    next();
+  },
+  auth, apiTokenLimiter, mcpRouter());
 
 app.use('/api', api);
 

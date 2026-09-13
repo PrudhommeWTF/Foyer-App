@@ -57,6 +57,12 @@ export interface TaskItem {
   /** Auteur et date de création. */
   by?: string | null;
   at?: string | null;
+  /**
+   * Nom du jeton d'accès quand la tâche a été créée par un assistant (« Claude
+   * iPhone »), sinon absent. Renseigné uniquement par le serveur MCP : le fil
+   * d'activité affiche alors « (via un assistant) » sur la création.
+   */
+  via?: string | null;
   /** Dernier auteur d'une modification, et sa date. Absents tant qu'aucune retouche n'a eu lieu depuis la création. */
   upBy?: string | null;
   upAt?: string | null;
@@ -101,7 +107,7 @@ export interface TaskFields {
   contractId?: number | null; parentId?: string | null; pos?: number | null;
 }
 
-interface Base { opId: string; by?: string | null; at?: string | null; }
+interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
 export type TaskOp =
   /** `done` et compagnie sont acceptés à l'ajout : c'est ce qui permet d'annuler une suppression. */
   | (Base & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null })
@@ -355,8 +361,10 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (!f.listId) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
         const done = o['done'] === true;
         const history = readHistory(o['history']);
+        const via = trimmed(o['via'], 80) || null;
         const bare: TaskItem = {
           id, listId: f.listId, text: f.text, who: f.who ?? [], due: f.due ?? null, done, by, at,
+          ...(via ? { via } : {}),
           ...(done ? { doneAt: trimmed(o['doneAt'], 40) || at, doneBy: trimmed(o['doneBy'], 80) || by } : {}),
           ...(history.length ? { history } : {}),
         };
