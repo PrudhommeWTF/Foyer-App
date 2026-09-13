@@ -6,7 +6,7 @@
 // reste du kit d'authentification. Monté sous /api par server.ts.
 import express, { Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { ApiTokenRow, countActiveApiTokens, createApiToken, getApiTokenById, getUserById, getUserByMemberId, listApiTokensForUser, revokeApiToken } from '../db';
+import { ApiTokenRow, countActiveApiTokens, createApiToken, getApiTokenById, getUserById, getUserByMemberId, listApiTokensForUser, revokeApiToken, revokeRefreshForAccessToken } from '../db';
 import { log } from '../log';
 import { AuthedRequest, auth, denyToken, motDePasseBon, requireAdmin, requireMember, route } from './session';
 import { genererJeton, hashJeton, prefixeJeton } from './tokens';
@@ -65,6 +65,7 @@ export function tokensRouter(): Router {
     const t = Number.isInteger(id) ? getApiTokenById(id) : undefined;
     if (!t || t.user_id !== req.user!.id) { res.status(404).json({ error: 'Jeton introuvable' }); return; }
     revokeApiToken(t.id);
+    revokeRefreshForAccessToken(t.id);
     log.info(`Jeton : « ${t.name} » révoqué par ${req.user!.email}.`);
     res.json({ ok: true });
   });
@@ -85,6 +86,7 @@ export function tokensRouter(): Router {
     const t = Number.isInteger(tid) ? getApiTokenById(tid) : undefined;
     if (!t || t.user_id !== user.id) { res.status(404).json({ error: 'Jeton introuvable' }); return; }
     revokeApiToken(t.id);
+    revokeRefreshForAccessToken(t.id);
     log.attention(`Jeton : « ${t.name} » de ${user.email} révoqué par l’administrateur ${req.user!.email}.`);
     res.json({ ok: true });
   });

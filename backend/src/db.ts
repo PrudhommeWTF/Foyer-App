@@ -82,6 +82,53 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
 `);
 
+// Un jeton d'accès émis par le flux OAuth expire (30 jours) et porte le client
+// qui l'a obtenu (« claude.ai »). Ces deux colonnes restent nulles pour les
+// jetons créés à la main, qui n'expirent pas.
+try { db.exec('ALTER TABLE api_tokens ADD COLUMN expires_at TEXT'); } catch { /* déjà présent */ }
+try { db.exec('ALTER TABLE api_tokens ADD COLUMN oauth_client_id TEXT'); } catch { /* déjà présent */ }
+
+// OAuth 2.1 pour les connecteurs de claude.ai et ChatGPT. Trois tables :
+//  - oauth_clients : les clients enregistrés dynamiquement (RFC 7591) ;
+//  - oauth_codes   : les codes d'autorisation, à usage unique, 5 minutes ;
+//  - oauth_refresh : les jetons de rafraîchissement, en rotation, 90 jours.
+// Les jetons d'accès, eux, sont des lignes d'api_tokens comme les autres :
+// révocables au même endroit, avec en plus une expiration et le client d'origine.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id TEXT PRIMARY KEY,
+    client_name TEXT NOT NULL DEFAULT '',
+    redirect_uris TEXT NOT NULL,
+    client_secret TEXT,
+    client_secret_expires_at INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS oauth_codes (
+    code_hash TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect_uri TEXT NOT NULL,
+    code_challenge TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    resource TEXT,
+    expires_at INTEGER NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE IF NOT EXISTS oauth_refresh (
+    token_hash TEXT PRIMARY KEY,
+    client_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    access_token_id INTEGER REFERENCES api_tokens(id) ON DELETE SET NULL,
+    scope TEXT NOT NULL,
+    resource TEXT,
+    expires_at INTEGER NOT NULL,
+    rotated_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_oauth_refresh_access ON oauth_refresh(access_token_id);
+`);
+
 // The bytes of every module live next to the database, in the same data
 // directory: one tar of DATA_DIR remains a complete backup.
 initBlobs(DATA_DIR);
@@ -112,6 +159,15 @@ reportOrphansAtBoot();
 {
   const purges = pruneApiTokens();
   if (purges) log.info(`Jetons : ${purges} jeton(s) révoqué(s) depuis plus de 30 jours purgé(s).`);
+}
+
+// OAuth : codes périmés, jetons de rafraîchissement expirés ou tournés, et
+// clients sans jeton actif depuis plus de 30 jours.
+{
+  pruneOAuthCodes();
+  pruneOAuthRefresh();
+  const clients = pruneOAuthClients();
+  if (clients) log.info(`OAuth : ${clients} client(s) sans jeton actif purgé(s).`);
 }
 
 /**
@@ -281,12 +337,19 @@ export interface ApiTokenRow {
   last_used_at: string | null;
   last_used_ua: string | null;
   revoked_at: string | null;
+  /** Expiration, pour un jeton émis par OAuth (30 jours). Null pour un jeton créé à la main. */
+  expires_at: string | null;
+  /** Client OAuth qui a obtenu ce jeton (« claude.ai »). Null pour un jeton créé à la main. */
+  oauth_client_id: string | null;
 }
 
-export function createApiToken(userId: number, name: string, tokenHash: string, prefix: string, scope: 'read' | 'write'): ApiTokenRow {
+export function createApiToken(
+  userId: number, name: string, tokenHash: string, prefix: string, scope: 'read' | 'write',
+  opts: { expiresAt?: string | null; oauthClientId?: string | null } = {},
+): ApiTokenRow {
   const info = db
-    .prepare('INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope) VALUES (?, ?, ?, ?, ?)')
-    .run(userId, name, tokenHash, prefix, scope);
+    .prepare('INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope, expires_at, oauth_client_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(userId, name, tokenHash, prefix, scope, opts.expiresAt ?? null, opts.oauthClientId ?? null);
   return db.prepare('SELECT * FROM api_tokens WHERE id = ?').get(info.lastInsertRowid) as ApiTokenRow;
 }
 
@@ -321,6 +384,90 @@ export function touchApiToken(id: number, ua: string): void {
 /** Supprime les jetons révoqués depuis plus de trente jours. Rend le nombre de lignes retirées. */
 export function pruneApiTokens(): number {
   return db.prepare("DELETE FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at < datetime('now', '-30 days')").run().changes;
+}
+
+// ---- OAuth 2.1 (connecteurs claude.ai, ChatGPT) ----
+// Toujours du SQL pur : les secrets sont engendrés et hachés dans oauth/, les
+// règles du protocole vivent dans le fournisseur. Ici on range et on relit.
+
+export interface OAuthClientRow {
+  client_id: string;
+  client_name: string;
+  redirect_uris: string; // JSON
+  client_secret: string | null;
+  client_secret_expires_at: number | null;
+  created_at: string;
+}
+
+export function upsertOAuthClient(c: { client_id: string; client_name: string; redirect_uris: string[]; client_secret?: string | null; client_secret_expires_at?: number | null }): void {
+  db.prepare(
+    'INSERT OR REPLACE INTO oauth_clients (client_id, client_name, redirect_uris, client_secret, client_secret_expires_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(c.client_id, c.client_name || '', JSON.stringify(c.redirect_uris), c.client_secret ?? null, c.client_secret_expires_at ?? null);
+}
+
+export function getOAuthClient(clientId: string): OAuthClientRow | undefined {
+  return db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(clientId) as OAuthClientRow | undefined;
+}
+
+/** Clients enregistrés qui n'ont aucun jeton actif et n'ont rien obtenu depuis 30 jours : purgés. */
+export function pruneOAuthClients(): number {
+  return db.prepare(
+    "DELETE FROM oauth_clients WHERE created_at < datetime('now', '-30 days') "
+    + 'AND client_id NOT IN (SELECT oauth_client_id FROM api_tokens WHERE oauth_client_id IS NOT NULL AND revoked_at IS NULL)',
+  ).run().changes;
+}
+
+export interface OAuthCodeRow {
+  code_hash: string; client_id: string; user_id: number; redirect_uri: string;
+  code_challenge: string; scope: string; resource: string | null; expires_at: number; used: number;
+}
+
+export function insertOAuthCode(c: Omit<OAuthCodeRow, 'used'>): void {
+  db.prepare(
+    'INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, code_challenge, scope, resource, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(c.code_hash, c.client_id, c.user_id, c.redirect_uri, c.code_challenge, c.scope, c.resource, c.expires_at);
+}
+
+export function getOAuthCode(codeHash: string): OAuthCodeRow | undefined {
+  return db.prepare('SELECT * FROM oauth_codes WHERE code_hash = ?').get(codeHash) as OAuthCodeRow | undefined;
+}
+
+/** Marque un code consommé, une seule fois : rend vrai si c'est bien cette requête qui l'a consommé. */
+export function consumeOAuthCode(codeHash: string): boolean {
+  return db.prepare('UPDATE oauth_codes SET used = 1 WHERE code_hash = ? AND used = 0').run(codeHash).changes === 1;
+}
+
+export function pruneOAuthCodes(): number {
+  return db.prepare("DELETE FROM oauth_codes WHERE expires_at < ? OR created_at < datetime('now', '-1 day')").run(Math.floor(Date.now() / 1000)).changes;
+}
+
+export interface OAuthRefreshRow {
+  token_hash: string; client_id: string; user_id: number; access_token_id: number | null;
+  scope: string; resource: string | null; expires_at: number; rotated_at: string | null;
+}
+
+export function insertOAuthRefresh(r: Omit<OAuthRefreshRow, 'rotated_at'>): void {
+  db.prepare(
+    'INSERT INTO oauth_refresh (token_hash, client_id, user_id, access_token_id, scope, resource, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(r.token_hash, r.client_id, r.user_id, r.access_token_id, r.scope, r.resource, r.expires_at);
+}
+
+export function getOAuthRefresh(tokenHash: string): OAuthRefreshRow | undefined {
+  return db.prepare('SELECT * FROM oauth_refresh WHERE token_hash = ?').get(tokenHash) as OAuthRefreshRow | undefined;
+}
+
+/** Rotation : marque un jeton de rafraîchissement comme utilisé, une seule fois (rend vrai si c'est cette requête qui l'a fait). */
+export function rotateOAuthRefresh(tokenHash: string): boolean {
+  return db.prepare("UPDATE oauth_refresh SET rotated_at = datetime('now') WHERE token_hash = ? AND rotated_at IS NULL").run(tokenHash).changes === 1;
+}
+
+/** Révoque les jetons de rafraîchissement adossés à un jeton d'accès (révocation depuis les Paramètres, ou depuis /revoke). */
+export function revokeRefreshForAccessToken(accessTokenId: number): void {
+  db.prepare("UPDATE oauth_refresh SET rotated_at = datetime('now') WHERE access_token_id = ? AND rotated_at IS NULL").run(accessTokenId);
+}
+
+export function pruneOAuthRefresh(): number {
+  return db.prepare("DELETE FROM oauth_refresh WHERE expires_at < ? OR (rotated_at IS NOT NULL AND rotated_at < datetime('now', '-1 day'))").run(Math.floor(Date.now() / 1000)).changes;
 }
 
 /** Un code de secours tel qu'il est rangé : son empreinte, et s'il a servi. */

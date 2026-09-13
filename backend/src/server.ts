@@ -39,6 +39,8 @@ import { AuthedRequest, apiTokenLimiter, auth, currentMember, denyToken, denyTok
 import { authRouter } from './auth/routes';
 import { tokensRouter } from './auth/tokens-routes';
 import { mcpRouter } from './mcp/server';
+import { mcpChallenge, oauthAuthMiddleware } from './oauth/server';
+import { oauthLoginRouter } from './oauth/login';
 
 const DATA_DIR = process.env.FOYER_DATA_DIR || path.join(__dirname, '..', 'data');
 const PORT = parseInt(process.env.PORT || '8099', 10);
@@ -432,9 +434,20 @@ api.use('/mcp',
     if (effectiveSetting('mcpEnabled') !== true) { res.status(404).json({ error: 'Introuvable' }); return; }
     next();
   },
+  // Sans jeton, si OAuth est utilisable : 401 + WWW-Authenticate pour la découverte.
+  mcpChallenge,
   auth, apiTokenLimiter, mcpRouter());
 
 app.use('/api', api);
+
+// ---- OAuth 2.1 pour les connecteurs claude.ai et ChatGPT (voir oauth/) ----
+// Monté à la racine (pas sous /api) : la découverte (/.well-known/*), l'octroi
+// (/authorize, /token), l'enregistrement (/register) et la révocation (/revoke)
+// vivent là où le client les cherche. La page de connexion et de consentement
+// (/oauth/login) est servie par le backend, sans dépendre de l'application.
+// Tout est gouverné par `mcpEnabled` et l'« Adresse publique de Foyer ».
+app.use(oauthAuthMiddleware);
+app.use(oauthLoginRouter());
 
 // Un corps trop gros ressortait en page HTML d'Express, sans dire pourquoi ni
 // quoi faire. Ce gestionnaire d'erreur est monté APRÈS l'API : les parseurs
