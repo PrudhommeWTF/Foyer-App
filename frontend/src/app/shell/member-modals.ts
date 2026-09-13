@@ -9,53 +9,20 @@ import { PALETTE } from '../core/constants';
 import { ALLERGENES } from '../core/articles';
 import { contactIni } from '../core/helpers';
 
+/**
+ * Les modales de gestion d'un membre : ouvrir/modifier son accès (email, mot de
+ * passe, jetons), sa fiche (prénom, rôle, contraintes alimentaires, droits), et
+ * confirmer son retrait. Elles étaient portées par l'ancienne modale « Gestion
+ * de la famille » ; celle-ci a disparu au profit de *Paramètres → Membres et
+ * accès*, mais ces trois modales restent des surimpressions déclenchées depuis
+ * cet écran, donc rendues ici, dans le chrome, toujours présentes.
+ */
 @Component({
-  selector: 'app-family-modal',
+  selector: 'app-member-modals',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent],
   template: `
-    @if (store.ui().familyOpen) {
-      <f-modal title="Gestion de la famille" (close)="store.patch({ familyOpen: false })">
-        <label class="field-label">Nom du foyer</label>
-        @if (store.isAdmin()) {
-          <div class="row" style="margin-bottom:20px">
-            <input class="input" [ngModel]="store.ui().famNameField" (ngModelChange)="store.patch({ famNameField: $event })" />
-            <button class="btn btn-primary" (click)="store.saveFamily()">Enregistrer</button>
-          </div>
-        } @else {
-          <div class="input readonly" style="margin-bottom:20px">{{ d().familyName }}</div>
-        }
-        <div class="between"><div class="overline">Membres · {{ d().members.length }}</div>
-          @if (store.isAdmin()) {
-            <button class="btn btn-soft" (click)="store.newMember()"><f-icon name="userPlus" [size]="17" /> Ajouter</button>
-          }</div>
-        <div class="members">
-          @for (m of d().members; track m.id) {
-            <div class="member">
-              <f-avatar [ini]="m.ini" [color]="m.color" [size]="40" />
-              <div class="minfo">
-                <div class="mname">{{ m.name }} @if (m.admin) { <span class="admin">admin</span> }</div>
-                <div class="mrole">{{ m.role }}@if (store.isAdmin() && admin.memberHasAccount(m.id)) { <span class="acct" [title]="admin.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }@if (store.isAdmin() && admin.memberHasTotp(m.id)) { <span class="acct totp" title="Second facteur actif"><f-icon name="lock" [size]="10" color="#4E93B8" [width]="3" /> 2FA</span> }</div>
-              </div>
-              @if (store.isAdmin()) {
-                <button class="icon-btn sm" title="Gérer l'accès" (click)="admin.openAccount(m.id)"><f-icon name="lock" [size]="15" [color]="admin.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" /></button>
-                @if (admin.memberHasTotp(m.id)) {
-                  <!-- Téléphone perdu, cassé ou réinitialisé, et codes de secours
-                       avec : c'est la sortie de dernier recours. -->
-                  <button class="icon-btn sm" title="Retirer son second facteur (téléphone perdu)" (click)="retirerTotp(m.id, m.name)">
-                    <f-icon name="refresh" [size]="15" color="var(--ink3)" />
-                  </button>
-                }
-                <button class="icon-btn sm" (click)="store.editMember(m.id)"><f-icon name="edit" [size]="16" /></button>
-                <button class="icon-btn sm" (click)="store.patch({ memberDelId: m.id })"><f-icon name="trash" [size]="16" color="var(--primary)" /></button>
-              }
-            </div>
-          }
-        </div>
-      </f-modal>
-    }
-
     @if (store.ui().accountFor) {
       <f-modal [title]="accEmail() ? 'Gérer l’accès' : 'Créer un accès'" (close)="admin.closeAccount()">
         <p class="confirm" style="margin-bottom:18px">
@@ -176,20 +143,13 @@ import { contactIni } from '../core/helpers';
     .chips { display: flex; flex-wrap: wrap; gap: 7px; }
     .chip { border: 2px solid var(--line2); background: transparent; color: var(--ink2); border-radius: 11px; padding: 6px 10px; font-family: var(--font-body); font-size: 12.5px; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
     .chip.on { background: var(--honey); border-color: var(--honey); color: #fff; }
-    .chip.on.sage { background: var(--sage); border-color: var(--sage); }
+    .chip.on.sage { background: var(--sage); border-color: var(--sage); color: #fff; }
     .hint { font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; margin: 4px 0 8px; }
     .hint b { color: var(--ink); }
     .choix { display: flex; flex-direction: column; max-height: 180px; overflow-y: auto; margin-top: 4px; }
     .art { border: none; background: none; border-top: 1px solid var(--line); padding: 10px 2px; cursor: pointer; text-align: left; font-family: var(--font-body); font-size: 14px; font-weight: 700; color: var(--ink); }
     .art:hover { background: var(--soft); }
     .row { display: flex; align-items: center; gap: 10px; }
-    .between { display: flex; align-items: center; justify-content: space-between; margin: 4px 0 12px; }
-    .members { display: flex; flex-direction: column; gap: 8px; }
-    .member { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 14px; background: var(--soft); }
-    .minfo { flex: 1; min-width: 0; }
-    .mname { font-size: 14.5px; font-weight: 800; color: var(--ink); }
-    .admin { font-size: 10px; font-weight: 800; color: var(--sage); background: #EDF2EB; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
-    .mrole { font-size: 12px; font-weight: 700; color: var(--ink2); }
     .mform-head { display: flex; justify-content: center; margin-bottom: 18px; }
     .toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-size: 14px; font-weight: 800; color: var(--ink); }
     .switch { width: 46px; height: 26px; border-radius: 20px; background: var(--line2); position: relative; transition: background .2s ease; }
@@ -197,12 +157,7 @@ import { contactIni } from '../core/helpers';
     .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .2s ease; }
     .switch.on .knob { left: 23px; }
     .confirm { font-size: 14px; font-weight: 600; color: var(--ink2); margin-bottom: 20px; line-height: 1.5; }
-    .acct { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; background: #EDF2EB; color: #5F7E5C; font-size: 10.5px; font-weight: 800; }
-    :host-context(:root.dark) .acct { background: rgba(122,155,118,.22); }
-    .acct.totp { background: #E5F0F4; color: #3C6E88; }
-    :host-context(:root.dark) .acct.totp { background: rgba(78,147,184,.22); }
     .acc-foot { display: flex; align-items: center; gap: 10px; }
-    .input.readonly { display: flex; align-items: center; color: var(--ink2); font-weight: 700; background: var(--soft); }
     .tok-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
     .tok { display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 12px; padding: 10px 12px; }
     .tok.rev { opacity: .55; }
@@ -213,26 +168,13 @@ import { contactIni } from '../core/helpers';
     .tok-x { flex: none; padding: 7px 11px; font-size: 12.5px; color: var(--primary); }
   `],
 })
-export class FamilyModalComponent {
+export class MemberModalsComponent {
   readonly allergenes = Object.entries(ALLERGENES).map(([key, name]) => ({ key, name }));
   store = inject(FoyerStore);
   admin = inject(AdminStore);
   palette = PALETTE;
   d = this.store.d;
   ini(): string { return contactIni(this.store.ui().mfName || '?'); }
-  /**
-   * Le téléphone d'un membre est perdu : on retire son second facteur pour qu'il
-   * puisse se reconnecter, puis en reposer un. Le mot de passe de
-   * l'administrateur est redemandé par le serveur, pas seulement ici.
-   */
-  async retirerTotp(memberId: string, nom: string): Promise<void> {
-    const mdp = prompt(
-      `Retirer le second facteur de ${nom} ?\n\n`
-      + 'Son mot de passe seul suffira de nouveau à ouvrir son compte, jusqu’à ce qu’il en repose un.\n'
-      + 'Confirmez avec VOTRE mot de passe.',
-    );
-    if (mdp) await this.admin.resetMemberTotp(memberId, mdp);
-  }
 
   accEmail(): string { const id = this.store.ui().accountFor; return id ? this.admin.memberAccountEmail(id) : ''; }
   accMemberName(): string { const id = this.store.ui().accountFor; return this.d().members.find((m) => m.id === id)?.name || 'ce membre'; }

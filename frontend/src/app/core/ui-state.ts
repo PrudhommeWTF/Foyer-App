@@ -209,7 +209,7 @@ export interface UiState {
   schedPasteWho: string | null;
 
   // family & profile
-  familyOpen: boolean; famNameField: string;
+  famNameField: string;
   memberForm: boolean; mfEditId: string | null; mfName: string; mfRole: string; mfEmail: string; mfColor: string; mfAdmin: boolean; mfEnfant: boolean; mfBirthday: string; memberDelId: string | null;
   /** Contraintes alimentaires en cours d'édition, et recherche d'aliment refusé. */
   mfAllerg: string[]; mfRefuse: string[]; mfRefuseQ: string;
@@ -291,7 +291,7 @@ export function initialUi(): UiState {
     seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seEvery: 1, seAway: true, seSync: false,
     seMore: false, seOccDate: today, seScope: 'all', seDelOpen: false, schedMove: null,
     schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,
-    familyOpen: false, famNameField: '',
+    famNameField: '',
     memberForm: false, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', memberDelId: null,
     mfAllerg: [], mfRefuse: [], mfRefuseQ: '',
     settingsSection: 'compte', pfName: '', pfRole: '', pfIni: '', pfEmail: '', pfColor: '#E56B4E',

@@ -260,6 +260,9 @@ const GESTES = new Set(['compte', 'membres']);
                 </button>
               }
             </div>
+            @if (store.isAdmin()) {
+              <div class="hint" style="margin:-4px 0 10px">L’accès d’un membre (email et mot de passe) se règle avec le cadenas : c’est là qu’on <b>définit ou réinitialise son mot de passe</b>, par exemple pour une première connexion.</div>
+            }
             <div class="members">
               @for (m of d().members; track m.id) {
                 <div class="member">
@@ -269,9 +272,17 @@ const GESTES = new Set(['compte', 'membres']);
                       <span class="m-name">{{ m.name }}</span>
                       @if (m.admin) { <span class="badge">Admin</span> }
                     </div>
-                    <div class="m-role">{{ m.role }}</div>
+                    <div class="m-role">{{ m.role }}@if (store.isAdmin() && admin.memberHasAccount(m.id)) { <span class="acct" [title]="admin.memberAccountEmail(m.id)"><f-icon name="check" [size]="10" color="#5F7E5C" [width]="3" /> accès</span> }@if (store.isAdmin() && admin.memberHasTotp(m.id)) { <span class="acct totp" title="Second facteur actif"><f-icon name="lock" [size]="10" color="#4E93B8" [width]="3" /> 2FA</span> }</div>
                   </div>
                   @if (store.isAdmin()) {
+                    <button class="icon-btn sm" title="Gérer l’accès (email, mot de passe)" (click)="admin.openAccount(m.id)">
+                      <f-icon name="lock" [size]="15" [color]="admin.memberHasAccount(m.id) ? 'var(--sage)' : 'var(--ink3)'" [width]="2" />
+                    </button>
+                    @if (admin.memberHasTotp(m.id)) {
+                      <button class="icon-btn sm" title="Retirer son second facteur (téléphone perdu)" (click)="retirerTotp(m.id, m.name)">
+                        <f-icon name="refresh" [size]="15" color="var(--ink3)" [width]="2" />
+                      </button>
+                    }
                     <button class="icon-btn sm" (click)="store.editMember(m.id)">
                       <f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2" />
                     </button>
@@ -568,6 +579,10 @@ const GESTES = new Set(['compte', 'membres']);
     .m-top { display: flex; align-items: center; gap: 8px; }
     .m-name { font-weight: 800; font-size: 15px; color: var(--ink); }
     .m-role { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .acct { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; padding: 1px 7px; border-radius: 20px; background: #EDF2EB; color: #5F7E5C; font-size: 10.5px; font-weight: 800; }
+    :host-context(:root.dark) .acct { background: rgba(122,155,118,.22); }
+    .acct.totp { background: #E5F0F4; color: #3C6E88; }
+    :host-context(:root.dark) .acct.totp { background: rgba(78,147,184,.22); }
     .badge { background: #FDF0DA; color: #D9930F; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: .03em; }
     .prefs { display: flex; flex-direction: column; gap: 10px; }
     .pref { display: flex; align-items: center; justify-content: space-between; padding: 13px 15px; border-radius: 13px; background: var(--soft); cursor: pointer; }
@@ -618,6 +633,20 @@ export class SettingsScreen {
   admin = inject(AdminStore);
   d = this.store.d;
   copied = signal(false);
+
+  /**
+   * Le téléphone d'un membre est perdu : on retire son second facteur pour qu'il
+   * puisse se reconnecter, puis en reposer un. Le mot de passe de
+   * l'administrateur est redemandé par le serveur, pas seulement ici.
+   */
+  async retirerTotp(memberId: string, nom: string): Promise<void> {
+    const mdp = prompt(
+      `Retirer le second facteur de ${nom} ?\n\n`
+      + 'Son mot de passe seul suffira de nouveau à ouvrir son compte, jusqu’à ce qu’il en repose un.\n'
+      + 'Confirmez avec VOTRE mot de passe.',
+    );
+    if (mdp) await this.admin.resetMemberTotp(memberId, mdp);
+  }
 
   readonly DEPLOYMENT = DEPLOYMENT;
   readonly q = signal('');
