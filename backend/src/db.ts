@@ -62,6 +62,26 @@ try { db.exec('ALTER TABLE users ADD COLUMN totp_recovery TEXT'); } catch { /* d
 try { db.exec('ALTER TABLE users ADD COLUMN totp_last_step INTEGER NOT NULL DEFAULT 0'); } catch { /* déjà présent */ }
 try { db.exec('ALTER TABLE users ADD COLUMN totp_enabled_at TEXT'); } catch { /* déjà présent */ }
 
+// Jetons d'accès par membre : un secret long-durée, haché en base, qu'un
+// assistant ou un script porte en en-tête `Authorization: Bearer`. Additif et
+// idempotent comme le reste. La cascade suit la suppression du compte (le
+// PRAGMA foreign_keys est posé plus haut) : retirer un membre emporte ses jetons.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS api_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    prefix TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_used_at TEXT,
+    last_used_ua TEXT,
+    revoked_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+`);
+
 // The bytes of every module live next to the database, in the same data
 // directory: one tar of DATA_DIR remains a complete backup.
 initBlobs(DATA_DIR);
@@ -86,6 +106,13 @@ pruneUnreferencedFiles();
 
 // Both attachment tables are registered by now: the sweep sees the whole disk.
 reportOrphansAtBoot();
+
+// Jetons révoqués depuis plus de trente jours : l'historique a été lisible le
+// temps de comprendre ce qui s'était passé, on le purge ensuite.
+{
+  const purges = pruneApiTokens();
+  if (purges) log.info(`Jetons : ${purges} jeton(s) révoqué(s) depuis plus de 30 jours purgé(s).`);
+}
 
 /**
  * Applique les migrations du document d'état, une fois, au démarrage.
@@ -234,6 +261,66 @@ export interface UserRow {
   /** Dernier pas consommé, pour refuser le rejeu d'un code lu par-dessus une épaule. */
   totp_last_step: number;
   totp_enabled_at: string | null;
+}
+
+// ---- Jetons d'accès par membre ----
+// Cette couche ne fait que du SQL : le secret est engendré et haché ailleurs
+// (auth/tokens.ts), la vérification du mot de passe et la portée aussi. Ici on
+// range et on relit des lignes déjà prêtes.
+
+export interface ApiTokenRow {
+  id: number;
+  user_id: number;
+  name: string;
+  /** SHA-256 du secret, jamais le secret. */
+  token_hash: string;
+  /** Les premiers caractères du secret, pour le reconnaître dans une liste. */
+  prefix: string;
+  scope: 'read' | 'write';
+  created_at: string;
+  last_used_at: string | null;
+  last_used_ua: string | null;
+  revoked_at: string | null;
+}
+
+export function createApiToken(userId: number, name: string, tokenHash: string, prefix: string, scope: 'read' | 'write'): ApiTokenRow {
+  const info = db
+    .prepare('INSERT INTO api_tokens (user_id, name, token_hash, prefix, scope) VALUES (?, ?, ?, ?, ?)')
+    .run(userId, name, tokenHash, prefix, scope);
+  return db.prepare('SELECT * FROM api_tokens WHERE id = ?').get(info.lastInsertRowid) as ApiTokenRow;
+}
+
+export function getApiTokenByHash(hash: string): ApiTokenRow | undefined {
+  return db.prepare('SELECT * FROM api_tokens WHERE token_hash = ?').get(hash) as ApiTokenRow | undefined;
+}
+
+export function getApiTokenById(id: number): ApiTokenRow | undefined {
+  return db.prepare('SELECT * FROM api_tokens WHERE id = ?').get(id) as ApiTokenRow | undefined;
+}
+
+/** Tous les jetons d'un compte, révoqués compris (l'historique reste lisible jusqu'à la purge), le plus récent d'abord. */
+export function listApiTokensForUser(userId: number): ApiTokenRow[] {
+  return db.prepare('SELECT * FROM api_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC').all(userId) as ApiTokenRow[];
+}
+
+/** Le nombre de jetons encore actifs d'un compte (pour la fiche de membre). */
+export function countActiveApiTokens(userId: number): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM api_tokens WHERE user_id = ? AND revoked_at IS NULL').get(userId) as { n: number }).n;
+}
+
+/** Révoque un jeton : pose l'horodatage, sans supprimer la ligne. Sans effet s'il l'était déjà. */
+export function revokeApiToken(id: number): void {
+  db.prepare("UPDATE api_tokens SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL").run(id);
+}
+
+/** Note la dernière utilisation. Appelée au plus une fois par minute et par jeton (voir auth/session.ts). */
+export function touchApiToken(id: number, ua: string): void {
+  db.prepare("UPDATE api_tokens SET last_used_at = datetime('now'), last_used_ua = ? WHERE id = ?").run(ua.slice(0, 200), id);
+}
+
+/** Supprime les jetons révoqués depuis plus de trente jours. Rend le nombre de lignes retirées. */
+export function pruneApiTokens(): number {
+  return db.prepare("DELETE FROM api_tokens WHERE revoked_at IS NOT NULL AND revoked_at < datetime('now', '-30 days')").run().changes;
 }
 
 /** Un code de secours tel qu'il est rangé : son empreinte, et s'il a servi. */

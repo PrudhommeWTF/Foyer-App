@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, WritableSignal, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ApiService } from '../../core/api.service';
+import { ApiService, ApiTokenView } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
@@ -140,6 +140,66 @@ import { contactIni } from '../../core/helpers';
       </button>
     }
 
+    @if (store.currentMemberId()) {
+      <div class="extra-t">Accès pour les assistants et scripts</div>
+      <div class="hint">
+        Un accès laisse un assistant (Claude, un script…) lire ou agir dans le foyer en votre nom, avec vos droits.
+        Le secret n’est montré qu’une seule fois, à la création. Changer votre mot de passe ne révoque pas ces accès :
+        révoquez-les ici quand vous ne vous en servez plus. Les finances et les réglages restent toujours hors de leur portée.
+      </div>
+
+      @if (newSecret()) {
+        <div class="secret-b neuf">
+          <div class="secret-t">Votre nouvel accès. Copiez-le maintenant : il ne sera plus affiché.</div>
+          <code class="secret">{{ newSecret() }}</code>
+          <button class="btn btn-soft btn-block" style="margin-top:10px" (click)="copierJeton()">
+            {{ secretTokCopie() ? 'Copié !' : 'Copier le jeton' }}
+          </button>
+        </div>
+      }
+
+      @if (tokens().length) {
+        <div class="tok-list">
+          @for (t of tokens(); track t.id) {
+            <div class="tok" [class.rev]="t.revoked_at">
+              <div class="tok-b">
+                <div class="tok-n">{{ t.name }} <span class="tok-badge">{{ t.scope === 'write' ? 'Lecture et écriture' : 'Lecture seule' }}</span></div>
+                <div class="tok-m">
+                  <code>{{ t.prefix }}…</code> · créé le {{ dateCourte(t.created_at) }}
+                  @if (t.revoked_at) { · <span class="tok-rev">révoqué</span> }
+                  @else if (t.last_used_at) { · vu le {{ dateCourte(t.last_used_at) }}{{ t.last_used_ua ? ' (' + agent(t.last_used_ua) + ')' : '' }} }
+                  @else { · jamais utilisé }
+                </div>
+              </div>
+              @if (!t.revoked_at) {
+                <button class="btn btn-ghost tok-x" (click)="revoquer(t)">Révoquer</button>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <label class="field-label" for="tok-nom">Nom de l’accès</label>
+      <input id="tok-nom" class="input" placeholder="Claude sur mon iPhone" maxlength="60"
+        [ngModel]="tokName()" (ngModelChange)="tokName.set($event)" />
+      <label class="field-label">Ce que cet accès pourra faire</label>
+      <div class="seg" role="radiogroup" aria-label="Portée de l’accès">
+        <button [class.active]="tokScope() === 'read'" (click)="tokScope.set('read')">Lecture seule</button>
+        <button [class.active]="tokScope() === 'write'" (click)="tokScope.set('write')">Lecture et écriture</button>
+      </div>
+      <div class="hint">
+        {{ tokScope() === 'write'
+          ? 'Pourra ajouter des courses, créer des tâches et des événements, en plus de tout consulter.'
+          : 'Pourra consulter l’agenda, les courses, les tâches et les repas, sans rien modifier.' }}
+      </div>
+      <label class="field-label" for="tok-mdp">Mot de passe</label>
+      <input id="tok-mdp" class="input" type="password" autocomplete="current-password"
+        [ngModel]="tokPassword()" (ngModelChange)="tokPassword.set($event)" />
+      <button class="btn btn-primary btn-block" style="margin-top:14px" [disabled]="tokBusy()" (click)="creerJeton()">
+        {{ tokBusy() ? 'Création…' : 'Créer un accès' }}
+      </button>
+    }
+
     <button class="btn btn-soft btn-block" style="margin-top:22px" (click)="store.logout()">
       <f-icon name="logout" [size]="18" color="var(--ink2)" [width]="2.2" /> Se déconnecter
     </button>
@@ -165,6 +225,18 @@ import { contactIni } from '../../core/helpers';
     .secours-t { font-size: 13px; font-weight: 800; color: #8A6520; margin-bottom: 10px; }
     .secours-l { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
     .secours-l code { font-size: 14px; font-weight: 800; letter-spacing: 1px; color: var(--ink); }
+    .secret-b.neuf { background: #FDF0DA; }
+
+    .tok-list { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 18px; }
+    .tok { display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 12px; padding: 11px 14px; }
+    .tok.rev { opacity: .55; }
+    .tok-b { min-width: 0; flex: 1; }
+    .tok-n { font-size: 14px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .tok-badge { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); background: var(--soft2); border-radius: 8px; padding: 2px 7px; }
+    .tok-m { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 3px; }
+    .tok-m code { font-size: 11.5px; }
+    .tok-rev { color: var(--primary); font-weight: 800; }
+    .tok-x { flex: none; padding: 8px 12px; font-size: 13px; color: var(--primary); }
   `],
 })
 export class SettingsAccountComponent {
@@ -193,6 +265,72 @@ export class SettingsAccountComponent {
   readonly secretCopie = signal(false);
   readonly secoursCopies = signal(false);
   readonly secoursRestants = this.store.totpRecoveryLeft;
+
+  // ---- jetons d'accès (assistants, scripts) --------------------------------
+  readonly tokens = signal<ApiTokenView[]>([]);
+  readonly tokName = signal('');
+  readonly tokScope = signal<'read' | 'write'>('read');
+  readonly tokPassword = signal('');
+  readonly tokBusy = signal(false);
+  /** Le secret d'un jeton qu'on vient de créer, montré une seule fois. */
+  readonly newSecret = signal('');
+  readonly secretTokCopie = signal(false);
+
+  constructor() { void this.chargerJetons(); }
+
+  private async chargerJetons(): Promise<void> {
+    if (!this.store.currentMemberId()) return;
+    try { this.tokens.set((await this.api.listMyTokens()).tokens); } catch { /* la section reste vide, sans bruit */ }
+  }
+
+  async creerJeton(): Promise<void> {
+    if (this.tokBusy()) return;
+    const name = this.tokName().trim();
+    if (!name) { this.store.toast('Donnez un nom à cet accès.'); return; }
+    if (!this.tokPassword()) { this.store.toast('Votre mot de passe est requis pour créer un accès.'); return; }
+    this.tokBusy.set(true);
+    try {
+      const { token, ...vue } = await this.api.createMyToken(name, this.tokScope(), this.tokPassword());
+      this.newSecret.set(token);
+      this.tokens.update((l) => [vue, ...l]);
+      this.tokName.set(''); this.tokPassword.set('');
+      this.store.toast('Accès créé. Copiez le jeton maintenant, il ne sera plus affiché.');
+    } catch (e) { this.store.toast((e as Error).message); }
+    this.tokBusy.set(false);
+  }
+
+  async revoquer(t: ApiTokenView): Promise<void> {
+    if (!confirm(`Révoquer l’accès « ${t.name} » ? Il cessera immédiatement de fonctionner.`)) return;
+    try {
+      await this.api.revokeMyToken(t.id);
+      this.tokens.update((l) => l.map((x) => (x.id === t.id ? { ...x, revoked_at: new Date().toISOString() } : x)));
+      this.store.toast('Accès révoqué.');
+    } catch (e) { this.store.toast((e as Error).message); }
+  }
+
+  copierJeton(): Promise<void> {
+    return this.copier(this.newSecret(), this.secretTokCopie, 'Copie impossible : recopiez le jeton à la main.');
+  }
+
+  /** SQLite rend « AAAA-MM-JJ HH:MM:SS » en UTC : on l'affiche à l'heure de Paris. */
+  dateCourte(s: string): string {
+    const d = new Date(s.replace(' ', 'T') + (s.includes('Z') || s.includes('+') ? '' : 'Z'));
+    if (isNaN(d.getTime())) return s;
+    return new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
+  }
+
+  /** Un libellé court à partir du User-Agent, pour reconnaître l'appareil qui s'est servi du jeton. */
+  agent(ua: string): string {
+    if (/claude/i.test(ua)) return 'Claude';
+    if (/chatgpt|openai/i.test(ua)) return 'ChatGPT';
+    if (/iPhone/i.test(ua)) return 'iPhone';
+    if (/iPad/i.test(ua)) return 'iPad';
+    if (/Android/i.test(ua)) return 'Android';
+    if (/curl/i.test(ua)) return 'curl';
+    if (/python/i.test(ua)) return 'script Python';
+    if (/node/i.test(ua)) return 'script Node';
+    return ua.length > 32 ? ua.slice(0, 32) + '…' : ua;
+  }
 
   /** Les initiales que le prénom donnerait, celles qu'on retrouve en vidant le champ. */
   iniAuto(): string { return contactIni(this.store.ui().pfName || '?'); }

@@ -21,7 +21,7 @@ import { empreinteSecours, genererSecours, genererSecret, otpauthUri, secretLisi
 import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './throttle';
 import { log } from '../log';
 import {
-  AuthedRequest, SESSION_COOKIE, aRenouveler, auth, currentMember, hashLeurre, motDePasseBon,
+  AuthedRequest, SESSION_COOKIE, aRenouveler, auth, currentMember, denyToken, hashLeurre, motDePasseBon,
   ouvrirSession, pwdMin, pwdTropCourt, requireAdmin, route, setSessionCookie, sign, signerDefi, verifierDefi,
 } from './session';
 
@@ -316,7 +316,7 @@ export function authRouter(): Router {
    * autres sessions** : c'est le but. La session en cours, elle, reçoit un jeton
    * neuf, sinon on se déconnecterait soi-même en se protégeant.
    */
-  r.put('/me/credentials', authLimiter, auth, jsonSmall, route(async (req, res) => {
+  r.put('/me/credentials', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!await motDePasseBon(req, user, 'currentPassword')) {
@@ -373,7 +373,7 @@ export function authRouter(): Router {
    * l'application d'authentification fermerait le compte au prochain démarrage,
    * et il faudrait un administrateur pour le rouvrir.
    */
-  r.post('/me/totp/start', authLimiter, auth, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/start', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!await motDePasseBon(req, user)) {
@@ -401,7 +401,7 @@ export function authRouter(): Router {
    * second facteur s'active. Les codes de secours ne sont montrés qu'ici, une
    * seule fois : ils ne sont pas rangés en clair.
    */
-  r.post('/me/totp/enable', authLimiter, auth, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/enable', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!user.totp_pending) {
@@ -426,7 +426,7 @@ export function authRouter(): Router {
    * passe seul suffirait à qui l'a volé, ce qui reviendrait à ne pas avoir de
    * second facteur du tout.
    */
-  r.post('/me/totp/disable', authLimiter, auth, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/disable', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
@@ -451,7 +451,7 @@ export function authRouter(): Router {
    * Refaire ses codes de secours, quand il n'en reste plus assez ou qu'on a perdu
    * le papier. Les anciens cessent immédiatement de valoir.
    */
-  r.post('/me/totp/recovery', authLimiter, auth, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/recovery', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
@@ -473,7 +473,7 @@ export function authRouter(): Router {
   // Réservée à un administrateur : cette liste est l'inventaire exact des
   // identifiants à attaquer, et les adresses personnelles de la famille avec.
   // L'écran qui s'en sert est déjà celui de la gestion des accès.
-  r.get('/members/accounts', auth, requireAdmin, (_req, res) => {
+  r.get('/members/accounts', auth, denyToken, requireAdmin, (_req, res) => {
     // Qui a posé un second facteur : sans cette colonne, un administrateur ne peut
     // pas savoir où en est le foyer, ni à qui le proposer.
     const accounts = listMemberAccounts().map((a) => ({
@@ -483,7 +483,7 @@ export function authRouter(): Router {
     res.json({ accounts });
   });
 
-  r.post('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(async (req, res) => {
+  r.post('/members/:memberId/account', auth, denyToken, requireAdmin, jsonSmall, route(async (req, res) => {
     const memberId = req.params.memberId;
     const state = getHousehold().state as HouseholdState;
     const member = state.members.find((m) => m.id === memberId);
@@ -498,7 +498,7 @@ export function authRouter(): Router {
     res.status(201).json({ memberId, email: email.toLowerCase() });
   }));
 
-  r.put('/members/:memberId/account', auth, requireAdmin, jsonSmall, route(async (req, res) => {
+  r.put('/members/:memberId/account', auth, denyToken, requireAdmin, jsonSmall, route(async (req, res) => {
     const memberId = req.params.memberId;
     const user = getUserByMemberId(memberId);
     if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }
@@ -530,7 +530,7 @@ export function authRouter(): Router {
    * fermerait un compte définitivement. Le mot de passe de l'administrateur est
    * redemandé, et le geste est journalisé.
    */
-  r.post('/members/:memberId/totp/reset', auth, requireAdmin, jsonSmall, route(async (req, res) => {
+  r.post('/members/:memberId/totp/reset', auth, denyToken, requireAdmin, jsonSmall, route(async (req, res) => {
     const moi = req.user ? getUserById(req.user.id) : undefined;
     if (!moi || !await motDePasseBon(req, moi)) {
       res.status(403).json({ error: 'Mot de passe incorrect. Ce geste retire la protection d’un autre compte : il se confirme par votre mot de passe.' });
@@ -549,7 +549,7 @@ export function authRouter(): Router {
     res.json({ enabled: false });
   }));
 
-  r.delete('/members/:memberId/account', auth, requireAdmin, (req: AuthedRequest, res: Response) => {
+  r.delete('/members/:memberId/account', auth, denyToken, requireAdmin, (req: AuthedRequest, res: Response) => {
     const memberId = req.params.memberId;
     const user = getUserByMemberId(memberId);
     if (!user) { res.status(404).json({ error: 'Ce membre n’a pas d’accès' }); return; }

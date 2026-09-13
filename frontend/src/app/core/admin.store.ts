@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, ConfigImportReport, PushStatus, SystemStatus, UpdateInfo } from './api.service';
+import { ApiError, ApiService, ApiTokenView, ConfigImportReport, PushStatus, SystemStatus, UpdateInfo } from './api.service';
 import { downloadBlob } from './download';
 import { FoyerStore } from './foyer.store';
 import { pushInviteVisible } from './push-invite';
@@ -35,6 +35,8 @@ export class AdminStore {
   readonly accounts = signal<Record<string, string>>({}); // memberId → login email
   /** Les membres qui ont posé un second facteur. Rempli en même temps que `accounts`. */
   readonly accountsTotp = signal<Set<string>>(new Set());
+  /** Les jetons d'accès du membre dont la fiche d'accès est ouverte (vus par l'administrateur). */
+  readonly memberTokens = signal<ApiTokenView[]>([]);
 
   // ---- self-update ------------------------------------------------------
   readonly updateInfo = signal<UpdateInfo | null>(null);
@@ -94,6 +96,7 @@ export class AdminStore {
       if (!this.store.authed()) untracked(() => {
         this.accounts.set({});
         this.accountsTotp.set(new Set());
+        this.memberTokens.set([]);
         this.icsToken.set('');
       });
     });
@@ -134,8 +137,25 @@ export class AdminStore {
     await this.store.flush();
     await this.refreshAccounts();
     this.store.patch({ accountFor: memberId, acEmail: this.memberAccountEmail(memberId), acPassword: '', acBusy: false });
+    // Les jetons de ce membre, pour que l'administrateur puisse les révoquer.
+    this.memberTokens.set([]);
+    if (this.memberHasAccount(memberId)) {
+      try { this.memberTokens.set((await this.api.listMemberTokens(memberId)).tokens); } catch { /* la section reste vide */ }
+    }
   }
-  closeAccount(): void { this.store.patch({ accountFor: null, acBusy: false }); }
+  closeAccount(): void { this.store.patch({ accountFor: null, acBusy: false }); this.memberTokens.set([]); }
+
+  /** Le nombre de jetons encore actifs du membre ouvert. */
+  activeMemberTokens(): number { return this.memberTokens().filter((t) => !t.revoked_at).length; }
+
+  /** Un parent révoque l'accès d'un membre (le sien, ou celui d'un enfant). */
+  async revokeMemberToken(memberId: string, id: number): Promise<void> {
+    try {
+      await this.api.revokeMemberToken(memberId, id);
+      this.memberTokens.update((l) => l.map((x) => (x.id === id ? { ...x, revoked_at: new Date().toISOString() } : x)));
+      this.store.toast('Accès révoqué.');
+    } catch (e) { this.store.toast((e as Error).message); }
+  }
 
   async saveAccount(): Promise<void> {
     const s = this.store.ui();

@@ -67,6 +67,25 @@ import { contactIni } from '../core/helpers';
         <input class="input" type="email" [ngModel]="store.ui().acEmail" (ngModelChange)="store.patch({ acEmail: $event })" placeholder="membre@email.fr" style="margin-bottom:14px" />
         <label class="field-label">{{ accEmail() ? 'Nouveau mot de passe' : 'Mot de passe' }}</label>
         <input class="input" type="password" [ngModel]="store.ui().acPassword" (ngModelChange)="store.patch({ acPassword: $event })" [placeholder]="accEmail() ? 'Laisser vide pour ne pas changer' : '6 caractères minimum'" style="margin-bottom:18px" />
+
+        @if (admin.memberTokens().length) {
+          <div class="overline" style="margin-bottom:8px">Accès pour assistants et scripts · {{ admin.activeMemberTokens() }} actif(s)</div>
+          <div class="tok-list">
+            @for (t of admin.memberTokens(); track t.id) {
+              <div class="tok" [class.rev]="t.revoked_at">
+                <div class="tok-b">
+                  <div class="tok-n">{{ t.name }} <span class="tok-badge">{{ t.scope === 'write' ? 'écriture' : 'lecture' }}</span></div>
+                  <div class="tok-m"><code>{{ t.prefix }}…</code>@if (t.revoked_at) { · révoqué }</div>
+                </div>
+                @if (!t.revoked_at) {
+                  <button class="btn btn-ghost tok-x" (click)="admin.revokeMemberToken(store.ui().accountFor!, t.id)">Révoquer</button>
+                }
+              </div>
+            }
+          </div>
+          <div class="hint" style="margin-bottom:18px">Un accès agit au nom de ce membre, avec ses droits. Révoquez-le s’il n’est plus utilisé, ou en cas de doute.</div>
+        }
+
         <div class="acc-foot">
           @if (accEmail()) {
             <button class="btn btn-ghost" (click)="admin.removeAccount()" [disabled]="store.ui().acBusy">Retirer l'accès</button>
@@ -184,6 +203,14 @@ import { contactIni } from '../core/helpers';
     :host-context(:root.dark) .acct.totp { background: rgba(78,147,184,.22); }
     .acc-foot { display: flex; align-items: center; gap: 10px; }
     .input.readonly { display: flex; align-items: center; color: var(--ink2); font-weight: 700; background: var(--soft); }
+    .tok-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .tok { display: flex; align-items: center; gap: 12px; background: var(--soft); border-radius: 12px; padding: 10px 12px; }
+    .tok.rev { opacity: .55; }
+    .tok-b { flex: 1; min-width: 0; }
+    .tok-n { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .tok-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink2); background: var(--soft2); border-radius: 7px; padding: 2px 6px; }
+    .tok-m { font-size: 11px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .tok-x { flex: none; padding: 7px 11px; font-size: 12.5px; color: var(--primary); }
   `],
 })
 export class FamilyModalComponent {
