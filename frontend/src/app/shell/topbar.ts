@@ -21,14 +21,14 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 
       @if (!store.narrow()) {
         <button class="search" (click)="store.openSearch()" title="Rechercher"><f-icon name="search" [size]="18" color="#B7ABA0" [width]="2.2" /><span>Rechercher…</span></button>
-        <div class="avatars" (click)="store.openFamily()" title="Gérer la famille">
+        <div class="avatars" (click)="store.openMembers()" title="Membres et accès">
           @for (m of d().members; track m.id) {
             <f-avatar [ini]="m.ini" [color]="m.color" [size]="38" border="3px solid var(--soft)" />
           }
         </div>
       } @else {
         <button class="icon-btn lg" (click)="store.openSearch()" title="Rechercher"><f-icon name="search" [size]="21" /></button>
-        <button class="icon-btn lg" (click)="store.openFamily()" title="Gérer la famille"><f-icon name="users" [size]="21" /></button>
+        <button class="icon-btn lg" (click)="store.openMembers()" title="Membres et accès"><f-icon name="users" [size]="21" /></button>
       }
 
       <button class="icon-btn lg bell" (click)="store.toggleNotif()" title="Notifications">

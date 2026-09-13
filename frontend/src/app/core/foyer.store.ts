@@ -1082,7 +1082,7 @@ export class FoyerStore {
       case 'shop': this.editShop(h.id); break;
       case 'recipe': this.patch({ openRecipeId: h.id }); break;
       case 'card': this.showCard(h.id); break;
-      case 'member': this.openFamily(); break;
+      case 'member': this.openMembers(); break;
       default: break;
     }
   }
@@ -2985,8 +2985,9 @@ export class FoyerStore {
   }
 
   // ---- family & profile -------------------------------------------------
-  openFamily(): void { this.patch({ familyOpen: true, famNameField: this._data()?.familyName || '' }); }
-  saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.patch({ familyOpen: false }); this.toast('Foyer mis à jour'); }
+  /** Mène à Paramètres → Membres et accès (là où vit toute la gestion de la famille). */
+  openMembers(): void { this.patch({ settingsSection: 'membres', famNameField: this._data()?.familyName || '' }); this.go('settings'); }
+  saveFamily(): void { const n = this.ui().famNameField.trim(); if (!n) { this.toast('Donne un nom au foyer'); return; } this.mutate((d) => { d.familyName = n; }); this.toast('Foyer mis à jour'); }
   newMember(): void { this.patch({ memberForm: true, mfEditId: null, mfName: '', mfRole: '', mfEmail: '', mfColor: '#9B6FA8', mfAdmin: false, mfEnfant: false, mfBirthday: '', mfAllerg: [], mfRefuse: [], mfRefuseQ: '' }); }
   editMember(id: string): void { const m = this._data()?.members.find((x) => x.id === id); if (!m) return; this.patch({ memberForm: true, mfEditId: id, mfName: m.name, mfRole: m.role, mfEmail: m.email || '', mfColor: m.color, mfAdmin: !!m.admin, mfEnfant: !!m.enfant, mfBirthday: m.birthday || '', mfAllerg: [...(m.allerg || [])], mfRefuse: [...(m.refuse || [])], mfRefuseQ: '' }); }
   saveMember(): void {
