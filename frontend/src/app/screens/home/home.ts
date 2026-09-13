@@ -5,10 +5,8 @@ import { AdminStore } from '../../core/admin.store';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
-import { WhoComponent } from '../../shared/who';
 import { recentActivity, relTime } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
-import { WhoBadge, whoBadges } from '../../core/schedule';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
 
@@ -60,7 +58,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
   selector: 'screen-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, WhoComponent, NgTemplateOutlet],
+  imports: [IconComponent, AvatarComponent, NgTemplateOutlet],
   template: `
     <!-- Invitation à activer les rappels, au premier lancement installé. -->
     <ng-template #pushCard>
@@ -103,30 +101,55 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     <ng-template #agendaCard>
       <div class="card rc">
         <div class="rc-head"><span>Prochains évènements</span><button class="rc-link" (click)="store.go('calendar')">Agenda</button></div>
-        @for (a of nextAgenda(); track $index) {
-          @if (a.kind === 'event') {
-            <div class="rc-row ev" (click)="store.editEvent(a.ev.id)">
-              <div class="ev-when" [style.background]="store.tint(evColor(a.ev))" [style.color]="evColor(a.ev)">
-                <span class="ev-day">{{ dayLabel(a.date) }}</span>
-                <span class="ev-time">{{ a.ev.time === '—' ? 'jour.' : a.ev.time }}</span>
-              </div>
-              <div class="rc-main">
-                <div class="rc-title">{{ a.ev.title }}</div>
-                @if (a.ev.who.length) { <f-who [badges]="badges(a.ev)" /> }
-              </div>
+        <!-- Une frise groupée par jour : à gauche le jour (abrégé + numéro),
+             à droite les entrées, chacune avec une barre de couleur, les
+             pastilles des membres, le titre et l'horaire (ou une pastille pour
+             une journée entière). -->
+        @for (g of agendaGroups(); track g.date) {
+          <div class="tl-group">
+            <div class="tl-day" [class.today]="g.isToday">
+              <span class="tl-wd">{{ g.wd }}</span>
+              <span class="tl-num">{{ g.num }}</span>
             </div>
-          } @else {
-            <div class="rc-row ev" (click)="store.openTaskItem(a.task.id)">
-              <div class="ev-when" [style.background]="store.tint(a.color)" [style.color]="a.color">
-                <span class="ev-day">{{ dayLabel(a.date) }}</span>
-                <span class="ev-time">@if (a.task.time) { {{ a.task.time }} } @else { <f-icon name="taches" [size]="12" [color]="a.color" [width]="2.4" /> }</span>
-              </div>
-              <div class="rc-main">
-                <div class="rc-title">{{ a.task.text }}</div>
-                <span class="rc-sub">{{ a.list }}</span>
-              </div>
+            <div class="tl-events">
+              @for (a of g.items; track $index) {
+                @if (a.kind === 'event') {
+                  <div class="tl-ev" (click)="store.editEvent(a.ev.id)">
+                    <span class="tl-bar" [style.background]="evColor(a.ev)"></span>
+                    @if (a.ev.who.length) {
+                      <div class="tl-av">
+                        @for (m of whoAv(a.ev.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="28" /> }
+                      </div>
+                    }
+                    <div class="tl-main">
+                      @if (isAllDay(a.ev)) {
+                        <span class="tl-pill">{{ a.ev.title }}</span>
+                      } @else {
+                        <div class="tl-title">{{ a.ev.title }}</div>
+                        <div class="tl-time"><f-icon name="clock" [size]="13" color="var(--ink3)" [width]="2.2" /><span>{{ evTime(a.ev) }}</span></div>
+                      }
+                    </div>
+                  </div>
+                } @else {
+                  <div class="tl-ev" (click)="store.openTaskItem(a.task.id)">
+                    <span class="tl-bar" [style.background]="a.color"></span>
+                    @if (a.task.who.length) {
+                      <div class="tl-av">
+                        @for (m of whoAv(a.task.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="28" /> }
+                      </div>
+                    }
+                    <div class="tl-main">
+                      <div class="tl-title">{{ a.task.text }}</div>
+                      <div class="tl-time">
+                        @if (a.task.time) { <f-icon name="clock" [size]="13" color="var(--ink3)" [width]="2.2" /><span>{{ a.task.time }} · {{ a.list }}</span> }
+                        @else { <f-icon name="taches" [size]="12" color="var(--ink3)" [width]="2.2" /><span>{{ a.list }}</span> }
+                      </div>
+                    </div>
+                  </div>
+                }
+              }
             </div>
-          }
+          </div>
         } @empty {
           <div class="rc-empty">Rien à venir.</div>
         }
@@ -300,14 +323,24 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .rc-row.prep .prep-line { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rc-row:first-of-type { border-top: none; }
 
-    /* prochains évènements */
-    .ev-when { flex: none; width: 52px; height: 40px; border-radius: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .ev-day { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .02em; }
-    .ev-time { font-size: 12px; font-weight: 800; }
-    .rc-main { min-width: 0; flex: 1; }
-    .rc-title { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rc-sub { display: block; margin-top: 2px; font-size: 11px; font-weight: 700; color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rc-main f-who { margin-top: 4px; display: block; }
+    /* prochains évènements : une frise groupée par jour */
+    .tl-group { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+    .tl-group:first-of-type { border-top: none; }
+    .tl-day { flex: none; width: 42px; text-align: center; line-height: 1; }
+    .tl-wd { display: block; font-size: 11.5px; font-weight: 800; color: var(--ink2); text-transform: capitalize; }
+    .tl-num { display: block; margin-top: 3px; font-size: 25px; font-weight: 800; color: var(--ink); font-family: var(--font-display); }
+    .tl-day.today .tl-wd, .tl-day.today .tl-num { color: var(--primary); }
+    .tl-events { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 13px; }
+    .tl-ev { display: flex; align-items: stretch; gap: 10px; cursor: pointer; }
+    .tl-bar { flex: none; width: 4px; border-radius: 3px; align-self: stretch; }
+    .tl-av { flex: none; display: flex; align-items: center; }
+    .tl-av .avatar + .avatar { margin-left: -9px; box-shadow: 0 0 0 2px var(--surface); }
+    .tl-main { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    .tl-title { font-size: 14px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tl-time { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; font-weight: 700; color: var(--ink2); min-width: 0; }
+    .tl-time span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tl-pill { align-self: flex-start; background: rgba(122,155,118,.16); color: var(--sage-dark); border-radius: 20px; padding: 4px 12px; font-size: 13px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :host-context(:root.dark) .tl-pill { background: rgba(122,155,118,.24); color: #A9C6A5; }
 
     /* dernières tâches */
     .t-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
@@ -459,7 +492,28 @@ export class HomeScreen {
       if (!l) continue;
       out.push({ date: t.due, time: t.time || '', kind: 'task', task: t, list: l.name, color: l.color });
     }
-    return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).slice(0, 4);
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)).slice(0, 6);
+  });
+
+  /**
+   * Les prochaines entrées regroupées par jour, pour la frise de l'accueil : à
+   * gauche le jour (abrégé + numéro), à droite ses entrées dans l'ordre.
+   */
+  readonly agendaGroups = computed(() => {
+    const today = this.store.todayStr();
+    const groups: { date: string; wd: string; num: string; isToday: boolean; items: Ahead[] }[] = [];
+    for (const a of this.nextAgenda()) {
+      let g = groups.find((x) => x.date === a.date);
+      if (!g) {
+        const d = parseDay(a.date);
+        // Abrégé sans le point final que certaines locales ajoutent (« mer. » → « mer »).
+        const wd = cap(d.toLocaleDateString(this.store.locale, { weekday: 'short' }).replace(/\.$/, ''));
+        g = { date: a.date, wd, num: String(d.getDate()), isToday: a.date === today, items: [] };
+        groups.push(g);
+      }
+      g.items.push(a);
+    }
+    return groups;
   });
 
   /** Les 4 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
@@ -539,15 +593,21 @@ export class HomeScreen {
   nm(id: string | null): string { return (id && this.store.memberName(id)) || 'Quelqu’un'; }
   rel(iso: string): string { return relTime(iso, Date.now()); }
 
-  badges(ev: EventItem): WhoBadge[] { return whoBadges({ who: ev.who }, this.store.data()?.members || []); }
   evColor(ev: EventItem): string { return ev.who.length ? this.store.memberColor(ev.who[0]) : '#E56B4E'; }
 
-  /** « Auj. », « Demain », sinon « lun. 12 ». */
-  dayLabel(date: string): string {
-    const today = this.store.todayStr();
-    if (date === today) return 'Auj.';
-    if (date === this.store.addDays(today, 1)) return 'Demain';
-    return cap(parseDay(date).toLocaleDateString(this.store.locale, { weekday: 'short', day: 'numeric' }));
+  /** Un événement sans heure occupe la journée : il s'affiche en pastille, sans horaire. */
+  isAllDay(ev: EventItem): boolean { return !!ev.allDay || !ev.time || ev.time === '—'; }
+
+  /** L'horaire d'un événement : « 7:00 - 8:00 », ou juste le début si la fin est inconnue. */
+  evTime(ev: EventItem): string { return ev.endTime ? `${ev.time} - ${ev.endTime}` : ev.time; }
+
+  /** Les pastilles des membres concernés (trois au plus), pour l'entrée de la frise. */
+  whoAv(ids: string[]): { id: string; ini: string; color: string }[] {
+    const members = this.store.data()?.members || [];
+    return ids.slice(0, 3).map((id) => {
+      const m = members.find((x) => x.id === id);
+      return { id, ini: m?.ini || '?', color: m ? this.store.memberColor(id) : '#8A7E74' };
+    });
   }
 
   /** Le sous-titre d'une tuile de module : un compte réel, jamais un décor. */
