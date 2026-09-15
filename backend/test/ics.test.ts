@@ -47,7 +47,12 @@ describe('flux ICS', () => {
     const octobre = buildIcs(state(), [deadline({ date: '2027-09-15' })]);
     assert.ok(sept.includes('UID:fin-preavis-7@foyer'));
     assert.ok(octobre.includes('UID:fin-preavis-7@foyer'), 'même UID malgré la reconduction');
-    assert.ok(!octobre.includes('20260915'));
+    // La date d'échéance passe bien à 2027, sans garder celle de 2026. On vise la
+    // date de l'événement (VALUE=DATE) et pas une occurrence quelconque de la
+    // chaîne : le DTSTAMP porte la date du jour, qui tombe pile sur 20260915 un
+    // 15 septembre 2026, et ferait échouer un simple `includes` à cette date.
+    assert.ok(octobre.includes('DTSTART;VALUE=DATE:20270915'), 'la reconduction porte la nouvelle date');
+    assert.ok(!octobre.includes('VALUE=DATE:20260915'), 'et ne garde pas l’ancienne échéance');
   });
 
   it('publie les créneaux d’emploi du temps synchronisés, pas les autres', () => {
