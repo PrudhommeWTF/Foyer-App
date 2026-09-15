@@ -369,8 +369,13 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .fscroll-x { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .fscroll-x::-webkit-scrollbar { display: none; }
     .track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; align-items: stretch; }
-    .slide { flex: 0 0 100%; scroll-snap-align: center; display: flex; box-sizing: border-box; }
-    .slide > .card { flex: 1; }
+    /* min-width: 0 est vital : sans lui, un volet au contenu long (une tâche au
+       titre à rallonge) déborde de 100% (min-width: auto = min-content d'un item
+       flex), la largeur du volet devient indéfinie, l'ellipsis intérieure ne
+       s'applique plus, et le carousel se désaligne. Bridé à 100%, le contenu est
+       tronqué proprement à l'intérieur. */
+    .slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; display: flex; box-sizing: border-box; }
+    .slide > .card { flex: 1; min-width: 0; }
     .pills { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; }
     .pill { flex: none; border: none; background: var(--soft); color: var(--ink2); border-radius: 20px; padding: 7px 15px; font-size: 12px; font-weight: 800; cursor: pointer; }
     .pill.on { background: #FCE9E3; color: var(--primary); }
