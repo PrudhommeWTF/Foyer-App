@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { recentActivity, relTime } from './activity';
-import { HouseholdState, ShopItem, ShopList, TaskItem, TaskList } from './models';
+import { EventItem, HouseholdState, ShopItem, ShopList, TaskItem, TaskList } from './models';
 
 // Fabriques typées : les fixtures ne portent que ce que le fil lit, mais restent
 // de vrais objets du domaine (le typecheck de la CI, tsconfig.test.json, les vérifie).
@@ -9,10 +9,11 @@ const tList = (over: Partial<TaskList>): TaskList => ({ id: 'l1', name: 'Liste',
 const task = (over: Partial<TaskItem>): TaskItem => ({ id: 't', listId: 'l1', text: 'x', who: [], due: null, done: false, ...over });
 const sList = (over: Partial<ShopList>): ShopList => ({ id: 's1', name: 'Courses', color: '#222', icon: 'panier', ...over });
 const shop = (over: Partial<ShopItem>): ShopItem => ({ id: 'a', name: 'Article', qty: '', aisleId: 'x', state: 'a-prendre', listId: 's1', ...over });
+const event = (over: Partial<EventItem>): EventItem => ({ id: 'e', date: '2026-09-10', time: '', title: 'Évènement', who: [], recur: 'none', ...over });
 
 // Un état minimal : seuls les champs que le fil lit comptent. Le reste est vide.
 function state(over: Partial<HouseholdState>): HouseholdState {
-  return { taskLists: [], tasks: [], shopLists: [], shop: [], ...over } as HouseholdState;
+  return { taskLists: [], tasks: [], shopLists: [], shop: [], events: [], ...over } as HouseholdState;
 }
 
 describe('recentActivity', () => {
@@ -55,6 +56,29 @@ describe('recentActivity', () => {
     const tasks = Array.from({ length: 20 }, (_, i) => task({ id: 't' + i, at: `2026-09-${String(i + 1).padStart(2, '0')}T08:00:00.000Z`, by: 'm1' }));
     const s = state({ taskLists: [tList({ id: 'l1', name: 'L' })], tasks });
     assert.equal(recentActivity(s, 5).length, 5);
+  });
+
+  it('inclut les événements de l’agenda : programmation et retouche', () => {
+    const s = state({
+      events: [
+        event({ id: 'e1', title: 'Réunion école', at: '2026-09-02T08:00:00.000Z', by: 'm1' }),
+        event({ id: 'e2', title: 'Dentiste', at: '2026-09-03T08:00:00.000Z', by: 'm2', upAt: '2026-09-06T11:00:00.000Z', upBy: 'm1' }),
+      ],
+    });
+    const feed = recentActivity(s, 12);
+    // e1 programmé + e2 programmé + e2 modifié = 3 entrées, triées desc.
+    assert.deepEqual(feed.map((e) => e.at), [
+      '2026-09-06T11:00:00.000Z', '2026-09-03T08:00:00.000Z', '2026-09-02T08:00:00.000Z',
+    ]);
+    assert.equal(feed[0].verb, 'a modifié');
+    assert.equal(feed[0].what, 'Dentiste');
+    assert.equal(feed[0].where, 'Agenda');
+    assert.equal(feed[2].verb, 'a programmé');
+  });
+
+  it('ignore un événement sans auteur ni date (importé, ou dérivé d’un repas)', () => {
+    const s = state({ events: [event({ id: 'e1', title: 'Dîner', mealKey: '2026-09-10-soir' })] });
+    assert.equal(recentActivity(s, 12).length, 0);
   });
 });
 
