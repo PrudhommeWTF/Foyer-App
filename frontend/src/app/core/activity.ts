@@ -2,11 +2,11 @@
 //
 // Il ne se dérive que des mutations réellement horodatées et attribuées :
 // tâches (création via `at`/`by`, achèvement via `doneAt`/`doneBy` ou l'historique
-// d'une tâche récurrente) et articles de courses (`at`/`by`, l'état donnant le
-// verbe). Les événements portent désormais leur auteur (affiché sur leur fiche),
-// mais restent hors de ce fil : l'agenda les montre déjà, les répéter ici ferait
-// doublon. Contacts et recettes n'ont ni date de changement ni auteur : les faire
-// figurer serait inventer une ligne, pas la refléter.
+// d'une tâche récurrente), articles de courses (`at`/`by`, l'état donnant le
+// verbe), et événements de l'agenda (création via `at`/`by`, modification via
+// `upAt`/`upBy`). Un événement sans auteur ni date (importé de longue date, ou
+// dérivé d'un repas) n'y figure pas : on reflète le geste, on ne l'invente pas.
+// Contacts et recettes n'ont ni date de changement ni auteur, même raison.
 import { HouseholdState } from './models';
 
 export interface ActivityEntry {
@@ -56,6 +56,12 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
     if (!s.at) continue;
     const l = sList(s.listId);
     out.push({ at: s.at, by: s.by ?? null, via: s.via ?? null, verb: SHOP_VERB[s.state] || 'a modifié', what: s.name, where: l?.name || 'Courses', color: l?.color || '#4E93B8' });
+  }
+  // Événements de l'agenda : programmation (at/by) et retouche (upAt/upBy). Le
+  // badge « Agenda » les distingue des tâches, qui portent le même verbe.
+  for (const ev of state.events || []) {
+    if (ev.at) out.push({ at: ev.at, by: ev.by ?? null, verb: 'a programmé', what: ev.title, where: 'Agenda', color: '#E56B4E' });
+    if (ev.upAt) out.push({ at: ev.upAt, by: ev.upBy ?? null, verb: 'a modifié', what: ev.title, where: 'Agenda', color: '#E56B4E' });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
