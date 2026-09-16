@@ -5,7 +5,7 @@ import { AdminStore } from '../../core/admin.store';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
-import { recentActivity, relTime } from '../../core/activity';
+import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
@@ -83,7 +83,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
           <div class="act">
             <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" />
             <div class="act-b">
-              <div class="act-l"><b>{{ nm(a.by) }}</b>@if (a.via) { <span class="act-via">via un assistant</span>} {{ a.verb }} <b>« {{ a.what }} »</b></div>
+              <div class="act-l"><b>{{ nm(a.by) }}</b>@if (a.via) { <span class="act-via">via un assistant</span>} {{ a.verb }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
               <div class="act-m">
                 <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
                 <span class="act-t">{{ rel(a.at) }}</span>
@@ -307,6 +307,10 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .act-b { min-width: 0; flex: 1; }
     .act-l { font-size: 14px; color: var(--ink2); line-height: 1.35; }
     .act-l b { color: var(--ink); font-weight: 800; }
+    /* Le nom est un lien vers l'élément. Rendu inline pour se couper en fin de
+       ligne comme le texte qui l'entoure, plutôt qu'en bloc insécable. */
+    .act-name { display: inline; font: inherit; font-weight: 800; color: var(--ink); background: none; border: none; padding: 0; cursor: pointer; }
+    .act-name:hover { color: var(--primary); text-decoration: underline; }
     .act-m { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
     .act-where { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
     .act-via { font-size: 10.5px; font-weight: 800; color: var(--violet); background: rgba(155,111,168,.14); padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
@@ -598,6 +602,13 @@ export class HomeScreen {
   col(id: string | null): string { return id ? this.store.memberColor(id) : '#8A7E74'; }
   nm(id: string | null): string { return (id && this.store.memberName(id)) || 'Quelqu’un'; }
   rel(iso: string): string { return relTime(iso, Date.now()); }
+
+  /** Clic sur le nom d'une entrée du fil : ouvre la fiche de l'élément concerné. */
+  openActivity(a: ActivityEntry): void {
+    if (a.kind === 'task') this.store.openTaskItem(a.ref);
+    else if (a.kind === 'event') this.store.editEvent(a.ref);
+    else this.store.openShoppingList(a.ref);
+  }
 
   evColor(ev: EventItem): string { return ev.who.length ? this.store.memberColor(ev.who[0]) : '#E56B4E'; }
 

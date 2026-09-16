@@ -1130,6 +1130,10 @@ export class FoyerStore {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
     const m = monthIndex(ev.date);
+    // La fiche d'événement ne vit que dans l'écran calendrier : on s'y rend
+    // d'abord, sinon un clic venu de l'accueil (fil d'activité, prochains
+    // évènements) poserait `showEvent` sans que rien ne s'affiche.
+    this.go('calendar');
     this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m, evCalOpen: false });
   }
   dpPick(ds: string): void {
