@@ -32,10 +32,14 @@ describe('recentActivity', () => {
     assert.deepEqual(feed.map((e) => e.at), [
       '2026-09-05T10:00:00.000Z', '2026-09-04T09:00:00.000Z', '2026-09-03T08:00:00.000Z', '2026-09-01T08:00:00.000Z',
     ]);
-    assert.equal(feed[0].verb, 'a mis au panier');
+    assert.equal(feed[0].verb, 'a mis au panier l’article');
     assert.equal(feed[0].where, 'Drive');
-    assert.equal(feed[1].verb, 'a terminé');
-    assert.equal(feed[2].verb, 'a ajouté');
+    assert.equal(feed[0].kind, 'shop');
+    assert.equal(feed[0].ref, 's1'); // le lien mène à la liste de courses
+    assert.equal(feed[1].verb, 'a terminé la tâche');
+    assert.equal(feed[1].kind, 'task');
+    assert.equal(feed[1].ref, 't2');
+    assert.equal(feed[2].verb, 'a ajouté la tâche');
   });
 
   it('déplie une ligne par achèvement d’une tâche récurrente', () => {
@@ -47,7 +51,7 @@ describe('recentActivity', () => {
       ],
     });
     const feed = recentActivity(s, 12);
-    const done = feed.filter((e) => e.verb === 'a terminé');
+    const done = feed.filter((e) => e.verb === 'a terminé la tâche');
     assert.equal(done.length, 2);
     assert.equal(feed[0].at, '2026-09-08T20:00:00.000Z');
   });
@@ -58,7 +62,7 @@ describe('recentActivity', () => {
     assert.equal(recentActivity(s, 5).length, 5);
   });
 
-  it('inclut les événements de l’agenda : programmation et retouche', () => {
+  it('inclut les événements de l’agenda : programmation et retouche, avec lien vers la fiche', () => {
     const s = state({
       events: [
         event({ id: 'e1', title: 'Réunion école', at: '2026-09-02T08:00:00.000Z', by: 'm1' }),
@@ -70,10 +74,12 @@ describe('recentActivity', () => {
     assert.deepEqual(feed.map((e) => e.at), [
       '2026-09-06T11:00:00.000Z', '2026-09-03T08:00:00.000Z', '2026-09-02T08:00:00.000Z',
     ]);
-    assert.equal(feed[0].verb, 'a modifié');
+    assert.equal(feed[0].verb, 'a modifié l’évènement');
     assert.equal(feed[0].what, 'Dentiste');
     assert.equal(feed[0].where, 'Agenda');
-    assert.equal(feed[2].verb, 'a programmé');
+    assert.equal(feed[0].kind, 'event');
+    assert.equal(feed[0].ref, 'e2'); // le lien mène à la fiche de l'événement
+    assert.equal(feed[2].verb, 'a programmé l’évènement');
   });
 
   it('ignore un événement sans auteur ni date (importé, ou dérivé d’un repas)', () => {

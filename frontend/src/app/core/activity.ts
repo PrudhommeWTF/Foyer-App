@@ -16,20 +16,25 @@ export interface ActivityEntry {
   by: string | null;
   /** Nom du jeton d'accès quand le geste vient d'un assistant, sinon null. Affiché « (via un assistant) ». */
   via?: string | null;
-  /** « a ajouté », « a terminé », « a mis au panier »... */
+  /** Verbe nommant le type d'item : « a ajouté la tâche », « a programmé l'évènement », « a mis au panier l'article »... */
   verb: string;
-  /** Ce qui a changé : l'intitulé de la tâche ou de l'article. */
+  /** Ce qui a changé : l'intitulé de la tâche, de l'événement ou de l'article. */
   what: string;
   /** La liste d'origine, pour situer d'un coup d'oeil. */
   where: string;
   /** Couleur de cette liste, comme accent. */
   color: string;
+  /** Type d'item, pour ouvrir le bon écran au clic sur le nom. */
+  kind: 'task' | 'event' | 'shop';
+  /** Cible du lien : l'identifiant de la tâche ou de l'événement, la liste pour un article. */
+  ref: string;
 }
 
+// Verbe par état d'un article, nommant l'item. Un lien sur le nom mène à sa liste.
 const SHOP_VERB: Record<string, string> = {
-  'a-prendre': 'a ajouté aux courses',
-  panier: 'a mis au panier',
-  indisponible: 'a noté indisponible',
+  'a-prendre': 'a ajouté aux courses l’article',
+  panier: 'a mis au panier l’article',
+  indisponible: 'a noté indisponible l’article',
 };
 
 /**
@@ -44,24 +49,24 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
     const l = tList(t.listId);
     const where = l?.name || 'Tâches';
     const color = l?.color || '#7A9B76';
-    if (t.at) out.push({ at: t.at, by: t.by ?? null, via: t.via ?? null, verb: 'a ajouté', what: t.text, where, color });
+    if (t.at) out.push({ at: t.at, by: t.by ?? null, via: t.via ?? null, verb: 'a ajouté la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
     if (t.history?.length) {
-      for (const h of t.history) if (h.at) out.push({ at: h.at, by: h.by, verb: 'a terminé', what: t.text, where, color });
+      for (const h of t.history) if (h.at) out.push({ at: h.at, by: h.by, verb: 'a terminé la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
     } else if (t.done && t.doneAt) {
-      out.push({ at: t.doneAt, by: t.doneBy ?? null, verb: 'a terminé', what: t.text, where, color });
+      out.push({ at: t.doneAt, by: t.doneBy ?? null, verb: 'a terminé la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
     }
   }
   const sList = (id: string) => (state.shopLists || []).find((l) => l.id === id);
   for (const s of state.shop || []) {
     if (!s.at) continue;
     const l = sList(s.listId);
-    out.push({ at: s.at, by: s.by ?? null, via: s.via ?? null, verb: SHOP_VERB[s.state] || 'a modifié', what: s.name, where: l?.name || 'Courses', color: l?.color || '#4E93B8' });
+    out.push({ at: s.at, by: s.by ?? null, via: s.via ?? null, verb: SHOP_VERB[s.state] || 'a modifié l’article', what: s.name, where: l?.name || 'Courses', color: l?.color || '#4E93B8', kind: 'shop', ref: s.listId });
   }
   // Événements de l'agenda : programmation (at/by) et retouche (upAt/upBy). Le
-  // badge « Agenda » les distingue des tâches, qui portent le même verbe.
+  // verbe nomme le type et le badge « Agenda » situe ; le nom ouvre la fiche.
   for (const ev of state.events || []) {
-    if (ev.at) out.push({ at: ev.at, by: ev.by ?? null, verb: 'a programmé', what: ev.title, where: 'Agenda', color: '#E56B4E' });
-    if (ev.upAt) out.push({ at: ev.upAt, by: ev.upBy ?? null, verb: 'a modifié', what: ev.title, where: 'Agenda', color: '#E56B4E' });
+    if (ev.at) out.push({ at: ev.at, by: ev.by ?? null, verb: 'a programmé l’évènement', what: ev.title, where: 'Agenda', color: '#E56B4E', kind: 'event', ref: ev.id });
+    if (ev.upAt) out.push({ at: ev.upAt, by: ev.upBy ?? null, verb: 'a modifié l’évènement', what: ev.title, where: 'Agenda', color: '#E56B4E', kind: 'event', ref: ev.id });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
