@@ -185,12 +185,21 @@ import { TaskComposerComponent } from './composer';
         <div class="group">
           @if (g.label) {
             <div class="g-head">
-              <span class="col-title">{{ g.label }} · {{ g.lines.length }}</span>
+              @if (g.key === 'soon') {
+                <!-- « À venir » se replie : ce qui n'est pas pour tout de suite peut s'effacer. -->
+                <button class="col-toggle" (click)="store.patch({ soonCollapsed: !store.ui().soonCollapsed })" [attr.aria-expanded]="!store.ui().soonCollapsed">
+                  <f-icon [name]="store.ui().soonCollapsed ? 'chevronRight' : 'chevronDown'" [size]="14" color="var(--ink2)" [width]="2.4" />
+                  {{ g.label }} · {{ g.lines.length }}
+                </button>
+              } @else {
+                <span class="col-title">{{ g.label }} · {{ g.lines.length }}</span>
+              }
               @if (g.key === 'late') {
                 <button class="g-act" (click)="postponeAll(g, store.todayStr())">Tout reporter à aujourd’hui</button>
               }
             </div>
           }
+          @if (g.key !== 'soon' || !store.ui().soonCollapsed) {
           <div class="list" [fReorder]="ids(g)" (reordered)="store.reorderTasks($event)">
             @for (l of g.lines; track l.task.id) {
               <div [attr.data-rid]="l.task.id">
@@ -262,6 +271,7 @@ import { TaskComposerComponent } from './composer';
               </div>
             }
           </div>
+          }
         </div>
       } @empty {
         @if (lists().length) { <div class="empty">Rien à faire ici 🎉</div> }
@@ -484,6 +494,8 @@ import { TaskComposerComponent } from './composer';
     .group { margin-bottom: 20px; }
     .g-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
     .col-title { font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; }
+    /* « À venir » repliable : même allure que le titre de groupe, avec un chevron. */
+    .col-toggle { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; padding: 0; }
     .g-act { border: none; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 9px; cursor: pointer; }
     .list { display: flex; flex-direction: column; gap: 10px; }
 
