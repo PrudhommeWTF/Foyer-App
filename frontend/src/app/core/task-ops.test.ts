@@ -33,10 +33,10 @@ test('une retouche estampille « modifié » : dernier auteur et date', () => {
   assert.equal(out[0].upAt, '2026-09-03T08:00:00Z');
 });
 
-test('un simple réordonnancement (pos seul) n’estampille pas « modifié »', () => {
-  const out = applyTaskOp([task()], op({ op: 'edit', id: 't1', pos: 3 }));
-  assert.equal(out[0].pos, 3);
-  assert.equal(out[0].upBy, undefined, 'glisser une tâche dans la liste n’est pas une modification à afficher');
+test('un simple rangement (clé d’ordre seule) n’estampille pas « modifié »', () => {
+  const out = applyTaskOp([task()], op({ op: 'edit', id: 't1', ord: 'a3' }));
+  assert.equal(out[0].ord, 'a3');
+  assert.equal(out[0].upBy, undefined, 'ranger une tâche dans la liste n’est pas une modification à afficher');
   assert.equal(out[0].upAt, undefined);
 });
 

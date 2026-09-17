@@ -3,6 +3,7 @@ import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayl
 import { Mutation, asConflict, rebase } from './state-sync';
 import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
+import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { cardColor } from './cards';
 import { downloadBlob } from './download';
@@ -1666,20 +1667,28 @@ export class FoyerStore {
     if (!p || !t) return null;
     if (p.parentId) { this.toast('Une sous-tâche ne peut pas en avoir elle-même'); return null; }
     const id = uid('t');
-    const pos = this.subtasks(parentId).length;
-    this.pushTaskOps([{ op: 'add', id, listId: p.listId, text: t, who: [], due: null, parentId, pos }]);
+    // La clé d'ordre est posée par le serveur (fin de liste) ; une sous-tâche
+    // neuve se range donc après les autres, sans qu'on calcule d'index ici.
+    this.pushTaskOps([{ op: 'add', id, listId: p.listId, text: t, who: [], due: null, parentId }]);
     return id;
   }
 
   /**
-   * Le nouvel ordre après un glisser-déposer : les positions sont renumérotées
-   * de 0 à n, et seules celles qui bougent sont envoyées. Renuméroter tout
-   * ferait un lot de vingt opérations pour un déplacement d'un cran.
+   * Le rangement après un glisser-déposer : un seul déplacement relatif est
+   * envoyé (la tâche qui a bougé, et ce qu'elle suit), jamais une renumérotation
+   * de la liste. Le serveur calcule la clé fractionnaire sur les voisins réels.
    */
   reorderTasks(ids: readonly string[]): void {
-    const ops: TaskOpDraft[] = [];
-    ids.forEach((id, i) => { const t = this.task(id); if (t && t.pos !== i) ops.push({ op: 'edit', id, pos: i }); });
-    if (ops.length) this.taskOpsWithUndo(ops, 'Ordre modifié');
+    // `ids` est le nouvel ordre d'un groupe rendu par le glisser-déposer. On en
+    // déduit LA tâche qui a bougé et ce qu'elle suit désormais, pour n'émettre
+    // qu'un seul déplacement relatif : le serveur recalcule la clé sur les
+    // voisins réels, et deux appareils qui rangent en même temps ne s'écrasent pas.
+    const set = new Set(ids);
+    const old = (this.data()?.tasks || []).filter((t) => set.has(t.id)).sort(byOrd).map((t) => t.id);
+    const mv = singleMove(old, ids);
+    if (!mv) return;
+    const op: TaskOpDraft = mv.position ? { op: 'move', id: mv.id, position: mv.position } : { op: 'move', id: mv.id, apres: mv.apres! };
+    this.taskOpWithUndo(op, 'Tâche déplacée');
   }
 
   /** Passer l'occurrence courante d'une série sans la faire. */

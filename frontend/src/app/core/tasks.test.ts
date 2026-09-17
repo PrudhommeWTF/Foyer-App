@@ -188,8 +188,8 @@ test('une échéance avec tolérance se dit « vers le »', () => {
 test('les sous-tâches viennent sous leur parent, et ne font pas de ligne à elles seules', () => {
   const g = groupOpen([
     tache('parent', { due: TODAY }),
-    tache('s1', { parentId: 'parent', pos: 1 }),
-    tache('s2', { parentId: 'parent', pos: 0 }),
+    tache('s1', { parentId: 'parent', ord: 'a1' }),
+    tache('s2', { parentId: 'parent', ord: 'a0' }),
   ], TODAY);
   assert.deepEqual(g.map((x) => x.key), ['today']);
   assert.deepEqual(g[0].lines.map((l) => l.task.id), ['parent']);
@@ -236,22 +236,22 @@ test('subtasksOf ne rend que les enfants directs de la tâche visée', () => {
 // ---- ordre manuel ------------------------------------------------------------------
 
 test('l’ordre manuel décide sans date : la checklist et le groupe « Sans date »', () => {
-  const check = groupOpen([tache('a', { pos: 2 }), tache('b', { pos: 0 }), tache('c', { pos: 1 })], TODAY, 'checklist');
+  const check = groupOpen([tache('a', { ord: 'a2' }), tache('b', { ord: 'a0' }), tache('c', { ord: 'a1' })], TODAY, 'checklist');
   assert.deepEqual(check[0].lines.map((l) => l.task.id), ['b', 'c', 'a']);
-  const sans = groupOpen([tache('a', { pos: 2 }), tache('b', { pos: 0 })], TODAY);
+  const sans = groupOpen([tache('a', { ord: 'a2' }), tache('b', { ord: 'a0' })], TODAY);
   assert.deepEqual(sans[0].lines.map((l) => l.task.id), ['b', 'a']);
 });
 
 test('sans position, une tâche passe après celles qui en ont une, dans l’ordre habituel', () => {
-  const g = groupOpen([tache('neuve', { at: '2026-09-02T10:00:00Z' }), tache('rangee', { pos: 0 }), tache('vieille', { at: '2026-09-01T10:00:00Z' })], TODAY);
+  const g = groupOpen([tache('neuve', { at: '2026-09-02T10:00:00Z' }), tache('rangee', { ord: 'a0' }), tache('vieille', { at: '2026-09-01T10:00:00Z' })], TODAY);
   assert.deepEqual(g[0].lines.map((l) => l.task.id), ['rangee', 'neuve', 'vieille']);
 });
 
 test('dans le jour même, l’ordre manuel passe devant l’heure : on range sa journée comme on la fera', () => {
   const g = groupOpen([
-    tache('a-08h', { due: TODAY, time: '08:00', pos: 2 }),
-    tache('a-18h', { due: TODAY, time: '18:00', pos: 0 }),
-    tache('sans-heure', { due: TODAY, pos: 1 }),
+    tache('a-08h', { due: TODAY, time: '08:00', ord: 'a2' }),
+    tache('a-18h', { due: TODAY, time: '18:00', ord: 'a0' }),
+    tache('sans-heure', { due: TODAY, ord: 'a1' }),
   ], TODAY);
   assert.deepEqual(g[0].lines.map((l) => l.task.id), ['a-18h', 'sans-heure', 'a-08h']);
 });
@@ -259,7 +259,7 @@ test('dans le jour même, l’ordre manuel passe devant l’heure : on range sa 
 test('une tâche du jour jamais déplacée passe après celles qui l’ont été, à son heure', () => {
   const g = groupOpen([
     tache('neuve-18h', { due: TODAY, time: '18:00' }),
-    tache('rangee', { due: TODAY, pos: 0 }),
+    tache('rangee', { due: TODAY, ord: 'a0' }),
     tache('neuve-08h', { due: TODAY, time: '08:00' }),
   ], TODAY);
   assert.deepEqual(g[0].lines.map((l) => l.task.id), ['rangee', 'neuve-08h', 'neuve-18h']);
@@ -267,8 +267,8 @@ test('une tâche du jour jamais déplacée passe après celles qui l’ont été
 
 test('sur ce qui s’étale, la date passe devant : « À venir » reste chronologique', () => {
   const g = groupOpen([
-    tache('apres-demain', { due: '2026-09-04', pos: 0 }),
-    tache('demain', { due: '2026-09-03', pos: 9 }),
+    tache('apres-demain', { due: '2026-09-04', ord: 'a0' }),
+    tache('demain', { due: '2026-09-03', ord: 'a9' }),
   ], TODAY);
   const venir = g.find((x) => x.key === 'soon')!;
   assert.deepEqual(venir.lines.map((l) => l.task.id), ['demain', 'apres-demain']);
@@ -276,8 +276,8 @@ test('sur ce qui s’étale, la date passe devant : « À venir » reste chronol
 
 test('l’accueil montre le jour même dans l’ordre choisi à l’écran', () => {
   const lignes = todayTasks([
-    tache('a-08h', { due: TODAY, time: '08:00', pos: 1 }),
-    tache('a-18h', { due: TODAY, time: '18:00', pos: 0 }),
+    tache('a-08h', { due: TODAY, time: '08:00', ord: 'a1' }),
+    tache('a-18h', { due: TODAY, time: '18:00', ord: 'a0' }),
   ], TODAY, 5).lines.map((l) => l.task.id);
   assert.deepEqual(lignes, ['a-18h', 'a-08h']);
 });

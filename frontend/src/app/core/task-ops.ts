@@ -12,18 +12,21 @@
 // « Annuler » envoie. Annuler ne remet jamais le tableau en bloc : ce serait
 // effacer ce que l'autre appareil a écrit entre-temps.
 import { Remind, TaskDone, TaskItem, TaskRec } from './models';
+import { endKey, moveKey, startKey } from './task-order';
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; parentId?: string | null; pos?: number | null;
+  contractId?: number | null; parentId?: string | null; ord?: string | null;
 }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
 export type TaskOp =
-  | (OpBase & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null; history?: TaskDone[] })
+  | (OpBase & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null; history?: TaskDone[]; position?: 'debut' | 'fin' })
   | (OpBase & TaskFields & { op: 'edit'; id: string })
+  /** Range une tâche par rapport à une autre (« avant »/« après ») ou aux extrémités. Le serveur calcule la clé. */
+  | (OpBase & { op: 'move'; id: string; avant?: string | null; apres?: string | null; position?: 'debut' | 'fin' | null })
   /** Sur une série : `occ` l'échéance soldée, `next` la suivante (null : la série s'arrête). */
   | (OpBase & { op: 'done'; id: string; occ?: string; next?: string | null })
   /** Passer une occurrence sans la faire. */
@@ -47,8 +50,8 @@ export interface TaskDraft {
 
 /** Pose les champs, en retirant les clés vides plutôt que de laisser « ». */
 function assign(t: TaskItem, f: TaskFields): TaskItem {
-  const { pos, ...rest } = { ...t, ...f };
-  const next: TaskItem = { ...rest, ...(typeof pos === 'number' ? { pos } : {}) };
+  const { ord, ...rest } = { ...t, ...f };
+  const next: TaskItem = { ...rest, ...(typeof ord === 'string' && ord ? { ord } : {}) };
   if (!next.note) delete next.note;
   if (!next.cat) delete next.cat;
   if (next.shopListId == null) delete next.shopListId;
@@ -72,13 +75,16 @@ export function applyTaskOp(items: TaskItem[], op: TaskOp): TaskItem[] {
   switch (op.op) {
     case 'add': {
       if (idx >= 0) break;
-      const { op: _op, opId: _id, at: _at, by: _by, done, doneAt, doneBy, history, ...fields } = op;
+      const { op: _op, opId: _id, at: _at, by: _by, done, doneAt, doneBy, history, position, ...fields } = op;
       void _op; void _id; void _at; void _by;
+      // Une clé provisoire pour l'affichage : la même que le serveur calculera
+      // (fin de liste, ou tête sur demande). Il la confirmera à la synchro.
+      const ord = typeof fields.ord === 'string' && fields.ord ? fields.ord : (position === 'debut' ? startKey(out, op.listId) : endKey(out, op.listId));
       out.push(assign({
         id: op.id, listId: op.listId, text: op.text, who: op.who ?? [], due: op.due ?? null, done: !!done, by, at,
         ...(done ? { doneAt: doneAt ?? at, doneBy: doneBy ?? by } : {}),
         ...(history?.length ? { history } : {}),
-      }, fields));
+      }, { ...fields, ord }));
       break;
     }
     case 'edit': {
@@ -86,8 +92,16 @@ export function applyTaskOp(items: TaskItem[], op: TaskOp): TaskItem[] {
       const { op: _op, opId: _id, at: _at, by: _by, id: _tid, ...fields } = op;
       void _op; void _id; void _at; void _by; void _tid;
       const next = assign(out[idx], fields);
-      // Toute retouche estampille « modifié », sauf un simple réordonnancement (pos seul).
-      out[idx] = Object.keys(fields).some((k) => k !== 'pos') ? { ...next, upBy: by, upAt: at } : next;
+      // Toute retouche estampille « modifié », sauf un simple rangement (clé d'ordre seule).
+      out[idx] = Object.keys(fields).some((k) => k !== 'ord') ? { ...next, upBy: by, upAt: at } : next;
+      break;
+    }
+    case 'move': {
+      if (idx < 0) break;
+      // Clé provisoire, relue sur les voisins locaux ; le serveur tranchera. Sans
+      // objet (référence absente, autre liste, déjà en place) : on ne bouge rien.
+      const k = moveKey(out, op.id, { avant: op.avant, apres: op.apres, position: op.position });
+      if (k != null) out[idx] = { ...out[idx], ord: k };
       break;
     }
     case 'done': {
@@ -145,16 +159,19 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
     case 'skip': return before && !before.done ? { op: 'edit', id: op.id, due: before.due } : null;
     case 'reopen': return before && before.done ? { op: 'done', id: op.id, ...(before.rec ? { occ: before.due || '', next: null } : {}) } : null;
     case 'add': return { op: 'remove', id: op.id };
+    case 'move':
+      // Annuler un rangement remet la clé d'avant (une clé connue, pas inventée).
+      return before && !before.done ? { op: 'edit', id: op.id, ord: before.ord ?? null } : null;
     case 'remove': {
       if (!before) return null;
-      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind, contractId, parentId, pos } = before;
+      const { id, listId, text, who, due, done, doneAt, doneBy, note, cat, time, shopListId, rec, history, remind, contractId, parentId, ord } = before;
       return {
         op: 'add', id, listId, text, who, due, done,
         ...(done ? { doneAt: doneAt ?? null, doneBy: doneBy ?? null } : {}),
         ...(note ? { note } : {}), ...(cat ? { cat } : {}), ...(time ? { time } : {}), ...(shopListId ? { shopListId } : {}),
         ...(rec ? { rec } : {}), ...(history?.length ? { history } : {}), ...(remind ? { remind } : {}),
         ...(contractId ? { contractId } : {}),
-        ...(parentId ? { parentId } : {}), ...(typeof pos === 'number' ? { pos } : {}),
+        ...(parentId ? { parentId } : {}), ...(typeof ord === 'string' && ord ? { ord } : {}),
       };
     }
     case 'edit': {
