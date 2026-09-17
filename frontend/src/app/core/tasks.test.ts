@@ -290,6 +290,29 @@ test('reorder déplace un élément et laisse le tableau intact quand les indice
   assert.deepEqual(reorder(['a', 'b', 'c'], -1, 0), ['a', 'b', 'c']);
 });
 
-test('se réordonnent à la main : le jour même et ce qui n’a pas de date, pas ce qui s’étale', () => {
-  assert.deepEqual(REORDERABLE, ['today', 'undated']);
+test('se réordonnent à la main : le jour même, ce qui n’a pas de date, et la liste manuelle ; pas ce qui s’étale', () => {
+  assert.deepEqual(REORDERABLE, ['today', 'undated', 'manuel']);
+});
+
+test('mode manuel : une liste à plat dans l’ordre choisi, les retards en bandeau daté en tête', () => {
+  const tasks = [
+    tache('futur', { due: '2026-09-20', ord: 'a3' }),
+    tache('sansdate', { ord: 'a1' }),
+    tache('retard-vieux', { due: '2026-08-01' }),
+    tache('aujourdhui', { due: TODAY, ord: 'a2' }),
+    tache('retard-recent', { due: '2026-09-01' }),
+  ];
+  const g = groupOpen(tasks, TODAY, 'taches', 'manuel');
+  // Un bandeau « En retard » daté (récent devant), puis tout le reste à plat
+  // dans l'ordre manuel (a1 < a2 < a3), la date n'y décidant plus.
+  assert.deepEqual(g.map((x) => x.key), ['late', 'manuel']);
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['retard-recent', 'retard-vieux']);
+  assert.deepEqual(g[1].lines.map((l) => l.task.id), ['sansdate', 'aujourdhui', 'futur']);
+});
+
+test('mode manuel sans aucun retard : une seule liste, sans titre', () => {
+  const g = groupOpen([tache('b', { ord: 'a1' }), tache('a', { ord: 'a0' })], TODAY, 'taches', 'manuel');
+  assert.deepEqual(g.map((x) => x.key), ['manuel']);
+  assert.equal(g[0].label, '', 'pas de titre quand c’est l’unique groupe');
+  assert.deepEqual(g[0].lines.map((l) => l.task.id), ['a', 'b']);
 });

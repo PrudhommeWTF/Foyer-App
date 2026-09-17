@@ -406,6 +406,15 @@ import { TaskComposerComponent } from './composer';
             <button [class.active]="store.ui().lScope !== 'shared'" (click)="store.patch({ lScope: store.currentMemberId() || 'shared' })">Moi seulement</button>
           </div>
           @if (store.ui().lScope !== 'shared') { <div class="plan-hint">Cachée aux autres membres, pas chiffrée.</div> }
+
+          @if (store.ui().lKind === 'taches' || store.ui().lKind === 'corvees') {
+            <div class="field-label mt">Ordre des tâches</div>
+            <div class="seg">
+              <button [class.active]="store.ui().lOrder !== 'manuel'" (click)="store.patch({ lOrder: 'echeance' })">Par échéance</button>
+              <button [class.active]="store.ui().lOrder === 'manuel'" (click)="store.patch({ lOrder: 'manuel' })">Manuel</button>
+            </div>
+            <div class="plan-hint">{{ store.ui().lOrder === 'manuel' ? 'Vous rangez les tâches à la main (glisser-déposer ou à la voix). Les tâches en retard remontent quand même par date, pour ne pas être enterrées.' : 'Les tâches se rangent par date (aujourd’hui, en retard, à venir), l’ordre manuel départageant.' }}</div>
+          }
         }
 
         <div class="field-label mt">Couleur</div>
@@ -643,7 +652,7 @@ export class TachesScreen {
     if (a === 'me') return this.mine();
     return this.d().tasks.filter((t) => t.listId === a);
   });
-  groups = computed<TaskGroup[]>(() => groupOpen(this.scoped(), this.store.todayStr(), this.activeObj()?.kind || 'taches'));
+  groups = computed<TaskGroup[]>(() => groupOpen(this.scoped(), this.store.todayStr(), this.activeObj()?.kind || 'taches', this.activeObj()?.order === 'manuel' ? 'manuel' : 'echeance'));
   done = computed(() => doneTasks(this.scoped()));
   editing = computed(() => { const id = this.store.ui().taskEdit; return id ? this.store.task(id) || null : null; });
 

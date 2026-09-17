@@ -183,26 +183,44 @@ export function todayTasks(tasks: TaskItem[], today: string, max: number, relega
 
 // ---- l'ordre de l'écran -------------------------------------------------------
 
-export type TaskGroupKey = 'today' | 'late' | 'soon' | 'undated';
+export type TaskGroupKey = 'today' | 'late' | 'soon' | 'undated' | 'manuel';
 export interface TaskGroup { key: TaskGroupKey; label: string; lines: TaskLine[] }
 
 /**
- * Les tâches ouvertes d'un écran, par groupe. Le jour même d'abord, puis le
- * retard (récent en tête), puis ce qui vient, puis ce qui n'a pas de date.
- * Une checklist se lit dans l'ordre où elle a été écrite : un seul groupe, sans
- * titre, du premier au dernier.
+ * Les tâches ouvertes d'un écran, par groupe. Deux modes de rangement (voir
+ * `TaskList.order`) :
+ *
+ *   - **'echeance'** (défaut) : le jour même d'abord, puis le retard (récent en
+ *     tête), puis ce qui vient, puis ce qui n'a pas de date. La date décide, et
+ *     l'ordre manuel ne fait que départager.
+ *   - **'manuel'** : une seule liste dans l'ordre manuel, la date devenant une
+ *     étiquette. Les tâches **en retard** remontent quand même en un bandeau
+ *     daté en tête : un rangement à la main ne doit jamais enterrer une échéance
+ *     dépassée.
+ *
+ * Une checklist se lit dans l'ordre écrit : un seul groupe manuel, sans titre.
  *
  * Les sous-tâches viennent sous leur parent au lieu de faire une ligne. Celle
  * dont le parent n'est pas dans `tasks` en fait une : c'est ce qui rend la vue
  * « À moi » juste, et ce qui empêche une sous-tâche de disparaître.
  */
-export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'taches'): TaskGroup[] {
+export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'taches', order: 'manuel' | 'echeance' = 'echeance'): TaskGroup[] {
   const byId = new Map((tasks || []).map((t) => [t.id, t]));
   const line = (task: TaskItem, late = 0): TaskLine => ({ task, late, subs: subtasksOf(tasks, task.id) });
   const open = (tasks || []).filter((t) => !t.done && isRoot(t, byId));
   if (kind === 'checklist') {
     const lines = open.slice().sort(byManual).map((t) => line(t));
-    return lines.length ? [{ key: 'undated', label: '', lines }] : [];
+    return lines.length ? [{ key: 'manuel', label: '', lines }] : [];
+  }
+  if (order === 'manuel') {
+    const late = open.filter((t) => standing(t, today) === 'late').map((t) => line(t, lateOf(t, today))).sort((a, b) => a.late - b.late);
+    const rest = open.filter((t) => standing(t, today) !== 'late').sort(byManual).map((t) => line(t));
+    const groups: TaskGroup[] = [
+      { key: 'late', label: 'En retard', lines: late },
+      // Un titre seulement s'il y a un bandeau au-dessus dont il faut se démarquer.
+      { key: 'manuel', label: late.length ? 'À faire' : '', lines: rest },
+    ];
+    return groups.filter((g) => g.lines.length);
   }
   const groups: TaskGroup[] = [
     { key: 'today', label: 'Aujourd’hui', lines: open.filter((t) => standing(t, today) === 'now').sort(byManualThenTime).map((t) => line(t)) },
@@ -214,15 +232,11 @@ export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'ta
 }
 
 /**
- * Les groupes qui se rangent à la main.
- *
- * Le jour même en fait partie : ses tâches sont toutes du même jour, l'heure ne
- * dit donc pas dans quel ordre on s'y prend, et l'ordre manuel y passe devant.
- * « En retard » garde son classement par ancienneté et « À venir » reste
- * chronologique : là, la date est l'information utile, et une poignée y
- * cacherait le calendrier au lieu de servir.
+ * Les groupes qui se rangent à la main : le jour même et les tâches sans date
+ * (mode échéance), la liste à plat (mode manuel), et la checklist. « En retard »
+ * et « À venir » restent chronologiques, une poignée y cacherait le calendrier.
  */
-export const REORDERABLE: TaskGroupKey[] = ['today', 'undated'];
+export const REORDERABLE: TaskGroupKey[] = ['today', 'undated', 'manuel'];
 
 /** Les tâches faites, la plus récente d'abord. Les sous-tâches restent sous leur parent. */
 export function doneTasks(tasks: TaskItem[]): TaskItem[] {
