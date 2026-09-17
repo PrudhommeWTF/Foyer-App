@@ -20,12 +20,13 @@
 //     les compteurs et ne fait pas de ligne à elle seule. Sauf quand son parent
 //     n'est pas dans ce qu'on regarde (la vue « À moi ») : elle redevient alors
 //     une ligne, plutôt que de disparaître.
-//   - L'**ordre manuel** (`pos`, posé au glisser-déposer) décide dans le jour
-//     même, dans une checklist, dans les tâches sans date et sous un parent.
-//     Sur ce qui s'étale (« En retard », « À venir »), la date passe devant :
-//     elle est l'information utile, et l'ordre manuel n'y fait que départager.
+//   - L'**ordre manuel** (clé `ord`, posée au glisser-déposer ou à la voix)
+//     décide dans le jour même, dans une checklist, dans les tâches sans date et
+//     sous un parent. Sur ce qui s'étale (« En retard », « À venir »), la date
+//     passe devant : elle est l'information utile, l'ordre manuel n'y départage.
 import { addDaysIso, normText, parseDay, weekdayOf } from './helpers';
 import { ListKind, Remind, TaskItem, TaskList } from './models';
+import { byOrd } from './task-order';
 import { windowEnd } from './recurrence';
 
 /**
@@ -71,23 +72,21 @@ const isRoot = (t: TaskItem, byId: Map<string, TaskItem>): boolean => {
   const parent = byId.get(t.parentId);
   return !parent || (parent.done && !t.done);
 };
-/** L'ordre manuel d'abord ; sans lui, la tâche passe après celles qui en ont un. */
-const byPos = (a: TaskItem, b: TaskItem): number => (a.pos ?? Number.MAX_SAFE_INTEGER) - (b.pos ?? Number.MAX_SAFE_INTEGER);
+/** L'ordre manuel d'abord (clé fractionnaire, id départageant) ; voir task-order.ts. */
+const byManual = byOrd;
 /** La date, puis l'heure, l'ordre manuel départageant. Pour ce qui s'étale sur plusieurs jours. */
 const byDueThenTime = (a: TaskItem, b: TaskItem): number =>
-  (a.due || '').localeCompare(b.due || '') || (a.time || '99').localeCompare(b.time || '99') || byPos(a, b);
+  (a.due || '').localeCompare(b.due || '') || (a.time || '99').localeCompare(b.time || '99') || byManual(a, b);
 /**
  * L'ordre manuel devant tout le reste. C'est celui du jour même : les tâches y
  * sont toutes du même jour, donc l'heure ne dit pas l'ordre dans lequel on s'y
  * prend. Une tâche jamais déplacée passe après celles qui l'ont été, à son heure.
  */
-const byManualThenTime = (a: TaskItem, b: TaskItem): number => byPos(a, b) || byDueThenTime(a, b);
-/** Les plus récentes d'abord : ce qu'on vient de saisir est ce qu'on cherche. */
-const newestFirst = (a: TaskItem, b: TaskItem): number => (b.at || '').localeCompare(a.at || '');
+const byManualThenTime = (a: TaskItem, b: TaskItem): number => byManual(a, b) || byDueThenTime(a, b);
 
 /** Les sous-tâches d'une tâche, dans leur ordre : l'ordre manuel, puis la saisie. */
 export function subtasksOf(tasks: TaskItem[], parentId: string): TaskItem[] {
-  return (tasks || []).filter((t) => t.parentId === parentId).sort((a, b) => byPos(a, b) || (a.at || '').localeCompare(b.at || ''));
+  return (tasks || []).filter((t) => t.parentId === parentId).sort(byManual);
 }
 
 /** Combien de sous-tâches faites sur combien. Null quand il n'y en a pas : rien à afficher. */
@@ -164,7 +163,7 @@ export function todayTasks(tasks: TaskItem[], today: string, max: number, relega
     .map((task) => ({ task, late: lateOf(task, today), subs: [] }))
     .sort((a, b) => a.late - b.late);
   const now = open.filter((t) => standing(t, today) === 'now').sort(byManualThenTime).map((task) => ({ task, late: 0, subs: [] }));
-  const undated = open.filter((t) => !t.due).sort(byPos).map((task) => ({ task, late: 0, subs: [] }));
+  const undated = open.filter((t) => !t.due).sort(byManual).map((task) => ({ task, late: 0, subs: [] }));
   const later = open.filter((t) => standing(t, today) === 'soon');
 
   const lines: TaskLine[] = [
@@ -184,46 +183,60 @@ export function todayTasks(tasks: TaskItem[], today: string, max: number, relega
 
 // ---- l'ordre de l'écran -------------------------------------------------------
 
-export type TaskGroupKey = 'today' | 'late' | 'soon' | 'undated';
+export type TaskGroupKey = 'today' | 'late' | 'soon' | 'undated' | 'manuel';
 export interface TaskGroup { key: TaskGroupKey; label: string; lines: TaskLine[] }
 
 /**
- * Les tâches ouvertes d'un écran, par groupe. Le jour même d'abord, puis le
- * retard (récent en tête), puis ce qui vient, puis ce qui n'a pas de date.
- * Une checklist se lit dans l'ordre où elle a été écrite : un seul groupe, sans
- * titre, du premier au dernier.
+ * Les tâches ouvertes d'un écran, par groupe. Deux modes de rangement (voir
+ * `TaskList.order`) :
+ *
+ *   - **'echeance'** (défaut) : le jour même d'abord, puis le retard (récent en
+ *     tête), puis ce qui vient, puis ce qui n'a pas de date. La date décide, et
+ *     l'ordre manuel ne fait que départager.
+ *   - **'manuel'** : une seule liste dans l'ordre manuel, la date devenant une
+ *     étiquette. Les tâches **en retard** remontent quand même en un bandeau
+ *     daté en tête : un rangement à la main ne doit jamais enterrer une échéance
+ *     dépassée.
+ *
+ * Une checklist se lit dans l'ordre écrit : un seul groupe manuel, sans titre.
  *
  * Les sous-tâches viennent sous leur parent au lieu de faire une ligne. Celle
  * dont le parent n'est pas dans `tasks` en fait une : c'est ce qui rend la vue
  * « À moi » juste, et ce qui empêche une sous-tâche de disparaître.
  */
-export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'taches'): TaskGroup[] {
+export function groupOpen(tasks: TaskItem[], today: string, kind: ListKind = 'taches', order: 'manuel' | 'echeance' = 'echeance'): TaskGroup[] {
   const byId = new Map((tasks || []).map((t) => [t.id, t]));
   const line = (task: TaskItem, late = 0): TaskLine => ({ task, late, subs: subtasksOf(tasks, task.id) });
   const open = (tasks || []).filter((t) => !t.done && isRoot(t, byId));
   if (kind === 'checklist') {
-    const lines = open.slice().sort((a, b) => byPos(a, b) || (a.at || '').localeCompare(b.at || '')).map((t) => line(t));
-    return lines.length ? [{ key: 'undated', label: '', lines }] : [];
+    const lines = open.slice().sort(byManual).map((t) => line(t));
+    return lines.length ? [{ key: 'manuel', label: '', lines }] : [];
+  }
+  if (order === 'manuel') {
+    const late = open.filter((t) => standing(t, today) === 'late').map((t) => line(t, lateOf(t, today))).sort((a, b) => a.late - b.late);
+    const rest = open.filter((t) => standing(t, today) !== 'late').sort(byManual).map((t) => line(t));
+    const groups: TaskGroup[] = [
+      { key: 'late', label: 'En retard', lines: late },
+      // Un titre seulement s'il y a un bandeau au-dessus dont il faut se démarquer.
+      { key: 'manuel', label: late.length ? 'À faire' : '', lines: rest },
+    ];
+    return groups.filter((g) => g.lines.length);
   }
   const groups: TaskGroup[] = [
     { key: 'today', label: 'Aujourd’hui', lines: open.filter((t) => standing(t, today) === 'now').sort(byManualThenTime).map((t) => line(t)) },
     { key: 'late', label: 'En retard', lines: open.filter((t) => standing(t, today) === 'late').map((t) => line(t, lateOf(t, today))).sort((a, b) => a.late - b.late) },
     { key: 'soon', label: 'À venir', lines: open.filter((t) => standing(t, today) === 'soon').sort(byDueThenTime).map((t) => line(t)) },
-    { key: 'undated', label: 'Sans date', lines: open.filter((t) => !t.due).sort((a, b) => byPos(a, b) || newestFirst(a, b)).map((t) => line(t)) },
+    { key: 'undated', label: 'Sans date', lines: open.filter((t) => !t.due).sort(byManual).map((t) => line(t)) },
   ];
   return groups.filter((g) => g.lines.length);
 }
 
 /**
- * Les groupes qui se rangent à la main.
- *
- * Le jour même en fait partie : ses tâches sont toutes du même jour, l'heure ne
- * dit donc pas dans quel ordre on s'y prend, et l'ordre manuel y passe devant.
- * « En retard » garde son classement par ancienneté et « À venir » reste
- * chronologique : là, la date est l'information utile, et une poignée y
- * cacherait le calendrier au lieu de servir.
+ * Les groupes qui se rangent à la main : le jour même et les tâches sans date
+ * (mode échéance), la liste à plat (mode manuel), et la checklist. « En retard »
+ * et « À venir » restent chronologiques, une poignée y cacherait le calendrier.
  */
-export const REORDERABLE: TaskGroupKey[] = ['today', 'undated'];
+export const REORDERABLE: TaskGroupKey[] = ['today', 'undated', 'manuel'];
 
 /** Les tâches faites, la plus récente d'abord. Les sous-tâches restent sous leur parent. */
 export function doneTasks(tasks: TaskItem[]): TaskItem[] {

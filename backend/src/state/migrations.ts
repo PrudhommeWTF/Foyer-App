@@ -18,11 +18,12 @@
 //     silence.
 import fs from 'fs';
 import path from 'path';
+import { generateNKeysBetween } from 'fractional-indexing';
 import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 11;
+export const STATE_VERSION = 12;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -489,6 +490,47 @@ export const STATE_MIGRATIONS: StateMigration[] = [
         }
       }
       if (inconnus) ctx.log(`Agenda : ${inconnus} événement(s) attribué(s) à un membre disparu, remis sans participant.`);
+    },
+  },
+  {
+    version: 12,
+    label: 'tâches : ordre manuel en clé fractionnaire',
+    up: (doc, ctx) => {
+      // L'ordre manuel passe d'un entier `pos` (qui forçait à réécrire les
+      // voisins) à une clé texte fractionnaire `ord` (voir tasks/ordering.ts).
+      // Chaque tâche reçoit une clé dans l'ordre d'affichage courant, par liste,
+      // pour que rien ne bouge à l'oeil. Rejouable : une tâche déjà classée
+      // n'est pas retouchée, et `pos` disparu ne se re-supprime pas.
+      const tasks = arr(doc['tasks']);
+      const byList = new Map<string, any[]>();
+      for (const t of tasks) {
+        const lid = String(t['listId'] ?? '');
+        if (!byList.has(lid)) byList.set(lid, []);
+        byList.get(lid)!.push(t);
+      }
+      const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number.MAX_SAFE_INTEGER);
+      let classees = 0;
+      for (const group of byList.values()) {
+        const sansCle = group.filter((t) => !(typeof t['ord'] === 'string' && t['ord']));
+        if (!sansCle.length) continue;
+        // Ordre d'affichage courant : l'ordre manuel entier hérité (pos) d'abord,
+        // puis la date, puis la création, l'identifiant départageant.
+        sansCle.sort((a, b) =>
+          (num(a['pos']) - num(b['pos'])) ||
+          String(a['due'] ?? '9999').localeCompare(String(b['due'] ?? '9999')) ||
+          String(a['at'] ?? '').localeCompare(String(b['at'] ?? '')) ||
+          String(a['id'] ?? '').localeCompare(String(b['id'] ?? '')));
+        // Les clés nouvelles se posent après celles qui existent déjà dans la
+        // liste (cas d'un document à moitié converti après une restauration).
+        const keyed = group
+          .map((t) => (typeof t['ord'] === 'string' ? String(t['ord']) : ''))
+          .filter(Boolean)
+          .sort();
+        const keys = generateNKeysBetween(keyed.length ? keyed[keyed.length - 1] : null, null, sansCle.length);
+        sansCle.forEach((t, i) => { t['ord'] = keys[i]; classees++; });
+      }
+      for (const t of tasks) if ('pos' in t) delete t['pos'];
+      if (classees) ctx.log(`Tâches : ${classees} clé(s) d'ordre attribuée(s) dans l'ordre d'affichage courant.`);
     },
   },
 ];

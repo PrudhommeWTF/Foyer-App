@@ -44,7 +44,8 @@ interface TaskList {
   id; name; color; icon;
   kind: ListKind;      // seules les listes « taches » sont l'affaire du jour
   scope: string;       // 'shared', ou l'id du membre pour une liste privée
-  position: number;
+  position: number;    // ordre de la liste parmi les listes
+  order?: 'manuel' | 'echeance'; // rangement des tâches (défaut absent = échéance)
   archived?: boolean;
   // Listes de préparation (kind 'preparation') uniquement, voir plus bas.
   forMember?: string | null;     // membre concerné par le départ
@@ -69,7 +70,7 @@ interface TaskItem {
   shopListId?: string | null; // lien vers une liste de courses
   contractId?: number | null; // contrat du module Finances (échéance, piste d'économie)
   parentId?: string | null;   // sous-tâche : un seul niveau, dans la liste du parent
-  pos?: number;               // ordre manuel, posé au glisser-déposer
+  ord?: string;               // clé d'ordre manuel (indexation fractionnaire), voir « L'ordre manuel »
   rec?; history?; remind?;    // voir « La récurrence » et « Rappels »
 }
 ```
@@ -93,6 +94,57 @@ Ce que ces choix impliquent à l'écran :
 - **Une sous-tâche est un détail, pas une tâche de plus.** Elle ne compte dans
   aucun compteur, ne monte pas sur l'accueil, et ne fait pas de ligne à elle
   seule. Voir « Sous-tâches » plus bas.
+
+## L'ordre manuel
+
+Une tâche peut être prioritaire sans être datée, et une tâche datée dans trois
+semaines peut être celle qu'on prépare maintenant. L'ordre des tâches est donc
+**indépendant de l'échéance**, réglable à la main (glisser-déposer) et à la voix
+(outil MCP `tache_deplacer`, voir docs/assistants.md).
+
+**La clé.** Chaque tâche porte une clé texte `ord` en **indexation
+fractionnaire** (base 62, bibliothèque `fractional-indexing`, voir
+`backend/src/tasks/ordering.ts` et son miroir `frontend/.../task-order.ts`).
+Insérer une tâche entre deux autres fabrique une clé située **entre** leurs deux
+clés : une seule tâche est touchée à chaque déplacement, jamais ses voisines.
+C'est ce qui rend le rangement sûr quand deux appareils réorganisent la même
+liste en même temps, là où une colonne d'entiers aurait forcé à tout réécrire.
+Le tri se fait sur le couple **(clé, identifiant)**, jamais sur la clé seule :
+deux clients hors ligne peuvent produire la même clé, et l'affichage ne doit pas
+osciller. Une tâche **sans clé** (client d'une version antérieure) passe en fin
+de liste, sans casser le tri.
+
+**Le déplacement.** Une opération ciblée `move` (dans le flux `hh_task_ops`,
+jamais un PUT du document) exprimée en **relatif** : `{ avant: id }`,
+`{ apres: id }`, ou `{ position: 'debut' | 'fin' }`. Le client ne fournit
+**jamais** de clé : le serveur relit les clés des voisins réels au moment du
+traitement et calcule la nouvelle lui-même. Refus motivés (référence inexistante,
+référence dans une autre liste, tâche terminée), neutre quand la tâche y est
+déjà. L'échéance n'est **jamais** touchée par un déplacement.
+
+**Deux modes, par liste** (`TaskList.order`) :
+
+| Mode | Ce que l'écran montre |
+| --- | --- |
+| `echeance` (défaut) | Groupes Aujourd'hui / En retard / À venir / Sans date. La date décide, la clé départage. |
+| `manuel` | Une seule liste à plat dans l'ordre choisi. Les tâches **en retard** remontent quand même dans un bandeau daté en tête, pour ne jamais enterrer une échéance dépassée. |
+
+Une **checklist** est manuelle par nature (un seul groupe, sans titre). Dans les
+vues qui mêlent plusieurs listes (« Toutes », « À moi ») et dans le flux ICS, le
+mode manuel d'une liste ne s'applique pas : ces vues répondent à une question de
+temps. De même, l'outil MCP `taches_liste` filtré sur « retard » ou
+« aujourdhui » reste chronologique.
+
+**Changement de liste.** Une tâche déplacée vers une autre liste reçoit une clé
+de **fin** de la liste d'arrivée : elle ne connaît pas l'ordre de sa nouvelle
+maison, on ne l'insère donc pas au milieu.
+
+**Migration.** La migration d'état 12 attribue une clé à chaque tâche existante
+dans l'ordre d'affichage courant, par liste, pour que rien ne bouge à l'oeil le
+jour du déploiement. Elle est rejouable (une tâche déjà classée n'est pas
+retouchée). Toujours sauvegarder avant une montée de version (voir le README,
+section « Sauvegarde et restauration ») : le serveur écrit de lui-même une copie
+du document avant la première migration en attente.
 
 ## Listes de préparation
 

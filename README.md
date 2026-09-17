@@ -278,7 +278,9 @@ Procédures de restauration, vérification d'une sauvegarde et export CSV en lig
 [`docs/finances-architecture.md`](docs/finances-architecture.md#14-sauvegarde-et-restauration).
 
 Le document d'état est migré au démarrage lorsque sa forme change. Une **copie du document
-d'origine** est écrite dans `<données>/backups/` avant toute transformation.
+d'origine** est écrite dans `<données>/backups/` avant toute transformation. Prenez tout de même
+l'instantané shell ci-dessus **avant une montée de version** : c'est le filet qui couvre aussi
+la base relationnelle des Finances, hors du document.
 
 ## 📅 Calendrier partagé et flux ICS
 

@@ -14,6 +14,8 @@
 // Ce fichier ne touche ni au disque ni au réseau : c'est ce qui permet de le
 // tester sur les cas tordus (rejeu, ordre inversé, liste supprimée sous les pieds).
 
+import { endKey, keyForMove, startKey } from './ordering';
+
 /**
  * Comment une tâche revient. Deux modes, et c'est le choix de fond du module :
  * `base: 'due'` à date fixe (les poubelles du mardi), `base: 'done'` à partir
@@ -94,24 +96,34 @@ export interface TaskItem {
    */
   parentId?: string | null;
   /**
-   * Ordre manuel dans la liste, posé par le glisser-déposer. Il décide là où
-   * aucune date ne décide (checklists, tâches sans date) et départage ailleurs.
+   * Clé d'ordre manuel dans la liste, en indexation fractionnaire (voir
+   * ordering.ts). Insérer entre deux tâches fabrique une clé entre leurs deux
+   * clés : une seule tâche est touchée à chaque déplacement. Absente, la tâche
+   * passe en fin de liste. Le tri se fait sur (ord, id), jamais sur `ord` seul.
    */
-  pos?: number;
+  ord?: string;
 }
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; parentId?: string | null; pos?: number | null;
+  contractId?: number | null; parentId?: string | null; ord?: string | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
 export type TaskOp =
-  /** `done` et compagnie sont acceptés à l'ajout : c'est ce qui permet d'annuler une suppression. */
-  | (Base & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null })
+  /** `done` et compagnie sont acceptés à l'ajout : c'est ce qui permet d'annuler une suppression. `position` crée en tête ou en fin ; `ord` restitue une clé connue (annulation d'une suppression). */
+  | (Base & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null; position?: 'debut' | 'fin' })
   | (Base & TaskFields & { op: 'edit'; id: string })
+  /**
+   * Range une tâche dans sa liste, par rapport à une autre : « avant » ou
+   * « après » une tâche de référence, ou aux extrémités (« début » / « fin »).
+   * Le client ne fournit jamais de clé : le serveur relit les voisins réels et
+   * calcule la nouvelle clé lui-même (voir ordering.ts). C'est ce qui rend le
+   * rangement sûr quand deux appareils réorganisent la même liste en même temps.
+   */
+  | (Base & { op: 'move'; id: string; avant?: string | null; apres?: string | null; position?: 'debut' | 'fin' | null })
   /**
    * Sur une série, `occ` est l'échéance que la coche solde et `next` la
    * suivante, calculée par le client. Une coche dont `occ` n'est plus
@@ -171,8 +183,6 @@ const NOTE_MAX = 2000;
 const CAT_MAX = 40;
 const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
 const HISTORY_MAX = 200;
-/** Bornes de l'ordre manuel : au-delà, ce n'est plus une position mais une erreur. */
-const POS_MAX = 10_000_000;
 
 /** Lit une règle de récurrence. Null pour « aucune », une raison si elle est illisible. */
 function readRec(v: unknown): { rec: TaskRec | null } | { reason: string } {
@@ -248,11 +258,14 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     // Une liste de courses disparue ne fait pas échouer la tâche : le lien tombe.
     f.shopListId = id && ctx.shopListIds.has(id) ? id : null;
   }
-  if (o['pos'] !== undefined) {
-    const n = o['pos'];
-    if (n === null || n === '') f.pos = null;
-    else if (typeof n === 'number' && Number.isFinite(n)) f.pos = Math.max(-POS_MAX, Math.min(POS_MAX, Math.round(n)));
-    else return { reason: 'Position illisible : ' + str(n) };
+  if (o['ord'] !== undefined) {
+    const v = o['ord'];
+    if (v === null || v === '') f.ord = null;
+    // Une clé d'ordre est base 62 (voir ordering.ts). Ce champ ne sert qu'à
+    // restituer une clé connue (annulation) : un déplacement passe par l'op `move`,
+    // qui calcule la clé côté serveur.
+    else if (typeof v === 'string' && /^[0-9A-Za-z]{1,200}$/.test(v)) f.ord = v;
+    else return { reason: 'Clé d’ordre illisible : ' + str(v) };
   }
   if (o['contractId'] !== undefined) {
     const v = o['contractId'];
@@ -265,10 +278,11 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
 
 /** Pose les champs lus sur une tâche, en retirant les clés vides plutôt que de les laisser à « ». */
 function assign(t: TaskItem, f: TaskFields): TaskItem {
-  // `pos` sort du lot : une tâche stockée porte un nombre ou rien, jamais null,
-  // et c'est ainsi que « retirer l'ordre manuel » s'écrit sans conversion forcée.
-  const { pos, ...rest } = { ...t, ...f };
-  const next: TaskItem = { ...rest, ...(typeof pos === 'number' ? { pos } : {}) };
+  // `ord` sort du lot : une tâche stockée porte une clé texte ou rien, jamais
+  // null, et c'est ainsi que « retirer l'ordre manuel » s'écrit sans forcer une
+  // conversion.
+  const { ord, ...rest } = { ...t, ...f };
+  const next: TaskItem = { ...rest, ...(typeof ord === 'string' && ord ? { ord } : {}) };
   if (!next.note) delete next.note;
   if (!next.cat) delete next.cat;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
@@ -373,7 +387,12 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         // d'application les laisse traîner.
         const parent = readParent(o['parentId'], out, bare);
         if ('reason' in parent) { skipped.push({ opId, reason: parent.reason }); break; }
-        out.push(assign(bare, { ...f, parentId: parent.parentId }));
+        // Toute tâche naît classée : une clé restituée (annulation d'une
+        // suppression), sinon une clé calculée pour la tête ou la fin de liste.
+        // Sans clé, elle tomberait en fin de tri, ce qu'on ne veut qu'en dernier
+        // recours (client d'une version antérieure).
+        const ord = typeof f.ord === 'string' && f.ord ? f.ord : (o['position'] === 'debut' ? startKey(out, f.listId) : endKey(out, f.listId));
+        out.push(assign(bare, { ...f, parentId: parent.parentId, ord }));
         applied.push(opId);
         break;
       }
@@ -391,9 +410,21 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         const p = o['parentId'] !== undefined ? readParent(o['parentId'], out, cible) : { parentId: out[idx].parentId ?? null };
         if ('reason' in p) { skipped.push({ opId, reason: p.reason }); break; }
         const next = assign(out[idx], { ...read.fields, parentId: p.parentId });
-        // Toute retouche estampille « modifié », sauf un simple réordonnancement (pos seul).
+        // Toute retouche estampille « modifié », sauf un simple réordonnancement (clé d'ordre seule).
         const changed = [...Object.keys(read.fields), ...(o['parentId'] !== undefined ? ['parentId'] : [])];
-        out[idx] = changed.some((k) => k !== 'pos') ? { ...next, upBy: by, upAt: at } : next;
+        out[idx] = changed.some((k) => k !== 'ord') ? { ...next, upBy: by, upAt: at } : next;
+        applied.push(opId);
+        break;
+      }
+      case 'move': {
+        // Une tâche disparue (supprimée par l'autre appareil pendant la coupure)
+        // n'est pas une erreur : le déplacement est sans objet.
+        if (idx < 0) { applied.push(opId); break; }
+        const res = keyForMove(out, id, { avant: trimmed(o['avant'], 80) || null, apres: trimmed(o['apres'], 80) || null, position: o['position'] === 'debut' ? 'debut' : o['position'] === 'fin' ? 'fin' : null });
+        if ('reason' in res) { skipped.push({ opId, reason: res.reason }); break; }
+        // Déjà à cette place : neutre, on acquitte sans rien écrire ni estamper « modifié ».
+        if ('noop' in res) { applied.push(opId); break; }
+        out[idx] = { ...out[idx], ord: res.key };
         applied.push(opId);
         break;
       }

@@ -101,6 +101,8 @@ export interface UiState {
   // listes de tâches
   activeList: string; listForm: boolean; listEditId: string | null;
   lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
+  /** Mode de rangement de la liste éditée : 'manuel' (ordre à la main) ou 'echeance' (par date). */
+  lOrder: 'manuel' | 'echeance';
   /** Champs propres aux listes de préparation (kind 'preparation'). */
   lForMember: string | null; lDeparture: string; lRemind: number;
   /** Lieu de destination lié à la préparation, ou '' : l'écran montre alors son inventaire. */
@@ -272,7 +274,7 @@ export function initialUi(): UiState {
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
     taskEdit: null, taskNew: false, showDone: false, showArchived: false, soonCollapsed: false,
-    activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
+    activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', lOrder: 'echeance', listDelId: null,
     lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
     tplOpen: false,
     placeForm: false, plEditId: null, plName: '', plColor: '#4E93B8', plIcon: 'voyage', plNote: '', placeDelId: null,

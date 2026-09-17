@@ -129,6 +129,14 @@ export interface TaskList {
   position: number;
   archived?: boolean;
   /**
+   * Comment les tâches se rangent dans cette liste. 'echeance' (défaut absent) :
+   * groupées et triées par date (aujourd'hui, en retard, à venir), l'ordre
+   * manuel ne faisant que départager. 'manuel' : une seule liste dans l'ordre
+   * manuel, la date devenant une étiquette, sauf les tâches en retard qui
+   * remontent triées par date pour ne jamais être enterrées.
+   */
+  order?: 'manuel' | 'echeance';
+  /**
    * Listes de préparation (kind 'preparation') : le trousseau d'un départ,
    * rempli à l'avance, coché au moment de partir, remis à zéro pour la fois
    * suivante. Ces quatre champs ne concernent qu'elles.
@@ -225,8 +233,12 @@ export interface TaskItem {
    * Une sous-tâche est un détail du parent : ni date, ni récurrence, ni rappel.
    */
   parentId?: string | null;
-  /** Ordre manuel, posé au glisser-déposer. Décide là où aucune date ne décide. */
-  pos?: number;
+  /**
+   * Clé d'ordre manuel dans la liste, en indexation fractionnaire (voir
+   * task-order.ts). Absente, la tâche passe en fin de liste. Le tri se fait sur
+   * (ord, id), jamais sur `ord` seul.
+   */
+  ord?: string;
 }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 /**

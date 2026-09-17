@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -587,7 +587,7 @@ test('migration 9 : les listes deviennent typées, partagées et ordonnées ; le
 
 test('migration 9 : rejouée sur un document déjà migré, elle ne change rien', () => {
   const migre = {
-    ...foyerTaches([{ id: 't1', text: 'Notaire', who: ['m1'], due: '2026-09-05', time: '18:00', done: true, doneBy: 'me', listId: 'l1', note: 'RDV' }],
+    ...foyerTaches([{ id: 't1', text: 'Notaire', who: ['m1'], due: '2026-09-05', time: '18:00', done: true, doneBy: 'me', listId: 'l1', note: 'RDV', ord: 'a0' }],
       [{ id: 'l1', name: 'Maison', kind: 'checklist', scope: 'm1', position: 3, archived: true }]),
     taskTemplates: [{ id: 'tp1', name: 'Valise', kind: 'checklist', items: ['Maillots'] }],
   };
@@ -672,4 +672,48 @@ test('un événement affecté à un membre disparu se retrouve sans participant'
 test('une affectation d’événement déjà en liste n’est pas retouchée', () => {
   const res = run({ members: [{ id: 'm1' }, { id: 'm2' }], events: [{ id: 'e1', date: '2026-09-01', time: '18:00', title: 'RDV', who: ['m1', 'm2'], recur: 'none' }] });
   assert.deepEqual(res.doc['events'][0].who, ['m1', 'm2']);
+});
+
+// ---- migration 12 : ordre manuel en clé fractionnaire ----------------------
+
+test('les tâches reçoivent une clé d’ordre dans l’ordre d’affichage, et pos disparaît', () => {
+  const doc: { tasks: any[] } = {
+    tasks: [
+      { id: 'a', listId: 'l1', text: 'A', pos: 2, due: '2026-09-10' },
+      { id: 'b', listId: 'l1', text: 'B', pos: 0, due: '2026-09-12' },
+      { id: 'c', listId: 'l1', text: 'C', pos: 1, due: null },
+      { id: 'x', listId: 'l2', text: 'X' },
+    ],
+  };
+  run(doc, 11);
+  // Clé posée partout, pos parti.
+  for (const t of doc['tasks']) {
+    assert.equal(typeof t.ord, 'string', `clé posée sur ${t.id}`);
+    assert.equal('pos' in t, false, `pos retiré de ${t.id}`);
+  }
+  // Ordre de l1 conforme à l'ordre manuel entier hérité (b, c, a).
+  const l1 = doc['tasks'].filter((t: any) => t.listId === 'l1').sort((p: any, q: any) => (p.ord < q.ord ? -1 : 1));
+  assert.deepEqual(l1.map((t: any) => t.id), ['b', 'c', 'a']);
+  // Les clés sont relatives à une liste : distinctes dans l1, mais l2 peut
+  // repartir de la même valeur sans que cela gêne (l'ordre n'est pas comparable).
+  assert.equal(new Set(l1.map((t: any) => t.ord)).size, 3, 'clés distinctes dans la liste');
+});
+
+test('migration 12 rejouée deux fois : résultat identique', () => {
+  const doc = {
+    tasks: [
+      { id: 'a', listId: 'l1', text: 'A', pos: 1 },
+      { id: 'b', listId: 'l1', text: 'B', pos: 0 },
+    ],
+  };
+  run(doc, 11);
+  const apres1 = JSON.stringify(doc);
+  run(doc, 11);
+  assert.equal(JSON.stringify(doc), apres1, 'un second passage ne touche plus rien');
+});
+
+test('une tâche sans pos ni clé reçoit tout de même une clé, rangée en fin', () => {
+  const doc: { tasks: any[] } = { tasks: [{ id: 'z', listId: 'l1', text: 'Z' }] };
+  run(doc, 11);
+  assert.equal(typeof doc['tasks'][0].ord, 'string');
 });

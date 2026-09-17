@@ -60,10 +60,10 @@ test('une retouche estampille « modifié » : dernier auteur et date, sans touc
   assert.equal(r.items[0].at, '2026-09-01T09:00:00Z');
 });
 
-test('un réordonnancement (pos seul) n’estampille pas « modifié »', () => {
-  const r = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 2, by: 'm1', at: '2026-09-03T20:00:00Z' })], ctx());
-  assert.equal(r.items[0].pos, 2);
-  assert.equal(r.items[0].upBy, undefined, 'glisser une tâche n’est pas une modification à afficher');
+test('poser une clé d’ordre seule (restitution) n’estampille pas « modifié »', () => {
+  const r = applyOps([task()], [op({ op: 'edit', id: 't1', ord: 'a5', by: 'm1', at: '2026-09-03T20:00:00Z' })], ctx());
+  assert.equal(r.items[0].ord, 'a5');
+  assert.equal(r.items[0].upBy, undefined, 'ranger une tâche n’est pas une modification à afficher');
   assert.equal(r.items[0].upAt, undefined);
 });
 
@@ -378,32 +378,18 @@ test('rattrapage : une sous-tâche dont le parent est parti avec sa liste remont
 });
 
 // ---- ordre manuel -----------------------------------------------------------------
+// La sémantique du rangement (op `move`, concurrence, cent insertions, refus)
+// vit dans tasks-ordering.test.ts. Ici, seulement la validation du champ `ord`
+// tel qu'un `edit` le pose (chemin de la restitution d'annulation).
 
-test('la position se pose, se retire, et une position illisible est refusée avec la raison', () => {
-  const r = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 3 })], ctx());
-  assert.equal(r.items[0].pos, 3);
-  const zero = applyOps(r.items, [op({ op: 'edit', id: 't1', pos: 0 })], ctx());
-  assert.equal(zero.items[0].pos, 0, 'zéro est une position, pas une absence');
-  const enleve = applyOps(r.items, [op({ op: 'edit', id: 't1', pos: null })], ctx());
-  assert.equal('pos' in enleve.items[0], false);
-  const faux = applyOps(r.items, [op({ op: 'edit', id: 't1', pos: 'premier' })], ctx());
+test('une clé d’ordre se pose, se retire, et une clé illisible est refusée avec la raison', () => {
+  const r = applyOps([task()], [op({ op: 'edit', id: 't1', ord: 'a3' })], ctx());
+  assert.equal(r.items[0].ord, 'a3');
+  const enleve = applyOps(r.items, [op({ op: 'edit', id: 't1', ord: null })], ctx());
+  assert.equal('ord' in enleve.items[0], false, 'null retire la clé, sans la laisser à vide');
+  const faux = applyOps(r.items, [op({ op: 'edit', id: 't1', ord: 'clé/illégale' })], ctx());
   assert.equal(faux.skipped.length, 1);
-  assert.match(faux.skipped[0].reason, /Position illisible/);
-});
-
-test('une position est arrondie et bornée : un client fantaisiste ne casse pas l’ordre', () => {
-  const r = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 2.6 })], ctx());
-  assert.equal(r.items[0].pos, 3);
-  const grand = applyOps([task()], [op({ op: 'edit', id: 't1', pos: 1e12 })], ctx());
-  assert.equal(grand.items[0].pos, 10_000_000);
-});
-
-test('deux appareils qui réordonnent en même temps : le dernier lot reçu fait foi, sans rien perdre', () => {
-  const depart = [task({ id: 'a', pos: 0 }), task({ id: 'b', pos: 1 }), task({ id: 'c', pos: 2 })];
-  const un = applyOps(depart, [op({ op: 'edit', id: 'c', pos: 0 }), op({ op: 'edit', id: 'a', pos: 1 })], ctx());
-  const deux = applyOps(un.items, [op({ op: 'edit', id: 'b', pos: 0 }), op({ op: 'edit', id: 'c', pos: 1 })], ctx());
-  assert.deepEqual(deux.items.map((t) => [t.id, t.pos]), [['a', 1], ['b', 0], ['c', 1]]);
-  assert.equal(deux.items.length, 3, 'aucune tâche perdue dans la bagarre');
+  assert.match(faux.skipped[0].reason, /Clé d’ordre illisible/);
 });
 
 // ---- remise à zéro d'une liste de préparation ------------------------------

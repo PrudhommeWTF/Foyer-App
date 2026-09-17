@@ -12,6 +12,8 @@ import { getHousehold, db, saveHousehold } from '../db';
 import { HouseholdState, EventItem, Recipe } from '../models';
 import { applyShoppingOps } from '../shopping/repo';
 import { applyTaskOps } from '../tasks/repo';
+import { TaskItem } from '../tasks/ops';
+import { byOrd, orderedOf } from '../tasks/ordering';
 import { FALLBACK_AISLE_NAMES } from '../shopping/ops';
 import { addDaysIso, publishedSlotOccurrences } from '../schedule';
 import { effectiveSetting } from '../settings/repo';
@@ -45,6 +47,36 @@ const memberName = (s: HouseholdState, id: string): string => s.members.find((m)
 /** Les listes de tâches visibles pour ce membre : partagées, ou privées lui appartenant. */
 function visibleTaskLists(s: HouseholdState, ctx: McpCtx) {
   return (s.taskLists || []).filter((l) => !l.archived && (l.scope === 'shared' || l.scope === ctx.memberId));
+}
+
+/**
+ * Résout une tâche désignée par identifiant OU par intitulé, avec correspondance
+ * approchée : à la voix, on ne dicte jamais un identifiant. On cherche, dans les
+ * listes visibles et parmi les tâches ouvertes (pas les sous-tâches), l'identifiant
+ * exact, puis l'intitulé exact, puis l'intitulé qui contient les mots dictés. En
+ * cas d'ambiguïté, on rend les candidats et on ne devine pas.
+ */
+type TaskResolution = { id: string } | { candidates: TaskItem[] } | { none: true };
+function resolveTask(s: HouseholdState, ctx: McpCtx, query: string): TaskResolution {
+  const q = norm(query);
+  if (!q) return { none: true };
+  const listIds = new Set(visibleTaskLists(s, ctx).map((l) => l.id));
+  const open = (s.tasks || []).filter((t) => listIds.has(t.listId) && !t.done && !t.parentId);
+  const byId = open.find((t) => t.id === query.trim());
+  if (byId) return { id: byId.id };
+  const exact = open.filter((t) => norm(t.text) === q);
+  if (exact.length === 1) return { id: exact[0].id };
+  if (exact.length > 1) return { candidates: exact };
+  const approx = open.filter((t) => norm(t.text).includes(q));
+  if (approx.length === 1) return { id: approx[0].id };
+  if (approx.length > 1) return { candidates: approx };
+  return { none: true };
+}
+
+/** Le texte d'ambiguïté : la liste des candidats avec leur identifiant, pour que l'assistant précise. */
+function candidatsTexte(s: HouseholdState, query: string, candidates: TaskItem[]): string {
+  const lignes = candidates.slice(0, 8).map((t) => `- ${t.text} [${t.id}] (${s.taskLists?.find((l) => l.id === t.listId)?.name || 'Tâches'})`);
+  return `Plusieurs tâches correspondent à « ${query} ». Précisez laquelle (par son identifiant) :\n${lignes.join('\n')}`;
 }
 
 /** Résout des prénoms en identifiants de membres. Rend les inconnus pour le dire à l'assistant. */
@@ -136,18 +168,35 @@ export function tachesListe(ctx: McpCtx, quand: 'aujourdhui' | 'semaine' | 'reta
   }
   const listIds = new Set(lists.map((l) => l.id));
   const listName2 = (id: string): string => lists.find((l) => l.id === id)?.name || 'Tâches';
+  // Le rang de chaque tâche dans l'ordre manuel de sa liste (racines ouvertes),
+  // pour que l'assistant puisse dire « elle est en troisième position » et
+  // raisonner sur un déplacement relatif.
+  const rang = new Map<string, { r: number; t: number }>();
+  for (const l of lists) {
+    const ordered = orderedOf(s.tasks || [], l.id).filter((t) => !t.done && !t.parentId);
+    ordered.forEach((t, i) => rang.set(t.id, { r: i + 1, t: ordered.length }));
+  }
   let tasks = (s.tasks || []).filter((t) => listIds.has(t.listId) && !t.done && !t.parentId);
   if (quand === 'aujourdhui') tasks = tasks.filter((t) => t.due === today);
   else if (quand === 'semaine') tasks = tasks.filter((t) => t.due && t.due >= today && t.due <= weekEnd);
   else if (quand === 'retard') tasks = tasks.filter((t) => t.due && t.due < today);
   if (!tasks.length) return 'Aucune tâche ouverte pour ce filtre.';
+  // « retard » et « aujourd'hui » répondent à une question de temps : elles
+  // restent chronologiques. « Toutes » sort dans l'ordre manuel du foyer.
+  if (quand === 'retard' || quand === 'aujourdhui' || quand === 'semaine') {
+    tasks = tasks.slice().sort((a, b) => (a.due || '').localeCompare(b.due || '') || (a.time || '99').localeCompare(b.time || '99'));
+  } else {
+    tasks = tasks.slice().sort(byOrd);
+  }
   const line = (t: (typeof tasks)[number]): string => {
     const who = t.who.length ? ' · ' + t.who.map((id) => memberName(s, id)).join(', ') : '';
     const due = t.due ? ' · échéance ' + frDate(t.due, t.due < today || t.due.slice(0, 4) !== today.slice(0, 4)) + (t.time ? ' ' + t.time : '') : '';
     const serie = t.rec ? ' · série' : '';
-    return `- ${t.text} [${t.id}] (${listName2(t.listId)})${due}${who}${serie}`;
+    const rg = rang.get(t.id);
+    const pos = rg ? `${rg.r}/${rg.t} ` : '';
+    return `- ${pos}${t.text} [${t.id}] (${listName2(t.listId)})${due}${who}${serie}`;
   };
-  return `Tâches (${tasks.length}) :\n` + tasks.map(line).join('\n');
+  return `Tâches (${tasks.length}), rang sur total dans l’ordre du foyer :\n` + tasks.map(line).join('\n');
 }
 
 /** Occurrences d'un événement (récurrence simple) entre deux dates, en lignes prêtes à afficher. */
@@ -307,7 +356,7 @@ export function coursesCocher(ctx: McpCtx, ids: string[]): string {
   return parts.join(' ');
 }
 
-export function tacheCreer(ctx: McpCtx, args: { texte: string; liste?: string; echeance?: string; heure?: string; pour?: string[]; note?: string }): string {
+export function tacheCreer(ctx: McpCtx, args: { texte: string; liste?: string; echeance?: string; heure?: string; pour?: string[]; note?: string; position?: 'debut' | 'fin' }): string {
   const s = state();
   const texte = (args.texte || '').trim();
   if (!texte) return 'Donnez l’intitulé de la tâche.';
@@ -319,12 +368,14 @@ export function tacheCreer(ctx: McpCtx, args: { texte: string; liste?: string; e
   const { ids, unknown } = resolveMembers(s, args.pour || []);
   const at = new Date().toISOString();
   const id = genId('t');
+  const position = args.position === 'debut' ? 'debut' : 'fin';
   applyTaskOps([{
     op: 'add', opId: genId('op'), id, listId: list.id, text: texte,
     who: ids, due: args.echeance || null, time: args.heure || null, note: (args.note || '').trim() || undefined,
-    by: ctx.memberId, via: ctx.via, at,
+    position, by: ctx.memberId, via: ctx.via, at,
   }]);
-  const parts = [`Tâche créée dans « ${list.name} » : « ${texte} » [${id}]${args.echeance ? ' pour le ' + frDate(args.echeance, true) : ''}.`];
+  const ou = position === 'debut' ? ' en tête de liste' : '';
+  const parts = [`Tâche créée dans « ${list.name} »${ou} : « ${texte} » [${id}]${args.echeance ? ' pour le ' + frDate(args.echeance, true) : ''}.`];
   if (unknown.length) parts.push(`Prénoms non reconnus (non affectés) : ${unknown.join(', ')}.`);
   return parts.join(' ');
 }
@@ -337,6 +388,43 @@ export function tacheTerminer(ctx: McpCtx, id: string): string {
   if (t.done) return 'Cette tâche est déjà terminée.';
   applyTaskOps([{ op: 'done', opId: genId('op'), id, by: ctx.memberId, via: ctx.via, at: new Date().toISOString() }]);
   return `Tâche « ${t.text} » marquée terminée.`;
+}
+
+/**
+ * Range une tâche par rapport à une autre, sans toucher à son échéance. La tâche
+ * à déplacer et la référence se désignent par intitulé (à la voix) ou par
+ * identifiant. En cas d'ambiguïté, on rend les candidats plutôt que de deviner.
+ */
+export function tacheDeplacer(ctx: McpCtx, args: { tache: string; avant?: string; apres?: string; position?: 'debut' | 'fin' }): string {
+  const s = state();
+  const moved = resolveTask(s, ctx, args.tache || '');
+  if ('none' in moved) return `Aucune tâche ouverte ne correspond à « ${args.tache} ».`;
+  if ('candidates' in moved) return candidatsTexte(s, args.tache, moved.candidates);
+
+  let target: { avant?: string; apres?: string; position?: 'debut' | 'fin' };
+  if (args.position === 'debut' || args.position === 'fin') {
+    target = { position: args.position };
+  } else if ((args.avant && args.avant.trim()) || (args.apres && args.apres.trim())) {
+    const refQuery = (args.avant || args.apres)!.trim();
+    const ref = resolveTask(s, ctx, refQuery);
+    if ('none' in ref) return `Aucune tâche de référence ne correspond à « ${refQuery} ».`;
+    if ('candidates' in ref) return candidatsTexte(s, refQuery, ref.candidates);
+    if (ref.id === moved.id) return 'La tâche à déplacer et la référence sont la même : rien à faire.';
+    target = args.avant ? { avant: ref.id } : { apres: ref.id };
+  } else {
+    return 'Précisez où ranger la tâche : « avant » ou « après » une autre tâche, ou une position (« début » ou « fin »).';
+  }
+
+  const res = applyTaskOps([{ op: 'move', opId: genId('op'), id: moved.id, ...target, by: ctx.memberId, via: ctx.via, at: new Date().toISOString() }]);
+  if (res.skipped.length) return res.skipped[0].reason;
+
+  // Le rang après coup, dans l'ordre manuel de la liste.
+  const after = state();
+  const t = (after.tasks || []).find((x) => x.id === moved.id)!;
+  const ordered = orderedOf(after.tasks || [], t.listId).filter((x) => !x.done && !x.parentId);
+  const r = ordered.findIndex((x) => x.id === t.id) + 1;
+  const listName = after.taskLists?.find((l) => l.id === t.listId)?.name || 'Tâches';
+  return `Tâche « ${t.text} » rangée : ${r} sur ${ordered.length} dans « ${listName} » (échéance inchangée).`;
 }
 
 export function evenementCreer(ctx: McpCtx, args: { titre: string; date: string; heure?: string; fin?: string; lieu?: string; pour?: string[] }): string {

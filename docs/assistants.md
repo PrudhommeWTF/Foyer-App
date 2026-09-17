@@ -25,8 +25,17 @@ liste de courses, les tâches, l'agenda, le planning des repas, la recherche et
 le détail des recettes, la liste des membres.
 
 Écriture (jeton `write` seulement) : ajouter des courses, cocher des courses,
-créer une tâche, terminer une tâche, créer un événement, importer une recette
-depuis une adresse web.
+créer une tâche (au besoin en tête de liste), terminer une tâche, **ranger une
+tâche dans l'ordre du foyer** (`tache_deplacer`), créer un événement, importer
+une recette depuis une adresse web.
+
+L'ordre des tâches : chaque liste porte un ordre manuel (indexation
+fractionnaire), indépendant de l'échéance. `taches_liste` rend le **rang** de
+chaque tâche (« 3/7 »), et `tache_deplacer` la range **avant** ou **après** une
+autre (désignée par son intitulé, correspondance approchée) ou aux extrémités
+(« début » / « fin ») **sans jamais toucher à l'échéance**. En cas d'intitulé
+ambigu, l'outil rend les candidats au lieu de deviner. Exemple à la voix :
+« déplace le relevé des compteurs avant le rendez-vous notaire ».
 
 Ce que l'assistant **ne peut pas** faire, quelle que soit la portée : les
 **Finances** (lecture comme écriture), les **réglages**, la **gestion des
@@ -115,6 +124,9 @@ un assistant ».
 - « Qu'est-ce qu'on mange cette semaine ? »
 - « Ajoute des pâtes, du café et du beurre aux courses. »
 - « Crée une tâche : appeler le dentiste, pour vendredi, pour moi. »
+- « Crée en tête de liste : préparer les papiers de la voiture. »
+- « Déplace le relevé des compteurs avant le rendez-vous notaire. »
+- « Où en est ma liste de tâches ? » (chaque tâche sort avec son rang)
 - « Mets un rendez-vous mercredi à 9h30 : contrôle technique. »
 - « Cherche une recette de gratin et donne-moi les ingrédients. »
 

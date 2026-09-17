@@ -3,6 +3,7 @@ import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayl
 import { Mutation, asConflict, rebase } from './state-sync';
 import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Recipe, SchedSlot, SchedType, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
+import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { cardColor } from './cards';
 import { downloadBlob } from './download';
@@ -1666,20 +1667,28 @@ export class FoyerStore {
     if (!p || !t) return null;
     if (p.parentId) { this.toast('Une sous-tâche ne peut pas en avoir elle-même'); return null; }
     const id = uid('t');
-    const pos = this.subtasks(parentId).length;
-    this.pushTaskOps([{ op: 'add', id, listId: p.listId, text: t, who: [], due: null, parentId, pos }]);
+    // La clé d'ordre est posée par le serveur (fin de liste) ; une sous-tâche
+    // neuve se range donc après les autres, sans qu'on calcule d'index ici.
+    this.pushTaskOps([{ op: 'add', id, listId: p.listId, text: t, who: [], due: null, parentId }]);
     return id;
   }
 
   /**
-   * Le nouvel ordre après un glisser-déposer : les positions sont renumérotées
-   * de 0 à n, et seules celles qui bougent sont envoyées. Renuméroter tout
-   * ferait un lot de vingt opérations pour un déplacement d'un cran.
+   * Le rangement après un glisser-déposer : un seul déplacement relatif est
+   * envoyé (la tâche qui a bougé, et ce qu'elle suit), jamais une renumérotation
+   * de la liste. Le serveur calcule la clé fractionnaire sur les voisins réels.
    */
   reorderTasks(ids: readonly string[]): void {
-    const ops: TaskOpDraft[] = [];
-    ids.forEach((id, i) => { const t = this.task(id); if (t && t.pos !== i) ops.push({ op: 'edit', id, pos: i }); });
-    if (ops.length) this.taskOpsWithUndo(ops, 'Ordre modifié');
+    // `ids` est le nouvel ordre d'un groupe rendu par le glisser-déposer. On en
+    // déduit LA tâche qui a bougé et ce qu'elle suit désormais, pour n'émettre
+    // qu'un seul déplacement relatif : le serveur recalcule la clé sur les
+    // voisins réels, et deux appareils qui rangent en même temps ne s'écrasent pas.
+    const set = new Set(ids);
+    const old = (this.data()?.tasks || []).filter((t) => set.has(t.id)).sort(byOrd).map((t) => t.id);
+    const mv = singleMove(old, ids);
+    if (!mv) return;
+    const op: TaskOpDraft = mv.position ? { op: 'move', id: mv.id, position: mv.position } : { op: 'move', id: mv.id, apres: mv.apres! };
+    this.taskOpWithUndo(op, 'Tâche déplacée');
   }
 
   /** Passer l'occurrence courante d'une série sans la faire. */
@@ -1770,11 +1779,11 @@ export class FoyerStore {
 
   newTaskList(kind: ListKind = 'taches'): void {
     const icon = kind === 'taches' ? 'maison' : kind === 'preparation' ? 'valise' : 'checklist';
-    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: icon, lKind: kind, lScope: 'shared', lForMember: null, lDeparture: '', lRemind: 3, lPlace: '' });
+    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: icon, lKind: kind, lScope: 'shared', lOrder: 'echeance', lForMember: null, lDeparture: '', lRemind: 3, lPlace: '' });
   }
   editTaskList(id: string): void {
     const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return;
-    this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope,
+    this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope, lOrder: l.order === 'manuel' ? 'manuel' : 'echeance',
       lForMember: l.forMember ?? null, lDeparture: l.departure ?? '', lRemind: l.remindDaysBefore ?? 3, lPlace: l.placeId ?? '' });
   }
   /** Les champs propres à une liste de préparation, ou de quoi les effacer si elle n'en est pas (ou plus) une. */
@@ -1789,9 +1798,12 @@ export class FoyerStore {
     // Une liste de préparation est toujours partagée : l'enfant coche son sac.
     const scope = s.lKind === 'preparation' ? 'shared' : s.lScope;
     const extra = this.prepFields();
+    // Le mode manuel ne concerne que les tâches et les corvées ; ailleurs il est
+    // absent (échéance par défaut, la checklist étant manuelle par nature).
+    const order = (s.lKind === 'taches' || s.lKind === 'corvees') && s.lOrder === 'manuel' ? 'manuel' : undefined;
     if (s.listEditId) {
       const before = this._data()?.taskLists.find((l) => l.id === s.listEditId);
-      this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon, kind: s.lKind, scope, ...extra }; });
+      this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon, kind: s.lKind, scope, order, ...extra }; });
       this.toast('Liste modifiée');
       this.patch({ listForm: false, listEditId: null });
       // Nouveau départ : la date a changé et des affaires restent cochées de la
@@ -1802,7 +1814,7 @@ export class FoyerStore {
       }
       return;
     }
-    const id = this.createTaskList(name, s.lColor, s.lIcon, s.lKind, scope, extra);
+    const id = this.createTaskList(name, s.lColor, s.lIcon, s.lKind, scope, { ...extra, ...(order ? { order } : {}) });
     this.patch({ listForm: false, activeList: id });
     this.toast('Liste créée');
   }
