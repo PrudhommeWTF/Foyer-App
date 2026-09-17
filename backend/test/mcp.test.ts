@@ -134,4 +134,44 @@ describe('Serveur MCP', () => {
     await c.close();
     assert.ok(!/Cadeau surprise/.test(out), 'la tâche d’une liste privée d’autrui reste invisible');
   });
+
+  it('tache_creer en tête, tache_deplacer par intitulé (exact et approché), rang, et échéance inchangée', async () => {
+    const c = await connect(tokenWrite);
+    await c.callTool({ name: 'tache_creer', arguments: { texte: 'Relevé des compteurs', echeance: '2026-03-20' } });
+    await c.callTool({ name: 'tache_creer', arguments: { texte: 'Rendez-vous notaire' } });
+    const tete = textOf(await c.callTool({ name: 'tache_creer', arguments: { texte: 'Appeler la banque', position: 'debut' } }));
+    assert.match(tete, /en tête de liste/, 'création en tête annoncée');
+
+    // Intitulé approché (à la voix, jamais l'identifiant) : « compteurs » avant « notaire ».
+    const dep = textOf(await c.callTool({ name: 'tache_deplacer', arguments: { tache: 'compteurs', avant: 'notaire' } }));
+    assert.match(dep, /rangée/);
+    assert.match(dep, /échéance inchangée/);
+
+    // Intitulé exact : ranger « Appeler la banque » en fin.
+    const fin = textOf(await c.callTool({ name: 'tache_deplacer', arguments: { tache: 'Appeler la banque', position: 'fin' } }));
+    assert.match(fin, /rangée/);
+
+    const liste = textOf(await c.callTool({ name: 'taches_liste', arguments: { quand: 'toutes' } }));
+    await c.close();
+    const iReleve = liste.indexOf('Relevé des compteurs');
+    const iNotaire = liste.indexOf('Rendez-vous notaire');
+    assert.ok(iReleve > -1 && iNotaire > -1 && iReleve < iNotaire, 'le relevé passe avant le notaire dans la liste');
+    assert.match(liste, /\d+\/\d+/, 'un rang « n/total » accompagne chaque tâche');
+
+    // L'échéance du relevé n'a pas bougé d'un pouce.
+    const state = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state;
+    const releve = (state.tasks as { text: string; due: string }[]).find((t) => t.text === 'Relevé des compteurs');
+    assert.equal(releve?.due, '2026-03-20', 'échéance strictement inchangée par le déplacement');
+  });
+
+  it('tache_deplacer sur un intitulé ambigu rend les candidats au lieu de deviner', async () => {
+    const c = await connect(tokenWrite);
+    await c.callTool({ name: 'tache_creer', arguments: { texte: 'Arroser le basilic' } });
+    await c.callTool({ name: 'tache_creer', arguments: { texte: 'Arroser les tomates' } });
+    const out = textOf(await c.callTool({ name: 'tache_deplacer', arguments: { tache: 'arroser', position: 'debut' } }));
+    await c.close();
+    assert.match(out, /Plusieurs tâches correspondent/, 'ambiguïté : on ne choisit pas');
+    assert.match(out, /Arroser le basilic/);
+    assert.match(out, /Arroser les tomates/);
+  });
 });

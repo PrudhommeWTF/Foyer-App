@@ -58,7 +58,7 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'taches_liste',
-    description: 'Les tâches ouvertes, filtrées par échéance. `quand` : aujourdhui, semaine, retard ou toutes (défaut).',
+    description: 'Les tâches ouvertes, avec leur identifiant [id] et leur rang dans l’ordre du foyer (« 3/7 »), pour situer une tâche et raisonner sur un déplacement. `quand` : toutes (défaut, dans l’ordre manuel), ou aujourdhui/semaine/retard (dans l’ordre du temps).',
     inputSchema: { type: 'object', properties: { quand: { type: 'string', enum: ['aujourdhui', 'semaine', 'retard', 'toutes'] }, liste: S.string(80) } },
     run: (ctx, a) => t.tachesListe(ctx, (str(a.quand) as 'aujourdhui' | 'semaine' | 'retard' | 'toutes') || 'toutes', str(a.liste)),
   },
@@ -122,13 +122,13 @@ const TOOLS: ToolDef[] = [
   {
     name: 'tache_creer',
     write: true,
-    description: 'Crée une tâche (sans récurrence : les séries se créent dans l’app). `pour` accepte des prénoms.',
+    description: 'Crée une tâche (sans récurrence : les séries se créent dans l’app). `pour` accepte des prénoms. `position` : « debut » pour la mettre en tête de liste, sinon elle va en fin.',
     inputSchema: {
       type: 'object',
-      properties: { texte: S.string(300), liste: S.string(80), echeance: S.date, heure: S.time, pour: { type: 'array', maxItems: 20, items: S.string(80) }, note: S.string(2000) },
+      properties: { texte: S.string(300), liste: S.string(80), echeance: S.date, heure: S.time, pour: { type: 'array', maxItems: 20, items: S.string(80) }, note: S.string(2000), position: { type: 'string', enum: ['debut', 'fin'] } },
       required: ['texte'],
     },
-    run: (ctx, a) => t.tacheCreer(ctx, { texte: str(a.texte) || '', liste: str(a.liste), echeance: str(a.echeance), heure: str(a.heure), pour: strArr(a.pour), note: str(a.note) }),
+    run: (ctx, a) => t.tacheCreer(ctx, { texte: str(a.texte) || '', liste: str(a.liste), echeance: str(a.echeance), heure: str(a.heure), pour: strArr(a.pour), note: str(a.note), position: str(a.position) === 'debut' ? 'debut' : str(a.position) === 'fin' ? 'fin' : undefined }),
   },
   {
     name: 'tache_terminer',
@@ -136,6 +136,17 @@ const TOOLS: ToolDef[] = [
     description: 'Marque une tâche terminée (uniquement une tâche sans série).',
     inputSchema: { type: 'object', properties: { id: S.string(80) }, required: ['id'] },
     run: (ctx, a) => t.tacheTerminer(ctx, str(a.id) || ''),
+  },
+  {
+    name: 'tache_deplacer',
+    write: true,
+    description: 'Range une tâche dans l’ordre du foyer, sans toucher à son échéance. `tache` désigne la tâche à déplacer par son intitulé (ou son identifiant). Où la ranger : « avant » ou « apres » une autre tâche (par intitulé ou identifiant), ou `position` « debut »/« fin ». Exemple à la voix : déplacer « le relevé des compteurs » avant « le rendez-vous notaire ». En cas d’intitulé ambigu, l’outil rend les candidats au lieu de choisir.',
+    inputSchema: {
+      type: 'object',
+      properties: { tache: S.string(300), avant: S.string(300), apres: S.string(300), position: { type: 'string', enum: ['debut', 'fin'] } },
+      required: ['tache'],
+    },
+    run: (ctx, a) => t.tacheDeplacer(ctx, { tache: str(a.tache) || '', avant: str(a.avant), apres: str(a.apres), position: str(a.position) === 'debut' ? 'debut' : str(a.position) === 'fin' ? 'fin' : undefined }),
   },
   {
     name: 'evenement_creer',
