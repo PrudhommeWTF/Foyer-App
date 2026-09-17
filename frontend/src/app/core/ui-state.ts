@@ -96,8 +96,8 @@ export interface UiState {
   // tâches
   /** Tâche ouverte dans la modale de modification, ou null. `taskNew` ouvre la saisie en modale (menu « + »). */
   taskEdit: string | null; taskNew: boolean;
-  /** Terminées dépliées, listes archivées montrées. */
-  showDone: boolean; showArchived: boolean;
+  /** Terminées dépliées, listes archivées montrées, section « À venir » repliée. */
+  showDone: boolean; showArchived: boolean; soonCollapsed: boolean;
   // listes de tâches
   activeList: string; listForm: boolean; listEditId: string | null;
   lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
@@ -271,7 +271,7 @@ export function initialUi(): UiState {
     aisleOrderOpen: false,
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
-    taskEdit: null, taskNew: false, showDone: false, showArchived: false,
+    taskEdit: null, taskNew: false, showDone: false, showArchived: false, soonCollapsed: false,
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', listDelId: null,
     lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
     tplOpen: false,
