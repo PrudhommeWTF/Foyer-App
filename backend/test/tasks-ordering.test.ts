@@ -6,7 +6,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskOp, applyOps } from '../src/tasks/ops';
-import { byOrd, keyForMove, orderedOf } from '../src/tasks/ordering';
+import { byOrd, orderedOf } from '../src/tasks/ordering';
 
 const ctx = (lists = ['l1', 'l2']) => ({
   listIds: new Set(lists),

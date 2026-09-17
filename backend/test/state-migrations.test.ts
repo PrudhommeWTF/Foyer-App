@@ -677,7 +677,7 @@ test('une affectation d’événement déjà en liste n’est pas retouchée', (
 // ---- migration 12 : ordre manuel en clé fractionnaire ----------------------
 
 test('les tâches reçoivent une clé d’ordre dans l’ordre d’affichage, et pos disparaît', () => {
-  const doc = {
+  const doc: { tasks: any[] } = {
     tasks: [
       { id: 'a', listId: 'l1', text: 'A', pos: 2, due: '2026-09-10' },
       { id: 'b', listId: 'l1', text: 'B', pos: 0, due: '2026-09-12' },
@@ -713,7 +713,7 @@ test('migration 12 rejouée deux fois : résultat identique', () => {
 });
 
 test('une tâche sans pos ni clé reçoit tout de même une clé, rangée en fin', () => {
-  const doc = { tasks: [{ id: 'z', listId: 'l1', text: 'Z' }] };
+  const doc: { tasks: any[] } = { tasks: [{ id: 'z', listId: 'l1', text: 'Z' }] };
   run(doc, 11);
   assert.equal(typeof doc['tasks'][0].ord, 'string');
 });
