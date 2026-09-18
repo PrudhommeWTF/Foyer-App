@@ -43,7 +43,9 @@ import { PALETTE } from '../core/constants';
       } @else {
         <div class="meta">
           <div class="count">{{ total() }} carte{{ total() > 1 ? 's' : '' }} de fidélité</div>
-          <button class="sortby" (click)="store.toggleCardSort()">Trier par {{ store.ui().cardSort === 'freq' ? 'nom' : 'usage' }}</button>
+          @if (store.isAdmin()) {
+            <button class="sortby" (click)="store.toggleCardSort()">Trier par {{ sortMode() === 'freq' ? 'nom' : 'usage' }}</button>
+          }
         </div>
 
         @if (searching()) {
@@ -291,11 +293,13 @@ export class FideliteScreen implements OnDestroy {
   total = computed(() => this.d().cards.length);
   private query = computed(() => this.store.ui().cardSearch.trim().toLowerCase());
   searching = computed(() => this.query().length > 0);
+  /** Rangement choisi pour le foyer : 'freq' (fréquentes en tête) ou 'nom'. */
+  sortMode = computed(() => this.store.setting('cardSort'));
   private byName = (a: LoyaltyCard, b: LoyaltyCard) => a.name.localeCompare(b.name, 'fr');
 
   /** Les cartes les plus présentées en caisse, en tête et hors recherche (mode 'freq'). Vide sinon. */
   frequent = computed<LoyaltyCard[]>(() => {
-    if (this.searching() || this.store.ui().cardSort !== 'freq') return [];
+    if (this.searching() || this.sortMode() !== 'freq') return [];
     return this.d().cards
       .filter((c) => (c.uses || 0) > 0)
       .sort((a, b) => (b.uses || 0) - (a.uses || 0) || (b.lastUsedAt || '').localeCompare(a.lastUsedAt || ''))

@@ -132,8 +132,6 @@ export interface UiState {
 
   // cartes de fidélité
   cardSearch: string;
-  /** Rangement de la liste : 'freq' (les plus présentées en caisse d'abord, en section) ou 'nom' (tout par ordre alphabétique). Par appareil, non persisté. */
-  cardSort: 'freq' | 'nom';
   cardForm: boolean; caEditId: string | null;
   caName: string; caCode: string; caFormat: CardFormat; caColor: string; caNote: string;
   /** L'utilisateur a choisi la couleur : le nom ne la reppropose plus. */
@@ -289,7 +287,7 @@ export function initialUi(): UiState {
     showPlaceItem: false, piEditId: null, piName: '', piQty: '', piPlaceId: '',
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
-    cardSearch: '', cardSort: 'freq',
+    cardSearch: '',
     cardForm: false, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: '#E56B4E', caNote: '', caColorTouched: false, caLogo: '', logoBusy: false, logoOpts: [], logoSearched: false, cardDelId: null, cardShow: null, scanOpen: false,
     recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
     fRecipeId: '', fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],

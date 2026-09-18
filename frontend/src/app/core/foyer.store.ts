@@ -1965,7 +1965,7 @@ export class FoyerStore {
     this.patch({ cardShow: id });
   }
   closeCard(): void { this.patch({ cardShow: null }); }
-  toggleCardSort(): void { this.patch({ cardSort: this.ui().cardSort === 'freq' ? 'nom' : 'freq' }); }
+  toggleCardSort(): void { void this.setSetting('cardSort', this.setting('cardSort') === 'freq' ? 'nom' : 'freq'); }
   openScan(): void { this.patch({ scanOpen: true }); }
   closeScan(): void { this.patch({ scanOpen: false }); }
 

@@ -128,6 +128,16 @@ Le rappel proposé quand une tâche reçoit une date.
 
 - **Rappel proposé pour une nouvelle tâche datée** (`taskDefaultRemind`) : Ce que le formulaire coche d’avance quand on donne une date à une tâche. Cela ne change aucune tâche existante, et reste modifiable tâche par tâche.
 
+### Cartes de fidélité
+
+Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `cardSort` | Rangement de la liste des cartes | Foyer | liste | `freq` | `freq`, `nom` | Cartes | — |
+
+- **Rangement de la liste des cartes** (`cardSort`) : L’ordre de l’écran Fidélité, partagé par le foyer. « Fréquemment utilisées » met en tête les cartes le plus souvent ouvertes pour être présentées en caisse, dans une section à part, les autres suivant par nom ; « Par nom » range tout par ordre alphabétique. Se change aussi depuis le bouton de tri de l’écran.
+
 ### Finances
 
 La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.

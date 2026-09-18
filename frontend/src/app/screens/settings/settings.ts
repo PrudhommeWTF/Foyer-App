@@ -28,6 +28,7 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   repas: { icon: 'repas', tint: '#FDF0DA', color: '#F0B24B' },
   courses: { icon: 'courses', tint: '#EDF2EB', color: '#7A9B76' },
   taches: { icon: 'taches', tint: '#F2ECF5', color: '#9B6FA8' },
+  fidelite: { icon: 'card', tint: '#E5F0F4', color: '#4E93B8' },
   finances: { icon: 'budget', tint: '#EDF2EB', color: '#5F9E6E' },
   acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
   serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },

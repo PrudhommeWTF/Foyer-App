@@ -135,6 +135,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
   { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
   { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date.' },
+  { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -401,6 +402,19 @@ export const REGISTRY = [
       { value: '1h', label: 'Une heure avant' },
       { value: 'eve', label: 'La veille à 18 h' },
       { value: 'morning', label: 'Le matin à 9 h' },
+    ],
+  },
+
+  // ---- fidélité -----------------------------------------------------------
+  {
+    key: 'cardSort',
+    type: 'enum', scope: 'foyer', section: 'fidelite', module: 'Cartes',
+    label: 'Rangement de la liste des cartes',
+    desc: 'L’ordre de l’écran Fidélité, partagé par le foyer. « Fréquemment utilisées » met en tête les cartes le plus souvent ouvertes pour être présentées en caisse, dans une section à part, les autres suivant par nom ; « Par nom » range tout par ordre alphabétique. Se change aussi depuis le bouton de tri de l’écran.',
+    default: 'freq',
+    options: [
+      { value: 'freq', label: 'Fréquemment utilisées en tête' },
+      { value: 'nom', label: 'Par nom' },
     ],
   },
 
