@@ -79,9 +79,9 @@ export interface LiveSnapshot { version: number; shop?: ShopItem[]; tasks?: Task
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
 export type ShopOp =
-  | (OpBase & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean })
+  | (OpBase & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean; photoId?: number | null })
   | (OpBase & { op: 'set-state'; id: string; state: ShopItem['state'] })
-  | (OpBase & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string })
+  | (OpBase & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string; photoId?: number | null })
   | (OpBase & { op: 'remove'; id: string });
 
 /**
@@ -521,7 +521,7 @@ export class ApiService {
   }
 
   // ---- fichiers ----------------------------------------------------------
-  uploadFile(owner: 'recipe', ownerId: string, file: File): Promise<{ file: StoredFile; deduplicated: boolean }> {
+  uploadFile(owner: 'recipe' | 'shop', ownerId: string, file: File): Promise<{ file: StoredFile; deduplicated: boolean }> {
     const q = `files?owner=${owner}&id=${encodeURIComponent(ownerId)}&filename=${encodeURIComponent(file.name)}`;
     return this.upload(q, file);
   }

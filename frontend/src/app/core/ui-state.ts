@@ -83,10 +83,16 @@ export interface UiState {
 
   // shop item modal
   showShop: boolean; shEditId: string | null;
+  /** Identifiant de l'article en cours (créé ou édité) : sert à rattacher une photo avant même la sauvegarde. */
+  shId: string;
   shTitle: string; shQty: string; shState: ShopState; shAisleId: string; shListId: string;
+  /** Photo du produit en cours d'édition, et téléversement en cours. */
+  shPhotoId: number | null; shPhotoBusy: boolean;
   newShop: string;
   /** Réordonnancement des rayons : l'ordre des allées du magasin habituel. */
   aisleOrderOpen: boolean;
+  /** Rayons repliés (par identifiant) : on masque leurs articles, cochés ou non. Par appareil, non persisté. */
+  collapsedAisles: string[];
   // shop lists
   activeShopList: string; shopListForm: boolean; clEditId: string | null;
   clName: string; clColor: string; clIcon: string; shopListDelId: string | null;
@@ -269,8 +275,8 @@ export function initialUi(): UiState {
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1), evCalOpen: false,
-    showShop: false, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', newShop: '',
-    aisleOrderOpen: false,
+    showShop: false, shEditId: null, shId: '', shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', shPhotoId: null, shPhotoBusy: false, newShop: '',
+    aisleOrderOpen: false, collapsedAisles: [],
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
     aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
     taskEdit: null, taskNew: false, showDone: false, showArchived: false, soonCollapsed: false,

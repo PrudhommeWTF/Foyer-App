@@ -17,15 +17,20 @@ import { log } from '../log';
 const MAX_UPLOAD = '20mb';
 
 /** Les genres qu'on accepte encore d'écrire (voir OWNER_KINDS). */
-type AcceptedKind = 'recipe';
+type AcceptedKind = 'recipe' | 'shop';
 
 /**
  * Ce que chaque genre de propriétaire accepte. Le type vient des octets, jamais
- * de l'extension : une recette n'a aucune raison d'accepter un PDF déguisé en
- * photo.
+ * de l'extension : une recette (ou un produit de courses) n'a aucune raison
+ * d'accepter un PDF déguisé en photo.
  */
 const ACCEPTS: Record<AcceptedKind, { ok: (t: DetectedType | null) => boolean; refus: string }> = {
   recipe: {
+    ok: (t) => !!t && IMAGE_MIMES.includes(t.mime),
+    refus: `Ce format d’image n’est pas pris en charge. Formats acceptés : ${ACCEPTED_IMAGE_LABEL}. `
+      + 'Le type est reconnu d’après le contenu du fichier, pas d’après son extension.',
+  },
+  shop: {
     ok: (t) => !!t && IMAGE_MIMES.includes(t.mime),
     refus: `Ce format d’image n’est pas pris en charge. Formats acceptés : ${ACCEPTED_IMAGE_LABEL}. `
       + 'Le type est reconnu d’après le contenu du fichier, pas d’après son extension.',

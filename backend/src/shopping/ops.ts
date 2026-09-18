@@ -50,6 +50,8 @@ export interface ShopItem {
   /** Membre qui a posé l'état courant, et quand. Sert à l'afficher, pas à arbitrer. */
   by?: string | null;
   at?: string | null;
+  /** Identifiant de la photo du produit (fichier rangé sur le disque, genre « shop »), ou absent. */
+  photoId?: number | null;
   /**
    * Nom du jeton d'accès quand l'état courant vient d'un assistant (« Claude
    * iPhone »), sinon absent. Renseigné uniquement par le serveur MCP : le fil
@@ -61,9 +63,9 @@ export interface ShopItem {
 
 interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
 export type ShopOp =
-  | (Base & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean })
+  | (Base & { op: 'add'; id: string; name: string; qty?: string; aisleId: string; listId: string; art?: string; gen?: boolean; photoId?: number | null })
   | (Base & { op: 'set-state'; id: string; state: ShopState })
-  | (Base & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string })
+  | (Base & { op: 'edit'; id: string; name?: string; qty?: string; aisleId?: string; listId?: string; photoId?: number | null })
   | (Base & { op: 'remove'; id: string });
 
 export interface OpsContext {
@@ -89,6 +91,8 @@ export interface ApplyResult {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
 const trimmed = (v: unknown, max = 200): string => str(v).trim().slice(0, max);
+/** Un identifiant de photo valide : un entier positif (une ligne de hh_attachments). */
+const isPhotoId = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v > 0;
 
 /**
  * Applique un lot d'opérations. Chaque opération est indépendante : l'une est
@@ -140,6 +144,7 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
           ...(via ? { via } : {}),
           ...(o['art'] ? { art: trimmed(o['art'], 80) } : {}),
           ...(o['gen'] ? { gen: true } : {}),
+          ...(isPhotoId(o['photoId']) ? { photoId: o['photoId'] as number } : {}),
         });
         applied.push(opId);
         break;
@@ -174,6 +179,12 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
           const listId = trimmed(o['listId'], 80);
           if (!ctx.listIds.has(listId)) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
           next.listId = listId;
+        }
+        if (o['photoId'] !== undefined) {
+          const pid = o['photoId'];
+          if (pid === null || pid === '') delete next.photoId;
+          else if (isPhotoId(pid)) next.photoId = pid as number;
+          else { skipped.push({ opId, reason: 'Photo invalide.' }); break; }
         }
         out[idx] = next;
         applied.push(opId);

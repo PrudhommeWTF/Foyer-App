@@ -25,8 +25,8 @@ export function initFiles(db: Database): void {
  * déjà sur le disque gardent un genre valide. `OWNER_KINDS` ne liste que ce
  * qu'on accepte encore d'écrire.
  */
-export type OwnerKind = 'recipe' | 'document';
-export const OWNER_KINDS: OwnerKind[] = ['recipe'];
+export type OwnerKind = 'recipe' | 'shop' | 'document';
+export const OWNER_KINDS: OwnerKind[] = ['recipe', 'shop'];
 
 export interface StoredFile {
   id: number;
