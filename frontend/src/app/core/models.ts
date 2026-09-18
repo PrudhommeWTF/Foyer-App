@@ -264,6 +264,9 @@ export interface LoyaltyCard {
    * monogramme tient lieu de logo.
    */
   logo?: string;
+  /** Nombre de fois que la carte a été ouverte pour être présentée en caisse, et la dernière. Sert au classement « fréquemment utilisées ». */
+  uses?: number;
+  lastUsedAt?: string;
 }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert

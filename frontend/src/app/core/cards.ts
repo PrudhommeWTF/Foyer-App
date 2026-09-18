@@ -88,3 +88,17 @@ export function cardColor(name: string): string {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
 }
+
+/**
+ * Encre lisible (foncée ou blanche) à poser sur une couleur de fond
+ * hexadécimale : la tuile d'une carte affiche son nom dans cette encre, quelle
+ * que soit la couleur choisie (le doré clair veut du texte foncé, le bleu du
+ * blanc). Luminance perçue, seuil au milieu.
+ */
+export function onColor(hex: string): string {
+  const h = (hex || '').replace('#', '');
+  const n = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return '#fff';
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? '#2A2A33' : '#fff';
+}
