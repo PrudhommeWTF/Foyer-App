@@ -104,7 +104,9 @@ export interface Contact { id: string; name: string; role: string; phone: string
  */
 export interface LoyaltyCard { id: string; name: string; code: string; format: string; color: string; note?: string;
   /** Logo choisi, en data-URI (recherché en ligne d'après le nom). Absent : le monogramme sert de logo. */
-  logo?: string; }
+  logo?: string;
+  /** Nombre de fois que la carte a été ouverte pour être présentée en caisse, et la dernière : sert au classement « fréquemment utilisées ». */
+  uses?: number; lastUsedAt?: string; }
 /**
  * Un créneau du planning porte plusieurs plats : une entrée, un plat, un dessert
  * se choisissent séparément. Chacun est soit une recette du carnet, soit un

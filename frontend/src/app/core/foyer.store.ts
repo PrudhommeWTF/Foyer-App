@@ -1959,8 +1959,13 @@ export class FoyerStore {
     this.patch({ cardForm: false, caEditId: null });
   }
   confirmCardDel(): void { const id = this.ui().cardDelId; if (!id) return; this.mutate((d) => { d.cards = d.cards.filter((c) => c.id !== id); }); this.patch({ cardDelId: null, cardShow: null }); this.toast('Carte supprimée'); }
-  showCard(id: string): void { this.patch({ cardShow: id }); }
+  /** Ouvrir une carte, c'est la présenter en caisse : on compte l'usage pour nourrir le classement « fréquemment utilisées ». */
+  showCard(id: string): void {
+    this.mutate((d) => { const c = d.cards.find((x) => x.id === id); if (c) { c.uses = (c.uses || 0) + 1; c.lastUsedAt = new Date().toISOString(); } });
+    this.patch({ cardShow: id });
+  }
   closeCard(): void { this.patch({ cardShow: null }); }
+  toggleCardSort(): void { this.patch({ cardSort: this.ui().cardSort === 'freq' ? 'nom' : 'freq' }); }
   openScan(): void { this.patch({ scanOpen: true }); }
   closeScan(): void { this.patch({ scanOpen: false }); }
 
