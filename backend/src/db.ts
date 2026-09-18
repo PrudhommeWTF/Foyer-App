@@ -233,10 +233,11 @@ function pruneUnreferencedFiles(): void {
   const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
   if (!row) return;
   try {
-    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[]; files?: { fileId?: number | null }[] };
+    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[]; files?: { fileId?: number | null }[]; shop?: { photoId?: number | null }[] };
     const referenced = new Set<number>();
     for (const r of doc.recipes || []) if (typeof r.photoId === 'number') referenced.add(r.photoId);
     for (const f of doc.files || []) if (typeof f.fileId === 'number') referenced.add(f.fileId);
+    for (const it of doc.shop || []) if (typeof it.photoId === 'number') referenced.add(it.photoId);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
       log.info(`Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);

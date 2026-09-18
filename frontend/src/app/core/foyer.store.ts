@@ -769,7 +769,7 @@ export class FoyerStore {
         if (idx < 0) items.push({
           id: op.id, name: op.name, qty: op.qty || '', aisleId: op.aisleId, state: 'a-prendre', listId: op.listId,
           by: op.by ?? null, at: op.at ?? null,
-          ...(op.art ? { art: op.art } : {}), ...(op.gen ? { gen: true } : {}),
+          ...(op.art ? { art: op.art } : {}), ...(op.gen ? { gen: true } : {}), ...(op.photoId ? { photoId: op.photoId } : {}),
         });
         break;
       case 'set-state':
@@ -777,13 +777,15 @@ export class FoyerStore {
         break;
       case 'edit':
         if (idx >= 0) {
-          items[idx] = {
+          const next = {
             ...items[idx],
             ...(op.name !== undefined ? { name: op.name } : {}),
             ...(op.qty !== undefined ? { qty: op.qty } : {}),
             ...(op.aisleId !== undefined ? { aisleId: op.aisleId } : {}),
             ...(op.listId !== undefined ? { listId: op.listId } : {}),
           };
+          if (op.photoId !== undefined) { if (op.photoId) next.photoId = op.photoId; else delete next.photoId; }
+          items[idx] = next;
         }
         break;
       case 'remove':
@@ -1296,29 +1298,53 @@ export class FoyerStore {
     return (aisles.find((a) => isFallbackAisleName(a.name)) || aisles[aisles.length - 1] || aisles[0])?.id || '';
   }
   openShop(): void {
-    this.patch({ showShop: true, shEditId: null, shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: this.defaultAisleId(), shListId: this.activeShopListId() });
+    // On fixe l'identifiant dès l'ouverture : une photo peut ainsi être rattachée
+    // à l'article avant même sa sauvegarde (comme pour une recette neuve).
+    this.patch({ showShop: true, shEditId: null, shId: uid('s'), shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: this.defaultAisleId(), shListId: this.activeShopListId(), shPhotoId: null, shPhotoBusy: false });
   }
   editShop(id: string): void {
     const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
-    this.patch({ showShop: true, shEditId: id, shTitle: it.name, shQty: it.qty, shState: it.state, shAisleId: it.aisleId, shListId: it.listId || this.activeShopListId() });
+    this.patch({ showShop: true, shEditId: id, shId: id, shTitle: it.name, shQty: it.qty, shState: it.state, shAisleId: it.aisleId, shListId: it.listId || this.activeShopListId(), shPhotoId: it.photoId ?? null, shPhotoBusy: false });
   }
   saveShop(): void {
     const s = this.ui(); const name = s.shTitle.trim(); if (!name) { this.toast('Donne un nom à l’article'); return; }
     const qty = s.shQty.trim();
     if (s.shEditId) {
       const before = this._data()?.shop.find((x) => x.id === s.shEditId);
-      const ops: ShopOpDraft[] = [{ op: 'edit', id: s.shEditId, name, qty, aisleId: s.shAisleId, listId: s.shListId }];
+      const ops: ShopOpDraft[] = [{ op: 'edit', id: s.shEditId, name, qty, aisleId: s.shAisleId, listId: s.shListId, photoId: s.shPhotoId }];
       // L'état est une opération distincte : elle porte qui l'a posé et quand,
       // ce qu'une simple édition de champs ne dit pas.
       if (before && before.state !== s.shState) ops.push({ op: 'set-state', id: s.shEditId, state: s.shState });
       this.pushShopOps(ops);
     } else {
-      this.pushShopOps([{ op: 'add', id: uid('s'), name, qty, aisleId: s.shAisleId, listId: s.shListId }]);
+      this.pushShopOps([{ op: 'add', id: s.shId, name, qty, aisleId: s.shAisleId, listId: s.shListId, ...(s.shPhotoId ? { photoId: s.shPhotoId } : {}) }]);
     }
     // Le rayon a été choisi à la main dans la fiche : on le retient pour ce nom.
     this.learnAisle(name, s.shAisleId);
     this.toast(s.shEditId ? 'Article modifié' : 'Article ajouté');
     this.patch({ showShop: false, shEditId: null });
+  }
+  /** Téléverse une photo pour l'article en cours, et la retient. */
+  async onShopPhoto(file: File): Promise<void> {
+    const ownerId = this.ui().shId; if (!ownerId) return;
+    this.patch({ shPhotoBusy: true });
+    try {
+      const res = await this.api.uploadFile('shop', ownerId, file);
+      this.cachePhoto(res.file.id, file);
+      this.patch({ shPhotoId: res.file.id });
+      // En édition, on l'écrit tout de suite : la photo ne se perd pas si la
+      // fiche est fermée sans « Enregistrer ». En création, elle part avec l'ajout.
+      if (this.ui().shEditId) this.pushShopOps([{ op: 'edit', id: this.ui().shEditId!, photoId: res.file.id }]);
+    } catch (e) {
+      this.toast((e as Error).message);
+    } finally {
+      this.patch({ shPhotoBusy: false });
+    }
+  }
+  /** Retire la photo de l'article en cours. Le fichier est balayé au prochain démarrage. */
+  removeShopPhoto(): void {
+    this.patch({ shPhotoId: null });
+    if (this.ui().shEditId) this.pushShopOps([{ op: 'edit', id: this.ui().shEditId!, photoId: null }]);
   }
   delShop(): void {
     const id = this.ui().shEditId; if (!id) return;
@@ -2491,8 +2517,11 @@ export class FoyerStore {
   private neededPhotoIds(): number[] {
     const ids = new Set<number>();
     for (const r of this._data()?.recipes || []) if (r.photoId) ids.add(r.photoId);
+    for (const it of this._data()?.shop || []) if (it.photoId) ids.add(it.photoId);
     const editing = this.ui().fPhotoId;
     if (editing) ids.add(editing);
+    const shopEditing = this.ui().shPhotoId;
+    if (shopEditing) ids.add(shopEditing);
     return [...ids];
   }
 

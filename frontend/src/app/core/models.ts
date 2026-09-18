@@ -88,6 +88,8 @@ export interface ShopItem {
    * qu'elle a elle-même produit, et ne touche jamais un ajout fait à la main.
    */
   art?: string | null; gen?: boolean | null;
+  /** Identifiant de la photo du produit (fichier rangé sur le disque), ou absent. */
+  photoId?: number | null;
   /** Nom du jeton d'accès quand l'état vient d'un assistant (posé par le serveur MCP). */
   via?: string | null;
 }

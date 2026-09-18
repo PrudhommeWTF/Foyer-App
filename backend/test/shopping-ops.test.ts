@@ -191,3 +191,29 @@ test('le rattrapage ne touche pas aux articles en règle', () => {
   assert.deepEqual(r.items, start);
   assert.equal(r.movedToFallback, 0);
 });
+
+// ---- photo d'un produit -----------------------------------------------------
+
+test('un ajout peut porter une photo, une édition la pose et la retire', () => {
+  const add = applyOps([], [op({ op: 'add', id: 's1', name: 'Lessive', aisleId: 'a1', listId: 'cl1', photoId: 42 })], ctx());
+  assert.equal(add.items[0].photoId, 42, 'la photo voyage avec l’ajout');
+
+  const pose = applyOps([item()], [op({ op: 'edit', id: 's1', photoId: 7 })], ctx());
+  assert.equal(pose.items[0].photoId, 7);
+
+  const retire = applyOps(pose.items, [op({ op: 'edit', id: 's1', photoId: null })], ctx());
+  assert.equal('photoId' in retire.items[0], false, 'null retire la photo, sans la laisser à null');
+});
+
+test('une photo invalide est refusée avec la raison, sans casser l’article', () => {
+  const r = applyOps([item()], [op({ op: 'edit', id: 's1', photoId: 'pas-un-nombre' })], ctx());
+  assert.equal(r.skipped.length, 1);
+  assert.match(r.skipped[0].reason, /Photo invalide/);
+  assert.equal(r.items[0].name, 'Pommes', 'l’article est intact');
+});
+
+test('éditer un autre champ ne touche pas la photo', () => {
+  const r = applyOps([item({ photoId: 9 })], [op({ op: 'edit', id: 's1', qty: '2 kg' })], ctx());
+  assert.equal(r.items[0].qty, '2 kg');
+  assert.equal(r.items[0].photoId, 9, 'la photo reste tant qu’on ne la vise pas');
+});

@@ -165,6 +165,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
                   @if (it.state === 'indisponible') { <f-icon name="x" [size]="15" color="#C6492F" [width]="3" /> }
                 </button>
                 <button class="row-body" (click)="store.editShop(it.id)">
+                  @if (store.photoUrl(it.photoId); as ph) { <span class="s-thumb" [style.background-image]="'url(' + ph + ')'"></span> }
                   <span class="s-name">{{ it.name }}</span>
                   @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
                 </button>
@@ -241,6 +242,23 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
             </div>
           }
         </div>
+
+        <div class="field-label">Photo <span class="opt">(facultatif)</span></div>
+        @if (store.photoUrl(store.ui().shPhotoId); as ph) {
+          <div class="photo-preview">
+            <div class="photo-img" [style.background-image]="'url(' + ph + ')'"></div>
+            <button class="btn btn-soft" (click)="store.removeShopPhoto()">
+              <f-icon name="x" [size]="15" color="var(--ink2)" /> Retirer la photo
+            </button>
+          </div>
+        } @else {
+          <label class="photo-upload" [class.busy]="store.ui().shPhotoBusy">
+            <input type="file" accept="image/*" [disabled]="store.ui().shPhotoBusy" (change)="onShopPhoto($event)">
+            <f-icon name="upload" [size]="18" color="var(--ink2)" />
+            <span>{{ store.ui().shPhotoBusy ? 'Envoi…' : 'Ajouter une photo' }}</span>
+          </label>
+        }
+
         <div class="modal-actions">
           @if (store.ui().shEditId) {
             <button class="icon-btn del-btn" (click)="store.delShop()" aria-label="Supprimer"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
@@ -395,6 +413,14 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .s-name.done { color: var(--ink3); text-decoration: line-through; }
     .row.unavail .s-name { color: #C6492F; }
     .s-qty { font-size: 13px; font-weight: 800; color: var(--ink3); flex: none; }
+    /* Vignette du produit dans la liste, et sélecteur de photo dans la fiche. */
+    .s-thumb { flex: none; width: 30px; height: 30px; border-radius: 8px; background-size: cover; background-position: center; box-shadow: 0 2px 6px -3px rgba(90,60,40,.6); }
+    .opt { font-weight: 700; color: var(--ink3); text-transform: none; letter-spacing: 0; }
+    .photo-upload { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: var(--soft); font-size: 13.5px; font-weight: 800; color: var(--ink2); cursor: pointer; margin-bottom: 6px; }
+    .photo-upload input { display: none; }
+    .photo-upload.busy { opacity: .6; pointer-events: none; }
+    .photo-preview { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .photo-img { width: 64px; height: 64px; border-radius: 12px; background-size: cover; background-position: center; flex: none; box-shadow: 0 6px 14px -8px rgba(90,60,40,.6); }
     .who { width: 10px; height: 10px; border-radius: 50%; flex: none; }
     .empty { color: var(--ink2); font-weight: 700; font-size: 14px; padding: 24px 0; }
 
@@ -548,4 +574,13 @@ export class CoursesScreen {
 
   whoColor(it: ShopItem): string | null { return it.by ? this.store.memberColor(it.by) : null; }
   whoName(it: ShopItem): string { return it.by ? 'Coché par ' + this.store.memberName(it.by) : ''; }
+
+  /** Une photo choisie pour l'article en cours : on la téléverse et on la retient. */
+  onShopPhoto(e: Event): void {
+    const input = e.target as HTMLInputElement;
+    const f = input.files?.[0];
+    // Le champ est vidé : reposer deux fois le même fichier doit relancer l'envoi.
+    input.value = '';
+    if (f) void this.store.onShopPhoto(f);
+  }
 }
