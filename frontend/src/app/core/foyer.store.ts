@@ -1234,14 +1234,18 @@ export class FoyerStore {
    * attributs (quantité, rayon, liste) sont facultatifs : sans eux, on retombe
    * sur la quantité vide, le rayon « À trier » et la liste active, comme avant.
    */
-  addShop(name: string, opts?: { qty?: string; aisleId?: string; listId?: string }): string | null {
+  addShop(name: string, opts?: { qty?: string; aisleId?: string; listId?: string; art?: string }): string | null {
     const t = name.trim(); if (!t) return null;
     const listId = opts?.listId || this.activeShopListId(); if (!listId) { this.toast('Créez d’abord une liste'); return null; }
     const id = uid('s');
     // Sans rayon imposé, on le déduit du nom : le référentiel (base + ce que le
     // foyer a appris) range « bananes » aux fruits sans qu'on ait à le dire.
     const aisleId = opts?.aisleId || this.resolveAisleForName(t);
-    this.pushShopOps([{ op: 'add', id, name: t, qty: opts?.qty?.trim() || '', aisleId, listId }]);
+    // Rattachement au référentiel : la clé fournie (suggestion choisie) ou, à
+    // défaut, celle que le nom désigne. L'article gagne un lien fiable, ce qui
+    // évite un doublon quand la génération des repas réclame le même produit.
+    const art = opts?.art || resolveArticleKey(t, this.articleIndex());
+    this.pushShopOps([{ op: 'add', id, name: t, qty: opts?.qty?.trim() || '', aisleId, listId, ...(art ? { art } : {}) }]);
     return id;
   }
 

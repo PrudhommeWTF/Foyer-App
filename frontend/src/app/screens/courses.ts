@@ -6,7 +6,12 @@ import { ModalComponent } from '../shared/modal';
 import { ConfirmComponent } from '../shared/confirm';
 import { LIST_ICONS, PALETTE } from '../core/constants';
 import { RAYONS } from '../core/articles';
-import { Aisle, ShopItem, ShopState } from '../core/models';
+import { cap } from '../core/helpers';
+import { searchArticles } from '../core/ingredient-repair';
+import { Aisle, Rayon, ShopItem, ShopState } from '../core/models';
+
+/** Une suggestion d'ajout : un article connu du référentiel (avec sa clé et son rayon), ou un simple nom déjà acheté. */
+interface ShopSuggestion { name: string; key?: string; rayon?: Rayon; }
 
 interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
 
@@ -67,8 +72,11 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
       </div>
       @if (suggestions().length) {
         <div class="sugg">
-          @for (sg of suggestions(); track sg) {
-            <button class="sugg-chip" (click)="addSuggestion(sg)">{{ sg }}</button>
+          @for (sg of suggestions(); track sg.name) {
+            <button class="sugg-chip" [class.known]="sg.key" (click)="addSuggestion(sg)">
+              @if (sg.key) { <span class="s-dot" [style.background]="suggAisleColor(sg)"></span> }
+              {{ sg.name }}
+            </button>
           }
         </div>
       }
@@ -374,7 +382,8 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .quick .input { flex: 1; min-height: 52px; font-size: 16px; }
     .add-btn { width: 52px; height: 52px; flex: none; border: none; border-radius: 15px; background: var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .sugg { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-    .sugg-chip { border: none; background: var(--soft2); color: var(--ink2); border-radius: 12px; padding: 9px 14px; font-size: 13.5px; font-weight: 800; cursor: pointer; }
+    .sugg-chip { display: inline-flex; align-items: center; gap: 7px; border: none; background: var(--soft2); color: var(--ink2); border-radius: 12px; padding: 9px 14px; font-size: 13.5px; font-weight: 800; cursor: pointer; }
+    .sugg-chip.known { color: var(--ink); }
 
     .sync { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 13px; background: var(--soft2); color: var(--ink2); font-size: 12.5px; font-weight: 700; margin-bottom: 14px; }
     .sync.off { background: #FCE9E3; color: #C6492F; }
@@ -506,25 +515,40 @@ export class CoursesScreen {
   });
 
   /**
-   * Suggestions tirées de ce que le foyer achète déjà, dès les premières lettres.
-   * Le référentiel d'articles arrive à la tranche suivante ; en attendant, les
-   * articles passés sont une source honnête et sans surprise.
+   * Suggestions dès les premières lettres. D'abord les articles **connus** (base
+   * intégrée + ce que le foyer a appris) : les choisir complète l'entrée avec le
+   * rayon de l'article et la relie au référentiel. Ensuite, ce que le foyer a
+   * déjà acheté et que le référentiel ignore, pour ne pas perdre les noms libres.
    */
-  suggestions = computed(() => {
-    const q = this.store.ui().newShop.trim().toLowerCase();
+  suggestions = computed<ShopSuggestion[]>(() => {
+    const q = this.store.ui().newShop.trim();
     if (q.length < 2) return [];
+    const lq = q.toLowerCase();
     const seen = new Set<string>();
-    const out: string[] = [];
+    const out: ShopSuggestion[] = [];
+    for (const a of searchArticles(this.store.articleIndex(), this.d().articles || [], q, 6)) {
+      const k = a.name.toLowerCase();
+      if (k === lq || seen.has(k)) continue; // déjà tapé tel quel : rien à compléter
+      seen.add(k);
+      out.push({ name: cap(a.name), key: a.key, rayon: a.rayon });
+      if (out.length === 5) return out;
+    }
     for (const it of this.d().shop) {
       const n = it.name.trim();
       const k = n.toLowerCase();
-      if (k === q || seen.has(k) || !k.includes(q)) continue;
+      if (k === lq || seen.has(k) || !k.includes(lq)) continue;
       seen.add(k);
-      out.push(n);
-      if (out.length === 4) break;
+      out.push({ name: n });
+      if (out.length === 5) break;
     }
     return out;
   });
+
+  /** Couleur du rayon où atterrira un article connu : l'aperçu de l'info complétée sur la puce. */
+  suggAisleColor(sg: ShopSuggestion): string {
+    const id = this.store.resolveAisleForName(sg.name);
+    return this.d().aisles.find((a) => a.id === id)?.color || 'var(--ink3)';
+  }
 
   // Repli d'attributs de l'ajout rapide (quantité, rayon, liste), révélé quand
   // le champ prend le focus, comme la saisie d'une tâche. L'état vit dans le
@@ -554,12 +578,13 @@ export class CoursesScreen {
    * rayon (le suivant se déduira de son propre nom), la liste reste.
    */
   addQuick(): void { this.commitAdd(this.store.ui().newShop); }
-  addSuggestion(name: string): void { this.commitAdd(name); }
+  /** Choisir une suggestion ajoute l'article, en le reliant au référentiel quand c'en est un connu. */
+  addSuggestion(sg: ShopSuggestion): void { this.commitAdd(sg.name, sg.key); }
 
-  private commitAdd(name: string): void {
+  private commitAdd(name: string, art?: string): void {
     const forced = this.qaAisleOverride();
     const aisleId = forced ?? this.store.resolveAisleForName(name);
-    if (this.store.addShop(name, { qty: this.qaQty(), aisleId, listId: this.qaList() || undefined })) {
+    if (this.store.addShop(name, { qty: this.qaQty(), aisleId, listId: this.qaList() || undefined, art })) {
       if (forced) this.store.learnAisle(name, forced);
       this.store.patch({ newShop: '' });
       this.qaQty.set('');
