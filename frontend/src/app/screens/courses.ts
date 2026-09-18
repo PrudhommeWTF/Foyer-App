@@ -150,21 +150,26 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
       <!-- À prendre, dans l'ordre des allées -->
       @for (g of todo(); track g.aisle.id) {
         <div class="cat" [style.border-left]="'4px solid ' + g.aisle.color">
-          <div class="cat-head">
-            <div class="cat-name"><span class="dot" [style.background]="g.aisle.color"></span>{{ g.aisle.name }}</div>
-            <span class="cat-n">{{ g.items.length }}</span>
-          </div>
-          @for (it of g.items; track it.id) {
-            <div class="row" [class.unavail]="it.state === 'indisponible'">
-              <button class="tick" [class.unavail]="it.state === 'indisponible'" (click)="store.toggleShop(it.id)"
-                      [attr.aria-label]="'Cocher ' + it.name">
-                @if (it.state === 'indisponible') { <f-icon name="x" [size]="15" color="#C6492F" [width]="3" /> }
-              </button>
-              <button class="row-body" (click)="store.editShop(it.id)">
-                <span class="s-name">{{ it.name }}</span>
-                @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
-              </button>
+          <button class="cat-head" (click)="store.toggleAisleCollapse(g.aisle.id)" [attr.aria-expanded]="!store.aisleCollapsed(g.aisle.id)">
+            <div class="cat-name">
+              <f-icon [name]="store.aisleCollapsed(g.aisle.id) ? 'chevronRight' : 'chevronDown'" [size]="15" color="var(--ink3)" [width]="2.4" />
+              <span class="dot" [style.background]="g.aisle.color"></span>{{ g.aisle.name }}
             </div>
+            <span class="cat-n">{{ g.items.length }}</span>
+          </button>
+          @if (!store.aisleCollapsed(g.aisle.id)) {
+            @for (it of g.items; track it.id) {
+              <div class="row" [class.unavail]="it.state === 'indisponible'">
+                <button class="tick" [class.unavail]="it.state === 'indisponible'" (click)="store.toggleShop(it.id)"
+                        [attr.aria-label]="'Cocher ' + it.name">
+                  @if (it.state === 'indisponible') { <f-icon name="x" [size]="15" color="#C6492F" [width]="3" /> }
+                </button>
+                <button class="row-body" (click)="store.editShop(it.id)">
+                  <span class="s-name">{{ it.name }}</span>
+                  @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+                </button>
+              </div>
+            }
           }
         </div>
       } @empty {
@@ -371,7 +376,7 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .mini-link { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; }
 
     .cat { background: var(--surface); border-radius: var(--r-card); padding: 12px 14px 6px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); margin-bottom: 14px; }
-    .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; width: 100%; border: none; background: transparent; padding: 4px 0; cursor: pointer; font: inherit; }
     .cat-name { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 13.5px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; }
     .cat-name .dot { width: 10px; height: 10px; border-radius: 3px; }
     .cat-n { font-size: 12px; font-weight: 800; color: var(--ink3); }

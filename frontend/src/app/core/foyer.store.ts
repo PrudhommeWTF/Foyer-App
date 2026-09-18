@@ -1421,6 +1421,13 @@ export class FoyerStore {
 
   // ---- rayons -------------------------------------------------------------
   readonly aislesInOrder = computed(() => (this._data()?.aisles || []).slice().sort((a, b) => a.position - b.position));
+  /** Un rayon est-il replié (ses articles masqués) ? */
+  aisleCollapsed(id: string): boolean { return this.ui().collapsedAisles.includes(id); }
+  /** Replier ou déplier un rayon : on masque ses articles, cochés ou non, sans toucher aux données. */
+  toggleAisleCollapse(id: string): void {
+    const cur = this.ui().collapsedAisles;
+    this.patch({ collapsedAisles: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
+  }
   newAisle(): void { this.patch({ aiForm: true, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '' }); }
   editAisle(id: string): void { const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return; this.patch({ aiForm: true, aiEditId: id, aiName: a.name, aiColor: a.color, aiKind: a.kind || '' }); }
   saveAisle(): void {
