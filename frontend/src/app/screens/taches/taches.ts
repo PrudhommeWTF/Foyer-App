@@ -204,13 +204,19 @@ import { TaskComposerComponent } from './composer';
           <div class="list" [fReorder]="ids(g)" (reordered)="store.reorderTasks($event)">
             @for (l of g.lines; track l.task.id) {
               <div [attr.data-rid]="l.task.id">
-              <div class="swipe-wrap">
-              <!-- Fonds révélés par le glissement : à droite terminer, à gauche supprimer. -->
+              <div class="swipe-wrap" [class.swap]="!rightDone()">
+              <!-- Fonds révélés par le glissement. Le sens (terminer / supprimer) suit le réglage de l'utilisateur. -->
               <div class="swipe-bg" aria-hidden="true">
-                <span class="swipe-ic done"><f-icon name="check" [size]="20" color="#fff" [width]="3" /> Terminer</span>
-                <span class="swipe-ic del">Supprimer <f-icon name="trash" [size]="19" color="#fff" [width]="2.4" /></span>
+                <span class="swipe-ic r">
+                  @if (rightDone()) { <f-icon name="check" [size]="20" color="#fff" [width]="3" /> Terminer }
+                  @else { <f-icon name="trash" [size]="19" color="#fff" [width]="2.4" /> Supprimer }
+                </span>
+                <span class="swipe-ic l">
+                  @if (rightDone()) { Supprimer <f-icon name="trash" [size]="19" color="#fff" [width]="2.4" /> }
+                  @else { Terminer <f-icon name="check" [size]="20" color="#fff" [width]="3" /> }
+                </span>
               </div>
-              <div class="task" fSwipe (swipeRight)="store.toggleTask(l.task.id)" (swipeLeft)="store.removeTask(l.task.id)"
+              <div class="task" fSwipe (swipeRight)="doSwipe(l.task.id, 'right')" (swipeLeft)="doSwipe(l.task.id, 'left')"
                    [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.editTaskItem(l.task.id)">
                 @if (l.task.rec && l.task.due) {
                   <div class="t-prog" [style.width.%]="taskProgress(l.task) * 100" [style.background]="listColor(l.task.listId)"></div>
@@ -521,11 +527,14 @@ import { TaskComposerComponent } from './composer';
     .swipe-wrap { position: relative; border-radius: 16px; }
     .swipe-bg { position: absolute; inset: 0; border-radius: 16px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; opacity: 0; }
     .swipe-wrap[data-swipe] .swipe-bg { opacity: 1; }
+    /* La couleur suit l'action de ce côté : terminer en vert, supprimer en rouge. « swap » intervertit les deux. */
     .swipe-wrap[data-swipe="right"] .swipe-bg { background: var(--sage); }
     .swipe-wrap[data-swipe="left"] .swipe-bg { background: var(--primary); }
+    .swipe-wrap.swap[data-swipe="right"] .swipe-bg { background: var(--primary); }
+    .swipe-wrap.swap[data-swipe="left"] .swipe-bg { background: var(--sage); }
     .swipe-ic { display: inline-flex; align-items: center; gap: 8px; color: #fff; font-weight: 800; font-size: 14px; opacity: 0; transition: transform .12s ease; }
-    .swipe-wrap[data-swipe="right"] .swipe-ic.done { opacity: 1; }
-    .swipe-wrap[data-swipe="left"] .swipe-ic.del { opacity: 1; }
+    .swipe-wrap[data-swipe="right"] .swipe-ic.r { opacity: 1; }
+    .swipe-wrap[data-swipe="left"] .swipe-ic.l { opacity: 1; }
     .swipe-wrap.swipe-commit .swipe-ic { transform: scale(1.14); }
 
     .task { position: relative; display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 16px; padding: 14px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; overflow: hidden; touch-action: pan-y; }
@@ -675,6 +684,14 @@ export class TachesScreen {
   groups = computed<TaskGroup[]>(() => groupOpen(this.scoped(), this.store.todayStr(), this.activeObj()?.kind || 'taches', this.activeObj()?.order === 'manuel' ? 'manuel' : 'echeance'));
   done = computed(() => doneTasks(this.scoped()));
   editing = computed(() => { const id = this.store.ui().taskEdit; return id ? this.store.task(id) || null : null; });
+
+  /** Le glissement à droite termine-t-il la tâche ? Faux si l'utilisateur a inversé les deux sens. */
+  rightDone = computed(() => this.store.setting('taskSwipe') !== 'right-delete');
+  /** Applique le geste selon le réglage : un côté termine, l'autre supprime. */
+  doSwipe(id: string, dir: 'right' | 'left'): void {
+    const terminer = dir === 'right' ? this.rightDone() : !this.rightDone();
+    if (terminer) this.store.toggleTask(id); else this.store.removeTask(id);
+  }
 
   delListName = computed(() => this.d().taskLists.find((l) => l.id === this.store.ui().listDelId)?.name || '');
   delListCount = computed(() => this.d().tasks.filter((t) => t.listId === this.store.ui().listDelId).length);
