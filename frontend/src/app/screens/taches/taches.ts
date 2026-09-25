@@ -13,6 +13,7 @@ import { parseDay } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
 import { ReorderDirective } from '../../shared/reorder';
+import { SwipeDirective } from '../../shared/swipe';
 import { WhoComponent } from '../../shared/who';
 import { StampComponent } from '../../shared/stamp';
 import { TaskComposerComponent } from './composer';
@@ -33,7 +34,7 @@ import { TaskComposerComponent } from './composer';
   selector: 'screen-taches',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, WhoComponent, TaskComposerComponent, StampComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, SwipeDirective, WhoComponent, TaskComposerComponent, StampComponent],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -203,7 +204,14 @@ import { TaskComposerComponent } from './composer';
           <div class="list" [fReorder]="ids(g)" (reordered)="store.reorderTasks($event)">
             @for (l of g.lines; track l.task.id) {
               <div [attr.data-rid]="l.task.id">
-              <div class="task" [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.editTaskItem(l.task.id)">
+              <div class="swipe-wrap">
+              <!-- Fonds révélés par le glissement : à droite terminer, à gauche supprimer. -->
+              <div class="swipe-bg" aria-hidden="true">
+                <span class="swipe-ic done"><f-icon name="check" [size]="20" color="#fff" [width]="3" /> Terminer</span>
+                <span class="swipe-ic del">Supprimer <f-icon name="trash" [size]="19" color="#fff" [width]="2.4" /></span>
+              </div>
+              <div class="task" fSwipe (swipeRight)="store.toggleTask(l.task.id)" (swipeLeft)="store.removeTask(l.task.id)"
+                   [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.editTaskItem(l.task.id)">
                 @if (l.task.rec && l.task.due) {
                   <div class="t-prog" [style.width.%]="taskProgress(l.task) * 100" [style.background]="listColor(l.task.listId)"></div>
                 }
@@ -250,6 +258,7 @@ import { TaskComposerComponent } from './composer';
                   <button class="later" (click)="$event.stopPropagation(); store.postponeTask(l.task.id)">demain</button>
                 }
                 @if (l.task.who.length) { <f-who [badges]="badges(l.task)" [size]="22" /> }
+              </div>
               </div>
               <!-- Les sous-tâches, sous leur parent : un détail se coche là où il est. -->
               @if (l.subs.length) {
@@ -508,7 +517,18 @@ import { TaskComposerComponent } from './composer';
     .g-act { border: none; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 9px; cursor: pointer; }
     .list { display: flex; flex-direction: column; gap: 10px; }
 
-    .task { position: relative; display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 16px; padding: 14px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; overflow: hidden; }
+    /* Glissé au doigt : le fond coloré et son icône, révélés derrière la ligne. */
+    .swipe-wrap { position: relative; border-radius: 16px; }
+    .swipe-bg { position: absolute; inset: 0; border-radius: 16px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; opacity: 0; }
+    .swipe-wrap[data-swipe] .swipe-bg { opacity: 1; }
+    .swipe-wrap[data-swipe="right"] .swipe-bg { background: var(--sage); }
+    .swipe-wrap[data-swipe="left"] .swipe-bg { background: var(--primary); }
+    .swipe-ic { display: inline-flex; align-items: center; gap: 8px; color: #fff; font-weight: 800; font-size: 14px; opacity: 0; transition: transform .12s ease; }
+    .swipe-wrap[data-swipe="right"] .swipe-ic.done { opacity: 1; }
+    .swipe-wrap[data-swipe="left"] .swipe-ic.del { opacity: 1; }
+    .swipe-wrap.swipe-commit .swipe-ic { transform: scale(1.14); }
+
+    .task { position: relative; display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 16px; padding: 14px 16px; box-shadow: 0 10px 24px -20px rgba(90,60,40,.6); cursor: pointer; overflow: hidden; touch-action: pan-y; }
     .task.done { background: var(--soft2); box-shadow: none; }
     /* Barre de progression d'une tâche récurrente, le long de la bordure basse :
        elle se remplit à mesure que l'occurrence à venir approche. */
