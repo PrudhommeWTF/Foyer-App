@@ -9,9 +9,10 @@
 // événements), portent l'auteur (`by` = membre) et la provenance (`via` = nom
 // du jeton), et respectent la portée et le rôle du membre.
 import { getHousehold, db, saveHousehold } from '../db';
-import { HouseholdState, EventItem, Recipe } from '../models';
-import { applyShoppingOps } from '../shopping/repo';
-import { applyTaskOps } from '../tasks/repo';
+import { HouseholdState, EventItem, Recipe, SchedSlot, MealValue, MealItem, ShopList, TaskList, ListKind, Place } from '../models';
+import { applyShoppingOps, preserveShopping } from '../shopping/repo';
+import { applyTaskOps, preserveTasks } from '../tasks/repo';
+import { applyPlaceOps } from '../places/repo';
 import { TaskItem } from '../tasks/ops';
 import { byOrd, orderedOf } from '../tasks/ordering';
 import { FALLBACK_AISLE_NAMES } from '../shopping/ops';
@@ -106,6 +107,66 @@ function resolveAisle(s: HouseholdState, rayon?: string) {
   return fallbackAisle(s);
 }
 
+// ---- Résolveurs et constantes partagés pour le CRUD -----------------------
+
+const RECUR_VALUES = ['none', 'daily', 'weekday', 'weekly', 'biweekly', 'monthly'] as const;
+const RECUR_LABEL: Record<string, string> = { daily: 'chaque jour', weekday: 'en semaine', weekly: 'chaque semaine', biweekly: 'une semaine sur deux', monthly: 'chaque mois' };
+const SCHED_TYPES = ['ecole', 'travail', 'sport', 'loisir', 'sante', 'repas', 'autre'] as const;
+const SCHED_WHEN = ['always', 'school', 'holidays'] as const;
+const WHEN_LABEL: Record<string, string> = { always: 'toujours', school: 'période scolaire', holidays: 'vacances' };
+const MEAL_KEY_BY_NAME: Record<string, string> = { matin: 'matin', 'petit-dejeuner': 'matin', 'petit dejeuner': 'matin', midi: 'midi', dejeuner: 'midi', soir: 'soir', diner: 'soir', souper: 'soir' };
+const MEAL_LABEL: Record<string, string> = { matin: 'Petit-déjeuner', midi: 'Midi', soir: 'Soir' };
+const DOW_BY_NAME: Record<string, number> = { lundi: 1, mardi: 2, mercredi: 3, jeudi: 4, vendredi: 5, samedi: 6, dimanche: 7 };
+const DOW_LABEL = ['', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const isDate = (v?: string): boolean => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const isTime = (v?: string): boolean => !!v && /^\d{2}:\d{2}$/.test(v);
+/** Jour de la semaine d'une date ISO, lundi = 1 à dimanche = 7 (comme `dow`). */
+function dowOf(iso: string): number { const [y, m, d] = iso.split('-').map(Number); const j = new Date(Date.UTC(y || 1970, (m || 1) - 1, d || 1)).getUTCDay(); return j === 0 ? 7 : j; }
+/** Un nom de jour (« lundi ») ou un numéro (1..7) vers un `dow`. */
+function resolveDow(v: string | number | undefined): number | null {
+  if (typeof v === 'number') return v >= 1 && v <= 7 ? v : null;
+  const n = norm(String(v || '')); if (!n) return null;
+  if (DOW_BY_NAME[n]) return DOW_BY_NAME[n];
+  const num = Number(n); return Number.isInteger(num) && num >= 1 && num <= 7 ? num : null;
+}
+/** Le créneau de repas (« matin », « déjeuner »…) ramené à sa clé matin/midi/soir. */
+function resolveMealKey(v: string): string | null { return MEAL_KEY_BY_NAME[norm(v)] || null; }
+
+const resolveEvent = (s: HouseholdState, id: string): EventItem | null => (s.events || []).find((e) => e.id === id) || null;
+/** Une recette par identifiant, puis par nom exact, puis par nom contenant les mots. */
+function resolveRecipe(s: HouseholdState, q: string): Recipe | null {
+  const byId = (s.recipes || []).find((r) => r.id === q.trim()); if (byId) return byId;
+  const n = norm(q); if (!n) return null;
+  return (s.recipes || []).find((r) => norm(r.name) === n) || (s.recipes || []).find((r) => norm(r.name).includes(n)) || null;
+}
+const resolveSlot = (s: HouseholdState, id: string) => (s.sched || []).find((x) => x.id === id) || null;
+/** Un lieu de vacances par identifiant, puis par nom (exact, puis contenant les mots). */
+function resolvePlace(s: HouseholdState, q: string): Place | null {
+  const byId = (s.places || []).find((p) => p.id === q.trim()); if (byId) return byId;
+  const n = norm(q); if (!n) return null;
+  return (s.places || []).find((p) => norm(p.name) === n) || (s.places || []).find((p) => norm(p.name).includes(n)) || null;
+}
+
+/**
+ * Résout une tâche ouverte OU terminée, par identifiant ou intitulé. Sert aux
+ * gestes qui peuvent viser l'une comme l'autre (modifier, rouvrir, supprimer).
+ */
+function resolveTaskAny(s: HouseholdState, ctx: McpCtx, query: string): TaskResolution {
+  const q = norm(query);
+  if (!q) return { none: true };
+  const listIds = new Set(visibleTaskLists(s, ctx).map((l) => l.id));
+  const byId = (s.tasks || []).find((t) => t.id === query.trim() && listIds.has(t.listId));
+  if (byId) return { id: byId.id };
+  const roots = (s.tasks || []).filter((t) => listIds.has(t.listId) && !t.parentId);
+  const exact = roots.filter((t) => norm(t.text) === q);
+  if (exact.length === 1) return { id: exact[0].id };
+  if (exact.length > 1) return { candidates: exact };
+  const approx = roots.filter((t) => norm(t.text).includes(q));
+  if (approx.length === 1) return { id: approx[0].id };
+  if (approx.length > 1) return { candidates: approx };
+  return { none: true };
+}
+
 // ---- Lecture -------------------------------------------------------------
 
 export function aujourdhui(ctx: McpCtx): string {
@@ -156,7 +217,7 @@ export function coursesListe(ctx: McpCtx, listName?: string): string {
   return out.join('\n');
 }
 
-export function tachesListe(ctx: McpCtx, quand: 'aujourdhui' | 'semaine' | 'retard' | 'toutes' = 'toutes', listName?: string): string {
+export function tachesListe(ctx: McpCtx, quand: 'aujourdhui' | 'semaine' | 'retard' | 'toutes' | 'terminees' = 'toutes', listName?: string): string {
   const s = state();
   const today = todayParis();
   const weekEnd = addDaysIso(today, 7);
@@ -168,6 +229,13 @@ export function tachesListe(ctx: McpCtx, quand: 'aujourdhui' | 'semaine' | 'reta
   }
   const listIds = new Set(lists.map((l) => l.id));
   const listName2 = (id: string): string => lists.find((l) => l.id === id)?.name || 'Tâches';
+  // Les terminées, les plus récentes d'abord : de quoi en rouvrir ou en supprimer une.
+  if (quand === 'terminees') {
+    const fini = (s.tasks || []).filter((t) => listIds.has(t.listId) && t.done && !t.parentId)
+      .sort((a, b) => (b.doneAt || '').localeCompare(a.doneAt || '')).slice(0, 20);
+    if (!fini.length) return 'Aucune tâche terminée.';
+    return `Tâches terminées (${fini.length} récentes) :\n` + fini.map((t) => `- ${t.text} [${t.id}] (${listName2(t.listId)})`).join('\n');
+  }
   // Le rang de chaque tâche dans l'ordre manuel de sa liste (racines ouvertes),
   // pour que l'assistant puisse dire « elle est en troisième position » et
   // raisonner sur un déplacement relatif.
@@ -427,12 +495,14 @@ export function tacheDeplacer(ctx: McpCtx, args: { tache: string; avant?: string
   return `Tâche « ${t.text} » rangée : ${r} sur ${ordered.length} dans « ${listName} » (échéance inchangée).`;
 }
 
-export function evenementCreer(ctx: McpCtx, args: { titre: string; date: string; heure?: string; fin?: string; lieu?: string; pour?: string[] }): string {
+export function evenementCreer(ctx: McpCtx, args: { titre: string; date: string; heure?: string; fin?: string; lieu?: string; pour?: string[]; recurrence?: string }): string {
   const titre = (args.titre || '').trim();
   if (!titre) return 'Donnez le titre de l’événement.';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date || '')) return 'Date illisible (attendu AAAA-MM-JJ).';
-  if (args.heure && !/^\d{2}:\d{2}$/.test(args.heure)) return 'Heure illisible (attendu HH:MM).';
-  if (args.fin && !/^\d{2}:\d{2}$/.test(args.fin)) return 'Heure de fin illisible (attendu HH:MM).';
+  if (!isDate(args.date)) return 'Date illisible (attendu AAAA-MM-JJ).';
+  if (args.heure && !isTime(args.heure)) return 'Heure illisible (attendu HH:MM).';
+  if (args.fin && !isTime(args.fin)) return 'Heure de fin illisible (attendu HH:MM).';
+  const recur = args.recurrence && args.recurrence !== 'none' ? args.recurrence : '';
+  if (recur && !RECUR_VALUES.includes(recur as (typeof RECUR_VALUES)[number])) return `Récurrence inconnue. Valeurs : ${RECUR_VALUES.join(', ')}.`;
   const id = genId('e');
   // Les événements n'ont pas d'opérations ciblées : on écrit dans le document, en
   // une transaction (better-sqlite3 est synchrone, aucune écriture ne s'y glisse).
@@ -440,7 +510,7 @@ export function evenementCreer(ctx: McpCtx, args: { titre: string; date: string;
     const s = getHousehold().state as HouseholdState;
     const { ids, unknown } = resolveMembers(s, args.pour || []);
     const ev: EventItem = {
-      id, date: args.date, time: args.heure || '', title: titre, who: ids, recur: '',
+      id, date: args.date, time: args.heure || '', title: titre, who: ids, recur,
       end: null, endTime: args.fin || null, place: (args.lieu || '').trim() || null,
       allDay: !args.heure, by: ctx.memberId, at: new Date().toISOString(),
     };
@@ -448,7 +518,47 @@ export function evenementCreer(ctx: McpCtx, args: { titre: string; date: string;
     saveHousehold(s);
     return unknown.length ? ` Prénoms non reconnus : ${unknown.join(', ')}.` : '';
   })();
-  return `Événement créé : « ${titre} » le ${frDate(args.date, true)}${args.heure ? ' à ' + args.heure : ''} [${id}].${out}`;
+  const rl = recur ? ', ' + (RECUR_LABEL[recur] || recur) : '';
+  return `Événement créé : « ${titre} » le ${frDate(args.date, true)}${args.heure ? ' à ' + args.heure : ''}${rl} [${id}].${out}`;
+}
+
+export function evenementModifier(ctx: McpCtx, args: { id: string; titre?: string; date?: string; heure?: string; fin?: string; lieu?: string; pour?: string[]; recurrence?: string }): string {
+  if (args.date !== undefined && !isDate(args.date)) return 'Date illisible (attendu AAAA-MM-JJ).';
+  if (args.heure && !isTime(args.heure)) return 'Heure illisible (attendu HH:MM).';
+  if (args.fin && !isTime(args.fin)) return 'Heure de fin illisible (attendu HH:MM).';
+  if (args.recurrence && args.recurrence !== 'none' && !RECUR_VALUES.includes(args.recurrence as (typeof RECUR_VALUES)[number])) return `Récurrence inconnue. Valeurs : ${RECUR_VALUES.join(', ')}.`;
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const ev = resolveEvent(s, args.id);
+    if (!ev) return 'INTROUVABLE';
+    let extra = '';
+    if (args.titre !== undefined) { const t = args.titre.trim(); if (!t) return 'VIDE'; ev.title = t; }
+    if (args.date !== undefined) ev.date = args.date;
+    // L'heure : une chaîne vide bascule en journée entière, une heure la repose.
+    if (args.heure !== undefined) { ev.time = args.heure; ev.allDay = !args.heure; }
+    if (args.fin !== undefined) ev.endTime = args.fin || null;
+    if (args.lieu !== undefined) ev.place = args.lieu.trim() || null;
+    if (args.recurrence !== undefined) ev.recur = args.recurrence === 'none' ? '' : args.recurrence;
+    if (args.pour !== undefined) { const { ids, unknown } = resolveMembers(s, args.pour); ev.who = ids; if (unknown.length) extra = ` Prénoms non reconnus : ${unknown.join(', ')}.`; }
+    ev.upBy = ctx.memberId; ev.upAt = new Date().toISOString();
+    saveHousehold(s);
+    return `« ${ev.title} » le ${frDate(ev.date, true)}${extra}`;
+  })();
+  if (out === 'INTROUVABLE') return 'Événement introuvable (identifiant).';
+  if (out === 'VIDE') return 'Le titre ne peut pas être vide.';
+  return `Événement modifié : ${out}`;
+}
+
+export function evenementSupprimer(_ctx: McpCtx, id: string): string {
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const ev = resolveEvent(s, id);
+    if (!ev) return 'INTROUVABLE';
+    s.events = (s.events || []).filter((e) => e.id !== id);
+    saveHousehold(s);
+    return ev.title;
+  })();
+  return out === 'INTROUVABLE' ? 'Événement introuvable (identifiant).' : `Événement supprimé : « ${out} ».`;
 }
 
 export async function recetteImporter(ctx: McpCtx, url: string): Promise<string> {
@@ -477,4 +587,529 @@ export async function recetteImporter(ctx: McpCtx, url: string): Promise<string>
     if (e instanceof FetchError || e instanceof ImportError) return 'Import refusé : ' + (e as Error).message;
     return 'Erreur pendant l’import : ' + (e as Error).message;
   }
+}
+
+// ---- Courses : état, modification, retrait, listes -----------------------
+
+const SHOP_STATE_LABEL: Record<string, string> = { 'a-prendre': 'remis à prendre', panier: 'mis au panier', indisponible: 'marqués introuvables' };
+
+/** Change l'état d'articles : à prendre, au panier, ou introuvable. */
+export function coursesEtat(ctx: McpCtx, ids: string[], etat: string): string {
+  if (!SHOP_STATE_LABEL[etat]) return 'État inconnu (valeurs : a-prendre, panier, indisponible).';
+  const s = state();
+  const known = new Set((s.shop || []).map((i) => i.id));
+  const cible = ids.filter((id) => known.has(id));
+  const inconnus = ids.filter((id) => !known.has(id));
+  const at = new Date().toISOString();
+  if (cible.length) applyShoppingOps(cible.map((id) => ({ op: 'set-state', opId: genId('op'), id, state: etat, by: ctx.memberId, via: ctx.via, at })));
+  const parts = [`${cible.length} article(s) ${SHOP_STATE_LABEL[etat]}.`];
+  if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
+  return parts.join(' ');
+}
+
+/** Modifie un article : nom, quantité, rayon, ou liste. */
+export function coursesModifier(ctx: McpCtx, args: { id: string; nom?: string; qte?: string; rayon?: string; liste?: string }): string {
+  const s = state();
+  const it = (s.shop || []).find((i) => i.id === args.id);
+  if (!it) return 'Article introuvable (identifiant).';
+  const op: Record<string, unknown> = { op: 'edit', opId: genId('op'), id: args.id, by: ctx.memberId, via: ctx.via, at: new Date().toISOString() };
+  if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'Le nom ne peut pas être vide.'; op['name'] = n; }
+  if (args.qte !== undefined) op['qty'] = args.qte.trim();
+  if (args.rayon !== undefined) { const a = resolveAisle(s, args.rayon); if (!a) return 'Rayon introuvable.'; op['aisleId'] = a.id; }
+  if (args.liste !== undefined) { const l = resolveShopList(s, args.liste); if (!l) return `Liste « ${args.liste} » inconnue.`; op['listId'] = l.id; }
+  const res = applyShoppingOps([op]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Article « ${(op['name'] as string) || it.name} » modifié.`;
+}
+
+/** Retire des articles d'une liste de courses, par identifiants. */
+export function coursesRetirer(ctx: McpCtx, ids: string[]): string {
+  const s = state();
+  const known = new Map((s.shop || []).map((i) => [i.id, i.name]));
+  const cible = ids.filter((id) => known.has(id));
+  const inconnus = ids.filter((id) => !known.has(id));
+  const at = new Date().toISOString();
+  if (cible.length) applyShoppingOps(cible.map((id) => ({ op: 'remove', opId: genId('op'), id, by: ctx.memberId, via: ctx.via, at })));
+  const noms = cible.map((id) => known.get(id)).filter(Boolean);
+  const parts = [`${cible.length} article(s) retiré(s)${noms.length ? ' : ' + noms.join(', ') : ''}.`];
+  if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
+  return parts.join(' ');
+}
+
+export function rayons(_ctx: McpCtx): string {
+  const s = state();
+  const a = (s.aisles || []).slice().sort((x, y) => (x.position ?? 999) - (y.position ?? 999));
+  if (!a.length) return 'Aucun rayon.';
+  return 'Rayons du magasin (pour ranger un article) :\n' + a.map((x) => '- ' + x.name).join('\n');
+}
+
+export function listeCoursesCreer(_ctx: McpCtx, args: { nom: string; couleur?: string; icone?: string }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nom de la liste.';
+  const id = genId('cl');
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    if ((s.shopLists || []).some((l) => norm(l.name) === norm(nom))) return 'DOUBLON';
+    const list: ShopList = { id, name: nom, color: (args.couleur || '#7A9B76'), icon: (args.icone || 'panier') };
+    s.shopLists = [...(s.shopLists || []), list];
+    saveHousehold(s);
+    return '';
+  })();
+  return out === 'DOUBLON' ? `Une liste de courses « ${nom} » existe déjà.` : `Liste de courses créée : « ${nom} » [${id}].`;
+}
+
+export function listeCoursesRenommer(_ctx: McpCtx, args: { liste: string; nom: string }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nouveau nom.';
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const l = args.liste ? (s.shopLists || []).find((x) => norm(x.name) === norm(args.liste)) : null;
+    if (!l) return 'INTROUVABLE';
+    const old = l.name; l.name = nom;
+    saveHousehold(s);
+    return old;
+  })();
+  return out === 'INTROUVABLE' ? `Liste « ${args.liste} » inconnue.` : `Liste de courses renommée : « ${out} » vers « ${nom} ».`;
+}
+
+export function listeCoursesSupprimer(_ctx: McpCtx, liste: string): string {
+  const out = db.transaction((): { r: string; dropped?: number } => {
+    const before = getHousehold().state as HouseholdState;
+    const l = liste ? (before.shopLists || []).find((x) => norm(x.name) === norm(liste)) : null;
+    if (!l) return { r: 'INTROUVABLE' };
+    const next = structuredClone(before) as HouseholdState;
+    next.shopLists = (next.shopLists || []).filter((x) => x.id !== l.id);
+    const rec = preserveShopping(next as unknown as Record<string, unknown>, before as unknown as Record<string, unknown>);
+    saveHousehold(next);
+    return { r: l.name, dropped: rec.dropped };
+  })();
+  if (out.r === 'INTROUVABLE') return `Liste « ${liste} » inconnue.`;
+  return `Liste de courses supprimée : « ${out.r} »${out.dropped ? ` (avec ${out.dropped} article(s))` : ''}.`;
+}
+
+// ---- Tâches : modifier, rouvrir, supprimer, listes -----------------------
+
+export function tacheModifier(ctx: McpCtx, args: { tache: string; texte?: string; echeance?: string; heure?: string; pour?: string[]; note?: string; liste?: string }): string {
+  const s = state();
+  const r = resolveTaskAny(s, ctx, args.tache || '');
+  if ('none' in r) return `Aucune tâche ne correspond à « ${args.tache} ».`;
+  if ('candidates' in r) return candidatsTexte(s, args.tache, r.candidates);
+  if (args.echeance && !isDate(args.echeance)) return 'Échéance illisible (attendu AAAA-MM-JJ, ou vide pour l’enlever).';
+  if (args.heure && !isTime(args.heure)) return 'Heure illisible (attendu HH:MM).';
+  const op: Record<string, unknown> = { op: 'edit', opId: genId('op'), id: r.id, by: ctx.memberId, via: ctx.via, at: new Date().toISOString() };
+  let extra = '';
+  if (args.texte !== undefined) { const t = args.texte.trim(); if (!t) return 'L’intitulé ne peut pas être vide.'; op['text'] = t; }
+  if (args.echeance !== undefined) op['due'] = args.echeance ? args.echeance : null;
+  if (args.heure !== undefined) op['time'] = args.heure ? args.heure : null;
+  if (args.note !== undefined) op['note'] = args.note.trim();
+  if (args.pour !== undefined) { const { ids, unknown } = resolveMembers(s, args.pour); op['who'] = ids; if (unknown.length) extra = ` Prénoms non reconnus : ${unknown.join(', ')}.`; }
+  if (args.liste !== undefined) { const l = visibleTaskLists(s, ctx).find((x) => norm(x.name) === norm(args.liste!)); if (!l) return `Liste « ${args.liste} » inconnue ou privée.`; op['listId'] = l.id; }
+  const res = applyTaskOps([op]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  const t = (state().tasks || []).find((x) => x.id === r.id)!;
+  return `Tâche modifiée : « ${t.text} » [${t.id}]${t.due ? ', échéance ' + frDate(t.due, true) : ''}.${extra}`;
+}
+
+export function tacheRouvrir(ctx: McpCtx, tache: string): string {
+  const s = state();
+  const r = resolveTaskAny(s, ctx, tache || '');
+  if ('none' in r) return `Aucune tâche ne correspond à « ${tache} ».`;
+  if ('candidates' in r) return candidatsTexte(s, tache, r.candidates);
+  const t = (s.tasks || []).find((x) => x.id === r.id)!;
+  if (!t.done) return 'Cette tâche est déjà ouverte.';
+  const res = applyTaskOps([{ op: 'reopen', opId: genId('op'), id: r.id, ...(t.rec && t.due ? { occ: t.due } : {}), by: ctx.memberId, via: ctx.via, at: new Date().toISOString() }]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Tâche rouverte : « ${t.text} ».`;
+}
+
+export function tacheSupprimer(ctx: McpCtx, tache: string): string {
+  const s = state();
+  const r = resolveTaskAny(s, ctx, tache || '');
+  if ('none' in r) return `Aucune tâche ne correspond à « ${tache} ».`;
+  if ('candidates' in r) return candidatsTexte(s, tache, r.candidates);
+  const t = (s.tasks || []).find((x) => x.id === r.id)!;
+  const subs = (s.tasks || []).filter((x) => x.parentId === r.id);
+  const at = new Date().toISOString();
+  const ops = [...subs, t].map((x) => ({ op: 'remove', opId: genId('op'), id: x.id, by: ctx.memberId, via: ctx.via, at }));
+  const res = applyTaskOps(ops);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Tâche supprimée : « ${t.text} »${subs.length ? ` (avec ${subs.length} sous-tâche(s))` : ''}.`;
+}
+
+const LIST_KINDS = ['taches', 'corvees', 'checklist', 'preparation'] as const;
+
+export function listeTachesCreer(ctx: McpCtx, args: { nom: string; type?: string; couleur?: string; icone?: string; prive?: boolean }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nom de la liste.';
+  const kind = (args.type && (LIST_KINDS as readonly string[]).includes(args.type) ? args.type : 'taches') as ListKind;
+  const id = genId('l');
+  db.transaction((): void => {
+    const s = getHousehold().state as HouseholdState;
+    const list: TaskList = { id, name: nom, color: (args.couleur || '#E56B4E'), icon: (args.icone || 'checklist'), kind, scope: args.prive ? ctx.memberId : 'shared', position: (s.taskLists || []).length };
+    s.taskLists = [...(s.taskLists || []), list];
+    saveHousehold(s);
+  })();
+  return `Liste de tâches créée : « ${nom} »${args.prive ? ' (privée)' : ''} [${id}].`;
+}
+
+export function listeTachesRenommer(ctx: McpCtx, args: { liste: string; nom: string }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nouveau nom.';
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const l = (s.taskLists || []).find((x) => norm(x.name) === norm(args.liste) && (x.scope === 'shared' || x.scope === ctx.memberId));
+    if (!l) return 'INTROUVABLE';
+    const old = l.name; l.name = nom;
+    saveHousehold(s);
+    return old;
+  })();
+  return out === 'INTROUVABLE' ? `Liste « ${args.liste} » inconnue ou privée.` : `Liste de tâches renommée : « ${out} » vers « ${nom} ».`;
+}
+
+export function listeTachesArchiver(ctx: McpCtx, args: { liste: string; archivee: boolean }): string {
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const l = (s.taskLists || []).find((x) => norm(x.name) === norm(args.liste) && (x.scope === 'shared' || x.scope === ctx.memberId));
+    if (!l) return 'INTROUVABLE';
+    l.archived = args.archivee;
+    saveHousehold(s);
+    return l.name;
+  })();
+  return out === 'INTROUVABLE' ? `Liste « ${args.liste} » inconnue ou privée.` : `Liste « ${out} » ${args.archivee ? 'archivée' : 'restaurée'}.`;
+}
+
+export function listeTachesSupprimer(ctx: McpCtx, liste: string): string {
+  const out = db.transaction((): { r: string; dropped?: number } => {
+    const before = getHousehold().state as HouseholdState;
+    const l = (before.taskLists || []).find((x) => norm(x.name) === norm(liste) && (x.scope === 'shared' || x.scope === ctx.memberId));
+    if (!l) return { r: 'INTROUVABLE' };
+    const next = structuredClone(before) as HouseholdState;
+    next.taskLists = (next.taskLists || []).filter((x) => x.id !== l.id);
+    const rec = preserveTasks(next as unknown as Record<string, unknown>, before as unknown as Record<string, unknown>);
+    saveHousehold(next);
+    return { r: l.name, dropped: rec.dropped };
+  })();
+  if (out.r === 'INTROUVABLE') return `Liste « ${liste} » inconnue ou privée.`;
+  return `Liste de tâches supprimée : « ${out.r} »${out.dropped ? ` (avec ${out.dropped} tâche(s))` : ''}.`;
+}
+
+// ---- Repas ----------------------------------------------------------------
+
+export function repasDefinir(_ctx: McpCtx, args: { date: string; creneau: string; recettes?: string[]; texte?: string[]; couverts?: number; absents?: string[] }): string {
+  if (!isDate(args.date)) return 'Date illisible (attendu AAAA-MM-JJ).';
+  const key = resolveMealKey(args.creneau || '');
+  if (!key) return 'Créneau inconnu (matin, midi ou soir).';
+  const s = state();
+  const items: MealItem[] = [];
+  const inconnues: string[] = [];
+  for (const q of args.recettes || []) { const r = resolveRecipe(s, q); if (r) items.push({ rid: r.id }); else inconnues.push(q); }
+  for (const line of args.texte || []) { const t = (line || '').trim(); if (t) items.push({ text: t }); }
+  if (!items.length) return inconnues.length ? `Aucune recette reconnue (${inconnues.join(', ')}).` : 'Donnez au moins une recette ou un plat en texte.';
+  const { ids: away, unknown } = resolveMembers(s, args.absents || []);
+  const pax = typeof args.couverts === 'number' && args.couverts > 0 ? Math.floor(args.couverts) : null;
+  db.transaction((): void => {
+    const st = getHousehold().state as HouseholdState;
+    const v: MealValue = { items, ...(pax ? { pax } : {}), ...(away.length ? { away } : {}) };
+    st.meals = { ...(st.meals || {}), [`${args.date}-${key}`]: v };
+    saveHousehold(st);
+  })();
+  const noms = items.map((it) => it.rid ? (s.recipes || []).find((r) => r.id === it.rid)?.name || 'recette' : it.text).join(', ');
+  const parts = [`${MEAL_LABEL[key]} du ${frDate(args.date, true)} : ${noms}${pax ? `, ${pax} couverts` : ''}.`];
+  if (inconnues.length) parts.push(`Recettes non trouvées : ${inconnues.join(', ')}.`);
+  if (unknown.length) parts.push(`Absents non reconnus : ${unknown.join(', ')}.`);
+  return parts.join(' ');
+}
+
+export function repasVider(_ctx: McpCtx, args: { date: string; creneau: string }): string {
+  if (!isDate(args.date)) return 'Date illisible (attendu AAAA-MM-JJ).';
+  const key = resolveMealKey(args.creneau || '');
+  if (!key) return 'Créneau inconnu (matin, midi ou soir).';
+  const mealKey = `${args.date}-${key}`;
+  const out = db.transaction((): string => {
+    const st = getHousehold().state as HouseholdState;
+    if (!st.meals || !st.meals[mealKey]) return 'VIDE';
+    const next = { ...st.meals }; delete next[mealKey]; st.meals = next;
+    // L'événement d'agenda éventuellement posé pour ce repas part avec lui.
+    st.events = (st.events || []).filter((e) => e.mealKey !== mealKey);
+    saveHousehold(st);
+    return 'OK';
+  })();
+  return out === 'VIDE' ? `Rien de prévu pour ${MEAL_LABEL[key]} du ${frDate(args.date, true)}.` : `${MEAL_LABEL[key]} du ${frDate(args.date, true)} vidé.`;
+}
+
+// ---- Recettes : créer, modifier, supprimer -------------------------------
+
+const posInt = (v?: number): number | null => (typeof v === 'number' && v > 0 ? Math.floor(v) : null);
+
+export function recetteCreer(_ctx: McpCtx, args: { nom: string; ingredients?: string[]; etapes?: string[]; portions?: number; prepMin?: number; cookMin?: number; source?: string }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nom de la recette.';
+  const ingr = (args.ingredients || []).map((x) => (x || '').trim()).filter(Boolean);
+  const steps = (args.etapes || []).map((x) => (x || '').trim()).filter(Boolean);
+  const id = genId('r');
+  db.transaction((): void => {
+    const s = getHousehold().state as HouseholdState;
+    const r: Recipe = { id, name: nom, level: '', color: '#E56B4E', ingr, steps, portions: posInt(args.portions), prepMin: posInt(args.prepMin), cookMin: posInt(args.cookMin), source: (args.source || '').trim() || null };
+    s.recipes = [...(s.recipes || []), r];
+    saveHousehold(s);
+  })();
+  return `Recette créée : « ${nom} » [${id}] (${ingr.length} ingrédient(s), ${steps.length} étape(s)).`;
+}
+
+export function recetteModifier(_ctx: McpCtx, args: { id: string; nom?: string; ingredients?: string[]; etapes?: string[]; portions?: number; prepMin?: number; cookMin?: number; source?: string }): string {
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const r = resolveRecipe(s, args.id || '');
+    if (!r) return 'INTROUVABLE';
+    if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'VIDE'; r.name = n; }
+    if (args.ingredients !== undefined) r.ingr = args.ingredients.map((x) => (x || '').trim()).filter(Boolean);
+    if (args.etapes !== undefined) r.steps = args.etapes.map((x) => (x || '').trim()).filter(Boolean);
+    if (args.portions !== undefined) r.portions = posInt(args.portions);
+    if (args.prepMin !== undefined) r.prepMin = posInt(args.prepMin);
+    if (args.cookMin !== undefined) r.cookMin = posInt(args.cookMin);
+    if (args.source !== undefined) r.source = args.source.trim() || null;
+    saveHousehold(s);
+    return r.name;
+  })();
+  if (out === 'INTROUVABLE') return 'Recette introuvable.';
+  if (out === 'VIDE') return 'Le nom ne peut pas être vide.';
+  return `Recette modifiée : « ${out} ».`;
+}
+
+export function recetteSupprimer(_ctx: McpCtx, id: string): string {
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const r = resolveRecipe(s, id || '');
+    if (!r) return 'INTROUVABLE';
+    s.recipes = (s.recipes || []).filter((x) => x.id !== r.id);
+    saveHousehold(s);
+    return r.name;
+  })();
+  return out === 'INTROUVABLE' ? 'Recette introuvable.' : `Recette supprimée : « ${out} ».`;
+}
+
+// ---- Emploi du temps ------------------------------------------------------
+
+export function emploiDuTemps(_ctx: McpCtx, args: { membre?: string; jour?: string }): string {
+  const s = state();
+  let slots = (s.sched || []).slice();
+  if (args.membre) { const m = s.members.find((x) => norm(x.name) === norm(args.membre!)); if (!m) return `Membre « ${args.membre} » inconnu.`; slots = slots.filter((sl) => sl.who.includes(m.id)); }
+  let dow: number | null = null;
+  if (args.jour) { dow = resolveDow(args.jour); if (!dow) return 'Jour inconnu (lundi..dimanche, ou 1..7).'; slots = slots.filter((sl) => sl.dow === dow); }
+  if (!slots.length) return 'Aucun créneau à l’emploi du temps pour ce filtre.';
+  slots.sort((a, b) => a.dow - b.dow || a.start.localeCompare(b.start));
+  const line = (sl: SchedSlot): string => {
+    const w = sl.who.map((id) => memberName(s, id)).filter(Boolean).join(', ');
+    const quand = sl.rec === 'once' ? `ponctuel${sl.date ? ' le ' + frDate(sl.date, true) : ''}` : `chaque ${DOW_LABEL[sl.dow]}${(sl.interval || 1) > 1 ? ` (une semaine sur ${sl.interval})` : ''}`;
+    const when = sl.when && sl.when !== 'always' ? ` · ${WHEN_LABEL[sl.when] || sl.when}` : '';
+    const flags = `${sl.away ? ' · hors foyer' : ''}${sl.sync ? ' · publié à l’agenda' : ''}`;
+    return `- ${DOW_LABEL[sl.dow]} ${sl.start}${sl.end ? '-' + sl.end : ''} ${sl.label} [${sl.id}]${w ? ' (' + w + ')' : ''} · ${sl.k} · ${quand}${when}${flags}`;
+  };
+  return `Emploi du temps (${slots.length} créneau(x)) :\n` + slots.map(line).join('\n');
+}
+
+export function creneauCreer(_ctx: McpCtx, args: { label: string; pour: string[]; jour?: string; debut: string; fin?: string; type?: string; recurrence?: string; date?: string; unesur?: number; du?: string; au?: string; quand?: string; hors_foyer?: boolean; publier?: boolean }): string {
+  const label = (args.label || '').trim();
+  if (!label) return 'Donnez l’intitulé du créneau.';
+  if (!isTime(args.debut)) return 'Heure de début illisible (attendu HH:MM).';
+  if (args.fin && !isTime(args.fin)) return 'Heure de fin illisible (attendu HH:MM).';
+  const rec = args.recurrence === 'once' ? 'once' : 'weekly';
+  let dow: number | null;
+  let date: string | undefined;
+  if (rec === 'once') {
+    if (!isDate(args.date)) return 'Pour un créneau ponctuel, donnez la date (AAAA-MM-JJ).';
+    date = args.date; dow = dowOf(args.date!);
+  } else {
+    dow = resolveDow(args.jour); if (!dow) return 'Jour inconnu (lundi..dimanche, ou 1..7).';
+  }
+  const k = args.type && (SCHED_TYPES as readonly string[]).includes(args.type) ? args.type : 'autre';
+  const when = args.quand && (SCHED_WHEN as readonly string[]).includes(args.quand) ? args.quand : 'always';
+  if (args.du && !isDate(args.du)) return 'Début de période illisible (AAAA-MM-JJ).';
+  if (args.au && !isDate(args.au)) return 'Fin de période illisible (AAAA-MM-JJ).';
+  const s0 = state();
+  const { ids, unknown } = resolveMembers(s0, args.pour || []);
+  if (!ids.length) return 'Précisez au moins un membre (prénom) pour le créneau.' + (unknown.length ? ` Non reconnus : ${unknown.join(', ')}.` : '');
+  const id = genId('s');
+  db.transaction((): void => {
+    const s = getHousehold().state as HouseholdState;
+    const slot: SchedSlot = {
+      id, who: ids, dow: dow!, start: args.debut, end: args.fin || '', label, k, rec,
+      ...(rec === 'once' && date ? { date } : {}),
+      ...(args.unesur && args.unesur > 1 ? { interval: Math.floor(args.unesur) } : {}),
+      ...(args.du ? { from: args.du } : {}),
+      ...(args.au ? { until: args.au } : {}),
+      ...(when !== 'always' ? { when } : {}),
+      ...(args.hors_foyer ? { away: true } : {}),
+      ...(args.publier ? { sync: true } : {}),
+    };
+    s.sched = [...(s.sched || []), slot];
+    saveHousehold(s);
+  })();
+  const quand = rec === 'once' ? `le ${frDate(date!, true)}` : `chaque ${DOW_LABEL[dow!]}`;
+  const parts = [`Créneau créé : « ${label} » ${quand} ${args.debut}${args.fin ? '-' + args.fin : ''}${args.publier ? ', publié à l’agenda' : ''} [${id}].`];
+  if (unknown.length) parts.push(`Prénoms non reconnus : ${unknown.join(', ')}.`);
+  return parts.join(' ');
+}
+
+export function creneauModifier(_ctx: McpCtx, args: { id: string; label?: string; pour?: string[]; jour?: string; debut?: string; fin?: string; type?: string; date?: string; unesur?: number; du?: string; au?: string; quand?: string; hors_foyer?: boolean; publier?: boolean }): string {
+  if (args.debut && !isTime(args.debut)) return 'Heure de début illisible (HH:MM).';
+  if (args.fin && !isTime(args.fin)) return 'Heure de fin illisible (HH:MM).';
+  if (args.date && !isDate(args.date)) return 'Date illisible (AAAA-MM-JJ).';
+  if (args.du && !isDate(args.du)) return 'Début de période illisible (AAAA-MM-JJ).';
+  if (args.au && !isDate(args.au)) return 'Fin de période illisible (AAAA-MM-JJ).';
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const sl = resolveSlot(s, args.id);
+    if (!sl) return 'INTROUVABLE';
+    let extra = '';
+    if (args.label !== undefined) { const l = args.label.trim(); if (!l) return 'VIDE'; sl.label = l; }
+    if (args.debut !== undefined) sl.start = args.debut;
+    if (args.fin !== undefined) sl.end = args.fin || '';
+    if (args.type !== undefined && (SCHED_TYPES as readonly string[]).includes(args.type)) sl.k = args.type;
+    if (args.jour !== undefined) { const d = resolveDow(args.jour); if (!d) return 'JOUR'; sl.dow = d; }
+    if (args.date !== undefined && args.date) { sl.date = args.date; sl.dow = dowOf(args.date); sl.rec = 'once'; }
+    if (args.unesur !== undefined) sl.interval = args.unesur > 1 ? Math.floor(args.unesur) : undefined;
+    if (args.du !== undefined) sl.from = args.du || undefined;
+    if (args.au !== undefined) sl.until = args.au || null;
+    if (args.quand !== undefined) sl.when = (SCHED_WHEN as readonly string[]).includes(args.quand) ? args.quand : 'always';
+    if (args.hors_foyer !== undefined) sl.away = !!args.hors_foyer;
+    if (args.publier !== undefined) sl.sync = !!args.publier;
+    if (args.pour !== undefined) { const { ids, unknown } = resolveMembers(s, args.pour); if (!ids.length) return 'AUCUN'; sl.who = ids; if (unknown.length) extra = ` Prénoms non reconnus : ${unknown.join(', ')}.`; }
+    saveHousehold(s);
+    return `${sl.label}\u0001${extra}`;
+  })();
+  if (out === 'INTROUVABLE') return 'Créneau introuvable (identifiant).';
+  if (out === 'VIDE') return 'L’intitulé ne peut pas être vide.';
+  if (out === 'JOUR') return 'Jour inconnu (lundi..dimanche, ou 1..7).';
+  if (out === 'AUCUN') return 'Le créneau doit garder au moins un membre.';
+  const [lab, extra] = out.split('\u0001');
+  return `Créneau modifié : « ${lab} ».${extra || ''}`;
+}
+
+export function creneauSupprimer(_ctx: McpCtx, id: string): string {
+  const out = db.transaction((): string => {
+    const s = getHousehold().state as HouseholdState;
+    const sl = resolveSlot(s, id);
+    if (!sl) return 'INTROUVABLE';
+    s.sched = (s.sched || []).filter((x) => x.id !== id);
+    saveHousehold(s);
+    return sl.label;
+  })();
+  return out === 'INTROUVABLE' ? 'Créneau introuvable (identifiant).' : `Créneau supprimé : « ${out} ».`;
+}
+
+// ---- Lieux de vacances (inventaires) --------------------------------------
+
+export function lieux(_ctx: McpCtx, args: { lieu?: string }): string {
+  const s = state();
+  let places = (s.places || []).slice().sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+  if (args.lieu) { const p = resolvePlace(s, args.lieu); if (!p) return `Lieu « ${args.lieu} » inconnu.`; places = [p]; }
+  if (!places.length) return 'Aucun lieu de vacances.';
+  const items = s.placeItems || [];
+  const fmt = (i: { name: string; qty: string; id: string }): string => `${i.name}${i.qty ? ' (' + i.qty + ')' : ''} [${i.id}]`;
+  const out: string[] = [];
+  for (const p of places) {
+    const mine = items.filter((i) => i.placeId === p.id);
+    const labas = mine.filter((i) => i.state === 'la-bas');
+    const ici = mine.filter((i) => i.state === 'ici');
+    out.push(`${p.name} [${p.id}]${p.note ? ` (${p.note})` : ''} :`);
+    if (labas.length) out.push('  Sur place : ' + labas.map(fmt).join(', '));
+    if (ici.length) out.push('  Ramenées : ' + ici.map(fmt).join(', '));
+    if (!mine.length) out.push('  (aucune affaire)');
+  }
+  return out.join('\n');
+}
+
+export function lieuCreer(ctx: McpCtx, args: { nom: string; couleur?: string; icone?: string; note?: string }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nom du lieu.';
+  const id = genId('pl');
+  const res = applyPlaceOps([{ op: 'place-add', opId: genId('op'), id, name: nom, ...(args.couleur ? { color: args.couleur } : {}), ...(args.icone ? { icon: args.icone } : {}), ...(args.note && args.note.trim() ? { note: args.note.trim() } : {}), by: ctx.memberId, at: new Date().toISOString() }]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Lieu de vacances créé : « ${nom} » [${id}].`;
+}
+
+export function lieuModifier(ctx: McpCtx, args: { id: string; nom?: string; couleur?: string; icone?: string; note?: string }): string {
+  const s = state();
+  const p = resolvePlace(s, args.id || '');
+  if (!p) return 'Lieu introuvable.';
+  const op: Record<string, unknown> = { op: 'place-edit', opId: genId('op'), id: p.id, by: ctx.memberId, at: new Date().toISOString() };
+  if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'Le nom ne peut pas être vide.'; op['name'] = n; }
+  if (args.couleur !== undefined) op['color'] = args.couleur;
+  if (args.icone !== undefined) op['icon'] = args.icone;
+  if (args.note !== undefined) op['note'] = args.note.trim();
+  const res = applyPlaceOps([op]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Lieu modifié : « ${(op['name'] as string) || p.name} ».`;
+}
+
+export function lieuSupprimer(ctx: McpCtx, id: string): string {
+  const s = state();
+  const p = resolvePlace(s, id || '');
+  if (!p) return 'Lieu introuvable.';
+  const n = (s.placeItems || []).filter((i) => i.placeId === p.id).length;
+  const res = applyPlaceOps([{ op: 'place-remove', opId: genId('op'), id: p.id, by: ctx.memberId, at: new Date().toISOString() }]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Lieu supprimé : « ${p.name} »${n ? ` (avec ${n} affaire(s))` : ''}.`;
+}
+
+export function affaireAjouter(ctx: McpCtx, args: { lieu: string; affaires: { nom: string; qte?: string }[]; etat?: string }): string {
+  const s = state();
+  const p = resolvePlace(s, args.lieu || '');
+  if (!p) return `Lieu « ${args.lieu} » inconnu.`;
+  const etat = args.etat === 'ici' ? 'ici' : 'la-bas';
+  const at = new Date().toISOString();
+  const ops: unknown[] = [];
+  const noms: string[] = [];
+  for (const a of args.affaires || []) {
+    const nom = (a.nom || '').trim();
+    if (!nom) continue;
+    ops.push({ op: 'add', opId: genId('op'), id: genId('pi'), placeId: p.id, name: nom, qty: (a.qte || '').trim(), state: etat, by: ctx.memberId, at });
+    noms.push(nom + (a.qte ? ' (' + a.qte + ')' : ''));
+  }
+  if (!ops.length) return 'Aucune affaire à ajouter.';
+  const res = applyPlaceOps(ops);
+  if (res.skipped.length && !res.applied.length) return res.skipped[0].reason;
+  return `Ajouté à « ${p.name} » (${etat === 'ici' ? 'ramenées' : 'sur place'}) : ${noms.join(', ')}.`;
+}
+
+const PLACE_STATE_LABEL: Record<string, string> = { 'la-bas': 'laissée(s) sur place', ici: 'ramenée(s) ici' };
+
+export function affaireEtat(ctx: McpCtx, ids: string[], etat: string): string {
+  if (!PLACE_STATE_LABEL[etat]) return 'État inconnu (valeurs : la-bas, ici).';
+  const s = state();
+  const known = new Set((s.placeItems || []).map((i) => i.id));
+  const cible = ids.filter((id) => known.has(id));
+  const inconnus = ids.filter((id) => !known.has(id));
+  const at = new Date().toISOString();
+  if (cible.length) applyPlaceOps(cible.map((id) => ({ op: 'set-state', opId: genId('op'), id, state: etat, by: ctx.memberId, at })));
+  const parts = [`${cible.length} affaire(s) ${PLACE_STATE_LABEL[etat]}.`];
+  if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
+  return parts.join(' ');
+}
+
+export function affaireModifier(ctx: McpCtx, args: { id: string; nom?: string; qte?: string; lieu?: string }): string {
+  const s = state();
+  const it = (s.placeItems || []).find((i) => i.id === args.id);
+  if (!it) return 'Affaire introuvable (identifiant).';
+  const op: Record<string, unknown> = { op: 'edit', opId: genId('op'), id: args.id, by: ctx.memberId, at: new Date().toISOString() };
+  if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'Le nom ne peut pas être vide.'; op['name'] = n; }
+  if (args.qte !== undefined) op['qty'] = args.qte.trim();
+  if (args.lieu !== undefined) { const p = resolvePlace(s, args.lieu); if (!p) return `Lieu « ${args.lieu} » inconnu.`; op['placeId'] = p.id; }
+  const res = applyPlaceOps([op]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Affaire « ${(op['name'] as string) || it.name} » modifiée.`;
+}
+
+export function affaireRetirer(ctx: McpCtx, ids: string[]): string {
+  const s = state();
+  const known = new Map((s.placeItems || []).map((i) => [i.id, i.name]));
+  const cible = ids.filter((id) => known.has(id));
+  const inconnus = ids.filter((id) => !known.has(id));
+  const at = new Date().toISOString();
+  if (cible.length) applyPlaceOps(cible.map((id) => ({ op: 'remove', opId: genId('op'), id, by: ctx.memberId, at })));
+  const noms = cible.map((id) => known.get(id)).filter(Boolean);
+  const parts = [`${cible.length} affaire(s) retirée(s)${noms.length ? ' : ' + noms.join(', ') : ''}.`];
+  if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
+  return parts.join(' ');
 }

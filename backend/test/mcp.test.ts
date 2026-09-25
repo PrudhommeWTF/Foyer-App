@@ -174,4 +174,121 @@ describe('Serveur MCP', () => {
     assert.match(out, /Arroser le basilic/);
     assert.match(out, /Arroser les tomates/);
   });
+
+  it('les nouvelles lectures sont ouvertes au jeton read, pas les nouvelles écritures', async () => {
+    const read = await connect(tokenRead);
+    const names = (await read.listTools()).tools.map((tl) => tl.name);
+    await read.close();
+    assert.ok(names.includes('rayons') && names.includes('emploi_du_temps') && names.includes('lieux'), 'lectures ajoutées visibles');
+    for (const n of ['courses_etat', 'courses_retirer', 'liste_courses_supprimer', 'tache_supprimer', 'repas_definir', 'recette_creer', 'creneau_creer', 'evenement_supprimer', 'lieu_creer', 'lieu_supprimer', 'affaire_ajouter'])
+      assert.ok(!names.includes(n), 'pas d’écriture pour un jeton read : ' + n);
+  });
+
+  it('événement : créer, modifier, supprimer', async () => {
+    const c = await connect(tokenWrite);
+    const id = textOf(await c.callTool({ name: 'evenement_creer', arguments: { titre: 'Réunion école', date: '2026-04-01', heure: '18:00' } })).match(/\[(e[^\]]+)\]/)![1];
+    assert.match(textOf(await c.callTool({ name: 'evenement_modifier', arguments: { id, lieu: 'Mairie', heure: '18:30' } })), /modifié/);
+    const ev = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.events.find((e: { id: string }) => e.id === id);
+    assert.equal(ev.place, 'Mairie'); assert.equal(ev.time, '18:30');
+    assert.match(textOf(await c.callTool({ name: 'evenement_supprimer', arguments: { id } })), /supprimé/);
+    await c.close();
+    assert.ok(!(await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.events.some((e: { id: string }) => e.id === id));
+  });
+
+  it('courses : état, modifier, retirer, et CRUD d’une liste', async () => {
+    const c = await connect(tokenWrite);
+    assert.match(textOf(await c.callTool({ name: 'liste_courses_creer', arguments: { nom: 'Pique-nique' } })), /créée/);
+    await c.callTool({ name: 'courses_ajouter', arguments: { articles: [{ nom: 'Pommes' }, { nom: 'Chips' }], liste: 'Pique-nique' } });
+    let liste = textOf(await c.callTool({ name: 'courses_liste', arguments: { liste: 'Pique-nique' } }));
+    const pommeId = liste.match(/Pommes[^[]*\[([^\]]+)\]/)![1];
+    const chipsId = liste.match(/Chips[^[]*\[([^\]]+)\]/)![1];
+    assert.match(textOf(await c.callTool({ name: 'courses_modifier', arguments: { id: pommeId, qte: '2 kg' } })), /modifié/);
+    assert.match(textOf(await c.callTool({ name: 'courses_etat', arguments: { ids: [chipsId], etat: 'panier' } })), /panier/);
+    liste = textOf(await c.callTool({ name: 'courses_liste', arguments: { liste: 'Pique-nique' } }));
+    assert.ok(/Pommes \(2 kg\)/.test(liste), 'quantité modifiée : ' + liste);
+    assert.ok(!/Chips/.test(liste), 'les chips au panier ne sont plus « à prendre »');
+    assert.match(textOf(await c.callTool({ name: 'courses_retirer', arguments: { ids: [pommeId] } })), /retiré/);
+    assert.match(textOf(await c.callTool({ name: 'liste_courses_renommer', arguments: { liste: 'Pique-nique', nom: 'Sortie' } })), /renommée/);
+    assert.match(textOf(await c.callTool({ name: 'liste_courses_supprimer', arguments: { liste: 'Sortie' } })), /supprimée/);
+    await c.close();
+    assert.ok(!((await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.shopLists || []).some((l: { name: string }) => l.name === 'Sortie'));
+  });
+
+  it('tâche : modifier, terminer, retrouver, rouvrir, supprimer', async () => {
+    const c = await connect(tokenWrite);
+    const tid = textOf(await c.callTool({ name: 'tache_creer', arguments: { texte: 'Laver la voiture' } })).match(/\[(t[^\]]+)\]/)![1];
+    assert.match(textOf(await c.callTool({ name: 'tache_modifier', arguments: { tache: 'Laver la voiture', echeance: '2026-05-01', texte: 'Laver la voiture à fond' } })), /modifiée/);
+    assert.match(textOf(await c.callTool({ name: 'tache_terminer', arguments: { id: tid } })), /terminée/);
+    assert.match(textOf(await c.callTool({ name: 'taches_liste', arguments: { quand: 'terminees' } })), /Laver la voiture/);
+    assert.match(textOf(await c.callTool({ name: 'tache_rouvrir', arguments: { tache: 'Laver la voiture' } })), /rouverte/);
+    assert.match(textOf(await c.callTool({ name: 'tache_supprimer', arguments: { tache: 'Laver la voiture' } })), /supprimée/);
+    await c.close();
+    assert.ok(!(await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.tasks.some((t: { id: string }) => t.id === tid));
+  });
+
+  it('liste de tâches : créer, archiver (masquée), restaurer, supprimer', async () => {
+    const c = await connect(tokenWrite);
+    assert.match(textOf(await c.callTool({ name: 'liste_taches_creer', arguments: { nom: 'Vacances', type: 'checklist' } })), /créée/);
+    await c.callTool({ name: 'tache_creer', arguments: { texte: 'Passeports', liste: 'Vacances' } });
+    assert.match(textOf(await c.callTool({ name: 'liste_taches_archiver', arguments: { liste: 'Vacances', archivee: true } })), /archivée/);
+    assert.ok(!/Passeports/.test(textOf(await c.callTool({ name: 'taches_liste', arguments: {} }))), 'une liste archivée est masquée');
+    assert.match(textOf(await c.callTool({ name: 'liste_taches_archiver', arguments: { liste: 'Vacances', archivee: false } })), /restaurée/);
+    assert.match(textOf(await c.callTool({ name: 'liste_taches_supprimer', arguments: { liste: 'Vacances' } })), /supprimée/);
+    await c.close();
+  });
+
+  it('repas : définir avec une recette puis vider', async () => {
+    const c = await connect(tokenWrite);
+    assert.match(textOf(await c.callTool({ name: 'recette_creer', arguments: { nom: 'Tarte aux pommes', ingredients: ['pommes', 'pâte'], etapes: ['éplucher', 'cuire'] } })), /créée/);
+    assert.match(textOf(await c.callTool({ name: 'repas_definir', arguments: { date: '2026-04-15', creneau: 'soir', recettes: ['Tarte aux pommes'], couverts: 4 } })), /Tarte aux pommes/);
+    assert.match(textOf(await c.callTool({ name: 'repas_semaine', arguments: { semaine: '2026-04-13' } })), /Tarte aux pommes/);
+    assert.match(textOf(await c.callTool({ name: 'repas_vider', arguments: { date: '2026-04-15', creneau: 'soir' } })), /vidé/);
+    await c.close();
+  });
+
+  it('recette : créer, modifier, détailler, supprimer', async () => {
+    const c = await connect(tokenWrite);
+    const id = textOf(await c.callTool({ name: 'recette_creer', arguments: { nom: 'Soupe', ingredients: ['carottes'], etapes: ['mixer'], portions: 4 } })).match(/\[(r[^\]]+)\]/)![1];
+    assert.match(textOf(await c.callTool({ name: 'recette_modifier', arguments: { id, nom: 'Soupe de légumes', prepMin: 15 } })), /modifiée/);
+    assert.match(textOf(await c.callTool({ name: 'recette_detail', arguments: { id } })), /Soupe de légumes/);
+    assert.match(textOf(await c.callTool({ name: 'recette_supprimer', arguments: { id } })), /supprimée/);
+    await c.close();
+    assert.ok(!(await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.recipes.some((r: { id: string }) => r.id === id));
+  });
+
+  it('emploi du temps : créer un créneau publié, le lister, le modifier, le supprimer', async () => {
+    const c = await connect(tokenWrite);
+    const cr = textOf(await c.callTool({ name: 'creneau_creer', arguments: { label: 'Piscine', pour: ['Camille'], jour: 'mardi', debut: '17:00', fin: '18:00', type: 'sport', publier: true } }));
+    const id = cr.match(/\[(s[^\]]+)\]/)![1];
+    assert.match(cr, /publié à l’agenda/);
+    assert.match(textOf(await c.callTool({ name: 'emploi_du_temps', arguments: { membre: 'Camille' } })), /Piscine/);
+    // Publié : ses occurrences apparaissent à l'agenda (mardi 6 janvier 2026 dans la fenêtre).
+    assert.match(textOf(await c.callTool({ name: 'agenda', arguments: { du: '2026-01-05', au: '2026-01-11' } })), /Piscine/);
+    assert.match(textOf(await c.callTool({ name: 'creneau_modifier', arguments: { id, debut: '17:30' } })), /modifié/);
+    assert.match(textOf(await c.callTool({ name: 'creneau_supprimer', arguments: { id } })), /supprimé/);
+    await c.close();
+  });
+
+  it('lieux de vacances : créer, poser des affaires, changer l’état, déplacer, retirer, supprimer', async () => {
+    const c = await connect(tokenWrite);
+    const id = textOf(await c.callTool({ name: 'lieu_creer', arguments: { nom: 'Chalet montagne', note: 'Clé sous le pot' } })).match(/\[(pl[^\]]+)\]/)![1];
+    await c.callTool({ name: 'affaire_ajouter', arguments: { lieu: 'Chalet montagne', affaires: [{ nom: 'Raquettes' }, { nom: 'Luge', qte: '2' }] } });
+    let inv = textOf(await c.callTool({ name: 'lieux', arguments: { lieu: 'Chalet montagne' } }));
+    assert.match(inv, /Raquettes/); assert.match(inv, /Sur place/);
+    const raqId = inv.match(/Raquettes[^[]*\[([^\]]+)\]/)![1];
+    const lugeId = inv.match(/Luge[^[]*\[([^\]]+)\]/)![1];
+    assert.match(textOf(await c.callTool({ name: 'affaire_etat', arguments: { ids: [raqId], etat: 'ici' } })), /ramenée/);
+    inv = textOf(await c.callTool({ name: 'lieux', arguments: { lieu: 'Chalet montagne' } }));
+    assert.match(inv, /Ramenées : Raquettes/);
+    assert.match(textOf(await c.callTool({ name: 'affaire_modifier', arguments: { id: lugeId, qte: '3' } })), /modifiée/);
+    // Un second lieu, où l'on déplace la luge.
+    await c.callTool({ name: 'lieu_creer', arguments: { nom: 'Cave' } });
+    assert.match(textOf(await c.callTool({ name: 'affaire_modifier', arguments: { id: lugeId, lieu: 'Cave' } })), /modifiée/);
+    assert.match(textOf(await c.callTool({ name: 'affaire_retirer', arguments: { ids: [raqId] } })), /retirée/);
+    assert.match(textOf(await c.callTool({ name: 'lieu_supprimer', arguments: { id } })), /supprimé/);
+    await c.close();
+    const st = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state;
+    assert.ok(!(st.places || []).some((p: { id: string }) => p.id === id), 'lieu supprimé');
+    assert.ok((st.placeItems || []).some((i: { id: string }) => i.id === lugeId), 'la luge déplacée survit dans la cave');
+  });
 });
