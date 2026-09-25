@@ -20,14 +20,32 @@ dentiste vendredi ».
 
 ## Ce que l'assistant peut faire
 
-Lecture (jeton `read` ou `write`) : le résumé du jour (`foyer_aujourdhui`), la
-liste de courses, les tâches, l'agenda, le planning des repas, la recherche et
-le détail des recettes, la liste des membres.
+Sur six domaines, l'assistant fait le même **CRUD** que l'interface web :
+le **calendrier**, les **listes de courses**, les **listes de tâches**, le
+**planning des repas**, le **carnet de recettes** et l'**emploi du temps**.
 
-Écriture (jeton `write` seulement) : ajouter des courses, cocher des courses,
-créer une tâche (au besoin en tête de liste), terminer une tâche, **ranger une
-tâche dans l'ordre du foyer** (`tache_deplacer`), créer un événement, importer
-une recette depuis une adresse web.
+Lecture (jeton `read` ou `write`) : le résumé du jour (`foyer_aujourdhui`), la
+liste de courses et les **rayons**, les tâches (ouvertes, par échéance, ou
+terminées) avec leur rang, l'agenda, le planning des repas, la recherche et le
+détail des recettes, l'**emploi du temps** (par membre ou par jour), la liste
+des membres.
+
+Écriture (jeton `write` seulement), par domaine :
+
+- **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise).
+- **Courses** : ajouter, changer l'état (à prendre / au panier / introuvable),
+  modifier (nom, quantité, rayon, liste), retirer ; créer, renommer, supprimer
+  une liste de courses.
+- **Tâches** : créer (au besoin en tête), modifier, terminer, rouvrir, ranger
+  dans l'ordre du foyer (`tache_deplacer`), supprimer ; créer, renommer,
+  archiver, supprimer une liste de tâches.
+- **Repas** : poser un repas sur un créneau (recettes et/ou texte, couverts,
+  absents), vider un créneau.
+- **Recettes** : créer (ingrédients, étapes, portions, temps), modifier,
+  supprimer, ou importer depuis une adresse web.
+- **Emploi du temps** : créer, modifier, supprimer un créneau (hebdomadaire ou
+  ponctuel, période de validité, filtre scolaire/vacances, publication à
+  l'agenda).
 
 L'ordre des tâches : chaque liste porte un ordre manuel (indexation
 fractionnaire), indépendant de l'échéance. `taches_liste` rend le **rang** de
@@ -39,10 +57,12 @@ ambigu, l'outil rend les candidats au lieu de deviner. Exemple à la voix :
 
 Ce que l'assistant **ne peut pas** faire, quelle que soit la portée : les
 **Finances** (lecture comme écriture), les **réglages**, la **gestion des
-comptes** et de la sécurité. Il ne peut pas **terminer une tâche récurrente**
-(une série se coche dans l'app, qui calcule la prochaine échéance), ni
-**supprimer** quoi que ce soit. Chaque écriture est **attribuée** au membre, et
-le fil d'activité de l'accueil affiche « (via un assistant) ».
+comptes** et de la sécurité, et les **lieux de vacances**. Il ne peut pas
+**terminer une tâche récurrente** (une série se coche dans l'app, qui calcule la
+prochaine échéance). Les **suppressions** sont possibles, listes entières
+comprises, exactement comme dans l'app : à manier avec le même soin. Chaque
+écriture est **attribuée** au membre, et le fil d'activité de l'accueil affiche
+« (via un assistant) ».
 
 ## Brancher chaque client
 
@@ -128,7 +148,12 @@ un assistant ».
 - « Déplace le relevé des compteurs avant le rendez-vous notaire. »
 - « Où en est ma liste de tâches ? » (chaque tâche sort avec son rang)
 - « Mets un rendez-vous mercredi à 9h30 : contrôle technique. »
+- « Décale le contrôle technique à 10h et mets le lieu : garage du centre. »
 - « Cherche une recette de gratin et donne-moi les ingrédients. »
+- « Note le gratin dauphinois pour le dîner de samedi, on sera 6. »
+- « Ajoute au carnet ma recette de cookies (voici les ingrédients et les étapes). »
+- « Ajoute la piscine de Léa le mardi de 17h à 18h, et publie-la à l'agenda. »
+- « Renomme la liste “Courses” en “Semaine”, et supprime la liste “Test”. »
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
 réglage, terminer une tâche récurrente, ou supprimer quelque chose.
