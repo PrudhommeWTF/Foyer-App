@@ -134,7 +134,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'calendriers', group: 'cercle', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
   { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
   { id: 'courses', group: 'modules', label: 'Courses', desc: 'Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L’ordre des rayons et les articles de placard se règlent dans l’écran Courses.' },
-  { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date.' },
+  { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date, et le sens du glissement d’une tâche sur téléphone.' },
   { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
@@ -402,6 +402,17 @@ export const REGISTRY = [
       { value: '1h', label: 'Une heure avant' },
       { value: 'eve', label: 'La veille à 18 h' },
       { value: 'morning', label: 'Le matin à 9 h' },
+    ],
+  },
+  {
+    key: 'taskSwipe',
+    type: 'enum', scope: 'personnel', section: 'taches', module: 'Tâches',
+    label: 'Glissement d’une tâche sur téléphone',
+    desc: 'Ce que fait glisser une tâche vers la droite ou vers la gauche, sur téléphone. Par défaut, glisser à droite la termine et à gauche la supprime ; l’autre choix intervertit les deux. Propre à vous, sans effet à la souris.',
+    default: 'right-done',
+    options: [
+      { value: 'right-done', label: 'Droite : terminer · Gauche : supprimer' },
+      { value: 'right-delete', label: 'Droite : supprimer · Gauche : terminer' },
     ],
   },
 

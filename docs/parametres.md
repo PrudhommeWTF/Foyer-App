@@ -120,13 +120,15 @@ Génération de la liste depuis les repas, et mémoire de ce qu’on a déjà. L
 
 ### Tâches
 
-Le rappel proposé quand une tâche reçoit une date.
+Le rappel proposé quand une tâche reçoit une date, et le sens du glissement d’une tâche sur téléphone.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
 | `taskDefaultRemind` | Rappel proposé pour une nouvelle tâche datée | Foyer | liste | _(vide)_ | _(vide)_, `at`, `1h`, `eve`, `morning` | Tâches | — |
+| `taskSwipe` | Glissement d’une tâche sur téléphone | Personnel | liste | `right-done` | `right-done`, `right-delete` | Tâches | — |
 
 - **Rappel proposé pour une nouvelle tâche datée** (`taskDefaultRemind`) : Ce que le formulaire coche d’avance quand on donne une date à une tâche. Cela ne change aucune tâche existante, et reste modifiable tâche par tâche.
+- **Glissement d’une tâche sur téléphone** (`taskSwipe`) : Ce que fait glisser une tâche vers la droite ou vers la gauche, sur téléphone. Par défaut, glisser à droite la termine et à gauche la supprime ; l’autre choix intervertit les deux. Propre à vous, sans effet à la souris.
 
 ### Cartes de fidélité
 
