@@ -350,6 +350,65 @@ const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { id: S.string(80) }, required: ['id'] },
     run: (ctx, a) => t.creneauSupprimer(ctx, str(a.id) || ''),
   },
+  // ---- Lieux de vacances (inventaires) ----
+  {
+    name: 'lieux',
+    description: 'Les lieux de vacances et leur inventaire, avec les [id]. Chaque affaire est « sur place » (là-bas) ou « ramenée » (ici). Filtrable par `lieu` (nom ou id).',
+    inputSchema: { type: 'object', properties: { lieu: S.string(80) } },
+    run: (ctx, a) => t.lieux(ctx, { lieu: str(a.lieu) }),
+  },
+  {
+    name: 'lieu_creer',
+    write: true,
+    description: 'Crée un lieu de vacances (un inventaire qui ne se remet jamais à zéro).',
+    inputSchema: { type: 'object', properties: { nom: S.string(80), couleur: S.string(20), icone: S.string(40), note: S.string(500) }, required: ['nom'] },
+    run: (ctx, a) => t.lieuCreer(ctx, { nom: str(a.nom) || '', couleur: str(a.couleur), icone: str(a.icone), note: str(a.note) }),
+  },
+  {
+    name: 'lieu_modifier',
+    write: true,
+    description: 'Modifie un lieu de vacances (par [id] ou nom) : nom, couleur, icône, note. Ne change que les champs fournis.',
+    inputSchema: { type: 'object', properties: { id: S.string(80), nom: S.string(80), couleur: S.string(20), icone: S.string(40), note: S.string(500) }, required: ['id'] },
+    run: (ctx, a) => t.lieuModifier(ctx, { id: str(a.id) || '', nom: str(a.nom), couleur: str(a.couleur), icone: str(a.icone), note: str(a.note) }),
+  },
+  {
+    name: 'lieu_supprimer',
+    write: true,
+    description: 'Supprime un lieu de vacances entier (par [id] ou nom), avec les affaires de son inventaire.',
+    inputSchema: { type: 'object', properties: { id: S.string(80) }, required: ['id'] },
+    run: (ctx, a) => t.lieuSupprimer(ctx, str(a.id) || ''),
+  },
+  {
+    name: 'affaire_ajouter',
+    write: true,
+    description: 'Ajoute des affaires à l’inventaire d’un lieu (nom ou [id]). `etat` : « la-bas » (sur place, défaut) ou « ici » (ramenée).',
+    inputSchema: { type: 'object', properties: { lieu: S.string(80), affaires: { type: 'array', maxItems: 50, items: { type: 'object', properties: { nom: S.string(200), qte: S.string(40) }, required: ['nom'] } }, etat: { type: 'string', enum: ['la-bas', 'ici'] } }, required: ['lieu', 'affaires'] },
+    run: (ctx, a) => {
+      const affaires = Array.isArray(a.affaires) ? a.affaires.map((x) => { const o = (x ?? {}) as Args; return { nom: str(o.nom) || '', qte: str(o.qte) }; }) : [];
+      return t.affaireAjouter(ctx, { lieu: str(a.lieu) || '', affaires, etat: str(a.etat) });
+    },
+  },
+  {
+    name: 'affaire_etat',
+    write: true,
+    description: 'Change l’état d’affaires (par [id]) : « la-bas » (laissée sur place) ou « ici » (ramenée à la maison).',
+    inputSchema: { type: 'object', properties: { ids: { type: 'array', maxItems: 100, items: S.string(80) }, etat: { type: 'string', enum: ['la-bas', 'ici'] } }, required: ['ids', 'etat'] },
+    run: (ctx, a) => t.affaireEtat(ctx, strArr(a.ids), str(a.etat) || ''),
+  },
+  {
+    name: 'affaire_modifier',
+    write: true,
+    description: 'Modifie une affaire (par [id]) : nom, quantité, ou lieu (déplacement vers un autre inventaire, par nom ou id). Ne change que les champs fournis.',
+    inputSchema: { type: 'object', properties: { id: S.string(80), nom: S.string(200), qte: S.string(40), lieu: S.string(80) }, required: ['id'] },
+    run: (ctx, a) => t.affaireModifier(ctx, { id: str(a.id) || '', nom: str(a.nom), qte: str(a.qte), lieu: str(a.lieu) }),
+  },
+  {
+    name: 'affaire_retirer',
+    write: true,
+    description: 'Retire des affaires d’un inventaire, par leurs [id].',
+    inputSchema: { type: 'object', properties: { ids: { type: 'array', maxItems: 100, items: S.string(80) } }, required: ['ids'] },
+    run: (ctx, a) => t.affaireRetirer(ctx, strArr(a.ids)),
+  },
 ];
 
 /** Construit un serveur MCP lié à un membre et à une portée. Reconstruit à chaque requête (transport sans état). */

@@ -20,15 +20,16 @@ dentiste vendredi ».
 
 ## Ce que l'assistant peut faire
 
-Sur six domaines, l'assistant fait le même **CRUD** que l'interface web :
+Sur sept domaines, l'assistant fait le même **CRUD** que l'interface web :
 le **calendrier**, les **listes de courses**, les **listes de tâches**, le
-**planning des repas**, le **carnet de recettes** et l'**emploi du temps**.
+**planning des repas**, le **carnet de recettes**, l'**emploi du temps** et les
+**lieux de vacances**.
 
 Lecture (jeton `read` ou `write`) : le résumé du jour (`foyer_aujourdhui`), la
 liste de courses et les **rayons**, les tâches (ouvertes, par échéance, ou
 terminées) avec leur rang, l'agenda, le planning des repas, la recherche et le
-détail des recettes, l'**emploi du temps** (par membre ou par jour), la liste
-des membres.
+détail des recettes, l'**emploi du temps** (par membre ou par jour), les **lieux
+de vacances** et leur inventaire, la liste des membres.
 
 Écriture (jeton `write` seulement), par domaine :
 
@@ -46,6 +47,9 @@ des membres.
 - **Emploi du temps** : créer, modifier, supprimer un créneau (hebdomadaire ou
   ponctuel, période de validité, filtre scolaire/vacances, publication à
   l'agenda).
+- **Lieux de vacances** : créer, modifier, supprimer un lieu (inventaire) ;
+  ajouter des affaires, changer leur état (sur place / ramenée), les modifier
+  (nom, quantité, déplacement vers un autre lieu), les retirer.
 
 L'ordre des tâches : chaque liste porte un ordre manuel (indexation
 fractionnaire), indépendant de l'échéance. `taches_liste` rend le **rang** de
@@ -56,9 +60,8 @@ ambigu, l'outil rend les candidats au lieu de deviner. Exemple à la voix :
 « déplace le relevé des compteurs avant le rendez-vous notaire ».
 
 Ce que l'assistant **ne peut pas** faire, quelle que soit la portée : les
-**Finances** (lecture comme écriture), les **réglages**, la **gestion des
-comptes** et de la sécurité, et les **lieux de vacances**. Il ne peut pas
-**terminer une tâche récurrente** (une série se coche dans l'app, qui calcule la
+**Finances** (lecture comme écriture), les **réglages**, et la **gestion des
+comptes** et de la sécurité. Il ne peut pas **terminer une tâche récurrente** (une série se coche dans l'app, qui calcule la
 prochaine échéance). Les **suppressions** sont possibles, listes entières
 comprises, exactement comme dans l'app : à manier avec le même soin. Chaque
 écriture est **attribuée** au membre, et le fil d'activité de l'accueil affiche
@@ -154,6 +157,7 @@ un assistant ».
 - « Ajoute au carnet ma recette de cookies (voici les ingrédients et les étapes). »
 - « Ajoute la piscine de Léa le mardi de 17h à 18h, et publie-la à l'agenda. »
 - « Renomme la liste “Courses” en “Semaine”, et supprime la liste “Test”. »
+- « Qu'est-ce qui reste au chalet ? » puis « Note que j'ai ramené les raquettes. »
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
 réglage, terminer une tâche récurrente, ou supprimer quelque chose.

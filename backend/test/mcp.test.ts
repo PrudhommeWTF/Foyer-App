@@ -179,8 +179,8 @@ describe('Serveur MCP', () => {
     const read = await connect(tokenRead);
     const names = (await read.listTools()).tools.map((tl) => tl.name);
     await read.close();
-    assert.ok(names.includes('rayons') && names.includes('emploi_du_temps'), 'lectures ajoutées visibles');
-    for (const n of ['courses_etat', 'courses_retirer', 'liste_courses_supprimer', 'tache_supprimer', 'repas_definir', 'recette_creer', 'creneau_creer', 'evenement_supprimer'])
+    assert.ok(names.includes('rayons') && names.includes('emploi_du_temps') && names.includes('lieux'), 'lectures ajoutées visibles');
+    for (const n of ['courses_etat', 'courses_retirer', 'liste_courses_supprimer', 'tache_supprimer', 'repas_definir', 'recette_creer', 'creneau_creer', 'evenement_supprimer', 'lieu_creer', 'lieu_supprimer', 'affaire_ajouter'])
       assert.ok(!names.includes(n), 'pas d’écriture pour un jeton read : ' + n);
   });
 
@@ -267,5 +267,28 @@ describe('Serveur MCP', () => {
     assert.match(textOf(await c.callTool({ name: 'creneau_modifier', arguments: { id, debut: '17:30' } })), /modifié/);
     assert.match(textOf(await c.callTool({ name: 'creneau_supprimer', arguments: { id } })), /supprimé/);
     await c.close();
+  });
+
+  it('lieux de vacances : créer, poser des affaires, changer l’état, déplacer, retirer, supprimer', async () => {
+    const c = await connect(tokenWrite);
+    const id = textOf(await c.callTool({ name: 'lieu_creer', arguments: { nom: 'Chalet montagne', note: 'Clé sous le pot' } })).match(/\[(pl[^\]]+)\]/)![1];
+    await c.callTool({ name: 'affaire_ajouter', arguments: { lieu: 'Chalet montagne', affaires: [{ nom: 'Raquettes' }, { nom: 'Luge', qte: '2' }] } });
+    let inv = textOf(await c.callTool({ name: 'lieux', arguments: { lieu: 'Chalet montagne' } }));
+    assert.match(inv, /Raquettes/); assert.match(inv, /Sur place/);
+    const raqId = inv.match(/Raquettes[^[]*\[([^\]]+)\]/)![1];
+    const lugeId = inv.match(/Luge[^[]*\[([^\]]+)\]/)![1];
+    assert.match(textOf(await c.callTool({ name: 'affaire_etat', arguments: { ids: [raqId], etat: 'ici' } })), /ramenée/);
+    inv = textOf(await c.callTool({ name: 'lieux', arguments: { lieu: 'Chalet montagne' } }));
+    assert.match(inv, /Ramenées : Raquettes/);
+    assert.match(textOf(await c.callTool({ name: 'affaire_modifier', arguments: { id: lugeId, qte: '3' } })), /modifiée/);
+    // Un second lieu, où l'on déplace la luge.
+    await c.callTool({ name: 'lieu_creer', arguments: { nom: 'Cave' } });
+    assert.match(textOf(await c.callTool({ name: 'affaire_modifier', arguments: { id: lugeId, lieu: 'Cave' } })), /modifiée/);
+    assert.match(textOf(await c.callTool({ name: 'affaire_retirer', arguments: { ids: [raqId] } })), /retirée/);
+    assert.match(textOf(await c.callTool({ name: 'lieu_supprimer', arguments: { id } })), /supprimé/);
+    await c.close();
+    const st = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state;
+    assert.ok(!(st.places || []).some((p: { id: string }) => p.id === id), 'lieu supprimé');
+    assert.ok((st.placeItems || []).some((i: { id: string }) => i.id === lugeId), 'la luge déplacée survit dans la cave');
   });
 });

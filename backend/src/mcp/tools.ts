@@ -9,9 +9,10 @@
 // événements), portent l'auteur (`by` = membre) et la provenance (`via` = nom
 // du jeton), et respectent la portée et le rôle du membre.
 import { getHousehold, db, saveHousehold } from '../db';
-import { HouseholdState, EventItem, Recipe, SchedSlot, MealValue, MealItem, ShopList, TaskList, ListKind } from '../models';
+import { HouseholdState, EventItem, Recipe, SchedSlot, MealValue, MealItem, ShopList, TaskList, ListKind, Place } from '../models';
 import { applyShoppingOps, preserveShopping } from '../shopping/repo';
 import { applyTaskOps, preserveTasks } from '../tasks/repo';
+import { applyPlaceOps } from '../places/repo';
 import { TaskItem } from '../tasks/ops';
 import { byOrd, orderedOf } from '../tasks/ordering';
 import { FALLBACK_AISLE_NAMES } from '../shopping/ops';
@@ -139,6 +140,12 @@ function resolveRecipe(s: HouseholdState, q: string): Recipe | null {
   return (s.recipes || []).find((r) => norm(r.name) === n) || (s.recipes || []).find((r) => norm(r.name).includes(n)) || null;
 }
 const resolveSlot = (s: HouseholdState, id: string) => (s.sched || []).find((x) => x.id === id) || null;
+/** Un lieu de vacances par identifiant, puis par nom (exact, puis contenant les mots). */
+function resolvePlace(s: HouseholdState, q: string): Place | null {
+  const byId = (s.places || []).find((p) => p.id === q.trim()); if (byId) return byId;
+  const n = norm(q); if (!n) return null;
+  return (s.places || []).find((p) => norm(p.name) === n) || (s.places || []).find((p) => norm(p.name).includes(n)) || null;
+}
 
 /**
  * Résout une tâche ouverte OU terminée, par identifiant ou intitulé. Sert aux
@@ -989,4 +996,120 @@ export function creneauSupprimer(_ctx: McpCtx, id: string): string {
     return sl.label;
   })();
   return out === 'INTROUVABLE' ? 'Créneau introuvable (identifiant).' : `Créneau supprimé : « ${out} ».`;
+}
+
+// ---- Lieux de vacances (inventaires) --------------------------------------
+
+export function lieux(_ctx: McpCtx, args: { lieu?: string }): string {
+  const s = state();
+  let places = (s.places || []).slice().sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+  if (args.lieu) { const p = resolvePlace(s, args.lieu); if (!p) return `Lieu « ${args.lieu} » inconnu.`; places = [p]; }
+  if (!places.length) return 'Aucun lieu de vacances.';
+  const items = s.placeItems || [];
+  const fmt = (i: { name: string; qty: string; id: string }): string => `${i.name}${i.qty ? ' (' + i.qty + ')' : ''} [${i.id}]`;
+  const out: string[] = [];
+  for (const p of places) {
+    const mine = items.filter((i) => i.placeId === p.id);
+    const labas = mine.filter((i) => i.state === 'la-bas');
+    const ici = mine.filter((i) => i.state === 'ici');
+    out.push(`${p.name} [${p.id}]${p.note ? ` (${p.note})` : ''} :`);
+    if (labas.length) out.push('  Sur place : ' + labas.map(fmt).join(', '));
+    if (ici.length) out.push('  Ramenées : ' + ici.map(fmt).join(', '));
+    if (!mine.length) out.push('  (aucune affaire)');
+  }
+  return out.join('\n');
+}
+
+export function lieuCreer(ctx: McpCtx, args: { nom: string; couleur?: string; icone?: string; note?: string }): string {
+  const nom = (args.nom || '').trim();
+  if (!nom) return 'Donnez le nom du lieu.';
+  const id = genId('pl');
+  const res = applyPlaceOps([{ op: 'place-add', opId: genId('op'), id, name: nom, ...(args.couleur ? { color: args.couleur } : {}), ...(args.icone ? { icon: args.icone } : {}), ...(args.note && args.note.trim() ? { note: args.note.trim() } : {}), by: ctx.memberId, at: new Date().toISOString() }]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Lieu de vacances créé : « ${nom} » [${id}].`;
+}
+
+export function lieuModifier(ctx: McpCtx, args: { id: string; nom?: string; couleur?: string; icone?: string; note?: string }): string {
+  const s = state();
+  const p = resolvePlace(s, args.id || '');
+  if (!p) return 'Lieu introuvable.';
+  const op: Record<string, unknown> = { op: 'place-edit', opId: genId('op'), id: p.id, by: ctx.memberId, at: new Date().toISOString() };
+  if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'Le nom ne peut pas être vide.'; op['name'] = n; }
+  if (args.couleur !== undefined) op['color'] = args.couleur;
+  if (args.icone !== undefined) op['icon'] = args.icone;
+  if (args.note !== undefined) op['note'] = args.note.trim();
+  const res = applyPlaceOps([op]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Lieu modifié : « ${(op['name'] as string) || p.name} ».`;
+}
+
+export function lieuSupprimer(ctx: McpCtx, id: string): string {
+  const s = state();
+  const p = resolvePlace(s, id || '');
+  if (!p) return 'Lieu introuvable.';
+  const n = (s.placeItems || []).filter((i) => i.placeId === p.id).length;
+  const res = applyPlaceOps([{ op: 'place-remove', opId: genId('op'), id: p.id, by: ctx.memberId, at: new Date().toISOString() }]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Lieu supprimé : « ${p.name} »${n ? ` (avec ${n} affaire(s))` : ''}.`;
+}
+
+export function affaireAjouter(ctx: McpCtx, args: { lieu: string; affaires: { nom: string; qte?: string }[]; etat?: string }): string {
+  const s = state();
+  const p = resolvePlace(s, args.lieu || '');
+  if (!p) return `Lieu « ${args.lieu} » inconnu.`;
+  const etat = args.etat === 'ici' ? 'ici' : 'la-bas';
+  const at = new Date().toISOString();
+  const ops: unknown[] = [];
+  const noms: string[] = [];
+  for (const a of args.affaires || []) {
+    const nom = (a.nom || '').trim();
+    if (!nom) continue;
+    ops.push({ op: 'add', opId: genId('op'), id: genId('pi'), placeId: p.id, name: nom, qty: (a.qte || '').trim(), state: etat, by: ctx.memberId, at });
+    noms.push(nom + (a.qte ? ' (' + a.qte + ')' : ''));
+  }
+  if (!ops.length) return 'Aucune affaire à ajouter.';
+  const res = applyPlaceOps(ops);
+  if (res.skipped.length && !res.applied.length) return res.skipped[0].reason;
+  return `Ajouté à « ${p.name} » (${etat === 'ici' ? 'ramenées' : 'sur place'}) : ${noms.join(', ')}.`;
+}
+
+const PLACE_STATE_LABEL: Record<string, string> = { 'la-bas': 'laissée(s) sur place', ici: 'ramenée(s) ici' };
+
+export function affaireEtat(ctx: McpCtx, ids: string[], etat: string): string {
+  if (!PLACE_STATE_LABEL[etat]) return 'État inconnu (valeurs : la-bas, ici).';
+  const s = state();
+  const known = new Set((s.placeItems || []).map((i) => i.id));
+  const cible = ids.filter((id) => known.has(id));
+  const inconnus = ids.filter((id) => !known.has(id));
+  const at = new Date().toISOString();
+  if (cible.length) applyPlaceOps(cible.map((id) => ({ op: 'set-state', opId: genId('op'), id, state: etat, by: ctx.memberId, at })));
+  const parts = [`${cible.length} affaire(s) ${PLACE_STATE_LABEL[etat]}.`];
+  if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
+  return parts.join(' ');
+}
+
+export function affaireModifier(ctx: McpCtx, args: { id: string; nom?: string; qte?: string; lieu?: string }): string {
+  const s = state();
+  const it = (s.placeItems || []).find((i) => i.id === args.id);
+  if (!it) return 'Affaire introuvable (identifiant).';
+  const op: Record<string, unknown> = { op: 'edit', opId: genId('op'), id: args.id, by: ctx.memberId, at: new Date().toISOString() };
+  if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'Le nom ne peut pas être vide.'; op['name'] = n; }
+  if (args.qte !== undefined) op['qty'] = args.qte.trim();
+  if (args.lieu !== undefined) { const p = resolvePlace(s, args.lieu); if (!p) return `Lieu « ${args.lieu} » inconnu.`; op['placeId'] = p.id; }
+  const res = applyPlaceOps([op]);
+  if (res.skipped.length) return res.skipped[0].reason;
+  return `Affaire « ${(op['name'] as string) || it.name} » modifiée.`;
+}
+
+export function affaireRetirer(ctx: McpCtx, ids: string[]): string {
+  const s = state();
+  const known = new Map((s.placeItems || []).map((i) => [i.id, i.name]));
+  const cible = ids.filter((id) => known.has(id));
+  const inconnus = ids.filter((id) => !known.has(id));
+  const at = new Date().toISOString();
+  if (cible.length) applyPlaceOps(cible.map((id) => ({ op: 'remove', opId: genId('op'), id, by: ctx.memberId, at })));
+  const noms = cible.map((id) => known.get(id)).filter(Boolean);
+  const parts = [`${cible.length} affaire(s) retirée(s)${noms.length ? ' : ' + noms.join(', ') : ''}.`];
+  if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
+  return parts.join(' ');
 }
