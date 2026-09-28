@@ -31,6 +31,15 @@ terminées) avec leur rang, l'agenda, le planning des repas, la recherche et le
 détail des recettes, l'**emploi du temps** (par membre ou par jour), les **lieux
 de vacances** et leur inventaire, la liste des membres.
 
+Un huitième domaine, **Employé à domicile** (le suivi des heures de ménage et la
+préparation de la déclaration CESU), est **réservé aux adultes** : ses outils
+`menage_*` sont **invisibles et refusés** à un jeton porté par un enfant, du côté
+serveur. Un adulte peut demander le récapitulatif d'un mois (heures, salaire net,
+chiffres à recopier sur le CESU), lister les présences, noter que l'employé est
+venu, ajuster ou retirer une présence, et déclarer, marquer payé, rouvrir ou
+marquer « sans présence » un mois. **Le taux horaire et l'employé lui-même ne se
+règlent pas par l'assistant** (données sensibles, réservées aux Paramètres).
+
 Écriture (jeton `write` seulement), par domaine :
 
 - **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise).
@@ -50,6 +59,10 @@ de vacances** et leur inventaire, la liste des membres.
 - **Lieux de vacances** : créer, modifier, supprimer un lieu (inventaire) ;
   ajouter des affaires, changer leur état (sur place / ramenée), les modifier
   (nom, quantité, déplacement vers un autre lieu), les retirer.
+- **Employé à domicile** (adultes seulement) : noter une présence
+  (`menage_presence_ajouter`), la modifier, la retirer ; déclarer un mois,
+  le marquer payé, le rouvrir, ou le marquer sans présence. Pas de réglage du
+  taux ni de gestion de l'employé.
 
 L'ordre des tâches : chaque liste porte un ordre manuel (indexation
 fractionnaire), indépendant de l'échéance. `taches_liste` rend le **rang** de
@@ -158,9 +171,14 @@ un assistant ».
 - « Ajoute la piscine de Léa le mardi de 17h à 18h, et publie-la à l'agenda. »
 - « Renomme la liste “Courses” en “Semaine”, et supprime la liste “Test”. »
 - « Qu'est-ce qui reste au chalet ? » puis « Note que j'ai ramené les raquettes. »
+- « La femme de ménage est venue aujourd'hui, 3 heures. » (adulte)
+- « Combien d'heures ce mois-ci, et combien à déclarer sur le CESU ? » (adulte)
+- « Marque le mois de septembre comme déclaré. » (adulte)
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
-réglage, terminer une tâche récurrente, ou supprimer quelque chose.
+réglage, terminer une tâche récurrente, ou supprimer quelque chose. Le suivi de
+l'**employé à domicile** n'existe pas non plus pour un enfant : ses outils lui
+sont invisibles et refusés.
 
 ## Sécurité
 

@@ -191,6 +191,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
   school: { color: '#F0B24B', label: 'Vacances scolaires' },
   birthday: { color: '#C77DA5', label: 'Anniversaire' },
   echeance: { color: '#C6492F', label: 'Échéance de contrat' },
+  cesu: { color: '#7A8B4A', label: 'Déclaration CESU' },
 };
 
 export const SCREEN_TITLES: Record<string, string> = {

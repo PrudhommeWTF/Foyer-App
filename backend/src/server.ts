@@ -14,6 +14,7 @@ import {
 import { HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
 import { employesRouter } from './employes/routes';
+import { computeMonth as empComputeMonth, listEmployees as empListEmployees } from './employes/repo';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
@@ -571,6 +572,15 @@ export function start(): void {
       return (getHousehold().state as HouseholdState).members.map((m) => ({ id: m.id, name: m.name, adult: !m.enfant, hasAccount: accts.has(m.id) }));
     },
     accounts: () => listMemberAccounts().map((a) => a.memberId),
+    adults: () => {
+      const accts = new Set(listMemberAccounts().map((a) => a.memberId));
+      return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id);
+    },
+    employes: (month) => empListEmployees(false).map((e) => {
+      const r = empComputeMonth(e.id, month);
+      return { id: String(e.id), name: e.name, role: e.role, minutes: r.minutes, status: r.status };
+    }),
+    rappelJour: () => Number(effectiveSetting('empRappelJour')) || 3,
     url: appUrl,
     rules: () => ({
       paused: effectiveSetting('pushPaused') === true,

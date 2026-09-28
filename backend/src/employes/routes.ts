@@ -75,7 +75,13 @@ export function employesRouter(requireAdmin: AdminGuard): Router {
     const t = today();
     const employees = repo.listEmployees(false).map((e) => {
       const rate = repo.currentRate(e.id, t);
-      return { ...e, currentRate: rate ? { netHourlyCents: rate.netHourlyCents, effectiveFrom: rate.effectiveFrom } : null };
+      return {
+        ...e,
+        currentRate: rate ? { netHourlyCents: rate.netHourlyCents, effectiveFrom: rate.effectiveFrom } : null,
+        // Les mois à déclarer (présences non déclarées) : le repère d'agenda les
+        // pose au jour de rappel du mois suivant.
+        openMonths: repo.openMonthsWithPresence(e.id),
+      };
     });
     res.json({
       employees,

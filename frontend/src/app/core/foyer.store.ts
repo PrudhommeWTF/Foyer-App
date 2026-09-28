@@ -3143,11 +3143,22 @@ export class FoyerStore {
 
   /**
    * Repères de calendrier poussés par les modules qui ne vivent pas dans ce
-   * document (échéances de contrat), indexés par date ISO. Comme les
-   * notifications, ils sont **calculés** ailleurs et jamais stockés ici : une
-   * date de reconduction qui change change son repère, sans copie périmée.
+   * document (échéances de contrat, déclarations CESU), indexés par date ISO.
+   * Comme les notifications, ils sont **calculés** ailleurs et jamais stockés
+   * ici : une date qui change change son repère, sans copie périmée. Chaque
+   * module écrit sa propre source (finances, employé) sans écraser les autres.
    */
-  readonly externalDayExtras = signal<Record<string, DayExtra[]>>({});
+  private readonly extDayExtraSources = signal<Record<string, Record<string, DayExtra[]>>>({});
+  setExternalDayExtras(source: string, map: Record<string, DayExtra[]>): void {
+    this.extDayExtraSources.update((s) => ({ ...s, [source]: map }));
+  }
+  private readonly externalDayExtras = computed(() => {
+    const out: Record<string, DayExtra[]> = {};
+    for (const map of Object.values(this.extDayExtraSources())) {
+      for (const [ds, items] of Object.entries(map)) (out[ds] ??= []).push(...items);
+    }
+    return out;
+  });
 
   toggleNotif(): void { this.patch({ notifOpen: !this.ui().notifOpen }); }
 
