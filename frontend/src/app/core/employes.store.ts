@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { EmployesApi, EmpBootstrap, EmpMonthRecap, EmpRole, EmpShift } from './employes.api';
+import { EmployesApi, EmpBootstrap, EmpMonthRecap, EmpOverviewRow, EmpRole, EmpShift } from './employes.api';
 import { DayExtra, FoyerStore } from './foyer.store';
 import { ApiError } from './api.service';
 import { todayIn } from './helpers';
@@ -19,6 +19,8 @@ export class EmployesStore {
   readonly boot = signal<EmpBootstrap | null>(null);
   readonly month = signal(todayIn(HOUSEHOLD_TZ).slice(0, 7));
   readonly recap = signal<EmpMonthRecap | null>(null);
+  /** Les heures de chaque employé pour le mois affiché (vue rapide en tête d'écran). */
+  readonly overview = signal<EmpOverviewRow[]>([]);
   readonly loading = signal(false);
   /** L'appel a échoué (serveur injoignable) : l'écran le dit plutôt que d'afficher « 0 h ». */
   readonly indispo = signal(false);
@@ -78,7 +80,7 @@ export class EmployesStore {
     await this.reloadMonth();
   }
   reset(): void {
-    this.loaded = false; this.boot.set(null); this.recap.set(null); this.indispo.set(false); this.selectedId.set(null);
+    this.loaded = false; this.boot.set(null); this.recap.set(null); this.overview.set([]); this.indispo.set(false); this.selectedId.set(null);
     this.month.set(todayIn(HOUSEHOLD_TZ).slice(0, 7));
   }
 
@@ -90,12 +92,19 @@ export class EmployesStore {
     catch (e) { if (e instanceof ApiError && e.status === 0) this.indispo.set(true); }
   }
   async reloadMonth(): Promise<void> {
+    void this.reloadOverview();
     if (!this.employe()) { this.recap.set(null); return; }
     this.loading.set(true);
     try { this.recap.set(await this.api.month(this.month(), this.employe()!.id)); this.indispo.set(false); }
     catch (e) { if (e instanceof ApiError && e.status === 0) this.indispo.set(true); this.recap.set(null); }
     this.loading.set(false);
   }
+  /** Recharge les heures par employé pour le mois affiché. */
+  async reloadOverview(): Promise<void> {
+    try { this.overview.set((await this.api.overview(this.month())).employees); } catch { /* injoignable : chips sans heures */ }
+  }
+  /** Les minutes d'un employé pour le mois affiché, ou 0 s'il n'a rien encore. */
+  minutesOf(id: number): number { return this.overview().find((o) => o.employeeId === id)?.minutes ?? 0; }
 
   setMonth(mois: string): void { this.month.set(mois); void this.reloadMonth(); }
   shiftMonth(delta: number): void {
@@ -113,6 +122,35 @@ export class EmployesStore {
       const r = await this.api.createEmployee(nom.trim(), role, euros);
       await this.reloadBoot();
       this.selectedId.set(r.employee.id);
+      await this.reloadMonth();
+    } finally { this.busy.set(false); }
+  }
+
+  /** Modifier le nom ou la catégorie d'un employé. */
+  async modifierEmploye(id: number, patch: { name?: string; role?: EmpRole }): Promise<void> {
+    this.busy.set(true);
+    try { await this.api.editEmployee(id, patch); await this.reloadBoot(); await this.reloadMonth(); }
+    finally { this.busy.set(false); }
+  }
+
+  /** Régler le taux d'un employé (nouvelle ligne datée dans emp_rates), et rafraîchir. */
+  async reglerTaux(id: number, euros: number, effectiveFrom: string): Promise<void> {
+    this.busy.set(true);
+    try { await this.api.setRate(euros, effectiveFrom, id); await this.reloadBoot(); await this.reloadMonth(); }
+    finally { this.busy.set(false); }
+  }
+
+  /**
+   * Retirer un employé (archivage) : il quitte la liste, mais ses heures et
+   * déclarations restent en base (rien n'est effacé, comme partout dans le module).
+   * On bascule alors sur le premier employé restant.
+   */
+  async archiverEmploye(id: number): Promise<void> {
+    this.busy.set(true);
+    try {
+      await this.api.archiveEmployee(id);
+      if (this.selectedId() === id) this.selectedId.set(null);
+      await this.reloadBoot();
       await this.reloadMonth();
     } finally { this.busy.set(false); }
   }

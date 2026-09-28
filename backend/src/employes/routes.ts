@@ -93,6 +93,17 @@ export function employesRouter(requireAdmin: AdminGuard): Router {
 
   r.get('/rates', handler((req, res) => { const e = resolveEmployee(req); res.json({ employeeId: e.id, rates: repo.ratesOf(e.id) }); }));
 
+  // Vue d'ensemble d'un mois : les heures (et le net) de chaque employé actif, en
+  // un appel, pour la vue rapide en tête d'écran.
+  r.get('/overview', handler((req, res) => {
+    const month = req.query['month'] ? monthField(req.query['month'], 'month') : today().slice(0, 7);
+    const employees = repo.listEmployees(false).map((e) => {
+      const m = repo.computeMonth(e.id, month);
+      return { employeeId: e.id, minutes: m.minutes, netCents: m.netCents, status: m.status };
+    });
+    res.json({ month, employees });
+  }));
+
   r.get('/month', handler((req, res) => {
     const e = resolveEmployee(req);
     const month = req.query['month'] ? monthField(req.query['month'], 'month') : today().slice(0, 7);

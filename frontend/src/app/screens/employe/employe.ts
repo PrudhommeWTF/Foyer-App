@@ -4,7 +4,7 @@ import { EmployesStore } from '../../core/employes.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
-import { EMP_ROLES, EmpRole, EmpShift, empRoleLabel } from '../../core/employes.api';
+import { EMP_ROLES, EmployesApi, EmpRate, EmpRole, EmpShift, empRoleLabel } from '../../core/employes.api';
 import { decHours as decH, eurosFmt as euro, hoursPlain, eurosPlain } from '../../core/employe.format';
 
 const MONTH_FMT = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'Europe/Paris' });
@@ -49,7 +49,10 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
         @if (store.employes().length > 1 || store.foyer.isAdmin()) {
           <div class="emps">
             @for (em of store.employes(); track em.id) {
-              <button class="emp-chip" [class.on]="em.id === e.id" (click)="store.selectEmploye(em.id)">{{ em.name }}</button>
+              <button class="emp-chip" [class.on]="em.id === e.id" (click)="store.selectEmploye(em.id)">
+                <span class="ec-nom">{{ em.name }}</span>
+                <span class="ec-h">{{ decH(store.minutesOf(em.id)) }}</span>
+              </button>
             }
             @if (store.foyer.isAdmin()) { <button class="emp-add" (click)="ouvrirNouvel()" aria-label="Ajouter un employé"><f-icon name="plus" [size]="16" color="var(--ink2)" [width]="2.4" /></button> }
           </div>
@@ -69,7 +72,10 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
               <div class="r-titre">{{ e.name }}</div>
               <div class="r-role">{{ roleLabel(e.role) }}</div>
             </div>
-            @if (recap(); as r) { <span class="badge {{ statut(r.status).cls }}">{{ statut(r.status).label }}</span> }
+            <div class="r-side">
+              @if (recap(); as r) { <span class="badge {{ statut(r.status).cls }}">{{ statut(r.status).label }}</span> }
+              @if (store.foyer.isAdmin()) { <button class="edit-emp" (click)="ouvrirEdit(e)" aria-label="Modifier l’employé"><f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2.2" /></button> }
+            </div>
           </div>
           @if (recap(); as r) {
             <div class="r-chiffres">
@@ -197,6 +203,55 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
           </div>
         </f-modal>
       }
+
+      <!-- Formulaire : modifier ou retirer un employé (administrateur) -->
+      @if (editOpen()) {
+        <f-modal title="Modifier l’employé" [maxWidth]="440" (close)="editOpen.set(false)">
+          <div class="form">
+            <label class="lab">Nom</label>
+            <input class="input" [(ngModel)]="edNom" placeholder="Prénom et nom" maxlength="120" />
+            <label class="lab">Catégorie (CESU)</label>
+            <select class="input" [(ngModel)]="edRole">
+              @for (r of roles; track r.id) { <option [value]="r.id">{{ r.label }}</option> }
+            </select>
+
+            <!-- Taux, sur l'employé : taux courant, nouveau taux daté, historique -->
+            @if (!edConfirmDel()) {
+              <div class="taux-bloc">
+                <div class="taux-cur">Taux actuel :
+                  <b>{{ edEmploye()?.currentRate ? euro(edEmploye()!.currentRate!.netHourlyCents) : 'non défini' }}</b>
+                  @if (edEmploye()?.currentRate; as cr) { <span class="since">depuis le {{ frDate(cr.effectiveFrom) }}</span> }
+                </div>
+                <div class="two">
+                  <label class="lab">Nouveau taux (€/h)<input class="input" type="number" inputmode="decimal" min="0" max="100" step="0.01" [(ngModel)]="edTaux" placeholder="14,50" /></label>
+                  <label class="lab">Date d’effet<input class="input" type="date" [(ngModel)]="edDate" /></label>
+                </div>
+                <button class="btn btn-soft appl" [disabled]="!edTauxValide() || store.busy()" (click)="appliquerTaux()">Appliquer le taux</button>
+                @if (edTauxMsg()) { <div class="okmsg">{{ edTauxMsg() }}</div> }
+                @if (edRates().length) {
+                  <div class="hist-t">Historique</div>
+                  <ul class="hist">@for (r of edRates(); track r.id) { <li><b>{{ euro(r.netHourlyCents) }}</b> à partir du {{ frDate(r.effectiveFrom) }}</li> }</ul>
+                }
+              </div>
+            }
+
+            @if (edErreur()) { <div class="warn"><f-icon name="x" [size]="15" color="#C6492F" [width]="2.2" /> {{ edErreur() }}</div> }
+            @if (!edConfirmDel()) {
+              <div class="f-act">
+                <button class="btn btn-soft danger" (click)="edConfirmDel.set(true)"><f-icon name="trash" [size]="15" color="var(--primary)" [width]="2" /> Retirer</button>
+                <button class="btn btn-soft" (click)="editOpen.set(false)">Annuler</button>
+                <button class="btn btn-primary" [disabled]="!edNom.trim() || store.busy()" (click)="enregistrerEdit()">Enregistrer</button>
+              </div>
+            } @else {
+              <div class="hint2">Retirer cet employé le fait disparaître de la liste. Ses heures et déclarations restent enregistrées (rien n’est effacé).</div>
+              <div class="f-act">
+                <button class="btn btn-soft" (click)="edConfirmDel.set(false)">Annuler</button>
+                <button class="btn btn-primary danger-btn" [disabled]="store.busy()" (click)="archiver()">Retirer définitivement de la liste</button>
+              </div>
+            }
+          </div>
+        </f-modal>
+      }
     </div>
   `,
   styles: [`
@@ -205,10 +260,12 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .create .ct { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--ink); }
     .create .cd { font-size: 13px; font-weight: 600; color: var(--ink2); margin: 6px 0 14px; }
 
-    .emps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .emp-chip { border: none; background: var(--surface); color: var(--ink2); font-weight: 800; font-size: 13px; padding: 8px 14px; border-radius: 20px; cursor: pointer; box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); }
+    .emps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: stretch; }
+    .emp-chip { border: none; background: var(--surface); color: var(--ink2); cursor: pointer; box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); border-radius: 16px; padding: 8px 14px; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
+    .emp-chip .ec-nom { font-weight: 800; font-size: 13px; }
+    .emp-chip .ec-h { font-weight: 700; font-size: 11.5px; opacity: .7; }
     .emp-chip.on { background: var(--primary); color: #fff; }
-    .emp-add { border: none; background: var(--soft2); width: 36px; height: 36px; border-radius: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .emp-add { border: none; background: var(--soft2); border-radius: 16px; min-width: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
     .mois-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .mois-t { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); text-transform: capitalize; }
@@ -218,6 +275,19 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .r-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .r-titre { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink); }
     .r-role { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .r-side { display: flex; align-items: center; gap: 8px; }
+    .edit-emp { border: none; background: var(--soft2); width: 30px; height: 30px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .btn-primary.danger-btn { background: #C6492F; }
+    .taux-bloc { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line2); }
+    .taux-bloc .two .lab { display: flex; flex-direction: column; gap: 5px; margin: 0; flex: 1; min-width: 0; }
+    .taux-bloc .two .lab .input { min-width: 0; width: 100%; box-sizing: border-box; }
+    .taux-cur { font-size: 13.5px; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+    .taux-cur .since { color: var(--ink3); font-weight: 600; margin-left: 4px; }
+    .appl { width: 100%; justify-content: center; margin-top: 4px; }
+    .okmsg { font-size: 12px; font-weight: 800; color: #5F7E5C; margin-top: 8px; }
+    .hist-t { margin-top: 14px; font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; }
+    .hist { margin: 8px 0 0; padding-left: 18px; }
+    .hist li { font-size: 13px; font-weight: 600; color: var(--ink2); margin: 3px 0; }
     .badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
     .badge.ouvert { background: var(--soft2); color: var(--ink2); }
     .badge.declare { background: #E5F0F4; color: #3E7A96; }
@@ -274,6 +344,7 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
 export class EmployeScreen {
   store = inject(EmployesStore);
   private foyer = inject(FoyerStore);
+  private api = inject(EmployesApi);
 
   decH = decH; euro = euro;
   roles = EMP_ROLES;
@@ -295,6 +366,18 @@ export class EmployeScreen {
   readonly nouvelOpen = signal(false);
   readonly nErreur = signal('');
   nPrenom = ''; nNom = ''; nRole: EmpRole = 'menage'; nTaux = '';
+
+  // Formulaire de modification / retrait d'un employé (administrateur).
+  readonly editOpen = signal(false);
+  readonly edErreur = signal('');
+  readonly edConfirmDel = signal(false);
+  readonly edId = signal(0);
+  edNom = ''; edRole: EmpRole = 'menage';
+  // Taux, dans la même modale : taux courant, nouveau taux daté, historique.
+  readonly edRates = signal<EmpRate[]>([]);
+  readonly edTauxMsg = signal('');
+  edTaux = ''; edDate = '';
+  readonly edEmploye = computed(() => this.store.employes().find((e) => e.id === this.edId()) ?? null);
 
   constructor() { void this.store.init(); }
 
@@ -335,11 +418,50 @@ export class EmployeScreen {
   ouvrirNouvel(): void { this.nPrenom = ''; this.nNom = ''; this.nRole = 'menage'; this.nTaux = ''; this.nErreur.set(''); this.nouvelOpen.set(true); }
   async creerEmploye(): Promise<void> {
     if (!this.nomValide() || this.store.busy()) return;
-    const t = Number(String(this.nTaux).replace(',', '.'));
-    const euros = this.nTaux.trim() !== '' && Number.isFinite(t) && t >= 0 ? t : undefined;
+    // Un champ <input type="number"> lie un nombre (ou null), jamais une chaîne :
+    // on le normalise sans supposer un .trim().
+    const brut = String(this.nTaux ?? '').replace(',', '.');
+    const t = Number(brut);
+    const euros = brut.trim() !== '' && Number.isFinite(t) && t >= 0 ? t : undefined;
     this.nErreur.set('');
     try { await this.store.creerEmploye(this.nomComplet(), this.nRole, euros); this.nouvelOpen.set(false); }
     catch (e) { this.nErreur.set((e as Error).message || 'La création a échoué.'); }
+  }
+
+  ouvrirEdit(e: { id: number; name: string; role: EmpRole }): void {
+    this.edId.set(e.id); this.edNom = e.name; this.edRole = e.role;
+    this.edTaux = ''; this.edDate = this.foyer.todayStr(); this.edTauxMsg.set('');
+    this.edErreur.set(''); this.edConfirmDel.set(false); this.edRates.set([]); this.editOpen.set(true);
+    void this.chargerTaux(e.id);
+  }
+  private async chargerTaux(id: number): Promise<void> {
+    try { this.edRates.set((await this.api.rates(id)).rates); } catch { /* injoignable : pas d'historique affiché */ }
+  }
+  frDate(iso: string): string { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
+  edTauxValide(): boolean {
+    const brut = String(this.edTaux ?? '').replace(',', '.');
+    const n = Number(brut);
+    return brut.trim() !== '' && Number.isFinite(n) && n >= 0 && n <= 100 && /^\d{4}-\d{2}-\d{2}$/.test(this.edDate);
+  }
+  async appliquerTaux(): Promise<void> {
+    if (!this.edTauxValide() || this.store.busy()) return;
+    this.edErreur.set('');
+    try {
+      await this.store.reglerTaux(this.edId(), Number(String(this.edTaux ?? '').replace(',', '.')), this.edDate);
+      await this.chargerTaux(this.edId());
+      this.edTaux = ''; this.edTauxMsg.set('Taux enregistré');
+    } catch (e) { this.edErreur.set((e as Error).message || 'L’enregistrement du taux a échoué.'); }
+  }
+  async enregistrerEdit(): Promise<void> {
+    if (!this.edNom.trim() || this.store.busy()) return;
+    this.edErreur.set('');
+    try { await this.store.modifierEmploye(this.edId(), { name: this.edNom.trim(), role: this.edRole }); this.editOpen.set(false); }
+    catch (e) { this.edErreur.set((e as Error).message || 'L’enregistrement a échoué.'); }
+  }
+  async archiver(): Promise<void> {
+    this.edErreur.set('');
+    try { await this.store.archiverEmploye(this.edId()); this.editOpen.set(false); }
+    catch (e) { this.edErreur.set((e as Error).message || 'Le retrait a échoué.'); }
   }
 
   ouvrir(id: number): void {

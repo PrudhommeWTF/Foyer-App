@@ -27,6 +27,7 @@ export interface EmpEmployee { id: number; name: string; role: EmpRole; active: 
 export interface EmpBootstrap { employees: EmpEmployee[]; congesInclus: boolean; dureeHabituelle: number; rappelJour: number; }
 
 export type EmpMonthStatus = 'ouvert' | 'declare' | 'paye' | 'sans-presence';
+export interface EmpOverviewRow { employeeId: number; minutes: number; netCents: number | null; status: EmpMonthStatus; }
 export interface EmpShift { id: number; employeeId: number; day: string; minutes: number; note: string; createdAt: string; createdBy: string | null; createdVia: string | null; updatedAt: string | null; updatedBy: string | null; updatedVia: string | null; }
 export interface EmpRateBucket { netHourlyCents: number | null; minutes: number; netCents: number | null; }
 export interface EmpMonthRecap {
@@ -51,9 +52,19 @@ export class EmployesApi {
   createEmployee(name: string, role: EmpRole, euros?: number): Promise<{ employee: EmpEmployee }> {
     return this.api.post('employes/employees', { name, role, ...(euros != null ? { euros } : {}) });
   }
+  editEmployee(id: number, patch: { name?: string; role?: EmpRole }): Promise<{ employee: EmpEmployee }> {
+    return this.api.put('employes/employees/' + id, patch);
+  }
+  archiveEmployee(id: number): Promise<{ ok: true }> {
+    return this.api.post('employes/employees/' + id + '/archive', {});
+  }
 
   month(mois: string, employeeId?: number): Promise<EmpMonthRecap> {
     return this.api.request('employes/month?month=' + mois + (employeeId ? '&employee=' + employeeId : ''));
+  }
+  /** Les heures (et le net) de chaque employé pour un mois, en un appel. */
+  overview(mois: string): Promise<{ month: string; employees: EmpOverviewRow[] }> {
+    return this.api.request('employes/overview?month=' + mois);
   }
   addShift(body: { day?: string; minutes?: number; note?: string; force?: boolean }, employeeId?: number): Promise<{ shift?: EmpShift; duplicate?: EmpShift }> {
     return this.api.post('employes/shifts' + (employeeId ? '?employee=' + employeeId : ''), body);

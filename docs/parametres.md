@@ -170,7 +170,7 @@ La catégorisation suggérée des opérations, et quand un compteur d’énergie
 
 ### Employé à domicile
 
-Le taux horaire net déclaré au CESU, les congés payés, le rappel de déclaration et la durée proposée à la saisie.
+Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
