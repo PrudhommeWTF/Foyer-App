@@ -197,3 +197,49 @@ export function preparationDue(lists: PrepList[], tasks: Pick<TaskItem, 'listId'
   }
   return hits;
 }
+
+/** Le mois précédent celui de l'instant mural, « AAAA-MM ». */
+export function previousMonth(nowWall: string): string {
+  const [y, m] = nowWall.slice(0, 7).split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
+}
+
+/** « Septembre 2026 » pour « 2026-09 », dans la locale du foyer. */
+function monthLabel(mois: string): string {
+  return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: HOUSEHOLD_TZ }).format(new Date(mois + '-01T12:00:00Z'));
+}
+
+/** L'état d'un employé pour un mois donné, vu par le planificateur (module Employé à domicile). */
+export interface EmpMonthState { id: string; name: string; role: string; minutes: number; status: string; }
+
+/**
+ * Le rappel de déclaration CESU dû : à partir du jour `rappelJour` du mois (défaut 3,
+ * borné [1, 10]), à 9 h, un rappel par employé dont le mois précédent a des présences
+ * et n'est pas encore déclaré ni marqué sans présence. Une seule notification par
+ * employé et par mois (la clé porte le mois) : un rappel unique, pas un harcèlement.
+ *
+ * Destinataires : les adultes du foyer (le module est réservé aux adultes, un enfant
+ * n'en reçoit jamais rien). Pas de « manqué » : un rappel raté un jour repart le
+ * lendemain tant que le mois reste ouvert, la clé mensuelle dédoublonnant l'envoi.
+ */
+export function cesuDue(emps: EmpMonthState[], month: string, adults: string[], nowWall: string, rappelJour: number): ReminderHit[] {
+  const hits: ReminderHit[] = [];
+  // Avant 9 h, ou avant le jour de rappel, ou sans adulte à prévenir : rien.
+  if (nowWall.slice(11, 16) < MORNING || !adults.length) return hits;
+  const seuil = Math.min(10, Math.max(1, Number.isFinite(rappelJour) ? rappelJour : 3));
+  if (Number(nowWall.slice(8, 10)) < seuil) return hits;
+  for (const e of emps || []) {
+    if (e.minutes <= 0 || e.status !== 'ouvert') continue;
+    const quoi = e.role === 'menage' ? 'le ménage' : e.name;
+    hits.push({
+      key: `emp|${e.id}|${month}`,
+      taskId: 'emp-' + e.id,
+      memberIds: [...adults],
+      title: 'Déclaration CESU à faire',
+      body: `${monthLabel(month)} : pensez à déclarer ${quoi} sur cesu.urssaf.fr.`,
+      fireAt: nowWall.slice(0, 10) + 'T' + MORNING,
+    });
+  }
+  return hits;
+}

@@ -6,7 +6,7 @@
 // une longue coupure lisible (les rappels tombés pendant sont notés manqués).
 import type { TaskItem } from '../tasks/ops';
 import { PushPayload, SendReport, notify, recordMissed } from './push';
-import { PrepList, PrepMember, QuietHours, ReminderHit, dueReminders, parisWall, preparationDue } from './reminders';
+import { EmpMonthState, PrepList, PrepMember, QuietHours, ReminderHit, cesuDue, dueReminders, parisWall, preparationDue, previousMonth } from './reminders';
 
 export interface SchedulerDeps {
   tasks: () => TaskItem[];
@@ -16,6 +16,12 @@ export interface SchedulerDeps {
   members: () => PrepMember[];
   /** Les membres qui ont un compte : c'est à eux qu'une tâche sans responsable rappelle. */
   accounts: () => string[];
+  /** Les adultes du foyer disposant d'un compte : destinataires du rappel CESU (module Employé à domicile, réservé aux adultes). */
+  adults: () => string[];
+  /** L'état d'un mois donné pour chaque employé actif : de quoi décider du rappel CESU. Relu à chaque minute. */
+  employes: (month: string) => EmpMonthState[];
+  /** Le jour du mois à partir duquel rappeler la déclaration CESU (réglage empRappelJour). */
+  rappelJour: () => number;
   /** Adresse ouverte au tap sur la notification. */
   url: () => string;
   /**
@@ -33,6 +39,8 @@ const payloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, taskId: h.taskId, tag: 'task-' + h.taskId });
 const prepPayloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, taskId: h.taskId, tag: 'prep-' + h.taskId });
+const cesuPayloadOf = (h: ReminderHit, url: string): PushPayload =>
+  ({ kind: 'reminder', title: h.title, body: h.body, url, taskId: h.taskId, tag: 'cesu-' + h.taskId });
 
 /** Ce qu'un envoi a atteint, par membre, pour le journal (vide quand tout a été ignoré). */
 const reached = (r: SendReport): string => r.members.filter((m) => m.status !== 'skipped')
@@ -65,6 +73,14 @@ export async function tick(deps: SchedulerDeps, nowWall = parisWall()): Promise<
     if (!pour.length) continue;
     const parts = reached(await notify(h.key, pour, prepPayloadOf(h, deps.url())));
     if (parts) deps.log(`Notifications : préparation « ${h.title} » (${h.fireAt.replace('T', ' ')}) → ${parts}`);
+  }
+  // Rappel CESU : le mois écoulé a des présences non déclarées (module Employé à domicile).
+  const mois = previousMonth(nowWall);
+  for (const h of cesuDue(deps.employes(mois), mois, deps.adults(), nowWall, deps.rappelJour())) {
+    const pour = h.memberIds.filter((m) => deps.wants(m, 'reminder'));
+    if (!pour.length) continue;
+    const parts = reached(await notify(h.key, pour, cesuPayloadOf(h, deps.url())));
+    if (parts) deps.log(`Notifications : rappel CESU « ${h.body} » → ${parts}`);
   }
 }
 

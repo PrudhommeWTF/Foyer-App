@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRender
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, DayExtra } from '../core/foyer.store';
 import { AdminStore } from '../core/admin.store';
+import { EmployesStore } from '../core/employes.store';
 import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { WhoComponent } from '../shared/who';
@@ -262,7 +263,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
           }
           <!-- Filtres : chaque case montre ou cache un type d'élément dans toutes les vues. -->
           <div class="filters">
-            @for (fk of filterKinds; track fk.k) {
+            @for (fk of filterKinds(); track fk.k) {
               <button class="filt" [class.off]="!shown(fk.k)" (click)="toggleKind(fk.k)" [attr.aria-pressed]="shown(fk.k)">
                 <span class="filt-box" [style.background]="shown(fk.k) ? fk.color : 'transparent'" [style.border-color]="fk.color">
                   @if (shown(fk.k)) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
@@ -728,12 +729,16 @@ export class CalendarScreen {
   weekdays = SCHED_DAYS;
   recurOpts: Recur[] = ['none', 'daily', 'weekday', 'weekly', 'biweekly', 'monthly'];
 
-  /** Types d'éléments qu'on peut montrer ou cacher, avec leur pastille de légende. */
-  filterKinds = [
+  /**
+   * Types d'éléments qu'on peut montrer ou cacher, avec leur pastille de légende.
+   * Le repère CESU n'est proposé qu'aux adultes : le module Employé à domicile
+   * est invisible aux enfants, jusque dans la légende.
+   */
+  filterKinds = computed(() => [
     { k: 'event', color: CAL_KINDS['event'].color, label: 'Événements' },
     { k: 'planning', color: SCHED_COLORS['ecole'], label: 'Emploi du temps' },
-    ...['task', 'birthday', 'holiday', 'school', 'echeance'].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
-  ];
+    ...['task', 'birthday', 'holiday', 'school', 'echeance', ...(this.store.isChild() ? [] : ['cesu'])].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
+  ]);
   /** Les types masqués, en ensemble : le filtre s'applique partout où un élément est produit. */
   hidden = computed(() => new Set(this.store.ui().calHidden));
   shown(k: string): boolean { return !this.hidden().has(k); }
@@ -776,6 +781,9 @@ export class CalendarScreen {
   readonly hourH = signal(HOUR_H_MIN);
 
   constructor() {
+    // Instancié pour son effet : le module Employé à domicile pose les repères
+    // de déclaration CESU sur l'agenda (adultes uniquement, sans écran ouvert).
+    inject(EmployesStore);
     try {
       const onResize = () => this.viewport.set(this.readViewport());
       window.addEventListener('resize', onResize, { passive: true });

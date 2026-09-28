@@ -5,7 +5,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem } from '../src/tasks/ops';
-import { PrepList, PrepMember, assignedBy, dueReminders, fireAt, parisWall, preparationDue, wallAdd, whenLabel } from '../src/notify/reminders';
+import { EmpMonthState, PrepList, PrepMember, assignedBy, cesuDue, dueReminders, fireAt, parisWall, preparationDue, previousMonth, wallAdd, whenLabel } from '../src/notify/reminders';
 
 const task = (over: Partial<TaskItem> = {}): TaskItem =>
   ({ id: 't1', listId: 'l1', text: 'Rappeler le plombier', who: ['m1'], due: '2026-09-05', time: '18:00', done: false, remind: 'at', ...over });
@@ -147,4 +147,49 @@ test('préparation : remindDaysBefore borné à [1, 30], défaut 3', () => {
   assert.equal(win(0, '2026-09-04'), true, '0 ramené à 1 : la veille');
   assert.equal(win(0, '2026-09-03'), false, '0 ramené à 1 : J-2 hors fenêtre');
   assert.equal(win(99, '2026-08-20'), true, '99 ramené à 30 : J-16 encore dans la fenêtre');
+});
+
+// ---- Rappel CESU (module Employé à domicile) ----
+
+test('previousMonth : le mois d’avant, changement d’année compris', () => {
+  assert.equal(previousMonth('2026-09-03T09:00'), '2026-08');
+  assert.equal(previousMonth('2026-01-03T09:00'), '2025-12');
+});
+
+const emp = (over: Partial<EmpMonthState> = {}): EmpMonthState =>
+  ({ id: '1', name: 'Fatou', role: 'menage', minutes: 900, status: 'ouvert', ...over });
+const adults = ['me', 'm1'];
+
+test('rappel CESU : à partir du jour de rappel, à 9 h, un rappel par employé au mois ouvert avec présences', () => {
+  const at = (day: string, time = '09:00', rj = 3): number => cesuDue([emp()], '2026-08', adults, `2026-09-${day}T${time}`, rj).length;
+  assert.equal(at('02'), 0, 'avant le 3 : rien');
+  assert.equal(at('03', '08:59'), 0, 'le 3 mais avant 9 h : rien');
+  assert.equal(at('03', '09:00'), 1, 'le 3 à 9 h : dû');
+  assert.equal(at('10'), 1, 'plus tard dans le mois : toujours dû tant que non déclaré');
+  assert.equal(at('04', '09:00', 5), 0, 'jour de rappel réglé à 5 : le 4 pas encore');
+  assert.equal(at('05', '09:00', 5), 1, 'jour de rappel réglé à 5 : le 5 est dû');
+});
+
+test('rappel CESU : destinataires adultes, corps et clé mensuelle', () => {
+  const h = cesuDue([emp()], '2026-08', adults, '2026-09-03T09:00', 3)[0];
+  assert.deepEqual(h.memberIds, ['me', 'm1']);
+  assert.equal(h.key, 'emp|1|2026-08');
+  assert.equal(h.body, 'août 2026 : pensez à déclarer le ménage sur cesu.urssaf.fr.');
+  assert.equal(h.title, 'Déclaration CESU à faire');
+});
+
+test('rappel CESU : rien sans présence, ni pour un mois déjà déclaré, payé ou sans présence, ni sans adulte', () => {
+  const now = '2026-09-03T09:00';
+  assert.equal(cesuDue([emp({ minutes: 0 })], '2026-08', adults, now, 3).length, 0, 'aucune présence');
+  assert.equal(cesuDue([emp({ status: 'declare' })], '2026-08', adults, now, 3).length, 0, 'déjà déclaré');
+  assert.equal(cesuDue([emp({ status: 'paye' })], '2026-08', adults, now, 3).length, 0, 'déjà payé');
+  assert.equal(cesuDue([emp({ status: 'sans-presence' })], '2026-08', adults, now, 3).length, 0, 'marqué sans présence');
+  assert.equal(cesuDue([emp()], '2026-08', [], now, 3).length, 0, 'aucun adulte à prévenir');
+});
+
+test('rappel CESU : jour de rappel borné à [1, 10]', () => {
+  const at = (day: string, rj: number): number => cesuDue([emp()], '2026-08', adults, `2026-09-${day}T09:00`, rj).length;
+  assert.equal(at('01', 0), 1, '0 ramené à 1 : dès le 1er');
+  assert.equal(at('10', 99), 1, '99 ramené à 10 : le 10 est dû');
+  assert.equal(at('09', 99), 0, '99 ramené à 10 : le 9 pas encore');
 });

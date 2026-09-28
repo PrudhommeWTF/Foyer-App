@@ -257,7 +257,7 @@ export class FinancesStore {
       ...this.deadlineNotifs(),
     ]));
     // Les échéances apparaissent dans le calendrier partagé sans y être stockées.
-    effect(() => this.foyer.externalDayExtras.set(this.deadlineDayExtras()));
+    effect(() => this.foyer.setExternalDayExtras('finances', this.deadlineDayExtras()));
   }
 
   /** Overrun and coverage alerts for the month in progress. */

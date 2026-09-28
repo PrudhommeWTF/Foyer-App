@@ -66,10 +66,11 @@ compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier dé
 | Module | En bref |
 |---|---|
 | 🏠 **Accueil** | Le mur de la famille : un fil de ce qui a récemment changé (tâches cochées, articles ajoutés aux courses), et un bandeau qui donne d'un coup d'oeil les prochains rendez-vous, les dernières tâches, les repas du jour et un sommaire des finances. Chaque bloc mène à son écran d'un tap. |
-| 📅 **Calendrier** | Vues 3 jours, semaine et mois, récurrence (quotidienne, en semaine, hebdomadaire, une semaine sur deux, mensuelle), couleur par membre. Superpose tâches planifiées, jours fériés, vacances scolaires, anniversaires, échéances de contrat et les **créneaux d'emploi du temps publiés à l'agenda** (identifiés comme tels, ouverts en un tap sur leur créneau source). Partage en lecture seule par flux **ICS** (Google Agenda, Apple Calendrier). |
+| 📅 **Calendrier** | Vues 3 jours, semaine et mois, récurrence (quotidienne, en semaine, hebdomadaire, une semaine sur deux, mensuelle), couleur par membre. Superpose tâches planifiées, jours fériés, vacances scolaires, anniversaires, échéances de contrat, déclarations CESU à faire (adultes) et les **créneaux d'emploi du temps publiés à l'agenda** (identifiés comme tels, ouverts en un tap sur leur créneau source). Partage en lecture seule par flux **ICS** (Google Agenda, Apple Calendrier). |
 | 🛒 **Courses** | Multi-listes, rayons réordonnables à l'ordre de votre magasin, coche en un tap, articles pris regroupés en bas. Génération automatique depuis le menu de la semaine, avec un rapport avant d'écrire. Export CSV. Écriture article par article : coche à plusieurs et hors ligne sans conflit. [Détails](docs/cuisine-architecture.md) |
 | ✅ **Tâches** | Saisie en un champ, affectation à un, plusieurs ou aucun membre, récurrence native (à date fixe ou après réalisation), sous-tâches, modèles, listes typées (corvées, checklists) et vue « À moi ». **Rappels sur le téléphone (Web Push)**, réglés tâche par tâche. Reliée au reste : contrats, courses, emploi du temps et agenda. [Détails](docs/taches.md) |
 | 💰 **Finances** | Comptes multi-titulaires, opérations catégorisées, bilan mensuel et annuel, budgets de référence. **Import de relevés** (CSV, OFX, CAMT.053, xlsx) avec déduplication et rapport avant validation. Règles de catégorisation, crédits, biens et contrats avec échéances de résiliation, relevés de compteur, pistes d'économies. [Détails](docs/finances-architecture.md) |
+| 🧹 **Employé à domicile** | Le suivi des heures d'un employé déclaré au **CESU** (ménage). « Elle est venue aujourd'hui » en un tap, récapitulatif de fin de mois avec les **chiffres exacts à recopier** sur cesu.urssaf.fr (heures en décimal, salaire net), déclaré puis payé. Taux horaire daté (un mois déclaré n'est jamais recalculé), rappel de déclaration et repère à l'agenda. **Réservé aux adultes**, aucune donnée personnelle au-delà du nom. [Détails](docs/employe-domicile.md) |
 | 🍽️ **Repas** | Déjeuner et dîner (petit-déjeuner en option) sur 3 ou 7 jours, grille sur écran, pile de jours sur téléphone. Plusieurs plats par créneau, couverts par repas, déplacement par glisser-déposer, recopie d'une période sur une autre, mise à l'agenda des repas avec invités. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients et étapes. **Import depuis l'adresse d'une page de recette** (Marmiton, 750g, Cuisine AZ, blogs) par lecture des données structurées. Recherche en une ligne (« courgette 20min végétarien »), notes de la famille, étiquettes, export et réimport JSON. [Détails](docs/cuisine-architecture.md) |
 | 🗓️ **Emploi du temps** | La semaine type du foyer, un créneau pour un ou plusieurs membres. Copie de journée, récurrence sobre (toutes les semaines ou une sur deux) avec période de validité et filtre période scolaire/vacances. Alimente les couverts du planning repas, et **publie à la demande un créneau au calendrier partagé** (ses occurrences y sont dérivées, jamais recopiées, donc toujours à jour). [Détails](docs/emploi-du-temps.md) |
@@ -103,6 +104,10 @@ Foyer-App/
   dédiées** (`fin_*`, même fichier SQLite), servies par `/api/finances/*` avec des opérations
   granulaires. Milliers d'opérations, agrégats côté serveur, pas de « dernier arrivé gagne ».
   Voir [`docs/finances-architecture.md`](docs/finances-architecture.md).
+- Le module **Employé à domicile** suit le même parti : tables `emp_*` hors du document, servies
+  par `/api/employes/*`, **réservées aux adultes**. Une présence = une ligne, le taux horaire est
+  daté (chaque heure valorisée au taux du jour), un mois déclaré est figé. Voir
+  [`docs/employe-domicile.md`](docs/employe-domicile.md).
 - La **liste de courses** et les **tâches** restent dans le document, mais s'écrivent
   **article par article** et **tâche par tâche** (`/api/shopping/ops`, `/api/tasks/ops`) :
   `PUT /api/state` ignore ces champs et conserve ceux du serveur. Deux personnes cochent en
@@ -305,7 +310,9 @@ ou un assistant lise et agisse dans le foyer **en son nom**, avec **ses droits**
 - **Format** : `foyer_` suivi de 40 caractères aléatoires. Le secret n'est affiché **qu'une
   fois**, à la création (copiez-le tout de suite) ; en base, seul son SHA-256 est rangé.
 - **Portées** : `read` (lecture seule) ou `write` (lecture **et** écriture). Le rôle du membre
-  s'applique en plus : un enfant garde ses restrictions.
+  s'applique en plus : un enfant garde ses restrictions. Le module **Employé à domicile**
+  (adultes) ne s'ouvre qu'à un jeton porté par un adulte ; ses outils sont invisibles et refusés
+  à un jeton d'enfant.
 - **Hors de portée d'un jeton**, quelle que soit la portée : les **Finances**, les **réglages**
   (en écriture), la **gestion des comptes et de la sécurité** (mot de passe, second facteur), le
   **système** (sauf la version, en lecture) et les **notifications**. Un jeton ne peut pas non
@@ -451,6 +458,7 @@ conservée dans [`docs/`](docs/).
 | Tâches (récurrence, rappels, hors ligne) | [`docs/taches.md`](docs/taches.md), [`docs/taches-notifications.md`](docs/taches-notifications.md) |
 | Cuisine (recettes → repas → courses) | [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md) |
 | Finances (architecture et cahier de recette) | [`docs/finances-architecture.md`](docs/finances-architecture.md), [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md) |
+| Employé à domicile (heures, CESU) | [`docs/employe-domicile.md`](docs/employe-domicile.md) |
 | Emploi du temps | [`docs/emploi-du-temps.md`](docs/emploi-du-temps.md) |
 | Hors ligne | [`docs/hors-ligne.md`](docs/hors-ligne.md) |
 | Assistants (serveur MCP) | [`docs/assistants.md`](docs/assistants.md) |

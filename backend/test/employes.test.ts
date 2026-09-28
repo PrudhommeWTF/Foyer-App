@@ -105,6 +105,18 @@ describe('Employé à domicile : HTTP', () => {
     assert.equal((await appel(ctx.base, 'POST', '/employes/shifts', { day: '2026-10-06', minutes: 60, force: true }, A())).status, 201);
   });
 
+  it('les mois à déclarer remontent dans le socle (repère d’agenda), un mois déclaré en sort', async () => {
+    const boot = await appel(ctx.base, 'GET', '/employes/bootstrap', undefined, M());
+    const emp = boot.json.employees[0];
+    assert.ok(emp.openMonths.includes('2026-09'), 'septembre rouvert avec présence : ' + JSON.stringify(emp.openMonths));
+    assert.ok(emp.openMonths.includes('2026-10'), 'octobre a des présences');
+    // Déclarer octobre : il sort de la liste des mois à déclarer.
+    assert.equal((await appel(ctx.base, 'POST', '/employes/month/declare', { month: '2026-10' }, M())).status, 200);
+    const boot2 = await appel(ctx.base, 'GET', '/employes/bootstrap', undefined, M());
+    assert.ok(!boot2.json.employees[0].openMonths.includes('2026-10'), 'octobre déclaré ne remonte plus');
+    assert.ok(boot2.json.employees[0].openMonths.includes('2026-09'), 'septembre reste à déclarer');
+  });
+
   it('un mois sans présence se marque pour faire taire le rappel', async () => {
     const r = await appel(ctx.base, 'POST', '/employes/month/no-presence', { month: '2026-11' }, M());
     assert.equal(r.status, 200);

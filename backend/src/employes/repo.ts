@@ -137,6 +137,20 @@ export function shiftsBetween(employeeId: number, from: string, to: string): Shi
   return (database.prepare('SELECT * FROM emp_shifts WHERE employee_id = ? AND day >= ? AND day <= ? AND archived_at IS NULL ORDER BY day DESC, id DESC')
     .all(employeeId, from, to) as Record<string, unknown>[]).map(shiftRow);
 }
+/**
+ * Les mois qui ont au moins une présence et restent à déclarer (statut « ouvert »,
+ * ou pas encore de ligne de mois). Sert au repère d'agenda et au rappel : un mois
+ * déclaré, payé ou marqué sans présence n'y figure pas.
+ */
+export function openMonthsWithPresence(employeeId: number): string[] {
+  return (database.prepare(
+    `SELECT DISTINCT substr(s.day, 1, 7) AS month
+     FROM emp_shifts s
+     LEFT JOIN emp_months m ON m.employee_id = s.employee_id AND m.month = substr(s.day, 1, 7)
+     WHERE s.employee_id = ? AND s.archived_at IS NULL AND (m.status IS NULL OR m.status = 'ouvert')
+     ORDER BY month`,
+  ).all(employeeId) as { month: string }[]).map((r) => r.month);
+}
 
 // ---- Mois : état et calcul ------------------------------------------------
 

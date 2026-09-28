@@ -9,7 +9,7 @@ import { ApiService } from './api.service';
 export type EmpRole = 'menage' | 'garde' | 'jardin' | 'autre';
 
 export interface EmpRate { id: number; employeeId: number; netHourlyCents: number; effectiveFrom: string; createdAt: string; createdBy: string | null; }
-export interface EmpEmployee { id: number; name: string; role: EmpRole; active: boolean; createdAt: string; archivedAt: string | null; currentRate: { netHourlyCents: number; effectiveFrom: string } | null; }
+export interface EmpEmployee { id: number; name: string; role: EmpRole; active: boolean; createdAt: string; archivedAt: string | null; currentRate: { netHourlyCents: number; effectiveFrom: string } | null; openMonths: string[]; }
 export interface EmpBootstrap { employees: EmpEmployee[]; configuredHourlyRate: number; congesInclus: boolean; dureeHabituelle: number; rappelJour: number; }
 
 export type EmpMonthStatus = 'ouvert' | 'declare' | 'paye' | 'sans-presence';

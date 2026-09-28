@@ -1,9 +1,9 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { EmployesApi, EmpBootstrap, EmpMonthRecap, EmpShift } from './employes.api';
-import { FoyerStore } from './foyer.store';
+import { DayExtra, FoyerStore } from './foyer.store';
 import { ApiError } from './api.service';
 import { todayIn } from './helpers';
-import { HOUSEHOLD_TZ } from './constants';
+import { CAL_KINDS, HOUSEHOLD_TZ } from './constants';
 
 /**
  * État de l'écran « Ménage » (module Employé à domicile). Le module vit dans ses
@@ -31,6 +31,37 @@ export class EmployesStore {
   constructor() {
     // À la déconnexion, on oublie tout : le module recharge au retour.
     effect(() => { if (!this.foyer.authed() && this.loaded) this.reset(); });
+    // Repère d'agenda : un mois à déclarer pose un repère au jour de rappel du
+    // mois suivant. Réservé aux adultes (un enfant ne charge jamais le module).
+    effect(() => this.foyer.setExternalDayExtras('employe', this.cesuDayExtras()));
+    // Charger le socle dès qu'un adulte est connecté, pour que le repère
+    // d'agenda existe sans avoir ouvert l'écran « Ménage ».
+    effect(() => { if (this.foyer.authed() && !this.foyer.isChild() && !this.boot()) void this.reloadBoot(); });
+  }
+
+  /** Date « AAAA-MM-JJ » du jour de rappel (borné [1, 28]) du mois suivant `month`. */
+  private markDate(month: string, day: number): string {
+    const [y, m] = month.split('-').map(Number);
+    const d = new Date(Date.UTC(y, m, 1));
+    const jour = Math.min(28, Math.max(1, day));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(jour).padStart(2, '0')}`;
+  }
+  /** « août » pour « 2026-08 », dans la locale du foyer. */
+  private moisNom(month: string): string {
+    return new Intl.DateTimeFormat('fr-FR', { month: 'long', timeZone: HOUSEHOLD_TZ }).format(new Date(month + '-01T12:00:00Z'));
+  }
+  /** Les repères CESU, indexés par date : un par mois à déclarer, tous employés confondus. */
+  private cesuDayExtras(): Record<string, DayExtra[]> {
+    const b = this.boot();
+    const out: Record<string, DayExtra[]> = {};
+    if (!b || this.foyer.isChild()) return out;
+    for (const e of b.employees) {
+      for (const mois of e.openMonths || []) {
+        const ds = this.markDate(mois, b.rappelJour);
+        (out[ds] ??= []).push({ kind: 'cesu', label: 'Déclaration CESU', color: CAL_KINDS['cesu'].color, sub: e.role === 'menage' ? 'Ménage de ' + this.moisNom(mois) : e.name + ' : ' + this.moisNom(mois) });
+      }
+    }
+    return out;
   }
 
   private loaded = false;

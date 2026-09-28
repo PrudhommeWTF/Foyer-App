@@ -187,6 +187,9 @@ describe('planificateur', () => {
     lists: () => [],
     members: () => [],
     accounts: () => ['me', 'm1'],
+    adults: () => ['me', 'm1'],
+    employes: () => [],
+    rappelJour: () => 3,
     url: () => '',
     // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
     // ses rappels. Les tests qui éprouvent ces règles les posent eux-mêmes.
@@ -231,6 +234,23 @@ describe('planificateur', () => {
     assert.ok(log.some((l) => l.includes('préparation') && l.includes('Trousseau colo')));
     await tick(deps(tasks, log, over), '2026-09-03T18:01');
     assert.equal(sent.length, 2, 'même jour, même clé : rien de plus');
+  });
+
+  it('rappel CESU : le mois écoulé non déclaré, aux adultes, une fois par mois', async () => {
+    addDevice('me', sub('a'), ''); addDevice('m1', sub('b'), '');
+    const log: string[] = [];
+    const over: Partial<SchedulerDeps> = {
+      adults: () => ['me', 'm1'],
+      employes: (month) => month === '2026-08' ? [{ id: '1', name: 'Fatou', role: 'menage', minutes: 900, status: 'ouvert' }] : [],
+      rappelJour: () => 3,
+    };
+    // Le 3 septembre à 9 h : le mois d'août, ouvert avec présences, est rappelé aux deux adultes.
+    await tick(deps([], log, over), '2026-09-03T09:00');
+    assert.deepEqual(sent.map((s) => s.endpoint.slice(-1)).sort(), ['a', 'b'], 'me et m1');
+    assert.ok(log.some((l) => l.includes('CESU') && l.includes('août')));
+    // Deuxième passage : même clé mensuelle, rien de plus.
+    await tick(deps([], log, over), '2026-09-03T09:01');
+    assert.equal(sent.length, 2, 'même mois, même clé : pas de second envoi');
   });
 });
 
