@@ -7,7 +7,7 @@ import * as repo from './repo';
 import * as backup from './backup';
 import { fail, id, makeHandler } from './http';
 import { AuthedRequest, currentMember } from '../auth/session';
-import { applySettings, effectiveSetting } from '../settings/repo';
+import { effectiveSetting } from '../settings/repo';
 import { log } from '../log';
 
 type AdminGuard = (req: Request, res: Response, next: express.NextFunction) => void;
@@ -85,9 +85,6 @@ export function employesRouter(requireAdmin: AdminGuard): Router {
     });
     res.json({
       employees,
-      // Le taux courant tel que réglé dans les Paramètres : sert de valeur de
-      // départ au contrôle, et de repli tant qu'aucun taux daté n'existe.
-      configuredHourlyRate: Number(effectiveSetting('empNetHourlyRate')) || 0,
       congesInclus: effectiveSetting('empCongesInclus') === true,
       dureeHabituelle: Number(effectiveSetting('empDureeHabituelle')) || 180,
       rappelJour: Number(effectiveSetting('empRappelJour')) || 3,
@@ -189,6 +186,11 @@ export function employesRouter(requireAdmin: AdminGuard): Router {
     const name = trimmed(b['name'], 'name', 120);
     const role = oneOf(b['role'], repo.EMP_ROLES, 'role', 'menage');
     const e = repo.createEmployee(name, role);
+    // Taux personnalisé posé à la création : une première ligne d'historique
+    // datée d'aujourd'hui. Chaque employé porte le sien, il n'y a pas de taux global.
+    if (b['euros'] !== undefined && b['euros'] !== null && b['euros'] !== '') {
+      repo.addRate(e.id, eurosToCents(b['euros'], 'euros'), today(), author(req));
+    }
     log.info(`Employé : « ${name} » (${role}) créé par ${author(req) || 'inconnu'}.`);
     res.status(201).json({ employee: e });
   }));
@@ -207,16 +209,13 @@ export function employesRouter(requireAdmin: AdminGuard): Router {
     res.json({ ok: true });
   }));
 
-  // Le taux : historique daté (emp_rates) + valeur courante du réglage, en un geste.
+  // Le taux : une ligne d'historique datée par employé (emp_rates). Le calcul
+  // d'un mois lit cet historique, le taux en vigueur le jour de chaque présence.
   r.put('/taux', requireAdmin, handler((req, res) => {
     const e = resolveEmployee(req); const b = req.body as Record<string, unknown>;
     const cents = eurosToCents(b['euros'] ?? b['montant'], 'euros');
     const effectiveFrom = b['effective_from'] ? dayField(b['effective_from'], 'effective_from') : today();
     const rate = repo.addRate(e.id, cents, effectiveFrom, author(req));
-    // Le réglage « taux horaire net » reflète le taux courant, journalisé et
-    // exporté comme les autres. Le calcul d'un mois lit l'historique daté, pas lui.
-    const out = applySettings({ empNetHourlyRate: cents / 100 }, author(req), true);
-    if (out.refused.length) log.attention('Employé : réglage du taux refusé : ' + out.refused.map((x) => x.error).join(' ; '));
     log.info(`Employé : taux réglé à ${(cents / 100).toFixed(2)} € (effet ${effectiveFrom}, ${e.name}) par ${author(req) || 'inconnu'}.`);
     res.json({ rate, rates: repo.ratesOf(e.id) });
   }));

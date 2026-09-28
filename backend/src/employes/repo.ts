@@ -12,8 +12,11 @@ export function initEmployesRepo(db: Database): void {
   initBackup(db);
 }
 
-export type EmpRole = 'menage' | 'garde' | 'jardin' | 'autre';
-export const EMP_ROLES: readonly EmpRole[] = ['menage', 'garde', 'jardin', 'autre'];
+// Les catégories d'emploi, calquées sur les activités déclarables au CESU. Le
+// stockage est une chaîne libre (pas de contrainte SQL) : ajouter une catégorie
+// ne demande aucune migration, et les employés existants gardent la leur.
+export type EmpRole = 'menage' | 'garde' | 'soutien' | 'jardin' | 'bricolage' | 'repas' | 'seniors' | 'informatique' | 'autre';
+export const EMP_ROLES: readonly EmpRole[] = ['menage', 'garde', 'soutien', 'jardin', 'bricolage', 'repas', 'seniors', 'informatique', 'autre'];
 export type MonthStatus = 'ouvert' | 'declare' | 'paye' | 'sans-presence';
 export const MONTH_STATUSES: readonly MonthStatus[] = ['ouvert', 'declare', 'paye', 'sans-presence'];
 /** Un mois figé : ses présences ne se modifient plus, ses totaux ne se recalculent plus. */

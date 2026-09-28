@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { EmployesApi, EmpBootstrap, EmpMonthRecap, EmpShift } from './employes.api';
+import { EmployesApi, EmpBootstrap, EmpMonthRecap, EmpRole, EmpShift } from './employes.api';
 import { DayExtra, FoyerStore } from './foyer.store';
 import { ApiError } from './api.service';
 import { todayIn } from './helpers';
@@ -24,7 +24,13 @@ export class EmployesStore {
   readonly indispo = signal(false);
   readonly busy = signal(false);
 
-  readonly employe = computed(() => this.boot()?.employees[0] ?? null);
+  /** L'employé regardé (plusieurs peuvent coexister). Null = revenir au premier. */
+  readonly selectedId = signal<number | null>(null);
+  readonly employes = computed(() => this.boot()?.employees ?? []);
+  readonly employe = computed(() => {
+    const list = this.employes();
+    return list.find((e) => e.id === this.selectedId()) ?? list[0] ?? null;
+  });
   readonly dureeHabituelle = computed(() => this.boot()?.dureeHabituelle ?? 180);
   readonly congesInclus = computed(() => this.boot()?.congesInclus ?? true);
 
@@ -72,9 +78,12 @@ export class EmployesStore {
     await this.reloadMonth();
   }
   reset(): void {
-    this.loaded = false; this.boot.set(null); this.recap.set(null); this.indispo.set(false);
+    this.loaded = false; this.boot.set(null); this.recap.set(null); this.indispo.set(false); this.selectedId.set(null);
     this.month.set(todayIn(HOUSEHOLD_TZ).slice(0, 7));
   }
+
+  /** Regarder un autre employé : recharge son mois courant. */
+  selectEmploye(id: number): void { this.selectedId.set(id); void this.reloadMonth(); }
 
   private async reloadBoot(): Promise<void> {
     try { this.boot.set(await this.api.bootstrap()); this.indispo.set(false); }
@@ -97,10 +106,15 @@ export class EmployesStore {
 
   private empId(): number | undefined { return this.employe()?.id; }
 
-  async creerEmploye(nom: string): Promise<void> {
+  /** Créer un employé (catégorie CESU + taux à la création), et le regarder aussitôt. */
+  async creerEmploye(nom: string, role: EmpRole, euros?: number): Promise<void> {
     this.busy.set(true);
-    try { await this.api.createEmployee(nom.trim(), 'menage'); await this.reloadBoot(); await this.reloadMonth(); }
-    finally { this.busy.set(false); }
+    try {
+      const r = await this.api.createEmployee(nom.trim(), role, euros);
+      await this.reloadBoot();
+      this.selectedId.set(r.employee.id);
+      await this.reloadMonth();
+    } finally { this.busy.set(false); }
   }
 
   /** « Elle est venue aujourd'hui » : une présence à la durée habituelle, en un tap, annulable. */

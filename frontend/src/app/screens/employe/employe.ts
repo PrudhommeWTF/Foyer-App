@@ -4,7 +4,7 @@ import { EmployesStore } from '../../core/employes.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
-import { EmpShift } from '../../core/employes.api';
+import { EMP_ROLES, EmpRole, EmpShift, empRoleLabel } from '../../core/employes.api';
 import { decHours as decH, eurosFmt as euro, hoursPlain, eurosPlain } from '../../core/employe.format';
 
 const MONTH_FMT = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'Europe/Paris' });
@@ -37,13 +37,24 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
       @if (!store.employe() && !store.indispo()) {
         <div class="card create">
           <div class="ct">Aucun employé configuré</div>
-          <div class="cd">Ajoutez la personne pour commencer à noter ses heures (le nom seul, aucune donnée sensible).</div>
-          <div class="crow">
-            <input class="input" [(ngModel)]="nom" placeholder="Nom (ex : Nolwenn)" maxlength="120" (keydown.enter)="creer()" />
-            <button class="btn btn-primary" [disabled]="!nom.trim() || store.busy()" (click)="creer()">Créer</button>
-          </div>
+          @if (store.foyer.isAdmin()) {
+            <div class="cd">Ajoutez la personne pour commencer à noter ses heures (nom et prénom, la catégorie CESU et le taux horaire, rien d’autre).</div>
+            <button class="btn btn-primary" (click)="ouvrirNouvel()"><f-icon name="userPlus" [size]="18" color="#fff" [width]="2.4" /> Ajouter un employé</button>
+          } @else {
+            <div class="cd">Aucun employé n’est encore configuré. Demandez à un administrateur du foyer de l’ajouter.</div>
+          }
         </div>
       } @else if (store.employe(); as e) {
+        <!-- Sélecteur d'employé (plusieurs contrats possibles) -->
+        @if (store.employes().length > 1 || store.foyer.isAdmin()) {
+          <div class="emps">
+            @for (em of store.employes(); track em.id) {
+              <button class="emp-chip" [class.on]="em.id === e.id" (click)="store.selectEmploye(em.id)">{{ em.name }}</button>
+            }
+            @if (store.foyer.isAdmin()) { <button class="emp-add" (click)="ouvrirNouvel()" aria-label="Ajouter un employé"><f-icon name="plus" [size]="16" color="var(--ink2)" [width]="2.4" /></button> }
+          </div>
+        }
+
         <!-- En-tête : mois et navigation -->
         <div class="mois-nav">
           <button class="nav" (click)="store.shiftMonth(-1)" aria-label="Mois précédent"><f-icon name="chevronLeft" [size]="20" color="var(--ink2)" [width]="2.4" /></button>
@@ -54,7 +65,10 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
         <!-- Résumé du mois -->
         <div class="card resume">
           <div class="r-head">
-            <div class="r-titre">{{ titre() }}</div>
+            <div class="r-ident">
+              <div class="r-titre">{{ e.name }}</div>
+              <div class="r-role">{{ roleLabel(e.role) }}</div>
+            </div>
             @if (recap(); as r) { <span class="badge {{ statut(r.status).cls }}">{{ statut(r.status).label }}</span> }
           </div>
           @if (recap(); as r) {
@@ -64,7 +78,7 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
             </div>
             @if (!r.frozen) {
               <button class="btn btn-primary big" [disabled]="store.busy()" (click)="store.elleEstVenue()">
-                <f-icon name="plus" [size]="20" color="#fff" [width]="2.6" /> Elle est venue aujourd’hui
+                <f-icon name="plus" [size]="20" color="#fff" [width]="2.6" /> Présence aujourd’hui
               </button>
             } @else {
               <div class="fige"><f-icon name="lock" [size]="14" color="var(--ink3)" [width]="2.2" /> Mois figé. <button class="lien" (click)="store.rouvrir()">Rouvrir pour modifier</button></div>
@@ -158,6 +172,31 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
           </f-modal>
         }
       }
+
+      <!-- Formulaire : ajouter un employé (administrateur) -->
+      @if (nouvelOpen()) {
+        <f-modal title="Ajouter un employé" [maxWidth]="440" (close)="nouvelOpen.set(false)">
+          <div class="form">
+            <label class="lab">Prénom et nom</label>
+            <div class="two">
+              <input class="input" [(ngModel)]="nPrenom" placeholder="Prénom" maxlength="60" />
+              <input class="input" [(ngModel)]="nNom" placeholder="Nom" maxlength="60" />
+            </div>
+            <label class="lab">Catégorie (CESU)</label>
+            <select class="input" [(ngModel)]="nRole">
+              @for (r of roles; track r.id) { <option [value]="r.id">{{ r.label }}</option> }
+            </select>
+            <label class="lab">Taux horaire net (€/h)</label>
+            <input class="input" type="number" inputmode="decimal" min="0" max="100" step="0.01" [(ngModel)]="nTaux" placeholder="14,50" />
+            <div class="hint2">Le taux se déclare au CESU. Il pourra changer plus tard (historique daté par employé), sans recalculer un mois déjà déclaré.</div>
+            @if (nErreur()) { <div class="warn"><f-icon name="x" [size]="15" color="#C6492F" [width]="2.2" /> {{ nErreur() }}</div> }
+            <div class="f-act">
+              <button class="btn btn-soft" (click)="nouvelOpen.set(false)">Annuler</button>
+              <button class="btn btn-primary" [disabled]="!nomValide() || store.busy()" (click)="creerEmploye()">Créer</button>
+            </div>
+          </div>
+        </f-modal>
+      }
     </div>
   `,
   styles: [`
@@ -165,15 +204,20 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .note { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 700; color: var(--ink2); }
     .create .ct { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--ink); }
     .create .cd { font-size: 13px; font-weight: 600; color: var(--ink2); margin: 6px 0 14px; }
-    .crow { display: flex; gap: 10px; } .crow .input { flex: 1; }
+
+    .emps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .emp-chip { border: none; background: var(--surface); color: var(--ink2); font-weight: 800; font-size: 13px; padding: 8px 14px; border-radius: 20px; cursor: pointer; box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); }
+    .emp-chip.on { background: var(--primary); color: #fff; }
+    .emp-add { border: none; background: var(--soft2); width: 36px; height: 36px; border-radius: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
     .mois-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .mois-t { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); text-transform: capitalize; }
     .nav { border: none; background: var(--surface); width: 40px; height: 40px; border-radius: 12px; cursor: pointer; box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); }
     .nav:disabled { opacity: .4; cursor: default; }
 
-    .r-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .r-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .r-titre { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink); }
+    .r-role { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
     .badge.ouvert { background: var(--soft2); color: var(--ink2); }
     .badge.declare { background: #E5F0F4; color: #3E7A96; }
@@ -190,6 +234,8 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .form { display: flex; flex-direction: column; }
     .form .lab { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; margin: 12px 2px 6px; }
     .form .lab:first-child { margin-top: 0; }
+    .form .two { display: flex; gap: 10px; } .form .two .input { flex: 1; min-width: 0; }
+    .hint2 { font-size: 12px; font-weight: 600; color: var(--ink3); margin-top: 8px; line-height: 1.5; }
     .big-step { align-self: flex-start; }
     .warn { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #C6492F; margin-top: 12px; }
     .f-act { display: flex; gap: 8px; margin-top: 20px; }
@@ -230,11 +276,11 @@ export class EmployeScreen {
   private foyer = inject(FoyerStore);
 
   decH = decH; euro = euro;
+  roles = EMP_ROLES;
+  roleLabel = empRoleLabel;
   statut = (s: string) => STATUT[s] || STATUT['ouvert'];
 
   readonly recap = this.store.recap;
-  // Champs de saisie (ngModel simples, pas des signals : formulaires locaux éphémères).
-  nom = '';
 
   readonly edit = signal<number | null>(null);
   eJour = ''; eNote = ''; eMin = 180;
@@ -245,10 +291,14 @@ export class EmployeScreen {
   readonly ajoutDoublon = signal(false);
   aJour = ''; aNote = ''; aMin = 180;
 
+  // Formulaire de création d'un employé (administrateur).
+  readonly nouvelOpen = signal(false);
+  readonly nErreur = signal('');
+  nPrenom = ''; nNom = ''; nRole: EmpRole = 'menage'; nTaux = '';
+
   constructor() { void this.store.init(); }
 
   readonly moisLabel = computed(() => MONTH_FMT.format(new Date(this.store.month() + '-01T12:00:00Z')));
-  readonly titre = computed(() => { const e = this.store.employe(); return e && e.role === 'menage' ? 'Ménage' : (e?.name || 'Employé'); });
   estMoisCourant(): boolean { return this.store.month() >= this.foyer.todayStr().slice(0, 7); }
 
   readonly semaines = computed<Semaine[]>(() => {
@@ -280,7 +330,17 @@ export class EmployeScreen {
   hDecimal = hoursPlain;
   eurosPlain = eurosPlain;
 
-  async creer(): Promise<void> { if (this.nom.trim()) await this.store.creerEmploye(this.nom); this.nom = ''; }
+  nomComplet(): string { return `${this.nPrenom.trim()} ${this.nNom.trim()}`.trim(); }
+  nomValide(): boolean { return this.nomComplet().length > 0; }
+  ouvrirNouvel(): void { this.nPrenom = ''; this.nNom = ''; this.nRole = 'menage'; this.nTaux = ''; this.nErreur.set(''); this.nouvelOpen.set(true); }
+  async creerEmploye(): Promise<void> {
+    if (!this.nomValide() || this.store.busy()) return;
+    const t = Number(String(this.nTaux).replace(',', '.'));
+    const euros = this.nTaux.trim() !== '' && Number.isFinite(t) && t >= 0 ? t : undefined;
+    this.nErreur.set('');
+    try { await this.store.creerEmploye(this.nomComplet(), this.nRole, euros); this.nouvelOpen.set(false); }
+    catch (e) { this.nErreur.set((e as Error).message || 'La création a échoué.'); }
+  }
 
   ouvrir(id: number): void {
     if (this.edit() === id) { this.edit.set(null); return; }

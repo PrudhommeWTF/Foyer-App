@@ -6,11 +6,25 @@ import { ApiService } from './api.service';
 // ne passe par le document d'état du foyer. En PR 1, seul le contrôle du taux
 // (dans les Paramètres) s'en sert ; l'écran « Ménage » ajoutera le reste.
 
-export type EmpRole = 'menage' | 'garde' | 'jardin' | 'autre';
+// Les catégories d'emploi, calquées sur les activités déclarables au CESU
+// (même liste que le backend). L'ordre est celui du sélecteur.
+export type EmpRole = 'menage' | 'garde' | 'soutien' | 'jardin' | 'bricolage' | 'repas' | 'seniors' | 'informatique' | 'autre';
+export const EMP_ROLES: { id: EmpRole; label: string }[] = [
+  { id: 'menage', label: 'Ménage / repassage' },
+  { id: 'garde', label: 'Garde d’enfants' },
+  { id: 'soutien', label: 'Soutien scolaire' },
+  { id: 'jardin', label: 'Jardinage' },
+  { id: 'bricolage', label: 'Petit bricolage' },
+  { id: 'repas', label: 'Préparation de repas' },
+  { id: 'seniors', label: 'Assistance aux personnes âgées' },
+  { id: 'informatique', label: 'Assistance informatique' },
+  { id: 'autre', label: 'Autre' },
+];
+export const empRoleLabel = (role: string): string => EMP_ROLES.find((r) => r.id === role)?.label || 'Employé';
 
 export interface EmpRate { id: number; employeeId: number; netHourlyCents: number; effectiveFrom: string; createdAt: string; createdBy: string | null; }
 export interface EmpEmployee { id: number; name: string; role: EmpRole; active: boolean; createdAt: string; archivedAt: string | null; currentRate: { netHourlyCents: number; effectiveFrom: string } | null; openMonths: string[]; }
-export interface EmpBootstrap { employees: EmpEmployee[]; configuredHourlyRate: number; congesInclus: boolean; dureeHabituelle: number; rappelJour: number; }
+export interface EmpBootstrap { employees: EmpEmployee[]; congesInclus: boolean; dureeHabituelle: number; rappelJour: number; }
 
 export type EmpMonthStatus = 'ouvert' | 'declare' | 'paye' | 'sans-presence';
 export interface EmpShift { id: number; employeeId: number; day: string; minutes: number; note: string; createdAt: string; createdBy: string | null; createdVia: string | null; updatedAt: string | null; updatedBy: string | null; updatedVia: string | null; }
@@ -30,12 +44,12 @@ export class EmployesApi {
   rates(employeeId?: number): Promise<{ employeeId: number; rates: EmpRate[] }> {
     return this.api.request('employes/rates' + (employeeId ? '?employee=' + employeeId : ''));
   }
-  /** Règle le taux courant (euros) avec sa date d'effet : ajoute une ligne d'historique et met le réglage à jour. */
+  /** Ajoute un taux daté (euros) pour l'employé : une ligne d'historique à partir de la date d'effet. */
   setRate(euros: number, effectiveFrom: string, employeeId?: number): Promise<{ rate: EmpRate; rates: EmpRate[] }> {
     return this.api.put('employes/taux', { euros, effective_from: effectiveFrom, ...(employeeId ? { employee: employeeId } : {}) });
   }
-  createEmployee(name: string, role: EmpRole): Promise<{ employee: EmpEmployee }> {
-    return this.api.post('employes/employees', { name, role });
+  createEmployee(name: string, role: EmpRole, euros?: number): Promise<{ employee: EmpEmployee }> {
+    return this.api.post('employes/employees', { name, role, ...(euros != null ? { euros } : {}) });
   }
 
   month(mois: string, employeeId?: number): Promise<EmpMonthRecap> {

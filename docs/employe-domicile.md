@@ -6,8 +6,19 @@ mensuelle** sur `cesu.urssaf.fr`. L'intention tient en deux gestes : noter en un
 tap qu'elle est venue, puis, en fin de mois, lire les chiffres exacts à recopier
 (heures en décimal, salaire net) et marquer le mois **déclaré** puis **payé**.
 
-Dans le code et le menu, le module s'appelle **Employé à domicile** ; l'écran
-s'intitule **Ménage** quand l'unique employé a ce rôle.
+Dans le code et le menu, le module s'appelle **Employé à domicile**. Le foyer
+peut suivre **plusieurs employés** (un « contrat » chacun) : une femme de ménage,
+un jardinier, une garde d'enfants. Un sélecteur en tête d'écran passe de l'un à
+l'autre ; chacun porte sa **catégorie CESU** et son **taux** propre.
+
+## Créer un employé
+
+Un administrateur ajoute un employé depuis l'écran (bouton « Ajouter un
+employé ») : **prénom et nom** (stockés en un seul nom), **catégorie CESU** (type
+d'emploi : ménage/repassage, garde d'enfants, soutien scolaire, jardinage, petit
+bricolage, préparation de repas, assistance aux personnes âgées, assistance
+informatique, autre) et **taux horaire net**. Rien d'autre : pas de contrat, pas
+de bulletin, la gestion se fait sur le site du CESU.
 
 ## Ce que le module fait, et ne fait pas
 
@@ -37,7 +48,7 @@ ne recharge ni ne réécrit tout le document pour noter une présence.
 
 | Table | Rôle |
 |-------|------|
-| `emp_employees` | L'employé : nom, rôle (`menage`), actif ou archivé. |
+| `emp_employees` | Un employé : nom, catégorie CESU (`role`), actif ou archivé. Plusieurs coexistent. |
 | `emp_rates` | L'**historique daté** du taux horaire net (une ligne par changement, avec sa date d'effet). |
 | `emp_shifts` | Une **présence** = une ligne (jour, minutes, note). Retirer, c'est archiver, jamais effacer. Porte sa provenance (`created_via` / `updated_via`) quand elle vient d'un assistant. |
 | `emp_months` | L'état d'un mois (ouvert, déclaré, payé, sans présence) et ses **totaux figés** à la déclaration. |
@@ -50,12 +61,12 @@ rien à déclarer ; le module a aussi son export/restauration dédié (administr
 
 ## Le taux dans le temps
 
-Le réglage **Taux horaire net (CESU)** (`empNetHourlyRate`) est le taux
-**courant**. Le changer, dans *Paramètres → Employé à domicile*, se fait **avec
-une date d'effet** : une ligne rejoint `emp_rates`, et le réglage suit la
-nouvelle valeur.
+Le taux n'est **pas** un réglage du foyer : chaque employé porte le sien, daté,
+dans `emp_rates`. Il se pose **à la création** (première ligne datée
+d'aujourd'hui) puis évolue dans *Paramètres → Employé à domicile*, **par
+employé**, avec une **date d'effet** (une nouvelle ligne rejoint `emp_rates`).
 
-Le calcul d'un mois lit **l'historique daté**, pas le réglage : chaque présence
+Le calcul d'un mois lit **l'historique daté** : chaque présence
 est valorisée au **taux en vigueur le jour où elle a eu lieu**. Si le taux change
 en cours de mois, le récapitulatif montre les **sous-totaux par taux** (« 6 h à
 14,50 €/h ; 5 h à 15,00 €/h »). Un mois **déjà déclaré n'est jamais recalculé** :

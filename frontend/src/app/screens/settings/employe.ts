@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
-import { EmployesApi, EmpBootstrap, EmpRate, EmpRole } from '../../core/employes.api';
+import { EmployesApi, EmpBootstrap, EmpEmployee, EmpRate, empRoleLabel } from '../../core/employes.api';
 import { todayIn } from '../../core/helpers';
 import { HOUSEHOLD_TZ } from '../../core/constants';
 
@@ -9,12 +9,12 @@ import { HOUSEHOLD_TZ } from '../../core/constants';
 const euro = (cents: number): string => (cents / 100).toFixed(2).replace('.', ',') + ' €';
 
 /**
- * Contrôle fait main du taux horaire, dans la section « Employé à domicile » des
- * Paramètres. Le champ décimal générique ne peut pas demander une **date
- * d'effet** : ici, taux et date se saisissent ensemble, et enregistrer ajoute
- * une ligne d'historique daté (emp_rates) tout en mettant le réglage à jour. Le
- * calcul d'un mois lit l'historique (le taux du jour de chaque présence), pas
- * cette valeur courante. Réservé aux administrateurs, comme tout réglage du foyer.
+ * Gestion du taux horaire, par employé, dans la section « Employé à domicile »
+ * des Paramètres. Chaque employé porte son propre taux daté (emp_rates) : le
+ * taux se pose à la création (écran « Employé à domicile ») puis évolue ici,
+ * avec sa date d'effet. Le calcul d'un mois lit l'historique (le taux du jour de
+ * chaque présence), un mois déjà déclaré n'est jamais recalculé. Réservé aux
+ * administrateurs, comme tout réglage du foyer.
  */
 @Component({
   selector: 'settings-employe',
@@ -23,23 +23,23 @@ const euro = (cents: number): string => (cents / 100).toFixed(2).replace('.', ',
   imports: [FormsModule],
   template: `
     @if (chargement()) { <div class="hint">Chargement…</div> }
-    @else if (!store.isAdmin()) {
-      <div class="hint">Le taux est un réglage du foyer : seul un administrateur peut le modifier. Vous le voyez tel qu’il s’applique.</div>
-      <div class="cur">Taux actuel : <b>{{ tauxActuel() }}</b>@if (dateActuelle(); as d) { <span class="since"> depuis le {{ frDate(d) }}</span> }</div>
+    @else if (!employes().length) {
+      <div class="hint">Aucun employé configuré. Ajoutez-en un depuis l’écran « Employé à domicile » (nom, catégorie CESU et taux horaire).</div>
     }
     @else {
-      @if (!employe()) {
-        <div class="hint">Aucun employé configuré. Créez la personne pour commencer (le nom seul, aucune donnée sensible).</div>
-        <div class="grille">
-          <input class="input" [(ngModel)]="nom" placeholder="Nom (ex : Nolwenn)" maxlength="120" />
-          <select class="input" [(ngModel)]="role">
-            <option value="menage">Ménage</option>
-            <option value="garde">Garde d’enfant</option>
-            <option value="jardin">Jardinage</option>
-            <option value="autre">Autre</option>
+      @if (employes().length > 1) {
+        <label class="lab">Employé
+          <select class="input" [ngModel]="selId()" (ngModelChange)="selId.set(+$event)">
+            @for (e of employes(); track e.id) { <option [value]="e.id">{{ e.name }} · {{ roleLabel(e.role) }}</option> }
           </select>
-        </div>
-        <button class="btn" [disabled]="!nom.trim() || busy()" (click)="creer()">Créer l’employé</button>
+        </label>
+      } @else {
+        <div class="cur">{{ employe()!.name }} <span class="since">· {{ roleLabel(employe()!.role) }}</span></div>
+      }
+
+      @if (!store.isAdmin()) {
+        <div class="hint">Le taux est un réglage du foyer : seul un administrateur peut le modifier. Vous le voyez tel qu’il s’applique.</div>
+        <div class="cur">Taux actuel : <b>{{ tauxActuel() }}</b>@if (dateActuelle(); as d) { <span class="since"> depuis le {{ frDate(d) }}</span> }</div>
       } @else {
         <div class="cur">Taux actuel : <b>{{ tauxActuel() }}</b>@if (dateActuelle(); as d) { <span class="since"> depuis le {{ frDate(d) }}</span> }</div>
         <div class="grille">
@@ -70,7 +70,7 @@ const euro = (cents: number): string => (cents / 100).toFixed(2).replace('.', ',
     .cur { font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
     .cur .since { color: var(--ink3); font-weight: 600; }
     .grille { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
-    .lab { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 800; color: var(--ink2); }
+    .lab { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 800; color: var(--ink2); margin-bottom: 12px; }
     .input { min-width: 150px; }
     .btn { border: none; background: var(--primary); color: #fff; font-weight: 800; font-size: 13.5px; padding: 10px 16px; border-radius: 11px; cursor: pointer; }
     .btn:disabled { opacity: .5; cursor: default; }
@@ -84,63 +84,58 @@ export class SettingsEmployeComponent {
   store = inject(FoyerStore);
   private api = inject(EmployesApi);
   euro = euro;
+  roleLabel = empRoleLabel;
 
   readonly chargement = signal(true);
   readonly boot = signal<EmpBootstrap | null>(null);
   readonly rates = signal<EmpRate[]>([]);
   readonly busy = signal(false);
   readonly erreur = signal('');
+  readonly selId = signal<number | null>(null);
 
-  nom = '';
-  role: EmpRole = 'menage';
   taux = '';
   dateEffet = todayIn(HOUSEHOLD_TZ);
 
-  readonly employe = computed(() => this.boot()?.employees[0] ?? null);
+  readonly employes = computed<EmpEmployee[]>(() => this.boot()?.employees ?? []);
+  readonly employe = computed<EmpEmployee | null>(() => {
+    const list = this.employes();
+    return list.find((e) => e.id === this.selId()) ?? list[0] ?? null;
+  });
   readonly dateActuelle = computed(() => this.employe()?.currentRate?.effectiveFrom ?? null);
   readonly tauxActuel = computed(() => {
     const c = this.employe()?.currentRate?.netHourlyCents;
-    if (typeof c === 'number') return euro(c);
-    // Le taux réglé mais pas encore daté (juste après la configuration) : lu du réglage.
-    const conf = this.store.setting('empNetHourlyRate');
-    return conf ? euro(Math.round(Number(conf) * 100)) : 'non défini';
+    return typeof c === 'number' ? euro(c) : 'non défini';
   });
   readonly valide = computed(() => { const n = Number(String(this.taux).replace(',', '.')); return Number.isFinite(n) && n >= 0 && n <= 100 && /^\d{4}-\d{2}-\d{2}$/.test(this.dateEffet); });
 
-  constructor() { void this.load(); }
+  constructor() {
+    void this.load();
+    // Changer d'employé (ou le premier chargement) relit son historique de taux.
+    effect(() => { const e = this.employe(); if (e) void this.loadRates(e.id); });
+  }
 
   private async load(): Promise<void> {
     this.chargement.set(true);
-    try {
-      const b = await this.api.bootstrap();
-      this.boot.set(b);
-      if (!this.taux && b.configuredHourlyRate) this.taux = String(b.configuredHourlyRate);
-      const e = b.employees[0];
-      if (e) this.rates.set((await this.api.rates(e.id)).rates);
-    } catch { /* module injoignable : la section reste, sans données */ }
+    try { this.boot.set(await this.api.bootstrap()); }
+    catch { /* module injoignable : la section reste, sans données */ }
     this.chargement.set(false);
+  }
+  private async loadRates(id: number): Promise<void> {
+    try { this.rates.set((await this.api.rates(id)).rates); } catch { /* ignore */ }
   }
 
   frDate(iso: string): string { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; }
 
-  async creer(): Promise<void> {
-    if (!this.nom.trim() || this.busy()) return;
-    this.busy.set(true); this.erreur.set('');
-    try { await this.api.createEmployee(this.nom.trim(), this.role); await this.load(); this.nom = ''; }
-    catch (e) { this.erreur.set((e as Error).message || 'La création a échoué.'); }
-    this.busy.set(false);
-  }
-
   async enregistrer(): Promise<void> {
-    if (!this.valide() || this.busy()) return;
+    const e = this.employe();
+    if (!this.valide() || this.busy() || !e) return;
     this.busy.set(true); this.erreur.set('');
     try {
       const euros = Number(String(this.taux).replace(',', '.'));
-      await this.api.setRate(euros, this.dateEffet, this.employe()?.id);
-      // Rafraîchir le document (le réglage courant a été écrit côté serveur) et l'historique.
-      await this.store.loadState();
+      await this.api.setRate(euros, this.dateEffet, e.id);
+      this.taux = '';
       await this.load();
-    } catch (e) { this.erreur.set((e as Error).message || 'L’enregistrement a échoué.'); }
+    } catch (err) { this.erreur.set((err as Error).message || 'L’enregistrement a échoué.'); }
     this.busy.set(false);
   }
 }

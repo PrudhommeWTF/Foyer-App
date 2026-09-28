@@ -42,9 +42,19 @@ describe('Employé à domicile : HTTP', () => {
     const taux = await appel(ctx.base, 'PUT', '/employes/taux', { euros: 14.5, effective_from: '2026-09-01' }, A());
     assert.equal(taux.status, 200, JSON.stringify(taux.json));
     assert.equal(taux.json.rate.netHourlyCents, 1450);
-    // Le réglage du foyer reflète le taux courant.
-    const reg = await appel(ctx.base, 'GET', '/settings', undefined, A());
-    assert.equal(reg.json.values.empNetHourlyRate, 14.5, 'le réglage suit le taux');
+    // Le taux vit sur l'employé (emp_rates), pas dans un réglage global : le socle le rend.
+    const boot = await appel(ctx.base, 'GET', '/employes/bootstrap', undefined, A());
+    assert.equal(boot.json.employees[0].currentRate.netHourlyCents, 1450, 'le taux courant suit l’employé');
+  });
+
+  it('un employé se crée avec sa catégorie CESU et son taux personnalisé', async () => {
+    const cr = await appel(ctx.base, 'POST', '/employes/employees', { name: 'Camille Jardin', role: 'jardin', euros: 18 }, A());
+    assert.equal(cr.status, 201, JSON.stringify(cr.json));
+    assert.equal(cr.json.employee.role, 'jardin');
+    const boot = await appel(ctx.base, 'GET', '/employes/bootstrap', undefined, A());
+    const jard = boot.json.employees.find((e: { name: string }) => e.name === 'Camille Jardin');
+    assert.ok(jard, 'le nouvel employé remonte dans le socle');
+    assert.equal(jard.currentRate.netHourlyCents, 1800, 'le taux posé à la création est daté d’aujourd’hui');
   });
 
   it('trois présences de 3 h donnent 9 h et 130,50 € net', async () => {

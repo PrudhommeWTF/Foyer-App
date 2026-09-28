@@ -433,14 +433,9 @@ export const REGISTRY = [
   },
 
   // ---- employé à domicile -------------------------------------------------
-  {
-    key: 'empNetHourlyRate',
-    type: 'decimal', scope: 'foyer', section: 'employe', module: 'Employé',
-    custom: true,
-    label: 'Taux horaire net (CESU)',
-    desc: 'Le taux horaire net de l’employé, tel que déclaré au CESU. Le changer crée une ligne d’historique daté : les mois déjà déclarés gardent leur taux, seuls les mois ouverts suivent le nouveau. Se règle avec sa date d’effet dans la section.',
-    default: 0, min: 0, max: 100, step: 0.01,
-  },
+  // Le taux horaire n'est pas un réglage du foyer : chaque employé porte le sien,
+  // daté, dans emp_rates. Il se règle à la création puis dans la section « Employé
+  // à domicile » des Paramètres, par employé.
   {
     key: 'empCongesInclus',
     type: 'bool', scope: 'foyer', section: 'employe', module: 'Employé',
