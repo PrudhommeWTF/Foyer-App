@@ -1117,7 +1117,11 @@ export function affaireRetirer(ctx: McpCtx, ids: string[]): string {
 
 // ---- Employé à domicile (« Ménage ») — réservé aux adultes ----------------
 
-const EMP_ROLE_LABEL: Record<string, string> = { menage: 'ménage', garde: 'garde d’enfant', jardin: 'jardinage', autre: 'autre' };
+const EMP_ROLE_LABEL: Record<string, string> = {
+  menage: 'ménage / repassage', garde: 'garde d’enfants', soutien: 'soutien scolaire',
+  jardin: 'jardinage', bricolage: 'petit bricolage', repas: 'préparation de repas',
+  seniors: 'assistance aux personnes âgées', informatique: 'assistance informatique', autre: 'autre',
+};
 const EMP_STATUS_LABEL: Record<string, string> = { ouvert: 'ouvert', declare: 'déclaré', paye: 'payé', 'sans-presence': 'sans présence' };
 /** Minutes vers heures décimales : « 9 h », « 3,5 h ». */
 const decHours = (min: number): string => ((min / 60).toFixed(2).replace(/\.?0+$/, '') || '0').replace('.', ',') + ' h';

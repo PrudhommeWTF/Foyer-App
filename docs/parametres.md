@@ -158,12 +158,10 @@ Le taux horaire net déclaré au CESU, les congés payés, le rappel de déclara
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `empNetHourlyRate` | Taux horaire net (CESU) | Foyer | décimal | `0` | de 0 à 100 (pas 0.01) | Employé | — |
 | `empCongesInclus` | Congés payés inclus dans le taux | Foyer | oui / non | activé | — | Employé | — |
 | `empRappelJour` | Jour du rappel de déclaration | Foyer | entier | `3` | de 1 à 10 | Employé | — |
 | `empDureeHabituelle` | Durée proposée par défaut (minutes) | Foyer | entier | `180` | de 15 à 720 | Employé | — |
 
-- **Taux horaire net (CESU)** (`empNetHourlyRate`) : Le taux horaire net de l’employé, tel que déclaré au CESU. Le changer crée une ligne d’historique daté : les mois déjà déclarés gardent leur taux, seuls les mois ouverts suivent le nouveau. Se règle avec sa date d’effet dans la section.
 - **Congés payés inclus dans le taux** (`empCongesInclus`) : Les congés payés sont inclus dans le taux (majoration de 10 % comprise), comme le propose le CESU par défaut. Le récapitulatif l’indique en toutes lettres.
 - **Jour du rappel de déclaration** (`empRappelJour`) : Jour du mois où Foyer rappelle de déclarer le mois précédent au CESU s’il est encore ouvert. La date limite du CESU n’est pas codée en dur : c’est ce rappel qui est réglable.
 - **Durée proposée par défaut (minutes)** (`empDureeHabituelle`) : Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.
