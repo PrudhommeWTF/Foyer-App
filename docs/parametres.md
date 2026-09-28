@@ -152,6 +152,22 @@ La catégorisation suggérée des opérations, et quand un compteur d’énergie
 - **Relevé de compteur attendu après** (`readingDueDays`) : Passé ce délai sans nouveau relevé, le compteur est signalé comme à relire. Un mois par défaut, et non la périodicité de facturation : celle-ci dit quand le fournisseur prélève, pas quand une dérive devient visible.
 - **Suggérer une catégorie à partir de** (`catSuggestMin`) : Combien de fois une même catégorie doit avoir été posée à la main pour un marchand avant que l’application ne la propose pour une nouvelle opération du même marchand. Plus le nombre est élevé, moins il y a de suggestions, mais plus elles sont sûres.
 
+### Employé à domicile
+
+Le taux horaire net déclaré au CESU, les congés payés, le rappel de déclaration et la durée proposée à la saisie.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `empNetHourlyRate` | Taux horaire net (CESU) | Foyer | décimal | `0` | de 0 à 100 (pas 0.01) | Employé | — |
+| `empCongesInclus` | Congés payés inclus dans le taux | Foyer | oui / non | activé | — | Employé | — |
+| `empRappelJour` | Jour du rappel de déclaration | Foyer | entier | `3` | de 1 à 10 | Employé | — |
+| `empDureeHabituelle` | Durée proposée par défaut (minutes) | Foyer | entier | `180` | de 15 à 720 | Employé | — |
+
+- **Taux horaire net (CESU)** (`empNetHourlyRate`) : Le taux horaire net de l’employé, tel que déclaré au CESU. Le changer crée une ligne d’historique daté : les mois déjà déclarés gardent leur taux, seuls les mois ouverts suivent le nouveau. Se règle avec sa date d’effet dans la section.
+- **Congés payés inclus dans le taux** (`empCongesInclus`) : Les congés payés sont inclus dans le taux (majoration de 10 % comprise), comme le propose le CESU par défaut. Le récapitulatif l’indique en toutes lettres.
+- **Jour du rappel de déclaration** (`empRappelJour`) : Jour du mois où Foyer rappelle de déclarer le mois précédent au CESU s’il est encore ouvert. La date limite du CESU n’est pas codée en dur : c’est ce rappel qui est réglable.
+- **Durée proposée par défaut (minutes)** (`empDureeHabituelle`) : Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.
+
 ## Serveur et exploitation
 
 Les accès, la machine, les sauvegardes et les mises à jour.

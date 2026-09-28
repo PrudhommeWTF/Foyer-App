@@ -55,6 +55,12 @@ import { SettingDecl, checkValue } from '../../core/settings/registry';
             [ngModel]="brouillon()" (ngModelChange)="brouillon.set($event)"
             (blur)="valider()" (keydown.enter)="valider()" />
         }
+        @case ('decimal') {
+          <input class="input num" type="number" inputmode="decimal" [disabled]="!!lock()"
+            [attr.min]="d.min ?? null" [attr.max]="d.max ?? null" [attr.step]="d.step ?? null"
+            [ngModel]="brouillon()" (ngModelChange)="brouillon.set($event)"
+            (blur)="valider()" (keydown.enter)="valider()" />
+        }
         @case ('time') {
           <input class="input num" type="time" [disabled]="!!lock()"
             [ngModel]="brouillon()" (ngModelChange)="brouillon.set($event)"

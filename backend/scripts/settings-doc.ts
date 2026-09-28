@@ -15,7 +15,7 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  bool: 'oui / non', int: 'entier', enum: 'liste', text: 'texte', time: 'heure',
+  bool: 'oui / non', int: 'entier', decimal: 'décimal', enum: 'liste', text: 'texte', time: 'heure',
 };
 
 /** La valeur par défaut, telle qu'on la lit dans un tableau. */
@@ -29,6 +29,7 @@ function defaultLabel(d: SettingDecl): string {
 function domainLabel(d: SettingDecl): string {
   if (d.type === 'enum') return (d.options || []).map((o) => (o.value === '' ? '_(vide)_' : '`' + o.value + '`')).join(', ');
   if (d.type === 'int') return `de ${d.min ?? '-∞'} à ${d.max ?? '+∞'}`;
+  if (d.type === 'decimal') return `de ${d.min ?? '-∞'} à ${d.max ?? '+∞'}` + (d.step ? ` (pas ${d.step})` : '');
   if (d.type === 'text') return `${d.maxLength ?? 200} caractères au maximum`;
   if (d.type === 'time') return 'HH:MM';
   return '';

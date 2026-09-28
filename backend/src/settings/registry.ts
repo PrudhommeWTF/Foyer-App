@@ -44,7 +44,7 @@
 export type SettingScope = 'deploiement' | 'foyer' | 'personnel';
 
 /** Le type décide du contrôle de saisie et de la forme du champ engendré. */
-export type SettingType = 'bool' | 'int' | 'enum' | 'text' | 'time' | 'secret';
+export type SettingType = 'bool' | 'int' | 'decimal' | 'enum' | 'text' | 'time' | 'secret';
 
 /** Une valeur admise d'un paramètre `enum`, avec son libellé affiché. */
 export interface SettingOption { value: string; label: string; }
@@ -67,9 +67,11 @@ export interface SettingDecl {
   default: boolean | number | string;
   /** `enum` : les valeurs admises, dans l'ordre d'affichage. */
   options?: readonly SettingOption[];
-  /** `int` : bornes incluses. */
+  /** `int` et `decimal` : bornes incluses. */
   min?: number;
   max?: number;
+  /** `decimal` : pas de saisie (par exemple 0.01 pour deux décimales). */
+  step?: number;
   /** `text` : longueur maximale. */
   maxLength?: number;
   /**
@@ -137,6 +139,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date, et le sens du glissement d’une tâche sur téléphone.' },
   { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
+  { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Le taux horaire net déclaré au CESU, les congés payés, le rappel de déclaration et la durée proposée à la saisie.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
   { id: 'serveur', group: 'machine', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
@@ -429,6 +432,37 @@ export const REGISTRY = [
     ],
   },
 
+  // ---- employé à domicile -------------------------------------------------
+  {
+    key: 'empNetHourlyRate',
+    type: 'decimal', scope: 'foyer', section: 'employe', module: 'Employé',
+    custom: true,
+    label: 'Taux horaire net (CESU)',
+    desc: 'Le taux horaire net de l’employé, tel que déclaré au CESU. Le changer crée une ligne d’historique daté : les mois déjà déclarés gardent leur taux, seuls les mois ouverts suivent le nouveau. Se règle avec sa date d’effet dans la section.',
+    default: 0, min: 0, max: 100, step: 0.01,
+  },
+  {
+    key: 'empCongesInclus',
+    type: 'bool', scope: 'foyer', section: 'employe', module: 'Employé',
+    label: 'Congés payés inclus dans le taux',
+    desc: 'Les congés payés sont inclus dans le taux (majoration de 10 % comprise), comme le propose le CESU par défaut. Le récapitulatif l’indique en toutes lettres.',
+    default: true,
+  },
+  {
+    key: 'empRappelJour',
+    type: 'int', scope: 'foyer', section: 'employe', module: 'Employé',
+    label: 'Jour du rappel de déclaration',
+    desc: 'Jour du mois où Foyer rappelle de déclarer le mois précédent au CESU s’il est encore ouvert. La date limite du CESU n’est pas codée en dur : c’est ce rappel qui est réglable.',
+    default: 3, min: 1, max: 10,
+  },
+  {
+    key: 'empDureeHabituelle',
+    type: 'int', scope: 'foyer', section: 'employe', module: 'Employé',
+    label: 'Durée proposée par défaut (minutes)',
+    desc: 'Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.',
+    default: 180, min: 15, max: 720,
+  },
+
   // ---- finances -----------------------------------------------------------
   {
     key: 'readingDueDays',
@@ -590,7 +624,7 @@ export const REGISTRY = [
 export const ALL: readonly SettingDecl[] = REGISTRY;
 
 type Decl = (typeof REGISTRY)[number];
-type ValueOfType<T> = T extends 'bool' ? boolean : T extends 'int' ? number : string;
+type ValueOfType<T> = T extends 'bool' ? boolean : T extends 'int' | 'decimal' ? number : string;
 type AllValues = { [D in Decl as D['key']]: ValueOfType<D['type']> };
 
 /**
@@ -674,6 +708,17 @@ export function checkValue(d: SettingDecl, raw: unknown): Checked {
       const max = d.max ?? Number.POSITIVE_INFINITY;
       if (n < min || n > max) return { ok: false, error: `Attendu : un nombre entre ${d.min} et ${d.max}.` };
       return { ok: true, value: n };
+    }
+    case 'decimal': {
+      const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw.replace(',', '.')) : NaN;
+      if (!Number.isFinite(n)) return { ok: false, error: 'Attendu : un nombre, par exemple 14,50.' };
+      const min = d.min ?? Number.NEGATIVE_INFINITY;
+      const max = d.max ?? Number.POSITIVE_INFINITY;
+      if (n < min || n > max) return { ok: false, error: `Attendu : un nombre entre ${d.min} et ${d.max}.` };
+      // Aligné sur le pas quand il est donné (0,01 => deux décimales), sans dérive flottante.
+      const step = d.step ?? 0;
+      const value = step > 0 ? Math.round(n / step) * step : n;
+      return { ok: true, value: Math.round(value * 1e6) / 1e6 };
     }
     case 'enum': {
       if (typeof raw !== 'string') return { ok: false, error: 'Attendu : une des valeurs proposées.' };

@@ -13,6 +13,7 @@ import {
 } from './db';
 import { HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
+import { employesRouter } from './employes/routes';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
@@ -355,6 +356,8 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
 api.use('/finances', auth, apiTokenLimiter, denyToken, requireAdulte, financesRouter(requireAdmin));
+// Module « Employé à domicile » : adultes uniquement, comme Finances.
+api.use('/employes', auth, apiTokenLimiter, denyToken, requireAdulte, employesRouter(requireAdmin));
 
 // Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
 // plutôt que par enregistrement du document entier, pour que deux
