@@ -14,6 +14,7 @@ import { TachesScreen } from '../screens/taches/taches';
 import { ContactsScreen } from '../screens/contacts';
 import { FideliteScreen } from '../screens/fidelite';
 import { FinancesScreen } from '../screens/finances/finances';
+import { EmployeScreen } from '../screens/employe/employe';
 import { RepasScreen } from '../screens/repas';
 import { RecettesScreen } from '../screens/recettes';
 import { PlanningScreen } from '../screens/planning';
@@ -28,7 +29,7 @@ import { LieuxScreen } from '../screens/lieux';
     SidebarComponent, TopbarComponent, NotificationsComponent,
     MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
-    FinancesScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen,
+    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen,
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
@@ -60,6 +61,7 @@ import { LieuxScreen } from '../screens/lieux';
             @case ('contacts') { <screen-contacts /> }
             @case ('fidelite') { <screen-fidelite /> }
             @case ('finances') { <screen-finances /> }
+            @case ('employe') { <screen-employe /> }
             @case ('repas') { <screen-repas /> }
             @case ('recettes') { <screen-recettes /> }
             @case ('planning') { <screen-planning /> }

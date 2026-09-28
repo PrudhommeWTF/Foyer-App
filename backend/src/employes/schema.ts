@@ -14,7 +14,7 @@
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
-export const EMP_SCHEMA_VERSION = 1;
+export const EMP_SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -84,6 +84,18 @@ const MIGRATIONS: Migration[] = [
           updated_by TEXT,
           PRIMARY KEY (employee_id, month)
         );
+      `);
+    },
+  },
+  {
+    version: 2,
+    label: 'provenance assistant (via) sur les présences',
+    up: (db) => {
+      // Nom du jeton d'accès quand la présence vient d'un assistant (MCP) :
+      // l'écran affiche alors « (via un assistant) ». Suit l'auteur (by).
+      db.exec(`
+        ALTER TABLE emp_shifts ADD COLUMN created_via TEXT;
+        ALTER TABLE emp_shifts ADD COLUMN updated_via TEXT;
       `);
     },
   },

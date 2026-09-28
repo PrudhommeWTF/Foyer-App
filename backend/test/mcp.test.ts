@@ -291,4 +291,55 @@ describe('Serveur MCP', () => {
     assert.ok(!(st.places || []).some((p: { id: string }) => p.id === id), 'lieu supprimé');
     assert.ok((st.placeItems || []).some((i: { id: string }) => i.id === lugeId), 'la luge déplacée survit dans la cave');
   });
+
+  it('Employé à domicile : outils réservés aux adultes (invisibles et refusés pour un enfant)', async () => {
+    const enfant = await connect(tokenEnfant);
+    const adulte = await connect(tokenWrite);
+    const nomsEnfant = (await enfant.listTools()).tools.map((tl) => tl.name);
+    const nomsAdulte = (await adulte.listTools()).tools.map((tl) => tl.name);
+    for (const n of ['menage_mois', 'menage_presence_ajouter', 'menage_mois_declarer'])
+      assert.ok(!nomsEnfant.includes(n), 'un enfant ne voit pas ' + n);
+    assert.ok(nomsAdulte.includes('menage_mois') && nomsAdulte.includes('menage_presence_ajouter'), 'un adulte voit les outils Ménage');
+    // Appel direct par un jeton d'enfant : refusé.
+    const res = await enfant.callTool({ name: 'menage_mois', arguments: {} });
+    assert.equal((res as { isError?: boolean }).isError, true);
+    await enfant.close(); await adulte.close();
+  });
+
+  it('Employé à domicile : ajouter une présence (attribuée via un assistant), doublon, mois, gel', async () => {
+    // Configuration par un administrateur (hors MCP) : employé + taux.
+    assert.equal((await appel(ctx.base, 'POST', '/employes/employees', { name: 'Nolwenn', role: 'menage' }, ctx.jetons.admin)).status, 201);
+    assert.equal((await appel(ctx.base, 'PUT', '/employes/taux', { euros: 14.5, effective_from: '2026-09-01' }, ctx.jetons.admin)).status, 200);
+
+    const c = await connect(tokenWrite);
+    // Un mois vide le dit explicitement.
+    assert.match(textOf(await c.callTool({ name: 'menage_mois', arguments: { mois: '2026-12' } })), /Aucune présence/);
+
+    // Ajout d'une présence de 3 h.
+    const add = textOf(await c.callTool({ name: 'menage_presence_ajouter', arguments: { jour: '2026-09-10', heures: 3 } }));
+    assert.match(add, /Présence notée/);
+    // Doublon du même jour : signalé, pas ajouté.
+    assert.match(textOf(await c.callTool({ name: 'menage_presence_ajouter', arguments: { jour: '2026-09-10', heures: 3 } })), /Déjà .*not/);
+
+    // Récapitulatif : 3 h, net 43,50 €, bloc CESU.
+    const mois = textOf(await c.callTool({ name: 'menage_mois', arguments: { mois: '2026-09' } }));
+    assert.match(mois, /3 h/);
+    assert.match(mois, /43,50 €/);
+    assert.match(mois, /À saisir sur le CESU/);
+
+    // Attribution : la présence porte le nom du jeton (via un assistant).
+    const recap = (await appel(ctx.base, 'GET', '/employes/month?month=2026-09', undefined, ctx.jetons.membre)).json;
+    assert.equal(recap.shifts[0].createdVia, 'Assistant écriture', 'via = nom du jeton');
+    assert.equal(recap.shifts[0].createdBy, membreId, 'by = membre du jeton');
+
+    // Déclarer fige le mois ; un taux postérieur ne recalcule pas.
+    const dec = textOf(await c.callTool({ name: 'menage_mois_declarer', arguments: { mois: '2026-09' } }));
+    assert.match(dec, /déclaré/);
+    assert.match(dec, /43,50 €/);
+    await appel(ctx.base, 'PUT', '/employes/taux', { euros: 30, effective_from: '2026-09-01' }, ctx.jetons.admin);
+    assert.match(textOf(await c.callTool({ name: 'menage_mois', arguments: { mois: '2026-09' } })), /43,50 €/);
+    // Ajouter sur un mois figé : refusé.
+    assert.match(textOf(await c.callTool({ name: 'menage_presence_ajouter', arguments: { jour: '2026-09-20', heures: 2 } })), /figé/);
+    await c.close();
+  });
 });

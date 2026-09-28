@@ -41,6 +41,8 @@ interface ToolDef {
   description: string;
   /** Outil d'écriture : annoncé uniquement pour un jeton `write`. */
   write?: boolean;
+  /** Réservé aux adultes : jamais annoncé ni exécuté pour un jeton d'enfant (comme les modules Finances et Employé à domicile). */
+  adultes?: boolean;
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
   run: (ctx: t.McpCtx, a: Args) => string | Promise<string>;
 }
@@ -409,12 +411,86 @@ const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { ids: { type: 'array', maxItems: 100, items: S.string(80) } }, required: ['ids'] },
     run: (ctx, a) => t.affaireRetirer(ctx, strArr(a.ids)),
   },
+  // ---- Employé à domicile (« Ménage ») — réservé aux adultes ----
+  {
+    name: 'menage_mois',
+    adultes: true,
+    description: 'Le récapitulatif d’un mois pour l’employé à domicile : état, présences avec [id], total d’heures, salaire net par taux applicable, et le bloc « À saisir sur le CESU » prêt à recopier. `mois` au format AAAA-MM (défaut : mois courant). Sans présence, le dit explicitement.',
+    inputSchema: { type: 'object', properties: { mois: S.string(7), employe: S.string(80) } },
+    run: (ctx, a) => t.menageMois(ctx, { mois: str(a.mois), employe: str(a.employe) }),
+  },
+  {
+    name: 'menage_presences',
+    adultes: true,
+    description: 'Les présences de l’employé sur une période (défaut : 31 derniers jours), avec leur [id]. Pour « quand est-elle venue la dernière fois ? ».',
+    inputSchema: { type: 'object', properties: { du: S.date, au: S.date, employe: S.string(80) } },
+    run: (ctx, a) => t.menagePresences(ctx, { du: str(a.du), au: str(a.au), employe: str(a.employe) }),
+  },
+  {
+    name: 'menage_employes',
+    adultes: true,
+    description: 'Les employés à domicile déclarés, leur rôle, le taux net courant et sa date d’effet.',
+    inputSchema: { type: 'object', properties: {} },
+    run: (ctx) => t.menageEmployes(ctx),
+  },
+  {
+    name: 'menage_presence_ajouter',
+    adultes: true, write: true,
+    description: 'Note une présence. Défauts : aujourd’hui, la durée habituelle réglée, l’unique employé actif. `heures` en décimal (3 = 3 h, 3.5 = 3 h 30, arrondi au quart d’heure). Si une présence existe déjà ce jour-là, ne l’ajoute pas : le signale et propose de la modifier. Refusé sur un mois déclaré ou payé.',
+    inputSchema: { type: 'object', properties: { jour: S.date, heures: { type: 'number' }, note: S.string(500), employe: S.string(80) } },
+    run: (ctx, a) => t.menagePresenceAjouter(ctx, { jour: str(a.jour), heures: num(a.heures), note: str(a.note), employe: str(a.employe) }),
+  },
+  {
+    name: 'menage_presence_modifier',
+    adultes: true, write: true,
+    description: 'Modifie une présence (par [id]) : jour, heures (décimal), note. Refusé sur un mois figé.',
+    inputSchema: { type: 'object', properties: { id: S.string(20), jour: S.date, heures: { type: 'number' }, note: S.string(500) }, required: ['id'] },
+    run: (ctx, a) => t.menagePresenceModifier(ctx, { id: str(a.id) || '', jour: str(a.jour), heures: num(a.heures), note: str(a.note) }),
+  },
+  {
+    name: 'menage_presence_retirer',
+    adultes: true, write: true,
+    description: 'Retire une présence (par [id]) : elle est archivée, jamais supprimée. Refusé sur un mois figé.',
+    inputSchema: { type: 'object', properties: { id: S.string(20) }, required: ['id'] },
+    run: (ctx, a) => t.menagePresenceRetirer(ctx, str(a.id) || ''),
+  },
+  {
+    name: 'menage_mois_declarer',
+    adultes: true, write: true,
+    description: 'Fige un mois (AAAA-MM) en « déclaré » avec les totaux du moment, et renvoie le bloc CESU tel qu’il a été figé. Refusé si des présences n’ont pas de taux.',
+    inputSchema: { type: 'object', properties: { mois: S.string(7), date: S.date, note: S.string(500) }, required: ['mois'] },
+    run: (ctx, a) => t.menageMoisDeclarer(ctx, { mois: str(a.mois) || '', date: str(a.date), note: str(a.note) }),
+  },
+  {
+    name: 'menage_mois_payer',
+    adultes: true, write: true,
+    description: 'Marque un mois déclaré comme payé. `montant_urssaf` (euros) enregistre le total calculé par le CESU, si connu.',
+    inputSchema: { type: 'object', properties: { mois: S.string(7), date: S.date, montant_urssaf: { type: 'number' } }, required: ['mois'] },
+    run: (ctx, a) => t.menageMoisPayer(ctx, { mois: str(a.mois) || '', date: str(a.date), montant_urssaf: num(a.montant_urssaf) }),
+  },
+  {
+    name: 'menage_mois_rouvrir',
+    adultes: true, write: true,
+    description: 'Rouvre un mois déclaré ou payé : ses présences redeviennent modifiables. Journalisé avec le membre.',
+    inputSchema: { type: 'object', properties: { mois: S.string(7) }, required: ['mois'] },
+    run: (ctx, a) => t.menageMoisRouvrir(ctx, str(a.mois) || ''),
+  },
+  {
+    name: 'menage_mois_sans_presence',
+    adultes: true, write: true,
+    description: 'Marque un mois « sans présence » (aucune venue), pour faire taire le rappel de déclaration.',
+    inputSchema: { type: 'object', properties: { mois: S.string(7) }, required: ['mois'] },
+    run: (ctx, a) => t.menageMoisSansPresence(ctx, str(a.mois) || ''),
+  },
 ];
 
 /** Construit un serveur MCP lié à un membre et à une portée. Reconstruit à chaque requête (transport sans état). */
 function buildServer(ctx: t.McpCtx): Server {
   const server = new Server({ name: 'foyer', version: '1.0.0' }, { capabilities: { tools: {} } });
-  const visible = (): ToolDef[] => TOOLS.filter((tool) => ctx.scope === 'write' || !tool.write);
+  // Un jeton d'enfant ne voit pas les outils réservés aux adultes, ni un jeton
+  // `read` les outils d'écriture. Le même filtre sert à la liste et à l'appel :
+  // un outil masqué est donc aussi « inconnu » à l'appel direct.
+  const visible = (): ToolDef[] => TOOLS.filter((tool) => (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant));
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: visible().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })),

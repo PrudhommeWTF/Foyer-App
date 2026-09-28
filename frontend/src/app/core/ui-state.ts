@@ -238,7 +238,7 @@ export interface UiState {
 const SCREEN_KEY = 'foyer.screen';
 const KNOWN_SCREENS: ReadonlySet<string> = new Set([
   'home', 'calendar', 'courses', 'taches', 'lieux', 'contacts', 'fidelite',
-  'finances', 'repas', 'recettes', 'planning', 'settings',
+  'finances', 'employe', 'repas', 'recettes', 'planning', 'settings',
 ]);
 export function rememberScreen(screen: string): void {
   try { localStorage.setItem(SCREEN_KEY, screen); } catch { /* mode privé : le choix vaut pour la session */ }

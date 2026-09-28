@@ -12,6 +12,16 @@ export interface EmpRate { id: number; employeeId: number; netHourlyCents: numbe
 export interface EmpEmployee { id: number; name: string; role: EmpRole; active: boolean; createdAt: string; archivedAt: string | null; currentRate: { netHourlyCents: number; effectiveFrom: string } | null; }
 export interface EmpBootstrap { employees: EmpEmployee[]; configuredHourlyRate: number; congesInclus: boolean; dureeHabituelle: number; rappelJour: number; }
 
+export type EmpMonthStatus = 'ouvert' | 'declare' | 'paye' | 'sans-presence';
+export interface EmpShift { id: number; employeeId: number; day: string; minutes: number; note: string; createdAt: string; createdBy: string | null; createdVia: string | null; updatedAt: string | null; updatedBy: string | null; updatedVia: string | null; }
+export interface EmpRateBucket { netHourlyCents: number | null; minutes: number; netCents: number | null; }
+export interface EmpMonthRecap {
+  employeeId: number; month: string; status: EmpMonthStatus; frozen: boolean;
+  minutes: number; netCents: number | null; buckets: EmpRateBucket[];
+  declaredAt: string | null; paidAt: string | null; urssafTotalCents: number | null;
+  shifts: EmpShift[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class EmployesApi {
   private api = inject(ApiService);
@@ -26,5 +36,30 @@ export class EmployesApi {
   }
   createEmployee(name: string, role: EmpRole): Promise<{ employee: EmpEmployee }> {
     return this.api.post('employes/employees', { name, role });
+  }
+
+  month(mois: string, employeeId?: number): Promise<EmpMonthRecap> {
+    return this.api.request('employes/month?month=' + mois + (employeeId ? '&employee=' + employeeId : ''));
+  }
+  addShift(body: { day?: string; minutes?: number; note?: string; force?: boolean }, employeeId?: number): Promise<{ shift?: EmpShift; duplicate?: EmpShift }> {
+    return this.api.post('employes/shifts' + (employeeId ? '?employee=' + employeeId : ''), body);
+  }
+  editShift(id: number, body: { day?: string; minutes?: number; note?: string }): Promise<{ shift: EmpShift }> {
+    return this.api.put('employes/shifts/' + id, body);
+  }
+  archiveShift(id: number): Promise<{ ok: true }> {
+    return this.api.post('employes/shifts/' + id + '/archive', {});
+  }
+  declare(mois: string, body: { date?: string; note?: string } = {}, employeeId?: number): Promise<EmpMonthRecap> {
+    return this.api.post('employes/month/declare' + (employeeId ? '?employee=' + employeeId : ''), { month: mois, ...body });
+  }
+  pay(mois: string, body: { date?: string; urssaf_total?: number } = {}, employeeId?: number): Promise<EmpMonthRecap> {
+    return this.api.post('employes/month/pay' + (employeeId ? '?employee=' + employeeId : ''), { month: mois, ...body });
+  }
+  reopen(mois: string, employeeId?: number): Promise<EmpMonthRecap> {
+    return this.api.post('employes/month/reopen' + (employeeId ? '?employee=' + employeeId : ''), { month: mois });
+  }
+  noPresence(mois: string, employeeId?: number): Promise<EmpMonthRecap> {
+    return this.api.post('employes/month/no-presence' + (employeeId ? '?employee=' + employeeId : ''), { month: mois });
   }
 }

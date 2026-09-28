@@ -21,7 +21,7 @@ export const isFrozen = (s: MonthStatus): boolean => s === 'declare' || s === 'p
 
 export interface Employee { id: number; name: string; role: EmpRole; active: boolean; createdAt: string; archivedAt: string | null; }
 export interface Rate { id: number; employeeId: number; netHourlyCents: number; effectiveFrom: string; createdAt: string; createdBy: string | null; }
-export interface Shift { id: number; employeeId: number; day: string; minutes: number; note: string; createdAt: string; createdBy: string | null; updatedAt: string | null; updatedBy: string | null; }
+export interface Shift { id: number; employeeId: number; day: string; minutes: number; note: string; createdAt: string; createdBy: string | null; createdVia: string | null; updatedAt: string | null; updatedBy: string | null; updatedVia: string | null; }
 export interface MonthRow {
   employeeId: number; month: string; status: MonthStatus;
   declaredAt: string | null; declaredHoursMinutes: number | null; declaredNetCents: number | null;
@@ -40,7 +40,8 @@ const rateRow = (r: Record<string, unknown>): Rate => ({
 const shiftRow = (r: Record<string, unknown>): Shift => ({
   id: r['id'] as number, employeeId: r['employee_id'] as number, day: r['day'] as string, minutes: r['minutes'] as number,
   note: (r['note'] as string) ?? '', createdAt: r['created_at'] as string, createdBy: (r['created_by'] as string) ?? null,
-  updatedAt: (r['updated_at'] as string) ?? null, updatedBy: (r['updated_by'] as string) ?? null,
+  createdVia: (r['created_via'] as string) ?? null,
+  updatedAt: (r['updated_at'] as string) ?? null, updatedBy: (r['updated_by'] as string) ?? null, updatedVia: (r['updated_via'] as string) ?? null,
 });
 const monthRowOf = (r: Record<string, unknown>): MonthRow => ({
   employeeId: r['employee_id'] as number, month: r['month'] as string, status: r['status'] as MonthStatus,
@@ -113,15 +114,15 @@ export function getShift(id: number): Shift | null {
   const r = database.prepare('SELECT * FROM emp_shifts WHERE id = ? AND archived_at IS NULL').get(id) as Record<string, unknown> | undefined;
   return r ? shiftRow(r) : null;
 }
-export function addShift(employeeId: number, day: string, minutes: number, note: string, by: string | null): Shift {
-  const info = database.prepare('INSERT INTO emp_shifts (employee_id, day, minutes, note, created_by) VALUES (?, ?, ?, ?, ?)')
-    .run(employeeId, day, minutes, note, by);
+export function addShift(employeeId: number, day: string, minutes: number, note: string, by: string | null, via: string | null = null): Shift {
+  const info = database.prepare('INSERT INTO emp_shifts (employee_id, day, minutes, note, created_by, created_via) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(employeeId, day, minutes, note, by, via);
   return getShift(Number(info.lastInsertRowid))!;
 }
-export function editShift(id: number, patch: { day?: string; minutes?: number; note?: string }, by: string | null): Shift | null {
+export function editShift(id: number, patch: { day?: string; minutes?: number; note?: string }, by: string | null, via: string | null = null): Shift | null {
   const s = getShift(id); if (!s) return null;
-  database.prepare("UPDATE emp_shifts SET day = ?, minutes = ?, note = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?")
-    .run(patch.day ?? s.day, patch.minutes ?? s.minutes, patch.note ?? s.note, by, id);
+  database.prepare("UPDATE emp_shifts SET day = ?, minutes = ?, note = ?, updated_at = datetime('now'), updated_by = ?, updated_via = ? WHERE id = ?")
+    .run(patch.day ?? s.day, patch.minutes ?? s.minutes, patch.note ?? s.note, by, via, id);
   return getShift(id);
 }
 export function archiveShift(id: number, by: string | null): boolean {
