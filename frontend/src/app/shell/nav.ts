@@ -8,7 +8,7 @@ export interface NavItem { id: string; label: string; icon: string; }
  * que la barre latérale, la barre du bas et le menu d'ajout doivent filtrer la
  * même chose, et qu'une seule des trois oubliée laisserait l'entrée visible.
  */
-export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'settings']);
+export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'employe', 'settings']);
 
 /** Les entrées du menu « + » qui mènent à ces écrans. */
 export const AJOUTS_ADULTES: ReadonlySet<string> = new Set(['tx']);
@@ -45,6 +45,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'lieux', label: 'Lieux de vacances', icon: 'map-pin' },
       { id: 'contacts', label: 'Contacts', icon: 'contacts' },
       { id: 'fidelite', label: 'Cartes de fidélité', icon: 'card' },
+    ],
+  },
+  {
+    title: 'Maison',
+    items: [
+      { id: 'employe', label: 'Employé à domicile', icon: 'users' },
     ],
   },
 ];

@@ -21,6 +21,7 @@ import { effectiveSetting } from '../settings/repo';
 import { fetchPublic } from '../recipes/fetch';
 import { FetchError } from '../recipes/fetch';
 import { ImportError, parseRecipePage } from '../recipes/schema-org';
+import * as emp from '../employes/repo';
 
 /** Qui agit, et par quel jeton. Construit à chaque requête depuis req.user/req.apiToken. */
 export interface McpCtx { memberId: string; enfant: boolean; scope: 'read' | 'write'; via: string; }
@@ -1112,4 +1113,141 @@ export function affaireRetirer(ctx: McpCtx, ids: string[]): string {
   const parts = [`${cible.length} affaire(s) retirée(s)${noms.length ? ' : ' + noms.join(', ') : ''}.`];
   if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
   return parts.join(' ');
+}
+
+// ---- Employé à domicile (« Ménage ») — réservé aux adultes ----------------
+
+const EMP_ROLE_LABEL: Record<string, string> = { menage: 'ménage', garde: 'garde d’enfant', jardin: 'jardinage', autre: 'autre' };
+const EMP_STATUS_LABEL: Record<string, string> = { ouvert: 'ouvert', declare: 'déclaré', paye: 'payé', 'sans-presence': 'sans présence' };
+/** Minutes vers heures décimales : « 9 h », « 3,5 h ». */
+const decHours = (min: number): string => ((min / 60).toFixed(2).replace(/\.?0+$/, '') || '0').replace('.', ',') + ' h';
+const centsEuro = (c: number): string => (c / 100).toFixed(2).replace('.', ',') + ' €';
+const moisLabel = (mois: string): string => new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'Europe/Paris' }).format(new Date(mois + '-01T12:00:00Z'));
+/** Heures décimales vers minutes, arrondi au quart d'heure, borné à 24 h. */
+const minutesFromHours = (h: number): number => Math.max(15, Math.min(1440, Math.round((h * 60) / 15) * 15));
+
+/** L'employé visé : par identifiant ou nom, sinon l'employé principal (« ménage »). */
+function empResolve(query?: string): emp.Employee | null {
+  const all = emp.listEmployees(false);
+  if (query && query.trim()) {
+    const byId = all.find((e) => String(e.id) === query.trim()); if (byId) return byId;
+    const q = norm(query);
+    return all.find((e) => norm(e.name) === q) || all.find((e) => norm(e.name).includes(q)) || null;
+  }
+  return emp.primaryEmployee();
+}
+
+/** Le bloc « À saisir sur le CESU », prêt à recopier. */
+function cesuBloc(recap: emp.MonthRecap, congesInclus: boolean): string {
+  const lines = [`À saisir sur le CESU (${moisLabel(recap.month)}) :`];
+  if (recap.netCents == null) { lines.push('- Taux non défini pour certaines présences : réglez le taux (avec sa date d’effet) avant de déclarer.'); return lines.join('\n'); }
+  lines.push(`- Nombre d’heures : ${decHours(recap.minutes)}`);
+  lines.push(`- Salaire net total : ${centsEuro(recap.netCents)}`);
+  lines.push(`- Congés payés : ${congesInclus ? 'inclus dans le taux (majoration de 10 %)' : 'non inclus'}`);
+  if (recap.buckets.length > 1) lines.push('- Détail par taux : ' + recap.buckets.map((b) => `${decHours(b.minutes)} à ${b.netHourlyCents != null ? centsEuro(b.netHourlyCents) + '/h' : 'taux inconnu'}`).join(' ; '));
+  return lines.join('\n');
+}
+
+export function menageMois(_ctx: McpCtx, args: { mois?: string; employe?: string }): string {
+  const e = empResolve(args.employe);
+  if (!e) return 'Aucun employé configuré. Créez-le dans les Paramètres.';
+  const mois = args.mois && /^\d{4}-\d{2}$/.test(args.mois) ? args.mois : todayParis().slice(0, 7);
+  const recap = emp.computeMonth(e.id, mois);
+  const congesInclus = effectiveSetting('empCongesInclus') === true;
+  const head = `Ménage (${e.name}), ${moisLabel(mois)} — mois ${EMP_STATUS_LABEL[recap.status]}.`;
+  if (!recap.shifts.length) return head + '\nAucune présence ce mois-ci.';
+  const lignes = recap.shifts.map((s) => `- ${frDate(s.day, true)} : ${decHours(s.minutes)} [${s.id}]${s.note ? ' (' + s.note + ')' : ''}`);
+  const total = `Total : ${decHours(recap.minutes)}${recap.netCents != null ? ', net ' + centsEuro(recap.netCents) : ''}.`;
+  return [head, `Présences (${recap.shifts.length}) :`, ...lignes, total, '', cesuBloc(recap, congesInclus)].join('\n');
+}
+
+export function menagePresences(_ctx: McpCtx, args: { du?: string; au?: string; employe?: string }): string {
+  const e = empResolve(args.employe); if (!e) return 'Aucun employé configuré.';
+  const au = args.au && /^\d{4}-\d{2}-\d{2}$/.test(args.au) ? args.au : todayParis();
+  const du = args.du && /^\d{4}-\d{2}-\d{2}$/.test(args.du) ? args.du : addDaysIso(au, -31);
+  const shifts = emp.shiftsBetween(e.id, du, au);
+  if (!shifts.length) return `Aucune présence de ${e.name} entre le ${frDate(du, true)} et le ${frDate(au, true)}.`;
+  return `Présences de ${e.name} du ${frDate(du, true)} au ${frDate(au, true)} :\n` + shifts.map((s) => `- ${frDate(s.day, true)} : ${decHours(s.minutes)} [${s.id}]`).join('\n');
+}
+
+export function menageEmployes(_ctx: McpCtx): string {
+  const all = emp.listEmployees(false);
+  if (!all.length) return 'Aucun employé configuré. Créez-le dans les Paramètres.';
+  const t = todayParis();
+  return 'Employés à domicile :\n' + all.map((e) => {
+    const r = emp.currentRate(e.id, t);
+    return `- ${e.name} [${e.id}] (${EMP_ROLE_LABEL[e.role] || e.role})${r ? ` · ${centsEuro(r.netHourlyCents)}/h depuis le ${frDate(r.effectiveFrom, true)}` : ' · taux non défini'}`;
+  }).join('\n');
+}
+
+export function menagePresenceAjouter(ctx: McpCtx, args: { jour?: string; heures?: number; note?: string; employe?: string }): string {
+  const e = empResolve(args.employe); if (!e) return 'Aucun employé configuré. Créez-le dans les Paramètres.';
+  if (args.jour && !/^\d{4}-\d{2}-\d{2}$/.test(args.jour)) return 'Jour illisible (attendu AAAA-MM-JJ).';
+  const jour = args.jour || todayParis();
+  const mois = jour.slice(0, 7);
+  if (emp.isFrozen(emp.monthStatus(e.id, mois))) return `Le mois ${mois} est figé (déclaré ou payé) : rouvrez-le pour ajouter une présence.`;
+  const minutes = args.heures != null ? minutesFromHours(args.heures) : (Number(effectiveSetting('empDureeHabituelle')) || 180);
+  const existing = emp.shiftOn(e.id, jour);
+  if (existing) {
+    const who = existing.createdBy ? memberName(state(), existing.createdBy) : 'quelqu’un';
+    return `Déjà ${decHours(existing.minutes)} notées le ${frDate(jour, true)} par ${who} [${existing.id}]. Pour corriger, utilisez menage_presence_modifier ; sinon c'est peut-être un second passage.`;
+  }
+  const s = emp.addShift(e.id, jour, minutes, (args.note || '').trim(), ctx.memberId, ctx.via);
+  return `Présence notée : ${e.name}, ${frDate(jour, true)}, ${decHours(minutes)} [${s.id}].`;
+}
+
+export function menagePresenceModifier(ctx: McpCtx, args: { id: string; jour?: string; heures?: number; note?: string }): string {
+  const s = emp.getShift(Number(args.id)); if (!s) return 'Présence introuvable (identifiant).';
+  if (args.jour && !/^\d{4}-\d{2}-\d{2}$/.test(args.jour)) return 'Jour illisible (attendu AAAA-MM-JJ).';
+  if (emp.isFrozen(emp.monthStatus(s.employeeId, s.day.slice(0, 7)))) return `Le mois ${s.day.slice(0, 7)} est figé : rouvrez-le pour modifier ses présences.`;
+  const jour = args.jour || s.day;
+  if (jour !== s.day && emp.isFrozen(emp.monthStatus(s.employeeId, jour.slice(0, 7)))) return `Le mois ${jour.slice(0, 7)} est figé.`;
+  const patch = { day: jour, minutes: args.heures != null ? minutesFromHours(args.heures) : undefined, note: args.note !== undefined ? args.note.trim() : undefined };
+  const out = emp.editShift(s.id, patch, ctx.memberId, ctx.via)!;
+  return `Présence modifiée : ${frDate(out.day, true)}, ${decHours(out.minutes)} [${out.id}].`;
+}
+
+export function menagePresenceRetirer(ctx: McpCtx, idArg: string): string {
+  const s = emp.getShift(Number(idArg)); if (!s) return 'Présence introuvable (identifiant).';
+  if (emp.isFrozen(emp.monthStatus(s.employeeId, s.day.slice(0, 7)))) return `Le mois ${s.day.slice(0, 7)} est figé : rouvrez-le pour retirer une présence.`;
+  emp.archiveShift(s.id, ctx.memberId);
+  return `Présence du ${frDate(s.day, true)} retirée.`;
+}
+
+function empMonthWrite(fn: () => emp.MonthRecap): string | emp.MonthRecap {
+  try { return fn(); } catch (e) { if (e instanceof emp.MonthError) return e.message; throw e; }
+}
+
+export function menageMoisDeclarer(ctx: McpCtx, args: { mois: string; date?: string; note?: string }): string {
+  const e = empResolve(undefined); if (!e) return 'Aucun employé configuré.';
+  if (!/^\d{4}-\d{2}$/.test(args.mois || '')) return 'Mois illisible (attendu AAAA-MM).';
+  if (args.date && !/^\d{4}-\d{2}-\d{2}$/.test(args.date)) return 'Date illisible (attendu AAAA-MM-JJ).';
+  const congesInclus = effectiveSetting('empCongesInclus') === true;
+  const out = empMonthWrite(() => emp.declareMonth(e.id, args.mois, args.date || todayParis(), congesInclus, (args.note || '').trim(), ctx.memberId));
+  if (typeof out === 'string') return out;
+  return `Mois ${moisLabel(args.mois)} déclaré.\n\n${cesuBloc(out, congesInclus)}`;
+}
+
+export function menageMoisPayer(ctx: McpCtx, args: { mois: string; date?: string; montant_urssaf?: number }): string {
+  const e = empResolve(undefined); if (!e) return 'Aucun employé configuré.';
+  if (!/^\d{4}-\d{2}$/.test(args.mois || '')) return 'Mois illisible (attendu AAAA-MM).';
+  const cents = typeof args.montant_urssaf === 'number' && args.montant_urssaf >= 0 ? Math.round(args.montant_urssaf * 100) : null;
+  const out = empMonthWrite(() => emp.payMonth(e.id, args.mois, args.date && /^\d{4}-\d{2}-\d{2}$/.test(args.date) ? args.date : todayParis(), cents, ctx.memberId));
+  if (typeof out === 'string') return out;
+  return `Mois ${moisLabel(args.mois)} marqué payé${cents != null ? ` (total CESU ${centsEuro(cents)})` : ''}.`;
+}
+
+export function menageMoisRouvrir(ctx: McpCtx, mois: string): string {
+  const e = empResolve(undefined); if (!e) return 'Aucun employé configuré.';
+  if (!/^\d{4}-\d{2}$/.test(mois || '')) return 'Mois illisible (attendu AAAA-MM).';
+  emp.reopenMonth(e.id, mois, ctx.memberId);
+  return `Mois ${moisLabel(mois)} rouvert : ses présences sont de nouveau modifiables.`;
+}
+
+export function menageMoisSansPresence(ctx: McpCtx, mois: string): string {
+  const e = empResolve(undefined); if (!e) return 'Aucun employé configuré.';
+  if (!/^\d{4}-\d{2}$/.test(mois || '')) return 'Mois illisible (attendu AAAA-MM).';
+  const out = empMonthWrite(() => emp.markNoPresence(e.id, mois, ctx.memberId));
+  if (typeof out === 'string') return out;
+  return `Mois ${moisLabel(mois)} marqué « sans présence » : le rappel ne s'affichera pas.`;
 }
