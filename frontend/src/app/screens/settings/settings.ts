@@ -8,6 +8,7 @@ import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl, declOf } from '../../co
 import { ModalComponent } from '../../shared/modal';
 import { SettingFieldComponent } from './field';
 import { SettingsAccountComponent } from './account';
+import { SettingsEmployeComponent } from './employe';
 
 /**
  * Une section de la page, et le groupe où elle tombe.
@@ -47,7 +48,7 @@ const GESTES = new Set(['compte', 'membres']);
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent],
+  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsEmployeComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -156,6 +157,7 @@ const GESTES = new Set(['compte', 'membres']);
 
                       @switch (s.id) {
                         @case ('compte') { <settings-account /> }
+                        @case ('employe') { <settings-employe /> }
                         @case ('courses') {
                           <!-- L'ordre des rayons et les articles de placard sont des
                                données du foyer, pas des réglages : ils se modifient là

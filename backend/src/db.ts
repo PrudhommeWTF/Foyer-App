@@ -4,6 +4,8 @@ import path from 'path';
 import { EMPTY_STATE } from './seed';
 import { migrateFinances } from './finances/schema';
 import { initFinancesRepo } from './finances/repo';
+import { migrateEmployes } from './employes/schema';
+import { initEmployesRepo } from './employes/repo';
 import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
 import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
 import * as files from './storage/files';
@@ -136,6 +138,10 @@ initBlobs(DATA_DIR);
 // Finances module: versioned schema, applied at boot and independent of the rest.
 migrateFinances(db);
 initFinancesRepo(db);
+
+// Module « Employé à domicile » : schéma relationnel versionné, comme Finances.
+migrateEmployes(db);
+initEmployesRepo(db);
 
 // Household-side tables (files, ops journals), then the document itself.
 migrateHousehold(db);
