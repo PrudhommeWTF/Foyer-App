@@ -272,8 +272,8 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
           <div class="rail">
             <ng-container [ngTemplateOutlet]="agendaCard" />
             <ng-container [ngTemplateOutlet]="tasksCard" />
-            <ng-container [ngTemplateOutlet]="mealsCard" />
-            @if (fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
+            @if (store.modRepas()) { <ng-container [ngTemplateOutlet]="mealsCard" /> }
+            @if (store.modFinances() && fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
           </div>
         </div>
       }
@@ -437,7 +437,7 @@ export class HomeScreen {
   readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 4 : 12) : []; });
 
   /** Les sections du carousel mobile. */
-  readonly slides = computed(() => SLIDES);
+  readonly slides = computed(() => SLIDES.filter((s) => s.key !== 'meals' || this.store.modRepas()));
 
   /**
    * Les modules ouverts à ce compte, tels que la navigation les groupe. Comme
@@ -473,7 +473,7 @@ export class HomeScreen {
   readonly modules = computed<Mod[]>(() => {
     const d = this.store.data();
     if (!d) return [];
-    const mods: Mod[] = navGroupsFor(this.store.isChild()).flatMap((g) => g.items).map((it) => ({
+    const mods: Mod[] = navGroupsFor(this.store.isChild(), (s) => this.store.screenEnabled(s)).flatMap((g) => g.items).map((it) => ({
       id: it.id, label: it.label, icon: it.icon, color: MOD_COLOR[it.id] || '#E56B4E', sub: this.moduleSub(it.id),
     }));
     if (!this.store.isChild()) mods.push({ id: 'settings', label: 'Paramètres', icon: 'gear', color: '#8A7E74', sub: 'Réglages et compte' });

@@ -91,7 +91,10 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 export class TopbarComponent {
   store = inject(FoyerStore);
   private finances = inject(FinancesStore);
-  menu = computed(() => (this.store.isChild() ? ADD_MENU.filter((a) => !AJOUTS_ADULTES.has(a.id)) : ADD_MENU));
+  // Chaque entrée du « + » qui mène à un module suit son activation.
+  private static readonly ADD_MODULE: Record<string, 'modRepas' | 'modFinances' | 'modFidelite'> = { recipe: 'modRepas', tx: 'modFinances', card: 'modFidelite' };
+  menu = computed(() => (this.store.isChild() ? ADD_MENU.filter((a) => !AJOUTS_ADULTES.has(a.id)) : ADD_MENU)
+    .filter((a) => { const m = TopbarComponent.ADD_MODULE[a.id]; return !m || this.store.moduleOn(m); }));
   d = this.store.d;
   title = computed(() => {
     const s = this.store.ui().screen;

@@ -28,6 +28,7 @@ import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSl
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
+import { ModuleFlag, SCREEN_MODULE } from './modules';
 import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
@@ -291,6 +292,8 @@ export class FoyerStore {
     effect(() => {
       const screen = this.ui().screen;
       if (this.authed() && this.isChild() && ECRANS_ADULTES.has(screen)) { this.patch({ screen: 'home' }); return; }
+      // Écran d'un module désactivé (retenu, ou éteint pendant qu'on le regarde) : retour à l'accueil.
+      if (this.authed() && this._data() && !this.screenEnabled(screen)) { this.patch({ screen: 'home' }); return; }
       rememberScreen(screen);
     });
 
@@ -1037,6 +1040,22 @@ export class FoyerStore {
   grad = grad;
 
   // ---- navigation -------------------------------------------------------
+  // ---- modules activables ----------------------------------------------
+  // Un module éteint (réglage foyer à false) disparaît partout. Ces quatre
+  // lectures littérales sont aussi ce qui atteste au registre qu'un drapeau sert.
+  readonly modRepas = computed(() => this.setting('modRepas') !== false);
+  readonly modFidelite = computed(() => this.setting('modFidelite') !== false);
+  readonly modFinances = computed(() => this.setting('modFinances') !== false);
+  readonly modEmploye = computed(() => this.setting('modEmploye') !== false);
+  moduleOn(flag: ModuleFlag): boolean {
+    return flag === 'modRepas' ? this.modRepas() : flag === 'modFidelite' ? this.modFidelite() : flag === 'modFinances' ? this.modFinances() : this.modEmploye();
+  }
+  /** Un écran est-il accessible ? (module actif, ou écran hors module.) */
+  screenEnabled(screen: string): boolean {
+    const flag = SCREEN_MODULE[screen];
+    return !flag || this.moduleOn(flag);
+  }
+
   go(screen: string): void {
     // Un seul point de passage, plutôt qu'une condition à chaque bouton : c'est
     // ce qui rend impossible d'ouvrir l'écran par une entrée qu'on aurait
@@ -1047,6 +1066,8 @@ export class FoyerStore {
         : 'Cet écran est réservé aux adultes du foyer.');
       return;
     }
+    // Un écran de module désactivé ramène à l'accueil, comme une porte fermée.
+    if (!this.screenEnabled(screen)) { this.patch({ screen: 'home', addMenuOpen: false, notifOpen: false }); return; }
     this.patch({ screen, openRecipeId: null, addMenuOpen: false, notifOpen: false });
   }
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
@@ -1067,8 +1088,8 @@ export class FoyerStore {
     for (const t of d.tasks) if (normText(t.text).includes(q)) push({ kind: 'task', icon: 'task', color: '#6E9E5F', title: t.text, sub: 'Tâche' + (t.who.length ? ' · ' + t.who.map(mname).join(', ') : ''), screen: 'taches', id: t.id });
     for (const e of d.events) if (normText(e.title).includes(q)) push({ kind: 'event', icon: 'calendar', color: '#4E93B8', title: e.title, sub: 'Événement · ' + e.date, screen: 'calendar', id: e.id });
     for (const s of d.shop) if (normText(s.name).includes(q)) push({ kind: 'shop', icon: 'panier', color: '#E08D3C', title: s.name, sub: 'Course' + (s.qty ? ' · ' + s.qty : ''), screen: 'courses', id: s.id });
-    for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
-    for (const c of d.cards) if (normText(c.name).includes(q)) push({ kind: 'card', icon: 'card', color: c.color || '#4E93B8', title: c.name, sub: 'Carte de fidélité', screen: 'fidelite', id: c.id });
+    if (this.modRepas()) for (const r of d.recipes) if (normText(r.name).includes(q)) push({ kind: 'recipe', icon: 'recettes', color: r.color || '#C6492F', title: r.name, sub: 'Recette', screen: 'recettes', id: r.id });
+    if (this.modFidelite()) for (const c of d.cards) if (normText(c.name).includes(q)) push({ kind: 'card', icon: 'card', color: c.color || '#4E93B8', title: c.name, sub: 'Carte de fidélité', screen: 'fidelite', id: c.id });
     for (const m of d.members) if (normText(`${m.name} ${m.role}`).includes(q)) push({ kind: 'member', icon: 'users', color: m.color, title: m.name, sub: m.role || 'Membre', screen: 'settings', id: m.id });
     return hits.slice(0, 40);
   });
@@ -3154,7 +3175,10 @@ export class FoyerStore {
   }
   private readonly externalDayExtras = computed(() => {
     const out: Record<string, DayExtra[]> = {};
-    for (const map of Object.values(this.extDayExtraSources())) {
+    // Un module éteint ne pose plus ses repères, même si son store tourne encore.
+    const off = (src: string): boolean => (src === 'finances' && !this.modFinances()) || (src === 'employe' && !this.modEmploye());
+    for (const [source, map] of Object.entries(this.extDayExtraSources())) {
+      if (off(source)) continue;
       for (const [ds, items] of Object.entries(map)) (out[ds] ??= []).push(...items);
     }
     return out;
@@ -3212,8 +3236,8 @@ export class FoyerStore {
     }
 
     // Les alertes de budget viennent du module Finances, dont les données vivent
-    // dans des tables dédiées et non dans ce document.
-    if (this.setting('notifFinances')) raw.push(...this.externalNotifs());
+    // dans des tables dédiées et non dans ce document. Module éteint, plus d'alerte.
+    if (this.setting('notifFinances') && this.modFinances()) raw.push(...this.externalNotifs());
 
     return raw.map((n) => ({ ...n, read: read.has(n.id) }));
   });

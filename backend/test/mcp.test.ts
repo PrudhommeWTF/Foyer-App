@@ -75,6 +75,23 @@ describe('Serveur MCP', () => {
     for (const n of [...readNames, ...writeNames]) assert.ok(!/finance|budget|reglage|setting/i.test(n), 'aucun outil finances/réglages : ' + n);
   });
 
+  it('un module désactivé retire ses outils de l’assistant, réactivé les rend', async () => {
+    // Un jeton dédié : ne pas grever le budget de requêtes des autres tests.
+    const tok = await creerJeton(ctx.jetons.membre, 'Assistant modules', 'write', 'MotDePasseSolide2');
+    await appel(ctx.base, 'PATCH', '/settings', { changes: { modEmploye: false, modRepas: false } }, ctx.jetons.admin);
+    const c = await connect(tok);
+    const off = (await c.listTools()).tools.map((t) => t.name);
+    await c.close();
+    assert.ok(!off.some((n) => n.startsWith('menage')), 'menage_* retirés quand Employé est éteint');
+    assert.ok(!off.some((n) => n.startsWith('recette') || n.startsWith('repas')), 'recette_*/repas_* retirés quand Repas est éteint');
+
+    await appel(ctx.base, 'PATCH', '/settings', { changes: { modEmploye: true, modRepas: true } }, ctx.jetons.admin);
+    const c2 = await connect(tok);
+    const on = (await c2.listTools()).tools.map((t) => t.name);
+    await c2.close();
+    assert.ok(on.some((n) => n.startsWith('menage')) && on.some((n) => n.startsWith('recette')), 'outils de retour une fois réactivés');
+  });
+
   it('courses_ajouter crée l’article avec attribution (by + via)', async () => {
     const c = await connect(tokenWrite);
     const out = textOf(await c.callTool({ name: 'courses_ajouter', arguments: { articles: [{ nom: 'Lait' }, { nom: 'Œufs', qte: '6' }] } }));

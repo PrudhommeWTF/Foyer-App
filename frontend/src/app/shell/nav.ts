@@ -13,10 +13,14 @@ export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'employe
 /** Les entrées du menu « + » qui mènent à ces écrans. */
 export const AJOUTS_ADULTES: ReadonlySet<string> = new Set(['tx']);
 
-/** Les groupes de navigation, tels qu'ils s'affichent pour ce compte. */
-export const navGroupsFor = (enfant: boolean): NavGroup[] => (enfant
-  ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !ECRANS_ADULTES.has(i.id)) })).filter((g) => g.items.length)
-  : NAV_GROUPS);
+/**
+ * Les groupes de navigation, tels qu'ils s'affichent pour ce compte. `enabled`
+ * masque les écrans d'un module désactivé (défaut : tout actif).
+ */
+export const navGroupsFor = (enfant: boolean, enabled: (screen: string) => boolean = () => true): NavGroup[] =>
+  (enfant ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !ECRANS_ADULTES.has(i.id)) })) : NAV_GROUPS)
+    .map((g) => ({ ...g, items: g.items.filter((i) => enabled(i.id)) }))
+    .filter((g) => g.items.length);
 export interface NavGroup { title: string; items: NavItem[]; }
 
 export const NAV_GROUPS: NavGroup[] = [

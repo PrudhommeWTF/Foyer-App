@@ -80,13 +80,14 @@ export class SearchModalComponent implements AfterViewInit {
   tintOf = tint;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Local matches first, then finance operations fetched from the server. */
-  allResults = computed<SearchHit[]>(() => [...this.store.searchResults(), ...this.finances.searchHits()]);
+  /** Local matches first, then finance operations fetched from the server (module actif). */
+  allResults = computed<SearchHit[]>(() => [...this.store.searchResults(), ...(this.store.modFinances() ? this.finances.searchHits() : [])]);
 
   onQuery(q: string): void {
     this.store.patch({ searchQuery: q });
     // The finances search hits the API: debounce it, unlike the in-memory ones.
     if (this.searchTimer) clearTimeout(this.searchTimer);
+    if (!this.store.modFinances()) return; // module éteint : pas de requête finances
     this.searchTimer = setTimeout(() => void this.finances.search(q), 220);
   }
 

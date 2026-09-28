@@ -9,6 +9,7 @@ import { ModalComponent } from '../../shared/modal';
 import { SettingFieldComponent } from './field';
 import { SettingsAccountComponent } from './account';
 import { SettingsEmployeComponent } from './employe';
+import { SettingsModulesComponent } from './modules';
 
 /**
  * Une section de la page, et le groupe où elle tombe.
@@ -31,6 +32,7 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   taches: { icon: 'taches', tint: '#F2ECF5', color: '#9B6FA8' },
   fidelite: { icon: 'card', tint: '#E5F0F4', color: '#4E93B8' },
   finances: { icon: 'budget', tint: '#EDF2EB', color: '#5F9E6E' },
+  modules: { icon: 'settings', tint: '#F2ECF5', color: '#9B6FA8' },
   acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
   serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },
   membres: { icon: 'users', tint: '#E5F0F4', color: '#4E93B8' },
@@ -48,7 +50,7 @@ const GESTES = new Set(['compte', 'membres']);
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsEmployeComponent],
+  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsEmployeComponent, SettingsModulesComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -158,6 +160,7 @@ const GESTES = new Set(['compte', 'membres']);
                       @switch (s.id) {
                         @case ('compte') { <settings-account /> }
                         @case ('employe') { <settings-employe /> }
+                        @case ('modules') { <settings-modules /> }
                         @case ('courses') {
                           <!-- L'ordre des rayons et les articles de placard sont des
                                données du foyer, pas des réglages : ils se modifient là
@@ -659,9 +662,15 @@ export class SettingsScreen {
   /** La section dépliée. Dans l'état d'interface, pour qu'on puisse y mener depuis ailleurs. */
   readonly ouvert = computed(() => this.store.ui().settingsSection);
 
+  /** La section de réglages d'un module éteint disparaît, comme le module lui-même. */
+  private readonly MODULE_SECTION: Record<string, 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye'> = {
+    repas: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye',
+  };
+
   /** Les sections du registre qui ont quelque chose à montrer, dans son ordre. */
   readonly sections = computed<Section[]>(() => SECTIONS
     .filter((s) => GESTES.has(s.id) || ALL.some((d) => d.section === s.id))
+    .filter((s) => { const m = this.MODULE_SECTION[s.id]; return !m || this.store.moduleOn(m); })
     .map((s) => ({ id: s.id, group: s.group, label: s.label, desc: s.desc, ...(ICONES[s.id] || ICONES['affichage']) })));
 
   /**
