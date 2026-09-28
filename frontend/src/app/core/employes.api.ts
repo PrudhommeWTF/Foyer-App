@@ -51,6 +51,12 @@ export class EmployesApi {
   createEmployee(name: string, role: EmpRole, euros?: number): Promise<{ employee: EmpEmployee }> {
     return this.api.post('employes/employees', { name, role, ...(euros != null ? { euros } : {}) });
   }
+  editEmployee(id: number, patch: { name?: string; role?: EmpRole }): Promise<{ employee: EmpEmployee }> {
+    return this.api.put('employes/employees/' + id, patch);
+  }
+  archiveEmployee(id: number): Promise<{ ok: true }> {
+    return this.api.post('employes/employees/' + id + '/archive', {});
+  }
 
   month(mois: string, employeeId?: number): Promise<EmpMonthRecap> {
     return this.api.request('employes/month?month=' + mois + (employeeId ? '&employee=' + employeeId : ''));

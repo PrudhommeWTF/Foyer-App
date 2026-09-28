@@ -57,6 +57,27 @@ describe('Employé à domicile : HTTP', () => {
     assert.equal(jard.currentRate.netHourlyCents, 1800, 'le taux posé à la création est daté d’aujourd’hui');
   });
 
+  it('modifier et retirer un employé exigent un administrateur ; le retrait garde l’historique', async () => {
+    const cr = await appel(ctx.base, 'POST', '/employes/employees', { name: 'Temporaire', role: 'menage' }, A());
+    const id = cr.json.employee.id;
+    // Non-admin : ni modifier ni retirer.
+    assert.equal((await appel(ctx.base, 'PUT', `/employes/employees/${id}`, { name: 'X' }, M())).status, 403);
+    assert.equal((await appel(ctx.base, 'POST', `/employes/employees/${id}/archive`, {}, M())).status, 403);
+    // Modifier nom et catégorie.
+    const mod = await appel(ctx.base, 'PUT', `/employes/employees/${id}`, { name: 'Renommé Dupont', role: 'garde' }, A());
+    assert.equal(mod.status, 200, JSON.stringify(mod.json));
+    assert.equal(mod.json.employee.name, 'Renommé Dupont');
+    assert.equal(mod.json.employee.role, 'garde');
+    // Une présence, puis retrait : l'employé quitte le socle, mais ses lignes restent.
+    await appel(ctx.base, 'POST', `/employes/shifts?employee=${id}`, { day: '2026-09-15', minutes: 60 }, A());
+    const arch = await appel(ctx.base, 'POST', `/employes/employees/${id}/archive`, {}, A());
+    assert.equal(arch.status, 200, JSON.stringify(arch.json));
+    const boot = await appel(ctx.base, 'GET', '/employes/bootstrap', undefined, A());
+    assert.ok(!boot.json.employees.some((e: { id: number }) => e.id === id), 'l’employé retiré ne remonte plus');
+    const exp = await appel(ctx.base, 'GET', '/employes/export.json', undefined, A());
+    assert.ok(exp.json.tables.emp_employees.some((r: { id: number }) => r.id === id), 'la ligne est archivée, pas effacée');
+  });
+
   it('trois présences de 3 h donnent 9 h et 130,50 € net', async () => {
     for (const day of ['2026-09-05', '2026-09-12', '2026-09-19']) {
       const r = await appel(ctx.base, 'POST', '/employes/shifts', { day, minutes: 180 }, M());

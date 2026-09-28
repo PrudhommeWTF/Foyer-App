@@ -117,6 +117,28 @@ export class EmployesStore {
     } finally { this.busy.set(false); }
   }
 
+  /** Modifier le nom ou la catégorie d'un employé. */
+  async modifierEmploye(id: number, patch: { name?: string; role?: EmpRole }): Promise<void> {
+    this.busy.set(true);
+    try { await this.api.editEmployee(id, patch); await this.reloadBoot(); await this.reloadMonth(); }
+    finally { this.busy.set(false); }
+  }
+
+  /**
+   * Retirer un employé (archivage) : il quitte la liste, mais ses heures et
+   * déclarations restent en base (rien n'est effacé, comme partout dans le module).
+   * On bascule alors sur le premier employé restant.
+   */
+  async archiverEmploye(id: number): Promise<void> {
+    this.busy.set(true);
+    try {
+      await this.api.archiveEmployee(id);
+      if (this.selectedId() === id) this.selectedId.set(null);
+      await this.reloadBoot();
+      await this.reloadMonth();
+    } finally { this.busy.set(false); }
+  }
+
   /** « Elle est venue aujourd'hui » : une présence à la durée habituelle, en un tap, annulable. */
   async elleEstVenue(): Promise<void> {
     const jour = this.foyer.todayStr();

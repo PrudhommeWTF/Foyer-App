@@ -69,7 +69,10 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
               <div class="r-titre">{{ e.name }}</div>
               <div class="r-role">{{ roleLabel(e.role) }}</div>
             </div>
-            @if (recap(); as r) { <span class="badge {{ statut(r.status).cls }}">{{ statut(r.status).label }}</span> }
+            <div class="r-side">
+              @if (recap(); as r) { <span class="badge {{ statut(r.status).cls }}">{{ statut(r.status).label }}</span> }
+              @if (store.foyer.isAdmin()) { <button class="edit-emp" (click)="ouvrirEdit(e)" aria-label="Modifier l’employé"><f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2.2" /></button> }
+            </div>
           </div>
           @if (recap(); as r) {
             <div class="r-chiffres">
@@ -197,6 +200,34 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
           </div>
         </f-modal>
       }
+
+      <!-- Formulaire : modifier ou retirer un employé (administrateur) -->
+      @if (editOpen()) {
+        <f-modal title="Modifier l’employé" [maxWidth]="440" (close)="editOpen.set(false)">
+          <div class="form">
+            <label class="lab">Nom</label>
+            <input class="input" [(ngModel)]="edNom" placeholder="Prénom et nom" maxlength="120" />
+            <label class="lab">Catégorie (CESU)</label>
+            <select class="input" [(ngModel)]="edRole">
+              @for (r of roles; track r.id) { <option [value]="r.id">{{ r.label }}</option> }
+            </select>
+            @if (edErreur()) { <div class="warn"><f-icon name="x" [size]="15" color="#C6492F" [width]="2.2" /> {{ edErreur() }}</div> }
+            @if (!edConfirmDel()) {
+              <div class="f-act">
+                <button class="btn btn-soft danger" (click)="edConfirmDel.set(true)"><f-icon name="trash" [size]="15" color="var(--primary)" [width]="2" /> Retirer</button>
+                <button class="btn btn-soft" (click)="editOpen.set(false)">Annuler</button>
+                <button class="btn btn-primary" [disabled]="!edNom.trim() || store.busy()" (click)="enregistrerEdit()">Enregistrer</button>
+              </div>
+            } @else {
+              <div class="hint2">Retirer cet employé le fait disparaître de la liste. Ses heures et déclarations restent enregistrées (rien n’est effacé).</div>
+              <div class="f-act">
+                <button class="btn btn-soft" (click)="edConfirmDel.set(false)">Annuler</button>
+                <button class="btn btn-primary danger-btn" [disabled]="store.busy()" (click)="archiver()">Retirer définitivement de la liste</button>
+              </div>
+            }
+          </div>
+        </f-modal>
+      }
     </div>
   `,
   styles: [`
@@ -218,6 +249,9 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .r-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
     .r-titre { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink); }
     .r-role { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .r-side { display: flex; align-items: center; gap: 8px; }
+    .edit-emp { border: none; background: var(--soft2); width: 30px; height: 30px; border-radius: 9px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .btn-primary.danger-btn { background: #C6492F; }
     .badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: .03em; }
     .badge.ouvert { background: var(--soft2); color: var(--ink2); }
     .badge.declare { background: #E5F0F4; color: #3E7A96; }
@@ -296,6 +330,12 @@ export class EmployeScreen {
   readonly nErreur = signal('');
   nPrenom = ''; nNom = ''; nRole: EmpRole = 'menage'; nTaux = '';
 
+  // Formulaire de modification / retrait d'un employé (administrateur).
+  readonly editOpen = signal(false);
+  readonly edErreur = signal('');
+  readonly edConfirmDel = signal(false);
+  edId = 0; edNom = ''; edRole: EmpRole = 'menage';
+
   constructor() { void this.store.init(); }
 
   readonly moisLabel = computed(() => MONTH_FMT.format(new Date(this.store.month() + '-01T12:00:00Z')));
@@ -340,6 +380,22 @@ export class EmployeScreen {
     this.nErreur.set('');
     try { await this.store.creerEmploye(this.nomComplet(), this.nRole, euros); this.nouvelOpen.set(false); }
     catch (e) { this.nErreur.set((e as Error).message || 'La création a échoué.'); }
+  }
+
+  ouvrirEdit(e: { id: number; name: string; role: EmpRole }): void {
+    this.edId = e.id; this.edNom = e.name; this.edRole = e.role;
+    this.edErreur.set(''); this.edConfirmDel.set(false); this.editOpen.set(true);
+  }
+  async enregistrerEdit(): Promise<void> {
+    if (!this.edNom.trim() || this.store.busy()) return;
+    this.edErreur.set('');
+    try { await this.store.modifierEmploye(this.edId, { name: this.edNom.trim(), role: this.edRole }); this.editOpen.set(false); }
+    catch (e) { this.edErreur.set((e as Error).message || 'L’enregistrement a échoué.'); }
+  }
+  async archiver(): Promise<void> {
+    this.edErreur.set('');
+    try { await this.store.archiverEmploye(this.edId); this.editOpen.set(false); }
+    catch (e) { this.edErreur.set((e as Error).message || 'Le retrait a échoué.'); }
   }
 
   ouvrir(id: number): void {
