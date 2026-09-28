@@ -80,6 +80,22 @@ Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.
 - **Inclure les tâches datées dans le flux partagé** (`icsTasks`) : Les tâches à faire qui ont une date apparaissent dans les agendas abonnés au lien ICS, préfixées « Tâche : ». Une tâche faite en disparaît ; une série n’y met que sa prochaine occurrence.
 - **Suggérer des lieux à la saisie** (`placeSuggest`) : Quand vous renseignez le lieu d’un événement, le champ propose des adresses de la Base Adresse Nationale (service public français, api-adresse.data.gouv.fr). C’est une requête sortante, déclenchée par votre frappe, sans clé ni compte. Coupé, le champ reste une simple saisie libre.
 
+### Modules actifs
+
+Activer ou désactiver des pans entiers de l’application. Un module éteint disparaît partout et ses accès sont fermés, sans que ses données soient supprimées.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `modRepas` | Repas et cuisine | Foyer | oui / non | activé | — | Foyer | — |
+| `modFidelite` | Cartes de fidélité | Foyer | oui / non | activé | — | Foyer | — |
+| `modFinances` | Finances | Foyer | oui / non | activé | — | Foyer | — |
+| `modEmploye` | Employé à domicile | Foyer | oui / non | activé | — | Foyer | — |
+
+- **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
+- **Cartes de fidélité** (`modFidelite`) : Les cartes de fidélité du foyer. Désactivé, l’écran et son entrée de menu disparaissent ; les cartes enregistrées sont conservées.
+- **Finances** (`modFinances`) : Les comptes, opérations, budgets et contrats. Désactivé, l’écran, la tuile d’accueil, les notifications, les repères d’agenda et l’accès API disparaissent ; les données relationnelles du module sont conservées.
+- **Employé à domicile** (`modEmploye`) : Le suivi des heures et la déclaration CESU. Désactivé, l’écran, les repères d’agenda, les rappels, l’accès API et les outils d’assistant disparaissent ; les employés et présences sont conservés.
+
 ## Les modules
 
 Le comportement de chaque écran de l’application.

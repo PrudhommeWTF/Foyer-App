@@ -92,3 +92,16 @@ export function restoreModule(backup: unknown): RestoreReport {
   }
   return { before, after, ignoredColumns };
 }
+
+/** Le nombre de lignes par table : pour dire ce qu'un « repartir à zéro » effacerait. */
+export function moduleCounts(): Record<string, number> { return counts(); }
+
+/** Efface toutes les données du module (tables emp_*). Rend le décompte d'avant. */
+export function resetModule(): Record<string, number> {
+  const before = counts();
+  database.transaction(() => {
+    database.pragma('defer_foreign_keys = ON');
+    for (const t of [...TABLES].reverse()) database.prepare(`DELETE FROM ${t}`).run();
+  })();
+  return before;
+}

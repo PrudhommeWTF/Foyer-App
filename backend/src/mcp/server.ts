@@ -20,6 +20,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { AuthedRequest, currentMember } from '../auth/session';
 import { log } from '../log';
+import { effectiveSetting } from '../settings/repo';
 import * as t from './tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
@@ -490,7 +491,14 @@ function buildServer(ctx: t.McpCtx): Server {
   // Un jeton d'enfant ne voit pas les outils réservés aux adultes, ni un jeton
   // `read` les outils d'écriture. Le même filtre sert à la liste et à l'appel :
   // un outil masqué est donc aussi « inconnu » à l'appel direct.
-  const visible = (): ToolDef[] => TOOLS.filter((tool) => (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant));
+  // Un module désactivé retire ses outils, comme un jeton enfant retire les
+  // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
+  // menage_* de « Employé à domicile ». Les autres domaines n'ont pas d'outils.
+  const toolModuleOff = (name: string): boolean =>
+    (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
+    || (effectiveSetting('modEmploye') === false && name.startsWith('menage'));
+  const visible = (): ToolDef[] => TOOLS.filter((tool) =>
+    (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: visible().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })),

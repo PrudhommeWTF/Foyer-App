@@ -15,6 +15,8 @@ import { HouseholdState } from './seed';
 import { financesRouter } from './finances/routes';
 import { employesRouter } from './employes/routes';
 import { computeMonth as empComputeMonth, listEmployees as empListEmployees } from './employes/repo';
+import { moduleCounts as finCounts, resetModule as finReset } from './finances/backup';
+import { moduleCounts as empCounts, resetModule as empReset } from './employes/backup';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
@@ -329,6 +331,13 @@ api.put('/state', auth, ...tokenGate, requireMember, jsonDoc, (req: AuthedReques
   // whole-document PUT. Nothing to reconcile against other collections here.
   preservePlaces(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>);
 
+  // Un module document désactivé se fige : ce qu'un client envoie pour meals,
+  // recipes ou cards est ignoré au profit de ce que le serveur garde, comme les
+  // courses et les tâches. C'est le verrou côté /state (l'interface le masque,
+  // mais un appel direct ou l'assistant ne doit pas contourner la désactivation).
+  if (effectiveSetting('modRepas') === false) { state.meals = avant.meals; state.recipes = avant.recipes; }
+  if (effectiveSetting('modFidelite') === false) { state.cards = avant.cards; }
+
   const result = saveHousehold(state);
   res.json(result);
 });
@@ -353,12 +362,62 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
   res.json({ version, shop: shopItemsOf(doc), tasks: taskItemsOf(doc), places: placesOf(doc), placeItems: placeItemsOf(doc) });
 });
 
+// Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un
+// enfant sur un module adulte. Le masquage dans l'interface n'est pas la barrière,
+// c'en est le reflet ; la barrière est ici, côté serveur.
+const requireModule = (flag: 'modFinances' | 'modEmploye') => (_req: Request, res: Response, next: NextFunction): void => {
+  if (effectiveSetting(flag) === false) { res.status(403).json({ error: 'Ce module est désactivé.' }); return; }
+  next();
+};
+
 // ---- Finances (relational tables, granular operations) ----
 // Kept out of /api/state on purpose: thousands of transactions must not be
 // reloaded and rewritten every time another module saves.
-api.use('/finances', auth, apiTokenLimiter, denyToken, requireAdulte, financesRouter(requireAdmin));
+api.use('/finances', auth, apiTokenLimiter, denyToken, requireAdulte, requireModule('modFinances'), financesRouter(requireAdmin));
 // Module « Employé à domicile » : adultes uniquement, comme Finances.
-api.use('/employes', auth, apiTokenLimiter, denyToken, requireAdulte, employesRouter(requireAdmin));
+api.use('/employes', auth, apiTokenLimiter, denyToken, requireAdulte, requireModule('modEmploye'), employesRouter(requireAdmin));
+
+// ---- Modules activables (activer / désactiver, remise à zéro) ----
+// L'activation elle-même est un réglage foyer (modRepas, modFidelite, modFinances,
+// modEmploye), écrit par /api/settings sous contrôle d'administrateur. Ici : le
+// décompte de ce qu'un module contient (pour la confirmation), et la remise à
+// zéro d'un module (à la réactivation « repartir sans les données »).
+api.get('/modules', auth, ...tokenGate, requireMember, (_req: Request, res: Response) => {
+  const doc = getHousehold().state as HouseholdState;
+  const fc = finCounts(); const ec = empCounts();
+  res.json({
+    counts: {
+      repas: { recipes: (doc.recipes || []).length, meals: Object.keys(doc.meals || {}).length },
+      fidelite: { cards: (doc.cards || []).length },
+      finances: { transactions: fc['fin_transactions'] || 0, comptes: fc['fin_accounts'] || 0 },
+      employe: { employes: ec['emp_employees'] || 0, presences: ec['emp_shifts'] || 0 },
+    },
+  });
+});
+api.post('/modules/:mod/reset', auth, ...tokenGate, requireMember, requireAdmin, jsonSmall, (req: AuthedRequest, res: Response) => {
+  const mod = String(req.params['mod']);
+  // Effacement définitif : une confirmation par saisie, comme la restauration.
+  if (req.body?.confirm !== 'SUPPRIMER') { res.status(400).json({ error: 'Confirmation requise : renvoyez confirm="SUPPRIMER".' }); return; }
+  const who = currentMember(req)?.name || 'un administrateur';
+  if (mod === 'repas') {
+    const doc = getHousehold().state as HouseholdState;
+    doc.recipes = []; doc.meals = {};
+    saveHousehold(doc);
+  } else if (mod === 'fidelite') {
+    const doc = getHousehold().state as HouseholdState;
+    doc.cards = [];
+    saveHousehold(doc);
+  } else if (mod === 'finances') {
+    finReset();
+  } else if (mod === 'employe') {
+    empReset();
+  } else {
+    res.status(404).json({ error: 'Module inconnu.' });
+    return;
+  }
+  log.info(`Modules : « ${mod} » remis à zéro par ${who} (données effacées).`);
+  res.json({ ok: true });
+});
 
 // Réglages du foyer : déclarés dans settings/registry.ts, écrits clé par clé
 // plutôt que par enregistrement du document entier, pour que deux
