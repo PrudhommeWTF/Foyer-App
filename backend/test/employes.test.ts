@@ -148,6 +148,16 @@ describe('Employé à domicile : HTTP', () => {
     assert.ok(boot2.json.employees[0].openMonths.includes('2026-09'), 'septembre reste à déclarer');
   });
 
+  it('la vue d’ensemble d’un mois rend les heures de chaque employé en un appel', async () => {
+    const ov = await appel(ctx.base, 'GET', '/employes/overview?month=2026-09', undefined, M());
+    assert.equal(ov.status, 200, JSON.stringify(ov.json));
+    assert.ok(Array.isArray(ov.json.employees), 'une liste par employé');
+    // Nolwenn (primaire) a des présences en septembre ; sa ligne porte des minutes > 0.
+    const prem = ov.json.employees[0];
+    assert.ok(typeof prem.minutes === 'number' && prem.minutes > 0, 'les heures du mois remontent : ' + JSON.stringify(prem));
+    assert.ok('netCents' in prem && 'status' in prem, 'la ligne porte aussi net et statut');
+  });
+
   it('un mois sans présence se marque pour faire taire le rappel', async () => {
     const r = await appel(ctx.base, 'POST', '/employes/month/no-presence', { month: '2026-11' }, M());
     assert.equal(r.status, 200);

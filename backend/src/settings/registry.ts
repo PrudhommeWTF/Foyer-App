@@ -140,7 +140,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'taches', group: 'modules', label: 'Tâches', desc: 'Le rappel proposé quand une tâche reçoit une date, et le sens du glissement d’une tâche sur téléphone.' },
   { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
-  { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Le taux horaire net déclaré au CESU, les congés payés, le rappel de déclaration et la durée proposée à la saisie.' },
+  { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
   { id: 'serveur', group: 'machine', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },

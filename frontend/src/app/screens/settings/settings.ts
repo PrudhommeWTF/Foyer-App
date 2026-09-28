@@ -8,7 +8,6 @@ import { ALL, DEPLOYMENT, GROUPS, SECTIONS, SettingDecl, declOf } from '../../co
 import { ModalComponent } from '../../shared/modal';
 import { SettingFieldComponent } from './field';
 import { SettingsAccountComponent } from './account';
-import { SettingsEmployeComponent } from './employe';
 import { SettingsModulesComponent } from './modules';
 
 /**
@@ -50,7 +49,7 @@ const GESTES = new Set(['compte', 'membres']);
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsEmployeComponent, SettingsModulesComponent],
+  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsModulesComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -159,7 +158,6 @@ const GESTES = new Set(['compte', 'membres']);
 
                       @switch (s.id) {
                         @case ('compte') { <settings-account /> }
-                        @case ('employe') { <settings-employe /> }
                         @case ('modules') { <settings-modules /> }
                         @case ('courses') {
                           <!-- L'ordre des rayons et les articles de placard sont des
