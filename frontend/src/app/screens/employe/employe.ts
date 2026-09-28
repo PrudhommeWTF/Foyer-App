@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { EmployesStore } from '../../core/employes.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
+import { ModalComponent } from '../../shared/modal';
 import { EmpShift } from '../../core/employes.api';
 import { decHours as decH, eurosFmt as euro, hoursPlain, eurosPlain } from '../../core/employe.format';
 
@@ -26,7 +27,7 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
   selector: 'screen-employe',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, ModalComponent],
   template: `
     <div class="screen-enter">
       @if (store.indispo()) {
@@ -68,6 +69,9 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
             } @else {
               <div class="fige"><f-icon name="lock" [size]="14" color="var(--ink3)" [width]="2.2" /> Mois figé. <button class="lien" (click)="store.rouvrir()">Rouvrir pour modifier</button></div>
             }
+            <button class="btn btn-soft add-date" (click)="ouvrirAjout()">
+              <f-icon name="calendar" [size]="17" color="var(--ink2)" [width]="2.2" /> Ajouter à une autre date
+            </button>
           } @else if (store.loading()) {
             <div class="vide">Chargement…</div>
           }
@@ -130,6 +134,29 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
             }
           </div>
         }
+
+        <!-- Formulaire : ajouter une présence à une date choisie -->
+        @if (ajoutOpen()) {
+          <f-modal title="Ajouter une présence" [maxWidth]="420" (close)="ajoutOpen.set(false)">
+            <div class="form">
+              <label class="lab">Date</label>
+              <input class="input" type="date" [(ngModel)]="aJour" (ngModelChange)="ajoutDoublon.set(false)" />
+              <label class="lab">Durée</label>
+              <div class="stepper big-step">
+                <button (click)="pasAjout(-15)" aria-label="Moins un quart d’heure">−</button>
+                <span>{{ decH(aMin) }}</span>
+                <button (click)="pasAjout(15)" aria-label="Plus un quart d’heure">+</button>
+              </div>
+              <label class="lab">Note (facultatif)</label>
+              <input class="input" [(ngModel)]="aNote" placeholder="Ex : grand ménage" maxlength="500" />
+              @if (ajoutDoublon()) { <div class="warn"><f-icon name="x" [size]="15" color="#C6492F" [width]="2.2" /> Une présence existe déjà ce jour. Ajustez-la dans la liste.</div> }
+              <div class="f-act">
+                <button class="btn btn-soft" (click)="ajoutOpen.set(false)">Annuler</button>
+                <button class="btn btn-primary" [disabled]="!aJour || store.busy()" (click)="enregistrerAjout()">Ajouter</button>
+              </div>
+            </div>
+          </f-modal>
+        }
       }
     </div>
   `,
@@ -158,6 +185,15 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .btn.big { width: 100%; justify-content: center; padding: 15px; font-size: 15.5px; }
     .fige { font-size: 13px; font-weight: 700; color: var(--ink3); display: flex; align-items: center; gap: 6px; }
     .lien { border: none; background: none; color: var(--primary); font-weight: 800; cursor: pointer; padding: 0; font-size: 13px; }
+    .add-date { width: 100%; justify-content: center; margin-top: 10px; }
+
+    .form { display: flex; flex-direction: column; }
+    .form .lab { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; margin: 12px 2px 6px; }
+    .form .lab:first-child { margin-top: 0; }
+    .big-step { align-self: flex-start; }
+    .warn { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #C6492F; margin-top: 12px; }
+    .f-act { display: flex; gap: 8px; margin-top: 20px; }
+    .f-act .btn { flex: 1; justify-content: center; }
 
     .cesu-t { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--ink); }
     .cesu-p { font-size: 13px; font-weight: 700; color: var(--ink3); text-transform: capitalize; margin-bottom: 8px; }
@@ -204,6 +240,11 @@ export class EmployeScreen {
   eJour = ''; eNote = ''; eMin = 180;
   readonly copie = signal('');
 
+  // Formulaire d'ajout à une date choisie (modale).
+  readonly ajoutOpen = signal(false);
+  readonly ajoutDoublon = signal(false);
+  aJour = ''; aNote = ''; aMin = 180;
+
   constructor() { void this.store.init(); }
 
   readonly moisLabel = computed(() => MONTH_FMT.format(new Date(this.store.month() + '-01T12:00:00Z')));
@@ -247,6 +288,21 @@ export class EmployeScreen {
     this.eJour = s.day; this.eNote = s.note; this.eMin = s.minutes; this.edit.set(id);
   }
   pas(delta: number): void { this.eMin = Math.max(15, Math.min(1440, this.eMin + delta)); }
+
+  ouvrirAjout(): void {
+    // Par défaut : le jour affiché quand on regarde un mois passé, sinon aujourd'hui ;
+    // durée habituelle réglée dans les Paramètres.
+    const auj = this.foyer.todayStr();
+    this.aJour = this.estMoisCourant() ? auj : this.store.month() + '-01';
+    this.aMin = this.store.dureeHabituelle();
+    this.aNote = ''; this.ajoutDoublon.set(false); this.ajoutOpen.set(true);
+  }
+  pasAjout(delta: number): void { this.aMin = Math.max(15, Math.min(1440, this.aMin + delta)); }
+  async enregistrerAjout(): Promise<void> {
+    const r = await this.store.ajouterPresence(this.aJour, this.aMin, this.aNote);
+    if (r === 'ok') this.ajoutOpen.set(false);
+    else if (r === 'doublon') this.ajoutDoublon.set(true);
+  }
   async valider(s: EmpShift): Promise<void> {
     await this.store.ajuster(s.id, { day: this.eJour, minutes: this.eMin, note: this.eNote.trim() });
     this.edit.set(null);

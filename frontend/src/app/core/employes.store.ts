@@ -115,6 +115,27 @@ export class EmployesStore {
     } catch (e) { this.foyer.toast(this.msg(e)); }
   }
 
+  /**
+   * Ajouter une présence à une date choisie (formulaire). Contrairement au bouton
+   * du jour, la date peut tomber dans un autre mois : on s'y déplace pour que la
+   * présence se voie. Rend `doublon` pour que l'écran garde le formulaire ouvert
+   * et invite à ajuster l'existante plutôt que d'en créer une seconde en silence.
+   */
+  async ajouterPresence(day: string, minutes: number, note: string): Promise<'ok' | 'doublon' | 'erreur'> {
+    this.busy.set(true);
+    try {
+      const r = await this.api.addShift({ day, minutes, note: note.trim() || undefined }, this.empId());
+      if (r.duplicate) return 'doublon';
+      const mois = day.slice(0, 7);
+      if (mois !== this.month()) this.month.set(mois);
+      await this.reloadMonth();
+      await this.reloadBoot();
+      this.foyer.toastWithUndo('Présence notée', () => void this.retirerSilencieux(r.shift!.id));
+      return 'ok';
+    } catch (e) { this.foyer.toast(this.msg(e)); return 'erreur'; }
+    finally { this.busy.set(false); }
+  }
+
   async ajuster(id: number, patch: { day?: string; minutes?: number; note?: string }): Promise<void> {
     this.busy.set(true);
     try { await this.api.editShift(id, patch); await this.reloadMonth(); }
