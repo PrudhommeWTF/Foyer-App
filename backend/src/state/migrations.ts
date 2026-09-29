@@ -23,7 +23,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 12;
+export const STATE_VERSION = 13;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -531,6 +531,39 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       }
       for (const t of tasks) if ('pos' in t) delete t['pos'];
       if (classees) ctx.log(`Tâches : ${classees} clé(s) d'ordre attribuée(s) dans l'ordre d'affichage courant.`);
+    },
+  },
+  {
+    version: 13,
+    label: 'tâches : ordre manuel en clé globale (tri dans les vues agrégées)',
+    up: (doc, ctx) => {
+      // L'ordre manuel devient global au lieu d'être propre à chaque liste, pour
+      // qu'on puisse ranger à la main dans « Toutes les tâches » et « À moi »,
+      // pas seulement dans une liste isolée. La migration 12 avait posé une
+      // suite de clés PAR liste : chaque liste repartait de « a0 », donc deux
+      // listes partageaient les mêmes clés et ne pouvaient pas s'ordonner l'une
+      // par rapport à l'autre. On réunit tout en une seule suite croissante, en
+      // gardant l'ordre affiché courant (clé, identifiant), pour que rien ne
+      // bouge à l'oeil. Rejouable : sans collision de clé ni tâche sans clé, il
+      // n'y a rien à réécrire.
+      const tasks = arr(doc['tasks']);
+      if (tasks.length < 2) return;
+      const TAIL = '~';
+      const k = (t: any): string => (typeof t['ord'] === 'string' && t['ord'] ? String(t['ord']) : TAIL);
+      const id = (t: any): string => String(t['id'] ?? '');
+      const ordered = tasks.slice().sort((a, b) => {
+        const ka = k(a), kb = k(b);
+        if (ka !== kb) return ka < kb ? -1 : 1;
+        const ia = id(a), ib = id(b);
+        return ia < ib ? -1 : ia > ib ? 1 : 0;
+      });
+      // Déjà une suite globale saine (clés distinctes, aucune sans clé) : on n'y touche pas.
+      let sain = k(ordered[0]) !== TAIL;
+      for (let i = 1; sain && i < ordered.length; i++) if (k(ordered[i]) === TAIL || k(ordered[i - 1]) === k(ordered[i])) sain = false;
+      if (sain) return;
+      const keys = generateNKeysBetween(null, null, ordered.length);
+      ordered.forEach((t, i) => { t['ord'] = keys[i]; });
+      ctx.log(`Tâches : ${ordered.length} clé(s) d'ordre réunifiée(s) en une suite globale (tri possible dans « Toutes » et « À moi »).`);
     },
   },
 ];

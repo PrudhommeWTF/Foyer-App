@@ -113,12 +113,17 @@ test('deux déplacements concurrents : rien ne disparaît, rien ne change de lis
 
 // ---- refus et cas neutres ----------------------------------------------------
 
-test('déplacer vers une référence d’une autre liste : refus motivé', () => {
-  let items = add(add([], 'a', 'l1'), 'x', 'l2');
-  const r = applyOps(items, [op({ op: 'move', id: 'a', avant: 'x' })], ctx());
-  assert.equal(r.skipped.length, 1);
-  assert.match(r.skipped[0].reason, /autre liste/);
-  assert.deepEqual(order(items, 'l1'), ['a'], 'l’ordre n’a pas bougé');
+test('déplacer à côté d’une tâche d’une autre liste : permis, la liste ne change pas (vue agrégée)', () => {
+  // a et b dans l1, x dans l2 : l'ordre manuel est global, donc ranger a
+  // juste après x est licite (c'est ce que fait un glisser-déposer dans
+  // « Toutes les tâches »). a garde sa liste, seule sa clé d'ordre change.
+  let items = add(add(add([], 'a', 'l1'), 'b', 'l1'), 'x', 'l2');
+  assert.deepEqual([...items].sort(byOrd).map((t) => t.id), ['a', 'b', 'x'], 'ordre global de départ');
+  const r = applyOps(items, [op({ op: 'move', id: 'a', apres: 'x' })], ctx());
+  assert.equal(r.skipped.length, 0, 'plus de refus « autre liste »');
+  assert.deepEqual([...r.items].sort(byOrd).map((t) => t.id), ['b', 'x', 'a'], 'a est passée après x');
+  assert.equal(r.items.find((t) => t.id === 'a')!.listId, 'l1', 'a est toujours dans sa liste');
+  assert.deepEqual(order(r.items, 'l1'), ['b', 'a'], 'vue de sa seule liste, a suit b');
 });
 
 test('référence inexistante : refus motivé', () => {

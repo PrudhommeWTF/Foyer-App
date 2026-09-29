@@ -391,7 +391,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         // suppression), sinon une clé calculée pour la tête ou la fin de liste.
         // Sans clé, elle tomberait en fin de tri, ce qu'on ne veut qu'en dernier
         // recours (client d'une version antérieure).
-        const ord = typeof f.ord === 'string' && f.ord ? f.ord : (o['position'] === 'debut' ? startKey(out, f.listId) : endKey(out, f.listId));
+        const ord = typeof f.ord === 'string' && f.ord ? f.ord : (o['position'] === 'debut' ? startKey(out) : endKey(out));
         out.push(assign(bare, { ...f, parentId: parent.parentId, ord }));
         applied.push(opId);
         break;

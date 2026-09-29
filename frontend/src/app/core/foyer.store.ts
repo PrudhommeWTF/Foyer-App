@@ -1745,7 +1745,7 @@ export class FoyerStore {
     const old = (this.data()?.tasks || []).filter((t) => set.has(t.id)).sort(byOrd).map((t) => t.id);
     const mv = singleMove(old, ids);
     if (!mv) return;
-    const op: TaskOpDraft = mv.position ? { op: 'move', id: mv.id, position: mv.position } : { op: 'move', id: mv.id, apres: mv.apres! };
+    const op: TaskOpDraft = mv.avant ? { op: 'move', id: mv.id, avant: mv.avant } : { op: 'move', id: mv.id, apres: mv.apres! };
     this.taskOpWithUndo(op, 'Tâche déplacée');
   }
 
