@@ -23,6 +23,12 @@ export interface Member {
    */
   enfant?: boolean;
   allerg?: string[]; refuse?: string[];
+  /**
+   * Identifiants des notifications déjà lues par ce membre. Ici, et non dans le
+   * navigateur, pour que « lu » sur un appareil se voie sur les autres. Élagué
+   * aux notifications encore vivantes à chaque écriture (voir saveRead).
+   */
+  readNotifs?: string[];
 }
 export interface EventItem { id: string; date: string; time: string; title: string; who: string[]; recur: Recur; end?: string | null;
   /**

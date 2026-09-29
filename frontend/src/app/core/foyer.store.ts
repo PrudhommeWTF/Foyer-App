@@ -54,10 +54,6 @@ function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-const READ_NOTIFS_KEY = 'foyer.readNotifs';
-function loadReadNotifs(): Set<string> {
-  try { return new Set(JSON.parse(localStorage.getItem(READ_NOTIFS_KEY) || '[]')); } catch { return new Set(); }
-}
 
 /**
  * File des opérations de courses pas encore acquittées par le serveur.
@@ -189,8 +185,15 @@ export class FoyerStore {
     .map((s) => ({ ...s, at: this.mealTimes()[s.key] || s.at })));
   readonly narrow = signal(false);
 
-  // Notifications lues (ids), persistées côté navigateur (état d'UI, non partagé).
-  readonly readNotifs = signal<Set<string>>(loadReadNotifs());
+  // Notifications lues (ids), portées par la fiche du membre dans le document :
+  // marquer lu sur un appareil se voit sur les autres (le localStorage, lui,
+  // restait sur l'appareil). Chacun a ses propres notifications, donc son propre
+  // ensemble de lues.
+  readonly readNotifs = computed<Set<string>>(() => {
+    const me = this.currentMemberId();
+    const m = me ? this._data()?.members.find((x) => x.id === me) : null;
+    return new Set(m?.readNotifs || []);
+  });
 
   // ---- regional formatting ----------------------------------------------
   // Foyer cible la France métropolitaine : locale et fuseau sont fixes.
@@ -3244,22 +3247,26 @@ export class FoyerStore {
 
   readonly unreadCount = computed(() => this.notifications().filter((n) => !n.read).length);
 
-  private persistReadNotifs(s: Set<string>): void { try { localStorage.setItem(READ_NOTIFS_KEY, JSON.stringify([...s])); } catch { /* ignore */ } }
-  markAllRead(): void {
-    const s = new Set(this.readNotifs());
-    this.notifications().forEach((n) => s.add(n.id));
-    this.readNotifs.set(s); this.persistReadNotifs(s);
+  /**
+   * Enregistre les identifiants lus sur la fiche du membre (donc partagés entre
+   * ses appareils). On ne garde que les identifiants encore vivants (une
+   * notification affichable aujourd'hui) : sans quoi la liste enflerait d'un
+   * identifiant par événement et par jour, sans jamais rien oublier.
+   */
+  private saveRead(ids: string[]): void {
+    const me = this.currentMemberId();
+    if (!me) return;
+    const live = new Set(this.notifications().map((n) => n.id));
+    const next = [...new Set([...this.readNotifs(), ...ids])].filter((id) => live.has(id));
+    this.mutate((d) => { const m = d.members.find((x) => x.id === me); if (m) m.readNotifs = next; });
   }
+  markAllRead(): void { this.saveRead(this.notifications().map((n) => n.id)); }
   openNotif(id: string, screen?: string): void {
-    const s = new Set(this.readNotifs()); s.add(id);
-    this.readNotifs.set(s); this.persistReadNotifs(s);
+    this.saveRead([id]);
     this.patch({ notifOpen: false, screen: screen || this.ui().screen });
   }
   /** Marquer une seule notification comme lue, sans quitter le panneau. */
-  markRead(id: string): void {
-    const s = new Set(this.readNotifs()); s.add(id);
-    this.readNotifs.set(s); this.persistReadNotifs(s);
-  }
+  markRead(id: string): void { this.saveRead([id]); }
 
   // ---- settings ---------------------------------------------------------
   //
