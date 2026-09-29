@@ -779,7 +779,10 @@ export class TachesScreen {
   postponeAll(g: TaskGroup, to: string): void { this.store.postponeTasks(g.lines.map((l) => l.task.id), to); }
 
   /** L'ordre se règle à la main là où aucune date ne le règle déjà. */
-  canOrder(g: TaskGroup): boolean { return REORDERABLE.includes(g.key); }
+  // Le rangement manuel est propre à une liste : on ne le propose pas dans les
+  // vues qui en mélangent plusieurs (« Toutes les tâches », « À moi »), où
+  // glisser une tâche à côté d'une tâche d'une autre liste n'aurait pas de sens.
+  canOrder(g: TaskGroup): boolean { return REORDERABLE.includes(g.key) && this.activeObj() != null; }
   ids(g: TaskGroup): string[] { return g.lines.map((l) => l.task.id); }
   subIds(subs: TaskItem[]): string[] { return subs.map((sb) => sb.id); }
   progress(subs: TaskItem[]): string { const p = subProgress(subs); return p ? p.done + '/' + p.total : ''; }
