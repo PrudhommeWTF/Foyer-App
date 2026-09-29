@@ -28,17 +28,23 @@ describe('moveKey', () => {
     assert.ok(moveKey(base, 'c', { position: 'debut' })! < 'a0');
     assert.ok(moveKey(base, 'a', { position: 'fin' })! > 'a2');
   });
-  it('rend null quand c’est sans objet : déjà en place, autre liste, référence absente, terminée', () => {
+  it('rend null quand c’est sans objet : déjà en place, référence absente, terminée', () => {
     assert.equal(moveKey(base, 'b', { apres: 'a' }), null, 'b est déjà après a');
-    assert.equal(moveKey([...base, t('x', 'b0', 'l2')], 'a', { avant: 'x' }), null, 'autre liste');
     assert.equal(moveKey(base, 'a', { apres: 'fantome' }), null, 'référence absente');
     assert.equal(moveKey([t('a', 'a0'), { ...t('b', 'a1'), done: true }], 'b', { position: 'debut' }), null, 'terminée');
+  });
+  it('range à côté d’une tâche d’une autre liste : l’ordre est global', () => {
+    // x (liste l2) après c dans l'ordre global ; ranger a juste avant x est
+    // permis (glisser-déposer dans une vue agrégée), la clé tombe entre c et x.
+    const k = moveKey([...base, t('x', 'a5', 'l2')], 'a', { avant: 'x' })!;
+    assert.ok('a2' < k && k < 'a5', `a se glisse juste avant x : ${k}`);
   });
 });
 
 describe('singleMove', () => {
   it('déduit la tâche remontée et ce qu’elle suit', () => {
-    assert.deepEqual(singleMove(['a', 'b', 'c'], ['c', 'a', 'b']), { id: 'c', position: 'debut' });
+    // Remontée en tête : exprimée par le voisin qu'elle précède désormais (avant).
+    assert.deepEqual(singleMove(['a', 'b', 'c'], ['c', 'a', 'b']), { id: 'c', avant: 'a' });
     assert.deepEqual(singleMove(['a', 'b', 'c'], ['a', 'c', 'b']), { id: 'c', apres: 'a' });
     assert.deepEqual(singleMove(['a', 'b', 'c'], ['b', 'c', 'a']), { id: 'a', apres: 'c' });
   });

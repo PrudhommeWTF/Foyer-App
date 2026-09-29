@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -691,12 +691,14 @@ test('les tâches reçoivent une clé d’ordre dans l’ordre d’affichage, et
     assert.equal(typeof t.ord, 'string', `clé posée sur ${t.id}`);
     assert.equal('pos' in t, false, `pos retiré de ${t.id}`);
   }
-  // Ordre de l1 conforme à l'ordre manuel entier hérité (b, c, a).
+  // Ordre de l1 conforme à l'ordre manuel entier hérité (b, c, a). La migration
+  // 13, qui suit dans le même passage, réunit ensuite les clés en une suite
+  // globale sans changer l'ordre affiché.
   const l1 = doc['tasks'].filter((t: any) => t.listId === 'l1').sort((p: any, q: any) => (p.ord < q.ord ? -1 : 1));
   assert.deepEqual(l1.map((t: any) => t.id), ['b', 'c', 'a']);
-  // Les clés sont relatives à une liste : distinctes dans l1, mais l2 peut
-  // repartir de la même valeur sans que cela gêne (l'ordre n'est pas comparable).
   assert.equal(new Set(l1.map((t: any) => t.ord)).size, 3, 'clés distinctes dans la liste');
+  // Et globalement : toutes listes confondues, aucune clé n'est partagée.
+  assert.equal(new Set(doc['tasks'].map((t: any) => t.ord)).size, 4, 'clés globalement distinctes');
 });
 
 test('migration 12 rejouée deux fois : résultat identique', () => {
@@ -716,4 +718,30 @@ test('une tâche sans pos ni clé reçoit tout de même une clé, rangée en fin
   const doc: { tasks: any[] } = { tasks: [{ id: 'z', listId: 'l1', text: 'Z' }] };
   run(doc, 11);
   assert.equal(typeof doc['tasks'][0].ord, 'string');
+});
+
+// ---- migration 13 : ordre manuel global (tri dans les vues agrégées) --------
+
+test('migration 13 : les clés par liste sont réunies en une suite globale, ordre préservé', () => {
+  const doc: { tasks: any[] } = {
+    tasks: [
+      { id: 'a', listId: 'l1', text: 'A', ord: 'a0' },
+      { id: 'b', listId: 'l1', text: 'B', ord: 'a1' },
+      { id: 'x', listId: 'l2', text: 'X', ord: 'a0' }, // même clé que a : collision entre listes
+      { id: 'y', listId: 'l2', text: 'Y', ord: 'a1' },
+    ],
+  };
+  run(doc, 12); // seule la 13 est en attente
+  assert.equal(new Set(doc['tasks'].map((t: any) => t.ord)).size, 4, 'toutes les clés sont désormais distinctes');
+  // L'ordre affiché est conservé : (clé, id) de départ = a(a0) < x(a0) < b(a1) < y(a1).
+  const order = [...doc['tasks']].sort((p: any, q: any) => (p.ord < q.ord ? -1 : 1)).map((t: any) => t.id);
+  assert.deepEqual(order, ['a', 'x', 'b', 'y']);
+});
+
+test('migration 13 rejouée : une suite déjà globale n’est pas réécrite', () => {
+  const doc = { tasks: [{ id: 'a', listId: 'l1', ord: 'a0' }, { id: 'b', listId: 'l2', ord: 'a1' }] };
+  run(doc, 12);
+  const apres = JSON.stringify(doc);
+  run(doc, 12);
+  assert.equal(JSON.stringify(doc), apres, 'aucune clé réécrite au second passage');
 });

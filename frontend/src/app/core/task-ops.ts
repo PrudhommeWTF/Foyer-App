@@ -78,8 +78,8 @@ export function applyTaskOp(items: TaskItem[], op: TaskOp): TaskItem[] {
       const { op: _op, opId: _id, at: _at, by: _by, done, doneAt, doneBy, history, position, ...fields } = op;
       void _op; void _id; void _at; void _by;
       // Une clé provisoire pour l'affichage : la même que le serveur calculera
-      // (fin de liste, ou tête sur demande). Il la confirmera à la synchro.
-      const ord = typeof fields.ord === 'string' && fields.ord ? fields.ord : (position === 'debut' ? startKey(out, op.listId) : endKey(out, op.listId));
+      // (fin globale, ou tête sur demande). Il la confirmera à la synchro.
+      const ord = typeof fields.ord === 'string' && fields.ord ? fields.ord : (position === 'debut' ? startKey(out) : endKey(out));
       out.push(assign({
         id: op.id, listId: op.listId, text: op.text, who: op.who ?? [], due: op.due ?? null, done: !!done, by, at,
         ...(done ? { doneAt: doneAt ?? at, doneBy: doneBy ?? by } : {}),

@@ -6,6 +6,13 @@
 // voisines. C'est ce qui rend le rangement sûr quand deux appareils réorganisent
 // en même temps, là où une colonne d'entiers aurait forcé à tout réécrire.
 //
+// **Les clés sont globales, pas propres à une liste.** Un même espace de clés
+// couvre toutes les tâches du foyer : on peut donc ranger à la main dans une
+// vue qui mélange plusieurs listes (« Toutes les tâches », « À moi »), pas
+// seulement dans une liste isolée. La migration 13 a réuni les anciennes clés
+// par liste en une seule suite croissante, en gardant l'ordre affiché ; toute
+// clé neuve se calcule depuis les voisins globaux, jamais depuis la seule liste.
+//
 // Deux règles tenues ici :
 //
 //   - **Tri déterministe** sur le couple (clé, identifiant), jamais sur la clé
@@ -35,22 +42,25 @@ export const byOrd = (a: TaskItem, b: TaskItem): number => cmp(key(a), key(b)) |
 export const orderedOf = (all: TaskItem[], listId: string): TaskItem[] =>
   all.filter((t) => t.listId === listId).sort(byOrd);
 
+/** Toutes les tâches dans l'ordre global : l'ordre qu'affichent les vues agrégées. */
+const ordered = (all: TaskItem[]): TaskItem[] => all.slice().sort(byOrd);
+
 /** La clé réelle d'une tâche, ou null (sans clé, ou sentinelle) : ce que la bibliothèque attend. */
 const realKey = (t: TaskItem | undefined): string | null => {
   const k = t?.ord;
   return typeof k === 'string' && k && k !== TAIL ? k : null;
 };
 
-/** Une clé de fin de liste : après la dernière tâche classée. */
-export function endKey(all: TaskItem[], listId: string): string {
-  const ordered = orderedOf(all, listId).filter((t) => realKey(t) !== null);
-  return generateKeyBetween(ordered.length ? realKey(ordered[ordered.length - 1]) : null, null);
+/** Une clé de fin : après la dernière tâche classée, toutes listes confondues. */
+export function endKey(all: TaskItem[]): string {
+  const keyed = ordered(all).filter((t) => realKey(t) !== null);
+  return generateKeyBetween(keyed.length ? realKey(keyed[keyed.length - 1]) : null, null);
 }
 
-/** Une clé de tête de liste : avant la première tâche classée. */
-export function startKey(all: TaskItem[], listId: string): string {
-  const ordered = orderedOf(all, listId).filter((t) => realKey(t) !== null);
-  return generateKeyBetween(null, ordered.length ? realKey(ordered[0]) : null);
+/** Une clé de tête : avant la première tâche classée, toutes listes confondues. */
+export function startKey(all: TaskItem[]): string {
+  const keyed = ordered(all).filter((t) => realKey(t) !== null);
+  return generateKeyBetween(null, keyed.length ? realKey(keyed[0]) : null);
 }
 
 /** La cible d'un déplacement, exprimée en relatif : jamais un index absolu, jamais une clé. */
@@ -61,17 +71,19 @@ export type MoveResult = { key: string } | { reason: string } | { noop: true };
 
 /**
  * Calcule la clé d'ordre d'un déplacement relatif, en relisant les voisins
- * réels de la liste. Le client ne fournit jamais de clé : c'est cette relecture
- * au moment du traitement qui rend l'opération sûre à deux appareils.
+ * réels. Le client ne fournit jamais de clé : c'est cette relecture au moment
+ * du traitement qui rend l'opération sûre à deux appareils. Les voisins sont
+ * globaux (toutes listes), pour qu'un rangement dans une vue agrégée place la
+ * tâche là où on l'a lâchée, même juste à côté d'une tâche d'une autre liste.
  */
 export function keyForMove(all: TaskItem[], movedId: string, target: MoveTarget): MoveResult {
   const moved = all.find((t) => t.id === movedId);
   if (!moved) return { reason: 'Tâche à déplacer introuvable.' };
   if (moved.done) return { reason: 'Une tâche terminée ne se range pas.' };
 
-  const ordered = orderedOf(all, moved.listId);
-  const others = ordered.filter((t) => t.id !== movedId);
-  const currentIdx = ordered.findIndex((t) => t.id === movedId);
+  const all_ = ordered(all);
+  const others = all_.filter((t) => t.id !== movedId);
+  const currentIdx = all_.findIndex((t) => t.id === movedId);
 
   let to: number;
   if (target.position === 'debut') to = 0;
@@ -82,7 +94,6 @@ export function keyForMove(all: TaskItem[], movedId: string, target: MoveTarget)
     const ref = all.find((t) => t.id === refId);
     if (!ref) return { reason: 'Tâche de référence introuvable.' };
     if (ref.id === movedId) return { noop: true };
-    if (ref.listId !== moved.listId) return { reason: 'La tâche de référence est dans une autre liste.' };
     const refIdx = others.findIndex((t) => t.id === refId);
     to = target.avant != null && target.avant !== '' ? refIdx : refIdx + 1;
   }
