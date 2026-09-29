@@ -3255,6 +3255,11 @@ export class FoyerStore {
     this.readNotifs.set(s); this.persistReadNotifs(s);
     this.patch({ notifOpen: false, screen: screen || this.ui().screen });
   }
+  /** Marquer une seule notification comme lue, sans quitter le panneau. */
+  markRead(id: string): void {
+    const s = new Set(this.readNotifs()); s.add(id);
+    this.readNotifs.set(s); this.persistReadNotifs(s);
+  }
 
   // ---- settings ---------------------------------------------------------
   //
