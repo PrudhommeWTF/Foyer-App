@@ -164,6 +164,23 @@ describe('Employé à domicile : HTTP', () => {
     assert.equal(r.json.status, 'sans-presence');
   });
 
+  it('marquer « sans présence » est refusé (400) si le mois porte déjà des présences', async () => {
+    await appel(ctx.base, 'POST', '/employes/shifts', { day: '2027-01-06', minutes: 120 }, M());
+    const r = await appel(ctx.base, 'POST', '/employes/month/no-presence', { month: '2027-01' }, M());
+    assert.equal(r.status, 400, JSON.stringify(r.json));
+    assert.match(r.json.error, /présences/i);
+  });
+
+  it('ajouter une présence rouvre un mois marqué « sans présence » (cohérence)', async () => {
+    // Marqué sans présence quand il est vide : accepté.
+    assert.equal((await appel(ctx.base, 'POST', '/employes/month/no-presence', { month: '2027-02' }, M())).json.status, 'sans-presence');
+    // Une présence arrive ensuite : le mois se rouvre de lui-même, l'étiquette ne se contredit plus.
+    await appel(ctx.base, 'POST', '/employes/shifts', { day: '2027-02-10', minutes: 120 }, M());
+    const mo = await appel(ctx.base, 'GET', '/employes/month?month=2027-02', undefined, M());
+    assert.equal(mo.json.status, 'ouvert', 'le mois est rouvert : ' + JSON.stringify(mo.json.status));
+    assert.equal(mo.json.minutes, 120);
+  });
+
   it('sauvegarde et restauration du module (administrateur)', async () => {
     const exp = await appel(ctx.base, 'GET', '/employes/export.json', undefined, A());
     assert.equal(exp.status, 200);

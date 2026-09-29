@@ -14,7 +14,7 @@
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
-export const EMP_SCHEMA_VERSION = 2;
+export const EMP_SCHEMA_VERSION = 3;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -96,6 +96,26 @@ const MIGRATIONS: Migration[] = [
       db.exec(`
         ALTER TABLE emp_shifts ADD COLUMN created_via TEXT;
         ALTER TABLE emp_shifts ADD COLUMN updated_via TEXT;
+      `);
+    },
+  },
+  {
+    version: 3,
+    label: 'cohérence : un mois « sans présence » qui porte des présences est rouvert',
+    up: (db) => {
+      // Un mois marqué « sans présence » alors qu'il a des présences se
+      // contredit (l'étiquette dit vide, le total dit le contraire). On répare
+      // les cas existants ; à l'avenir, ajouter une présence rouvre le mois et
+      // markNoPresence refuse un mois qui en a déjà.
+      db.exec(`
+        UPDATE emp_months SET status = 'ouvert', updated_at = datetime('now')
+        WHERE status = 'sans-presence'
+          AND EXISTS (
+            SELECT 1 FROM emp_shifts s
+            WHERE s.employee_id = emp_months.employee_id
+              AND substr(s.day, 1, 7) = emp_months.month
+              AND s.archived_at IS NULL
+          );
       `);
     },
   },

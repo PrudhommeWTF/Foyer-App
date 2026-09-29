@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import Database from 'better-sqlite3';
 import { FIN_SCHEMA_VERSION, migrateFinances } from '../src/finances/schema';
+import { EMP_SCHEMA_VERSION, migrateEmployes } from '../src/employes/schema';
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:');
@@ -128,5 +129,33 @@ describe('migrations du module Finances', () => {
     // la version ne bouge pas et que rien n'est à moitié appliqué.
     const version = (db.prepare("SELECT value FROM fin_meta WHERE key = 'schema_version'").get() as { value: string }).value;
     assert.equal(version, String(FIN_SCHEMA_VERSION));
+  });
+});
+
+describe('migrations du module Employé à domicile', () => {
+  it('migration 3 : rouvre un mois « sans présence » qui porte pourtant des présences', () => {
+    const db = freshDb();
+    migrateEmployes(db);
+    // On rejoue une base arrêtée à la migration 2 avec l'état incohérent : un mois
+    // marqué « sans présence » et une présence sur ce même mois.
+    db.prepare("INSERT INTO emp_employees (name, role) VALUES ('Zita', 'menage')").run();
+    db.prepare("INSERT INTO emp_shifts (employee_id, day, minutes) VALUES (1, '2026-09-04', 180)").run();
+    db.prepare("INSERT INTO emp_months (employee_id, month, status) VALUES (1, '2026-09', 'sans-presence')").run();
+    // Un autre mois réellement sans présence : il ne doit pas bouger.
+    db.prepare("INSERT INTO emp_months (employee_id, month, status) VALUES (1, '2026-11', 'sans-presence')").run();
+    db.prepare("UPDATE emp_meta SET value = '2' WHERE key = 'schema_version'").run();
+
+    assert.equal(migrateEmployes(db), EMP_SCHEMA_VERSION);
+
+    const sept = db.prepare("SELECT status FROM emp_months WHERE month = '2026-09'").get() as { status: string };
+    assert.equal(sept.status, 'ouvert', 'le mois avec présences est rouvert');
+    const nov = db.prepare("SELECT status FROM emp_months WHERE month = '2026-11'").get() as { status: string };
+    assert.equal(nov.status, 'sans-presence', 'un mois vraiment sans présence reste tel quel');
+  });
+
+  it('est rejouable : un second passage ne change plus rien', () => {
+    const db = freshDb();
+    assert.equal(migrateEmployes(db), EMP_SCHEMA_VERSION);
+    assert.equal(migrateEmployes(db), EMP_SCHEMA_VERSION);
   });
 });

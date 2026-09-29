@@ -5,6 +5,7 @@
 // `computeMonth`) pour être testable sans base.
 import type { Database } from 'better-sqlite3';
 import { initBackup } from './backup';
+import { Invalid } from './http';
 
 let database: Database;
 export function initEmployesRepo(db: Database): void {
@@ -120,6 +121,10 @@ export function getShift(id: number): Shift | null {
 export function addShift(employeeId: number, day: string, minutes: number, note: string, by: string | null, via: string | null = null): Shift {
   const info = database.prepare('INSERT INTO emp_shifts (employee_id, day, minutes, note, created_by, created_via) VALUES (?, ?, ?, ?, ?, ?)')
     .run(employeeId, day, minutes, note, by, via);
+  // Une présence contredit un mois marqué « sans présence » : on le rouvre. Cible
+  // uniquement une ligne existante dans cet état (un mois ouvert n'a pas de ligne).
+  database.prepare("UPDATE emp_months SET status = 'ouvert', updated_at = datetime('now'), updated_by = ? WHERE employee_id = ? AND month = ? AND status = 'sans-presence'")
+    .run(by, employeeId, day.slice(0, 7));
   return getShift(Number(info.lastInsertRowid))!;
 }
 export function editShift(id: number, patch: { day?: string; minutes?: number; note?: string }, by: string | null, via: string | null = null): Shift | null {
@@ -221,7 +226,9 @@ function upsertMonth(employeeId: number, month: string, fields: Partial<Record<s
     .run(...keys.map((k) => fields[k] ?? null), employeeId, month);
 }
 
-export class MonthError extends Error {}
+// Un refus métier sur un mois (figé, sans taux, ou déjà des présences) : c'est
+// une erreur du client, rendue en 400 comme les autres validations du module.
+export class MonthError extends Invalid {}
 
 /** Fige le mois : ses totaux du moment sont stockés et ne seront plus recalculés. */
 export function declareMonth(employeeId: number, month: string, date: string, congesInclus: boolean, note: string, by: string | null): MonthRecap {
