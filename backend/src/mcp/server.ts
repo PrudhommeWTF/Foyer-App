@@ -57,9 +57,9 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'courses_liste',
-    description: 'Les articles « à prendre » d’une liste, groupés par rayon, avec leur identifiant [id]. Par défaut la liste principale.',
-    inputSchema: { type: 'object', properties: { liste: S.string(80) } },
-    run: (ctx, a) => t.coursesListe(ctx, str(a.liste)),
+    description: 'Les articles « à prendre » d’une liste, groupés par rayon, avec leur identifiant [id]. Par défaut la liste principale. `coches: true` ajoute les articles déjà cochés (pour les relire ou en décocher un).',
+    inputSchema: { type: 'object', properties: { liste: S.string(80), coches: { type: 'boolean' } } },
+    run: (ctx, a) => t.coursesListe(ctx, str(a.liste), a.coches === true),
   },
   {
     name: 'taches_liste',
@@ -132,7 +132,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'courses_cocher',
     write: true,
-    description: 'Marque des articles comme mis au panier, par leurs identifiants.',
+    description: 'Coche des articles (déjà pris), par leurs identifiants.',
     inputSchema: { type: 'object', properties: { ids: { type: 'array', maxItems: 100, items: S.string(80) } }, required: ['ids'] },
     run: (ctx, a) => t.coursesCocher(ctx, strArr(a.ids)),
   },
@@ -205,7 +205,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'courses_etat',
     write: true,
-    description: 'Change l’état d’articles (par [id]) : « a-prendre », « panier » (pris), ou « indisponible » (introuvable en magasin).',
+    description: 'Change l’état d’articles (par [id]) : « a-prendre », « panier » (coché, déjà pris), ou « indisponible » (introuvable en magasin).',
     inputSchema: { type: 'object', properties: { ids: { type: 'array', maxItems: 100, items: S.string(80) }, etat: { type: 'string', enum: ['a-prendre', 'panier', 'indisponible'] } }, required: ['ids', 'etat'] },
     run: (ctx, a) => t.coursesEtat(ctx, strArr(a.ids), str(a.etat) || ''),
   },

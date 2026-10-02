@@ -19,6 +19,8 @@
 // Ce fichier ne touche ni au disque ni au réseau : c'est ce qui permet de le
 // tester sur les cas tordus (rejeu, ordre inversé, liste supprimée sous les pieds).
 
+import { ShopMemory, rememberPicked, rememberRemoved } from './memory';
+
 export type ShopState = 'a-prendre' | 'panier' | 'indisponible';
 export const SHOP_STATES: ShopState[] = ['a-prendre', 'panier', 'indisponible'];
 
@@ -80,6 +82,8 @@ export interface OpsContext {
 export interface SkippedOp { opId: string; reason: string }
 export interface ApplyResult {
   items: ShopItem[];
+  /** La mémoire d'achats après le lot : alimentée au passage en coché et à la suppression d'un coché. */
+  memory: ShopMemory;
   /** Identifiants retenus : l'appelant les inscrit au journal et le client les retire de sa file. */
   applied: string[];
   /**
@@ -100,13 +104,14 @@ const isPhotoId = (v: unknown): boolean => typeof v === 'number' && Number.isInt
  * d'attente hors ligne et qu'un article périmé ne doit pas bloquer les neuf
  * autres coches faites dans le magasin.
  */
-export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): ApplyResult {
+export function applyOps(items: ShopItem[], memory: ShopMemory, ops: unknown, ctx: OpsContext): ApplyResult {
   const out: ShopItem[] = items.map((i) => ({ ...i }));
+  let mem: ShopMemory = memory;
   const applied: string[] = [];
   const skipped: SkippedOp[] = [];
   const seen = new Set<string>();
 
-  if (!Array.isArray(ops)) return { items: out, applied, skipped: [{ opId: '', reason: 'Lot d’opérations illisible.' }] };
+  if (!Array.isArray(ops)) return { items: out, memory: mem, applied, skipped: [{ opId: '', reason: 'Lot d’opérations illisible.' }] };
 
   for (const raw of ops) {
     const o = (raw ?? {}) as Record<string, unknown>;
@@ -158,6 +163,10 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
         out[idx] = { ...out[idx], state, by, at };
         // La provenance suit l'état affiché : posée par un assistant, effacée sinon.
         if (via) out[idx].via = via; else delete out[idx].via;
+        // Passage en coché (« panier » en base) : la mémoire d'achats gagne un
+        // passage. Ici seulement, sur la branche réellement appliquée : un rejeu
+        // d'opération est acquitté bien avant ce point, donc jamais compté deux fois.
+        if (state === 'panier') mem = rememberPicked(mem, out[idx], at);
         applied.push(opId);
         break;
       }
@@ -191,7 +200,13 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
         break;
       }
       case 'remove': {
-        if (idx >= 0) out.splice(idx, 1);
+        // Un coché qu'on retire (« Supprimer les cochés ») laisse sa trace dans
+        // la mémoire : nom, rayon et quantité, pour qu'il reste proposé à la
+        // saisie. Lu avant le retrait, pendant que l'article est encore là.
+        if (idx >= 0) {
+          if (out[idx].state === 'panier') mem = rememberRemoved(mem, out[idx], at);
+          out.splice(idx, 1);
+        }
         applied.push(opId);
         break;
       }
@@ -200,7 +215,7 @@ export function applyOps(items: ShopItem[], ops: unknown, ctx: OpsContext): Appl
     }
   }
 
-  return { items: out, applied, skipped };
+  return { items: out, memory: mem, applied, skipped };
 }
 
 /**

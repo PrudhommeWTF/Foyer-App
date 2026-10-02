@@ -1,6 +1,7 @@
 // Household domain model (backend). Mirrors the frontend models; new optional
 // fields (planned/birthday/academie) are additive and backward-compatible.
 import type { ShopItem } from './shopping/ops';
+import type { ShopMemoryEntry } from './shopping/memory';
 import type { TaskItem } from './tasks/ops';
 import type { Place, PlaceItem } from './places/ops';
 import type { HouseholdSettings, MemberPrefs } from './settings/registry';
@@ -199,6 +200,8 @@ export interface HouseholdState {
   stock?: Record<string, string>;
   shopLists: ShopList[];
   shop: ShopItem[];
+  /** Mémoire d'achats (clé d'article ou nom normalisé vers un souvenir d'achat). Voir shopping/memory.ts. */
+  shopMemory?: Record<string, ShopMemoryEntry>;
   taskLists: TaskList[];
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];

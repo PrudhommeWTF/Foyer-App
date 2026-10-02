@@ -196,7 +196,7 @@ export function aujourdhui(ctx: McpCtx): string {
   return lines.join('\n');
 }
 
-export function coursesListe(ctx: McpCtx, listName?: string): string {
+export function coursesListe(ctx: McpCtx, listName?: string, coches?: boolean): string {
   const s = state();
   const list = resolveShopList(s, listName);
   if (!list) {
@@ -204,17 +204,29 @@ export function coursesListe(ctx: McpCtx, listName?: string): string {
     return listName ? `Liste « ${listName} » inconnue. Listes disponibles : ${noms || 'aucune'}.` : 'Aucune liste de courses.';
   }
   void ctx;
-  const items = (s.shop || []).filter((i) => i.listId === list.id && i.state === 'a-prendre');
-  if (!items.length) return `Rien à prendre dans « ${list.name} ».`;
   const aisleName = (id: string): string => (s.aisles || []).find((a) => a.id === id)?.name || 'Divers';
   const aislePos = (id: string): number => (s.aisles || []).find((a) => a.id === id)?.position ?? 999;
-  const byAisle = new Map<string, string[]>();
-  for (const it of items.sort((a, b) => aislePos(a.aisleId) - aislePos(b.aisleId))) {
-    const key = aisleName(it.aisleId);
-    (byAisle.get(key) ?? byAisle.set(key, []).get(key)!).push(`${it.name}${it.qty ? ' (' + it.qty + ')' : ''} [${it.id}]`);
+  // Les articles d'un état, groupés par rayon dans l'ordre du magasin.
+  const parRayon = (etat: string): string[] => {
+    const byAisle = new Map<string, string[]>();
+    for (const it of (s.shop || []).filter((i) => i.listId === list.id && i.state === etat).sort((a, b) => aislePos(a.aisleId) - aislePos(b.aisleId))) {
+      const key = aisleName(it.aisleId);
+      (byAisle.get(key) ?? byAisle.set(key, []).get(key)!).push(`${it.name}${it.qty ? ' (' + it.qty + ')' : ''} [${it.id}]`);
+    }
+    const lignes: string[] = [];
+    for (const [rayon, arts] of byAisle) lignes.push(`- ${rayon} : ${arts.join(', ')}`);
+    return lignes;
+  };
+  const aPrendre = parRayon('a-prendre');
+  const out: string[] = [];
+  out.push(aPrendre.length ? `Courses à prendre dans « ${list.name} » (${aPrendre.reduce((n, l) => n + l.split(',').length, 0)}) :` : `Rien à prendre dans « ${list.name} ».`);
+  out.push(...aPrendre);
+  // Sur demande, on ajoute les articles cochés (« panier » en base), pour relire
+  // ce qui a déjà été pris ou pour en décocher un.
+  if (coches) {
+    const pris = parRayon('panier');
+    if (pris.length) { out.push('', 'Cochés :'); out.push(...pris); }
   }
-  const out = [`Courses à prendre dans « ${list.name} » (${items.length}) :`];
-  for (const [rayon, arts] of byAisle) out.push(`- ${rayon} : ${arts.join(', ')}`);
   return out.join('\n');
 }
 
@@ -420,7 +432,7 @@ export function coursesCocher(ctx: McpCtx, ids: string[]): string {
   const cible = ids.filter((id) => known.has(id));
   const inconnus = ids.filter((id) => !known.has(id));
   if (cible.length) applyShoppingOps(cible.map((id) => ({ op: 'set-state', opId: genId('op'), id, state: 'panier', by: ctx.memberId, via: ctx.via, at })));
-  const parts = [`${cible.length} article(s) mis au panier.`];
+  const parts = [`${cible.length} article(s) coché(s).`];
   if (inconnus.length) parts.push(`Identifiants inconnus : ${inconnus.join(', ')}.`);
   return parts.join(' ');
 }
@@ -592,9 +604,9 @@ export async function recetteImporter(ctx: McpCtx, url: string): Promise<string>
 
 // ---- Courses : état, modification, retrait, listes -----------------------
 
-const SHOP_STATE_LABEL: Record<string, string> = { 'a-prendre': 'remis à prendre', panier: 'mis au panier', indisponible: 'marqués introuvables' };
+const SHOP_STATE_LABEL: Record<string, string> = { 'a-prendre': 'remis à prendre', panier: 'cochés', indisponible: 'marqués introuvables' };
 
-/** Change l'état d'articles : à prendre, au panier, ou introuvable. */
+/** Change l'état d'articles : à prendre, coché, ou introuvable. */
 export function coursesEtat(ctx: McpCtx, ids: string[], etat: string): string {
   if (!SHOP_STATE_LABEL[etat]) return 'État inconnu (valeurs : a-prendre, panier, indisponible).';
   const s = state();

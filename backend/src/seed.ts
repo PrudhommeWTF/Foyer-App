@@ -54,13 +54,14 @@ const STARTER_TASK_LIST = (): HouseholdState['taskLists'][number] =>
  * quand on ajoute une collection au document.
  */
 function scaffold(): Pick<HouseholdState,
-  'events' | 'aisles' | 'articles' | 'shopLists' | 'shop' | 'taskLists' | 'taskTemplates' | 'tasks' | 'places' | 'placeItems' | 'contacts' | 'cards' | 'meals' | 'recipes' | 'sched'> {
+  'events' | 'aisles' | 'articles' | 'shopLists' | 'shop' | 'shopMemory' | 'taskLists' | 'taskTemplates' | 'tasks' | 'places' | 'placeItems' | 'contacts' | 'cards' | 'meals' | 'recipes' | 'sched'> {
   return {
     events: [],
     aisles: STARTER_AISLES(),
     articles: [],
     shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
     shop: [],
+    shopMemory: {},
     taskLists: [STARTER_TASK_LIST()],
     taskTemplates: [],
     tasks: [],

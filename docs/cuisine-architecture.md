@@ -112,6 +112,51 @@ fermé et rouvert alors qu'il n'y a pas de réseau, la page ne peut pas se charg
 du tout. La file, elle, est intacte et repart à la première ouverture avec du
 réseau.
 
+### 3. Liste simple et mémoire d'achats
+
+Le modèle d'affichage est celui d'une liste simple, à la FamilyWall : un article
+coché **reste dans son rayon**, grisé et barré ; il n'est pas déplacé dans un
+« panier ». L'option « masquer les cochés » est une préférence **d'appareil**
+(`ui-state.ts`, `localStorage`), pas un réglage du foyer : le magasin et la maison
+n'ont pas besoin du même affichage.
+
+**Dette assumée du nom en base.** Les trois valeurs d'état restent `a-prendre`,
+`panier` et `indisponible` dans le document, les opérations, le journal et le
+MCP : les renommer demanderait une migration des deux côtés et casserait la file
+hors ligne des téléphones et les jetons des assistants. L'interface, elle, lit
+`panier` comme « coché ». Le renommage en base reste à faire un jour, dans une PR
+dédiée avec migration.
+
+**Mémoire d'achats (`state.shopMemory`).** Un troisième étage, distinct du
+référentiel (base intégrée + articles du foyer, voir « Le référentiel d'articles »
+plus bas) : il ne dit pas ce qu'**est** un article, il dit ce que le foyer
+**achète**. C'est un objet indexé par la clé de référentiel de l'article quand
+elle est connue (`art`), sinon par son nom normalisé (`normaliseName`, identique
+au `norm` du frontend). Chaque entrée garde le dernier libellé, rayon et quantité,
+un compte de passages en coché, la date du dernier, et plus tard un drapeau
+favori.
+
+Règles (voir `backend/src/shopping/memory.ts`) :
+
+- **Alimentée côté serveur seulement**, dans `applyOps` : au passage en coché
+  (`set-state` vers `panier`, `count + 1`) et à la suppression d'un article coché
+  (`remove` d'un `panier` : nom, rayon et quantité conservés, pour que « Supprimer
+  les cochés » ne fasse jamais perdre la mémoire). Le client ne l'écrit jamais.
+- **Jamais comptée deux fois.** L'incrément est sur la branche réellement
+  appliquée ; un `opId` déjà vu est acquitté avant d'y arriver (`hh_shop_ops`),
+  donc un rejeu depuis la file hors ligne n'ajoute rien.
+- **Jamais décrémentée** : décocher n'est pas « ne pas avoir acheté ».
+- **Protégée par `preserveShopping`** comme `shop` : un `PUT /api/state` ne
+  l'écrase pas.
+- **Élaguée**, hors de `applyOps` (qui reste déterministe) : `pruneMemory` retire
+  les entrées de plus de douze mois et borne la table à 500, à l'heure réelle,
+  dans la même transaction que l'écriture.
+
+Pas de migration de remplissage : la mémoire démarre vide et se nourrit au premier
+cochage ou à la première suppression de cochés. Aucune donnée ancienne n'est
+reconstruite, et c'est sans conséquence (la suppression d'un coché capture son
+nom au passage).
+
 ## Reprise des ingrédients non reconnus
 
 Le lecteur fait ce qu'il peut avec le français écrit à la main. Ce qui lui

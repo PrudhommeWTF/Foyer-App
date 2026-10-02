@@ -220,10 +220,13 @@ describe('Serveur MCP', () => {
     const pommeId = liste.match(/Pommes[^[]*\[([^\]]+)\]/)![1];
     const chipsId = liste.match(/Chips[^[]*\[([^\]]+)\]/)![1];
     assert.match(textOf(await c.callTool({ name: 'courses_modifier', arguments: { id: pommeId, qte: '2 kg' } })), /modifié/);
-    assert.match(textOf(await c.callTool({ name: 'courses_etat', arguments: { ids: [chipsId], etat: 'panier' } })), /panier/);
+    assert.match(textOf(await c.callTool({ name: 'courses_etat', arguments: { ids: [chipsId], etat: 'panier' } })), /coché/);
     liste = textOf(await c.callTool({ name: 'courses_liste', arguments: { liste: 'Pique-nique' } }));
     assert.ok(/Pommes \(2 kg\)/.test(liste), 'quantité modifiée : ' + liste);
-    assert.ok(!/Chips/.test(liste), 'les chips au panier ne sont plus « à prendre »');
+    assert.ok(!/Chips/.test(liste), 'les chips cochées ne sont plus « à prendre »');
+    // Sur demande, les cochés réapparaissent (pour en relire ou en décocher un).
+    const avecCoches = textOf(await c.callTool({ name: 'courses_liste', arguments: { liste: 'Pique-nique', coches: true } }));
+    assert.ok(/Cochés\s*:/.test(avecCoches) && /Chips/.test(avecCoches), 'coches:true relit les cochés : ' + avecCoches);
     assert.match(textOf(await c.callTool({ name: 'courses_retirer', arguments: { ids: [pommeId] } })), /retiré/);
     assert.match(textOf(await c.callTool({ name: 'liste_courses_renommer', arguments: { liste: 'Pique-nique', nom: 'Sortie' } })), /renommée/);
     assert.match(textOf(await c.callTool({ name: 'liste_courses_supprimer', arguments: { liste: 'Sortie' } })), /supprimée/);

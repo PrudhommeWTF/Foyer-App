@@ -185,7 +185,7 @@ export function recipeToText(r: Recipe): string {
 
 const ETATS: Record<string, string> = {
   'a-prendre': 'À prendre',
-  panier: 'Pris',
+  panier: 'Coché',
   indisponible: 'Introuvable',
 };
 

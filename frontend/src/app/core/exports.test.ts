@@ -176,7 +176,7 @@ test('les trois états sont écrits en français', () => {
     article({ id: '3', name: 'C', state: 'indisponible' }),
   ], RAYONS);
   assert.match(csv, /A;;À prendre/);
-  assert.match(csv, /B;;Pris/);
+  assert.match(csv, /B;;Coché/);
   assert.match(csv, /C;;Introuvable/);
 });
 
