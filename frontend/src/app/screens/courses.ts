@@ -5,15 +5,20 @@ import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 import { ConfirmComponent } from '../shared/confirm';
 import { LIST_ICONS, PALETTE } from '../core/constants';
-import { RAYONS } from '../core/articles';
+import { RAYONS, normaliseName } from '../core/articles';
 import { cap } from '../core/helpers';
 import { searchArticles } from '../core/ingredient-repair';
 import { Aisle, Rayon, ShopItem, ShopState } from '../core/models';
 
-/** Une suggestion d'ajout : un article connu du référentiel (avec sa clé et son rayon), ou un simple nom déjà acheté. */
-interface ShopSuggestion { name: string; key?: string; rayon?: Rayon; }
+/**
+ * Une suggestion d'ajout. `id` désigne un article déjà dans la liste active (le
+ * choisir le décoche plutôt que d'en créer un doublon) ; sinon c'est un nom à
+ * ajouter, connu du référentiel (`key` + `rayon`), déjà acheté (`aisleId` du
+ * rayon mémorisé), ou libre.
+ */
+interface ShopSuggestion { name: string; key?: string; rayon?: Rayon; id?: string; checked?: boolean; aisleId?: string | null; }
 
-interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
+interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; checkedCount: number; canReveal: boolean; }
 
 /**
  * Écran des courses, pensé pour le magasin avant le bureau : une colonne, des
@@ -143,30 +148,71 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
       <div class="by-head">
         <span class="overline">Par rayon</span>
         <span class="acts">
-          <span class="mini-link" (click)="store.patch({ aisleOrderOpen: true })"><f-icon name="planning" [size]="14" color="var(--ink2)" [width]="2.4" /> Ordre</span>
-          <span class="mini-link" (click)="store.newAisle()"><f-icon name="plus" [size]="14" color="#E56B4E" [width]="2.6" /> Rayon</span>
-          <span class="mini-link" (click)="store.exportShoppingCsv()"><f-icon name="export" [size]="14" color="var(--ink2)" [width]="2.4" /> Exporter</span>
           @if (active() !== 'all') {
             <span class="mini-link" (click)="store.addShoppingTask()">
               <f-icon name="checklist" [size]="14" color="var(--ink2)" [width]="2.4" />
               {{ store.shoppingTask(active()) ? 'Dans les tâches' : 'En tâche' }}
             </span>
           }
+          <!-- Un seul menu « Affichage » : la préférence d'appareil (masquer les
+               cochés), le geste destructif (les supprimer), et le reste. -->
+          <div class="menu-wrap">
+            <button class="mini-link" (click)="menuOpen.set(!menuOpen())" [attr.aria-expanded]="menuOpen()" aria-label="Affichage">
+              <f-icon name="settings" [size]="15" color="var(--ink2)" [width]="2.2" /> Affichage
+            </button>
+            @if (menuOpen()) {
+              <div class="menu-back" (click)="menuOpen.set(false)"></div>
+              <div class="menu" role="menu">
+                <button class="menu-item" role="menuitemcheckbox" [attr.aria-checked]="store.shopHideChecked()" (click)="store.toggleShopHideChecked()">
+                  <f-icon [name]="store.shopHideChecked() ? 'eyeOff' : 'eye'" [size]="16" color="var(--ink2)" [width]="2.2" />
+                  Masquer les articles cochés
+                  @if (store.shopHideChecked()) { <f-icon name="check" [size]="15" color="var(--sage)" [width]="3" class="menu-on" /> }
+                </button>
+                <button class="menu-item" [disabled]="!checkedTotal()" (click)="menuOpen.set(false); askClear.set(true)">
+                  <f-icon name="trash" [size]="16" color="#E56B4E" [width]="2.2" /> Supprimer les articles cochés
+                  @if (checkedTotal()) { <span class="menu-cnt">{{ checkedTotal() }}</span> }
+                </button>
+                <div class="menu-sep"></div>
+                <button class="menu-item" (click)="menuOpen.set(false); store.patch({ aisleOrderOpen: true })"><f-icon name="planning" [size]="16" color="var(--ink2)" [width]="2.2" /> Ordre des rayons</button>
+                <button class="menu-item" (click)="menuOpen.set(false); store.newAisle()"><f-icon name="plus" [size]="16" color="#E56B4E" [width]="2.6" /> Nouveau rayon</button>
+                <button class="menu-item" (click)="menuOpen.set(false); store.exportShoppingCsv()"><f-icon name="export" [size]="16" color="var(--ink2)" [width]="2.2" /> Exporter</button>
+              </div>
+            }
+          </div>
         </span>
       </div>
 
-      <!-- À prendre, dans l'ordre des allées -->
-      @for (g of todo(); track g.aisle.id) {
+      <!-- Tout coché et masqué : on le dit, et on propose de les revoir. -->
+      @if (scope().length && !toTakeTotal() && store.shopHideChecked()) {
+        <div class="all-done">
+          <span>Tout est coché.</span>
+          <button class="mini-link" (click)="store.toggleShopHideChecked()"><f-icon name="eye" [size]="14" color="var(--ink2)" [width]="2.2" /> Afficher les cochés</button>
+        </div>
+      }
+
+      <!-- La liste, par rayon. Un article coché reste dans son rayon, en bas,
+           grisé et barré : il n'est pas déplacé dans un panier. -->
+      @for (g of groups(); track g.aisle.id) {
         <div class="cat" [style.border-left]="'4px solid ' + g.aisle.color">
-          <button class="cat-head" (click)="store.toggleAisleCollapse(g.aisle.id)" [attr.aria-expanded]="!store.aisleCollapsed(g.aisle.id)">
-            <div class="cat-name">
+          <div class="cat-head">
+            <button class="cat-name-btn" (click)="store.toggleAisleCollapse(g.aisle.id)" [attr.aria-expanded]="!store.aisleCollapsed(g.aisle.id)">
               <f-icon [name]="store.aisleCollapsed(g.aisle.id) ? 'chevronRight' : 'chevronDown'" [size]="15" color="var(--ink3)" [width]="2.4" />
-              <span class="dot" [style.background]="g.aisle.color"></span>{{ g.aisle.name }}
-            </div>
-            <span class="cat-n">{{ g.items.length }}</span>
-          </button>
+              <span class="dot" [style.background]="g.aisle.color"></span>
+              <span class="cat-label">{{ g.aisle.name }}</span>
+            </button>
+            <span class="cat-counts">
+              @if (g.toTake.length) { <span class="cat-n">{{ g.toTake.length }} à prendre</span> }
+              @if (g.checkedCount) {
+                @if (g.canReveal) {
+                  <button class="cat-checked link" (click)="reveal(g.aisle.id)">{{ g.toTake.length ? '· ' : '' }}{{ g.checkedCount }} coché{{ g.checkedCount > 1 ? 's' : '' }}</button>
+                } @else {
+                  <span class="cat-checked">{{ g.toTake.length ? '· ' : '' }}{{ g.checkedCount }} coché{{ g.checkedCount > 1 ? 's' : '' }}</span>
+                }
+              }
+            </span>
+          </div>
           @if (!store.aisleCollapsed(g.aisle.id)) {
-            @for (it of g.items; track it.id) {
+            @for (it of g.toTake; track it.id) {
               <div class="row" [class.unavail]="it.state === 'indisponible'">
                 <button class="tick" [class.unavail]="it.state === 'indisponible'" (click)="store.toggleShop(it.id)"
                         [attr.aria-label]="'Cocher ' + it.name">
@@ -175,40 +221,38 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
                 <button class="row-body" (click)="store.editShop(it.id)">
                   @if (store.photoUrl(it.photoId); as ph) { <span class="s-thumb" [style.background-image]="'url(' + ph + ')'"></span> }
                   <span class="s-name">{{ it.name }}</span>
+                  @if (it.state === 'indisponible') { <span class="s-flag">introuvable</span> }
                   @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
                 </button>
+                @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
+              </div>
+              <!-- Rayon « À trier » : un tap range l'article et apprend son rayon. -->
+              @if (isTriage(g.aisle)) {
+                <div class="tri-chips">
+                  @for (a of otherAisles(); track a.id) {
+                    <button class="tri-chip" (click)="store.rangeShopItem(it.id, a.id)">
+                      <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
+                    </button>
+                  }
+                </div>
+              }
+            }
+            @for (it of g.checked; track it.id) {
+              <div class="row done">
+                <button class="tick on" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Décocher ' + it.name">
+                  <f-icon name="check" [size]="14" color="#fff" [width]="3.4" />
+                </button>
+                <button class="row-body" (click)="store.editShop(it.id)">
+                  <span class="s-name done">{{ it.name }}</span>
+                  @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+                </button>
+                @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
               </div>
             }
           }
         </div>
       } @empty {
-        <div class="empty">
-          @if (progress().total) { Tout est dans le panier. } @else { Aucun article dans cette liste. }
-        </div>
-      }
-
-      <!-- Déjà pris, regroupés en bas -->
-      @if (picked().length) {
-        <div class="done-head">
-          <span class="overline">Dans le panier ({{ picked().length }})</span>
-          @if (activeList(); as al) {
-            <span class="mini-link" (click)="store.clearPicked(al.id)"><f-icon name="trash" [size]="14" color="var(--ink2)" [width]="2.4" /> Vider</span>
-          }
-        </div>
-        <div class="cat done-cat">
-          @for (it of picked(); track it.id) {
-            <div class="row">
-              <button class="tick on" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Décocher ' + it.name">
-                <f-icon name="check" [size]="14" color="#fff" [width]="3.4" />
-              </button>
-              <button class="row-body" (click)="store.editShop(it.id)">
-                <span class="s-name done">{{ it.name }}</span>
-                @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
-              </button>
-              @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
-            </div>
-          }
-        </div>
+        <div class="empty">Ajoutez un premier article.</div>
       }
 
     </div>
@@ -370,6 +414,13 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
         Ce rayon sera supprimé. Ses articles passeront dans le rayon de repli.
       </f-confirm>
     }
+
+    <!-- Seul geste destructif de l'écran, donc le seul à confirmer. -->
+    @if (askClear()) {
+      <f-confirm title="Supprimer les articles cochés ?" confirmLabel="Supprimer" (cancel)="askClear.set(false)" (confirm)="confirmClear()">
+        {{ checkedTotal() }} article{{ checkedTotal() > 1 ? 's' : '' }} coché{{ checkedTotal() > 1 ? 's' : '' }} {{ checkedTotal() > 1 ? 'seront supprimés' : 'sera supprimé' }}. {{ checkedTotal() > 1 ? 'Ils resteront proposés' : 'Il restera proposé' }} à la saisie.
+      </f-confirm>
+    }
   `,
   styles: [`
     .chips { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
@@ -399,21 +450,45 @@ interface AisleGroup { aisle: Aisle; items: ShopItem[]; }
     .bar-fill { height: 100%; background: var(--sage); border-radius: 8px; transition: width .3s ease; }
 
     .by-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    .by-head .acts { display: flex; gap: 14px; }
-    .mini-link { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+    .by-head .acts { display: flex; gap: 14px; align-items: center; }
+    .mini-link { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; border: none; background: none; font: inherit; padding: 0; }
+
+    /* Menu « Affichage » : un seul popover, aligné à droite sous son bouton. */
+    .menu-wrap { position: relative; }
+    .menu-back { position: fixed; inset: 0; z-index: 40; }
+    .menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 41; min-width: 250px; background: var(--surface); border-radius: 14px; padding: 6px; box-shadow: 0 18px 44px -16px rgba(90,60,40,.55); border: 1px solid var(--line); display: flex; flex-direction: column; }
+    .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; color: var(--ink); text-align: left; padding: 11px 12px; border-radius: 10px; }
+    .menu-item:hover { background: var(--soft); }
+    .menu-item[disabled] { opacity: .4; cursor: default; }
+    .menu-item .menu-on { margin-left: auto; }
+    .menu-item .menu-cnt { margin-left: auto; font-size: 12px; font-weight: 800; color: var(--ink3); background: var(--soft2); border-radius: 7px; padding: 1px 8px; }
+    .menu-sep { height: 1px; background: var(--line); margin: 5px 8px; }
+
+    .all-done { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 13px; background: var(--soft2); color: var(--ink2); font-size: 13.5px; font-weight: 800; margin-bottom: 14px; }
 
     .cat { background: var(--surface); border-radius: var(--r-card); padding: 12px 14px 6px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); margin-bottom: 14px; }
-    .cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; width: 100%; border: none; background: transparent; padding: 4px 0; cursor: pointer; font: inherit; }
-    .cat-name { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-size: 13.5px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; }
-    .cat-name .dot { width: 10px; height: 10px; border-radius: 3px; }
-    .cat-n { font-size: 12px; font-weight: 800; color: var(--ink3); }
-    .done-cat { opacity: .75; }
-    .done-head { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 12px; }
+    .cat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+    .cat-name-btn { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; border: none; background: transparent; padding: 4px 0; cursor: pointer; font-family: var(--font-display); font-size: 13.5px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; text-align: left; }
+    .cat-name-btn .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+    .cat-label { min-width: 0; overflow-wrap: anywhere; }
+    .cat-counts { display: flex; align-items: center; gap: 4px; flex: none; }
+    .cat-n { font-size: 12px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
+    .cat-checked { font-size: 12px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
+    .cat-checked.link { border: none; background: none; cursor: pointer; color: var(--primary); font: inherit; font-size: 12px; font-weight: 800; padding: 2px 0; }
 
     /* La ligne fait 52 px : la coche et le corps sont deux cibles distinctes,
        assez larges pour être visées d'une main dans un magasin. */
     .row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
     .row + .row { border-top: 1px solid var(--line); }
+    .row.done { opacity: .7; }
+    /* Étiquette « introuvable » dans la ligne, discrète, non cochée. */
+    .s-flag { flex: none; font-size: 11px; font-weight: 800; color: #C6492F; background: #FCE9E3; border-radius: 6px; padding: 1px 7px; }
+    /* Puces de rangement sous un article « À trier » : une seule rangée qui
+       défile à l'horizontale, pour ne pas pousser la liste hors de vue quand le
+       foyer a beaucoup de rayons. Indentée sous le libellé. */
+    .tri-chips { display: flex; flex-wrap: nowrap; gap: 6px; padding: 0 0 10px 42px; margin-top: -2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .tri-chips::-webkit-scrollbar { display: none; }
+    .tri-chip { display: inline-flex; align-items: center; gap: 5px; flex: none; white-space: nowrap; border: none; background: var(--soft2); color: var(--ink2); border-radius: 9px; padding: 6px 10px; font-size: 12.5px; font-weight: 800; cursor: pointer; font-family: inherit; }
     .tick { width: 30px; height: 30px; flex: none; border-radius: 9px; border: 2px solid var(--line2); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
     .tick.on { background: var(--sage); border-color: var(--sage); }
     .tick.unavail { border-color: #E9B4A6; background: #FCE9E3; }
@@ -484,11 +559,21 @@ export class CoursesScreen {
   readonly RAYONS = RAYONS;
   readonly PALETTE = PALETTE;
   readonly iconKeys = Object.keys(LIST_ICONS);
+  // Le sélecteur d'état de la fiche : c'est là qu'on marque « introuvable », pas
+  // par un geste sur la ligne (qui ne fait que cocher). « panier » reste la
+  // valeur en base, lue « coché » à l'écran.
   readonly states: { k: ShopState; label: string }[] = [
     { k: 'a-prendre', label: 'À prendre' },
-    { k: 'panier', label: 'Pris' },
-    { k: 'indisponible', label: 'Indispo.' },
+    { k: 'panier', label: 'Coché' },
+    { k: 'indisponible', label: 'Introuvable' },
   ];
+
+  /** Menu « Affichage » ouvert. Éphémère, propre à ce composant. */
+  readonly menuOpen = signal(false);
+  /** Confirmation « Supprimer les cochés » ouverte. */
+  readonly askClear = signal(false);
+  /** Rayons dont on a révélé les cochés à la main (quand ils sont masqués). Par geste, non persisté. */
+  readonly revealedAisles = signal<Set<string>>(new Set());
 
   active = computed(() => this.store.ui().activeShopList);
   lists = computed(() => this.d().shopLists);
@@ -497,16 +582,35 @@ export class CoursesScreen {
 
   scope = computed(() => { const a = this.active(); return a === 'all' ? this.d().shop : this.d().shop.filter((x) => x.listId === a); });
 
-  /** À prendre et introuvables, groupés par rayon, dans l'ordre des allées. */
-  todo = computed<AisleGroup[]>(() => {
-    const scope = this.scope().filter((x) => x.state !== 'panier');
-    return this.store.aislesInOrder()
-      .map((aisle) => ({ aisle, items: scope.filter((x) => x.aisleId === aisle.id) }))
-      .filter((g) => g.items.length);
+  /**
+   * La liste par rayon, dans l'ordre des allées. Chaque rayon porte ses articles
+   * à prendre (non cochés, introuvables compris) puis, en bas, ses cochés. Les
+   * cochés sont masqués selon la préférence d'appareil, sauf quand on a révélé ce
+   * rayon : c'est le geste de remise rapide en magasin.
+   */
+  groups = computed<ShopGroup[]>(() => {
+    const hide = this.store.shopHideChecked();
+    const revealed = this.revealedAisles();
+    const scope = this.scope();
+    return this.store.aislesInOrder().map((aisle) => {
+      const inAisle = scope.filter((x) => x.aisleId === aisle.id);
+      const toTake = inAisle.filter((x) => x.state !== 'panier');
+      const checkedAll = inAisle.filter((x) => x.state === 'panier');
+      const show = !hide || revealed.has(aisle.id);
+      return {
+        aisle,
+        toTake,
+        checked: show ? checkedAll : [],
+        checkedCount: checkedAll.length,
+        canReveal: hide && !revealed.has(aisle.id) && checkedAll.length > 0,
+      };
+    }).filter((g) => g.toTake.length || g.checkedCount);
   });
 
-  /** Les articles pris restent visibles, en bas : c'est ce qu'on relit en caisse. */
-  picked = computed(() => this.scope().filter((x) => x.state === 'panier'));
+  /** Nombre d'articles encore à prendre (non cochés), toutes allées de la vue. */
+  toTakeTotal = computed(() => this.scope().filter((x) => x.state !== 'panier').length);
+  /** Nombre d'articles cochés de la vue : ce que « Supprimer les cochés » emporte. */
+  checkedTotal = computed(() => this.scope().filter((x) => x.state === 'panier').length);
 
   progress = computed(() => {
     const s = this.scope();
@@ -514,32 +618,54 @@ export class CoursesScreen {
     return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
   });
 
+  /** Révèle les cochés d'un rayon quand ils sont masqués (le reste de la vue ne bouge pas). */
+  reveal(aisleId: string): void { const s = new Set(this.revealedAisles()); s.add(aisleId); this.revealedAisles.set(s); }
+  /** Le rayon « À trier » (repli) : ses lignes gagnent des puces de rangement. */
+  isTriage(aisle: Aisle): boolean { return aisle.id === this.store.defaultAisleId(); }
+  /** Les rayons où ranger un article « à trier » : tous sauf le repli lui-même. */
+  otherAisles = computed<Aisle[]>(() => this.store.aislesInOrder().filter((a) => a.id !== this.store.defaultAisleId()));
+  /** Supprime les cochés de la vue (liste active, ou toutes si « Toutes »). */
+  confirmClear(): void {
+    this.askClear.set(false);
+    const a = this.active();
+    if (a === 'all') for (const l of this.lists()) this.store.clearPicked(l.id);
+    else this.store.clearPicked(a);
+  }
+
   /**
-   * Suggestions dès les premières lettres. D'abord les articles **connus** (base
-   * intégrée + ce que le foyer a appris) : les choisir complète l'entrée avec le
-   * rayon de l'article et la relie au référentiel. Ensuite, ce que le foyer a
-   * déjà acheté et que le référentiel ignore, pour ne pas perdre les noms libres.
+   * Suggestions dès la première lettre, dans cet ordre : les articles de la liste
+   * (cochés compris, pour en décocher un plutôt que d'en créer un doublon), puis
+   * la mémoire des noms déjà achetés (ce que le foyer achète vraiment passe avant
+   * ce que la base connaît), puis le référentiel intégré. Cinq puces au plus.
    */
   suggestions = computed<ShopSuggestion[]>(() => {
-    const q = this.store.ui().newShop.trim();
-    if (q.length < 2) return [];
-    const lq = q.toLowerCase();
+    const nq = normaliseName(this.store.ui().newShop);
+    if (!nq) return [];
     const seen = new Set<string>();
     const out: ShopSuggestion[] = [];
-    for (const a of searchArticles(this.store.articleIndex(), this.d().articles || [], q, 6)) {
-      const k = a.name.toLowerCase();
-      if (k === lq || seen.has(k)) continue; // déjà tapé tel quel : rien à compléter
-      seen.add(k);
-      out.push({ name: cap(a.name), key: a.key, rayon: a.rayon });
-      if (out.length === 5) return out;
+    // Rend vrai quand la liste est pleine, pour arrêter tôt.
+    const add = (s: ShopSuggestion, key: string): boolean => {
+      if (seen.has(key)) return false;
+      seen.add(key);
+      out.push(s);
+      return out.length >= 5;
+    };
+    // 1) Les articles de la liste active (cochés compris).
+    for (const it of this.scope()) {
+      const nn = normaliseName(it.name);
+      if (!nn.includes(nq)) continue;
+      if (add({ name: it.name, id: it.id, checked: it.state === 'panier' }, nn)) return out;
     }
-    for (const it of this.d().shop) {
-      const n = it.name.trim();
-      const k = n.toLowerCase();
-      if (k === lq || seen.has(k) || !k.includes(lq)) continue;
-      seen.add(k);
-      out.push({ name: n });
-      if (out.length === 5) break;
+    // 2) La mémoire des noms déjà achetés. Le rayon mémorisé n'est repris que s'il existe encore.
+    for (const e of Object.values(this.d().shopMemory || {})) {
+      const nn = normaliseName(e.name);
+      if (!nn.includes(nq)) continue;
+      const aisleId = e.aisleId && this.d().aisles.some((a) => a.id === e.aisleId) ? e.aisleId : null;
+      if (add({ name: cap(e.name), key: e.art || undefined, aisleId }, nn)) return out;
+    }
+    // 3) Le référentiel : base intégrée + ce que le foyer a appris.
+    for (const a of searchArticles(this.store.articleIndex(), this.d().articles || [], this.store.ui().newShop.trim(), 8)) {
+      if (add({ name: cap(a.name), key: a.key, rayon: a.rayon }, normaliseName(a.name))) return out;
     }
     return out;
   });
@@ -577,19 +703,45 @@ export class CoursesScreen {
    * retient la catégorie d'un libellé. On vide le nom, la quantité et le choix de
    * rayon (le suivant se déduira de son propre nom), la liste reste.
    */
-  addQuick(): void { this.commitAdd(this.store.ui().newShop); }
-  /** Choisir une suggestion ajoute l'article, en le reliant au référentiel quand c'en est un connu. */
-  addSuggestion(sg: ShopSuggestion): void { this.commitAdd(sg.name, sg.key); }
+  addQuick(): void {
+    const name = this.store.ui().newShop.trim();
+    if (!name) return;
+    // Un nom déjà dans la liste visée ne crée pas de doublon : coché, on le
+    // décoche ; à prendre, on le dit et on ne touche à rien.
+    const listId = this.qaList() || this.store.activeShopListId();
+    const existing = this.d().shop.find((x) => x.listId === listId && normaliseName(x.name) === normaliseName(name));
+    if (existing) { this.toggleExisting(existing.id); return; }
+    this.commitAdd(name);
+  }
+  /** Choisir une suggestion : un article de la liste se décoche, un nom s'ajoute. */
+  addSuggestion(sg: ShopSuggestion): void {
+    if (sg.id) { this.toggleExisting(sg.id); return; }
+    this.commitAdd(sg.name, sg.key, sg.aisleId);
+  }
 
-  private commitAdd(name: string, art?: string): void {
-    const forced = this.qaAisleOverride();
-    const aisleId = forced ?? this.store.resolveAisleForName(name);
-    if (this.store.addShop(name, { qty: this.qaQty(), aisleId, listId: this.qaList() || undefined, art })) {
-      if (forced) this.store.learnAisle(name, forced);
-      this.store.patch({ newShop: '' });
-      this.qaQty.set('');
-      this.qaAisleOverride.set(null);
+  /** Décoche un article déjà présent, ou signale qu'il est déjà à prendre. */
+  private toggleExisting(id: string): void {
+    const it = this.d().shop.find((x) => x.id === id);
+    if (it) {
+      if (it.state === 'panier') { this.store.setShopState(id, 'a-prendre'); this.store.toast(it.name + ' remis dans la liste'); }
+      else this.store.toast('Déjà dans la liste');
     }
+    this.clearQuick();
+  }
+
+  private commitAdd(name: string, art?: string, aisleId?: string | null): void {
+    const forced = this.qaAisleOverride();
+    const aisle = forced ?? aisleId ?? this.store.resolveAisleForName(name);
+    if (this.store.addShop(name, { qty: this.qaQty(), aisleId: aisle, listId: this.qaList() || undefined, art })) {
+      if (forced) this.store.learnAisle(name, forced);
+      this.clearQuick();
+    }
+  }
+
+  private clearQuick(): void {
+    this.store.patch({ newShop: '' });
+    this.qaQty.set('');
+    this.qaAisleOverride.set(null);
   }
 
   /** Ferme la fiche du rayon et demande confirmation de sa suppression. */

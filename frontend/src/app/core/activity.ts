@@ -33,8 +33,8 @@ export interface ActivityEntry {
 // Verbe par état d'un article, nommant l'item. Un lien sur le nom mène à sa liste.
 const SHOP_VERB: Record<string, string> = {
   'a-prendre': 'a ajouté aux courses l’article',
-  panier: 'a mis au panier l’article',
-  indisponible: 'a noté indisponible l’article',
+  panier: 'a coché l’article',
+  indisponible: 'a noté introuvable l’article',
 };
 
 /**

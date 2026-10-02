@@ -157,6 +157,18 @@ cochage ou à la première suppression de cochés. Aucune donnée ancienne n'est
 reconstruite, et c'est sans conséquence (la suppression d'un coché capture son
 nom au passage).
 
+**À l'écran** (`screens/courses.ts`) : un menu « Affichage » unique porte la
+préférence d'appareil (masquer les cochés), le seul geste destructif (les
+supprimer, avec confirmation) et le reste (ordre des rayons, nouveau rayon,
+export). Quand les cochés sont masqués, l'en-tête de chaque rayon dit « 3 à
+prendre · 2 cochés », et un tap sur « 2 cochés » les révèle pour ce rayon seul.
+La saisie propose dès la première lettre les articles de la liste (en choisir un
+coché le décoche, pas de doublon), puis la mémoire des noms, puis le référentiel.
+L'état « introuvable » se pose depuis la fiche de l'article, pas par un geste sur
+la ligne (qui ne fait que cocher) : l'article reste visible dans son rayon, non
+coché, avec une étiquette discrète. Le rayon « À trier » montre sous chaque
+article une rangée de rayons ; un tap range l'article et apprend son rayon.
+
 ## Reprise des ingrédients non reconnus
 
 Le lecteur fait ce qu'il peut avec le français écrit à la main. Ce qui lui

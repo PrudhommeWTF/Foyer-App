@@ -54,6 +54,15 @@ function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+// « Masquer les cochés » dans les courses : une préférence d'affichage propre à
+// l'appareil (le magasin et la maison ne veulent pas la même vue), gardée dans
+// localStorage comme l'écran courant, pas dans le document du foyer. Activée par
+// défaut : en magasin, un article coché a disparu de ce qu'il reste à prendre.
+const SHOP_HIDE_CHECKED_KEY = 'foyer.shopHideChecked';
+function loadShopHideChecked(): boolean {
+  try { return localStorage.getItem(SHOP_HIDE_CHECKED_KEY) !== '0'; } catch { return true; }
+}
+
 
 /**
  * File des opérations de courses pas encore acquittées par le serveur.
@@ -1308,6 +1317,19 @@ export class FoyerStore {
   }
 
   /**
+   * Range un article dans un rayon en un tap (depuis « À trier »), et retient ce
+   * rayon pour ce nom (articles du foyer), comme le fait un choix manuel à la
+   * saisie. Silencieux si le rayon n'existe pas.
+   */
+  rangeShopItem(id: string, aisleId: string): void {
+    const it = this._data()?.shop.find((x) => x.id === id);
+    if (!it || !this._data()?.aisles.some((a) => a.id === aisleId)) return;
+    this.pushShopOps([{ op: 'edit', id, aisleId }]);
+    this.learnAisle(it.name, aisleId);
+    this.toast(it.name + ' rangé');
+  }
+
+  /**
    * Y a-t-il des repas planifiés sur la semaine que « Générer » utilise ? Le
    * bouton ne s'affiche que si oui, pour ne pas proposer une génération qui
    * répondrait « aucun repas planifié ».
@@ -1482,6 +1504,14 @@ export class FoyerStore {
   // ---- rayons -------------------------------------------------------------
   readonly aislesInOrder = computed(() => (this._data()?.aisles || []).slice().sort((a, b) => a.position - b.position));
   /** Un rayon est-il replié (ses articles masqués) ? */
+  /** « Masquer les cochés » : préférence d'appareil, activée par défaut (voir SHOP_HIDE_CHECKED_KEY). */
+  readonly shopHideChecked = signal<boolean>(loadShopHideChecked());
+  toggleShopHideChecked(): void {
+    const next = !this.shopHideChecked();
+    this.shopHideChecked.set(next);
+    try { localStorage.setItem(SHOP_HIDE_CHECKED_KEY, next ? '1' : '0'); } catch { /* mode privé : vaut pour la session */ }
+  }
+
   aisleCollapsed(id: string): boolean { return this.ui().collapsedAisles.includes(id); }
   /** Replier ou déplier un rayon : on masque ses articles, cochés ou non, sans toucher aux données. */
   toggleAisleCollapse(id: string): void {

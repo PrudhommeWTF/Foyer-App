@@ -32,7 +32,7 @@ describe('recentActivity', () => {
     assert.deepEqual(feed.map((e) => e.at), [
       '2026-09-05T10:00:00.000Z', '2026-09-04T09:00:00.000Z', '2026-09-03T08:00:00.000Z', '2026-09-01T08:00:00.000Z',
     ]);
-    assert.equal(feed[0].verb, 'a mis au panier l’article');
+    assert.equal(feed[0].verb, 'a coché l’article');
     assert.equal(feed[0].where, 'Drive');
     assert.equal(feed[0].kind, 'shop');
     assert.equal(feed[0].ref, 's1'); // le lien mène à la liste de courses
