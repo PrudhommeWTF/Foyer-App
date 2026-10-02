@@ -100,6 +100,21 @@ export interface ShopItem {
   via?: string | null;
 }
 /**
+ * Un souvenir d'achat : ce que le foyer a déjà mis dans sa liste, pour le
+ * reproposer à la saisie (et, plus tard, nourrir les habituels). Alimenté côté
+ * serveur au passage en coché et à la suppression d'un coché. Voir backend
+ * shopping/memory.ts.
+ */
+export interface ShopMemoryEntry {
+  name: string;
+  art?: string | null;
+  aisleId?: string | null;
+  qty?: string | null;
+  count: number;
+  lastAt: string;
+  fav?: boolean;
+}
+/**
  * Un lieu de vacances et les affaires qui y restent d'une fois sur l'autre (la
  * maison de la montagne, le mobil-home au bord de mer). Contrairement à une
  * liste de préparation, un inventaire ne se remet jamais à zéro : il dit ce qui
@@ -425,6 +440,8 @@ export interface HouseholdState {
   stock?: Record<string, string>;
   shopLists: ShopList[];
   shop: ShopItem[];
+  /** Mémoire d'achats : clé d'article (ou nom normalisé) vers un souvenir d'achat. Écrite par opérations, côté serveur. */
+  shopMemory?: Record<string, ShopMemoryEntry>;
   taskLists: TaskList[];
   taskTemplates: TaskTemplate[];
   tasks: TaskItem[];

@@ -38,7 +38,7 @@ const TABLEAUX: Record<string, number> = {
 };
 
 /** Les tables indexées par clé : un objet, jamais un tableau. */
-const TABLES = ['meals', 'stock', 'prefs', 'settings', 'profile'] as const;
+const TABLES = ['meals', 'stock', 'prefs', 'settings', 'profile', 'shopMemory'] as const;
 
 /** Le nombre d'entrées qu'une table peut porter. */
 const MAX_ENTREES = 50_000;

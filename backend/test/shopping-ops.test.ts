@@ -3,7 +3,14 @@
 // médiocre. Aucun article coché ne doit se décocher tout seul.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { ShopItem, ShopOp, applyOps, reconcile } from '../src/shopping/ops';
+import { OpsContext, ShopItem, ShopOp, applyOps as applyOpsRaw, reconcile } from '../src/shopping/ops';
+import { ShopMemory } from '../src/shopping/memory';
+
+// applyOps prend et rend désormais la mémoire d'achats. La plupart des tests ne
+// s'y intéressent pas : cet adaptateur injecte une mémoire vide par défaut et
+// garde l'ordre d'appel habituel (items, ops, ctx). Les tests de la mémoire,
+// eux, passent une mémoire et lisent `r.memory`.
+const applyOps = (items: ShopItem[], ops: unknown, c: OpsContext, memory: ShopMemory = {}) => applyOpsRaw(items, memory, ops, c);
 
 const ctx = (opts: { applied?: string[]; aisles?: string[]; lists?: string[] } = {}) => ({
   aisleIds: new Set(opts.aisles ?? ['a1', 'a-tri']),
@@ -216,4 +223,71 @@ test('éditer un autre champ ne touche pas la photo', () => {
   const r = applyOps([item({ photoId: 9 })], [op({ op: 'edit', id: 's1', qty: '2 kg' })], ctx());
   assert.equal(r.items[0].qty, '2 kg');
   assert.equal(r.items[0].photoId, 9, 'la photo reste tant qu’on ne la vise pas');
+});
+
+// ---- mémoire d'achats -------------------------------------------------------
+
+test('cocher un article nourrit la mémoire : un passage, nom, rayon et quantité', () => {
+  const r = applyOps([item()], [op({ op: 'set-state', id: 's1', state: 'panier', at: '2026-09-20T10:00:00.000Z' })], ctx());
+  // Pas de clé d'article : la mémoire est indexée par le nom normalisé.
+  const e = r.memory['pommes'];
+  assert.ok(e, 'une entrée est créée');
+  assert.equal(e.count, 1);
+  assert.equal(e.name, 'Pommes');
+  assert.equal(e.aisleId, 'a1');
+  assert.equal(e.qty, '1 kg');
+  assert.equal(e.lastAt, '2026-09-20T10:00:00.000Z');
+});
+
+test('un article connu du référentiel est mémorisé sous sa clé d’article, pas son libellé', () => {
+  const r = applyOps([item({ art: 'lait', name: 'Lait demi-écrémé' })], [op({ op: 'set-state', id: 's1', state: 'panier' })], ctx());
+  assert.ok(r.memory['lait'], 'indexé par la clé d’article');
+  assert.equal(r.memory['lait'].count, 1);
+  assert.equal(r.memory['lait'].art, 'lait');
+});
+
+test('le rejeu d’un passage en coché ne compte pas deux fois', () => {
+  const one = op({ op: 'set-state', id: 's1', state: 'panier' });
+  let r = applyOps([item()], [one], ctx());
+  assert.equal(r.memory['pommes'].count, 1);
+  // Même opId rejoué depuis la file hors ligne : acquitté, mais pas recompté.
+  r = applyOps(r.items, [one], ctx({ applied: [one.opId] }), r.memory);
+  assert.equal(r.memory['pommes'].count, 1, 'toujours un seul passage');
+});
+
+test('cocher deux fois (deux opérations) compte deux passages', () => {
+  let r = applyOps([item()], [op({ op: 'set-state', id: 's1', state: 'panier' })], ctx());
+  r = applyOps([item()], [op({ op: 'set-state', id: 's1', state: 'panier' })], ctx(), r.memory);
+  assert.equal(r.memory['pommes'].count, 2);
+});
+
+test('décocher ou marquer introuvable ne touche pas le compte', () => {
+  let r = applyOps([item()], [op({ op: 'set-state', id: 's1', state: 'panier' })], ctx());
+  assert.equal(r.memory['pommes'].count, 1);
+  r = applyOps(r.items, [op({ op: 'set-state', id: 's1', state: 'a-prendre' })], ctx(), r.memory);
+  assert.equal(r.memory['pommes'].count, 1, 'décocher n’est pas « ne pas avoir acheté »');
+  r = applyOps(r.items, [op({ op: 'set-state', id: 's1', state: 'indisponible' })], ctx(), r.memory);
+  assert.equal(r.memory['pommes'].count, 1, 'introuvable n’est pas un achat');
+});
+
+test('supprimer un article coché garde son nom, son rayon et sa quantité', () => {
+  let r = applyOps([item()], [op({ op: 'set-state', id: 's1', state: 'panier' })], ctx());
+  r = applyOps(r.items, [op({ op: 'remove', id: 's1' })], ctx(), r.memory);
+  assert.equal(r.items.length, 0, 'l’article est retiré de la liste');
+  const e = r.memory['pommes'];
+  assert.ok(e, 'mais la mémoire garde sa trace');
+  assert.equal(e.count, 1);
+  assert.equal(e.aisleId, 'a1');
+  assert.equal(e.qty, '1 kg');
+});
+
+test('supprimer un article coché sans trace mémoire la crée (coché avant la mémoire)', () => {
+  // Article déjà « panier » mais aucune entrée de mémoire (foyer d'avant la mémoire).
+  const r = applyOps([item({ state: 'panier' })], [op({ op: 'remove', id: 's1' })], ctx());
+  assert.equal(r.memory['pommes'].count, 1, 'le nom n’est pas perdu à la suppression');
+});
+
+test('supprimer un article non coché ne crée pas d’entrée', () => {
+  const r = applyOps([item()], [op({ op: 'remove', id: 's1' })], ctx());
+  assert.equal(Object.keys(r.memory).length, 0, 'seul un coché laisse une trace');
 });

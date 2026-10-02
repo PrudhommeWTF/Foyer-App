@@ -9,6 +9,7 @@
 import type { Database } from 'better-sqlite3';
 import { docDb, idsOf as ids, initDoc, readDoc, writeDoc } from '../state/doc';
 import { ApplyResult, FALLBACK_AISLE_NAME, ShopItem, applyOps, isFallbackAisleName, reconcile } from './ops';
+import { ShopMemory, pruneMemory } from './memory';
 
 /** Au-delà, le journal des opérations est élagué : c'est une mémoire courte contre les rejeux, pas un historique. */
 const OPS_JOURNAL_MAX = 2000;
@@ -18,6 +19,12 @@ export function initShopping(db: Database): void { initDoc(db); }
 const items = (doc: Record<string, any>): ShopItem[] => (Array.isArray(doc['shop']) ? doc['shop'] : []);
 /** Les articles de courses d'un document déjà lu, pour partager un seul parse (voir /live). */
 export const shopItemsOf = items;
+
+/** La mémoire d'achats d'un document, ou un objet vide (clé absente sur un document ancien). */
+const memory = (doc: Record<string, any>): ShopMemory => {
+  const m = doc['shopMemory'];
+  return m && typeof m === 'object' && !Array.isArray(m) ? (m as ShopMemory) : {};
+};
 
 export interface ShoppingSnapshot { items: ShopItem[]; version: number }
 
@@ -38,7 +45,7 @@ export function applyShoppingOps(ops: unknown): ApplyOutcome {
   return database.transaction((): ApplyOutcome => {
     const { doc, version } = readDoc();
     const journal = database.prepare('SELECT 1 FROM hh_shop_ops WHERE op_id = ?');
-    const result = applyOps(items(doc), ops, {
+    const result = applyOps(items(doc), memory(doc), ops, {
       aisleIds: ids(doc, 'aisles'),
       listIds: ids(doc, 'shopLists'),
       alreadyApplied: (opId) => !!journal.get(opId),
@@ -49,6 +56,9 @@ export function applyShoppingOps(ops: unknown): ApplyOutcome {
     if (!result.applied.length) return { ...result, version };
 
     doc['shop'] = result.items;
+    // Élagage hors de applyOps (qui reste déterministe) : à l'heure réelle, dans
+    // la même transaction que l'écriture des articles.
+    doc['shopMemory'] = pruneMemory(result.memory, Date.now());
     const nextVersion = writeDoc(doc);
 
     const remember = database.prepare('INSERT OR IGNORE INTO hh_shop_ops (op_id) VALUES (?)');
@@ -91,5 +101,9 @@ export function preserveShopping(incoming: Record<string, any>, current?: Record
 
   const res = reconcile(items(doc), aisleIds, listIds, String(fallback.id));
   incoming['shop'] = res.items;
+  // La mémoire d'achats est écrite opération par opération, comme la liste :
+  // celle d'un document reçu par PUT /state est ignorée au profit de celle du
+  // serveur, pour qu'un téléphone périmé ne la fasse jamais régresser.
+  incoming['shopMemory'] = memory(doc);
   return { movedToFallback: res.movedToFallback, dropped: res.dropped };
 }

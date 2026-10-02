@@ -156,3 +156,27 @@ describe('un enregistrement du document ne peut plus emporter la liste', () => {
     assert.ok(incoming['aisles'].some((a: any) => a.name === 'À trier'));
   });
 });
+
+describe('mémoire d’achats', () => {
+  it('cocher un article écrit la mémoire dans le document', () => {
+    seed();
+    applyShoppingOps([
+      { opId: 'o1', op: 'add', id: 's1', name: 'Beurre', aisleId: 'a1', listId: 'cl1' },
+      { opId: 'o2', op: 'set-state', id: 's1', state: 'panier' },
+    ]);
+    assert.equal(stored().shopMemory['beurre'].count, 1);
+    assert.equal(stored().shopMemory['beurre'].aisleId, 'a1');
+  });
+
+  it('un enregistrement du document complet ne peut pas effacer la mémoire', () => {
+    seed();
+    applyShoppingOps([
+      { opId: 'o1', op: 'add', id: 's1', name: 'Beurre', aisleId: 'a1', listId: 'cl1' },
+      { opId: 'o2', op: 'set-state', id: 's1', state: 'panier' },
+    ]);
+    // Le client renvoie un document sans mémoire : celle du serveur est réinjectée.
+    const incoming = doc({ shop: [], shopMemory: {} }) as Record<string, any>;
+    preserveShopping(incoming);
+    assert.equal(incoming['shopMemory']['beurre'].count, 1);
+  });
+});

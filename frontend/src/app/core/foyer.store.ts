@@ -521,6 +521,7 @@ export class FoyerStore {
   private normalise(s: HouseholdState): HouseholdState {
     s.meals ||= {};
     s.articles ||= [];
+    s.shopMemory ||= {};
     // `who` d'un événement est une liste (plusieurs membres). Un document d'avant
     // la migration 11, ou lu hors ligne, peut encore porter une chaîne : on la
     // met en liste ici aussi, pour que l'affichage n'ait jamais à s'en soucier.
@@ -1380,12 +1381,17 @@ export class FoyerStore {
     this.patch({ showShop: false, shEditId: null });
     this.toast('Article supprimé');
   }
-  /** Vide les articles déjà pris d'une liste, une fois les courses rangées. */
+  /**
+   * Supprime les articles cochés d'une liste. Les introuvables ne sont pas
+   * touchés : ils restent pour la prochaine fois. Le serveur garde le nom, le
+   * rayon et la quantité de chaque coché retiré dans la mémoire d'achats
+   * (shopping/memory.ts), pour qu'ils restent proposés à la saisie.
+   */
   clearPicked(listId: string): void {
-    const done = (this._data()?.shop || []).filter((i) => i.listId === listId && i.state !== 'a-prendre');
-    if (!done.length) { this.toast('Rien à retirer'); return; }
+    const done = (this._data()?.shop || []).filter((i) => i.listId === listId && i.state === 'panier');
+    if (!done.length) { this.toast('Aucun article coché'); return; }
     this.pushShopOps(done.map((i) => ({ op: 'remove' as const, id: i.id })));
-    this.toast(done.length + (done.length > 1 ? ' articles retirés' : ' article retiré'));
+    this.toast(done.length + (done.length > 1 ? ' articles supprimés' : ' article supprimé'));
   }
 
   // ---- shopping lists ---------------------------------------------------
