@@ -1,6 +1,11 @@
 # Déploiement de Foyer
 
-Deux façons d'auto-héberger Foyer.
+Deux façons d'auto-héberger Foyer. Une troisième, pour Proxmox VE, est en
+préparation : des scripts au format **Community Helper-Scripts**
+(`deploy/community-scripts/`, voir son [README](community-scripts/README.md)),
+destinés au catalogue [community-scripts.org](https://community-scripts.org/).
+Tant qu'ils ne sont pas fusionnés dans leur dépôt, l'installation prise en
+charge reste **LXC Proxmox (ci-dessous)** ou **Docker**.
 
 ## 🐳 Docker Compose
 
