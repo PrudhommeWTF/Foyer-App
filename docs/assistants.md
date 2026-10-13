@@ -40,6 +40,28 @@ venu, ajuster ou retirer une présence, et déclarer, marquer payé, rouvrir ou
 marquer « sans présence » un mois. **Le taux horaire et l'employé lui-même ne se
 règlent pas par l'assistant** (données sensibles, réservées aux Paramètres).
 
+Un neuvième domaine, **École** (ÉcoleDirecte), n'existe que si le module est
+activé (il est éteint par défaut). Ses outils `ecole_*` lisent ce que Foyer a
+synchronisé, jamais ÉcoleDirecte en direct :
+
+| Outil | Ce qu'il rend |
+|---|---|
+| `ecole_devoirs` | Les devoirs de demain (défaut), de la semaine, ou d'une date, par enfant, avec leur `[id]`, l'énoncé, « interrogation », fait ou à faire, et « pas encore transmis » le cas échéant |
+| `ecole_devoir_fait` (écriture) | Coche un devoir (ou le décoche avec `fait: false`) : c'est la même coche que la tâche « Devoirs de … », renvoyée à ÉcoleDirecte au passage suivant |
+| `ecole_emploi_du_temps` | Les cours importés d'un jour, cours annulés signalés, heure de sortie |
+| `ecole_notes` | Les dernières notes, filtrables par matière (« maths » retrouve « Mathématiques ») ou date, et les moyennes de la période **telles que calculées par l'établissement** |
+| `ecole_vie_scolaire` | Absences, retards (justifiés ou non), sanctions, encouragements de l'année |
+| `ecole_etat` | L'état de la synchronisation : par compte, par enfant, dernière réussite, dernière erreur |
+
+**Un jeton d'enfant ne voit que lui** : sans `enfant`, il reçoit ses propres
+devoirs, cours, notes et vie scolaire ; en nommant un frère ou une sœur, il
+reçoit « Refusé : ce compte ne donne accès qu'à ce qui vous concerne ». Le
+filtre est fait côté serveur, dans chaque outil. Quand la synchronisation est
+en échec, chaque réponse le dit avec la date des données : l'assistant ne
+présente jamais des devoirs d'avant-hier comme ceux de demain. Les identifiants
+ÉcoleDirecte, le réglage des comptes et la question de sécurité ne sont pas
+accessibles par l'assistant.
+
 Écriture (jeton `write` seulement), par domaine :
 
 - **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise).
@@ -174,11 +196,17 @@ un assistant ».
 - « La femme de ménage est venue aujourd'hui, 3 heures. » (adulte)
 - « Combien d'heures ce mois-ci, et combien à déclarer sur le CESU ? » (adulte)
 - « Marque le mois de septembre comme déclaré. » (adulte)
+- « Qu'est-ce que Nolan a comme devoirs pour demain ? » (module École)
+- « Léo a-t-il une interrogation cette semaine ? »
+- « À quelle heure Nolan sort jeudi ? »
+- « Quelles sont les dernières notes de Léo en maths ? »
+- « J'ai fini mes exercices de maths, coche-les. » (jeton de l'enfant)
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
 réglage, terminer une tâche récurrente, ou supprimer quelque chose. Le suivi de
 l'**employé à domicile** n'existe pas non plus pour un enfant : ses outils lui
-sont invisibles et refusés.
+sont invisibles et refusés. Un enfant qui demande les devoirs ou les notes de
+son frère reçoit un refus.
 
 ## Sécurité
 

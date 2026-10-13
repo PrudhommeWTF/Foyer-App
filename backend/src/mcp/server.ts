@@ -22,6 +22,7 @@ import { AuthedRequest, currentMember } from '../auth/session';
 import { log } from '../log';
 import { effectiveSetting } from '../settings/repo';
 import * as t from './tools';
+import * as ed from './ecole-tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
 type Args = Record<string, unknown>;
@@ -483,6 +484,44 @@ const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { mois: S.string(7) }, required: ['mois'] },
     run: (ctx, a) => t.menageMoisSansPresence(ctx, str(a.mois) || ''),
   },
+  // ---- École (ÉcoleDirecte) : un enfant ne voit que lui, filtre fait dans chaque outil ----
+  {
+    name: 'ecole_devoirs',
+    description: 'Les devoirs ÉcoleDirecte d’un enfant (ou de tous ceux que ce compte peut voir), avec leur [id], la matière, l’énoncé, « interrogation » le cas échéant, et fait ou à faire. `quand` : demain (défaut), semaine (7 jours), ou date (avec `date` AAAA-MM-JJ). `enfant` : prénom.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), quand: { type: 'string', enum: ['demain', 'semaine', 'date'] }, date: S.date } },
+    run: (ctx, a) => ed.ecoleDevoirs(ctx, { enfant: str(a.enfant), quand: str(a.quand), date: str(a.date) }),
+  },
+  {
+    name: 'ecole_devoir_fait',
+    write: true,
+    description: 'Marque un devoir (par [id], voir ecole_devoirs) fait, ou à faire avec `fait: false`. Coche aussi sa tâche dans « Devoirs de … » ; ÉcoleDirecte l’apprend à la synchronisation suivante.',
+    inputSchema: { type: 'object', properties: { id: S.string(20), fait: { type: 'boolean' } }, required: ['id'] },
+    run: (ctx, a) => ed.ecoleDevoirFait(ctx, { id: str(a.id) || String(num(a.id) ?? ''), fait: bool(a.fait) }),
+  },
+  {
+    name: 'ecole_emploi_du_temps',
+    description: 'Les cours importés d’ÉcoleDirecte pour un jour (défaut : aujourd’hui), cours annulés signalés, et l’heure de sortie. `enfant` : prénom ; `date` : AAAA-MM-JJ.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), date: S.date } },
+    run: (ctx, a) => ed.ecoleEmploiDuTemps(ctx, { enfant: str(a.enfant), date: str(a.date) }),
+  },
+  {
+    name: 'ecole_notes',
+    description: 'Les dernières notes d’un enfant et les moyennes de la période, telles que calculées par l’établissement (jamais recalculées). Filtres : `matiere`, `depuis` (AAAA-MM-JJ). Un compte enfant ne lit que les siennes.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), matiere: S.string(80), depuis: S.date } },
+    run: (ctx, a) => ed.ecoleNotes(ctx, { enfant: str(a.enfant), matiere: str(a.matiere), depuis: str(a.depuis) }),
+  },
+  {
+    name: 'ecole_vie_scolaire',
+    description: 'Absences, retards (justifiés ou non), sanctions et encouragements d’un enfant depuis le début de l’année scolaire, ou depuis `depuis` (AAAA-MM-JJ). Un compte enfant ne lit que les siens.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), depuis: S.date } },
+    run: (ctx, a) => ed.ecoleVieScolaire(ctx, { enfant: str(a.enfant), depuis: str(a.depuis) }),
+  },
+  {
+    name: 'ecole_etat',
+    description: 'L’état de la synchronisation ÉcoleDirecte : par compte (connecté, question de sécurité, identifiants refusés, pause…), dernière réussite, dernière erreur, et par enfant la fraîcheur des données.',
+    inputSchema: { type: 'object', properties: {} },
+    run: (ctx) => ed.ecoleEtat(ctx),
+  },
 ];
 
 /** Construit un serveur MCP lié à un membre et à une portée. Reconstruit à chaque requête (transport sans état). */
@@ -493,10 +532,12 @@ function buildServer(ctx: t.McpCtx): Server {
   // un outil masqué est donc aussi « inconnu » à l'appel direct.
   // Un module désactivé retire ses outils, comme un jeton enfant retire les
   // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
-  // menage_* de « Employé à domicile ». Les autres domaines n'ont pas d'outils.
+  // menage_* de « Employé à domicile », ecole_* de « École » (éteint par
+  // défaut). Les autres domaines n'ont pas d'outils.
   const toolModuleOff = (name: string): boolean =>
     (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
-    || (effectiveSetting('modEmploye') === false && name.startsWith('menage'));
+    || (effectiveSetting('modEmploye') === false && name.startsWith('menage'))
+    || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'));
   const visible = (): ToolDef[] => TOOLS.filter((tool) =>
     (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 
