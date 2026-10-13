@@ -40,8 +40,8 @@ récupère la question **une fois**, la stocke (`pending_qcm`), met le compte en
 répondre » et **n'émet plus aucune requête** pour ce compte jusqu'à la réponse de l'administrateur.
 Le jeton du 250 n'est gardé qu'en mémoire ; si la réponse arrive après son expiration, Foyer refait
 une connexion, et si la question a changé, il affiche la nouvelle au lieu de répondre à l'aveugle.
-Le jeton de session est réutilisé d'un cycle à l'autre (mémoire seulement) ; reconnexion sur 520/525,
-au plus **une connexion par cycle et par compte**.
+Une connexion neuve par cycle et par compte (avec l'appareil de confiance, comme l'application
+officielle à chaque ouverture), jamais plus ; le jeton n'est gardé qu'en mémoire, le temps du cycle.
 
 ## 2. Version d'API, URL, en-têtes, secrets
 

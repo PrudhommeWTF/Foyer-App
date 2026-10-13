@@ -90,11 +90,13 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 | `modFidelite` | Cartes de fidélité | Foyer | oui / non | activé | — | Foyer | — |
 | `modFinances` | Finances | Foyer | oui / non | activé | — | Foyer | — |
 | `modEmploye` | Employé à domicile | Foyer | oui / non | activé | — | Foyer | — |
+| `modEcole` | École (ÉcoleDirecte) | Foyer | oui / non | désactivé | — | Foyer | — |
 
 - **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
 - **Cartes de fidélité** (`modFidelite`) : Les cartes de fidélité du foyer. Désactivé, l’écran et son entrée de menu disparaissent ; les cartes enregistrées sont conservées.
 - **Finances** (`modFinances`) : Les comptes, opérations, budgets et contrats. Désactivé, l’écran, la tuile d’accueil, les notifications, les repères d’agenda et l’accès API disparaissent ; les données relationnelles du module sont conservées.
 - **Employé à domicile** (`modEmploye`) : Le suivi des heures et la déclaration CESU. Désactivé, l’écran, les repères d’agenda, les rappels, l’accès API et les outils d’assistant disparaissent ; les employés et présences sont conservés.
+- **École (ÉcoleDirecte)** (`modEcole`) : Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.
 
 ## Les modules
 
@@ -182,6 +184,22 @@ Les congés payés, le rappel de déclaration au CESU et la durée proposée à 
 - **Jour du rappel de déclaration** (`empRappelJour`) : Jour du mois où Foyer rappelle de déclarer le mois précédent au CESU s’il est encore ouvert. La date limite du CESU n’est pas codée en dur : c’est ce rappel qui est réglable.
 - **Durée proposée par défaut (minutes)** (`empDureeHabituelle`) : Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.
 
+### École
+
+Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `ecoleRefreshMin` | Minutes entre deux synchronisations | Foyer | entier | `30` | de 15 à 1440 | École | — |
+| `ecolePauseDebut` | Pas de synchronisation à partir de | Foyer | heure | `22:00` | HH:MM | École | — |
+| `ecolePauseFin` | Reprise des synchronisations à | Foyer | heure | `06:00` | HH:MM | École | — |
+| `ecoleDimancheDebut` | Le dimanche, pas avant | Foyer | heure | `16:00` | HH:MM | École | — |
+
+- **Minutes entre deux synchronisations** (`ecoleRefreshMin`) : Chaque compte ÉcoleDirecte est interrogé au plus une fois par intervalle, un compte après l’autre. Plus court, ce n’est pas plus frais pour autant : ÉcoleDirecte peut bloquer un compte qui se connecte trop souvent.
+- **Pas de synchronisation à partir de** (`ecolePauseDebut`) : Début de la pause de nuit : Foyer ne contacte pas ÉcoleDirecte entre cette heure et l’heure de reprise. Identique à l’heure de reprise, il n’y a pas de pause.
+- **Reprise des synchronisations à** (`ecolePauseFin`) : Fin de la pause de nuit. Le bouton « Synchroniser maintenant » reste utilisable pendant la pause.
+- **Le dimanche, pas avant** (`ecoleDimancheDebut`) : Le dimanche, les synchronisations ne reprennent qu’à cette heure, à temps pour préparer la semaine. 00:00 pour traiter le dimanche comme un autre jour.
+
 ## Serveur et exploitation
 
 Les accès, la machine, les sauvegardes et les mises à jour.
@@ -236,6 +254,11 @@ Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la c
 | `envGithubRepo` | Dépôt consulté pour les mises à jour | Déploiement | texte | `PrudhommeWTF/Foyer-App` | 200 caractères au maximum | Exploitation | `FOYER_GITHUB_REPO` |
 | `envGithubToken` | Jeton GitHub | Déploiement | undefined | _(vide)_ | — | Exploitation | `FOYER_GITHUB_TOKEN` |
 | `envVapidPrivate` | Clé privée des rappels (VAPID) | Déploiement | undefined | _(vide)_ | — | Notifications | `FOYER_VAPID_PRIVATE` |
+| `envSecretKey` | Clé de chiffrement des identifiants | Déploiement | undefined | _(vide)_ | — | École | `FOYER_SECRET_KEY` |
+| `envEdApiBase` | Adresse de l’API ÉcoleDirecte | Déploiement | texte | `https://api.ecoledirecte.com` | 200 caractères au maximum | École | `FOYER_ED_API_BASE` |
+| `envEdApiVersion` | Version d’API annoncée à ÉcoleDirecte | Déploiement | texte | `4.102.0` | 200 caractères au maximum | École | `FOYER_ED_API_VERSION` |
+| `envEdUserAgent` | Navigateur annoncé à ÉcoleDirecte | Déploiement | texte | `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3` | 200 caractères au maximum | École | `FOYER_ED_USER_AGENT` |
+| `envEdOrigin` | Site d’origine annoncé à ÉcoleDirecte | Déploiement | texte | `https://www.ecoledirecte.com` | 200 caractères au maximum | École | `FOYER_ED_ORIGIN` |
 
 - **Version installée** (`envVersion`) : La version que ce service exécute. Injectée au build de l’image Docker, ou posée par l’installeur LXC dans /etc/foyer/foyer.env.
 - **Dossier des données** (`envDataDir`) : Où vivent la base SQLite, les fichiers, les photos et les sauvegardes de migration. C’est ce dossier qu’il faut archiver pour avoir une sauvegarde complète.
@@ -247,6 +270,11 @@ Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la c
 - **Dépôt consulté pour les mises à jour** (`envGithubRepo`) : Le dépôt GitHub dont les releases sont comparées à la version installée.
 - **Jeton GitHub** (`envGithubToken`) : Facultatif, et seulement utile pour un dépôt privé ou pour ne pas se faire limiter par GitHub lors des vérifications de version.
 - **Clé privée des rappels (VAPID)** (`envVapidPrivate`) : Sans elle, une paire est engendrée au premier démarrage et gardée en base. En changer invalide tous les appareils déjà abonnés aux rappels.
+- **Clé de chiffrement des identifiants** (`envSecretKey`) : Chiffre les identifiants ÉcoleDirecte et l’appareil de confiance enregistrés en base (au moins 32 caractères, par exemple « openssl rand -base64 32 »). Sans elle, aucun compte ne peut être enregistré. Perdue ou changée, les identifiants sont à ressaisir et la question de sécurité reviendra.
+- **Adresse de l’API ÉcoleDirecte** (`envEdApiBase`) : Le seul hôte que le module École contacte. À ne changer que si ÉcoleDirecte déménage son API.
+- **Version d’API annoncée à ÉcoleDirecte** (`envEdApiVersion`) : ÉcoleDirecte refuse les versions trop anciennes (code 517). Quand la section École le signale, posez ici la version que l’application officielle utilise (voir docs/ecole.md), puis redémarrez.
+- **Navigateur annoncé à ÉcoleDirecte** (`envEdUserAgent`) : L’en-tête User-Agent envoyé à ÉcoleDirecte. Le jeton de session y est lié : à ne changer que si ÉcoleDirecte se met à refuser celui-ci.
+- **Site d’origine annoncé à ÉcoleDirecte** (`envEdOrigin`) : Les en-têtes Origin et Referer envoyés avec chaque requête, comme le fait le site web d’ÉcoleDirecte. Aucune requête ne part vers cette adresse.
 
 ## Où c’est stocké, et comment le sauvegarder
 

@@ -52,6 +52,7 @@ export const CAT_ICONS: Record<string, string> = {
 // Named app / nav / ui icons (24x24 stroke paths).
 export const ICONS: Record<string, string> = {
   home: 'M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z',
+  ecole: 'M2 9l10-5 10 5-10 5zM6 11v5c0 1.6 2.7 3 6 3s6-1.4 6-3v-5M22 9v6',
   calendar: 'M3 5h18v16H3zM3 9h18M8 3v4M16 3v4',
   courses: 'M4 5h15l-1.6 9H6.5zM6.5 14 5 5 3 4M8 19a1.6 1.6 0 1 0 0 .01M17 19a1.6 1.6 0 1 0 0 .01',
   taches: 'M9 6h11M9 12h11M9 18h11M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2',

@@ -7,6 +7,7 @@ export interface ModuleCounts {
   fidelite: { cards: number };
   finances: { transactions: number; comptes: number };
   employe: { employes: number; presences: number };
+  ecole: { comptes: number; eleves: number };
 }
 
 @Injectable({ providedIn: 'root' })

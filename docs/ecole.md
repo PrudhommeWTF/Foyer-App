@@ -1,0 +1,254 @@
+# Module « École » (ÉcoleDirecte) : exploitation
+
+Ce que le module fait aujourd'hui, comment il se connecte à ÉcoleDirecte, comment
+le surveiller en shell, et quoi faire quand ça casse. Le choix de conception est
+dans `docs/ecole-etat-des-lieux.md`.
+
+**État : première tranche.** Comptes ÉcoleDirecte, question de sécurité,
+association des élèves aux membres, connexion périodique et journal. Les devoirs,
+l'emploi du temps, les notes et la vie scolaire viendront dans les tranches
+suivantes : pour l'instant, une synchronisation réussie ne rapatrie que la liste
+des élèves.
+
+---
+
+## 1. À savoir avant d'activer
+
+- **L'API d'ÉcoleDirecte n'est pas publique.** C'est celle de l'application
+  mobile et du site, documentée par la communauté (bibliothèque Python
+  `ecoledirecte`, dépôt `hacf-fr/ecoledirecte_api` ; `EduWireApps/ecoledirecte-api-docs`).
+  Elle change sans préavis, et son usage par un tiers n'est pas prévu par ses
+  conditions. Le module est fait pour casser proprement : un échec se voit dans
+  Paramètres avec la date de la dernière réussite, jamais une donnée périmée
+  présentée comme fraîche.
+- **Foyer détient les identifiants ÉcoleDirecte**, chiffrés en base (voir §2). Ils
+  ne reviennent jamais au navigateur et ne sont jamais écrits dans le journal.
+- **Risque de blocage du compte.** ÉcoleDirecte bloque un compte qui se connecte
+  trop souvent « depuis un nouvel appareil » ou qui accumule les échecs. Le
+  module se l'interdit :
+  - une seule connexion par compte et par intervalle (30 min par défaut), un
+    compte après l'autre, jamais deux échanges en parallèle ;
+  - pas de connexion la nuit (22 h à 6 h) ni le dimanche avant 16 h (réglables) ;
+  - l'appareil de confiance obtenu en répondant à la question de sécurité est
+    gardé et renvoyé à chaque connexion : la question ne revient pas ;
+  - **question de sécurité (250), identifiants refusés (505), version refusée
+    (517)** : le compte se bloque et n'envoie plus rien jusqu'à votre geste ;
+  - erreurs passagères (réseau, serveur en panne, 535) : au troisième échec de
+    suite, pause automatique de 6 h ;
+  - chaque incident prévient les administrateurs **une fois** (notification sur
+    le téléphone), pas à chaque passage.
+- **Désactivé, le module ne fait aucune requête.** Il l'est par défaut.
+  Activation : Paramètres → Modules actifs → « École (ÉcoleDirecte) ». Le seul
+  hôte contacté est `FOYER_ED_API_BASE` (`https://api.ecoledirecte.com`).
+
+---
+
+## 2. La clé de chiffrement `FOYER_SECRET_KEY`
+
+Identifiant, mot de passe et appareil de confiance sont chiffrés en AES-256-GCM
+avec une clé dédiée, distincte de `FOYER_JWT_SECRET` (faire tourner le secret
+des sessions après un incident ne doit pas détruire ces identifiants).
+
+**LXC** : l'installeur et la mise à jour la génèrent une fois dans
+`/etc/foyer/foyer.env` si elle manque. Pour la poser à la main :
+
+```sh
+grep -q '^FOYER_SECRET_KEY=' /etc/foyer/foyer.env \
+  || echo "FOYER_SECRET_KEY=$(openssl rand -base64 32)" >> /etc/foyer/foyer.env
+chmod 600 /etc/foyer/foyer.env
+systemctl restart foyer
+```
+
+**Docker** : dans le `.env` à côté du `docker-compose.yml`, puis recréer le conteneur.
+
+```sh
+grep -q '^FOYER_SECRET_KEY=' .env || echo "FOYER_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+docker compose up -d
+```
+
+| Situation | Ce qui se passe |
+|---|---|
+| Clé absente ou trop courte (< 32 caractères) | La section École le dit et refuse d'enregistrer un compte. Rien n'est jamais enregistré en clair. |
+| Clé changée, ou base restaurée sur une machine sans la même clé | Le service démarre normalement. Les comptes passent en « Identifiants à ressaisir », aucune connexion ne part. Ressaisir les identifiants suffit, mais **la question de sécurité reviendra** (l'appareil de confiance était chiffré avec l'ancienne clé). |
+| La bonne clé est remise en place | Les comptes reprennent seuls au passage suivant. |
+
+La clé vit dans `/etc/foyer/foyer.env`, que la sauvegarde chiffrée décrite dans
+`docs/sauvegarde-restauration.md` emporte déjà : restaurer cette archive
+restaure aussi la clé.
+
+---
+
+## 3. Le flux de connexion
+
+Tel qu'implémenté dans `backend/src/ecole/client/client.ts`, d'après la
+bibliothèque `ecoledirecte` 0.4.0 :
+
+1. `GET /v3/login.awp?gtk=1&v=<version>` : le serveur pose le cookie `GTK`.
+2. `POST /v3/login.awp?v=<version>`, corps brut `data=<JSON>` avec `x-gtk: <GTK>`.
+   Sans appareil connu : `identifiant`, `motdepasse`, `isReLogin: false`. Avec :
+   en plus `cn`, `cv`, `uuid: ""` et `fa: [{cn, cv}]`.
+3. Le jeton arrive dans l'en-tête `x-token` et repart tel quel. Un en-tête
+   `2FA-Token`, s'il arrive, repart aussi.
+4. Code 250 : `POST /v3/connexion/doubleauth.awp?verbe=get` donne la question et
+   les propositions (base64). Foyer les affiche dans Paramètres et **attend**.
+   Votre réponse part par `?verbe=post` (`data={"choix": "<base64>"}`) et rend
+   `cn` / `cv`, l'appareil de confiance, chiffré en base aussitôt.
+
+| Code | Sens | Conduite |
+|---|---|---|
+| 200 | OK | |
+| 210 | Pas de données (vacances) | Pas une erreur |
+| 250 | Question de sécurité | Bloqué jusqu'à votre réponse |
+| 505 | Identifiants refusés | Bloqué jusqu'à la ressaisie |
+| 517 | Version d'API refusée | Bloqué jusqu'au changement de `FOYER_ED_API_VERSION` |
+| 520, 525 | Jeton invalide ou expiré | Reconnexion au passage suivant |
+| 535 | Établissement indisponible | Passager, compte dans les trois échecs |
+| autre | | Conservé brut dans le journal, pour chercher |
+
+---
+
+## 4. Les états d'un compte, et quoi faire
+
+| Affiché | Cause | Votre geste |
+|---|---|---|
+| Connecté | Dernière connexion réussie | Rien |
+| Question de sécurité à répondre | Code 250 | Toucher la bonne réponse. Une mauvaise compte comme une tentative chez ÉcoleDirecte. |
+| Identifiants refusés | Code 505 (mot de passe changé ?) | « Ressaisir les identifiants ». La question ne revient pas si l'appareil de confiance est encore valide. |
+| Version d'API refusée | Code 517 | Mettre à jour `FOYER_ED_API_VERSION` (§6), redémarrer : le compte reprend seul. |
+| Identifiants à ressaisir | Clé de chiffrement changée ou absente | Remettre la bonne clé, ou ressaisir les identifiants. |
+| En pause automatique jusqu'à … | Trois échecs passagers de suite | Attendre, ou « Reprendre » après avoir vérifié le réseau (§5). |
+| En pause | Votre bouton « Mettre en pause » | « Reprendre » |
+
+« Synchroniser maintenant » est limité à une tentative par minute et refusé tant
+qu'une question, un refus d'identifiants ou une clé perdue attend votre geste.
+
+---
+
+## 5. Le journal
+
+Chaque connexion écrit une ligne avec le compte, le résultat, la durée et le
+code ÉcoleDirecte. Jamais l'identifiant, le mot de passe, le jeton, `cn` ni `cv`.
+
+```sh
+# LXC
+journalctl -u foyer -f | grep 'École'
+journalctl -u foyer --since today | grep 'École'
+# Docker
+docker compose logs -f foyer | grep 'École'
+```
+
+Exemples :
+
+```
+[foyer] École : compte 1 « Collège » : connexion : Connexion réussie : 2 élèves, 1 association proposée. (412 ms, code 200)
+[foyer] École : compte 1 « Collège » : Question de sécurité demandée : en attente de réponse dans Paramètres. (380 ms, code 250). Aucune nouvelle connexion avant la réponse.
+[foyer] École : compte 2 « Lycée » : connexion : ÉcoleDirecte refuse l’identifiant ou le mot de passe (505). Compte bloqué jusqu’à la ressaisie des identifiants. (290 ms, code 505, HTTP 200)
+[foyer] École : compte 2 « Lycée » : connexion : ÉcoleDirecte injoignable (délai dépassé). 3 échecs de suite : pause automatique de 6 h. (20003 ms, code -, HTTP -)
+```
+
+Le même journal, en plus court, est dans Paramètres → École (« Journal des
+synchronisations »), et en base :
+
+```sh
+sqlite3 -readonly /var/lib/foyer/foyer.db \
+  "SELECT at, account_id, ok, ed_code, duration_ms, message FROM ed_sync_log ORDER BY id DESC LIMIT 20;"
+```
+
+**Réseau** : le LXC doit joindre `api.ecoledirecte.com:443`. Test sans
+identifiants : `curl -sI "https://api.ecoledirecte.com/v3/login.awp?gtk=1&v=4.102.0" | grep -i set-cookie`
+doit montrer un cookie `GTK`.
+
+---
+
+## 6. Quand l'API change
+
+1. **Code 517** (« ÉcoleDirecte refuse la version d'API … ») : la version
+   annoncée est trop ancienne. La dernière connue est celle de la constante
+   `APIVERSION` dans `src/ecoledirecte_api/const.py` du dépôt
+   `hacf-fr/ecoledirecte_api`.
+
+   ```sh
+   # LXC
+   sed -i '/^FOYER_ED_API_VERSION=/d' /etc/foyer/foyer.env
+   echo 'FOYER_ED_API_VERSION=4.103.0' >> /etc/foyer/foyer.env   # la nouvelle version
+   systemctl restart foyer
+   # Docker : FOYER_ED_API_VERSION dans l'environnement du service, puis docker compose up -d
+   ```
+
+2. **Autre changement** : lancer la sonde, qui fait une vraie connexion et
+   affiche chaque échange (chemin, statut, code, en-têtes reçus) :
+
+   ```sh
+   # LXC (le fichier d'environnement est lu sur l'entrée standard : il n'est lisible que par root)
+   runuser -u foyer -- node /opt/foyer/backend/dist/ecole/sonde.js --env - --liste < /etc/foyer/foyer.env
+   runuser -u foyer -- node /opt/foyer/backend/dist/ecole/sonde.js --env - --compte 1 < /etc/foyer/foyer.env
+   # Docker
+   docker compose exec foyer npm run ecole:sonde -- --compte 1
+   ```
+
+   Elle ouvre la base en lecture seule, ne répond jamais à la question de
+   sécurité, et compte comme une connexion pour ÉcoleDirecte : ne pas la lancer
+   en boucle.
+
+3. **Régénérer les fixtures** des tests avec `--fixtures <dossier>` : chaque
+   réponse y est écrite anonymisée (noms, identifiants, jetons, `cn` / `cv`
+   remplacés). Les relire avant de les copier dans `backend/test/fixtures/ecole/`.
+
+Tout ce qui parle à ÉcoleDirecte est dans `backend/src/ecole/client/` : c'est le
+seul dossier à corriger.
+
+---
+
+## 7. Sauvegarde et restauration
+
+Les tables `ed_*` sont dans `foyer.db` : la sauvegarde globale
+(`docs/sauvegarde-restauration.md`) et le bouton « Sauvegarder maintenant » de
+Paramètres → Exploitation les emportent. Les colonnes chiffrées y restent chiffrées.
+
+**Avant la mise à jour qui installe ce module** (la migration crée trois tables,
+elle ne modifie rien d'existant) :
+
+```sh
+# LXC : instantané à chaud (la base est en WAL, ne pas copier le fichier)
+apt-get install -y sqlite3   # une fois
+sqlite3 /var/lib/foyer/foyer.db "VACUUM INTO '/root/foyer-avant-ecole-$(date +%Y%m%d-%H%M).db'"
+cp /etc/foyer/foyer.env /root/foyer.env.avant-ecole
+
+# Docker : même chose dans le volume
+docker compose exec foyer node -e "require('better-sqlite3')('/data/foyer.db').exec(\"VACUUM INTO '/data/foyer-avant-ecole.db'\")"
+```
+
+**Revenir en arrière** (service arrêté) :
+
+```sh
+systemctl stop foyer
+cp /root/foyer-avant-ecole-AAAAMMJJ-HHMM.db /var/lib/foyer/foyer.db
+rm -f /var/lib/foyer/foyer.db-wal /var/lib/foyer/foyer.db-shm
+chown foyer:foyer /var/lib/foyer/foyer.db && chmod 600 /var/lib/foyer/foyer.db
+systemctl start foyer
+```
+
+Une version antérieure de Foyer ignore les tables `ed_*` : revenir à l'ancien
+code sans restaurer la base fonctionne aussi.
+
+**Le module seul** (déménager, rejouer) : connecté en administrateur, le module
+actif, ouvrir dans le navigateur `https://<votre foyer>/api/ecole/export.json`
+télécharge un JSON des trois tables. La restauration (`POST /api/ecole/restore`
+avec `confirm: "REMPLACER"`) passe par la même session : les jetons d'API sont
+refusés sur ce module, qui manipule des identifiants.
+
+Restaurée sur un serveur dont la clé `FOYER_SECRET_KEY` diffère, une sauvegarde
+donne des comptes « Identifiants à ressaisir » : rien ne plante.
+
+---
+
+## 8. Ce qui est stocké
+
+| Table | Contenu |
+|---|---|
+| `ed_accounts` | Libellé, identifiant et mot de passe **chiffrés**, appareil de confiance **chiffré**, question en attente, état, dernière réussite et dernière erreur, pause |
+| `ed_students` | Élèves vus à la connexion (prénom, nom, classe, établissement, modules ÉcoleDirecte actifs), membre associé et d'où vient l'association |
+| `ed_sync_log` | Une ligne par connexion ou réponse à la question (2 000 dernières) |
+
+Retirer un compte efface ses secrets et l'archive ; l'historique reste.
+« Repartir à zéro » à la réactivation du module efface les trois tables.
