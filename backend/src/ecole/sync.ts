@@ -82,25 +82,41 @@ export function localDone(h: repo.Homework, task: { done: boolean } | undefined)
   return h.doneLocal ?? h.doneSynced ?? h.doneEd;
 }
 
-export interface StudentReport { homework: number; created: number; modified: number; sent: number; lessons: number; tasks: number; }
+export interface StudentReport {
+  homework: number; created: number; modified: number; sent: number; lessons: number; tasks: number; grades: number; life: number;
+  /** Ce qui est apparu depuis la première lecture, à annoncer. */
+  fresh: { homework: repo.Homework[]; grades: repo.Grade[]; life: repo.LifeItem[] };
+}
+
+/** L'année scolaire en cours, au format d'ÉcoleDirecte : « 2026-2027 », qui bascule en août. */
+export const schoolYear = (today: string): string => {
+  const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
+  return m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+};
+
+/** Le module ÉcoleDirecte est-il ouvert pour cet élève ? Sans liste connue, on essaie. */
+const allows = (st: repo.Student, code: string): boolean => !st.modules.length || st.modules.includes(code);
 
 async function syncStudent(c: EdClient, s: EdSession, st: repo.Student, member: MemberLite): Promise<StudentReport> {
   const now = new Date().toISOString();
   const today = parisToday();
   const horizon = addDays(today, Number(effectiveSetting('ecoleDevoirsJours')) || 14);
   const keepFrom = addDays(today, -KEEP_DAYS);
-  const rep: StudentReport = { homework: 0, created: 0, modified: 0, sent: 0, lessons: 0, tasks: 0 };
+  const rep: StudentReport = { homework: 0, created: 0, modified: 0, sent: 0, lessons: 0, tasks: 0, grades: 0, life: 0, fresh: { homework: [], grades: [], life: [] } };
 
   // 1. Cahier de textes : la liste, puis le détail des jours qui le méritent.
   const list = (await c.homeworkList(s, st.edStudentId)).filter((h) => h.due >= today && h.due <= horizon);
   const touched = new Set<string>();
+  const created: number[] = [];
   for (const h of list) {
-    const { row, created } = repo.upsertHomework(st.id, h, now);
-    if (created) { rep.created++; touched.add(h.due); }
+    const { row, created: isNew } = repo.upsertHomework(st.id, h, now);
+    if (isNew) { rep.created++; touched.add(h.due); created.push(row.id); }
     if (!row.detailAt || Date.now() - Date.parse(row.detailAt) > DETAIL_TTL_MS || h.due <= addDays(today, 2)) touched.add(h.due);
   }
   repo.archiveMissingHomework(st.id, list.map((h) => h.edId), today, horizon, now);
   rep.homework = list.length;
+  // Première lecture des devoirs de cet élève : muette, comme les notes.
+  if (!st.homeworkBaselineAt) { repo.markNotified('ed_homework', created, now); repo.patchStudent(st.id, { homeworkBaselineAt: now }); }
   for (const day of [...touched].sort()) {
     for (const d of await c.homeworkDay(s, st.edStudentId, day)) {
       const row = repo.listHomework([st.id], day, day, true).find((x) => x.edId === d.edId);
@@ -184,14 +200,36 @@ async function syncStudent(c: EdClient, s: EdSession, st: repo.Student, member: 
   const from = mondayOf(today);
   const to = addDays(from, 7 * (Number(effectiveSetting('ecoleEdtSemaines')) || 2) - 1);
   rep.lessons = repo.syncLessons(st.id, await c.timetable(s, st.edStudentId, from, to), from, to, now).upserted;
+
+  // 5. Notes et moyennes de l'année, si l'établissement les publie pour cet élève.
+  if (allows(st, 'NOTES')) {
+    const { grades, averages } = await c.grades(s, st.edStudentId, schoolYear(today));
+    rep.fresh.grades = repo.upsertGrades(st.id, grades, schoolYear(today), now, !st.gradesBaselineAt);
+    repo.saveAverages(st.id, averages, now);
+    if (!st.gradesBaselineAt) repo.patchStudent(st.id, { gradesBaselineAt: now });
+    rep.grades = grades.length;
+  }
+
+  // 6. Vie scolaire.
+  if (allows(st, 'VIE_SCOLAIRE')) {
+    const life = await c.schoolLife(s, st.edStudentId);
+    rep.fresh.life = repo.upsertLife(st.id, life, now, !st.lifeBaselineAt);
+    if (!st.lifeBaselineAt) repo.patchStudent(st.id, { lifeBaselineAt: now });
+    rep.life = life.length;
+  }
+
+  rep.fresh.homework = st.homeworkBaselineAt ? created.map((id) => repo.getHomework(id)!).filter((h) => !h.notifiedAt) : [];
   return rep;
 }
+
+/** Annonce ce qui vient d'apparaître pour un élève. Fourni par le service, qui sait à qui et comment l'envoyer. */
+export type Announce = (st: repo.Student, member: MemberLite, fresh: StudentReport['fresh']) => Promise<void>;
 
 /**
  * Les données de tous les élèves associés d'un compte, après une connexion
  * réussie. Rend le résumé à journaliser.
  */
-export async function syncAccountData(a: repo.Account, c: EdClient, s: EdSession, mainIdLogin: number, members: MemberLite[]): Promise<{ ok: number; failed: number; summary: string }> {
+export async function syncAccountData(a: repo.Account, c: EdClient, s: EdSession, mainIdLogin: number, members: MemberLite[], announce: Announce): Promise<{ ok: number; failed: number; summary: string }> {
   const students = repo.listStudents().filter((x) => x.accountId === a.id && x.linkState === 'confirme' && x.memberId);
   let current = mainIdLogin;
   let ok = 0, failed = 0;
@@ -205,7 +243,9 @@ export async function syncAccountData(a: repo.Account, c: EdClient, s: EdSession
       const r = await syncStudent(c, s, st, member);
       repo.patchStudent(st.id, { dataOkAt: new Date().toISOString(), dataError: null, dataErrorAt: null });
       ok++;
-      const line = `${member.name} : ${r.homework} devoir(s) dont ${r.created} nouveau(x)${r.modified ? `, ${r.modified} modifié(s)` : ''}${r.sent ? `, ${r.sent} « fait » transmis` : ''}, ${r.lessons} cours`;
+      const line = `${member.name} : ${r.homework} devoir(s) dont ${r.created} nouveau(x)${r.modified ? `, ${r.modified} modifié(s)` : ''}${r.sent ? `, ${r.sent} « fait » transmis` : ''}, ${r.lessons} cours, ${r.grades} note(s) dont ${r.fresh.grades.length} nouvelle(s), ${r.life} ligne(s) de vie scolaire dont ${r.fresh.life.length} nouvelle(s)`;
+      // L'annonce ne doit jamais faire échouer la synchronisation : les lignes restent, l'envoi se journalise.
+      await announce(st, member, r.fresh).catch((e) => log.attention(`École : annonce pour ${member.name} non envoyée : ${(e as Error).message}`));
       parts.push(line);
       log.info(`École : compte ${a.id} « ${a.label} » : données : ${line} (${Date.now() - t0} ms)`);
     } catch (e) {

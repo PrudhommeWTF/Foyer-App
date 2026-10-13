@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FoyerStore } from '../core/foyer.store';
 import { EcoleStore, subjectLabel } from '../core/ecole.store';
-import { EcoleApi, EdHomework, EdVueStudent } from '../core/ecole.api';
+import { EcoleApi, EdAverageView, EdGradeView, EdHomework, EdLifeView, EdVueStudent } from '../core/ecole.api';
 import { IconComponent } from '../core/icon';
 
 interface DayGroup { day: string; label: string; items: EdHomework[]; }
@@ -46,7 +46,7 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
         @if (ecole.students().length > 1) {
           <div class="tabs">
             @for (s of ecole.students(); track s.id) {
-              <button class="tab" [class.on]="current()?.id === s.id" (click)="pick.set(s.id)"
+              <button class="tab" [class.on]="current()?.id === s.id" (click)="pick.set(s.id); mode.set('avenir')"
                       [style.background]="current()?.id === s.id ? store.memberColor(s.memberId) : 'var(--soft)'">
                 {{ name(s) }}@if (openTomorrow(s.id); as n) { <span class="cnt">{{ n }}</span> }
               </button>
@@ -70,9 +70,70 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
 
           <div class="seg">
             <button [class.on]="mode() === 'avenir'" (click)="mode.set('avenir')">À faire</button>
-            <button [class.on]="mode() === 'passe'" (click)="showPast(s)">Semaine passée</button>
+            <button [class.on]="mode() === 'passe'" (click)="showPast(s)">Passés</button>
+            <button [class.on]="mode() === 'notes'" (click)="showNotes(s)">Notes</button>
+            <button [class.on]="mode() === 'vie'" (click)="showVie(s)">Vie scolaire</button>
           </div>
 
+          @if (mode() === 'notes') {
+            @if (notes(); as n) {
+              @if (period(); as p) {
+                <div class="d-head">Moyennes · {{ p.label }}</div>
+                <div class="avg-card">
+                  @for (a of p.rows; track a.subjectCode) {
+                    <div class="avg" [class.gen]="a.subjectCode === '_GENERALE'">
+                      <span class="avg-s">{{ subject2(a.subject) }}</span>
+                      <span class="avg-v">{{ a.average || '–' }}</span>
+                      @if (a.classAverage) { <span class="avg-c">classe {{ a.classAverage }}</span> }
+                    </div>
+                  }
+                </div>
+                <div class="small">Moyennes calculées par l’établissement et reprises telles quelles.</div>
+              }
+              <div class="d-head" style="margin-top:16px">Dernières notes</div>
+              @for (g of n.grades; track g.id) {
+                <button class="grade" (click)="openGrade.set(openGrade() === g.id ? null : g.id)" [attr.aria-expanded]="openGrade() === g.id">
+                  <div class="g-top">
+                    <span class="g-s">{{ subject2(g.subject) }}</span>
+                    <span class="g-v" [class.ns]="g.notSignificant">{{ g.value }}{{ g.outOf && isNum(g.value) ? '/' + g.outOf : '' }}</span>
+                  </div>
+                  <div class="g-meta">{{ g.date ? fr(g.date) : '' }}{{ g.label ? ' · ' + g.label : '' }}@if (g.notSignificant) { · non significative }</div>
+                  @if (openGrade() === g.id) {
+                    <div class="g-detail">
+                      @if (g.kind) { <div><span>Type</span><b>{{ g.kind }}</b></div> }
+                      @if (g.coefficient) { <div><span>Coefficient</span><b>{{ g.coefficient }}</b></div> }
+                      @if (g.classAverage) { <div><span>Moyenne de la classe</span><b>{{ g.classAverage }}</b></div> }
+                      @if (g.classMin || g.classMax) { <div><span>Plus basse · plus haute</span><b>{{ g.classMin || '–' }} · {{ g.classMax || '–' }}</b></div> }
+                    </div>
+                  }
+                </button>
+              } @empty {
+                <div class="empty">Aucune note pour l’instant.</div>
+              }
+            } @else {
+              <div class="hint">Chargement…</div>
+            }
+          } @else if (mode() === 'vie') {
+            @if (vie(); as items) {
+              @for (e of items; track e.id) {
+                <div class="life" [class]="'life ' + e.kind">
+                  <div class="g-top">
+                    <span class="g-s">{{ lifeLabel(e.kind) }}</span>
+                    @if (e.kind === 'absence' || e.kind === 'retard') {
+                      <span class="badge" [class.pend]="e.justified === false" [class.okb]="e.justified === true">{{ e.justified === null ? '' : e.justified ? 'justifié' + (e.kind === 'absence' ? 'e' : '') : 'non justifié' + (e.kind === 'absence' ? 'e' : '') }}</span>
+                    }
+                  </div>
+                  <div class="g-meta">{{ e.displayDate || (e.date ? fr(e.date) : '') }}</div>
+                  @if (e.label || e.reason) { <div class="txt">{{ [e.label, e.reason].filter(nonVide).join(' · ') }}</div> }
+                  @if (e.by) { <div class="g-meta">{{ e.by }}</div> }
+                </div>
+              } @empty {
+                <div class="empty">Rien d’enregistré cette année.</div>
+              }
+            } @else {
+              <div class="hint">Chargement…</div>
+            }
+          } @else {
           @for (g of groups(); track g.day) {
             <div class="day">
               <div class="d-head">{{ g.label }}<span class="d-n">{{ g.items.length }}</span></div>
@@ -102,6 +163,7 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
             </div>
           } @empty {
             <div class="empty">{{ mode() === 'avenir' ? 'Rien à faire dans les prochains jours.' : 'Rien la semaine passée.' }}</div>
+          }
           }
         }
       }
@@ -147,6 +209,27 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
     .meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
     .meta .mod { color: #9A6A12; }
     .meta .ko { color: #C6492F; }
+    .seg { max-width: 100%; overflow-x: auto; }
+    .seg button { white-space: nowrap; }
+    .avg-card { background: var(--surface); border-radius: 14px; box-shadow: var(--sh-card); padding: 4px 14px; }
+    .avg { display: flex; align-items: baseline; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .avg:first-child { border-top: none; }
+    .avg.gen .avg-s, .avg.gen .avg-v { font-weight: 900; color: var(--ink); }
+    .avg-s { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--ink2); }
+    .avg-v { font-size: 15px; font-weight: 800; color: var(--ink); }
+    .avg-c { font-size: 11.5px; font-weight: 700; color: var(--ink3); min-width: 74px; text-align: right; }
+    .grade, .life { display: block; width: 100%; text-align: left; border: none; font: inherit; background: var(--surface); border-radius: 14px; box-shadow: var(--sh-card); padding: 11px 14px; margin-bottom: 8px; cursor: pointer; }
+    .life { cursor: default; }
+    .life.sanction { border-left: 4px solid #C6492F; }
+    .life.encouragement { border-left: 4px solid #5F9E6E; }
+    .g-top { display: flex; align-items: center; gap: 8px; }
+    .g-s { flex: 1; font-size: 14px; font-weight: 800; color: var(--ink); }
+    .g-v { font-size: 16px; font-weight: 900; color: var(--ink); }
+    .g-v.ns { color: var(--ink3); text-decoration: line-through; }
+    .g-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 3px; }
+    .g-detail { margin-top: 8px; display: grid; gap: 4px; }
+    .g-detail div { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .badge.okb { background: #EDF2EB; color: #5F7E5C; }
   `],
 })
 export class EcoleScreen {
@@ -155,9 +238,12 @@ export class EcoleScreen {
   private api = inject(EcoleApi);
 
   readonly pick = signal<number | null>(null);
-  readonly mode = signal<'avenir' | 'passe'>('avenir');
+  readonly mode = signal<'avenir' | 'passe' | 'notes' | 'vie'>('avenir');
   /** La semaine passée, archives comprises (devoirs retirés d'ÉcoleDirecte depuis). */
   readonly past = signal<EdHomework[]>([]);
+  readonly notes = signal<{ grades: EdGradeView[]; averages: EdAverageView[] } | null>(null);
+  readonly vie = signal<EdLifeView[] | null>(null);
+  readonly openGrade = signal<number | null>(null);
   readonly nonVide = (s: string): boolean => !!s;
 
   constructor() { void this.ecole.load(); }
@@ -194,6 +280,33 @@ export class EcoleScreen {
     try { this.past.set((await this.api.archives(s.id, this.store.addDays(today, -7), this.store.addDays(today, -1))).homework); }
     catch (e) { this.store.toast((e as Error).message); }
   }
+
+  async showNotes(s: EdVueStudent): Promise<void> {
+    this.mode.set('notes'); this.notes.set(null);
+    try { this.notes.set(await this.api.notes(s.id)); } catch (e) { this.store.toast((e as Error).message); this.mode.set('avenir'); }
+  }
+  async showVie(s: EdVueStudent): Promise<void> {
+    this.mode.set('vie'); this.vie.set(null);
+    try { this.vie.set((await this.api.vie(s.id)).items); } catch (e) { this.store.toast((e as Error).message); this.mode.set('avenir'); }
+  }
+
+  /**
+   * Les moyennes de la période en cours (celle qui contient aujourd'hui, sinon
+   * la dernière), telles qu'ÉcoleDirecte les renvoie, moyenne générale en tête.
+   */
+  readonly period = computed<{ label: string; rows: EdAverageView[] } | null>(() => {
+    const a = this.notes()?.averages ?? [];
+    if (!a.length) return null;
+    const today = this.ecole.vue()?.today || this.store.todayStr();
+    const codes = [...new Set(a.map((x) => x.periodCode))];
+    const current = codes.find((c) => { const p = a.find((x) => x.periodCode === c)!; return !!p.periodFrom && !!p.periodTo && p.periodFrom <= today && today <= p.periodTo; }) ?? codes[codes.length - 1];
+    const rows = a.filter((x) => x.periodCode === current);
+    return { label: rows[0].periodLabel || current, rows };
+  });
+
+  isNum(v: string): boolean { return /^-?\d+([.,]\d+)?$/.test(v.trim()); }
+  subject2(s: string): string { return subjectLabel(s); }
+  lifeLabel(k: EdLifeView['kind']): string { return k === 'absence' ? 'Absence' : k === 'retard' ? 'Retard' : k === 'sanction' ? 'Sanction' : 'Encouragement'; }
 
   openTomorrow(studentId: number): number {
     const v = this.ecole.vue(); if (!v) return 0;

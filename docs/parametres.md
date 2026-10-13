@@ -193,6 +193,11 @@ Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèv
 | `ecoleRefreshMin` | Minutes entre deux synchronisations | Foyer | entier | `30` | de 15 à 1440 | École | — |
 | `ecoleDevoirsJours` | Jours de devoirs à venir récupérés | Foyer | entier | `14` | de 1 à 30 | École | — |
 | `ecoleEdtSemaines` | Semaines d’emploi du temps récupérées | Foyer | entier | `2` | de 1 à 4 | École | — |
+| `ecoleNotesMax` | Dernières notes affichées par enfant | Foyer | entier | `15` | de 5 à 100 | École | — |
+| `ecoleDevoirsHeure` | Rappel du soir des devoirs pour demain | Foyer | heure | `17:30` | HH:MM | École | — |
+| `ecoleNotifNotes` | Me prévenir d’une nouvelle note | Personnel | oui / non | activé | — | École | — |
+| `ecoleNotifDevoirs` | Me prévenir d’un nouveau devoir | Personnel | oui / non | désactivé | — | École | — |
+| `ecoleNotifVieScolaire` | Me prévenir d’une absence, d’un retard ou d’une sanction | Personnel | oui / non | activé | — | École | — |
 | `ecolePauseDebut` | Pas de synchronisation à partir de | Foyer | heure | `22:00` | HH:MM | École | — |
 | `ecolePauseFin` | Reprise des synchronisations à | Foyer | heure | `06:00` | HH:MM | École | — |
 | `ecoleDimancheDebut` | Le dimanche, pas avant | Foyer | heure | `16:00` | HH:MM | École | — |
@@ -200,6 +205,11 @@ Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèv
 - **Minutes entre deux synchronisations** (`ecoleRefreshMin`) : Chaque compte ÉcoleDirecte est interrogé au plus une fois par intervalle, un compte après l’autre. Plus court, ce n’est pas plus frais pour autant : ÉcoleDirecte peut bloquer un compte qui se connecte trop souvent.
 - **Jours de devoirs à venir récupérés** (`ecoleDevoirsJours`) : Combien de jours devant aujourd’hui le cahier de textes est lu à chaque synchronisation. Les devoirs au-delà arrivent quand ils entrent dans la fenêtre. Plus long, ce sont plus de requêtes vers ÉcoleDirecte.
 - **Semaines d’emploi du temps récupérées** (`ecoleEdtSemaines`) : À partir du lundi de la semaine en cours. Les cours importés apparaissent dans l’emploi du temps de l’enfant, en lecture seule, et comptent pour la présence aux repas.
+- **Dernières notes affichées par enfant** (`ecoleNotesMax`) : Combien de notes l’onglet « Notes » de l’écran École montre, des plus récentes aux plus anciennes. Les moyennes affichées sont celles qu’ÉcoleDirecte renvoie, jamais recalculées.
+- **Rappel du soir des devoirs pour demain** (`ecoleDevoirsHeure`) : À cette heure, s’il reste des devoirs non faits pour le lendemain, un rappel part aux adultes et à l’enfant concerné (selon leur réglage « Sur le téléphone : rappels de mes tâches », section Notifications). Un rappel par enfant et par soir, pas plus.
+- **Me prévenir d’une nouvelle note** (`ecoleNotifNotes`) : Une notification quand ÉcoleDirecte publie une note (« Nolan : 15/20 en histoire »), regroupées si plusieurs tombent en même temps. Un enfant n’est prévenu que des siennes. La toute première synchronisation n’envoie rien.
+- **Me prévenir d’un nouveau devoir** (`ecoleNotifDevoirs`) : Une notification quand un devoir apparaît dans le cahier de textes. Désactivé par défaut : les devoirs sont déjà dans les Tâches et le rappel du soir.
+- **Me prévenir d’une absence, d’un retard ou d’une sanction** (`ecoleNotifVieScolaire`) : Une notification quand ÉcoleDirecte enregistre une absence, un retard, une sanction ou un encouragement (« Léo : retard enregistré ce matin, non justifié »). Réservé aux adultes.
 - **Pas de synchronisation à partir de** (`ecolePauseDebut`) : Début de la pause de nuit : Foyer ne contacte pas ÉcoleDirecte entre cette heure et l’heure de reprise. Identique à l’heure de reprise, il n’y a pas de pause.
 - **Reprise des synchronisations à** (`ecolePauseFin`) : Fin de la pause de nuit. Le bouton « Synchroniser maintenant » reste utilisable pendant la pause.
 - **Le dimanche, pas avant** (`ecoleDimancheDebut`) : Le dimanche, les synchronisations ne reprennent qu’à cette heure, à temps pour préparer la semaine. 00:00 pour traiter le dimanche comme un autre jour.

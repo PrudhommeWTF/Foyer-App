@@ -97,3 +97,86 @@ export function parseTimetable(data: unknown): EdLesson[] {
   }
   return out;
 }
+
+// ---- Notes et vie scolaire ------------------------------------------------
+//
+// notes      : data = { notes: [ { id, devoir, codePeriode, codeMatiere,
+//              libelleMatiere, typeDevoir, valeur, noteSur, coef, moyenneClasse,
+//              minClasse, maxClasse, nonSignificatif, date } ], periodes: [ {
+//              codePeriode, periode, dateDebut, dateFin, cloture,
+//              ensembleMatieres: { moyenneGenerale, moyenneClasse, disciplines:
+//              [ { codeMatiere, discipline, moyenne, moyenneClasse, moyenneMin,
+//              moyenneMax, coef } ] } } ] }
+// vie scolaire : data = { absencesRetards: [...], sanctionsEncouragements:
+//              [...] }, chaque ligne { id, typeElement, date, displayDate,
+//              libelle, motif, justifie, par, commentaire }
+//
+// Les valeurs sont des chaînes à virgule (« 12,5 ») qu'on garde telles quelles :
+// Foyer affiche ce qu'ÉcoleDirecte renvoie et ne recalcule rien.
+
+export interface EdGrade {
+  edId: number; date: string; subject: string; subjectCode: string; label: string; kind: string;
+  valueRaw: string; valueNum: number | null; outOf: string; coefficient: string;
+  classAverage: string; classMin: string; classMax: string; periodCode: string; notSignificant: boolean;
+}
+export interface EdAverage {
+  periodCode: string; periodLabel: string; periodFrom: string; periodTo: string; closed: boolean;
+  subjectCode: string; subject: string; average: string; classAverage: string; classMin: string; classMax: string; coefficient: string;
+}
+export type EdLifeKind = 'absence' | 'retard' | 'sanction' | 'encouragement';
+export interface EdLifeItem {
+  edId: number; kind: EdLifeKind; date: string; displayDate: string; label: string; reason: string;
+  justified: boolean | null; by: string; comment: string;
+}
+
+/** « 14,5 » → 14.5 ; « Abs », « NN », « Disp » → null. */
+export const gradeNumber = (raw: string): number | null => {
+  const t = raw.trim().replace(',', '.');
+  return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : null;
+};
+const day = (v: unknown): string => { const s = str(v).slice(0, 10); return DAY.test(s) ? s : ''; };
+
+export function parseGrades(data: unknown): { grades: EdGrade[]; averages: EdAverage[] } {
+  const d = obj(data);
+  const grades = arr(d['notes']).map(obj).map((n): EdGrade => {
+    const valueRaw = str(n['valeur']);
+    return {
+      edId: num(n['id']), date: day(n['date']), subject: str(n['libelleMatiere']), subjectCode: str(n['codeMatiere']),
+      label: str(n['devoir']), kind: str(n['typeDevoir']), valueRaw, valueNum: gradeNumber(valueRaw), outOf: str(n['noteSur']),
+      coefficient: str(n['coef']), classAverage: str(n['moyenneClasse']), classMin: str(n['minClasse']), classMax: str(n['maxClasse']),
+      periodCode: str(n['codePeriode']), notSignificant: bool(n['nonSignificatif']),
+    };
+  }).filter((g) => g.edId > 0);
+  const averages: EdAverage[] = [];
+  for (const p of arr(d['periodes']).map(obj)) {
+    const ens = obj(p['ensembleMatieres']);
+    const base = { periodCode: str(p['codePeriode']), periodLabel: str(p['periode']), periodFrom: day(p['dateDebut']), periodTo: day(p['dateFin']), closed: bool(p['cloture']) };
+    if (!base.periodCode) continue;
+    // La moyenne générale, quand l'établissement la publie, est une ligne de plus.
+    if (str(ens['moyenneGenerale'])) averages.push({ ...base, subjectCode: '_GENERALE', subject: 'Moyenne générale', average: str(ens['moyenneGenerale']), classAverage: str(ens['moyenneClasse']), classMin: str(ens['moyenneMin']), classMax: str(ens['moyenneMax']), coefficient: '' });
+    for (const m of arr(ens['disciplines']).map(obj)) {
+      const code = str(m['codeMatiere']) + (str(m['codeSousMatiere']) ? '/' + str(m['codeSousMatiere']) : '');
+      if (!code) continue;
+      averages.push({ ...base, subjectCode: code, subject: str(m['discipline']), average: str(m['moyenne']), classAverage: str(m['moyenneClasse']), classMin: str(m['moyenneMin']), classMax: str(m['moyenneMax']), coefficient: str(m['coef']) });
+    }
+  }
+  return { grades, averages };
+}
+
+const lifeKind = (t: string, fromSanctions: boolean): EdLifeKind => {
+  const k = t.toLowerCase();
+  if (k.includes('retard')) return 'retard';
+  if (k.includes('absence')) return 'absence';
+  if (k.includes('encourag') || k.includes('felicit') || k.includes('félicit')) return 'encouragement';
+  return fromSanctions ? 'sanction' : 'absence';
+};
+
+export function parseLife(data: unknown): EdLifeItem[] {
+  const d = obj(data);
+  const read = (list: unknown, fromSanctions: boolean): EdLifeItem[] => arr(list).map(obj).map((e) => ({
+    edId: num(e['id']), kind: lifeKind(str(e['typeElement']), fromSanctions), date: day(e['date']), displayDate: str(e['displayDate']),
+    label: str(e['libelle']), reason: str(e['motif']), justified: e['justifie'] === undefined || e['justifie'] === null ? null : bool(e['justifie']),
+    by: str(e['par']), comment: str(e['commentaire']),
+  })).filter((e) => e.edId > 0);
+  return [...read(d['absencesRetards'], false), ...read(d['sanctionsEncouragements'], true)];
+}

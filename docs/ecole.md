@@ -4,12 +4,12 @@ Ce que le module fait aujourd'hui, comment il se connecte à ÉcoleDirecte, comm
 le surveiller en shell, et quoi faire quand ça casse. Le choix de conception est
 dans `docs/ecole-etat-des-lieux.md`.
 
-**État : deuxième tranche.** Comptes ÉcoleDirecte, question de sécurité,
+**État : troisième tranche.** Comptes ÉcoleDirecte, question de sécurité,
 association des élèves aux membres, connexion périodique, journal ; puis, pour
 chaque élève associé, le cahier de textes (devoirs projetés en tâches), la case
-« Fait » dans les deux sens et l'emploi du temps (cours dans l'Emploi du temps
-et la présence aux repas). Les notes, la vie scolaire, les notifications et les
-outils d'assistant viendront dans les tranches suivantes.
+« Fait » dans les deux sens, l'emploi du temps (cours dans l'Emploi du temps et
+la présence aux repas), les notes et moyennes, la vie scolaire, et les
+notifications. Les outils d'assistant viendront dans la tranche suivante.
 
 ---
 
@@ -23,6 +23,26 @@ outils d'assistant viendront dans les tranches suivantes.
 | **Planning des repas** | La présence tient compte des cours : un demi-pensionnaire qui a cours le matin et l'après-midi n'est pas attendu à midi ; un cours annulé libère. Case « Demi-pensionnaire » par élève dans Paramètres → École. |
 | **Agenda** | Un repère « Interro <matière> » au jour de l'interrogation. Les devoirs y sont déjà, comme toute tâche datée. |
 | **Accueil** | Tuile École : ce qui reste pour demain par enfant, les interrogations, l'état de la synchronisation (« ÉcoleDirecte indisponible depuis … » le cas échéant). |
+| **École → Notes** | Les dernières notes (nombre réglable, 15 par défaut), valeur telle que donnée (« 14,5/20 », « Abs »), non significatives barrées ; au tap : type, coefficient, moyenne, plus basse et plus haute de la classe. Les moyennes de la période en cours, moyenne générale en tête, **telles que l'établissement les calcule** : Foyer ne recalcule rien, ne classe rien, ne trace aucune courbe. |
+| **École → Vie scolaire** | Absences, retards (justifiés ou non), sanctions, encouragements de l'année. |
+| **Téléphone** | Une nouvelle note (« Nolan : 15/20 en histoire »), une absence ou un retard (« Léo : retard enregistré aujourd'hui, non justifié »), une sanction, et, si on le demande, un nouveau devoir. Plusieurs au même passage se regroupent (« Nolan : 3 nouvelles notes »). Le soir à 17 h 30 (réglable), s'il reste des devoirs pour demain : « Nolan : 2 devoirs pour demain, dont une interrogation ». |
+
+**Notifications : qui reçoit quoi.**
+
+| Sorte | Adultes | L'enfant concerné | Préférence (personnelle, Paramètres → École) |
+|---|---|---|---|
+| Nouvelle note | oui | oui (les siennes seulement) | « Me prévenir d'une nouvelle note », activé par défaut |
+| Absence, retard, sanction, encouragement | oui | non | « Me prévenir d'une absence… », activé par défaut |
+| Nouveau devoir | oui | oui | « Me prévenir d'un nouveau devoir », désactivé par défaut |
+| Rappel du soir | oui | oui | « Sur le téléphone : rappels de mes tâches » (section Notifications) |
+
+Seuls les membres qui ont un compte et un téléphone abonné reçoivent quelque
+chose. La **toute première lecture** des notes, de la vie scolaire et des
+devoirs d'un élève est muette (sinon trente notes d'un coup) ; ensuite chaque
+ligne n'est annoncée qu'une fois (`notified_at`), qu'il y ait eu des
+destinataires ou non. « Suspendre les rappels » du foyer coupe aussi ces
+notifications. Le rappel du soir part une fois par élève et par soir, dans les
+deux heures qui suivent l'heure réglée.
 
 **« Fait » dans les deux sens.** Cocher dans l'écran École ou dans Tâches, c'est
 la même coche ; elle part à ÉcoleDirecte au passage suivant. Coché dans
@@ -39,7 +59,9 @@ l'écran École. Elle ne crée pas de tâche pour un devoir déjà passé.
 **Requêtes par passage, par élève** : la liste du cahier de textes, le détail
 des jours qui le demandent (devoir nouveau ; aujourd'hui, demain et après-demain
 à chaque passage ; les autres jours toutes les 6 h), un envoi groupé des
-« fait » s'il y en a, l'emploi du temps. Une modification d'énoncé à plus de
+« fait » s'il y en a, l'emploi du temps, les notes, la vie scolaire. Les notes
+et la vie scolaire ne sont demandées que si l'établissement ouvre ces modules à
+l'élève (liste des modules renvoyée à la connexion). Une modification d'énoncé à plus de
 deux jours peut donc mettre jusqu'à 6 h à apparaître.
 
 ---
@@ -283,6 +305,9 @@ donne des comptes « Identifiants à ressaisir » : rien ne plante.
 | `ed_sync_log` | Une ligne par connexion, réponse à la question ou passage de données (2 000 dernières) |
 | `ed_homework` | Un devoir : date de rendu, matière, professeur, énoncé (HTML nettoyé et texte), interrogation, « fait » côté ÉcoleDirecte, dernier accord, valeur locale, erreur d'envoi, tâche projetée, archivage |
 | `ed_lessons` | Un cours : jour, heures, matière, professeur, salle, annulé, modifié, archivage |
+| `ed_grades` | Une note : date, matière, intitulé, valeur brute (« 14,5 », « Abs ») et numérique, barème, coefficient, moyenne, plus basse et plus haute de la classe, période, non significative, annoncée le |
+| `ed_averages` | Les moyennes par période et par matière (et la moyenne générale), telles que renvoyées |
+| `ed_life` | Absence, retard, sanction, encouragement : date, libellé, motif, justifié, par qui, annoncé le |
 
 Retirer un compte efface ses secrets et l'archive ; l'historique reste.
 « Repartir à zéro » à la réactivation du module efface les tables `ed_*`. Les

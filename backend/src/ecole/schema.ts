@@ -12,7 +12,7 @@
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
-export const ED_SCHEMA_VERSION = 2;
+export const ED_SCHEMA_VERSION = 3;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -175,6 +175,93 @@ const MIGRATIONS: Migration[] = [
         );
         CREATE INDEX ed_lessons_day ON ed_lessons(student_id, day);
       `);
+    },
+  },
+  {
+    version: 3,
+    label: 'notes, moyennes et vie scolaire',
+    up: (db) => {
+      db.exec(`
+        -- La première lecture des notes et de la vie scolaire d'un élève est
+        -- muette : tout ce qu'elle trouve est marqué déjà notifié. Ces dates
+        -- disent qu'elle a eu lieu.
+        ALTER TABLE ed_students ADD COLUMN grades_baseline_at TEXT;
+        ALTER TABLE ed_students ADD COLUMN life_baseline_at TEXT;
+        ALTER TABLE ed_students ADD COLUMN homework_baseline_at TEXT;
+        ALTER TABLE ed_homework ADD COLUMN notified_at TEXT;
+
+        -- Une note, telle qu'ÉcoleDirecte la donne : la valeur brute (« 14,5 »,
+        -- « Abs », « NN ») et, quand c'en est une, sa valeur numérique.
+        CREATE TABLE ed_grades (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL REFERENCES ed_students(id) ON DELETE CASCADE,
+          ed_id INTEGER NOT NULL,
+          date TEXT,
+          subject TEXT NOT NULL DEFAULT '',
+          subject_code TEXT NOT NULL DEFAULT '',
+          label TEXT NOT NULL DEFAULT '',
+          kind TEXT NOT NULL DEFAULT '',
+          value_raw TEXT NOT NULL DEFAULT '',
+          value_num REAL,
+          out_of TEXT NOT NULL DEFAULT '',
+          coefficient TEXT NOT NULL DEFAULT '',
+          class_average TEXT NOT NULL DEFAULT '',
+          class_min TEXT NOT NULL DEFAULT '',
+          class_max TEXT NOT NULL DEFAULT '',
+          period_code TEXT NOT NULL DEFAULT '',
+          not_significant INTEGER NOT NULL DEFAULT 0,
+          school_year TEXT NOT NULL DEFAULT '',
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          notified_at TEXT,
+          UNIQUE (student_id, ed_id)
+        );
+        CREATE INDEX ed_grades_date ON ed_grades(student_id, date);
+
+        -- Les moyennes par période et par matière, telles qu'ÉcoleDirecte les
+        -- renvoie. Jamais recalculées par Foyer.
+        CREATE TABLE ed_averages (
+          student_id INTEGER NOT NULL REFERENCES ed_students(id) ON DELETE CASCADE,
+          period_code TEXT NOT NULL,
+          period_label TEXT NOT NULL DEFAULT '',
+          period_from TEXT,
+          period_to TEXT,
+          closed INTEGER NOT NULL DEFAULT 0,
+          subject_code TEXT NOT NULL,
+          subject TEXT NOT NULL DEFAULT '',
+          average TEXT NOT NULL DEFAULT '',
+          class_average TEXT NOT NULL DEFAULT '',
+          class_min TEXT NOT NULL DEFAULT '',
+          class_max TEXT NOT NULL DEFAULT '',
+          coefficient TEXT NOT NULL DEFAULT '',
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (student_id, period_code, subject_code)
+        );
+
+        -- Absences, retards, sanctions, encouragements.
+        CREATE TABLE ed_life (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL REFERENCES ed_students(id) ON DELETE CASCADE,
+          ed_id INTEGER NOT NULL,
+          -- 'absence' | 'retard' | 'sanction' | 'encouragement'
+          kind TEXT NOT NULL,
+          date TEXT,
+          display_date TEXT NOT NULL DEFAULT '',
+          label TEXT NOT NULL DEFAULT '',
+          reason TEXT NOT NULL DEFAULT '',
+          justified INTEGER,
+          given_by TEXT NOT NULL DEFAULT '',
+          comment TEXT NOT NULL DEFAULT '',
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          notified_at TEXT,
+          UNIQUE (student_id, kind, ed_id)
+        );
+        CREATE INDEX ed_life_date ON ed_life(student_id, date);
+      `);
+      // Les devoirs déjà connus ne déclenchent pas de notification « nouveau devoir ».
+      db.exec(`UPDATE ed_homework SET notified_at = first_seen_at WHERE notified_at IS NULL;
+               UPDATE ed_students SET homework_baseline_at = datetime('now') WHERE data_ok_at IS NOT NULL;`);
     },
   },
 ];
