@@ -29,6 +29,10 @@ services:
       # compose file, e.g.:   echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
       # The app refuses to start in production without a solid secret (≥ 16 chars).
       FOYER_JWT_SECRET: "${FOYER_JWT_SECRET:?Définissez FOYER_JWT_SECRET, ex: echo \"FOYER_JWT_SECRET=$(openssl rand -hex 32)\" >> .env}"
+      # Module École (ÉcoleDirecte) : clé de chiffrement des identifiants enregistrés.
+      # Sans elle le module ne peut enregistrer aucun compte ; la changer oblige à les
+      # ressaisir. Une fois :   echo "FOYER_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+      FOYER_SECRET_KEY: "${FOYER_SECRET_KEY:-}"
       # Extra cross-origin origins (comma-separated). Empty in single-container setups.
       # FOYER_CORS_ORIGINS: "https://foyer.mondomaine.fr"
       # First launch shows the setup wizard (creates household + admin account).

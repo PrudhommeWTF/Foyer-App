@@ -1,0 +1,14 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "question": "UXVlbGxlIGVzdCBsYSB2aWxsZSBkZSBuYWlzc2FuY2UgZGUgdm90cmUgZW5mYW50ID8=",
+    "propositions": [
+      "UEFSSVM=",
+      "UkVOTkVT",
+      "U0FJTlQtw4lUSUVOTkU=",
+      "TFlPTg=="
+    ]
+  }
+}

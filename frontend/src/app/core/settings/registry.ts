@@ -141,6 +141,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
   { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
+  { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
   { id: 'serveur', group: 'machine', label: 'Serveur et déploiement', desc: 'Ce que la machine impose. Non modifiable ici : ces valeurs se changent dans la configuration du service, puis redémarrage.' },
@@ -250,6 +251,14 @@ export const REGISTRY = [
     label: 'Employé à domicile',
     desc: 'Le suivi des heures et la déclaration CESU. Désactivé, l’écran, les repères d’agenda, les rappels, l’accès API et les outils d’assistant disparaissent ; les employés et présences sont conservés.',
     default: true,
+  },
+  {
+    key: 'modEcole',
+    type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
+    custom: true,
+    label: 'École (ÉcoleDirecte)',
+    desc: 'Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.',
+    default: false,
   },
   {
     key: 'prefNotifs',
@@ -492,6 +501,38 @@ export const REGISTRY = [
     default: 180, min: 15, max: 720,
   },
 
+  // ---- école (ÉcoleDirecte) -----------------------------------------------
+  // Les comptes, la question de sécurité et l'association élève / membre ne sont
+  // pas des réglages : ce sont des gestes, rendus à la main dans la section.
+  {
+    key: 'ecoleRefreshMin',
+    type: 'int', scope: 'foyer', section: 'ecole', module: 'École',
+    label: 'Minutes entre deux synchronisations',
+    desc: 'Chaque compte ÉcoleDirecte est interrogé au plus une fois par intervalle, un compte après l’autre. Plus court, ce n’est pas plus frais pour autant : ÉcoleDirecte peut bloquer un compte qui se connecte trop souvent.',
+    default: 30, min: 15, max: 1440,
+  },
+  {
+    key: 'ecolePauseDebut',
+    type: 'time', scope: 'foyer', section: 'ecole', module: 'École',
+    label: 'Pas de synchronisation à partir de',
+    desc: 'Début de la pause de nuit : Foyer ne contacte pas ÉcoleDirecte entre cette heure et l’heure de reprise. Identique à l’heure de reprise, il n’y a pas de pause.',
+    default: '22:00',
+  },
+  {
+    key: 'ecolePauseFin',
+    type: 'time', scope: 'foyer', section: 'ecole', module: 'École',
+    label: 'Reprise des synchronisations à',
+    desc: 'Fin de la pause de nuit. Le bouton « Synchroniser maintenant » reste utilisable pendant la pause.',
+    default: '06:00',
+  },
+  {
+    key: 'ecoleDimancheDebut',
+    type: 'time', scope: 'foyer', section: 'ecole', module: 'École',
+    label: 'Le dimanche, pas avant',
+    desc: 'Le dimanche, les synchronisations ne reprennent qu’à cette heure, à temps pour préparer la semaine. 00:00 pour traiter le dimanche comme un autre jour.',
+    default: '16:00',
+  },
+
   // ---- finances -----------------------------------------------------------
   {
     key: 'readingDueDays',
@@ -639,6 +680,41 @@ export const REGISTRY = [
     label: 'Clé privée des rappels (VAPID)',
     desc: 'Sans elle, une paire est engendrée au premier démarrage et gardée en base. En changer invalide tous les appareils déjà abonnés aux rappels.',
     default: '', envOverride: 'FOYER_VAPID_PRIVATE',
+  },
+  {
+    key: 'envSecretKey',
+    type: 'secret', scope: 'deploiement', section: 'serveur', module: 'École',
+    label: 'Clé de chiffrement des identifiants',
+    desc: 'Chiffre les identifiants ÉcoleDirecte et l’appareil de confiance enregistrés en base (au moins 32 caractères, par exemple « openssl rand -base64 32 »). Sans elle, aucun compte ne peut être enregistré. Perdue ou changée, les identifiants sont à ressaisir et la question de sécurité reviendra.',
+    default: '', envOverride: 'FOYER_SECRET_KEY',
+  },
+  {
+    key: 'envEdApiBase',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'École',
+    label: 'Adresse de l’API ÉcoleDirecte',
+    desc: 'Le seul hôte que le module École contacte. À ne changer que si ÉcoleDirecte déménage son API.',
+    default: 'https://api.ecoledirecte.com', envOverride: 'FOYER_ED_API_BASE',
+  },
+  {
+    key: 'envEdApiVersion',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'École',
+    label: 'Version d’API annoncée à ÉcoleDirecte',
+    desc: 'ÉcoleDirecte refuse les versions trop anciennes (code 517). Quand la section École le signale, posez ici la version que l’application officielle utilise (voir docs/ecole.md), puis redémarrez.',
+    default: '4.102.0', envOverride: 'FOYER_ED_API_VERSION',
+  },
+  {
+    key: 'envEdUserAgent',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'École',
+    label: 'Navigateur annoncé à ÉcoleDirecte',
+    desc: 'L’en-tête User-Agent envoyé à ÉcoleDirecte. Le jeton de session y est lié : à ne changer que si ÉcoleDirecte se met à refuser celui-ci.',
+    default: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3', envOverride: 'FOYER_ED_USER_AGENT',
+  },
+  {
+    key: 'envEdOrigin',
+    type: 'text', scope: 'deploiement', section: 'serveur', module: 'École',
+    label: 'Site d’origine annoncé à ÉcoleDirecte',
+    desc: 'Les en-têtes Origin et Referer envoyés avec chaque requête, comme le fait le site web d’ÉcoleDirecte. Aucune requête ne part vers cette adresse.',
+    default: 'https://www.ecoledirecte.com', envOverride: 'FOYER_ED_ORIGIN',
   },
 ] as const satisfies readonly SettingDecl[];
 

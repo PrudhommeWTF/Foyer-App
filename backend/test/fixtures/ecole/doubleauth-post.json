@@ -1,0 +1,9 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "cn": "CN-ANONYME-0123456789",
+    "cv": "CV-ANONYME-9876543210"
+  }
+}

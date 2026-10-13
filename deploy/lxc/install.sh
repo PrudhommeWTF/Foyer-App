@@ -178,6 +178,15 @@ else
   fi
 fi
 
+# Clé de chiffrement des identifiants enregistrés (module École) : générée une
+# fois, jamais remplacée. La perdre ou la changer oblige à ressaisir les
+# identifiants ÉcoleDirecte et à répondre de nouveau à la question de sécurité.
+if ! grep -q '^FOYER_SECRET_KEY=' "${ENV_FILE}"; then
+  echo "FOYER_SECRET_KEY=$(head -c 32 /dev/urandom | base64 | tr -d '\n')" >> "${ENV_FILE}"
+  chmod 600 "${ENV_FILE}"
+  log "FOYER_SECRET_KEY générée dans ${ENV_FILE} : sauvegardez ce fichier avec la base."
+fi
+
 # Version déployée : stockée dans le fichier d'environnement (variable lue en
 # priorité par l'app, comme en Docker). Remplace l'ancien fichier <data>/version.
 if grep -q '^FOYER_VERSION=' "${ENV_FILE}"; then
