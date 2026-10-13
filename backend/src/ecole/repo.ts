@@ -33,6 +33,11 @@ export interface Student {
   firstName: string; lastName: string; className: string; schoolName: string;
   memberId: string | null; matchSource: 'prenom' | 'manuel' | null; linkState: LinkState;
   modules: string[]; createdAt: string; lastSeenAt: string | null; archivedAt: string | null;
+  /** La liste « Devoirs de … » du document, une fois créée. */
+  taskListId: string | null;
+  /** Déjeune à la cantine (la pause de midi compte comme une absence du foyer). */
+  halfBoard: boolean;
+  dataOkAt: string | null; dataError: string | null; dataErrorAt: string | null;
 }
 
 export interface LogLine {
@@ -64,6 +69,8 @@ const studentRow = (r: Row): Student => ({
   memberId: s(r['member_id']), matchSource: s(r['match_source']) as Student['matchSource'], linkState: (r['link_state'] as LinkState) || 'aucun',
   modules: (() => { try { const m = JSON.parse(String(r['modules_json'] || '[]')); return Array.isArray(m) ? m.map(String) : []; } catch { return []; } })(),
   createdAt: r['created_at'] as string, lastSeenAt: s(r['last_seen_at']), archivedAt: s(r['archived_at']),
+  taskListId: s(r['task_list_id']), halfBoard: r['half_board'] == null ? true : !!r['half_board'],
+  dataOkAt: s(r['data_ok_at']), dataError: s(r['data_error']), dataErrorAt: s(r['data_error_at']),
 });
 
 // ---- Comptes --------------------------------------------------------------
@@ -160,6 +167,136 @@ export function archiveMissingStudents(accountId: number, seenEdIds: number[], n
 
 export function setLink(studentId: number, memberId: string | null, matchSource: Student['matchSource'], linkState: LinkState): void {
   database.prepare('UPDATE ed_students SET member_id = ?, match_source = ?, link_state = ? WHERE id = ?').run(memberId, matchSource, linkState, studentId);
+}
+
+const STUDENT_COLUMNS = { taskListId: 'task_list_id', halfBoard: 'half_board', dataOkAt: 'data_ok_at', dataError: 'data_error', dataErrorAt: 'data_error_at' } as const;
+export type StudentPatch = Partial<{ -readonly [K in keyof typeof STUDENT_COLUMNS]: K extends 'halfBoard' ? boolean : string | null }>;
+
+export function patchStudent(id: number, patch: StudentPatch): void {
+  const keys = Object.keys(patch).filter((k): k is keyof typeof STUDENT_COLUMNS => k in STUDENT_COLUMNS);
+  if (!keys.length) return;
+  const vals = keys.map((k) => { const v = patch[k]; return typeof v === 'boolean' ? (v ? 1 : 0) : v ?? null; });
+  database.prepare(`UPDATE ed_students SET ${keys.map((k) => STUDENT_COLUMNS[k] + ' = ?').join(', ')} WHERE id = ?`).run(...vals, id);
+}
+
+// ---- Devoirs --------------------------------------------------------------
+
+export interface Homework {
+  id: number; studentId: number; edId: number; due: string;
+  subject: string; subjectCode: string; teacher: string;
+  contentHtml: string; contentText: string; contentHash: string | null;
+  isTest: boolean; online: boolean; givenOn: string | null;
+  doneEd: boolean; doneSynced: boolean | null; doneLocal: boolean | null;
+  doneSentAt: string | null; doneError: string | null;
+  taskId: string | null; taskDroppedAt: string | null; detailAt: string | null;
+  firstSeenAt: string; lastSeenAt: string; modifiedAt: string | null; archivedAt: string | null;
+}
+
+const b = (v: unknown): boolean | null => (v == null ? null : !!v);
+const homeworkRow = (r: Row): Homework => ({
+  id: r['id'] as number, studentId: r['student_id'] as number, edId: r['ed_id'] as number, due: r['due_date'] as string,
+  subject: String(r['subject'] ?? ''), subjectCode: String(r['subject_code'] ?? ''), teacher: String(r['teacher'] ?? ''),
+  contentHtml: String(r['content_html'] ?? ''), contentText: String(r['content_text'] ?? ''), contentHash: s(r['content_hash']),
+  isTest: !!r['is_test'], online: !!r['online'], givenOn: s(r['given_on']),
+  doneEd: !!r['done_ed'], doneSynced: b(r['done_synced']), doneLocal: b(r['done_local']),
+  doneSentAt: s(r['done_sent_at']), doneError: s(r['done_error']),
+  taskId: s(r['task_id']), taskDroppedAt: s(r['task_dropped_at']), detailAt: s(r['detail_at']),
+  firstSeenAt: r['first_seen_at'] as string, lastSeenAt: r['last_seen_at'] as string, modifiedAt: s(r['modified_at']), archivedAt: s(r['archived_at']),
+});
+
+export function getHomework(id: number): Homework | null {
+  const r = database.prepare('SELECT * FROM ed_homework WHERE id = ?').get(id) as Row | undefined;
+  return r ? homeworkRow(r) : null;
+}
+
+/** Les devoirs d'élèves donnés, entre deux dates de rendu incluses. Les archivés seulement sur demande. */
+export function listHomework(studentIds: number[], from: string, to: string, includeArchived = false): Homework[] {
+  if (!studentIds.length) return [];
+  return (database.prepare(`SELECT * FROM ed_homework WHERE student_id IN (${studentIds.map(() => '?').join(',')})
+    AND due_date BETWEEN ? AND ? ${includeArchived ? '' : 'AND archived_at IS NULL'} ORDER BY due_date, subject, id`)
+    .all(...studentIds, from, to) as Row[]).map(homeworkRow);
+}
+
+export interface HomeworkSeen { edId: number; due: string; subject: string; subjectCode: string; givenOn: string; done: boolean; isTest: boolean; online: boolean; }
+
+/**
+ * Un devoir vu dans la liste du cahier de textes : créé, ou mis à jour (et
+ * désarchivé). À la création, l'état « fait » d'ÉcoleDirecte est le point
+ * d'accord de départ (`done_synced`). Rend la ligne et si elle est neuve.
+ */
+export function upsertHomework(studentId: number, h: HomeworkSeen, now: string): { row: Homework; created: boolean } {
+  const before = database.prepare('SELECT id FROM ed_homework WHERE student_id = ? AND ed_id = ?').get(studentId, h.edId) as Row | undefined;
+  if (before) {
+    database.prepare(`UPDATE ed_homework SET due_date = ?, subject = ?, subject_code = ?, given_on = ?, done_ed = ?, is_test = ?, online = ?,
+      last_seen_at = ?, archived_at = NULL WHERE id = ?`)
+      .run(h.due, h.subject, h.subjectCode, h.givenOn || null, h.done ? 1 : 0, h.isTest ? 1 : 0, h.online ? 1 : 0, now, before['id']);
+    return { row: getHomework(before['id'] as number)!, created: false };
+  }
+  const id = Number(database.prepare(`INSERT INTO ed_homework (student_id, ed_id, due_date, subject, subject_code, given_on, done_ed, done_synced, is_test, online, first_seen_at, last_seen_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(studentId, h.edId, h.due, h.subject, h.subjectCode, h.givenOn || null, h.done ? 1 : 0, h.done ? 1 : 0, h.isTest ? 1 : 0, h.online ? 1 : 0, now, now).lastInsertRowid);
+  return { row: getHomework(id)!, created: true };
+}
+
+const HW_COLUMNS = {
+  teacher: 'teacher', contentHtml: 'content_html', contentText: 'content_text', contentHash: 'content_hash', detailAt: 'detail_at',
+  doneSynced: 'done_synced', doneLocal: 'done_local', doneSentAt: 'done_sent_at', doneError: 'done_error',
+  taskId: 'task_id', taskDroppedAt: 'task_dropped_at', modifiedAt: 'modified_at', archivedAt: 'archived_at',
+} as const;
+export type HomeworkPatch = Partial<{ -readonly [K in keyof typeof HW_COLUMNS]: K extends 'doneSynced' | 'doneLocal' ? boolean | null : string | null }>;
+
+export function patchHomework(id: number, patch: HomeworkPatch): void {
+  const keys = Object.keys(patch).filter((k): k is keyof typeof HW_COLUMNS => k in HW_COLUMNS);
+  if (!keys.length) return;
+  const vals = keys.map((k) => { const v = patch[k]; return typeof v === 'boolean' ? (v ? 1 : 0) : v ?? null; });
+  database.prepare(`UPDATE ed_homework SET ${keys.map((k) => HW_COLUMNS[k] + ' = ?').join(', ')} WHERE id = ?`).run(...vals, id);
+}
+
+/** Les devoirs de la fenêtre qu'ÉcoleDirecte ne renvoie plus : archivés (datés), jamais effacés. */
+export function archiveMissingHomework(studentId: number, seenEdIds: number[], from: string, to: string, now: string): number {
+  const rows = database.prepare('SELECT id, ed_id FROM ed_homework WHERE student_id = ? AND due_date BETWEEN ? AND ? AND archived_at IS NULL').all(studentId, from, to) as Row[];
+  const seen = new Set(seenEdIds);
+  const gone = rows.filter((r) => !seen.has(r['ed_id'] as number));
+  const stmt = database.prepare('UPDATE ed_homework SET archived_at = ? WHERE id = ?');
+  for (const r of gone) stmt.run(now, r['id']);
+  return gone.length;
+}
+
+// ---- Emploi du temps ------------------------------------------------------
+
+export interface Lesson {
+  id: number; studentId: number; edId: number; day: string; start: string; end: string;
+  subject: string; teacher: string; room: string; kind: string; cancelled: boolean; modified: boolean;
+}
+export interface LessonSeen { edId: number; day: string; start: string; end: string; subject: string; teacher: string; room: string; kind: string; cancelled: boolean; modified: boolean; }
+
+/**
+ * Remplace la vue d'une période par ce qu'ÉcoleDirecte vient d'en dire : upsert
+ * de chaque cours, archivage de ceux qui ont disparu. Une seule transaction.
+ */
+export function syncLessons(studentId: number, lessons: LessonSeen[], from: string, to: string, now: string): { upserted: number; archived: number } {
+  let archived = 0;
+  database.transaction(() => {
+    const up = database.prepare(`INSERT INTO ed_lessons (student_id, ed_id, day, start, end, subject, teacher, room, kind, cancelled, modified, first_seen_at, last_seen_at)
+      VALUES (@studentId, @edId, @day, @start, @end, @subject, @teacher, @room, @kind, @cancelled, @modified, @now, @now)
+      ON CONFLICT (student_id, ed_id, day) DO UPDATE SET start = excluded.start, end = excluded.end, subject = excluded.subject,
+        teacher = excluded.teacher, room = excluded.room, kind = excluded.kind, cancelled = excluded.cancelled, modified = excluded.modified,
+        last_seen_at = excluded.last_seen_at, archived_at = NULL`);
+    for (const l of lessons) up.run({ studentId, ...l, cancelled: l.cancelled ? 1 : 0, modified: l.modified ? 1 : 0, now });
+    archived = database.prepare('UPDATE ed_lessons SET archived_at = ? WHERE student_id = ? AND day BETWEEN ? AND ? AND archived_at IS NULL AND last_seen_at <> ?')
+      .run(now, studentId, from, to, now).changes;
+  })();
+  return { upserted: lessons.length, archived };
+}
+
+export function listLessons(studentIds: number[], from: string, to: string): Lesson[] {
+  if (!studentIds.length) return [];
+  return (database.prepare(`SELECT * FROM ed_lessons WHERE student_id IN (${studentIds.map(() => '?').join(',')}) AND day BETWEEN ? AND ? AND archived_at IS NULL ORDER BY day, start`)
+    .all(...studentIds, from, to) as Row[]).map((r) => ({
+    id: r['id'] as number, studentId: r['student_id'] as number, edId: r['ed_id'] as number, day: r['day'] as string,
+    start: r['start'] as string, end: r['end'] as string, subject: String(r['subject'] ?? ''), teacher: String(r['teacher'] ?? ''),
+    room: String(r['room'] ?? ''), kind: String(r['kind'] ?? ''), cancelled: !!r['cancelled'], modified: !!r['modified'],
+  }));
 }
 
 // ---- Journal --------------------------------------------------------------

@@ -193,6 +193,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
   birthday: { color: '#C77DA5', label: 'Anniversaire' },
   echeance: { color: '#C6492F', label: 'Échéance de contrat' },
   cesu: { color: '#7A8B4A', label: 'Déclaration CESU' },
+  ecole: { color: '#3D6FA8', label: 'Interrogation' },
 };
 
 export const SCREEN_TITLES: Record<string, string> = {
@@ -200,6 +201,7 @@ export const SCREEN_TITLES: Record<string, string> = {
   lieux: 'Lieux de vacances',
   contacts: 'Contacts importants', fidelite: 'Cartes de fidélité', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
+  ecole: 'École',
 };
 
 /**

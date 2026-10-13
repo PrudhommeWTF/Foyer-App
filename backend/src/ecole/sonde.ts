@@ -8,7 +8,8 @@
 // Options :
 //   --liste              les comptes enregistrés, sans aucune requête
 //   --compte <id>        se connecte avec ce compte (identifiants et appareil de confiance en base)
-//   --fixtures <dossier> écrit chaque réponse, anonymisée, pour régénérer test/fixtures/ecole
+//   --fixtures <dossier> écrit chaque réponse (connexion, cahier de textes, un jour de
+//                        détail, emploi du temps), anonymisée, pour régénérer test/fixtures/ecole
 //   --env <fichier|->    lit les variables KEY=VALUE d'un fichier (ou de l'entrée standard)
 //
 // La sonde ouvre la base en lecture seule et ne répond jamais à la question de
@@ -51,6 +52,8 @@ function anonymize(v: unknown, key = ''): unknown {
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, anonymize(x, k)]));
   if (key === 'question') return Buffer.from('Question anonymisée ?').toString('base64');
   if (key === 'propositions') return Buffer.from('PROPOSITION').toString('base64');
+  // Un énoncé peut citer un nom : remplacé, sa forme (HTML en base64) gardée.
+  if (key === 'contenu' && typeof v === 'string' && v) return Buffer.from('<p>Énoncé anonymisé, <a href="https://exemple.fr">lien</a></p>').toString('base64');
   if (IDS.has(key) && (typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v)))) {
     const k = String(v);
     if (!fakeIds.has(k)) fakeIds.set(k, 1000000 + fakeIds.size + 1);
@@ -114,6 +117,26 @@ async function main(): Promise<void> {
     for (const a of out.accounts) {
       say(`  compte ${a.type}${a.main ? ' (principal)' : ''}, ${a.students.length} élève(s)`);
       for (const e of a.students) say(`    ${e.firstName} · ${e.className || 'classe ?'} · ${e.schoolName || 'établissement ?'} · modules : ${e.modules.join(', ') || 'aucun'}`);
+    }
+    // Les données du premier élève : de quoi voir si le cahier de textes ou
+    // l'emploi du temps ont changé de forme. Lecture seule.
+    const main = out.accounts.find((x) => x.main) || out.accounts[0];
+    const st = out.accounts.flatMap((x) => x.students)[0];
+    if (st) {
+      say();
+      say(`Données de ${st.firstName} (lecture seule) :`);
+      if (st.idLogin && st.idLogin !== main?.idLogin) await client.switchAccount(out.session, st.idLogin);
+      const devoirs = await client.homeworkList(out.session, st.edId);
+      say(`  cahier de textes : ${devoirs.length} devoir(s) à venir`);
+      const jour = devoirs.map((d) => d.due).sort()[0];
+      if (jour) {
+        const detail = await client.homeworkDay(out.session, st.edId, jour);
+        say(`  détail du ${jour} : ${detail.length} devoir(s), énoncés de ${detail.map((d) => d.html.length).join(', ') || '0'} caractère(s) HTML`);
+      }
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
+      const fin = new Date(today + 'T12:00:00Z'); fin.setUTCDate(fin.getUTCDate() + 6);
+      const cours = await client.timetable(out.session, st.edId, today, fin.toISOString().slice(0, 10));
+      say(`  emploi du temps (7 jours) : ${cours.length} cours, dont ${cours.filter((c) => c.cancelled).length} annulé(s)`);
     }
   } catch (e) {
     if (e instanceof EdError) die(1, `${e.message} [famille : ${e.kind}, code ${e.code ?? '-'}, HTTP ${e.httpStatus ?? '-'}]`);

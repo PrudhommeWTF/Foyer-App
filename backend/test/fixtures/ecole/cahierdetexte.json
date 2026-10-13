@@ -1,0 +1,57 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "@J+1@": [
+      {
+        "matiere": "MATHEMATIQUES",
+        "codeMatiere": "MATHS",
+        "aFaire": true,
+        "idDevoir": 5001,
+        "documentsAFaire": false,
+        "donneLe": "@J-2@",
+        "effectue": false,
+        "interrogation": false,
+        "rendreEnLigne": false
+      },
+      {
+        "matiere": "ANGLAIS LV1",
+        "codeMatiere": "AGL1",
+        "aFaire": true,
+        "idDevoir": 5002,
+        "documentsAFaire": false,
+        "donneLe": "@J-5@",
+        "effectue": false,
+        "interrogation": true,
+        "rendreEnLigne": false
+      }
+    ],
+    "@J+3@": [
+      {
+        "matiere": "HISTOIRE-GEOGRAPHIE",
+        "codeMatiere": "HI-GE",
+        "aFaire": true,
+        "idDevoir": 5003,
+        "documentsAFaire": true,
+        "donneLe": "@J-1@",
+        "effectue": true,
+        "interrogation": false,
+        "rendreEnLigne": false
+      }
+    ],
+    "@J+40@": [
+      {
+        "matiere": "FRANCAIS",
+        "codeMatiere": "FRANC",
+        "aFaire": true,
+        "idDevoir": 5004,
+        "documentsAFaire": false,
+        "donneLe": "@J-1@",
+        "effectue": false,
+        "interrogation": false,
+        "rendreEnLigne": false
+      }
+    ]
+  }
+}

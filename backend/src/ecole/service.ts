@@ -19,6 +19,7 @@
 import { EdClient, EdError, EdSession, LoginOutcome, Trusted } from './client';
 import * as repo from './repo';
 import { MemberLite, propose } from './match';
+import { syncAccountData } from './sync';
 import { edConfig } from './config';
 import { Cadence, inQuietWindow, isDue, mayRun } from './cadence';
 import { open, seal } from '../storage/secret-box';
@@ -35,7 +36,7 @@ let deps: EcoleDeps = { members: () => [], alertAdmins: () => undefined };
 export function setEcoleDeps(d: Partial<EcoleDeps>): void { deps = { ...deps, ...d }; }
 
 export type ConnectResult =
-  | { kind: 'ok'; students: number }
+  | { kind: 'ok'; students: number; data?: { ok: number; failed: number } }
   | { kind: 'qcm'; question: string; propositions: string[]; changed?: boolean }
   | { kind: 'erreur'; errorKind: string; code: number | null; message: string };
 
@@ -175,10 +176,29 @@ async function connectNow(id: number): Promise<ConnectResult> {
   const creds = credentials(a);
   if (!creds) return blockForKey(a);
   const t0 = Date.now();
+  const c = client();
+  let out: LoginOutcome;
   try {
-    const out = await client().login(creds.login, creds.password, creds.trusted);
-    return out.kind === 'ok' ? onSuccess(a, out, t0) : onQcm(a, out, !!creds.trusted, t0);
+    out = await c.login(creds.login, creds.password, creds.trusted);
   } catch (e) { return onFailure(a, e, 'connexion', t0); }
+  if (out.kind === 'qcm') return onQcm(a, out, !!creds.trusted, t0);
+  return withData(a, c, out, onSuccess(a, out, t0));
+}
+
+/**
+ * Après une connexion réussie : les données des élèves associés, sur la même
+ * session. Un échec ici ne remet pas la connexion en cause : il est noté par
+ * élève (« données partielles ») et dans le journal.
+ */
+async function withData(a: repo.Account, c: EdClient, out: Extract<LoginOutcome, { kind: 'ok' }>, res: ConnectResult): Promise<ConnectResult> {
+  if (res.kind !== 'ok') return res;
+  const main = out.accounts.find((x) => x.main) || out.accounts.find((x) => x.type !== 'autre') || out.accounts[0];
+  const t0 = Date.now();
+  const data = await syncAccountData(repo.getAccount(a.id)!, c, out.session, main?.idLogin ?? 0, deps.members());
+  if (data.ok + data.failed) {
+    repo.addLog({ accountId: a.id, scope: 'donnees', ok: data.failed === 0, httpStatus: null, edCode: null, message: data.summary, durationMs: Date.now() - t0 });
+  }
+  return { ...res, data: { ok: data.ok, failed: data.failed } };
 }
 
 /** Une connexion, à la file. Le planificateur et le bouton « Synchroniser maintenant » passent par ici. */
@@ -209,7 +229,7 @@ export function answerQcm(id: number, index: number): Promise<ConnectResult> {
         if (!session) {
           // Sans l'appareil de confiance : c'est justement lui qu'on vient chercher.
           const out = await c.login(creds.login, creds.password, null);
-          if (out.kind === 'ok') return onSuccess(a, out, t0);
+          if (out.kind === 'ok') return withData(a, c, out, onSuccess(a, out, t0));
           if (out.question !== q.question || !out.propositions.includes(choice)) return onQcm(a, out, false, t0, true);
           session = out.challenge;
         }

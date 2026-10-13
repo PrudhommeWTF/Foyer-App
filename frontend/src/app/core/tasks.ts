@@ -126,19 +126,22 @@ export function visibleLists(lists: TaskList[], me: string | null, includeArchiv
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 }
 
-/** L'ordre des types dans les puces : l'affaire du jour d'abord. */
+/** Les types qu'on choisit en créant une liste. `devoirs` n'en est pas : ces listes naissent du module École. */
 export const KIND_ORDER: ListKind[] = ['taches', 'corvees', 'checklist', 'preparation'];
-export const KIND_LABELS: Record<ListKind, string> = { taches: 'Tâches', corvees: 'Corvées', checklist: 'Checklist', preparation: 'Préparation' };
+/** L'ordre des types dans les puces : l'affaire du jour d'abord, devoirs compris. */
+export const KIND_SORT: ListKind[] = ['taches', 'devoirs', 'corvees', 'checklist', 'preparation'];
+export const KIND_LABELS: Record<ListKind, string> = { taches: 'Tâches', corvees: 'Corvées', checklist: 'Checklist', preparation: 'Préparation', devoirs: 'Devoirs ÉcoleDirecte' };
 
 /**
- * Les tâches de l'affaire du jour : celles des listes « tâches » visibles, plus
- * celles dont la liste n'existe plus, qui sont montrées plutôt que perdues.
+ * Les tâches de l'affaire du jour : celles des listes « tâches » et « devoirs »
+ * visibles, plus celles dont la liste n'existe plus, qui sont montrées plutôt
+ * que perdues.
  */
 export function dailyTasks(tasks: TaskItem[], lists: TaskList[], me: string | null): TaskItem[] {
   const byId = new Map((lists || []).map((l) => [l.id, l]));
   return (tasks || []).filter((t) => {
     const l = byId.get(t.listId);
-    return !l || (l.kind === 'taches' && !l.archived && (l.scope === 'shared' || l.scope === me));
+    return !l || ((l.kind === 'taches' || l.kind === 'devoirs') && !l.archived && (l.scope === 'shared' || l.scope === me));
   });
 }
 

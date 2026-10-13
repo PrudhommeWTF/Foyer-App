@@ -50,6 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'contacts', label: 'Contacts', icon: 'contacts' },
       { id: 'fidelite', label: 'Cartes de fidélité', icon: 'card' },
       { id: 'employe', label: 'Employé à domicile', icon: 'users' },
+      { id: 'ecole', label: 'École', icon: 'ecole' },
     ],
   },
 ];

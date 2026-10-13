@@ -129,7 +129,8 @@ describe('École : configuration ÉcoleDirecte (HTTP)', () => {
     const apres = ed.connexions('parent.famille');
     assert.equal(apres.length, avant + 1, 'une connexion par passage, pas plus');
     assert.deepEqual(apres.at(-1)!.data!['fa'], [{ cn: 'CN-ANONYME-0123456789', cv: 'CV-ANONYME-9876543210' }]);
-    assert.equal(ed.requetes.at(-1)!.path, '/v3/login.awp', 'pas de double authentification');
+    const depuis = ed.requetes.slice(ed.requetes.lastIndexOf(apres.at(-1)!));
+    assert.ok(!depuis.some((q) => q.path.includes('doubleauth')), 'pas de double authentification');
     assert.equal((await compte(famille)).state, 'ok');
     const apresCo = await compte(famille);
     assert.ok(Date.parse(apresCo.nextRunAt) - Date.parse(apresCo.lastSyncAt) >= 30 * 60_000, 'pas deux fois dans l’intervalle');

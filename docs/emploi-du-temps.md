@@ -41,6 +41,23 @@ jamais rien.** Le filtre par membre est un affinage, pas un prérequis à
 l'affichage. Un écran qui paraît vide parce qu'un filtre est resté actif est un
 bug, pas une fonctionnalité.
 
+## Les cours importés d'ÉcoleDirecte
+
+Quand le module École est actif, les cours des élèves associés s'ajoutent à la
+vue : une **source en plus**, jamais fusionnée avec les créneaux du document.
+Ils ne sont pas dans `sched` (rien n'est écrit), leurs identifiants commencent
+par `ed:`, l'écran les montre étiquetés « ÉcoleDirecte », en lecture seule (ni
+édition, ni glisser-déposer), un cours annulé barré.
+
+La présence (`presence.ts`) et les couverts lisent `store.schedAll()`, qui
+réunit les deux sources : un cours compte comme un créneau « hors du foyer »,
+sauf s'il est annulé. Pour un élève **demi-pensionnaire** (case dans
+Paramètres → École, oui par défaut), la pause entre le dernier cours du matin et
+le premier de l'après-midi devient un créneau « Cantine » : il n'est pas
+attendu au déjeuner. Externe, ce trou reste libre. Un créneau saisi à la main
+qui chevauche un cours (le car scolaire) coexiste avec lui. Code :
+`frontend/src/app/core/ecole-slots.ts`.
+
 ## Le modèle de données
 
 Un créneau, dans `HouseholdState.sched` :

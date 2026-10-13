@@ -139,7 +139,7 @@ export interface PlaceItem {
  * sans peser sur la journée. C'est ce qui range « la tâche qui n'aurait jamais
  * dû en être une » : une liste d'idées est une checklist, hors du quotidien.
  */
-export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation';
+export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation' | 'devoirs';
 export interface TaskList {
   id: string; name: string; color: string; icon: string;
   kind: ListKind;
@@ -223,6 +223,8 @@ export interface TaskItem {
   done: boolean;
   /** Qui a coché, et quand. Sert à l'afficher, pas à arbitrer. */
   doneAt?: string | null; doneBy?: string | null;
+  /** Devoir ÉcoleDirecte dont la tâche est la projection (posé par le serveur seul). */
+  edId?: number | null;
   /** Auteur et date de création. */
   by?: string | null; at?: string | null;
   /** Nom du jeton d'accès quand la tâche a été créée par un assistant (posé par le serveur MCP). */

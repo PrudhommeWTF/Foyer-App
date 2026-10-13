@@ -8,6 +8,8 @@ import { WhoComponent } from '../shared/who';
 import { SchedSlot } from '../core/models';
 import { FreeGap, SchedScope, WHEN_LABELS, dowLabel, filterSlots, gapsOf, slotsOn, validityLabel, whoBadges } from '../core/schedule';
 import { DOW, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
+import { isEdSlot } from '../core/ecole-slots';
+import { EcoleStore } from '../core/ecole.store';
 
 /** Un jour de la vue, déjà filtré et daté : l'affichage n'a plus qu'à le dessiner. */
 interface DayView { dow: number; date: string; label: string; short: string; num: string; today: boolean; slots: SchedSlot[]; }
@@ -98,7 +100,7 @@ interface DayView { dow: number; date: string; label: string; short: string; num
         @if (!onThisWeek()) { <button class="clear" (click)="store.schedToday()">Cette semaine</button> }
       </div>
 
-      @if (!d().sched.length) {
+      @if (!store.schedAll().length) {
         <div class="blank">
           <div class="blank-title">Votre semaine est encore vide.</div>
           <div class="blank-sub">Ajoutez un premier créneau : école, travail, activité, trajet.</div>
@@ -147,9 +149,11 @@ interface DayView { dow: number; date: string; label: string; short: string; num
                       <span class="gap-line"></span>
                     </div>
                   }
-                  <div class="slot" draggable="true" (dragstart)="onDragStart(s)" (dragend)="onDragEnd()"
-                       [class.dragging]="dragId() === s.id"
-                       [style.border-left]="'4px solid ' + color(s.k)" (click)="store.editSlot(s.id, v.date)">
+                  <!-- Un cours importé d'ÉcoleDirecte se lit, il ne s'édite ni ne se déplace :
+                       il n'est pas dans le document, il vient du serveur. -->
+                  <div class="slot" [attr.draggable]="!ed(s.id)" (dragstart)="onDragStart(s)" (dragend)="onDragEnd()"
+                       [class.dragging]="dragId() === s.id" [class.ed]="ed(s.id)" [class.cancelled]="cancelled(s.id)"
+                       [style.border-left]="'4px solid ' + color(s.k)" (click)="ed(s.id) || store.editSlot(s.id, v.date)">
                     <div class="slot-top">
                       <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
                       <f-who [badges]="badges(s)" />
@@ -161,7 +165,8 @@ interface DayView { dow: number; date: string; label: string; short: string; num
                       </span>
                       <!-- Une période ou une exception doit se voir sur la ligne :
                            sinon rien ne distingue « toute l'année » de « jusqu'en juin ». -->
-                      @if (noteOf(s); as note) { <span class="slot-note">{{ note }}</span> }
+                      @if (ed(s.id)) { <span class="slot-ed">ÉcoleDirecte{{ cancelled(s.id) ? ' · annulé' : modified(s.id) ? ' · modifié' : '' }}</span> }
+                      @else if (noteOf(s); as note) { <span class="slot-note">{{ note }}</span> }
                     </div>
                   </div>
                 } @empty {
@@ -485,6 +490,9 @@ interface DayView { dow: number; date: string; label: string; short: string; num
     .slot.dragging { opacity: .4; }
     .day-card.drop-target { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
     .slot { background: var(--soft); border-radius: 12px; padding: 10px 11px; cursor: pointer; }
+    .slot.ed { cursor: default; }
+    .slot.cancelled .slot-label, .slot.cancelled .slot-time { text-decoration: line-through; opacity: .6; }
+    .slot-ed { font-size: 10.5px; font-weight: 800; color: #4E93B8; background: #E5F0F4; border-radius: 6px; padding: 2px 6px; }
     .slot-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     /* Si la place manque, c'est l'heure qui se coupe, jamais le marqueur
        d'identité : savoir de qui il s'agit prime sur la minute exacte. */
@@ -562,7 +570,8 @@ export class PlanningScreen {
    * poser un créneau ponctuel.
    */
   readonly week = computed<DayView[]>(() => {
-    const sched = this.d().sched;
+    // Les créneaux du foyer et les cours importés d'ÉcoleDirecte, côte à côte.
+    const sched = this.store.schedAll();
     const who = this.store.ui().schedWho;
     const cal = this.store.calendar();
     const today = this.store.todayStr();
@@ -652,7 +661,14 @@ export class PlanningScreen {
   readonly dragId = signal<string | null>(null);
   readonly overDow = signal(0);
 
-  onDragStart(s: SchedSlot): void { this.dragId.set(s.id); }
+  onDragStart(s: SchedSlot): void { if (!this.ed(s.id)) this.dragId.set(s.id); }
+
+  // ---- cours importés (lecture seule) -------------------------------------
+  private ecole = inject(EcoleStore);
+  private readonly lessonById = computed(() => new Map(this.ecole.lessons().map((l) => ['ed:' + l.id, l])));
+  ed(id: string): boolean { return isEdSlot(id); }
+  cancelled(id: string): boolean { return !!this.lessonById().get(id)?.cancelled; }
+  modified(id: string): boolean { return !!this.lessonById().get(id)?.modified; }
   onDragEnd(): void { this.dragId.set(null); this.overDow.set(0); }
   onDragOver(e: DragEvent, dow: number): void {
     if (!this.dragId()) return;

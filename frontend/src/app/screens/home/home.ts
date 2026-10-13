@@ -9,6 +9,7 @@ import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
+import { EcoleStore } from '../../core/ecole.store';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
 type Ahead =
@@ -27,7 +28,7 @@ interface Mod { id: string; label: string; icon: string; color: string; sub: str
 const MOD_COLOR: Record<string, string> = {
   calendar: '#E56B4E', courses: '#7A9B76', taches: '#9B6FA8',
   repas: '#4E93B8', recettes: '#E56B4E', finances: '#7A9B76',
-  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8',
+  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8', ecole: '#3D6FA8',
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */
@@ -177,6 +178,21 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
       </div>
     </ng-template>
 
+    <!-- École : ce que la tuile Tâches ne dit pas. Les interrogations de
+         demain, et l'état de la synchronisation, daté, jamais présenté frais
+         s'il ne l'est pas. Rien du tout quand le module est éteint. -->
+    <ng-template #ecoleCard>
+      <div class="card rc">
+        <div class="rc-head"><span>École</span><button class="rc-link" (click)="store.go('ecole')">Devoirs</button></div>
+        @for (l of ecole.tomorrowLines(); track l) {
+          <div class="rc-row" (click)="store.go('ecole')"><f-icon name="ecole" [size]="14" color="#3D6FA8" [width]="2.2" /><span class="ec-line">{{ l }}</span></div>
+        } @empty {
+          <div class="rc-empty">Aucun élève associé pour l’instant.</div>
+        }
+        @if (ecole.syncLine(); as sl) { <div class="ec-sync" [class.ko]="!sl.ok">{{ sl.text }}</div> }
+      </div>
+    </ng-template>
+
     <ng-template #mealsCard>
       <div class="card rc">
         <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
@@ -274,6 +290,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
             <ng-container [ngTemplateOutlet]="tasksCard" />
             @if (store.modRepas()) { <ng-container [ngTemplateOutlet]="mealsCard" /> }
             @if (store.modFinances() && fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
+            @if (store.modEcole() && ecole.vue()) { <ng-container [ngTemplateOutlet]="ecoleCard" /> }
           </div>
         </div>
       }
@@ -324,6 +341,9 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .rc-link { border: none; background: var(--soft); border-radius: 9px; padding: 5px 11px; font-size: 11.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
     .rc-link:hover { background: var(--soft2); }
     .rc-empty { font-size: 12.5px; font-weight: 700; color: var(--ink3); padding: 6px 2px 4px; }
+    .ec-line { font-size: 13px; font-weight: 700; color: var(--ink); }
+    .ec-sync { font-size: 11.5px; font-weight: 700; color: var(--ink3); padding-top: 8px; }
+    .ec-sync.ko { color: #C6492F; }
     .rc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; }
     .rc-row.prep .prep-line { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .rc-row:first-of-type { border-top: none; }
@@ -398,6 +418,7 @@ export class HomeScreen {
   store = inject(FoyerStore);
   admin = inject(AdminStore);
   private fins = inject(FinancesStore);
+  ecole = inject(EcoleStore);
 
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
   private readonly pillEls = viewChildren<ElementRef<HTMLElement>>('pillBtn');
@@ -651,6 +672,12 @@ export class HomeScreen {
       case 'contacts': return n(d.contacts.length, 'contact', 'contacts', 'Aucun contact');
       case 'fidelite': return n(d.cards.length, 'carte', 'cartes', 'Aucune carte');
       case 'lieux': return n((d.places || []).length, 'lieu', 'lieux', 'Aucun lieu');
+      case 'ecole': {
+        // Un échec se dit avant tout le reste : des devoirs d'hier présentés comme ceux de demain seraient pires que rien.
+        const sl = this.ecole.syncLine();
+        if (sl && !sl.ok) return sl.text;
+        return this.ecole.tomorrowShort() || 'Aucun élève associé';
+      }
       default: return '';
     }
   }

@@ -512,6 +512,20 @@ export const REGISTRY = [
     default: 30, min: 15, max: 1440,
   },
   {
+    key: 'ecoleDevoirsJours',
+    type: 'int', scope: 'foyer', section: 'ecole', module: 'École',
+    label: 'Jours de devoirs à venir récupérés',
+    desc: 'Combien de jours devant aujourd’hui le cahier de textes est lu à chaque synchronisation. Les devoirs au-delà arrivent quand ils entrent dans la fenêtre. Plus long, ce sont plus de requêtes vers ÉcoleDirecte.',
+    default: 14, min: 1, max: 30,
+  },
+  {
+    key: 'ecoleEdtSemaines',
+    type: 'int', scope: 'foyer', section: 'ecole', module: 'École',
+    label: 'Semaines d’emploi du temps récupérées',
+    desc: 'À partir du lundi de la semaine en cours. Les cours importés apparaissent dans l’emploi du temps de l’enfant, en lecture seule, et comptent pour la présence aux repas.',
+    default: 2, min: 1, max: 4,
+  },
+  {
     key: 'ecolePauseDebut',
     type: 'time', scope: 'foyer', section: 'ecole', module: 'École',
     label: 'Pas de synchronisation à partir de',

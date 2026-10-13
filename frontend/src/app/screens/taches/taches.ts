@@ -7,7 +7,7 @@ import { LIST_ICONS, PALETTE, tint } from '../../core/constants';
 import { ListKind, Place, PlaceItem, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
 import { TaskDraft } from '../../core/task-ops';
-import { KIND_LABELS, KIND_ORDER, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
+import { KIND_LABELS, KIND_ORDER, KIND_SORT, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
 import { occurrenceProgress, recLabel } from '../../core/recurrence';
 import { parseDay } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
@@ -102,6 +102,7 @@ import { TaskComposerComponent } from './composer';
               <div class="ident-sub">{{ kindLabel(l.kind) }}{{ l.scope !== 'shared' ? ' · privée' : '' }}{{ l.archived ? ' · archivée' : '' }}</div>
             </div>
           </div>
+          @if (l.kind !== 'devoirs') {
           <button class="icon-btn" (click)="store.editTaskList(l.id)" aria-label="Modifier la liste"><f-icon name="edit" [size]="15" color="var(--ink2)" [width]="2" /></button>
           <button class="icon-btn" (click)="store.archiveTaskList(l.id, !l.archived)" [attr.aria-label]="l.archived ? 'Restaurer la liste' : 'Archiver la liste'" [title]="l.archived ? 'Restaurer' : 'Archiver'">
             <f-icon [name]="l.archived ? 'refresh' : 'folder'" [size]="15" color="var(--ink2)" [width]="2" />
@@ -111,7 +112,13 @@ import { TaskComposerComponent } from './composer';
           <button class="btn btn-soft sm" (click)="store.saveListAsTemplate(l.id)" title="Retenir cette liste pour la refaire plus tard">
             <f-icon name="copy" [size]="15" color="var(--ink2)" [width]="2.2" /> En modèle
           </button>
-          @if (l.kind !== 'taches' && l.kind !== 'preparation') {
+          } @else {
+            <div class="spacer"></div>
+            @if (store.screenEnabled('ecole')) {
+              <button class="btn btn-soft sm" (click)="store.go('ecole')"><f-icon name="ecole" [size]="15" color="var(--ink2)" [width]="2.2" /> Écran École</button>
+            }
+          }
+          @if (l.kind !== 'taches' && l.kind !== 'preparation' && l.kind !== 'devoirs') {
             <button class="btn btn-soft sm" (click)="store.uncheckAll(l.id)"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout décocher</button>
           }
         } @else {
@@ -177,6 +184,9 @@ import { TaskComposerComponent } from './composer';
       <!-- Saisie rapide. Pas dans « À moi » : cette vue rassemble, elle ne range pas. -->
       @if (!lists().length) {
         <div class="empty">Créez une liste pour commencer.</div>
+      } @else if (activeObj()?.kind === 'devoirs') {
+        <!-- Pas de « + » ici : la liste se remplit depuis ÉcoleDirecte. -->
+        <div class="ed-hint">Remplie par ÉcoleDirecte : une tâche par devoir, cochée ici ou dans l’écran École. Une tâche maison va dans une autre liste.</div>
       } @else if (active() !== 'me') {
         <div class="compose"><app-task-composer (saved)="store.createTask($event)" /></div>
       }
@@ -248,8 +258,9 @@ import { TaskComposerComponent } from './composer';
                       }
                     </div>
                   }
-                  @if (l.subs.length || l.task.due || l.task.cat || l.task.note || active() === 'all' || active() === 'me') {
+                  @if (l.subs.length || l.task.due || l.task.cat || l.task.note || l.task.edId || active() === 'all' || active() === 'me') {
                     <div class="t-meta">
+                      @if (l.task.edId) { <span class="ed-tag">ÉcoleDirecte</span> }
                       @if (l.subs.length) { <span class="rec"><f-icon name="checklist" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ progress(l.subs) }}</span> }
                       @if (l.task.due) { <span class="due" [class.late]="l.late > 0">{{ dueOf(l.task) }}@if (l.late > 0) { <span class="late-n"> · depuis {{ lateLabel(l.late) }}</span> }</span> }
                       @if (l.task.rec) { <span class="rec" [title]="recOf(l.task)"><f-icon name="refresh" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ recOf(l.task) }}</span> }
@@ -554,6 +565,8 @@ import { TaskComposerComponent } from './composer';
     .t-text { font-size: 15px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
     .t-text.strike { color: var(--ink3); text-decoration: line-through; }
     .t-meta { display: flex; align-items: center; gap: 7px; margin-top: 5px; flex-wrap: wrap; }
+    .ed-tag { font-size: 10.5px; font-weight: 800; color: #4E93B8; background: #E5F0F4; border-radius: 6px; padding: 2px 6px; }
+    .ed-hint { font-size: 12.5px; font-weight: 600; color: var(--ink3); background: var(--soft); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; line-height: 1.45; }
     .due { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
     /* Le retard se dit, il ne crie pas : une précision, pas une alarme. */
     .due.late { color: var(--ink2); }
@@ -650,7 +663,7 @@ export class TachesScreen {
   /** Les listes visibles, dans l'ordre des types puis des positions. */
   lists = computed(() => {
     const all = this.store.visibleTaskLists(this.store.ui().showArchived);
-    return all.slice().sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || (a.position ?? 0) - (b.position ?? 0));
+    return all.slice().sort((a, b) => KIND_SORT.indexOf(a.kind) - KIND_SORT.indexOf(b.kind) || (a.position ?? 0) - (b.position ?? 0));
   });
   archivedCount = computed(() => this.store.visibleTaskLists(true).filter((l) => l.archived).length);
   templates = computed(() => this.d().taskTemplates);
@@ -707,7 +720,7 @@ export class TachesScreen {
 
   /** Changer de type propose l'icône par défaut du type, tant qu'on n'en a pas choisi une autre exprès. */
   pickKind(k: ListKind): void {
-    const defaults: Record<ListKind, string> = { taches: 'maison', corvees: 'checklist', checklist: 'checklist', preparation: 'valise' };
+    const defaults: Record<ListKind, string> = { taches: 'maison', corvees: 'checklist', checklist: 'checklist', preparation: 'valise', devoirs: 'ecole' };
     const cur = this.store.ui().lIcon;
     const wasDefault = Object.values(defaults).includes(cur);
     this.store.patch({ lKind: k, ...(wasDefault ? { lIcon: defaults[k] } : {}) });

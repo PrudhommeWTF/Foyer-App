@@ -37,7 +37,7 @@ export interface ApplyOutcome extends ApplyResult { version: number }
  * transaction : soit tout est écrit, soit rien ne l'est, et jamais un état
  * intermédiaire que l'autre téléphone lirait au milieu.
  */
-export function applyTaskOps(ops: unknown): ApplyOutcome {
+export function applyTaskOps(ops: unknown, opts: { trusted?: boolean } = {}): ApplyOutcome {
   const database = docDb();
   const assigned: { memberId: string; task: TaskItem; opId: string }[] = [];
   const outcome = database.transaction((): ApplyOutcome => {
@@ -51,6 +51,7 @@ export function applyTaskOps(ops: unknown): ApplyOutcome {
       memberIds: idsOf(doc, 'members'),
       shopListIds: idsOf(doc, 'shopLists'),
       alreadyApplied: (opId) => !!journal.get(opId),
+      trusted: opts.trusted === true,
     });
 
     // Rien de retenu : ne pas faire tourner le numéro de version pour rien, les

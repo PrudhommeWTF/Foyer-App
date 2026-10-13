@@ -19,6 +19,7 @@ import { moduleCounts as finCounts, resetModule as finReset } from './finances/b
 import { moduleCounts as empCounts, resetModule as empReset } from './employes/backup';
 import { ecoleRouter } from './ecole/routes';
 import { setEcoleDeps, startEcoleScheduler } from './ecole/service';
+import { preserveDevoirsLists } from './ecole/sync';
 import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
@@ -318,6 +319,13 @@ api.put('/state', auth, ...tokenGate, requireMember, jsonDoc, (req: AuthedReques
       `Courses : ${kept.movedToFallback} article(s) déplacé(s) vers le rayon de repli ` +
       `et ${kept.dropped} retiré(s) avec leur liste, à la suite d'une édition des rayons ou des listes.`,
     );
+  }
+
+  // Les listes « Devoirs de … » appartiennent au module École : remises telles
+  // que le serveur les tient avant que les tâches ne soient rapprochées des
+  // listes (une liste retirée par un client emporterait ses devoirs).
+  if (preserveDevoirsLists(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>)) {
+    log.info('Tâches : liste(s) « Devoirs de … » remise(s) en place : elles appartiennent au module École.');
   }
 
   // Same rule for the tasks: written op by op, never by whole-document PUT.

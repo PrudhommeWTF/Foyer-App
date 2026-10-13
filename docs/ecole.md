@@ -4,11 +4,43 @@ Ce que le module fait aujourd'hui, comment il se connecte à ÉcoleDirecte, comm
 le surveiller en shell, et quoi faire quand ça casse. Le choix de conception est
 dans `docs/ecole-etat-des-lieux.md`.
 
-**État : première tranche.** Comptes ÉcoleDirecte, question de sécurité,
-association des élèves aux membres, connexion périodique et journal. Les devoirs,
-l'emploi du temps, les notes et la vie scolaire viendront dans les tranches
-suivantes : pour l'instant, une synchronisation réussie ne rapatrie que la liste
-des élèves.
+**État : deuxième tranche.** Comptes ÉcoleDirecte, question de sécurité,
+association des élèves aux membres, connexion périodique, journal ; puis, pour
+chaque élève associé, le cahier de textes (devoirs projetés en tâches), la case
+« Fait » dans les deux sens et l'emploi du temps (cours dans l'Emploi du temps
+et la présence aux repas). Les notes, la vie scolaire, les notifications et les
+outils d'assistant viendront dans les tranches suivantes.
+
+---
+
+## 0. Ce que voit la famille
+
+| Où | Quoi |
+|---|---|
+| **École** (menu, section « Le foyer ») | Un onglet par enfant (un enfant ne voit que lui). Devoirs groupés par jour, demain en tête, énoncé lisible (liens gardés), badge « Interrogation », case « Fait », mention « non transmis » tant qu'ÉcoleDirecte ne l'a pas reçue, « modifié le … » quand le professeur a changé l'énoncé. « Semaine passée » relit l'historique, devoirs retirés d'ÉcoleDirecte compris. |
+| **Tâches** | Une liste « Devoirs de <prénom> » par élève associé, une tâche par devoir à venir, affectée à l'enfant, échéance à la date de rendu, étiquette « ÉcoleDirecte ». Pas de « + » : une tâche maison va dans une autre liste. Une interrogation porte le rappel « la veille à 18 h ». |
+| **Emploi du temps** | Les cours importés, à côté des créneaux saisis à la main (le car scolaire reste), étiquetés « ÉcoleDirecte », en lecture seule, annulés barrés. |
+| **Planning des repas** | La présence tient compte des cours : un demi-pensionnaire qui a cours le matin et l'après-midi n'est pas attendu à midi ; un cours annulé libère. Case « Demi-pensionnaire » par élève dans Paramètres → École. |
+| **Agenda** | Un repère « Interro <matière> » au jour de l'interrogation. Les devoirs y sont déjà, comme toute tâche datée. |
+| **Accueil** | Tuile École : ce qui reste pour demain par enfant, les interrogations, l'état de la synchronisation (« ÉcoleDirecte indisponible depuis … » le cas échéant). |
+
+**« Fait » dans les deux sens.** Cocher dans l'écran École ou dans Tâches, c'est
+la même coche ; elle part à ÉcoleDirecte au passage suivant. Coché dans
+ÉcoleDirecte (par l'enfant sur l'application officielle), la tâche se coche au
+passage suivant. Décoché dans ÉcoleDirecte : rien ne se décoche dans Foyer, et
+rien ne repart (pas de bras de fer). Un envoi qui échoue laisse la case cochée
+avec « non transmis » et repart au passage suivant.
+
+**Ce que la synchronisation ne fait jamais.** Elle ne recrée pas une tâche que
+quelqu'un a supprimée. Elle retire la tâche une semaine après la date de rendu
+(ou quand le devoir disparaît d'ÉcoleDirecte) : le devoir, lui, reste dans
+l'écran École. Elle ne crée pas de tâche pour un devoir déjà passé.
+
+**Requêtes par passage, par élève** : la liste du cahier de textes, le détail
+des jours qui le demandent (devoir nouveau ; aujourd'hui, demain et après-demain
+à chaque passage ; les autres jours toutes les 6 h), un envoi groupé des
+« fait » s'il y en a, l'emploi du temps. Une modification d'énoncé à plus de
+deux jours peut donc mettre jusqu'à 6 h à apparaître.
 
 ---
 
@@ -248,7 +280,19 @@ donne des comptes « Identifiants à ressaisir » : rien ne plante.
 |---|---|
 | `ed_accounts` | Libellé, identifiant et mot de passe **chiffrés**, appareil de confiance **chiffré**, question en attente, état, dernière réussite et dernière erreur, pause |
 | `ed_students` | Élèves vus à la connexion (prénom, nom, classe, établissement, modules ÉcoleDirecte actifs), membre associé et d'où vient l'association |
-| `ed_sync_log` | Une ligne par connexion ou réponse à la question (2 000 dernières) |
+| `ed_sync_log` | Une ligne par connexion, réponse à la question ou passage de données (2 000 dernières) |
+| `ed_homework` | Un devoir : date de rendu, matière, professeur, énoncé (HTML nettoyé et texte), interrogation, « fait » côté ÉcoleDirecte, dernier accord, valeur locale, erreur d'envoi, tâche projetée, archivage |
+| `ed_lessons` | Un cours : jour, heures, matière, professeur, salle, annulé, modifié, archivage |
 
 Retirer un compte efface ses secrets et l'archive ; l'historique reste.
-« Repartir à zéro » à la réactivation du module efface les trois tables.
+« Repartir à zéro » à la réactivation du module efface les tables `ed_*`. Les
+listes « Devoirs de … » restent alors dans Tâches comme des listes ordinaires :
+les supprimer à la main si on n'en veut plus.
+
+```sh
+# Ce qui reste pour demain, par élève (lecture seule)
+sqlite3 -readonly /var/lib/foyer/foyer.db "
+  SELECT s.ed_first_name, h.subject, h.is_test, h.done_ed, h.done_synced, h.done_error
+  FROM ed_homework h JOIN ed_students s ON s.id = h.student_id
+  WHERE h.due_date = date('now', '+1 day') AND h.archived_at IS NULL;"
+```

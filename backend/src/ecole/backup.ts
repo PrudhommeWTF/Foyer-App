@@ -14,7 +14,7 @@ let database: Database;
 export function initBackup(db: Database): void { database = db; }
 
 /** Tables du module, dans l'ordre des dépendances. `ed_meta` absente : la version voyage dans l'en-tête. */
-const TABLES = ['ed_accounts', 'ed_students', 'ed_sync_log'] as const;
+const TABLES = ['ed_accounts', 'ed_students', 'ed_sync_log', 'ed_homework', 'ed_lessons'] as const;
 
 export interface ModuleBackup {
   format: 1;

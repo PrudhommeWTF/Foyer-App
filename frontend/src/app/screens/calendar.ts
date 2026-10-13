@@ -737,7 +737,7 @@ export class CalendarScreen {
   filterKinds = computed(() => [
     { k: 'event', color: CAL_KINDS['event'].color, label: 'Événements' },
     { k: 'planning', color: SCHED_COLORS['ecole'], label: 'Emploi du temps' },
-    ...['task', 'birthday', 'holiday', 'school', 'echeance', ...(this.store.isChild() ? [] : ['cesu'])].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
+    ...['task', 'birthday', 'holiday', 'school', 'echeance', ...(this.store.isChild() ? [] : ['cesu']), ...(this.store.modEcole() ? ['ecole'] : [])].map((k) => ({ k, color: CAL_KINDS[k].color, label: CAL_KINDS[k].label })),
   ]);
   /** Les types masqués, en ensemble : le filtre s'applique partout où un élément est produit. */
   hidden = computed(() => new Set(this.store.ui().calHidden));
