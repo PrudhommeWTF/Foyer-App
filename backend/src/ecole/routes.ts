@@ -21,7 +21,7 @@ import { log } from '../log';
 import { AuthedRequest, currentMember } from '../auth/session';
 import { readDoc } from '../state/doc';
 import { applyTaskOps } from '../tasks/repo';
-import { addDays, localDone, parisToday } from './sync';
+import { addDays, localDone, parisToday, schoolYear } from './sync';
 import { KEEP_DAYS } from './projection';
 import { effectiveSetting } from '../settings/repo';
 
@@ -141,7 +141,6 @@ export function ecoleRouter(requireAdmin: Guard, memberIds: () => string[]): Rou
 
   // ---- Lecture et « Fait » : tout membre, filtré par élève -----------------
   const member = express.Router();
-  member.use(express.json({ limit: '16kb' }));
 
   /** Les élèves visibles, leur état, et leurs devoirs de la semaine passée à l'horizon réglé. */
   member.get('/vue', handler((req, res) => {
@@ -184,11 +183,41 @@ export function ecoleRouter(requireAdmin: Guard, memberIds: () => string[]): Rou
   }));
 
   /**
+   * Les dernières notes et les moyennes, telles qu'ÉcoleDirecte les renvoie.
+   * Un enfant ne lit que les siennes.
+   */
+  member.get('/eleves/:id/notes', handler((req, res) => {
+    const s = studentFor(req, req.params['id']);
+    if (!s) { res.status(403).json({ error: 'Ces notes ne vous sont pas accessibles.' }); return; }
+    const max = Number(effectiveSetting('ecoleNotesMax')) || 15;
+    res.json({
+      grades: repo.listGrades(s.id, max).map((g) => ({
+        id: g.id, date: g.date, subject: g.subject, label: g.label, kind: g.kind, value: g.valueRaw, outOf: g.outOf, coefficient: g.coefficient,
+        classAverage: g.classAverage, classMin: g.classMin, classMax: g.classMax, period: g.periodCode, notSignificant: g.notSignificant, new: g.firstSeenAt,
+      })),
+      averages: repo.listAverages(s.id),
+      syncedAt: s.dataOkAt,
+    });
+  }));
+
+  /** Absences, retards, sanctions, encouragements de l'année scolaire en cours. */
+  member.get('/eleves/:id/vie-scolaire', handler((req, res) => {
+    const s = studentFor(req, req.params['id']);
+    if (!s) { res.status(403).json({ error: 'Cette vie scolaire ne vous est pas accessible.' }); return; }
+    const today = parisToday();
+    const year = schoolYear(today);
+    const items = repo.listLife(s.id, dayParam(req.query['from'], year.slice(0, 4) + '-08-01'));
+    res.json({ items: items.map((e) => ({ id: e.id, kind: e.kind, date: e.date, displayDate: e.displayDate, label: e.label, reason: e.reason, justified: e.justified, by: e.by, comment: e.comment })), syncedAt: s.dataOkAt });
+  }));
+
+  /**
    * La case « Fait ». Quand la tâche projetée existe, c'est elle qu'on coche :
    * l'écran École et les Tâches disent la même chose. Le renvoi à ÉcoleDirecte
    * se fait à la synchronisation suivante.
    */
-  member.post('/devoirs/:id/fait', handler((req, res) => {
+  // L'analyseur sur cette seule route : posé sur tout le sous-routeur, il
+  // s'appliquait aussi à la restauration d'une sauvegarde, plus grosse.
+  member.post('/devoirs/:id/fait', express.json({ limit: '16kb' }), handler((req, res) => {
     const h = repo.getHomework(id(req.params['id'], 'devoir'));
     const s = h ? studentFor(req, h.studentId) : null;
     if (!h || !s) { res.status(403).json({ error: 'Ce devoir ne vous est pas accessible.' }); return; }

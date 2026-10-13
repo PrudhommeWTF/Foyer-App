@@ -32,7 +32,7 @@
 // qui décide quoi écrire où. Jamais un identifiant, un mot de passe, un jeton,
 // cn ni cv dans un message d'erreur.
 import { EdAccountInfo, parseAccounts } from './accounts';
-import { EdHomeworkDetail, EdHomeworkSummary, EdLesson, parseHomeworkDay, parseHomeworkList, parseTimetable } from './data';
+import { EdAverage, EdGrade, EdHomeworkDetail, EdHomeworkSummary, EdLesson, EdLifeItem, parseGrades, parseHomeworkDay, parseHomeworkList, parseLife, parseTimetable } from './data';
 import { EdError, errorOfCode } from './errors';
 
 export interface EdConfig {
@@ -166,6 +166,16 @@ export class EdClient {
   /** Les cours entre deux dates incluses (AAAA-MM-JJ). */
   async timetable(s: EdSession, studentId: number, from: string, to: string): Promise<EdLesson[]> {
     return parseTimetable(await this.data(s, 'emploi-du-temps', `/E/${studentId}/emploidutemps.awp?verbe=get`, { dateDebut: from, dateFin: to, avecTrous: false }));
+  }
+
+  /** Les notes et les moyennes d'une année scolaire (« 2026-2027 »). */
+  async grades(s: EdSession, studentId: number, schoolYear: string): Promise<{ grades: EdGrade[]; averages: EdAverage[] }> {
+    return parseGrades(await this.data(s, 'notes', `/eleves/${studentId}/notes.awp?verbe=get`, { anneeScolaire: schoolYear }));
+  }
+
+  /** Absences, retards, sanctions et encouragements. */
+  async schoolLife(s: EdSession, studentId: number): Promise<EdLifeItem[]> {
+    return parseLife(await this.data(s, 'vie-scolaire', `/eleves/${studentId}/viescolaire.awp?verbe=get`, {}));
   }
 
   /** Un échange de données : 200 rend `data`, 210 (rien, vacances) rend un vide, le reste est une erreur. */

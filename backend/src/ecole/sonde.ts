@@ -137,6 +137,15 @@ async function main(): Promise<void> {
       const fin = new Date(today + 'T12:00:00Z'); fin.setUTCDate(fin.getUTCDate() + 6);
       const cours = await client.timetable(out.session, st.edId, today, fin.toISOString().slice(0, 10));
       say(`  emploi du temps (7 jours) : ${cours.length} cours, dont ${cours.filter((c) => c.cancelled).length} annulé(s)`);
+      if (!st.modules.length || st.modules.includes('NOTES')) {
+        const y = Number(today.slice(0, 4)), m = Number(today.slice(5, 7));
+        const n = await client.grades(out.session, st.edId, m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`);
+        say(`  notes : ${n.grades.length} note(s), ${n.averages.length} moyenne(s) renvoyée(s)`);
+      }
+      if (!st.modules.length || st.modules.includes('VIE_SCOLAIRE')) {
+        const v = await client.schoolLife(out.session, st.edId);
+        say(`  vie scolaire : ${v.length} ligne(s) (${['absence', 'retard', 'sanction', 'encouragement'].map((k) => v.filter((e) => e.kind === k).length + ' ' + k).join(', ')})`);
+      }
     }
   } catch (e) {
     if (e instanceof EdError) die(1, `${e.message} [famille : ${e.kind}, code ${e.code ?? '-'}, HTTP ${e.httpStatus ?? '-'}]`);

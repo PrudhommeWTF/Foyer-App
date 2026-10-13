@@ -59,6 +59,10 @@ export interface FauxEd {
   envoiEnPanne: boolean;
   /** Les corps des envois de « fait » reçus. */
   faits: { eleve: number; faits: number[]; nonFaits: number[] }[];
+  /** Les notes servies (`notes`, `periodes`), modifiables par les tests. */
+  notes: { notes: Record<string, unknown>[]; periodes: Record<string, unknown>[] };
+  /** La vie scolaire servie, modifiable par les tests. */
+  vie: { absencesRetards: Record<string, unknown>[]; sanctionsEncouragements: Record<string, unknown>[] };
   /** Remplace l'énoncé d'un devoir (le professeur l'a modifié). */
   enonce: (idDevoir: number, html: string) => void;
   fermer: () => Promise<void>;
@@ -81,6 +85,7 @@ export async function fauxEcoleDirecte(): Promise<FauxEd> {
       'eleve.camille': { motdepasse: 'bon-mot-de-passe', reponse: 'login-eleve.json', qcm: false },
     },
     cahier: datee('cahierdetexte.json').data, jour: datee('cahierdetexte-jour.json').data.matieres, edt: datee('emploidutemps.json').data,
+    notes: datee('notes.json').data, vie: datee('viescolaire.json').data,
     sansDonnees: new Set([3000002]), jetonRefuse: false, envoiEnPanne: false, faits: [],
     enonce: (idDevoir, html) => { const e = etat.jour.find((x) => x.aFaire?.idDevoir === idDevoir); if (e?.aFaire) e.aFaire.contenu = Buffer.from(html).toString('base64'); },
     connexions: (id) => etat.requetes.filter((r) => r.path === '/v3/login.awp' && r.method === 'POST'
@@ -137,7 +142,7 @@ export async function fauxEcoleDirecte(): Promise<FauxEd> {
         }
       }
       // ---- Données : session obligatoire ----
-      const eleve = /^\/v3\/(?:Eleves|E)\/(\d+)\//.exec(url.pathname);
+      const eleve = /^\/v3\/(?:Eleves|eleves|E)\/(\d+)\//.exec(url.pathname);
       if (eleve || url.pathname === '/v3/renewtoken.awp') {
         if (etat.jetonRefuse || req.headers['x-token'] !== 'tok-ok') return json(fixture('code-520.json'));
         if (url.pathname === '/v3/renewtoken.awp') return json({ code: 200, message: '', data: {} }, { 'x-token': 'tok-ok' });
@@ -153,6 +158,8 @@ export async function fauxEcoleDirecte(): Promise<FauxEd> {
         }
         if (etat.sansDonnees.has(id)) return json(fixture('code-210.json'));
         if (/\/cahierdetexte\.awp$/.test(url.pathname)) return json({ code: 200, message: '', data: etat.cahier });
+        if (/\/notes\.awp$/.test(url.pathname)) return json({ code: 200, message: '', data: etat.notes });
+        if (/\/viescolaire\.awp$/.test(url.pathname)) return json({ code: 200, message: '', data: etat.vie });
         const jour = /\/cahierdetexte\/(\d{4}-\d{2}-\d{2})\.awp$/.exec(url.pathname);
         if (jour) {
           const ids = new Set((etat.cahier[jour[1]] || []).map((r) => r.idDevoir));

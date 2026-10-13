@@ -1,0 +1,130 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "foStat": "",
+    "notes": [
+      {
+        "id": 8001,
+        "devoir": "Contrôle chapitre 2",
+        "codePeriode": "A001",
+        "codeMatiere": "MATHS",
+        "libelleMatiere": "MATHEMATIQUES",
+        "codeSousMatiere": "",
+        "typeDevoir": "Devoir sur table",
+        "enLettre": false,
+        "commentaire": "",
+        "uncSujet": "",
+        "uncCorrige": "",
+        "coef": "1",
+        "noteSur": "20",
+        "valeur": "14,5",
+        "nonSignificatif": false,
+        "date": "@J-10@",
+        "dateSaisie": "@J-10@",
+        "valeurisee": false,
+        "moyenneClasse": "11,2",
+        "minClasse": "4",
+        "maxClasse": "18",
+        "elementsProgramme": []
+      },
+      {
+        "id": 8002,
+        "devoir": "Vocabulaire unit 2",
+        "codePeriode": "A001",
+        "codeMatiere": "AGL1",
+        "libelleMatiere": "ANGLAIS LV1",
+        "codeSousMatiere": "",
+        "typeDevoir": "Devoir sur table",
+        "enLettre": false,
+        "commentaire": "",
+        "uncSujet": "",
+        "uncCorrige": "",
+        "coef": "1",
+        "noteSur": "10",
+        "valeur": "Abs",
+        "nonSignificatif": false,
+        "date": "@J-8@",
+        "dateSaisie": "@J-8@",
+        "valeurisee": false,
+        "moyenneClasse": "6,1",
+        "minClasse": "2",
+        "maxClasse": "10",
+        "elementsProgramme": []
+      },
+      {
+        "id": 8003,
+        "devoir": "Dictée",
+        "codePeriode": "A001",
+        "codeMatiere": "FRANC",
+        "libelleMatiere": "FRANCAIS",
+        "codeSousMatiere": "",
+        "typeDevoir": "Devoir sur table",
+        "enLettre": false,
+        "commentaire": "",
+        "uncSujet": "",
+        "uncCorrige": "",
+        "coef": "1",
+        "noteSur": "20",
+        "valeur": "12",
+        "nonSignificatif": true,
+        "date": "@J-6@",
+        "dateSaisie": "@J-6@",
+        "valeurisee": false,
+        "moyenneClasse": "11,2",
+        "minClasse": "4",
+        "maxClasse": "18",
+        "elementsProgramme": []
+      }
+    ],
+    "periodes": [
+      {
+        "idPeriode": "A001",
+        "codePeriode": "A001",
+        "periode": "1er Trimestre",
+        "annuel": false,
+        "examenBlanc": false,
+        "cloture": false,
+        "dateDebut": "@J-40@",
+        "dateFin": "@J+50@",
+        "ensembleMatieres": {
+          "dateCalcul": "@J-1@",
+          "moyenneGenerale": "13,25",
+          "moyenneClasse": "11,80",
+          "moyenneMin": "6,10",
+          "moyenneMax": "17,40",
+          "nomPP": "M. ANONYME",
+          "disciplines": [
+            {
+              "id": 1,
+              "codeMatiere": "MATHS",
+              "codeSousMatiere": "",
+              "discipline": "MATHEMATIQUES",
+              "moyenne": "14,50",
+              "moyenneClasse": "11,20",
+              "moyenneMin": "4,00",
+              "moyenneMax": "18,00",
+              "coef": 3,
+              "groupeMatiere": false,
+              "professeurs": []
+            },
+            {
+              "id": 2,
+              "codeMatiere": "AGL1",
+              "codeSousMatiere": "",
+              "discipline": "ANGLAIS LV1",
+              "moyenne": "",
+              "moyenneClasse": "12,10",
+              "moyenneMin": "5,00",
+              "moyenneMax": "19,00",
+              "coef": 2,
+              "groupeMatiere": false,
+              "professeurs": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

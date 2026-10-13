@@ -1,0 +1,65 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "absencesRetards": [
+      {
+        "id": 6001,
+        "idEleve": 3000001,
+        "nomEleve": "",
+        "typeElement": "Absence",
+        "date": "@J-20@",
+        "displayDate": "le @J-20@ de 08:00 à 12:00",
+        "libelle": "1 demi-journée",
+        "motif": "Maladie",
+        "justifie": true,
+        "par": "",
+        "commentaire": "",
+        "typeJustification": "",
+        "justifieEd": false,
+        "aFaire": "",
+        "dateDeroulement": ""
+      },
+      {
+        "id": 6002,
+        "idEleve": 3000001,
+        "nomEleve": "",
+        "typeElement": "Retard",
+        "date": "@J-3@",
+        "displayDate": "le @J-3@ à 08:10",
+        "libelle": "10 minutes",
+        "motif": "",
+        "justifie": false,
+        "par": "",
+        "commentaire": "",
+        "typeJustification": "",
+        "justifieEd": false,
+        "aFaire": "",
+        "dateDeroulement": ""
+      }
+    ],
+    "sanctionsEncouragements": [
+      {
+        "id": 6101,
+        "idEleve": 3000001,
+        "nomEleve": "",
+        "typeElement": "Punition",
+        "date": "@J-15@",
+        "displayDate": "le @J-15@",
+        "libelle": "Retenue",
+        "motif": "Travail non fait",
+        "justifie": null,
+        "par": "M. ANONYME",
+        "commentaire": "",
+        "typeJustification": "",
+        "justifieEd": false,
+        "aFaire": "",
+        "dateDeroulement": ""
+      }
+    ],
+    "parametrage": {
+      "justificationEnLigne": true
+    }
+  }
+}

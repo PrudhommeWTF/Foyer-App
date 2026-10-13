@@ -19,7 +19,9 @@
 import { EdClient, EdError, EdSession, LoginOutcome, Trusted } from './client';
 import * as repo from './repo';
 import { MemberLite, propose } from './match';
-import { syncAccountData } from './sync';
+import { addDays, localDone, parisToday, syncAccountData } from './sync';
+import { eveningMessage, gradesMessage, homeworkMessage, lifeMessage } from './messages';
+import { readDoc } from '../state/doc';
 import { edConfig } from './config';
 import { Cadence, inQuietWindow, isDue, mayRun } from './cadence';
 import { open, seal } from '../storage/secret-box';
@@ -27,12 +29,21 @@ import { effectiveSetting } from '../settings/repo';
 import { parisWall } from '../notify/reminders';
 import { log } from '../log';
 
+/** Les sortes de notification du module, chacune avec sa préférence personnelle. */
+export type NotifKind = 'notes' | 'devoirs' | 'vie' | 'soir';
+
 export interface EcoleDeps {
   members: () => MemberLite[];
   /** Prévient les administrateurs (Web Push). Branché au démarrage du service, inerte en test. */
   alertAdmins: (key: string, title: string, body: string) => void;
+  /** Les membres qui ont un compte : seuls eux peuvent recevoir une notification. */
+  accounts: () => string[];
+  /** Ce membre veut-il cette sorte de notification (préférence personnelle) ? */
+  wants: (memberId: string, kind: NotifKind) => boolean;
+  /** Envoie une notification, idempotente par clé (journal hh_notif_sent). Rien si les rappels du foyer sont suspendus. */
+  push: (key: string, memberIds: string[], title: string, body: string) => Promise<void>;
 }
-let deps: EcoleDeps = { members: () => [], alertAdmins: () => undefined };
+let deps: EcoleDeps = { members: () => [], alertAdmins: () => undefined, accounts: () => [], wants: () => true, push: async () => undefined };
 export function setEcoleDeps(d: Partial<EcoleDeps>): void { deps = { ...deps, ...d }; }
 
 export type ConnectResult =
@@ -194,7 +205,7 @@ async function withData(a: repo.Account, c: EdClient, out: Extract<LoginOutcome,
   if (res.kind !== 'ok') return res;
   const main = out.accounts.find((x) => x.main) || out.accounts.find((x) => x.type !== 'autre') || out.accounts[0];
   const t0 = Date.now();
-  const data = await syncAccountData(repo.getAccount(a.id)!, c, out.session, main?.idLogin ?? 0, deps.members());
+  const data = await syncAccountData(repo.getAccount(a.id)!, c, out.session, main?.idLogin ?? 0, deps.members(), announce);
   if (data.ok + data.failed) {
     repo.addLog({ accountId: a.id, scope: 'donnees', ok: data.failed === 0, httpStatus: null, edCode: null, message: data.summary, durationMs: Date.now() - t0 });
   }
@@ -305,6 +316,79 @@ export function releaseBlocks(a: repo.Account): repo.Account {
   return repo.getAccount(a.id)!;
 }
 
+/**
+ * À qui annoncer, pour un élève et une sorte : les adultes qui ont un compte et
+ * le veulent, plus l'enfant lui-même pour ses notes et ses devoirs (jamais pour
+ * sa vie scolaire : c'est l'affaire des adultes).
+ */
+function recipients(memberId: string, kind: NotifKind): string[] {
+  const withAccount = new Set(deps.accounts());
+  const all = deps.members();
+  const adults = all.filter((m) => !m.enfant && withAccount.has(m.id)).map((m) => m.id);
+  const child = kind !== 'vie' && withAccount.has(memberId) ? [memberId] : [];
+  return [...new Set([...adults, ...child])].filter((m) => deps.wants(m, kind));
+}
+
+/**
+ * Ce qui vient d'apparaître pour un élève, une notification par sorte. Chaque
+ * ligne n'est annoncée qu'une fois (`notified_at`), qu'il y ait eu des
+ * destinataires ou non : personne abonné, rien ne s'accumule pour plus tard.
+ */
+async function announce(st: repo.Student, member: MemberLite, fresh: { homework: repo.Homework[]; grades: repo.Grade[]; life: repo.LifeItem[] }): Promise<void> {
+  const now = new Date().toISOString();
+  const today = parisToday();
+  const send = async (kind: NotifKind, key: string, msg: { title: string; body: string }): Promise<void> => {
+    const to = recipients(member.id, kind);
+    if (to.length) await deps.push(key, to, msg.title, msg.body);
+    log.info(`École : ${msg.title} → ${to.length ? to.join(', ') : 'personne d’abonné'}`);
+  };
+  const ids = (rows: { id: number }[]): string => rows.map((r) => r.id).join('-');
+  // Les notes non significatives (« NS ») ne valent pas une notification.
+  const grades = fresh.grades.filter((g) => !g.notSignificant);
+  if (grades.length) await send('notes', `ecole-notes|${st.id}|${ids(grades)}`, gradesMessage(member.name, grades));
+  if (fresh.grades.length) repo.markNotified('ed_grades', fresh.grades.map((g) => g.id), now);
+  if (fresh.life.length) {
+    await send('vie', `ecole-vie|${st.id}|${ids(fresh.life)}`, lifeMessage(member.name, fresh.life, today));
+    repo.markNotified('ed_life', fresh.life.map((e) => e.id), now);
+  }
+  if (fresh.homework.length) {
+    await send('devoirs', `ecole-devoirs|${st.id}|${ids(fresh.homework)}`, homeworkMessage(member.name, fresh.homework, today));
+    repo.markNotified('ed_homework', fresh.homework.map((h) => h.id), now);
+  }
+}
+
+/**
+ * Le rappel du soir : à `ecoleDevoirsHeure`, pour chaque élève associé à qui il
+ * reste des devoirs non faits pour demain. Une seule fois par élève et par soir
+ * (clé du journal), dans les deux heures qui suivent l'heure réglée, pour qu'un
+ * service redémarré à 23 h n'envoie pas un rappel de devoirs en pleine nuit.
+ */
+export async function eveningReminders(now = new Date()): Promise<number> {
+  const wall = parisWall(now);
+  const at = String(effectiveSetting('ecoleDevoirsHeure'));
+  const t = wall.slice(11, 16);
+  const minutes = (hm: string): number => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+  if (t < at || minutes(t) - minutes(at) >= 120) return 0;
+  const today = wall.slice(0, 10);
+  const demain = addDays(today, 1);
+  const docTasks: { id: string; done: boolean }[] = Array.isArray(readDoc().doc['tasks']) ? readDoc().doc['tasks'] : [];
+  const tasks = new Map(docTasks.map((x) => [x.id, x]));
+  const members = deps.members();
+  let sent = 0;
+  for (const st of repo.listStudents().filter((x) => x.linkState === 'confirme' && x.memberId)) {
+    const member = members.find((m) => m.id === st.memberId);
+    if (!member) continue;
+    const todo = repo.listHomework([st.id], demain, demain).filter((h) => !localDone(h, h.taskId ? tasks.get(h.taskId) : undefined));
+    if (!todo.length) continue;
+    const to = recipients(member.id, 'soir');
+    if (!to.length) continue;
+    const msg = eveningMessage(member.name, todo);
+    await deps.push(`ecole-soir|${st.id}|${today}`, to, msg.title, msg.body);
+    sent++;
+  }
+  return sent;
+}
+
 let ticking = false;
 
 /**
@@ -313,6 +397,8 @@ let ticking = false;
  */
 export async function ecoleTick(now = new Date()): Promise<number> {
   if (ticking || effectiveSetting('modEcole') !== true) return 0;
+  // Le rappel du soir ne dépend pas d'ÉcoleDirecte : il lit les tables, et part même pendant une pause.
+  await eveningReminders(now).catch((e) => log.erreur('École : rappel du soir en échec', e));
   const c = cadence();
   if (inQuietWindow(parisWall(now), c)) return 0;
   ticking = true;

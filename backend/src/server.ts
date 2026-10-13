@@ -673,6 +673,20 @@ export function start(): void {
   // est désactivé. Un incident (question de sécurité, identifiants refusés,
   // pause automatique) prévient les administrateurs une fois, sur leur téléphone.
   setEcoleDeps({
+    accounts: () => listMemberAccounts().map((a) => a.memberId),
+    // Les trois clés en toutes lettres : le garde-fou du registre doit les voir lues.
+    wants: (memberId, kind) => {
+      const st = getHousehold().state as HouseholdState;
+      if (kind === 'notes') return setting('ecoleNotifNotes', st, memberId);
+      if (kind === 'devoirs') return setting('ecoleNotifDevoirs', st, memberId);
+      if (kind === 'vie') return setting('ecoleNotifVieScolaire', st, memberId);
+      return memberWants(memberId, 'reminder');
+    },
+    push: async (key, memberIds, title, body) => {
+      if (effectiveSetting('pushPaused') === true) return;
+      const r = await notify(key, memberIds, { kind: 'ecole', title, body, url: appUrl(), tag: 'ecole-' + key.split('|').slice(0, 2).join('-') });
+      notifLog(`Notifications : école « ${title} » → ${r.members.map((m) => m.memberId + ' : ' + m.status).join(', ')}`);
+    },
     alertAdmins: (key, title, body) => {
       if (effectiveSetting('pushPaused') === true) return;
       const accts = new Set(listMemberAccounts().map((a) => a.memberId));

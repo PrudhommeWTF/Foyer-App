@@ -4,4 +4,4 @@ export type { EdConfig, EdExchange, LoginOutcome, Trusted } from './client';
 export type { EdAccountInfo, EdStudentInfo } from './accounts';
 export { EdError } from './errors';
 export type { EdErrorKind } from './errors';
-export type { EdHomeworkDetail, EdHomeworkSummary, EdLesson } from './data';
+export type { EdAverage, EdGrade, EdHomeworkDetail, EdHomeworkSummary, EdLesson, EdLifeItem, EdLifeKind } from './data';

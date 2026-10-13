@@ -38,6 +38,8 @@ export interface Student {
   /** Déjeune à la cantine (la pause de midi compte comme une absence du foyer). */
   halfBoard: boolean;
   dataOkAt: string | null; dataError: string | null; dataErrorAt: string | null;
+  /** La première lecture (muette) des devoirs, des notes, de la vie scolaire a eu lieu. */
+  homeworkBaselineAt: string | null; gradesBaselineAt: string | null; lifeBaselineAt: string | null;
 }
 
 export interface LogLine {
@@ -71,6 +73,7 @@ const studentRow = (r: Row): Student => ({
   createdAt: r['created_at'] as string, lastSeenAt: s(r['last_seen_at']), archivedAt: s(r['archived_at']),
   taskListId: s(r['task_list_id']), halfBoard: r['half_board'] == null ? true : !!r['half_board'],
   dataOkAt: s(r['data_ok_at']), dataError: s(r['data_error']), dataErrorAt: s(r['data_error_at']),
+  homeworkBaselineAt: s(r['homework_baseline_at']), gradesBaselineAt: s(r['grades_baseline_at']), lifeBaselineAt: s(r['life_baseline_at']),
 });
 
 // ---- Comptes --------------------------------------------------------------
@@ -169,7 +172,10 @@ export function setLink(studentId: number, memberId: string | null, matchSource:
   database.prepare('UPDATE ed_students SET member_id = ?, match_source = ?, link_state = ? WHERE id = ?').run(memberId, matchSource, linkState, studentId);
 }
 
-const STUDENT_COLUMNS = { taskListId: 'task_list_id', halfBoard: 'half_board', dataOkAt: 'data_ok_at', dataError: 'data_error', dataErrorAt: 'data_error_at' } as const;
+const STUDENT_COLUMNS = {
+  taskListId: 'task_list_id', halfBoard: 'half_board', dataOkAt: 'data_ok_at', dataError: 'data_error', dataErrorAt: 'data_error_at',
+  homeworkBaselineAt: 'homework_baseline_at', gradesBaselineAt: 'grades_baseline_at', lifeBaselineAt: 'life_baseline_at',
+} as const;
 export type StudentPatch = Partial<{ -readonly [K in keyof typeof STUDENT_COLUMNS]: K extends 'halfBoard' ? boolean : string | null }>;
 
 export function patchStudent(id: number, patch: StudentPatch): void {
@@ -189,7 +195,8 @@ export interface Homework {
   doneEd: boolean; doneSynced: boolean | null; doneLocal: boolean | null;
   doneSentAt: string | null; doneError: string | null;
   taskId: string | null; taskDroppedAt: string | null; detailAt: string | null;
-  firstSeenAt: string; lastSeenAt: string; modifiedAt: string | null; archivedAt: string | null;
+ firstSeenAt: string; lastSeenAt: string; modifiedAt: string | null; archivedAt: string | null;
+  notifiedAt: string | null;
 }
 
 const b = (v: unknown): boolean | null => (v == null ? null : !!v);
@@ -202,6 +209,7 @@ const homeworkRow = (r: Row): Homework => ({
   doneSentAt: s(r['done_sent_at']), doneError: s(r['done_error']),
   taskId: s(r['task_id']), taskDroppedAt: s(r['task_dropped_at']), detailAt: s(r['detail_at']),
   firstSeenAt: r['first_seen_at'] as string, lastSeenAt: r['last_seen_at'] as string, modifiedAt: s(r['modified_at']), archivedAt: s(r['archived_at']),
+  notifiedAt: s(r['notified_at']),
 });
 
 export function getHomework(id: number): Homework | null {
@@ -241,7 +249,7 @@ export function upsertHomework(studentId: number, h: HomeworkSeen, now: string):
 const HW_COLUMNS = {
   teacher: 'teacher', contentHtml: 'content_html', contentText: 'content_text', contentHash: 'content_hash', detailAt: 'detail_at',
   doneSynced: 'done_synced', doneLocal: 'done_local', doneSentAt: 'done_sent_at', doneError: 'done_error',
-  taskId: 'task_id', taskDroppedAt: 'task_dropped_at', modifiedAt: 'modified_at', archivedAt: 'archived_at',
+  taskId: 'task_id', taskDroppedAt: 'task_dropped_at', modifiedAt: 'modified_at', archivedAt: 'archived_at', notifiedAt: 'notified_at',
 } as const;
 export type HomeworkPatch = Partial<{ -readonly [K in keyof typeof HW_COLUMNS]: K extends 'doneSynced' | 'doneLocal' ? boolean | null : string | null }>;
 
@@ -297,6 +305,129 @@ export function listLessons(studentIds: number[], from: string, to: string): Les
     start: r['start'] as string, end: r['end'] as string, subject: String(r['subject'] ?? ''), teacher: String(r['teacher'] ?? ''),
     room: String(r['room'] ?? ''), kind: String(r['kind'] ?? ''), cancelled: !!r['cancelled'], modified: !!r['modified'],
   }));
+}
+
+// ---- Notes, moyennes, vie scolaire ----------------------------------------
+
+export interface Grade {
+  id: number; studentId: number; edId: number; date: string | null; subject: string; subjectCode: string; label: string; kind: string;
+  valueRaw: string; valueNum: number | null; outOf: string; coefficient: string; classAverage: string; classMin: string; classMax: string;
+  periodCode: string; notSignificant: boolean; firstSeenAt: string; notifiedAt: string | null;
+}
+export interface GradeSeen {
+  edId: number; date: string; subject: string; subjectCode: string; label: string; kind: string; valueRaw: string; valueNum: number | null;
+  outOf: string; coefficient: string; classAverage: string; classMin: string; classMax: string; periodCode: string; notSignificant: boolean;
+}
+const gradeRow = (r: Row): Grade => ({
+  id: r['id'] as number, studentId: r['student_id'] as number, edId: r['ed_id'] as number, date: s(r['date']),
+  subject: String(r['subject'] ?? ''), subjectCode: String(r['subject_code'] ?? ''), label: String(r['label'] ?? ''), kind: String(r['kind'] ?? ''),
+  valueRaw: String(r['value_raw'] ?? ''), valueNum: n(r['value_num']), outOf: String(r['out_of'] ?? ''), coefficient: String(r['coefficient'] ?? ''),
+  classAverage: String(r['class_average'] ?? ''), classMin: String(r['class_min'] ?? ''), classMax: String(r['class_max'] ?? ''),
+  periodCode: String(r['period_code'] ?? ''), notSignificant: !!r['not_significant'], firstSeenAt: r['first_seen_at'] as string, notifiedAt: s(r['notified_at']),
+});
+
+/**
+ * Les notes lues : upsert, jamais d'effacement. `silent` (première lecture de
+ * l'élève) les marque d'emblée notifiées. Rend les nouvelles lignes non notifiées.
+ */
+export function upsertGrades(studentId: number, grades: GradeSeen[], schoolYear: string, now: string, silent: boolean): Grade[] {
+  const fresh: number[] = [];
+  database.transaction(() => {
+    const exists = database.prepare('SELECT id FROM ed_grades WHERE student_id = ? AND ed_id = ?');
+    const ins = database.prepare(`INSERT INTO ed_grades (student_id, ed_id, date, subject, subject_code, label, kind, value_raw, value_num, out_of, coefficient,
+      class_average, class_min, class_max, period_code, not_significant, school_year, first_seen_at, last_seen_at, notified_at)
+      VALUES (@studentId, @edId, @date, @subject, @subjectCode, @label, @kind, @valueRaw, @valueNum, @outOf, @coefficient,
+      @classAverage, @classMin, @classMax, @periodCode, @ns, @schoolYear, @now, @now, @notified)`);
+    const upd = database.prepare(`UPDATE ed_grades SET date = @date, subject = @subject, subject_code = @subjectCode, label = @label, kind = @kind,
+      value_raw = @valueRaw, value_num = @valueNum, out_of = @outOf, coefficient = @coefficient, class_average = @classAverage,
+      class_min = @classMin, class_max = @classMax, period_code = @periodCode, not_significant = @ns, last_seen_at = @now WHERE id = @id`);
+    for (const g of grades) {
+      const row = exists.get(studentId, g.edId) as Row | undefined;
+      const p = { ...g, date: g.date || null, ns: g.notSignificant ? 1 : 0, now };
+      if (row) upd.run({ ...p, id: row['id'] });
+      else {
+        const id = Number(ins.run({ ...p, studentId, schoolYear, notified: silent ? now : null }).lastInsertRowid);
+        if (!silent) fresh.push(id);
+      }
+    }
+  })();
+  return fresh.map((id) => gradeRow(database.prepare('SELECT * FROM ed_grades WHERE id = ?').get(id) as Row));
+}
+
+export function listGrades(studentId: number, limit: number): Grade[] {
+  return (database.prepare('SELECT * FROM ed_grades WHERE student_id = ? ORDER BY date DESC, id DESC LIMIT ?').all(studentId, limit) as Row[]).map(gradeRow);
+}
+
+export interface Average {
+  periodCode: string; periodLabel: string; periodFrom: string | null; periodTo: string | null; closed: boolean;
+  subjectCode: string; subject: string; average: string; classAverage: string; classMin: string; classMax: string; coefficient: string;
+}
+export type AverageSeen = Omit<Average, 'periodFrom' | 'periodTo'> & { periodFrom: string; periodTo: string };
+
+/** Les moyennes, telles qu'ÉcoleDirecte les renvoie : la dernière lecture remplace la précédente, ligne à ligne. */
+export function saveAverages(studentId: number, averages: AverageSeen[], now: string): void {
+  const up = database.prepare(`INSERT INTO ed_averages (student_id, period_code, period_label, period_from, period_to, closed, subject_code, subject,
+      average, class_average, class_min, class_max, coefficient, updated_at)
+    VALUES (@studentId, @periodCode, @periodLabel, @periodFrom, @periodTo, @closed, @subjectCode, @subject, @average, @classAverage, @classMin, @classMax, @coefficient, @now)
+    ON CONFLICT (student_id, period_code, subject_code) DO UPDATE SET period_label = excluded.period_label, period_from = excluded.period_from,
+      period_to = excluded.period_to, closed = excluded.closed, subject = excluded.subject, average = excluded.average,
+      class_average = excluded.class_average, class_min = excluded.class_min, class_max = excluded.class_max, coefficient = excluded.coefficient,
+      updated_at = excluded.updated_at`);
+  database.transaction(() => {
+    for (const a of averages) up.run({ studentId, ...a, periodFrom: a.periodFrom || null, periodTo: a.periodTo || null, closed: a.closed ? 1 : 0, now });
+  })();
+}
+
+export function listAverages(studentId: number): Average[] {
+  return (database.prepare('SELECT * FROM ed_averages WHERE student_id = ? ORDER BY period_from, period_code, subject_code = \'_GENERALE\' DESC, subject').all(studentId) as Row[]).map((r) => ({
+    periodCode: r['period_code'] as string, periodLabel: String(r['period_label'] ?? ''), periodFrom: s(r['period_from']), periodTo: s(r['period_to']),
+    closed: !!r['closed'], subjectCode: r['subject_code'] as string, subject: String(r['subject'] ?? ''), average: String(r['average'] ?? ''),
+    classAverage: String(r['class_average'] ?? ''), classMin: String(r['class_min'] ?? ''), classMax: String(r['class_max'] ?? ''), coefficient: String(r['coefficient'] ?? ''),
+  }));
+}
+
+export interface LifeItem {
+  id: number; studentId: number; edId: number; kind: 'absence' | 'retard' | 'sanction' | 'encouragement'; date: string | null; displayDate: string;
+  label: string; reason: string; justified: boolean | null; by: string; comment: string; firstSeenAt: string; notifiedAt: string | null;
+}
+export type LifeSeen = Omit<LifeItem, 'id' | 'studentId' | 'firstSeenAt' | 'notifiedAt' | 'date'> & { date: string };
+const lifeRow = (r: Row): LifeItem => ({
+  id: r['id'] as number, studentId: r['student_id'] as number, edId: r['ed_id'] as number, kind: r['kind'] as LifeItem['kind'], date: s(r['date']),
+  displayDate: String(r['display_date'] ?? ''), label: String(r['label'] ?? ''), reason: String(r['reason'] ?? ''),
+  justified: r['justified'] == null ? null : !!r['justified'], by: String(r['given_by'] ?? ''), comment: String(r['comment'] ?? ''),
+  firstSeenAt: r['first_seen_at'] as string, notifiedAt: s(r['notified_at']),
+});
+
+/** Comme les notes : upsert, première lecture muette, rend les nouvelles lignes à notifier. Une justification qui arrive après coup met la ligne à jour. */
+export function upsertLife(studentId: number, items: LifeSeen[], now: string, silent: boolean): LifeItem[] {
+  const fresh: number[] = [];
+  database.transaction(() => {
+    const exists = database.prepare('SELECT id FROM ed_life WHERE student_id = ? AND kind = ? AND ed_id = ?');
+    for (const e of items) {
+      const p = { studentId, edId: e.edId, kind: e.kind, date: e.date || null, displayDate: e.displayDate, label: e.label, reason: e.reason,
+        justified: e.justified === null ? null : e.justified ? 1 : 0, by: e.by, comment: e.comment, now };
+      const row = exists.get(studentId, e.kind, e.edId) as Row | undefined;
+      if (row) {
+        database.prepare(`UPDATE ed_life SET date = @date, display_date = @displayDate, label = @label, reason = @reason, justified = @justified,
+          given_by = @by, comment = @comment, last_seen_at = @now WHERE id = @id`).run({ ...p, id: row['id'] });
+      } else {
+        const id = Number(database.prepare(`INSERT INTO ed_life (student_id, ed_id, kind, date, display_date, label, reason, justified, given_by, comment, first_seen_at, last_seen_at, notified_at)
+          VALUES (@studentId, @edId, @kind, @date, @displayDate, @label, @reason, @justified, @by, @comment, @now, @now, @notified)`).run({ ...p, notified: silent ? now : null }).lastInsertRowid);
+        if (!silent) fresh.push(id);
+      }
+    }
+  })();
+  return fresh.map((id) => lifeRow(database.prepare('SELECT * FROM ed_life WHERE id = ?').get(id) as Row));
+}
+
+export function listLife(studentId: number, from: string): LifeItem[] {
+  return (database.prepare('SELECT * FROM ed_life WHERE student_id = ? AND (date IS NULL OR date >= ?) ORDER BY date DESC, id DESC').all(studentId, from) as Row[]).map(lifeRow);
+}
+
+/** Marque des lignes notifiées : la table est l'une des trois du module, jamais une saisie. */
+export function markNotified(table: 'ed_grades' | 'ed_life' | 'ed_homework', ids: number[], now: string): void {
+  const stmt = database.prepare(`UPDATE ${table} SET notified_at = ? WHERE id = ?`);
+  database.transaction(() => { for (const id of ids) stmt.run(now, id); })();
 }
 
 // ---- Journal --------------------------------------------------------------
