@@ -19,8 +19,7 @@ import { keyState, open } from '../storage/secret-box';
 import { parisWall } from '../notify/reminders';
 import { log } from '../log';
 import { AuthedRequest, currentMember } from '../auth/session';
-import { readDoc } from '../state/doc';
-import { applyTaskOps } from '../tasks/repo';
+import { docTasks, setHomeworkDone } from './actions';
 import { addDays, localDone, parisToday, schoolYear } from './sync';
 import { KEEP_DAYS } from './projection';
 import { effectiveSetting } from '../settings/repo';
@@ -131,10 +130,6 @@ function homeworkView(h: repo.Homework, tasks: Map<string, { done: boolean }>, m
   };
 }
 
-const docTasks = (): Map<string, { done: boolean }> => {
-  const { doc } = readDoc();
-  return new Map((Array.isArray(doc['tasks']) ? doc['tasks'] : []).map((t: { id: string; done: boolean }) => [t.id, t]));
-};
 
 export function ecoleRouter(requireAdmin: Guard, memberIds: () => string[]): Router {
   const r = express.Router();
@@ -221,15 +216,8 @@ export function ecoleRouter(requireAdmin: Guard, memberIds: () => string[]): Rou
     const h = repo.getHomework(id(req.params['id'], 'devoir'));
     const s = h ? studentFor(req, h.studentId) : null;
     if (!h || !s) { res.status(403).json({ error: 'Ce devoir ne vous est pas accessible.' }); return; }
-    const fait = (req.body as Record<string, unknown>)['fait'] === true;
     const me = currentMember(req as AuthedRequest);
-    const tasks = docTasks();
-    if (h.taskId && tasks.has(h.taskId)) {
-      applyTaskOps([{ op: fait ? 'done' : 'reopen', opId: `ed-fait-${h.id}-${Date.now().toString(36)}`, id: h.taskId, by: me?.id ?? null, at: new Date().toISOString() }]);
-    } else {
-      repo.patchHomework(h.id, { doneLocal: fait });
-    }
-    log.info(`École : devoir ${h.id} marqué ${fait ? 'fait' : 'à faire'} par ${me?.name || 'un membre'} (envoi à ÉcoleDirecte au prochain passage).`);
+    setHomeworkDone(h, (req.body as Record<string, unknown>)['fait'] === true, { id: me?.id ?? null, name: me?.name || 'un membre' });
     res.json({ homework: homeworkView(repo.getHomework(h.id)!, docTasks(), s.memberId) });
   }));
 

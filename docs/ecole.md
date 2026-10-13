@@ -4,12 +4,13 @@ Ce que le module fait aujourd'hui, comment il se connecte à ÉcoleDirecte, comm
 le surveiller en shell, et quoi faire quand ça casse. Le choix de conception est
 dans `docs/ecole-etat-des-lieux.md`.
 
-**État : troisième tranche.** Comptes ÉcoleDirecte, question de sécurité,
+**État : module complet (quatre tranches).** Comptes ÉcoleDirecte, question de sécurité,
 association des élèves aux membres, connexion périodique, journal ; puis, pour
 chaque élève associé, le cahier de textes (devoirs projetés en tâches), la case
 « Fait » dans les deux sens, l'emploi du temps (cours dans l'Emploi du temps et
 la présence aux repas), les notes et moyennes, la vie scolaire, et les
-notifications. Les outils d'assistant viendront dans la tranche suivante.
+notifications, et les outils d'assistant (`ecole_*`, voir `docs/assistants.md`).
+Messagerie, formulaires, porte-monnaie cantine : pas dans cette version.
 
 ---
 
@@ -25,6 +26,7 @@ notifications. Les outils d'assistant viendront dans la tranche suivante.
 | **Accueil** | Tuile École : ce qui reste pour demain par enfant, les interrogations, l'état de la synchronisation (« ÉcoleDirecte indisponible depuis … » le cas échéant). |
 | **École → Notes** | Les dernières notes (nombre réglable, 15 par défaut), valeur telle que donnée (« 14,5/20 », « Abs »), non significatives barrées ; au tap : type, coefficient, moyenne, plus basse et plus haute de la classe. Les moyennes de la période en cours, moyenne générale en tête, **telles que l'établissement les calcule** : Foyer ne recalcule rien, ne classe rien, ne trace aucune courbe. |
 | **École → Vie scolaire** | Absences, retards (justifiés ou non), sanctions, encouragements de l'année. |
+| **Assistant** (Claude, via MCP) | « Qu'est-ce que Nolan a comme devoirs pour demain ? », « À quelle heure sort Léo jeudi ? », « Coche mes exercices de maths » : outils `ecole_*`. Un jeton d'enfant ne voit que lui. Voir `docs/assistants.md`. |
 | **Téléphone** | Une nouvelle note (« Nolan : 15/20 en histoire »), une absence ou un retard (« Léo : retard enregistré aujourd'hui, non justifié »), une sanction, et, si on le demande, un nouveau devoir. Plusieurs au même passage se regroupent (« Nolan : 3 nouvelles notes »). Le soir à 17 h 30 (réglable), s'il reste des devoirs pour demain : « Nolan : 2 devoirs pour demain, dont une interrogation ». |
 
 **Notifications : qui reçoit quoi.**
