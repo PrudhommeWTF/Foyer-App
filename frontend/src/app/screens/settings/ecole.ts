@@ -84,6 +84,14 @@ import { ModalComponent } from '../../shared/modal';
                   <div class="s-name">{{ s.firstName }} {{ s.lastName }}</div>
                   <div class="s-meta">{{ [s.className, s.schoolName].filter(nonVide).join(' · ') }}</div>
                   <div class="s-link" [class.todo]="s.linkState === 'propose' || s.linkState === 'aucun'">{{ lien(s) }}</div>
+                  @if (s.linkState === 'confirme') {
+                    @if (s.dataError) { <div class="s-err">Données en échec : {{ s.dataError }}</div> }
+                    @else if (s.dataOkAt) { <div class="s-meta">Devoirs et emploi du temps synchronisés {{ quand(s.dataOkAt) }}</div> }
+                    <label class="s-half">
+                      <input type="checkbox" [checked]="s.halfBoard" [disabled]="busy() === a.id" (change)="demiPension(a, s, $any($event.target).checked)" />
+                      Demi-pensionnaire : la pause de midi entre deux cours compte comme une absence au déjeuner
+                    </label>
+                  }
                 </div>
                 @if (choix()?.studentId === s.id) {
                   <div class="s-pick">
@@ -213,6 +221,9 @@ import { ModalComponent } from '../../shared/modal';
     .s-meta { font-size: 12px; font-weight: 600; color: var(--ink3); }
     .s-link { font-size: 12.5px; font-weight: 700; color: #5F7E5C; margin-top: 2px; }
     .s-link.todo { color: #9A6A12; }
+    .s-err { font-size: 12px; font-weight: 700; color: #C6492F; margin-top: 2px; }
+    .s-half { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; font-weight: 600; color: var(--ink2); margin-top: 6px; line-height: 1.4; }
+    .s-half input { margin-top: 2px; }
     .s-pick { display: flex; flex-direction: column; gap: 8px; }
     .row, .acts { display: flex; gap: 8px; flex-wrap: wrap; }
     .row .btn, .acts .btn { padding: 9px 13px; font-size: 13px; }
@@ -284,6 +295,7 @@ export class SettingsEcoleComponent {
   repondre(a: EdAccount, i: number): Promise<void> { return this.agir(a, () => this.api.answer(a.id, i)); }
   basculerPause(a: EdAccount): Promise<void> { return this.agir(a, () => this.api.pause(a.id, a.enabled)); }
   lier(a: EdAccount, s: EdStudent, action: 'confirmer' | 'ignorer'): Promise<void> { this.choix.set(null); return this.agir(a, () => this.api.link(s.id, action)); }
+  demiPension(a: EdAccount, s: EdStudent, on: boolean): Promise<void> { return this.agir(a, () => this.api.halfBoard(s.id, on)); }
   associer(a: EdAccount, s: EdStudent): Promise<void> {
     const m = this.choix()?.memberId; this.choix.set(null);
     return this.agir(a, () => this.api.link(s.id, 'associer', m));

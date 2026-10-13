@@ -2251,7 +2251,7 @@ export class FoyerStore {
    */
   presenceOf(dateStr: string, slot: string) {
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
+    return presenceAt({ members: d?.members || [], sched: this.schedAll(), cal: this.calendar(), mealTimes: this.mealTimes() }, dateStr, slot, d?.meals[dateStr + '-' + slot]);
   }
 
   /**
@@ -2263,7 +2263,7 @@ export class FoyerStore {
   readonly editingPresence = computed(() => {
     const e = this.ui().mealEdit; if (!e) return null;
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: d?.sched || [], cal: this.calendar(), mealTimes: this.mealTimes() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
+    return presenceAt({ members: d?.members || [], sched: this.schedAll(), cal: this.calendar(), mealTimes: this.mealTimes() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
   });
 
   // ---- suggestions ---------------------------------------------------------
@@ -2276,7 +2276,7 @@ export class FoyerStore {
     const e = this.ui().mealEdit; const d = this._data();
     if (!e || !d) return null;
     return suggestMeals({
-      recipes: d.recipes, meals: d.meals, members: d.members, sched: d.sched, cal: this.calendar(), index: this.articleIndex(),
+      recipes: d.recipes, meals: d.meals, members: d.members, sched: this.schedAll(), cal: this.calendar(), index: this.articleIndex(),
       mealTimes: this.mealTimes(),
       seuils: {
         repeatDays: this.setting('suggestRepeatDays'),
@@ -2327,7 +2327,7 @@ export class FoyerStore {
     const d = this._data(); if (!d) return [];
     // Seuls les convives attendus : alerter pour quelqu'un qui n'est pas là ce
     // soir-là est une fausse alerte, et une de trop suffit à ne plus les lire.
-    const presents = presenceAt({ members: d.members, sched: d.sched, cal: this.calendar(), mealTimes: this.mealTimes() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
+    const presents = presenceAt({ members: d.members, sched: this.schedAll(), cal: this.calendar(), mealTimes: this.mealTimes() }, key.slice(0, 10), key.slice(11), d.meals[key]).present;
     return mealConflicts(d.meals[key]?.items || [], d.recipes, presents, this.articleIndex());
   }
 
@@ -3212,13 +3212,29 @@ export class FoyerStore {
    * module écrit sa propre source (finances, employé) sans écraser les autres.
    */
   private readonly extDayExtraSources = signal<Record<string, Record<string, DayExtra[]>>>({});
+
+  /**
+   * Créneaux d'emploi du temps venus d'ailleurs que du document : les cours
+   * importés d'ÉcoleDirecte. Une source en plus, en lecture seule, jamais
+   * écrite dans `sched` ; la vue semaine, la présence et les couverts lisent
+   * `schedAll`, l'édition ne touche que `sched`.
+   */
+  private readonly extSlotSources = signal<Record<string, SchedSlot[]>>({});
+  setExternalSlots(source: string, slots: SchedSlot[]): void {
+    this.extSlotSources.update((s) => ({ ...s, [source]: slots }));
+  }
+  readonly schedAll = computed<SchedSlot[]>(() => {
+    const own = this._data()?.sched || [];
+    const ext = Object.entries(this.extSlotSources()).filter(([src]) => src !== 'ecole' || this.modEcole()).flatMap(([, v]) => v);
+    return ext.length ? [...own, ...ext] : own;
+  });
   setExternalDayExtras(source: string, map: Record<string, DayExtra[]>): void {
     this.extDayExtraSources.update((s) => ({ ...s, [source]: map }));
   }
   private readonly externalDayExtras = computed(() => {
     const out: Record<string, DayExtra[]> = {};
     // Un module éteint ne pose plus ses repères, même si son store tourne encore.
-    const off = (src: string): boolean => (src === 'finances' && !this.modFinances()) || (src === 'employe' && !this.modEmploye());
+    const off = (src: string): boolean => (src === 'finances' && !this.modFinances()) || (src === 'employe' && !this.modEmploye()) || (src === 'ecole' && !this.modEcole());
     for (const [source, map] of Object.entries(this.extDayExtraSources())) {
       if (off(source)) continue;
       for (const [ds, items] of Object.entries(map)) (out[ds] ??= []).push(...items);

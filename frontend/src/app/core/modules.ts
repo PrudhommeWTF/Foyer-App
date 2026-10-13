@@ -24,10 +24,10 @@ export const MODULES: ModuleDef[] = [
   { flag: 'modFidelite', id: 'fidelite', label: 'Cartes de fidélité', desc: 'Les cartes de fidélité du foyer.', screens: ['fidelite'] },
   { flag: 'modFinances', id: 'finances', label: 'Finances', desc: 'Les comptes, opérations, budgets et contrats.', screens: ['finances'] },
   { flag: 'modEmploye', id: 'employe', label: 'Employé à domicile', desc: 'Le suivi des heures et la déclaration CESU.', screens: ['employe'] },
-  { flag: 'modEcole', id: 'ecole', label: 'École (ÉcoleDirecte)', desc: 'Les comptes ÉcoleDirecte des enfants. Activé, une section École apparaît dans les Paramètres ; désactivé, Foyer ne contacte jamais ÉcoleDirecte.', screens: [] },
+  { flag: 'modEcole', id: 'ecole', label: 'École (ÉcoleDirecte)', desc: 'Les devoirs et l’emploi du temps des enfants, rapatriés d’ÉcoleDirecte. Désactivé, Foyer ne contacte jamais ÉcoleDirecte.', screens: ['ecole'] },
 ];
 
 /** L'écran à son drapeau de module, ou undefined pour un écran toujours présent. */
 export const SCREEN_MODULE: Record<string, ModuleFlag | undefined> = {
-  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye',
+  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole',
 };

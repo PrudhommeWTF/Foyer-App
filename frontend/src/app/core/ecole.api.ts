@@ -11,6 +11,33 @@ export type EdLinkState = 'propose' | 'confirme' | 'ignore' | 'aucun';
 export interface EdStudent {
   id: number; firstName: string; lastName: string; className: string; schoolName: string;
   memberId: string | null; matchSource: 'prenom' | 'manuel' | null; linkState: EdLinkState;
+  halfBoard: boolean; dataOkAt: string | null; dataError: string | null;
+}
+
+/** Un élève tel que l'écran École le voit (adulte : tous ; enfant : lui seul). */
+export interface EdVueStudent {
+  id: number; memberId: string; firstName: string; lastName: string; className: string; schoolName: string;
+  halfBoard: boolean; dataOkAt: string | null; dataError: string | null; dataErrorAt: string | null;
+  account: { state: EdState; lastOkAt: string | null; lastError: string | null; pausedUntil: string | null } | null;
+}
+
+export interface EdHomework {
+  id: number; studentId: number; memberId: string | null; due: string; subject: string; teacher: string;
+  html: string; text: string; isTest: boolean; online: boolean; givenOn: string | null;
+  /** La coche de la tâche quand elle existe, sinon la valeur gardée par le module. */
+  done: boolean;
+  /** Coché ou décoché dans Foyer, pas encore accepté par ÉcoleDirecte. */
+  pending: boolean;
+  doneError: string | null;
+  modifiedAt: string | null; archived: boolean; taskId: string | null;
+}
+
+export interface EdVue { today: string; students: EdVueStudent[]; homework: EdHomework[]; }
+
+export interface EdLessonView {
+  id: number; studentId: number; memberId: string | null; halfBoard: boolean;
+  day: string; start: string; end: string; subject: string; teacher: string; room: string; kind: string;
+  cancelled: boolean; modified: boolean;
 }
 
 export interface EdAccount {
@@ -55,4 +82,15 @@ export class EcoleApi {
   link(studentId: number, action: 'confirmer' | 'associer' | 'ignorer' | 'dissocier', memberId?: string): Promise<{ account: EdAccount }> {
     return this.api.put('ecole/eleves/' + studentId, { action, ...(memberId ? { memberId } : {}) });
   }
+  halfBoard(studentId: number, halfBoard: boolean): Promise<{ account: EdAccount }> {
+    return this.api.put('ecole/eleves/' + studentId, { action: 'demi-pension', halfBoard });
+  }
+
+  // ---- Lecture : tout membre (un enfant ne reçoit que ce qui le concerne) ----
+  vue(): Promise<EdVue> { return this.api.request('ecole/vue'); }
+  cours(from: string, to: string): Promise<{ lessons: EdLessonView[] }> { return this.api.request(`ecole/cours?from=${from}&to=${to}`); }
+  archives(studentId: number, from: string, to: string): Promise<{ homework: EdHomework[] }> {
+    return this.api.request(`ecole/eleves/${studentId}/devoirs?archives=1&from=${from}&to=${to}`);
+  }
+  fait(homeworkId: number, fait: boolean): Promise<{ homework: EdHomework }> { return this.api.post('ecole/devoirs/' + homeworkId + '/fait', { fait }); }
 }

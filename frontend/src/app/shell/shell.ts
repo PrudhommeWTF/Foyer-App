@@ -20,6 +20,8 @@ import { RecettesScreen } from '../screens/recettes';
 import { PlanningScreen } from '../screens/planning';
 import { SettingsScreen } from '../screens/settings/settings';
 import { LieuxScreen } from '../screens/lieux';
+import { EcoleScreen } from '../screens/ecole';
+import { EcoleStore } from '../core/ecole.store';
 
 @Component({
   selector: 'app-shell',
@@ -29,7 +31,7 @@ import { LieuxScreen } from '../screens/lieux';
     SidebarComponent, TopbarComponent, NotificationsComponent,
     MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
-    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen,
+    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen,
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
@@ -62,6 +64,7 @@ import { LieuxScreen } from '../screens/lieux';
             @case ('fidelite') { <screen-fidelite /> }
             @case ('finances') { <screen-finances /> }
             @case ('employe') { <screen-employe /> }
+            @case ('ecole') { <screen-ecole /> }
             @case ('repas') { <screen-repas /> }
             @case ('recettes') { <screen-recettes /> }
             @case ('planning') { <screen-planning /> }
@@ -95,6 +98,9 @@ import { LieuxScreen } from '../screens/lieux';
 export class ShellComponent implements AfterViewInit, OnDestroy {
   store = inject(FoyerStore);
   private host = inject(ElementRef<HTMLElement>);
+  // Le module École alimente l'emploi du temps, la présence aux repas, l'accueil
+  // et l'agenda : il se charge dès la connexion, pas à l'ouverture de son écran.
+  readonly ecole = inject(EcoleStore);
   private ro?: ResizeObserver;
 
   ngAfterViewInit(): void {
