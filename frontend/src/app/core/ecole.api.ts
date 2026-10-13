@@ -64,6 +64,19 @@ export type EdResult =
   | { kind: 'qcm'; question: string; propositions: string[]; changed?: boolean }
   | { kind: 'erreur'; errorKind: string; code: number | null; message: string };
 
+export interface EdGradeView {
+  id: number; date: string | null; subject: string; label: string; kind: string; value: string; outOf: string; coefficient: string;
+  classAverage: string; classMin: string; classMax: string; period: string; notSignificant: boolean;
+}
+export interface EdAverageView {
+  periodCode: string; periodLabel: string; periodFrom: string | null; periodTo: string | null; closed: boolean;
+  subjectCode: string; subject: string; average: string; classAverage: string; classMin: string; classMax: string; coefficient: string;
+}
+export interface EdLifeView {
+  id: number; kind: 'absence' | 'retard' | 'sanction' | 'encouragement'; date: string | null; displayDate: string;
+  label: string; reason: string; justified: boolean | null; by: string; comment: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EcoleApi {
   private api = inject(ApiService);
@@ -92,5 +105,7 @@ export class EcoleApi {
   archives(studentId: number, from: string, to: string): Promise<{ homework: EdHomework[] }> {
     return this.api.request(`ecole/eleves/${studentId}/devoirs?archives=1&from=${from}&to=${to}`);
   }
+  notes(studentId: number): Promise<{ grades: EdGradeView[]; averages: EdAverageView[]; syncedAt: string | null }> { return this.api.request(`ecole/eleves/${studentId}/notes`); }
+  vie(studentId: number): Promise<{ items: EdLifeView[]; syncedAt: string | null }> { return this.api.request(`ecole/eleves/${studentId}/vie-scolaire`); }
   fait(homeworkId: number, fait: boolean): Promise<{ homework: EdHomework }> { return this.api.post('ecole/devoirs/' + homeworkId + '/fait', { fait }); }
 }
