@@ -12,7 +12,7 @@
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
-export const ED_SCHEMA_VERSION = 1;
+export const ED_SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -95,6 +95,85 @@ const MIGRATIONS: Migration[] = [
           duration_ms INTEGER
         );
         CREATE INDEX ed_sync_log_account ON ed_sync_log(account_id, id);
+      `);
+    },
+  },
+  {
+    version: 2,
+    label: 'devoirs, emploi du temps, liste de tâches et demi-pension par élève',
+    up: (db) => {
+      db.exec(`
+        -- La liste « Devoirs de … » du document, créée à l'association de l'élève.
+        ALTER TABLE ed_students ADD COLUMN task_list_id TEXT;
+        -- Déjeune à la cantine : la pause de midi entre deux cours compte comme
+        -- une absence du foyer pour les couverts. Oui par défaut.
+        ALTER TABLE ed_students ADD COLUMN half_board INTEGER NOT NULL DEFAULT 1;
+        -- État des données de cet élève (un compte peut réussir sa connexion et
+        -- échouer sur le cahier de textes d'un seul enfant).
+        ALTER TABLE ed_students ADD COLUMN data_ok_at TEXT;
+        ALTER TABLE ed_students ADD COLUMN data_error TEXT;
+        ALTER TABLE ed_students ADD COLUMN data_error_at TEXT;
+
+        -- Un devoir du cahier de textes. Source de vérité : la tâche Foyer n'en
+        -- est qu'une projection (task_id). Jamais effacé : archivé quand
+        -- ÉcoleDirecte ne le renvoie plus.
+        CREATE TABLE ed_homework (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL REFERENCES ed_students(id) ON DELETE CASCADE,
+          ed_id INTEGER NOT NULL,
+          due_date TEXT NOT NULL,
+          subject TEXT NOT NULL DEFAULT '',
+          subject_code TEXT NOT NULL DEFAULT '',
+          teacher TEXT NOT NULL DEFAULT '',
+          content_html TEXT NOT NULL DEFAULT '',
+          content_text TEXT NOT NULL DEFAULT '',
+          content_hash TEXT,
+          is_test INTEGER NOT NULL DEFAULT 0,
+          online INTEGER NOT NULL DEFAULT 0,
+          given_on TEXT,
+          -- « Fait » des deux côtés. done_ed : ce qu'ÉcoleDirecte dit ;
+          -- done_synced : la dernière valeur sur laquelle les deux côtés étaient
+          -- d'accord ; done_local : ce que Foyer veut quand la tâche n'existe plus
+          -- (sinon c'est la coche de la tâche qui fait foi).
+          done_ed INTEGER NOT NULL DEFAULT 0,
+          done_synced INTEGER,
+          done_local INTEGER,
+          done_sent_at TEXT,
+          done_error TEXT,
+          task_id TEXT,
+          -- L'utilisateur a supprimé la tâche : elle n'est jamais recréée.
+          task_dropped_at TEXT,
+          detail_at TEXT,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          -- Le professeur a changé l'énoncé après publication.
+          modified_at TEXT,
+          archived_at TEXT,
+          UNIQUE (student_id, ed_id)
+        );
+        CREATE INDEX ed_homework_due ON ed_homework(student_id, due_date);
+
+        -- Un cours de l'emploi du temps importé. Lecture seule, jamais fusionné
+        -- avec les créneaux saisis à la main.
+        CREATE TABLE ed_lessons (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          student_id INTEGER NOT NULL REFERENCES ed_students(id) ON DELETE CASCADE,
+          ed_id INTEGER NOT NULL,
+          day TEXT NOT NULL,
+          start TEXT NOT NULL,
+          end TEXT NOT NULL,
+          subject TEXT NOT NULL DEFAULT '',
+          teacher TEXT NOT NULL DEFAULT '',
+          room TEXT NOT NULL DEFAULT '',
+          kind TEXT NOT NULL DEFAULT '',
+          cancelled INTEGER NOT NULL DEFAULT 0,
+          modified INTEGER NOT NULL DEFAULT 0,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          archived_at TEXT,
+          UNIQUE (student_id, ed_id, day)
+        );
+        CREATE INDEX ed_lessons_day ON ed_lessons(student_id, day);
       `);
     },
   },

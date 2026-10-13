@@ -1,7 +1,10 @@
 // Surface HTTP du module « École », montée sur /api/ecole derrière le drapeau
-// de module (403 désactivé). Cette première tranche ne porte que la
-// configuration : comptes, question de sécurité, association des élèves,
-// journal. Tout est réservé aux administrateurs.
+// de module (403 désactivé). Deux étages :
+//   - la lecture (devoirs, cours, état) et la case « Fait », ouvertes aux
+//     membres : un adulte voit tous les élèves associés, un enfant seulement
+//     lui-même, contrôle fait ici sur chaque route (403 sinon) ;
+//   - la configuration (comptes, question de sécurité, association,
+//     sauvegarde), réservée aux administrateurs.
 //
 // Aucune réponse ne contient d'identifiant, de mot de passe, de jeton, ni le
 // couple cn / cv : seulement « enregistrés le … » et « connu depuis le … ».
@@ -15,6 +18,12 @@ import { Invalid, fail, id } from '../employes/http';
 import { keyState, open } from '../storage/secret-box';
 import { parisWall } from '../notify/reminders';
 import { log } from '../log';
+import { AuthedRequest, currentMember } from '../auth/session';
+import { readDoc } from '../state/doc';
+import { applyTaskOps } from '../tasks/repo';
+import { addDays, localDone, parisToday } from './sync';
+import { KEEP_DAYS } from './projection';
+import { effectiveSetting } from '../settings/repo';
 
 type Guard = (req: Request, res: Response, next: express.NextFunction) => void;
 
@@ -71,7 +80,8 @@ function accountView(a: repo.Account, students: repo.Student[], now: Date) {
     nextRunAt: state === 'cle' ? null : nextRunAt(a, now, svc.cadence()),
     students: students.filter((s) => s.accountId === a.id).map((s) => ({
       id: s.id, firstName: s.firstName, lastName: s.lastName, className: s.className, schoolName: s.schoolName,
-      memberId: s.memberId, matchSource: s.matchSource, linkState: s.linkState,
+      memberId: s.memberId, matchSource: s.matchSource, linkState: s.linkState, halfBoard: s.halfBoard,
+      dataOkAt: s.dataOkAt, dataError: s.dataError,
     })),
   };
 }
@@ -82,8 +92,121 @@ const account = (raw: unknown): repo.Account => {
   return a!;
 };
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const dayParam = (v: unknown, fallback: string): string => { const s = String(v ?? '').trim(); if (!s) return fallback; if (!DAY.test(s)) fail('Date invalide : attendu AAAA-MM-JJ.'); return s; };
+
+/** Les élèves que la personne connectée peut voir : tous les associés pour un adulte, elle seule pour un enfant. */
+function visibleStudents(req: Request): repo.Student[] {
+  const me = currentMember(req as AuthedRequest);
+  if (!me) return [];
+  const linked = repo.listStudents().filter((s) => s.linkState === 'confirme' && s.memberId);
+  return me.enfant ? linked.filter((s) => s.memberId === me.id) : linked;
+}
+
+/** L'élève visé par la route, s'il est visible ; 403 sinon (même réponse qu'il existe ou non). */
+function studentFor(req: Request, raw: unknown): repo.Student | null {
+  const sid = id(raw, 'élève');
+  return visibleStudents(req).find((s) => s.id === sid) ?? null;
+}
+
+function studentView(s: repo.Student, now: Date) {
+  const a = repo.getAccount(s.accountId);
+  return {
+    id: s.id, memberId: s.memberId, firstName: s.firstName, lastName: s.lastName, className: s.className, schoolName: s.schoolName,
+    halfBoard: s.halfBoard, dataOkAt: s.dataOkAt, dataError: s.dataError, dataErrorAt: s.dataErrorAt,
+    account: a ? { state: stateOf(a, now), lastOkAt: a.lastOkAt, lastError: a.lastErrorMessage, pausedUntil: a.pausedUntil } : null,
+  };
+}
+
+/** Un devoir tel que l'écran le montre. « Fait » est la coche de la tâche quand elle existe. */
+function homeworkView(h: repo.Homework, tasks: Map<string, { done: boolean }>, memberId: string | null) {
+  const task = h.taskId ? tasks.get(h.taskId) : undefined;
+  const done = localDone(h, task);
+  const synced = h.doneSynced ?? h.doneEd;
+  return {
+    id: h.id, studentId: h.studentId, memberId, due: h.due, subject: h.subject, teacher: h.teacher,
+    html: h.contentHtml, text: h.contentText, isTest: h.isTest, online: h.online, givenOn: h.givenOn,
+    done, pending: done !== synced, doneError: done !== synced ? h.doneError : null,
+    modifiedAt: h.modifiedAt, archived: !!h.archivedAt, taskId: task ? h.taskId : null,
+  };
+}
+
+const docTasks = (): Map<string, { done: boolean }> => {
+  const { doc } = readDoc();
+  return new Map((Array.isArray(doc['tasks']) ? doc['tasks'] : []).map((t: { id: string; done: boolean }) => [t.id, t]));
+};
+
 export function ecoleRouter(requireAdmin: Guard, memberIds: () => string[]): Router {
   const r = express.Router();
+
+  // ---- Lecture et « Fait » : tout membre, filtré par élève -----------------
+  const member = express.Router();
+  member.use(express.json({ limit: '16kb' }));
+
+  /** Les élèves visibles, leur état, et leurs devoirs de la semaine passée à l'horizon réglé. */
+  member.get('/vue', handler((req, res) => {
+    const now = new Date();
+    const today = parisToday(now);
+    const students = visibleStudents(req);
+    const tasks = docTasks();
+    const byId = new Map(students.map((s) => [s.id, s]));
+    const homework = repo.listHomework(students.map((s) => s.id), addDays(today, -KEEP_DAYS), addDays(today, Number(effectiveSetting('ecoleDevoirsJours')) || 14))
+      .map((h) => homeworkView(h, tasks, byId.get(h.studentId)?.memberId ?? null));
+    res.json({ today, students: students.map((s) => studentView(s, now)), homework });
+  }));
+
+  member.get('/eleves/:id/devoirs', handler((req, res) => {
+    const s = studentFor(req, req.params['id']);
+    if (!s) { res.status(403).json({ error: 'Ces devoirs ne vous sont pas accessibles.' }); return; }
+    const today = parisToday();
+    const tasks = docTasks();
+    const from = dayParam(req.query['from'], addDays(today, -KEEP_DAYS));
+    const to = dayParam(req.query['to'], addDays(today, 30));
+    res.json({ student: studentView(s, new Date()), homework: repo.listHomework([s.id], from, to, req.query['archives'] === '1').map((h) => homeworkView(h, tasks, s.memberId)) });
+  }));
+
+  /** Les cours importés des élèves visibles (ou d'un seul), pour l'emploi du temps et la présence. */
+  const lessons = (students: repo.Student[], req: Request) => {
+    const today = parisToday();
+    const from = dayParam(req.query['from'], addDays(today, -7));
+    const to = dayParam(req.query['to'], addDays(today, 35));
+    const byId = new Map(students.map((s) => [s.id, s]));
+    return repo.listLessons(students.map((s) => s.id), from, to).map((l) => ({
+      id: l.id, studentId: l.studentId, memberId: byId.get(l.studentId)?.memberId ?? null, halfBoard: byId.get(l.studentId)?.halfBoard ?? true,
+      day: l.day, start: l.start, end: l.end, subject: l.subject, teacher: l.teacher, room: l.room, kind: l.kind, cancelled: l.cancelled, modified: l.modified,
+    }));
+  };
+  member.get('/cours', handler((req, res) => { res.json({ lessons: lessons(visibleStudents(req), req) }); }));
+  member.get('/eleves/:id/cours', handler((req, res) => {
+    const s = studentFor(req, req.params['id']);
+    if (!s) { res.status(403).json({ error: 'Cet emploi du temps ne vous est pas accessible.' }); return; }
+    res.json({ lessons: lessons([s], req) });
+  }));
+
+  /**
+   * La case « Fait ». Quand la tâche projetée existe, c'est elle qu'on coche :
+   * l'écran École et les Tâches disent la même chose. Le renvoi à ÉcoleDirecte
+   * se fait à la synchronisation suivante.
+   */
+  member.post('/devoirs/:id/fait', handler((req, res) => {
+    const h = repo.getHomework(id(req.params['id'], 'devoir'));
+    const s = h ? studentFor(req, h.studentId) : null;
+    if (!h || !s) { res.status(403).json({ error: 'Ce devoir ne vous est pas accessible.' }); return; }
+    const fait = (req.body as Record<string, unknown>)['fait'] === true;
+    const me = currentMember(req as AuthedRequest);
+    const tasks = docTasks();
+    if (h.taskId && tasks.has(h.taskId)) {
+      applyTaskOps([{ op: fait ? 'done' : 'reopen', opId: `ed-fait-${h.id}-${Date.now().toString(36)}`, id: h.taskId, by: me?.id ?? null, at: new Date().toISOString() }]);
+    } else {
+      repo.patchHomework(h.id, { doneLocal: fait });
+    }
+    log.info(`École : devoir ${h.id} marqué ${fait ? 'fait' : 'à faire'} par ${me?.name || 'un membre'} (envoi à ÉcoleDirecte au prochain passage).`);
+    res.json({ homework: homeworkView(repo.getHomework(h.id)!, docTasks(), s.memberId) });
+  }));
+
+  r.use(member);
+
+  // ---- Configuration : administrateurs ------------------------------------
   r.use(requireAdmin);
 
   // Avant l'analyseur commun, borné à 64 Ko : une sauvegarde est plus grosse.
@@ -186,7 +309,9 @@ export function ecoleRouter(requireAdmin: Guard, memberIds: () => string[]): Rou
       repo.setLink(s!.id, null, null, 'ignore');
     } else if (action === 'dissocier') {
       repo.setLink(s!.id, null, null, 'aucun');
-    } else fail('Action inconnue : confirmer, associer, ignorer ou dissocier.');
+    } else if (action === 'demi-pension') {
+      repo.patchStudent(s!.id, { halfBoard: b['halfBoard'] === true });
+    } else fail('Action inconnue : confirmer, associer, ignorer, dissocier ou demi-pension.');
     const after = repo.getStudent(s!.id)!;
     log.info(`École : élève ${after.id} (compte ${after.accountId}) : ${action}${after.memberId ? ' → membre ' + after.memberId : ''}.`);
     res.json({ account: view(repo.getAccount(after.accountId)!) });

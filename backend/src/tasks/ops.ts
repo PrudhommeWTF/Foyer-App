@@ -88,6 +88,12 @@ export interface TaskItem {
    */
   contractId?: number | null;
   /**
+   * Devoir ÉcoleDirecte dont la tâche est la projection (ligne de `ed_homework`).
+   * Posé par le serveur seul (opérations de confiance) : le module École tient
+   * la tâche à jour, et la coche de l'un est la coche de l'autre.
+   */
+  edId?: number | null;
+  /**
    * Tâche parente, pour une sous-tâche. **Un seul niveau** : une sous-tâche ne
    * peut pas en avoir elle-même, et une tâche qui a des sous-tâches ne peut pas
    * en devenir une. Une sous-tâche est un détail du parent (intitulé, membres,
@@ -108,7 +114,7 @@ export interface TaskItem {
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; parentId?: string | null; ord?: string | null;
+  contractId?: number | null; parentId?: string | null; ord?: string | null; edId?: number | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
@@ -154,6 +160,12 @@ export interface OpsContext {
   shopListIds: Set<string>;
   /** Vrai quand cette opération a déjà été appliquée (rejeu après coupure réseau). */
   alreadyApplied: (opId: string) => boolean;
+  /**
+   * Opérations écrites par le serveur lui-même (projection des devoirs
+   * ÉcoleDirecte) : elles seules posent `edId` et écrivent dans une liste
+   * `devoirs`. Jamais vrai pour ce qui vient d'un téléphone ou d'un assistant.
+   */
+  trusted?: boolean;
 }
 
 export interface SkippedOp { opId: string; reason: string }
@@ -267,6 +279,10 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     else if (typeof v === 'string' && /^[0-9A-Za-z]{1,200}$/.test(v)) f.ord = v;
     else return { reason: 'Clé d’ordre illisible : ' + str(v) };
   }
+  if (o['edId'] !== undefined && ctx.trusted) {
+    const v = o['edId'];
+    f.edId = typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null;
+  }
   if (o['contractId'] !== undefined) {
     const v = o['contractId'];
     if (v === null || v === '') f.contractId = null;
@@ -275,6 +291,14 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
   }
   return { fields: f };
 }
+
+/**
+ * Une liste « Devoirs de … » n'accueille que ce qu'ÉcoleDirecte y projette :
+ * ni ajout ni déplacement vers elle depuis un téléphone ou un assistant.
+ */
+const DEVOIRS_REFUS = 'Les devoirs viennent d’ÉcoleDirecte : une tâche maison va dans une autre liste.';
+const intoDevoirs = (listId: string | undefined, from: string | null, ctx: OpsContext): boolean =>
+  !!listId && listId !== from && !ctx.trusted && ctx.listKind(listId) === 'devoirs';
 
 /** Pose les champs lus sur une tâche, en retirant les clés vides plutôt que de les laisser à « ». */
 function assign(t: TaskItem, f: TaskFields): TaskItem {
@@ -287,6 +311,7 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (!next.cat) delete next.cat;
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
   if (next.contractId === null || next.contractId === undefined) delete next.contractId;
+  if (next.edId === null || next.edId === undefined) delete next.edId;
   if (next.parentId === null || next.parentId === undefined) delete next.parentId;
   // Une sous-tâche est un détail du parent : la date, la récurrence et le rappel
   // sont l'affaire de celui-ci. Les poser ici ferait sonner un rappel pour une
@@ -373,6 +398,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         const f = read.fields;
         if (!f.text) { skipped.push({ opId, reason: 'Tâche sans intitulé.' }); break; }
         if (!f.listId) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
+        if (intoDevoirs(f.listId, null, ctx)) { skipped.push({ opId, reason: DEVOIRS_REFUS }); break; }
         const done = o['done'] === true;
         const history = readHistory(o['history']);
         const via = trimmed(o['via'], 80) || null;
@@ -402,6 +428,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (idx < 0) { applied.push(opId); break; }
         const read = readFields(o, ctx);
         if ('reason' in read) { skipped.push({ opId, reason: read.reason }); break; }
+        if (intoDevoirs(read.fields.listId, out[idx].listId, ctx)) { skipped.push({ opId, reason: DEVOIRS_REFUS }); break; }
         // Le parent est validé contre la liste d'arrivée (déplacer une tâche et
         // la ranger sous un parent d'une autre liste ne veut rien dire), et posé
         // dans la même passe que les autres champs : sans quoi une sous-tâche

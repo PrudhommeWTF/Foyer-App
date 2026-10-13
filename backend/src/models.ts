@@ -69,8 +69,10 @@ export type { ShopItem, ShopState } from './shopping/ops';
  * Type d'une liste de tâches. Seules les listes `taches` sont l'affaire du
  * jour : elles comptent dans « Toutes » et sur l'accueil. Une liste de corvées
  * ou une checklist (valise, fournitures, idées) vit dans son propre onglet.
+ * Une liste `devoirs` (« Devoirs de Nolan ») est créée et remplie par le module
+ * École : elle ne se crée, ne se supprime ni ne se remplit à la main.
  */
-export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation';
+export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation' | 'devoirs';
 export interface TaskList {
   id: string; name: string; color: string; icon: string;
   kind: ListKind;

@@ -32,6 +32,7 @@
 // qui décide quoi écrire où. Jamais un identifiant, un mot de passe, un jeton,
 // cn ni cv dans un message d'erreur.
 import { EdAccountInfo, parseAccounts } from './accounts';
+import { EdHomeworkDetail, EdHomeworkSummary, EdLesson, parseHomeworkDay, parseHomeworkList, parseTimetable } from './data';
 import { EdError, errorOfCode } from './errors';
 
 export interface EdConfig {
@@ -134,6 +135,45 @@ export class EdClient {
     const cv = typeof data['cv'] === 'string' ? data['cv'] : '';
     if (!cn || !cv) throw new EdError('inattendu', 'ÉcoleDirecte a accepté la réponse sans rendre d’appareil de confiance.', r.code, r.status);
     return { cn, cv };
+  }
+
+  // ---- Données (session ouverte par `login`) ------------------------------
+
+  /**
+   * Passe la session sur un autre compte rattaché (parents dont les enfants
+   * sont dans deux établissements). Chemin et corps : `renewtoken.awp`, comme
+   * l'intégration Home Assistant.
+   */
+  async switchAccount(s: EdSession, idLogin: number): Promise<void> {
+    await this.data(s, 'changement-compte', '/renewtoken.awp?verbe=post', { idUser: idLogin, uuid: '' });
+  }
+
+  /** Les devoirs à venir, sans leur énoncé : une ligne par devoir, avec sa date de rendu. */
+  async homeworkList(s: EdSession, studentId: number): Promise<EdHomeworkSummary[]> {
+    return parseHomeworkList(await this.data(s, 'cahier-de-textes', `/Eleves/${studentId}/cahierdetexte.awp?verbe=get`, {}));
+  }
+
+  /** Le détail d'un jour : l'énoncé (HTML), le professeur. */
+  async homeworkDay(s: EdSession, studentId: number, day: string): Promise<EdHomeworkDetail[]> {
+    return parseHomeworkDay(await this.data(s, 'cahier-de-textes-jour', `/Eleves/${studentId}/cahierdetexte/${day}.awp?verbe=get`, {}), day);
+  }
+
+  /** Marque des devoirs faits, ou défaits, chez ÉcoleDirecte. */
+  async setHomeworkDone(s: EdSession, studentId: number, done: number[], notDone: number[]): Promise<void> {
+    await this.data(s, 'devoirs-faits', `/Eleves/${studentId}/cahierdetexte.awp?verbe=put`, { idDevoirsEffectues: done, idDevoirsNonEffectues: notDone });
+  }
+
+  /** Les cours entre deux dates incluses (AAAA-MM-JJ). */
+  async timetable(s: EdSession, studentId: number, from: string, to: string): Promise<EdLesson[]> {
+    return parseTimetable(await this.data(s, 'emploi-du-temps', `/E/${studentId}/emploidutemps.awp?verbe=get`, { dateDebut: from, dateFin: to, avecTrous: false }));
+  }
+
+  /** Un échange de données : 200 rend `data`, 210 (rien, vacances) rend un vide, le reste est une erreur. */
+  private async data(s: EdSession, step: string, path: string, body: unknown): Promise<unknown> {
+    const r = await this.call(s, step, 'POST', path, body);
+    if (r.code === 210) return {};
+    if (r.code !== 200) throw this.fail(r);
+    return r.json['data'];
   }
 
   private fail(r: Reply): EdError {

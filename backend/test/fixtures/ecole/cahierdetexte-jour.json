@@ -1,0 +1,139 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "date": "@JOUR@",
+    "matieres": [
+      {
+        "entityCode": "5B",
+        "entityLibelle": "5EME B",
+        "entityType": "C",
+        "matiere": "MATHEMATIQUES",
+        "codeMatiere": "MATHS",
+        "nomProf": "M. ANONYME",
+        "id": 5001,
+        "interrogation": false,
+        "blogActif": false,
+        "nbJourMaxRenduDevoir": 0,
+        "aFaire": {
+          "idDevoir": 5001,
+          "contenu": "PHA+RXhlcmNpY2VzIDEyIGV0IDEzIHAuJm5ic3A7NDU8L3A+PHA+Q29ycmlnJmVhY3V0ZTsgc3VyIDxhIGhyZWY9Imh0dHBzOi8vZXhlbXBsZS5mci9jb3JyaWdlIj5sZSBzaXRlPC9hPjwvcD48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+",
+          "rendreEnLigne": false,
+          "donneLe": "@J-2@",
+          "effectue": false,
+          "ressource": "",
+          "ressourceDocuments": [],
+          "documents": [],
+          "commentaires": []
+        },
+        "contenuDeSeance": {
+          "idDevoir": 5001,
+          "contenu": "",
+          "documents": []
+        }
+      },
+      {
+        "entityCode": "5B",
+        "entityLibelle": "5EME B",
+        "entityType": "C",
+        "matiere": "ANGLAIS LV1",
+        "codeMatiere": "AGL1",
+        "nomProf": "Mme ANONYME",
+        "id": 5002,
+        "interrogation": true,
+        "blogActif": false,
+        "nbJourMaxRenduDevoir": 0,
+        "aFaire": {
+          "idDevoir": 5002,
+          "contenu": "PHA+SW50ZXJyb2dhdGlvbiBzdXIgbGUgPGI+cHImZWFjdXRlO3QmZWFjdXRlO3JpdDwvYj4sIHVuaXQgMzwvcD4=",
+          "rendreEnLigne": false,
+          "donneLe": "@J-5@",
+          "effectue": false,
+          "ressource": "",
+          "ressourceDocuments": [],
+          "documents": [],
+          "commentaires": []
+        },
+        "contenuDeSeance": {
+          "idDevoir": 5002,
+          "contenu": "",
+          "documents": []
+        }
+      },
+      {
+        "entityCode": "5B",
+        "entityLibelle": "5EME B",
+        "entityType": "C",
+        "matiere": "HISTOIRE-GEOGRAPHIE",
+        "codeMatiere": "HI-GE",
+        "nomProf": "M. ANONYME",
+        "id": 5003,
+        "interrogation": false,
+        "blogActif": false,
+        "nbJourMaxRenduDevoir": 0,
+        "aFaire": {
+          "idDevoir": 5003,
+          "contenu": "PHVsPjxsaT5MaXJlIGxlIGNoYXBpdHJlIDI8L2xpPjxsaT5GYWlyZSBsYSBjYXJ0ZTwvbGk+PC91bD4=",
+          "rendreEnLigne": false,
+          "donneLe": "@J-1@",
+          "effectue": true,
+          "ressource": "",
+          "ressourceDocuments": [],
+          "documents": [
+            {
+              "id": 1,
+              "libelle": "fiche.pdf",
+              "type": "FICHIER_CDT"
+            }
+          ],
+          "commentaires": []
+        },
+        "contenuDeSeance": {
+          "idDevoir": 5003,
+          "contenu": "",
+          "documents": []
+        }
+      },
+      {
+        "entityCode": "5B",
+        "entityLibelle": "5EME B",
+        "entityType": "C",
+        "matiere": "FRANCAIS",
+        "codeMatiere": "FRANC",
+        "nomProf": "Mme ANONYME",
+        "id": 5004,
+        "interrogation": false,
+        "blogActif": false,
+        "nbJourMaxRenduDevoir": 0,
+        "aFaire": {
+          "idDevoir": 5004,
+          "contenu": "PHA+TGlyZSBsZSBsaXZyZTwvcD4=",
+          "rendreEnLigne": false,
+          "donneLe": "@J-1@",
+          "effectue": false,
+          "ressource": "",
+          "ressourceDocuments": [],
+          "documents": [],
+          "commentaires": []
+        },
+        "contenuDeSeance": {
+          "idDevoir": 5004,
+          "contenu": "",
+          "documents": []
+        }
+      },
+      {
+        "matiere": "PHYSIQUE-CHIMIE",
+        "codeMatiere": "PH-CH",
+        "nomProf": "M. ANONYME",
+        "id": 0,
+        "interrogation": false,
+        "contenuDeSeance": {
+          "idDevoir": 7000,
+          "contenu": "PHA+U8OpYW5jZSBzdXIgbCfDqWxlY3RyaWNpdMOpPC9wPg=="
+        }
+      }
+    ]
+  }
+}

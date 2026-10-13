@@ -25,3 +25,10 @@ champ libre inattendu peut encore porter une donnée personnelle.
 | `doubleauth-get.json` | la question et ses propositions, en base64 |
 | `doubleauth-post.json` | réponse acceptée : l'appareil de confiance (cn, cv) |
 | `code-505.json`, `code-517.json`, `code-535.json` | identifiants refusés, version refusée, établissement fermé |
+| `code-210.json`, `code-520.json` | rien à renvoyer (vacances), jeton refusé |
+| `cahierdetexte.json` | la liste des devoirs à venir, par date de rendu (dont une interrogation, un devoir déjà fait, un au-delà de l'horizon) |
+| `cahierdetexte-jour.json` | le détail d'un jour : énoncés HTML en base64 (lien, liste, script à retirer), une séance sans « à faire » |
+| `emploidutemps.json` | une journée de cours avec pause de midi, un cours annulé, un modifié, un événement sur deux jours |
+
+Les fichiers de données portent des dates relatives (`@J+1@` : demain à Paris) que
+le faux serveur remplace au moment du test.
