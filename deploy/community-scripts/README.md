@@ -24,27 +24,31 @@ Ils suivent le fonctionnement documenté par le projet :
 - Les **mises à jour** passent par `update_script()` (relancer le script côté
   hôte Proxmox), avec détection de version par `check_for_gh_release`.
 
-## ⚠️ Contrainte importante : ces scripts visent le catalogue community-scripts
+## Tester ces scripts depuis ce dépôt (avant fusion au catalogue)
 
-Le moteur community-scripts récupère le script d'installation à une **URL figée
-en dur** dans leur `build.func` :
+Quand le `ct/foyer.sh` est récupéré par `curl`, le moteur ne peut pas deviner
+d'où il vient : par défaut il va chercher le script d'install au dépôt officiel
+(`https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/foyer-install.sh`),
+ce qui renvoie une 404 tant que Foyer n'y est pas. Il faut donc lui **indiquer la
+base des scripts** avec la variable `COMMUNITY_SCRIPTS_URL`. Depuis l'hôte
+Proxmox (en root) :
 
+```bash
+COMMUNITY_SCRIPTS_URL=https://raw.githubusercontent.com/PrudhommeWTF/Foyer-App/main/deploy/community-scripts \
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/PrudhommeWTF/Foyer-App/main/deploy/community-scripts/ct/foyer.sh)"
 ```
-https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/foyer-install.sh
-```
 
-Il n'existe **aucune variable** pour pointer cette URL vers ce dépôt. Autrement
-dit, la commande « one-liner » standard ne fonctionnera que lorsque
-`install/foyer-install.sh` sera présent **dans le dépôt community-scripts**,
-c'est-à-dire après soumission et fusion par leurs mainteneurs.
+Le moteur cherche alors l'install à `${COMMUNITY_SCRIPTS_URL}/install/foyer-install.sh`,
+soit `.../deploy/community-scripts/install/foyer-install.sh`, qui existe. Adaptez
+la branche (`main`) au besoin. Variante avec un **checkout local** de ces
+scripts : exportez `COMMUNITY_SCRIPTS_ROOT=<dossier contenant ct/ et install/>`
+(et `COMMUNITY_SCRIPTS_CORE_DIR` pour un `build.func` local).
 
-- **Tant que ce n'est pas fusionné** : utilisez l'installation auto-hébergée
-  décrite dans [`../README.md`](../README.md) (`deploy/lxc/`), qui reste le
-  chemin pris en charge et ne dépend de personne.
-- **Pour tester ces scripts avant fusion** : suivez le workflow de *fork* de
-  community-scripts (forker leur dépôt, y copier ces deux fichiers, et laisser
-  leur `setup-fork.sh` réécrire les URLs vers votre fork), ou lancez-les avec un
-  checkout local de `community-scripts/core` via `COMMUNITY_SCRIPTS_CORE_DIR`.
+> La commande « one-liner » **courte** du site (sans variable) ne fonctionnera
+> que lorsque `install/foyer-install.sh` sera présent **dans le dépôt
+> community-scripts**, après soumission et fusion. En attendant, l'installation
+> prise en charge et indépendante reste l'auto-hébergée de
+> [`../README.md`](../README.md) (`deploy/lxc/`).
 
 ## Soumission au catalogue
 
