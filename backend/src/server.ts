@@ -17,6 +17,9 @@ import { employesRouter } from './employes/routes';
 import { computeMonth as empComputeMonth, listEmployees as empListEmployees } from './employes/repo';
 import { moduleCounts as finCounts, resetModule as finReset } from './finances/backup';
 import { moduleCounts as empCounts, resetModule as empReset } from './employes/backup';
+import { ecoleRouter } from './ecole/routes';
+import { setEcoleDeps, startEcoleScheduler } from './ecole/service';
+import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
@@ -365,7 +368,7 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
 // Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un
 // enfant sur un module adulte. Le masquage dans l'interface n'est pas la barrière,
 // c'en est le reflet ; la barrière est ici, côté serveur.
-const requireModule = (flag: 'modFinances' | 'modEmploye') => (_req: Request, res: Response, next: NextFunction): void => {
+const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole') => (_req: Request, res: Response, next: NextFunction): void => {
   if (effectiveSetting(flag) === false) { res.status(403).json({ error: 'Ce module est désactivé.' }); return; }
   next();
 };
@@ -376,6 +379,12 @@ const requireModule = (flag: 'modFinances' | 'modEmploye') => (_req: Request, re
 api.use('/finances', auth, apiTokenLimiter, denyToken, requireAdulte, requireModule('modFinances'), financesRouter(requireAdmin));
 // Module « Employé à domicile » : adultes uniquement, comme Finances.
 api.use('/employes', auth, apiTokenLimiter, denyToken, requireAdulte, requireModule('modEmploye'), employesRouter(requireAdmin));
+// Module « École » (ÉcoleDirecte) : désactivé par défaut. Cette tranche ne porte
+// que la configuration, réservée aux administrateurs (garde dans le routeur).
+// Les membres du foyer servent à proposer l'association des élèves.
+setEcoleDeps({ members: () => (getHousehold().state as HouseholdState).members.map((m) => ({ id: m.id, name: m.name, enfant: !!m.enfant })) });
+api.use('/ecole', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modEcole'), ecoleRouter(requireAdmin,
+  () => (getHousehold().state as HouseholdState).members.map((m) => m.id)));
 
 // ---- Modules activables (activer / désactiver, remise à zéro) ----
 // L'activation elle-même est un réglage foyer (modRepas, modFidelite, modFinances,
@@ -384,13 +393,14 @@ api.use('/employes', auth, apiTokenLimiter, denyToken, requireAdulte, requireMod
 // zéro d'un module (à la réactivation « repartir sans les données »).
 api.get('/modules', auth, ...tokenGate, requireMember, (_req: Request, res: Response) => {
   const doc = getHousehold().state as HouseholdState;
-  const fc = finCounts(); const ec = empCounts();
+  const fc = finCounts(); const ec = empCounts(); const dc = edCounts();
   res.json({
     counts: {
       repas: { recipes: (doc.recipes || []).length, meals: Object.keys(doc.meals || {}).length },
       fidelite: { cards: (doc.cards || []).length },
       finances: { transactions: fc['fin_transactions'] || 0, comptes: fc['fin_accounts'] || 0 },
       employe: { employes: ec['emp_employees'] || 0, presences: ec['emp_shifts'] || 0 },
+      ecole: { comptes: dc['ed_accounts'] || 0, eleves: dc['ed_students'] || 0 },
     },
   });
 });
@@ -411,6 +421,8 @@ api.post('/modules/:mod/reset', auth, ...tokenGate, requireMember, requireAdmin,
     finReset();
   } else if (mod === 'employe') {
     empReset();
+  } else if (mod === 'ecole') {
+    edReset();
   } else {
     res.status(404).json({ error: 'Module inconnu.' });
     return;
@@ -648,6 +660,21 @@ export function start(): void {
     wants: memberWants,
     log: notifLog,
   });
+
+  // Module École : un passage par minute, qui ne fait rien tant que le module
+  // est désactivé. Un incident (question de sécurité, identifiants refusés,
+  // pause automatique) prévient les administrateurs une fois, sur leur téléphone.
+  setEcoleDeps({
+    alertAdmins: (key, title, body) => {
+      if (effectiveSetting('pushPaused') === true) return;
+      const accts = new Set(listMemberAccounts().map((a) => a.memberId));
+      const admins = (getHousehold().state as HouseholdState).members.filter((m) => m.admin && accts.has(m.id)).map((m) => m.id);
+      void notify(key, admins, { kind: 'ecole', title, body, url: appUrl(), tag: 'ecole' })
+        .then((r) => notifLog(`Notifications : école « ${title} » → ${r.members.map((m) => m.memberId + ' : ' + m.status).join(', ') || 'aucun administrateur avec un accès'}`))
+        .catch((e) => notifLog('Notifications : alerte école non envoyée : ' + (e as Error).message));
+    },
+  });
+  startEcoleScheduler();
 
   // Le dire au démarrage plutôt qu'au premier bourrage : cru sur une interface
   // ouverte, X-Forwarded-For rend la temporisation contournable par quiconque

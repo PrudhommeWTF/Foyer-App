@@ -1,0 +1,36 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "accounts": [
+      {
+        "idLogin": 1000002,
+        "id": 3000003,
+        "identifiant": "ANONYME",
+        "typeCompte": "E",
+        "main": true,
+        "prenom": "Camille",
+        "nom": "FAMILLE",
+        "nomEtablissement": "ECOLE EXEMPLE",
+        "modules": [
+          {
+            "code": "CAHIER_DE_TEXTES",
+            "enable": true
+          },
+          {
+            "code": "NOTES",
+            "enable": false
+          }
+        ],
+        "profile": {
+          "classe": {
+            "id": 21,
+            "code": "CM2",
+            "libelle": "CM2"
+          }
+        }
+      }
+    ]
+  }
+}

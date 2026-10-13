@@ -18,7 +18,7 @@ export interface PushDevice {
 }
 
 export interface PushPayload {
-  kind: 'reminder' | 'assigned' | 'test';
+  kind: 'reminder' | 'assigned' | 'test' | 'ecole';
   title: string;
   body: string;
   /** Adresse ouverte au tap. Vide : la racine de l'application. */

@@ -1,0 +1,136 @@
+{
+  "code": 200,
+  "token": "",
+  "message": "",
+  "data": {
+    "changementMDP": false,
+    "nbJourMdpExire": 0,
+    "accounts": [
+      {
+        "idLogin": 1000001,
+        "id": 2000001,
+        "uid": "00000000000000000000000000000000",
+        "identifiant": "ANONYME",
+        "typeCompte": "1",
+        "codeOgec": "0000000A",
+        "main": true,
+        "lastConnexion": "2026-10-12 18:02",
+        "civilite": "M.",
+        "prenom": "Parent",
+        "particule": "",
+        "nom": "FAMILLE",
+        "email": "anonyme@example.fr",
+        "isPrimaire": false,
+        "nomEtablissement": "COLLEGE EXEMPLE",
+        "logoEtablissement": "",
+        "couleurAgendaEtablissement": "#1796b0",
+        "dicoEnLigneLeRobert": false,
+        "socketToken": "",
+        "modules": [
+          {
+            "code": "MESSAGERIE",
+            "enable": true,
+            "ordre": 1,
+            "badge": 0,
+            "params": {}
+          }
+        ],
+        "parametresIndividuels": {},
+        "profile": {
+          "email": "",
+          "eleves": [
+            {
+              "id": 3000001,
+              "prenom": "Léna",
+              "nom": "FAMILLE",
+              "sexe": "F",
+              "infoEDT": "",
+              "photo": "",
+              "nomEtablissement": "COLLEGE EXEMPLE",
+              "idEtablissement": "1",
+              "idReelEtab": "1",
+              "isPrimaire": false,
+              "classe": {
+                "id": 11,
+                "code": "5B",
+                "libelle": "5EME B",
+                "estNote": 1
+              },
+              "modules": [
+                {
+                  "code": "CAHIER_DE_TEXTES",
+                  "enable": true,
+                  "ordre": 1,
+                  "badge": 0,
+                  "params": {}
+                },
+                {
+                  "code": "NOTES",
+                  "enable": true,
+                  "ordre": 2,
+                  "badge": 0,
+                  "params": {}
+                },
+                {
+                  "code": "EDT",
+                  "enable": true,
+                  "ordre": 3,
+                  "badge": 0,
+                  "params": {}
+                },
+                {
+                  "code": "VIE_SCOLAIRE",
+                  "enable": true,
+                  "ordre": 4,
+                  "badge": 0,
+                  "params": {}
+                },
+                {
+                  "code": "CANTINE_BARCODE",
+                  "enable": false,
+                  "ordre": 5,
+                  "badge": 0,
+                  "params": {}
+                }
+              ]
+            },
+            {
+              "id": 3000002,
+              "prenom": "Nolan-Pierre",
+              "nom": "FAMILLE",
+              "sexe": "M",
+              "infoEDT": "",
+              "photo": "",
+              "nomEtablissement": "LYCEE EXEMPLE",
+              "idEtablissement": "2",
+              "idReelEtab": "2",
+              "isPrimaire": false,
+              "classe": {
+                "id": 12,
+                "code": "2A",
+                "libelle": "SECONDE A",
+                "estNote": 1
+              },
+              "modules": [
+                {
+                  "code": "CAHIER_DE_TEXTES",
+                  "enable": true,
+                  "ordre": 1,
+                  "badge": 0,
+                  "params": {}
+                },
+                {
+                  "code": "EDT",
+                  "enable": true,
+                  "ordre": 2,
+                  "badge": 0,
+                  "params": {}
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

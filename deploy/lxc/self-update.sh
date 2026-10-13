@@ -162,6 +162,15 @@ fi
 rm -f "${DATA_DIR}/version"
 chown -R "${SERVICE_USER}:${SERVICE_USER}" "$APP_DIR"
 
+# Clé de chiffrement des identifiants enregistrés (module École) : générée une
+# fois, jamais remplacée. La perdre ou la changer oblige à ressaisir les
+# identifiants ÉcoleDirecte et à répondre de nouveau à la question de sécurité.
+if ! grep -q '^FOYER_SECRET_KEY=' "${ENV_FILE}"; then
+  echo "FOYER_SECRET_KEY=$(head -c 32 /dev/urandom | base64 | tr -d '\n')" >> "${ENV_FILE}"
+  chmod 600 "${ENV_FILE}"
+  echo "FOYER_SECRET_KEY générée dans ${ENV_FILE} : sauvegardez ce fichier avec la base."
+fi
+
 # Le helper root vit hors de $APP_DIR : la mise à jour ne recopiait donc que le
 # backend et l'app compilée, et laissait CE script dans la version posée par
 # install.sh, pour toujours. Autrement dit, aucune correction du script de mise

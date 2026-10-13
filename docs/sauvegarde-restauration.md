@@ -99,7 +99,9 @@ mkdir -p "$DEST"
 sqlite3 "${DATA_DIR}/foyer.db" "VACUUM INTO '${travail}/foyer.db'"
 
 # 2. Les fichiers, et la configuration du service. Le fichier d'environnement
-#    porte le secret JWT : il n'a rien à faire ailleurs qu'ici, chiffré.
+#    porte le secret JWT et FOYER_SECRET_KEY (sans elle, les identifiants
+#    ÉcoleDirecte de la base sont illisibles) : il n'a rien à faire ailleurs
+#    qu'ici, chiffré.
 tar -C "$DATA_DIR" -cf "${travail}/donnees.tar" \
     pieces regles-accueil.json 2>/dev/null || \
 tar -C "$DATA_DIR" -cf "${travail}/donnees.tar" pieces

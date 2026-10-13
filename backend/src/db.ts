@@ -6,6 +6,8 @@ import { migrateFinances } from './finances/schema';
 import { initFinancesRepo } from './finances/repo';
 import { migrateEmployes } from './employes/schema';
 import { initEmployesRepo } from './employes/repo';
+import { migrateEcole } from './ecole/schema';
+import { initEcoleRepo } from './ecole/repo';
 import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
 import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
 import * as files from './storage/files';
@@ -142,6 +144,10 @@ initFinancesRepo(db);
 // Module « Employé à domicile » : schéma relationnel versionné, comme Finances.
 migrateEmployes(db);
 initEmployesRepo(db);
+
+// Module « École » (ÉcoleDirecte) : mêmes principes, tables ed_*.
+migrateEcole(db);
+initEcoleRepo(db);
 
 // Household-side tables (files, ops journals), then the document itself.
 migrateHousehold(db);

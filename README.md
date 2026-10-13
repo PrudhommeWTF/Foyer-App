@@ -71,13 +71,14 @@ compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier dé
 | ✅ **Tâches** | Saisie en un champ, affectation à un, plusieurs ou aucun membre, récurrence native (à date fixe ou après réalisation), sous-tâches, modèles, listes typées (corvées, checklists) et vue « À moi ». **Rappels sur le téléphone (Web Push)**, réglés tâche par tâche. Reliée au reste : contrats, courses, emploi du temps et agenda. [Détails](docs/taches.md) |
 | 💰 **Finances** | Comptes multi-titulaires, opérations catégorisées, bilan mensuel et annuel, budgets de référence. **Import de relevés** (CSV, OFX, CAMT.053, xlsx) avec déduplication et rapport avant validation. Règles de catégorisation, crédits, biens et contrats avec échéances de résiliation, relevés de compteur, pistes d'économies. [Détails](docs/finances-architecture.md) |
 | 🧹 **Employé à domicile** | Le suivi des heures d'un employé déclaré au **CESU** (ménage). « Elle est venue aujourd'hui » en un tap, récapitulatif de fin de mois avec les **chiffres exacts à recopier** sur cesu.urssaf.fr (heures en décimal, salaire net), déclaré puis payé. Taux horaire daté (un mois déclaré n'est jamais recalculé), rappel de déclaration et repère à l'agenda. **Réservé aux adultes**, aucune donnée personnelle au-delà du nom. [Détails](docs/employe-domicile.md) |
+| 🎒 **École** (en cours) | Connexion aux comptes **ÉcoleDirecte** des enfants : question de sécurité répondue une fois dans les Paramètres, élèves associés aux membres d'après leur prénom, connexion périodique prudente (pause de nuit, pause automatique sur échecs) et journal. Devoirs, emploi du temps, notes et vie scolaire arrivent dans les tranches suivantes. **Désactivé par défaut**, identifiants chiffrés côté serveur. [Détails](docs/ecole.md) |
 | 🍽️ **Repas** | Déjeuner et dîner (petit-déjeuner en option) sur 3 ou 7 jours, grille sur écran, pile de jours sur téléphone. Plusieurs plats par créneau, couverts par repas, déplacement par glisser-déposer, recopie d'une période sur une autre, mise à l'agenda des repas avec invités. |
 | 📖 **Recettes** | Carnet avec photos, ingrédients et étapes. **Import depuis l'adresse d'une page de recette** (Marmiton, 750g, Cuisine AZ, blogs) par lecture des données structurées. Recherche en une ligne (« courgette 20min végétarien »), notes de la famille, étiquettes, export et réimport JSON. [Détails](docs/cuisine-architecture.md) |
 | 🗓️ **Emploi du temps** | La semaine type du foyer, un créneau pour un ou plusieurs membres. Copie de journée, récurrence sobre (toutes les semaines ou une sur deux) avec période de validité et filtre période scolaire/vacances. Alimente les couverts du planning repas, et **publie à la demande un créneau au calendrier partagé** (ses occurrences y sont dérivées, jamais recopiées, donc toujours à jour). [Détails](docs/emploi-du-temps.md) |
 | 🥗 **Contraintes alimentaires** | Allergènes (liste européenne) et aliments refusés par membre. Les recettes affichent leurs allergènes et à qui elles ne conviennent pas ; le planning signale le créneau en cause. Honnête sur ses limites : un ingrédient non reconnu n'est pas vérifié, et l'interface le dit. |
 | ☎️ **Contacts** | Un carnet de contacts (urgences, santé, école) avec recherche transverse. |
 | 💳 **Cartes de fidélité** | Les cartes de tout le foyer, une fois pour toutes : **scannées par la caméra** (ou lues sur une photo), leur code (QR ou code-barres) est **réaffiché en grand** à présenter en caisse. Rangées par nom, avec un logo : soit un monogramme aux initiales, soit un vrai logo cherché en ligne d'après le nom (option `cardLogoSearch`, coupable). Le code reste du texte dans le document, jamais un fichier sur le disque. |
-| ⚙️ **Paramètres** | Thème, membres et accès, rappels sur cet appareil, partage du calendrier, mises à jour. **Activation des modules** : un administrateur peut désactiver « Repas et cuisine », « Cartes de fidélité », « Finances » et « Employé à domicile » (masqués partout et accès fermés, sans perte de données ; réactivation avec reprise ou remise à zéro). [Registre complet](docs/parametres.md) |
+| ⚙️ **Paramètres** | Thème, membres et accès, rappels sur cet appareil, partage du calendrier, mises à jour. **Activation des modules** : un administrateur peut désactiver « Repas et cuisine », « Cartes de fidélité », « Finances », « Employé à domicile » et activer « École » (masqués partout et accès fermés, sans perte de données ; réactivation avec reprise ou remise à zéro). [Registre complet](docs/parametres.md) |
 
 Chaque membre a sa couleur d'identité. Thème clair/sombre synchronisé. Interface responsive
 (bureau et mobile avec barre d'onglets).
@@ -108,6 +109,9 @@ Foyer-App/
   par `/api/employes/*`, **réservées aux adultes**. Une présence = une ligne, le taux horaire est
   daté (chaque heure valorisée au taux du jour), un mois déclaré est figé. Voir
   [`docs/employe-domicile.md`](docs/employe-domicile.md).
+- Le module **École** aussi : tables `ed_*`, servies par `/api/ecole/*`, écrites en arrière-plan
+  par le planificateur. Tout ce qui parle à ÉcoleDirecte vit dans `backend/src/ecole/client/`,
+  seul dossier à corriger quand cette API non publique change. Voir [`docs/ecole.md`](docs/ecole.md).
 - La **liste de courses** et les **tâches** restent dans le document, mais s'écrivent
   **article par article** et **tâche par tâche** (`/api/shopping/ops`, `/api/tasks/ops`) :
   `PUT /api/state` ignore ces champs et conserve ceux du serveur. Deux personnes cochent en
@@ -169,6 +173,9 @@ docker run -d --name foyer -p 127.0.0.1:8099:8099 -v foyer-data:/data \
 | `FOYER_RECIPE_IMPORT` | Autoriser l'import d'une recette depuis une URL, seule requête sortante du module Cuisine (`true`/`false`). Réglable depuis l'application ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
 | `FOYER_VAPID_PUBLIC` / `FOYER_VAPID_PRIVATE` | Paire de clés des rappels Web Push. Sans elles, une paire est générée au premier démarrage et gardée en base (en changer invalide tous les abonnements) | _(générées)_ |
 | `FOYER_VAPID_SUBJECT` | Contact déclaré au service push (`mailto:` ou `https:`). Une adresse locale est refusée par Apple (403 `BadJwtToken`) : elle est donc écartée au démarrage, avec un message dans le journal. Sans variable, c'est l'adresse publique du foyer (Paramètres → Notifications) qui sert de contact, et à défaut le dépôt du projet | _(adresse publique du foyer)_ |
+| `FOYER_SECRET_KEY` | Clé de chiffrement des identifiants ÉcoleDirecte enregistrés (≥ 32 caractères, `openssl rand -base64 32`). Générée par l'installeur LXC. Sans elle, le module École n'enregistre aucun compte ; **perdue ou changée, les identifiants sont à ressaisir et la question de sécurité ÉcoleDirecte revient**. Gardez-la avec vos sauvegardes | _(aucune)_ |
+| `FOYER_ED_API_VERSION` | Version d'API annoncée à ÉcoleDirecte. À monter quand la section École signale un refus (code 517), voir [`docs/ecole.md`](docs/ecole.md) | `4.102.0` |
+| `FOYER_ED_API_BASE` / `FOYER_ED_USER_AGENT` / `FOYER_ED_ORIGIN` | Hôte de l'API ÉcoleDirecte, navigateur et site d'origine annoncés. À ne toucher que si ÉcoleDirecte change | _(voir [`docs/parametres.md`](docs/parametres.md))_ |
 | `FOYER_PUBLIC_URL` | Adresse ouverte au tap sur une notification. Réglable depuis l'application ; cette variable l'emporte quand elle est posée | _(réglage du foyer)_ |
 
 La liste complète des réglages, leur portée et le module qui les consomme est engendrée depuis
@@ -459,6 +466,7 @@ conservée dans [`docs/`](docs/).
 | Cuisine (recettes → repas → courses) | [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md) |
 | Finances (architecture et cahier de recette) | [`docs/finances-architecture.md`](docs/finances-architecture.md), [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md) |
 | Employé à domicile (heures, CESU) | [`docs/employe-domicile.md`](docs/employe-domicile.md) |
+| École (ÉcoleDirecte : connexion, exploitation, quand l'API change) | [`docs/ecole.md`](docs/ecole.md), [`docs/ecole-etat-des-lieux.md`](docs/ecole-etat-des-lieux.md) |
 | Emploi du temps | [`docs/emploi-du-temps.md`](docs/emploi-du-temps.md) |
 | Hors ligne | [`docs/hors-ligne.md`](docs/hors-ligne.md) |
 | Assistants (serveur MCP) | [`docs/assistants.md`](docs/assistants.md) |
