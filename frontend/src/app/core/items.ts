@@ -11,19 +11,20 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot';
 
 export type SheetMode = 'vue' | 'edition';
 
 /**
  * Ce que la fiche montre. `id` vide = création (la fiche s'ouvre alors
  * directement en édition). `ctx.occ` désigne l'occurrence touchée d'une série ;
- * `ctx.date` (et `ctx.slot` pour un repas) le créneau proposé à une création ;
+ * `ctx.date` (et `ctx.slot` pour un repas, `ctx.time` pour un créneau) ce
+ * qu'une création reçoit d'office, `ctx.copy` l'élément qu'elle recopie ;
  * `ctx.prev` la fiche qu'on
  * retrouve au retour (deux niveaux au plus).
  */
 export interface ItemRef { kind: ItemKindId; id: string | null; mode: SheetMode; ctx?: ItemCtx; }
-export interface ItemCtx { occ?: string; date?: string; slot?: string; prev?: ItemRef; }
+export interface ItemCtx { occ?: string; date?: string; slot?: string; time?: string; copy?: string; prev?: ItemRef; }
 
 /** La partie pure d'un type : ce que les tests vérifient et ce que le shell lit sans charger l'élément. */
 export interface ItemKindMeta {
@@ -62,6 +63,10 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   recipe: {
     kind: 'recipe', label: 'Recette', newTitle: 'Nouvelle recette', editTitle: 'Modifier la recette',
     screen: 'recettes', openLabel: 'Ouvrir dans Carnet de recettes', editable: true, removeMode: 'confirm', module: 'modRepas',
+  },
+  slot: {
+    kind: 'slot', label: 'Créneau', newTitle: 'Nouveau créneau', editTitle: 'Modifier le créneau',
+    screen: 'planning', openLabel: 'Ouvrir dans Emploi du temps', editable: true, removeMode: 'undo',
   },
 };
 

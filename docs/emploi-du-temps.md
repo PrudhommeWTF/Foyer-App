@@ -111,7 +111,7 @@ le JSON du document est légèrement moins lisible à l'oeil nu.
 | `frontend/src/app/core/schedule.ts` | Le moteur : tri, jour d'une date, filtre par membre, marqueurs d'identité. Pur, testé dans `schedule.test.ts`. |
 | `frontend/src/app/core/sched-copy.ts` | La copie de journée : signature, plan, application, annulation. Pur, testé dans `sched-copy.test.ts`. |
 | `frontend/src/app/core/foyer.store.ts` | Les gestes : création, modification, suppression avec annulation, filtre. |
-| `frontend/src/app/screens/planning.ts` | L'écran. |
+| `frontend/src/app/screens/planning/planning.ts` | L'écran ; la fiche d'un créneau à côté (`slot.item.ts`, `slot-view.ts`, `slot-form.ts`). |
 | `frontend/src/app/shared/who.ts` | `f-who`, les marqueurs d'identité, partagés avec la tuile d'accueil. |
 | `backend/src/state/migrations.ts` | La migration 6, qui amène les documents existants à cette forme. |
 
@@ -219,9 +219,10 @@ autre objet que la semaine type, et une décision à prendre pour elle-même.
 
 ### Dupliquer un créneau
 
-Depuis le formulaire d'un créneau, « Dupliquer » repasse en création avec les
-mêmes valeurs. Rien n'est écrit tant qu'on n'enregistre pas : se raviser ne
-laisse pas de copie fantôme. C'est le geste pour créer le trajet retour à partir
+Depuis la fiche d'un créneau, « Dupliquer » ouvre par-dessus un créneau neuf
+pré-rempli des mêmes valeurs (sans ses exceptions). Rien n'est écrit tant qu'on
+ne crée pas : se raviser ne laisse pas de copie fantôme, et le retour ramène à
+l'original. C'est le geste pour créer le trajet retour à partir
 du trajet aller.
 
 ### Où vit le code
@@ -322,21 +323,42 @@ connues (pas de réseau, service en panne, académie non renseignée), le filtre
 tête de vue. Cacher l'école à 7h50 parce qu'une API est tombée est une faute bien
 pire que d'afficher un créneau en trop un jour de vacances.
 
+## Fiche d'un créneau
+
+Un tap sur un créneau, dans l'emploi du temps ou dans l'agenda (créneau publié),
+ouvre sa **fiche** par-dessus l'écran (voir [`fiche-element.md`](fiche-element.md)) :
+le jour de l'occurrence touchée, les heures, le rythme et la période, les
+membres, le type, et les deux réglages qui agissent ailleurs (« Hors du foyer »
+pour les couverts, « Publié à l'agenda partagé »). Une occurrence modifiée seule
+le dit (« Modifié pour ce jour seulement »).
+
+- **Modifier** passe la même fiche en formulaire ; la note « Ouvert sur le … »
+  rappelle l'occurrence visée par la portée.
+- **Ajouter**, un trou « libre » ou le menu + ouvrent la fiche en création, au
+  jour choisi, avec les membres du filtre et l'heure qui suit le dernier créneau.
+- Un **cours importé d'ÉcoleDirecte** s'ouvre aussi, en lecture seule : ni
+  Modifier ni Supprimer, et « Voir dans École » quand le module est actif.
+- Le déplacement par glisser-déposer (souris) reste sur l'écran.
+
+Le code : `screens/planning/slot.item.ts` (déclaration), `slot-view.ts`,
+`slot-form.ts`, et `core/slot-form.ts` (champs, validation, comparaison, testés).
+
 ## Modifier ou supprimer une occurrence
 
 Une série ne se modifie **jamais en entier sans qu'on l'ait demandé**. Quand un
-créneau hebdomadaire déjà enregistré est ouvert, le formulaire porte un choix
-« Appliquer », juste au-dessus du bouton d'enregistrement.
+créneau hebdomadaire déjà enregistré est modifié, « Sauvegarder » demande la
+portée à ce moment-là, et seulement si quelque chose a changé (sauvegarder sans
+rien changer n'écrit rien et ne demande rien).
 
 | Choix | Ce qui se passe |
 |---|---|
-| **À toute la série** (défaut) | Le créneau est réécrit. Ses exceptions sont conservées. |
+| **À toute la série** | Le créneau est réécrit. Ses exceptions sont conservées. |
 | **À partir du …** | La série est **coupée en deux** : l'ancienne se ferme la veille, une nouvelle démarre ce jour-là avec les nouvelles valeurs. |
 | **Ce jour seulement** | La série saute la date, et une occurrence détachée la reprend. |
 
-La suppression pose la même question, mais **sans réponse par défaut** : c'est
-elle qui détruit. Le formulaire déplie trois boutons explicites plutôt qu'une
-modale par-dessus une modale, ce qui reste utilisable au doigt.
+La suppression pose la même question, trois boutons rouges explicites en bas
+de la fiche, sans réponse par défaut : c'est elle qui détruit. Un créneau
+ponctuel se supprime sans question.
 
 Les trois suppressions s'annulent, et l'annulation est aussi ciblée que le
 geste : elle retire la date de la liste des exceptions, ou remet la borne de fin

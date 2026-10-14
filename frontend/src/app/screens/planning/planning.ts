@@ -1,15 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { FoyerStore } from '../core/foyer.store';
-import { IconComponent } from '../core/icon';
-import { AvatarComponent } from '../shared/avatar';
-import { ModalComponent } from '../shared/modal';
-import { WhoComponent } from '../shared/who';
-import { SchedSlot } from '../core/models';
-import { FreeGap, SchedScope, WHEN_LABELS, dowLabel, filterSlots, gapsOf, slotsOn, validityLabel, whoBadges } from '../core/schedule';
-import { DOW, SCHED_TYPES, SCHED_COLORS } from '../core/constants';
-import { isEdSlot } from '../core/ecole-slots';
-import { EcoleStore } from '../core/ecole.store';
+import { FoyerStore } from '../../core/foyer.store';
+import { IconComponent } from '../../core/icon';
+import { AvatarComponent } from '../../shared/avatar';
+import { ModalComponent } from '../../shared/modal';
+import { WhoComponent } from '../../shared/who';
+import { SchedSlot } from '../../core/models';
+import { FreeGap, WHEN_LABELS, dowLabel, filterSlots, gapsOf, slotsOn, validityLabel, whoBadges } from '../../core/schedule';
+import { DOW, SCHED_TYPES, SCHED_COLORS } from '../../core/constants';
+import { isEdSlot } from '../../core/ecole-slots';
+import { EcoleStore } from '../../core/ecole.store';
 
 /** Un jour de la vue, déjà filtré et daté : l'affichage n'a plus qu'à le dessiner. */
 interface DayView { dow: number; date: string; label: string; short: string; num: string; today: boolean; slots: SchedSlot[]; }
@@ -37,7 +36,7 @@ interface DayView { dow: number; date: string; label: string; short: string; num
   selector: 'screen-planning',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent, WhoComponent],
+  imports: [IconComponent, AvatarComponent, ModalComponent, WhoComponent],
   template: `
     <div class="screen-enter">
       <div class="head-row">
@@ -153,7 +152,7 @@ interface DayView { dow: number; date: string; label: string; short: string; num
                        il n'est pas dans le document, il vient du serveur. -->
                   <div class="slot" [attr.draggable]="!ed(s.id)" (dragstart)="onDragStart(s)" (dragend)="onDragEnd()"
                        [class.dragging]="dragId() === s.id" [class.ed]="ed(s.id)" [class.cancelled]="cancelled(s.id)"
-                       [style.border-left]="'4px solid ' + color(s.k)" (click)="ed(s.id) || store.editSlot(s.id, v.date)">
+                       [style.border-left]="'4px solid ' + color(s.k)" (click)="store.openItem('slot', s.id, { occ: v.date })">
                     <div class="slot-top">
                       <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
                       <f-who [badges]="badges(s)" />
@@ -190,166 +189,6 @@ interface DayView { dow: number; date: string; label: string; short: string; num
         </div>
       }
     </div>
-
-    @if (store.ui().schedEdit) {
-      <f-modal [title]="formTitle()" [maxWidth]="520" (close)="store.patch({ schedEdit: false })">
-        <div class="seg wrap">
-          <button [class.active]="store.ui().seRec === 'weekly' && store.ui().seEvery === 1" (click)="store.setSlotEvery(1)">Toutes les semaines</button>
-          <button [class.active]="store.ui().seRec === 'weekly' && store.ui().seEvery === 2" (click)="store.setSlotEvery(2)">Toutes les 2 semaines</button>
-          <button [class.active]="store.ui().seRec === 'once'" (click)="store.patch({ seRec: 'once' })">Une seule fois</button>
-        </div>
-        @if (store.ui().seRec === 'weekly' && store.ui().seEvery === 2) {
-          <div class="hint">Une semaine sur deux, à partir du {{ store.fmtNumDate(store.ui().seFrom) }} (le point de départ se règle plus bas).</div>
-        }
-
-        @if (store.ui().seRec === 'once') {
-          <div class="field-label">Date</div>
-          <input class="input" type="date" [ngModel]="store.ui().seDate" (ngModelChange)="store.patch({ seDate: $event })" />
-        } @else {
-          <div class="field-label">Jour</div>
-          <div class="seg wrap">
-            @for (n of days; track n) {
-              <button [class.active]="store.ui().seDow === n" (click)="store.patch({ seDow: n })">{{ label(n) }}</button>
-            }
-          </div>
-        }
-
-        <div class="field-label">Qui</div>
-        <div class="who-opts">
-          @for (m of d().members; track m.id) {
-            <div class="who-opt" [class.on]="store.ui().seWho.includes(m.id)"
-                 [style.border-color]="store.ui().seWho.includes(m.id) ? m.color : 'transparent'"
-                 (click)="store.toggleSlotWho(m.id)">
-              <f-avatar [ini]="m.ini" [color]="m.color" [size]="24" />
-              <span>{{ m.name }}</span>
-            </div>
-          }
-        </div>
-
-        <div class="form-row">
-          <div class="field">
-            <div class="field-label">Début</div>
-            <input class="input" type="time" [ngModel]="store.ui().seStart" (ngModelChange)="store.patch({ seStart: $event })" />
-          </div>
-          <div class="field">
-            <div class="field-label">Fin (option.)</div>
-            <input class="input" type="time" [ngModel]="store.ui().seEnd" (ngModelChange)="store.patch({ seEnd: $event })" />
-          </div>
-        </div>
-
-        <div class="field-label">Intitulé</div>
-        <!-- Ce qu'on a déjà écrit fait office de modèles : « École », « Car »,
-             « Cabinet » reviennent tous les jours, et une bibliothèque de
-             modèles serait une seconde chose à tenir à jour. -->
-        <input class="input" list="sched-labels" [ngModel]="store.ui().seLabel"
-               (ngModelChange)="store.patch({ seLabel: $event })" placeholder="Ex : Cours de piano" />
-        <datalist id="sched-labels">
-          @for (l of store.labelSuggestions(); track l) { <option [value]="l"></option> }
-        </datalist>
-
-        <div class="field-label">Type</div>
-        <div class="type-opts">
-          @for (t of types; track t.k) {
-            <div class="type-opt" [class.on]="store.ui().seType === t.k"
-                 [style.border-color]="store.ui().seType === t.k ? t.color : 'transparent'"
-                 [style.background]="tintOf(t.k)" [style.color]="t.color"
-                 (click)="store.setSlotType(t.k)">
-              <span class="dot" [style.background]="t.color"></span>{{ t.label }}
-            </div>
-          }
-        </div>
-
-        <!-- C'est cette case, et elle seule, qui décide des couverts. Le type
-             ne fait que la pré-cocher : le télétravail et le sport à la maison
-             existent. -->
-        <div class="away-row" [class.on]="store.ui().seAway" (click)="store.patch({ seAway: !store.ui().seAway })">
-          <span class="box">@if (store.ui().seAway) { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }</span>
-          <span class="away-txt">
-            <b>Hors du foyer</b>
-            <span class="away-hint">Personne n’est attendu à table pendant ce créneau : les repas qu’il couvre comptent un couvert de moins.</span>
-          </span>
-        </div>
-
-        <!-- Le créneau ressort dans le calendrier partagé, pour qui ne regarde que
-             lui. Rien n'est recopié : ses occurrences sont dérivées du créneau, et
-             suivent sa récurrence réelle (période, vacances, jours sautés). -->
-        <div class="away-row" [class.on]="store.ui().seSync" (click)="store.patch({ seSync: !store.ui().seSync })">
-          <span class="box">@if (store.ui().seSync) { <f-icon name="check" [size]="13" color="#fff" [width]="3" /> }</span>
-          <span class="away-txt">
-            <b>Publier à l’agenda</b>
-            <span class="away-hint">{{ store.ui().seRec === 'once'
-              ? 'Ce créneau apparaît dans le calendrier partagé à sa date.'
-              : 'Toutes les occurrences de ce créneau apparaissent dans le calendrier partagé.' }}</span>
-          </span>
-        </div>
-
-        <!-- Les réglages de période sont repliés : ils ne servent pas à la saisie
-             courante, et le formulaire ne doit demander que le nécessaire. -->
-        @if (store.ui().seRec === 'weekly') {
-          @if (store.ui().seMore) {
-            <div class="form-row">
-              <div class="field">
-                <div class="field-label">À partir du (option.)</div>
-                <input class="input" type="date" [ngModel]="store.ui().seFrom" (ngModelChange)="store.patch({ seFrom: $event })" />
-              </div>
-              <div class="field">
-                <div class="field-label">Jusqu’au (option.)</div>
-                <input class="input" type="date" [ngModel]="store.ui().seUntil" (ngModelChange)="store.patch({ seUntil: $event })" />
-              </div>
-            </div>
-            <div class="field-label">Seulement</div>
-            <div class="seg wrap">
-              <button [class.active]="store.ui().seWhen === 'always'" (click)="store.patch({ seWhen: 'always' })">Toute l’année</button>
-              <button [class.active]="store.ui().seWhen === 'school'" (click)="store.patch({ seWhen: 'school' })">En période scolaire</button>
-              <button [class.active]="store.ui().seWhen === 'holidays'" (click)="store.patch({ seWhen: 'holidays' })">Pendant les vacances</button>
-            </div>
-          } @else {
-            <div class="more" (click)="store.patch({ seMore: true })">
-              <f-icon name="calendar" [size]="14" color="var(--ink2)" [width]="2.2" /> Période de validité et vacances
-            </div>
-          }
-        }
-
-        <!-- Modifier une occurrence ne doit jamais toucher toute la série sans
-             qu'on l'ait demandé : la question est posée ici, au-dessus du bouton. -->
-        @if (askScope() && !store.ui().seDelOpen) {
-          <div class="field-label">Appliquer</div>
-          <div class="seg wrap">
-            <button [class.active]="store.ui().seScope === 'all'" (click)="store.patch({ seScope: 'all' })">À toute la série</button>
-            <button [class.active]="store.ui().seScope === 'future'" (click)="store.patch({ seScope: 'future' })">À partir du {{ store.fmtNumDate(store.ui().seOccDate) }}</button>
-            <button [class.active]="store.ui().seScope === 'once'" (click)="store.patch({ seScope: 'once' })">Ce jour seulement</button>
-          </div>
-        }
-
-        @if (store.ui().seDelOpen) {
-          <div class="report destructive">
-            <div class="line strong">{{ askScope() ? 'Supprimer quoi ?' : 'Supprimer ce créneau ?' }}</div>
-            <div class="del-opts">
-              @if (askScope()) {
-                <button class="btn btn-danger" (click)="store.delSlot('once')">Ce jour seulement</button>
-                <button class="btn btn-danger" (click)="store.delSlot('future')">À partir du {{ store.fmtNumDate(store.ui().seOccDate) }}</button>
-                <button class="btn btn-danger" (click)="store.delSlot('all')">Toute la série</button>
-              } @else {
-                <button class="btn btn-danger" (click)="store.delSlot('all')">Supprimer</button>
-              }
-              <button class="btn btn-soft" (click)="store.patch({ seDelOpen: false })">Non</button>
-            </div>
-          </div>
-        }
-
-        @if (!store.ui().seDelOpen) {
-        <div class="modal-actions">
-          @if (store.ui().seEditId) {
-            <button class="btn btn-soft" (click)="store.duplicateSlot()"><f-icon name="copy" [size]="16" color="var(--ink)" [width]="2.2" /> Dupliquer</button>
-            <button class="btn btn-danger" (click)="store.patch({ seDelOpen: true })"><f-icon name="trash" [size]="16" color="#fff" [width]="2.2" /> Supprimer</button>
-          }
-          <div class="spacer"></div>
-          <button class="btn btn-soft" (click)="store.patch({ schedEdit: false })">Annuler</button>
-          <button class="btn btn-primary" (click)="store.saveSlot()">Enregistrer</button>
-        </div>
-        }
-      </f-modal>
-    }
 
     <!-- Un glisser-déposer ne doit pas décider tout seul du sort d'une série. -->
     @if (store.ui().schedMove; as mv) {
@@ -490,7 +329,6 @@ interface DayView { dow: number; date: string; label: string; short: string; num
     .slot.dragging { opacity: .4; }
     .day-card.drop-target { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
     .slot { background: var(--soft); border-radius: 12px; padding: 10px 11px; cursor: pointer; }
-    .slot.ed { cursor: default; }
     .slot.cancelled .slot-label, .slot.cancelled .slot-time { text-decoration: line-through; opacity: .6; }
     .slot-ed { font-size: 10.5px; font-weight: 800; color: #4E93B8; background: #E5F0F4; border-radius: 6px; padding: 2px 6px; }
     .slot-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -510,7 +348,6 @@ interface DayView { dow: number; date: string; label: string; short: string; num
     .add.paste { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--primary); }
 
     .hint { font-size: 12px; font-weight: 700; color: var(--ink2); margin: 8px 0 16px; line-height: 1.35; }
-    .more { display: inline-flex; align-items: center; gap: 6px; margin: 12px 0 4px; padding: 8px 13px; border-radius: 11px; background: var(--soft2); color: var(--ink2); font-size: 12.5px; font-weight: 800; cursor: pointer; }
     .del-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .del-opts .btn { flex: 1 1 auto; }
     .report { background: var(--soft); border-radius: 13px; padding: 12px 14px; margin: 14px 0 4px; font-size: 13px; font-weight: 700; color: var(--ink2); }
@@ -520,35 +357,19 @@ interface DayView { dow: number; date: string; label: string; short: string; num
 
     .seg.wrap { flex-wrap: wrap; margin-bottom: 6px; }
     .seg > button:disabled { opacity: .35; cursor: default; }
-    .form-row { display: flex; gap: 12px; margin-bottom: 4px; }
-    .field { flex: 1; min-width: 0; }
     .field-label { margin-top: 4px; }
-    .input { margin-bottom: 4px; }
 
     .who-opts { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 8px; }
     .who-opt { display: flex; align-items: center; gap: 8px; padding: 7px 14px 7px 7px; border-radius: 13px; background: var(--soft); color: var(--ink); font-size: 13.5px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
     .who-opt.on { background: var(--soft2); }
 
-    .type-opts { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; }
-    .type-opt { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
-    .type-opt .dot { width: 9px; height: 9px; border-radius: 3px; }
-
-    .away-row { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-radius: 13px; background: var(--soft); cursor: pointer; margin-bottom: 4px; }
-    .away-row.on { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); }
-    .away-row .box { flex: none; width: 19px; height: 19px; border-radius: 6px; background: var(--surface); box-shadow: inset 0 0 0 2px var(--soft2); display: inline-flex; align-items: center; justify-content: center; margin-top: 1px; }
-    .away-row.on .box { background: var(--primary); box-shadow: none; }
-    .away-txt { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; font-weight: 800; color: var(--ink); }
-    .away-hint { font-size: 11.5px; font-weight: 700; color: var(--ink2); line-height: 1.35; }
-
     .modal-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
     .modal-actions .spacer { flex: 1; }
-    /* Sur téléphone, les trois boutons côte à côte poussaient « Enregistrer »
-       hors de l'écran : le geste central du formulaire était injoignable. */
+    /* Sur téléphone, les boutons se partagent la largeur : rien ne sort de l'écran. */
     :host-context(.shell.narrow) .modal-actions { flex-wrap: wrap; }
     :host-context(.shell.narrow) .modal-actions .spacer { display: none; }
     :host-context(.shell.narrow) .modal-actions .btn-soft,
     :host-context(.shell.narrow) .modal-actions .btn-primary { flex: 1; }
-    :host-context(.shell.narrow) .modal-actions .btn-danger { order: 3; flex: 1 0 100%; }
   `],
 })
 export class PlanningScreen {
@@ -556,8 +377,6 @@ export class PlanningScreen {
   d = this.store.d;
 
   days = [1, 2, 3, 4, 5, 6, 7];
-  scopes: SchedScope[] = ['all', 'future', 'once'];
-  types = SCHED_TYPES;
 
   label(dow: number): string { return dowLabel(dow); }
   filtered(id: string): boolean { return this.store.ui().schedWho.includes(id); }
@@ -624,16 +443,6 @@ export class PlanningScreen {
   });
 
   badges(s: SchedSlot) { return whoBadges(s, this.d().members); }
-
-  /**
-   * La question de la portée ne se pose que pour une série déjà enregistrée :
-   * un créneau neuf ou ponctuel n'a pas d'occurrences à distinguer.
-   */
-  readonly askScope = computed(() => {
-    const s = this.store.ui();
-    if (!s.seEditId) return false;
-    return this.d().sched.find((x) => x.id === s.seEditId)?.rec === 'weekly';
-  });
 
   /** Ce qui, sur la ligne, dit qu'un créneau n'a pas lieu toute l'année. */
   noteOf(s: SchedSlot): string {
@@ -750,5 +559,4 @@ export class PlanningScreen {
     return `color-mix(in srgb, ${this.color(k)} 14%, var(--surface))`;
   }
 
-  formTitle = computed(() => (this.store.ui().seEditId ? 'Modifier le créneau' : 'Nouveau créneau'));
 }
