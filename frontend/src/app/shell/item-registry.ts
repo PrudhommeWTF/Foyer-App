@@ -16,6 +16,7 @@ import { PLACE_ITEM } from '../screens/lieux/place.item';
 import { PLACE_ITEM_ITEM } from '../screens/lieux/place-item.item';
 import { CONTACT_ITEM } from '../screens/contacts/contact.item';
 import { CARD_ITEM } from '../screens/fidelite/card.item';
+import { TASK_LIST_ITEM } from '../screens/taches/task-list.item';
 
 export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   event: EVENT_ITEM,
@@ -30,4 +31,5 @@ export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   placeItem: PLACE_ITEM_ITEM,
   contact: CONTACT_ITEM,
   card: CARD_ITEM,
+  taskList: TASK_LIST_ITEM,
 };

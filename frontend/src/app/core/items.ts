@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -97,6 +97,11 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   card: {
     kind: 'card', label: 'Carte de fidélité', newTitle: 'Nouvelle carte', editTitle: 'Modifier la carte',
     screen: 'fidelite', openLabel: 'Ouvrir dans Cartes de fidélité', editable: true, removeMode: 'undo', module: 'modFidelite',
+  },
+  // Une liste emporte ses tâches : on confirme, en proposant d'archiver plutôt.
+  taskList: {
+    kind: 'taskList', label: 'Liste de tâches', newTitle: 'Nouvelle liste', editTitle: 'Modifier la liste',
+    screen: 'taches', openLabel: 'Ouvrir dans Tâches', editable: true, removeMode: 'confirm',
   },
 };
 

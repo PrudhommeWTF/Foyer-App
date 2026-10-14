@@ -1,4 +1,4 @@
-import { ListKind, Rayon } from './models';
+import { Rayon } from './models';
 import { todayIn, weekdayOf } from './helpers';
 import { PasteMode, SchedClip } from './sched-copy';
 import { HOUSEHOLD_TZ, SCREENS } from './constants';
@@ -80,14 +80,7 @@ export interface UiState {
   /** Terminées dépliées, listes archivées montrées, section « À venir » repliée. */
   showDone: boolean; showArchived: boolean; soonCollapsed: boolean;
   // listes de tâches
-  activeList: string; listForm: boolean; listEditId: string | null;
-  lName: string; lColor: string; lIcon: string; lKind: ListKind; lScope: string; listDelId: string | null;
-  /** Mode de rangement de la liste éditée : 'manuel' (ordre à la main) ou 'echeance' (par date). */
-  lOrder: 'manuel' | 'echeance';
-  /** Champs propres aux listes de préparation (kind 'preparation'). */
-  lForMember: string | null; lDeparture: string; lRemind: number;
-  /** Lieu de destination lié à la préparation, ou '' : l'écran montre alors son inventaire. */
-  lPlace: string;
+  activeList: string;
   /** Liste dont on demande la remise à zéro (modale de confirmation). */
   prepResetId: string | null;
   /** Choix d'un modèle pour créer une liste. */
@@ -199,8 +192,7 @@ export function initialUi(): UiState {
     aisleOrderOpen: false, collapsedAisles: [],
     activeShopList: 'all',
     showDone: false, showArchived: false, soonCollapsed: false,
-    activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', lOrder: 'echeance', listDelId: null,
-    lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
+    activeList: 'all', prepResetId: null,
     tplOpen: false,
     contactSearch: '', contactCat: 'Tous',
     cardSearch: '',

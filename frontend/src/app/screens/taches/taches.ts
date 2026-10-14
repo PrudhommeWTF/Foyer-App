@@ -3,10 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { FinancesStore } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
-import { LIST_ICONS, PALETTE, tint } from '../../core/constants';
+import { LIST_ICONS, tint } from '../../core/constants';
 import { ListKind, Place, PlaceItem, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
-import { KIND_LABELS, KIND_ORDER, KIND_SORT, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress } from '../../core/tasks';
+import { KIND_LABELS, KIND_SORT, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress } from '../../core/tasks';
 import { occurrenceProgress, recLabel } from '../../core/recurrence';
 import { parseDay } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
@@ -93,28 +93,18 @@ import { TaskComposerComponent } from './composer';
       <!-- En-tête de la liste active -->
       <div class="head-row">
         @if (activeObj(); as l) {
-          <div class="ident">
-            <div class="ident-ic" [style.background]="l.color"><f-icon [path]="iconOf(l)" [size]="18" color="#fff" [width]="2" /></div>
-            <div>
-              <div class="ident-name">{{ l.name }}</div>
-              <div class="ident-sub">{{ kindLabel(l.kind) }}{{ l.scope !== 'shared' ? ' · privée' : '' }}{{ l.archived ? ' · archivée' : '' }}</div>
-            </div>
-          </div>
-          @if (l.kind !== 'devoirs') {
-          <button class="icon-btn" (click)="store.editTaskList(l.id)" aria-label="Modifier la liste"><f-icon name="edit" [size]="15" color="var(--ink2)" [width]="2" /></button>
-          <button class="icon-btn" (click)="store.archiveTaskList(l.id, !l.archived)" [attr.aria-label]="l.archived ? 'Restaurer la liste' : 'Archiver la liste'" [title]="l.archived ? 'Restaurer' : 'Archiver'">
-            <f-icon [name]="l.archived ? 'refresh' : 'folder'" [size]="15" color="var(--ink2)" [width]="2" />
+          <!-- Le nom de la liste ouvre sa fiche : la modifier, l'archiver, en faire un modèle, la supprimer. -->
+          <button class="ident ident-btn" (click)="store.openItem('taskList', l.id)">
+            <span class="ident-ic" [style.background]="l.color"><f-icon [path]="iconOf(l)" [size]="18" color="#fff" [width]="2" /></span>
+            <span class="ident-txt">
+              <span class="ident-name">{{ l.name }}</span>
+              <span class="ident-sub">{{ kindLabel(l.kind) }}{{ l.scope !== 'shared' ? ' · privée' : '' }}{{ l.archived ? ' · archivée' : '' }}</span>
+            </span>
+            <f-icon name="chevronRight" [size]="16" color="var(--ink3)" [width]="2.4" />
           </button>
-          <button class="icon-btn" (click)="store.patch({ listDelId: l.id })" aria-label="Supprimer la liste"><f-icon name="trash" [size]="15" color="var(--primary)" [width]="2" /></button>
           <div class="spacer"></div>
-          <button class="btn btn-soft sm" (click)="store.saveListAsTemplate(l.id)" title="Retenir cette liste pour la refaire plus tard">
-            <f-icon name="copy" [size]="15" color="var(--ink2)" [width]="2.2" /> En modèle
-          </button>
-          } @else {
-            <div class="spacer"></div>
-            @if (store.screenEnabled('ecole')) {
-              <button class="btn btn-soft sm" (click)="store.go('ecole')"><f-icon name="ecole" [size]="15" color="var(--ink2)" [width]="2.2" /> Écran École</button>
-            }
+          @if (l.kind === 'devoirs' && store.screenEnabled('ecole')) {
+            <button class="btn btn-soft sm" (click)="store.go('ecole')"><f-icon name="ecole" [size]="15" color="var(--ink2)" [width]="2.2" /> Écran École</button>
           }
           @if (l.kind !== 'taches' && l.kind !== 'preparation' && l.kind !== 'devoirs') {
             <button class="btn btn-soft sm" (click)="store.uncheckAll(l.id)"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout décocher</button>
@@ -146,7 +136,7 @@ import { TaskComposerComponent } from './composer';
             </div>
             <div class="prep-acts">
               @if (isDeparturePast(l)) {
-                <button class="btn btn-soft sm" (click)="store.editTaskList(l.id)"><f-icon name="calendar" [size]="15" color="var(--ink2)" [width]="2.2" /> Nouveau départ</button>
+                <button class="btn btn-soft sm" (click)="store.openItem('taskList', l.id); store.editItem()"><f-icon name="calendar" [size]="15" color="var(--ink2)" [width]="2.2" /> Nouveau départ</button>
               }
               <button class="btn btn-soft sm" [disabled]="!p.total" (click)="store.patch({ prepResetId: l.id })"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout remettre à zéro</button>
             </div>
@@ -324,102 +314,6 @@ import { TaskComposerComponent } from './composer';
     </div>
 
 
-    <!-- Liste : nom, type, portée, couleur, icône -->
-    @if (store.ui().listForm) {
-      <f-modal [title]="store.ui().listEditId ? 'Modifier la liste' : 'Nouvelle liste'" [maxWidth]="460" (close)="store.patch({ listForm: false })">
-        <div class="field-label">Nom de la liste</div>
-        <input class="input" placeholder="Ex : Bricolage, Valise, Idées…"
-               [ngModel]="store.ui().lName" (ngModelChange)="store.patch({ lName: $event })" (keydown.enter)="store.saveTaskList()" />
-
-        <div class="field-label mt">Type</div>
-        <div class="seg">
-          @for (k of kinds; track k) {
-            <button [class.active]="store.ui().lKind === k" (click)="pickKind(k)">{{ kindLabel(k) }}</button>
-          }
-        </div>
-        <div class="plan-hint">{{ kindHint(store.ui().lKind) }}</div>
-
-        @if (store.ui().lKind === 'preparation') {
-          <div class="field-label mt">Pour qui</div>
-          <div class="seg-wrap">
-            <button class="seg-opt" [class.on]="!store.ui().lForMember" (click)="store.patch({ lForMember: null })">Personne</button>
-            @for (m of members(); track m.id) {
-              <button class="seg-opt" [class.on]="store.ui().lForMember === m.id" (click)="store.patch({ lForMember: m.id })">
-                <span class="s-dot" [style.background]="m.color"></span>{{ m.name }}
-              </button>
-            }
-          </div>
-
-          <div class="prep-two">
-            <div class="grow">
-              <div class="field-label">Date de départ</div>
-              <input class="input" type="date" [ngModel]="store.ui().lDeparture" (ngModelChange)="store.patch({ lDeparture: $event })" />
-            </div>
-            <div class="prep-remind">
-              <div class="field-label">Rappel</div>
-              <div class="remind-row">
-                <span>J -</span>
-                <input class="input" type="number" min="1" max="30" [ngModel]="store.ui().lRemind" (ngModelChange)="store.patch({ lRemind: +$event })" />
-              </div>
-            </div>
-          </div>
-          <div class="plan-hint">Un rappel {{ store.ui().lRemind }} jour{{ store.ui().lRemind > 1 ? 's' : '' }} avant le départ, tant qu'il reste des affaires à préparer. La liste est partagée : l'enfant peut cocher son sac.</div>
-
-          @if (places().length) {
-            <div class="field-label mt">Lieu de destination <span class="opt">(facultatif)</span></div>
-            <div class="seg-wrap">
-              <button class="seg-opt" [class.on]="!store.ui().lPlace" (click)="store.patch({ lPlace: '' })">Aucun</button>
-              @for (p of places(); track p.id) {
-                <button class="seg-opt" [class.on]="store.ui().lPlace === p.id" (click)="store.patch({ lPlace: p.id })">
-                  <span class="s-dot" [style.background]="p.color"></span>{{ p.name }}
-                </button>
-              }
-            </div>
-            <div class="plan-hint">L’écran montrera ce qui est déjà sur place, pour ne pas l’emporter, et proposera d’ajouter ce qui reste à la maison.</div>
-          }
-        } @else {
-          <div class="field-label mt">Qui la voit</div>
-          <div class="seg">
-            <button [class.active]="store.ui().lScope === 'shared'" (click)="store.patch({ lScope: 'shared' })">Tout le foyer</button>
-            <button [class.active]="store.ui().lScope !== 'shared'" (click)="store.patch({ lScope: store.currentMemberId() || 'shared' })">Moi seulement</button>
-          </div>
-          @if (store.ui().lScope !== 'shared') { <div class="plan-hint">Cachée aux autres membres, pas chiffrée.</div> }
-
-          @if (store.ui().lKind === 'taches' || store.ui().lKind === 'corvees') {
-            <div class="field-label mt">Ordre des tâches</div>
-            <div class="seg">
-              <button [class.active]="store.ui().lOrder !== 'manuel'" (click)="store.patch({ lOrder: 'echeance' })">Par échéance</button>
-              <button [class.active]="store.ui().lOrder === 'manuel'" (click)="store.patch({ lOrder: 'manuel' })">Manuel</button>
-            </div>
-            <div class="plan-hint">{{ store.ui().lOrder === 'manuel' ? 'Vous rangez les tâches à la main (glisser-déposer ou à la voix). Les tâches en retard remontent quand même par date, pour ne pas être enterrées.' : 'Les tâches se rangent par date (aujourd’hui, en retard, à venir), l’ordre manuel départageant.' }}</div>
-          }
-        }
-
-        <div class="field-label mt">Couleur</div>
-        <div class="swatch-row">
-          @for (c of palette; track c) {
-            <div class="swatch" [style.background]="c" [class.on]="store.ui().lColor === c" (click)="store.patch({ lColor: c })"></div>
-          }
-        </div>
-
-        <div class="field-label mt">Icône</div>
-        <div class="icon-grid">
-          @for (k of iconKeys; track k) {
-            <div class="ic-cell" [class.on]="store.ui().lIcon === k"
-                 [style.background]="store.ui().lIcon === k ? tint(store.ui().lColor) : 'var(--soft)'"
-                 (click)="store.patch({ lIcon: k })">
-              <f-icon [path]="listIcons[k]" [size]="20" [color]="store.ui().lIcon === k ? store.ui().lColor : 'var(--ink2)'" [width]="2" />
-            </div>
-          }
-        </div>
-
-        <div class="actions">
-          <button class="btn btn-soft grow" (click)="store.patch({ listForm: false })">Annuler</button>
-          <button class="btn btn-primary grow2" (click)="store.saveTaskList()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
     <!-- Modèles -->
     @if (store.ui().tplOpen) {
       <f-modal title="Nouvelle liste depuis un modèle" [maxWidth]="440" (close)="store.patch({ tplOpen: false })">
@@ -442,13 +336,6 @@ import { TaskComposerComponent } from './composer';
       </f-modal>
     }
 
-    <!-- Supprimer une liste -->
-    @if (store.ui().listDelId) {
-      <f-confirm title="Supprimer cette liste ?" (cancel)="store.patch({ listDelId: null })" (confirm)="store.confirmTaskListDel()">
-        « {{ delListName() }} » et ses {{ delListCount() }} tâches seront supprimées. Pour la garder sans l’afficher, archivez-la plutôt.
-      </f-confirm>
-    }
-
     <!-- Remettre à zéro une liste de préparation -->
     @if (store.ui().prepResetId) {
       <f-confirm title="Tout remettre à zéro ?" confirmLabel="Remettre à zéro" (cancel)="store.patch({ prepResetId: null })" (confirm)="store.resetList(store.ui().prepResetId!)">
@@ -469,6 +356,8 @@ import { TaskComposerComponent } from './composer';
 
     .head-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
     .ident { display: flex; align-items: center; gap: 10px; margin-right: 4px; }
+    .ident-btn { min-width: 0; padding: 0; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
+    .ident-txt { display: flex; flex-direction: column; min-width: 0; }
     .ident-ic { width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
     .ident-ic.sm { width: 30px; height: 30px; border-radius: 9px; }
     .ident-name { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); line-height: 1.1; }
@@ -542,19 +431,7 @@ import { TaskComposerComponent } from './composer';
     .empty { color: var(--ink3); font-weight: 700; font-size: 13.5px; padding: 16px 0; }
     .done-toggle { display: flex; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; padding: 6px 0 12px; }
 
-    .field-label.mt { margin-top: 18px; }
-    .plan-hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
 
-    /* Champs d'une liste de préparation dans la modale. */
-    .seg-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-    .seg-opt { display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; border: 2px solid transparent; border-radius: 11px; font-size: 13px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); font-family: inherit; }
-    .seg-opt.on { background: var(--primary); color: #fff; }
-    .seg-opt .s-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
-    .prep-two { display: flex; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
-    .prep-two .grow { flex: 1; min-width: 160px; }
-    .prep-remind { width: 130px; }
-    .remind-row { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 800; color: var(--ink2); }
-    .remind-row .input { width: 68px; }
 
     /* Bandeau d'en-tête d'une liste de préparation. */
     .prep-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: var(--surface); border-radius: var(--r-card, 16px); padding: 12px 16px; margin-bottom: 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
@@ -575,9 +452,6 @@ import { TaskComposerComponent } from './composer';
     .pp-chip.add { background: #EDF2EB; color: #5F7E5C; cursor: pointer; }
     .pp-empty { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
 
-    .icon-grid { display: flex; flex-wrap: wrap; gap: 9px; }
-    .ic-cell { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .ic-cell.on { box-shadow: inset 0 0 0 2px currentColor; }
 
     .tpls { display: flex; flex-direction: column; gap: 8px; }
     .tpl { display: flex; align-items: center; gap: 8px; }
@@ -586,9 +460,6 @@ import { TaskComposerComponent } from './composer';
     .tpl-name { font-size: 14px; font-weight: 800; color: var(--ink); }
     .tpl-sub { font-size: 12px; font-weight: 700; color: var(--ink3); }
 
-    .actions { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
-    .actions .grow { flex: 1; }
-    .actions .grow2 { flex: 1.4; }
 
   `],
 })
@@ -598,10 +469,7 @@ export class TachesScreen {
   d = this.store.d;
 
   readonly tint = tint;
-  readonly palette = PALETTE;
   readonly listIcons = LIST_ICONS;
-  readonly iconKeys = Object.keys(LIST_ICONS);
-  readonly kinds = KIND_ORDER;
 
   active = computed(() => this.store.ui().activeList);
   /** Les listes visibles, dans l'ordre des types puis des positions. */
@@ -649,28 +517,10 @@ export class TachesScreen {
     if (terminer) this.store.toggleTask(id); else this.store.removeTask(id);
   }
 
-  delListName = computed(() => this.d().taskLists.find((l) => l.id === this.store.ui().listDelId)?.name || '');
-  delListCount = computed(() => this.d().tasks.filter((t) => t.listId === this.store.ui().listDelId).length);
 
   iconOf(l: TaskList): string { return LIST_ICONS[l.icon] || LIST_ICONS['checklist']; }
   kindLabel(k: ListKind): string { return KIND_LABELS[k]; }
-  kindHint(k: ListKind): string {
-    return k === 'taches' ? 'L’affaire du jour : compte dans « Toutes » et sur l’accueil.'
-      : k === 'corvees' ? 'Des cases à cocher, lisibles par un enfant. Hors de « Toutes » et de l’accueil.'
-      : k === 'preparation' ? 'Le trousseau d’un départ : rempli à l’avance, coché au moment de partir, remis à zéro pour la fois suivante. Visible par l’enfant.'
-      : 'Valise, fournitures, idées : une liste qu’on refait. Hors de « Toutes » et de l’accueil.';
-  }
-
-  /** Changer de type propose l'icône par défaut du type, tant qu'on n'en a pas choisi une autre exprès. */
-  pickKind(k: ListKind): void {
-    const defaults: Record<ListKind, string> = { taches: 'maison', corvees: 'checklist', checklist: 'checklist', preparation: 'valise', devoirs: 'ecole' };
-    const cur = this.store.ui().lIcon;
-    const wasDefault = Object.values(defaults).includes(cur);
-    this.store.patch({ lKind: k, ...(wasDefault ? { lIcon: defaults[k] } : {}) });
-  }
-
   // ---- listes de préparation -------------------------------------------------
-  members = computed(() => this.d().members);
   memberName(id: string | null | undefined): string { return id ? this.store.memberName(id) : ''; }
 
   /** Progression d'une liste de préparation : préparés sur total. */
@@ -695,7 +545,7 @@ export class TachesScreen {
   isDeparturePast(l: TaskList): boolean { const n = this.daysToDeparture(l); return n !== null && n < 0; }
 
   // ---- croisement avec les lieux (inventaire du lieu de destination) ---------
-  /** Les lieux, pour le sélecteur du formulaire de préparation. */
+  /** Les lieux, pour retrouver celui d'une préparation. */
   places = computed(() => this.store.placesInOrder());
   /** Le lieu lié à une préparation, s'il existe encore. */
   placeOf(l: TaskList): Place | null { return l.placeId ? this.places().find((p) => p.id === l.placeId) ?? null : null; }
