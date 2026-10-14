@@ -29,8 +29,10 @@ import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoP
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
 import { ModuleFlag, SCREEN_MODULE } from './modules';
-import { EventDraft, EventScope, applyToSeries, detachOccurrence, draftChanges, isSeries, seriesDate, withSkip, withoutSkip } from './event-scope';
-import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { EventDraft, EventFields, applyToSeries, detachOccurrence, draftChanges, eventDraft, isSeries, seriesDate, withSkip, withoutEvent, withoutSkip } from './event-scope';
+import { ITEM_KINDS, ItemCtx, ItemKindId, ItemResult } from './items';
+import { sheetBack, sheetEdit, sheetOpen, sheetSaved } from './item-sheet';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
@@ -315,7 +317,10 @@ export class FoyerStore {
     // batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
     effect(() => {
       const screen = this.ui().screen;
-      const cadence = !this.authed() ? 0 : screen === 'courses' || screen === 'taches' || screen === 'lieux' ? LIVE_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
+      // Une fiche ouverte suit l'élément de près, quel que soit l'écran dessous :
+      // c'est elle qui doit dire « modifié par Nolwenn » avant qu'on écrase.
+      const fiche = !!this.ui().item;
+      const cadence = !this.authed() ? 0 : fiche || screen === 'courses' || screen === 'taches' || screen === 'lieux' ? LIVE_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
       if (cadence) this.startLivePolling(cadence); else this.stopLivePolling();
     });
 
@@ -979,9 +984,27 @@ export class FoyerStore {
       if (snap.shop) this.adoptShop(snap.shop);
       if (snap.tasks) this.adoptTasks(snap.tasks);
       if (snap.places || snap.placeItems) this.adoptPlaces(snap.places, snap.placeItems);
+      // Le reste du document (les événements…) ne voyage pas par ce canal. Sur
+      // l'accueil et sous une fiche ouverte, une version qui a bougé le fait
+      // relire, pour qu'un événement modifié ailleurs s'y voie sans recharger.
+      if (snap.version !== this.docVersion && (this.ui().item || this.ui().screen === 'home')) void this.refreshDocument();
     } catch {
       this.syncOffline.set(true);
     }
+  }
+
+  /**
+   * Relit le document du serveur et repart de sa version, en rejouant par-dessus
+   * ce qui n'est pas encore parti : le même chemin qu'un conflit
+   * d'enregistrement, donc rien de ce qui a été fait ici n'est perdu. Sans
+   * effet pendant un enregistrement (il s'en chargera), ni hors ligne.
+   */
+  async refreshDocument(): Promise<void> {
+    if (!this.authed() || this.saving) return;
+    try {
+      const { state, version } = await this.api.getState();
+      if (version !== this.docVersion && !this.saving) this.applyConflict(version, state);
+    } catch { /* hors ligne : on garde ce qu'on a */ }
   }
 
   /** Cadence en cours, pour ne pas relancer la minuterie quand elle est déjà bonne. */
@@ -1085,8 +1108,26 @@ export class FoyerStore {
     }
     // Un écran de module désactivé ramène à l'accueil, comme une porte fermée.
     if (!this.screenEnabled(screen)) { this.patch({ screen: 'home', addMenuOpen: false, notifOpen: false }); return; }
-    this.patch({ screen, openRecipeId: null, addMenuOpen: false, notifOpen: false });
+    this.patch({ screen, openRecipeId: null, addMenuOpen: false, notifOpen: false, item: null });
   }
+
+  // ---- fiche d'élément --------------------------------------------------
+  // Un tap sur un élément, d'où qu'il vienne, ouvre sa fiche par-dessus l'écran
+  // courant : on lit, on modifie, on ferme, et l'on est toujours là où l'on
+  // était. La machine d'état est pure (core/item-sheet.ts), la fiche est rendue
+  // par le shell (shell/item-sheet.ts).
+
+  /** Ouvre un élément (`id` vide : création). `stack` : depuis une autre fiche, qu'on retrouve au retour. */
+  openItem(kind: ItemKindId, id: string | null, ctx?: ItemCtx, stack = false): void {
+    const m = ITEM_KINDS[kind];
+    if ((m.module && !this.moduleOn(m.module)) || (m.adultOnly && this.isChild())) return;
+    this.patch({ item: sheetOpen(this.ui().item, kind, id, ctx, stack), addMenuOpen: false, notifOpen: false });
+  }
+  closeItem(): void { this.patch({ item: null }); }
+  editItem(): void { this.patch({ item: sheetEdit(this.ui().item) }); }
+  backItem(): void { this.patch({ item: sheetBack(this.ui().item) }); }
+  itemSaved(id?: string): void { this.patch({ item: sheetSaved(this.ui().item, id) }); }
+
   toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
 
   // ---- global search ----------------------------------------------------
@@ -1114,12 +1155,13 @@ export class FoyerStore {
   /** Navigate to a search hit and open its detail where possible. */
   openHit(h: SearchHit): void {
     this.closeSearch();
+    // Un élément qui a sa fiche s'ouvre par-dessus l'écran courant, sans y changer.
+    if (h.id && h.kind in ITEM_KINDS) { this.openItem(h.kind as ItemKindId, h.id); return; }
     this.go(h.screen);
     if (!h.id) return;
     switch (h.kind) {
       case 'contact': this.editContact(h.id); break;
       case 'task': this.editTaskItem(h.id); break;
-      case 'event': this.editEvent(h.id); break;
       case 'shop': this.editShop(h.id); break;
       case 'recipe': this.patch({ openRecipeId: h.id }); break;
       case 'card': this.showCard(h.id); break;
@@ -1152,84 +1194,43 @@ export class FoyerStore {
     this.editSlot(slotId, date);
   }
   /**
-   * Ouvre la création d'un événement. `pickedDate` la date choisie d'avance
-   * (clic sur un jour) : dans ce cas le mini-calendrier reste replié, on a déjà
-   * la date. Sans elle (ajout global), il s'ouvre pour choisir le jour.
+   * Enregistre un événement depuis sa fiche. `id` vide : création. Sur une
+   * occurrence de série (`occ`), la portée est demandée ici, une fois les
+   * champs remplis, et seulement si quelque chose a changé ; changer la
+   * récurrence elle-même ne peut viser que la série.
    */
-  openEvent(pickedDate?: string): void {
-    const start = pickedDate ?? this.ui().selDay;
-    // Index de mois absolu (année * 12 + mois - 1) : le sélecteur de date porte
-    // l'année, pas seulement le mois, sinon éditer un événement d'une autre année
-    // ouvrirait le calendrier de la mauvaise année.
-    const m = monthIndex(start);
-    // Participants « Tous » par défaut : un événement du foyer concerne le plus
-    // souvent tout le monde (repas, sortie, vacances). La liste vide vaut « Tous » ;
-    // on restreint ensuite en cochant des membres. Voir toggleEvWho.
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: start, evPickStart: true, dpMonth: m, evCalOpen: pickedDate == null, evOccDate: '', evAsk: null });
-  }
-  /**
-   * Ouvre un événement. `occ` la date de l'occurrence touchée dans l'agenda :
-   * sur une série, le formulaire montre cette date-là, et c'est elle que vise
-   * « cette occurrence » à l'enregistrement. Sans elle (fil d'activité,
-   * recherche), on édite la série depuis son départ.
-   */
-  editEvent(id: string, occ = ''): void {
-    const ev = this._data()?.events.find((e) => e.id === id);
-    if (!ev) return;
-    const evOccDate = occ && isSeries(ev) ? occ : '';
-    const start = evOccDate || ev.date;
-    const m = monthIndex(start);
-    // La fiche d'événement ne vit que dans l'écran calendrier : on s'y rend
-    // d'abord, sinon un clic venu de l'accueil (fil d'activité, prochains
-    // évènements) poserait `showEvent` sans que rien ne s'affiche.
-    this.go('calendar');
-    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: start, evEnd: ev.end || '', evPickStart: true, dpMonth: m, evCalOpen: false, evOccDate, evAsk: null });
-  }
-  dpPick(ds: string): void {
-    const s = this.ui();
-    if (s.evPickStart || (s.evStart && s.evEnd)) this.patch({ evStart: ds, evEnd: '', evPickStart: false });
-    else if (ds < s.evStart) this.patch({ evStart: ds, evEnd: '' });
-    else if (ds === s.evStart) this.patch({ evEnd: '' });
-    else this.patch({ evEnd: ds });
-  }
-  /**
-   * Enregistre l'événement. Sur une occurrence de série, la portée est demandée
-   * ici, une fois les champs remplis, et seulement si quelque chose a changé ;
-   * changer la récurrence elle-même ne peut viser que la série.
-   */
-  saveEvent(scope?: EventScope): void {
-    const s = this.ui();
-    const t = s.evTitle.trim(); if (!t) { this.toast('Donne un titre à l’événement'); return; }
-    // Journée entière : pas d'heure. Sinon l'heure de fin n'a de sens qu'avec une
-    // heure de début et si elle vient après (sinon « 18:00 – 09:00 »).
-    const time = s.evAllDay ? '—' : (s.evTime.trim() || '—');
-    const endTime = s.evAllDay ? null : ((s.evTime.trim() && s.evEndTime.trim() && s.evEndTime.trim() > s.evTime.trim()) ? s.evEndTime.trim() : null);
-    const place = s.evPlace.trim() || null;
-    const allDay = s.evAllDay || undefined;
+  saveEvent(f: EventFields, id: string | null, occ: string, scope?: string): ItemResult {
+    const draft = eventDraft(f);
+    if (!draft) { this.toast('Donne un titre à l’événement'); return { kind: 'invalid' }; }
     const by = this.me()?.id ?? null;
     const now = new Date().toISOString();
-    const draft: EventDraft = { date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null };
-    const ev = s.evEditId ? this._data()?.events.find((e) => e.id === s.evEditId) : undefined;
+    const ev = id ? this._data()?.events.find((e) => e.id === id) : undefined;
     if (!ev) {
       this.mutate((d) => { d.events.push({ id: uid('e'), ...draft, by, at: now }); });
       this.toast('Événement ajouté à l’agenda');
-      this.patch({ showEvent: false, evEditId: null, evAsk: null });
-      return;
+      return { kind: 'done' };
     }
-    const occ = s.evOccDate;
-    const serie: EventDraft = occ ? { ...draft, date: seriesDate(ev.date, occ, draft.date) } : draft;
+    const at = occ && isSeries(ev) ? occ : '';
+    const serie: EventDraft = at ? { ...draft, date: seriesDate(ev.date, at, draft.date) } : draft;
     // Rien de changé : rien n'est écrit, pas même l'auteur de la modification.
-    if (!draftChanges(ev, serie)) { this.patch({ showEvent: false, evEditId: null, evAsk: null }); return; }
-    const askable = !!occ && isSeries(ev) && draft.recur === ev.recur;
-    if (askable && !scope) { this.patch({ evAsk: 'save' }); return; }
+    if (!draftChanges(ev, serie)) return { kind: 'done' };
+    const askable = !!at && draft.recur === ev.recur;
+    if (askable && !scope) {
+      return { kind: 'ask', question: 'Appliquer la modification à :', choices: [
+        { scope: 'one', label: 'Cette occurrence (' + this.fmtNumDate(at) + ')' }, { scope: 'all', label: 'Toute la série' }] };
+    }
     if (askable && scope === 'one') {
-      const { series, single } = detachOccurrence(ev, occ, draft, uid('e'), by, now);
+      // Calculé dans la mutation : rejouée sur la version d'un autre appareil,
+      // elle part de la série telle qu'il l'a laissée. L'identifiant, lui, est fixé.
+      const newId = uid('e');
       this.mutate((d) => {
-        const i = d.events.findIndex((e) => e.id === ev.id);
-        if (i >= 0) d.events[i] = series;
-        d.events.push(single);
+        const i = d.events.findIndex((e) => e.id === ev.id); if (i < 0) return;
+        const { series, single } = detachOccurrence(d.events[i], at, draft, newId, by, now);
+        d.events[i] = series;
+        if (!d.events.some((e) => e.id === newId)) d.events.push(single);
       });
       this.toast('Cette occurrence modifiée, la série continue');
+      return { kind: 'done', id: newId };
     } else {
       this.mutate((d) => {
         const i = d.events.findIndex((e) => e.id === ev.id);
@@ -1237,23 +1238,9 @@ export class FoyerStore {
       });
       this.toast(isSeries(ev) ? 'Série modifiée' : 'Événement modifié');
     }
-    this.patch({ showEvent: false, evEditId: null, evAsk: null });
-  }
-  /**
-   * Saisie de l'heure de début d'un événement. L'heure de fin suit d'une heure
-   * par défaut, pour n'avoir à la préciser que lorsqu'elle diffère. On ne l'écrase
-   * pas si on l'a soi-même fixée : elle suit tant qu'elle est vide ou encore égale
-   * à ce que l'ancienne heure de début impliquait.
-   */
-  setEventStart(v: string): void {
-    const s = this.ui();
-    const patch: Partial<UiState> = { evTime: v };
-    const auto = addHourHHMM(s.evTime);
-    if (v && (!s.evEndTime || s.evEndTime === auto)) patch.evEndTime = addHourHHMM(v);
-    this.patch(patch);
+    return { kind: 'done' };
   }
 
-  /** Ajoute ou retire un membre de l'événement en cours d'édition. Aucun membre est licite (événement du foyer). */
   /**
    * Suggestions de lieu pour le champ « Lieu » d'un événement. Gardé par le
    * réglage `placeSuggest` : éteint, aucune requête ne part. Une panne rend une
@@ -1264,34 +1251,29 @@ export class FoyerStore {
     return this.api.placeSuggest(q).then((r) => r.suggestions).catch(() => []);
   }
 
-  toggleEvWho(id: string): void {
-    const cur = this.ui().evWho;
-    this.patch({ evWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
-  }
-
   /**
    * Supprime l'événement, ou seulement l'occurrence ouverte d'une série (la
    * série saute alors cette date). Pas de confirmation : l'annulation est
    * offerte quelques secondes, et rend l'événement tel qu'il était.
    */
-  delEvent(scope?: EventScope): void {
-    const s = this.ui();
-    const ev = s.evEditId ? this._data()?.events.find((e) => e.id === s.evEditId) : undefined; if (!ev) return;
-    const occ = s.evOccDate;
-    if (occ && isSeries(ev) && !scope) { this.patch({ evAsk: 'del' }); return; }
-    this.patch({ showEvent: false, evEditId: null, evAsk: null });
-    if (occ && isSeries(ev) && scope === 'one') {
-      this.mutate((d) => { const i = d.events.findIndex((e) => e.id === ev.id); if (i >= 0) d.events[i] = withSkip(d.events[i], occ); });
-      this.toastWithUndo('Occurrence du ' + this.fmtNumDate(occ) + ' supprimée', () => this.mutate((d) => {
-        const i = d.events.findIndex((e) => e.id === ev.id); if (i >= 0) d.events[i] = withoutSkip(d.events[i], occ);
-      }));
-      return;
+  delEvent(id: string, occ: string, scope?: string): ItemResult {
+    const ev = this._data()?.events.find((e) => e.id === id); if (!ev) return { kind: 'done' };
+    const at = occ && isSeries(ev) ? occ : '';
+    if (at && !scope) {
+      return { kind: 'ask', question: 'Supprimer :', choices: [
+        { scope: 'one', label: 'Cette occurrence (' + this.fmtNumDate(at) + ')', danger: true }, { scope: 'all', label: 'Toute la série', danger: true }] };
     }
-    const at = this._data()!.events.findIndex((e) => e.id === ev.id);
-    this.mutate((d) => { d.events = d.events.filter((e) => e.id !== ev.id); });
-    this.toastWithUndo(isSeries(ev) ? 'Série supprimée' : 'Événement supprimé', () => this.mutate((d) => {
-      if (!d.events.some((e) => e.id === ev.id)) d.events.splice(Math.min(at, d.events.length), 0, ev);
-    }));
+    if (at && scope === 'one') {
+      this.mutate((d) => { const i = d.events.findIndex((e) => e.id === id); if (i >= 0) d.events[i] = withSkip(d.events[i], at); });
+      this.toastWithUndo('Occurrence du ' + this.fmtNumDate(at) + ' supprimée', () => this.mutate((d) => {
+        const i = d.events.findIndex((e) => e.id === id); if (i >= 0) d.events[i] = withoutSkip(d.events[i], at);
+      }));
+      return { kind: 'done' };
+    }
+    let restore: (cur: EventItem[]) => EventItem[] = (cur) => cur;
+    this.mutate((d) => { const r = withoutEvent(d.events, id); d.events = r.list; restore = r.restore; });
+    this.toastWithUndo(isSeries(ev) ? 'Série supprimée' : 'Événement supprimé', () => this.mutate((d) => { d.events = restore(d.events); }));
+    return { kind: 'done' };
   }
 
   // ---- articles de courses ------------------------------------------------
@@ -3370,6 +3352,9 @@ export class FoyerStore {
   markAllRead(): void { this.saveRead(this.notifications().map((n) => n.id)); }
   openNotif(id: string, screen?: string): void {
     this.saveRead([id]);
+    // « ev-<événement>-<jour> » : l'événement du jour a sa fiche, ouverte sur place.
+    const ev = /^ev-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(id);
+    if (ev) { this.patch({ notifOpen: false }); this.openItem('event', ev[1], { occ: ev[2] }); return; }
     this.patch({ notifOpen: false, screen: screen || this.ui().screen });
   }
   /** Marquer une seule notification comme lue, sans quitter le panneau. */

@@ -196,6 +196,14 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
   ecole: { color: '#3D6FA8', label: 'Interrogation' },
 };
 
+/**
+ * Tous les écrans de l'application, une seule fois. L'écran retenu sur
+ * l'appareil (rechargement) et les fiches d'élément (« Ouvrir dans … ») ne
+ * visent qu'un écran de cette liste ; un test vérifie que la navigation n'en
+ * oublie aucun.
+ */
+export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'contacts', 'fidelite', 'finances', 'employe', 'ecole', 'repas', 'recettes', 'planning', 'settings'] as const;
+
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
   lieux: 'Lieux de vacances',

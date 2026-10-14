@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { EventItem } from './models';
 import { occursOn } from './helpers';
 import { eventsOn } from './agenda';
-import { EventDraft, applyToSeries, detachOccurrence, draftChanges, isSeries, seriesDate, withSkip, withoutSkip } from './event-scope';
+import { EventDraft, applyToSeries, detachOccurrence, draftChanges, eventDraft, eventFields, isSeries, recurText, seriesDate, withSkip, withoutEvent, withoutSkip } from './event-scope';
 
 // Le judo du mardi, depuis le mardi 1er septembre 2026.
 const judo: EventItem = { id: 'e1', date: '2026-09-01', time: '18:00', endTime: '19:00', title: 'Judo', who: ['m1'], recur: 'weekly', place: 'Dojo', by: 'm1', at: '2026-08-20T10:00:00Z' };
@@ -95,4 +95,55 @@ test('les membres dans un autre ordre ne sont pas une modification', () => {
 test('isSeries', () => {
   assert.equal(isSeries(judo), true);
   assert.equal(isSeries({ recur: 'none' }), false);
+});
+
+test('la récurrence en clair', () => {
+  assert.equal(recurText(judo), 'Tous les mardis');
+  assert.equal(recurText({ ...judo, recur: 'biweekly' }), 'Un mardi sur deux');
+  assert.equal(recurText({ ...judo, recur: 'monthly' }), 'Le 1er de chaque mois');
+  assert.equal(recurText({ ...judo, recur: 'monthly', date: '2026-09-12' }), 'Le 12 de chaque mois');
+  assert.equal(recurText({ ...judo, recur: 'daily' }), 'Tous les jours');
+  assert.equal(recurText({ ...judo, recur: 'weekday' }), 'Du lundi au vendredi');
+  assert.equal(recurText({ ...judo, recur: 'none' }), '');
+});
+
+test('ouvrir, Modifier, Sauvegarder sans rien toucher : aucun changement, même sur un ancien événement sans drapeau', () => {
+  const anciens: EventItem[] = [
+    judo,
+    { id: 'a', date: '2026-09-01', time: '', title: 'Vacances', who: [], recur: 'none', end: '2026-09-05' },
+    { id: 'b', date: '2026-09-01', time: '—', title: 'Fête', who: ['m2', 'm1'], recur: 'none' },
+    { id: 'c', date: '2026-09-01', time: '09:00', endTime: null, place: null, title: 'Réunion', who: [], recur: 'none', allDay: false },
+  ];
+  for (const ev of anciens) {
+    const draft = eventDraft(eventFields(ev, '', ''))!;
+    assert.equal(draftChanges(ev, draft), false, ev.title);
+  }
+  // Ouvert sur une occurrence : le formulaire montre son jour, la série garde le sien.
+  const f = eventFields(judo, '2026-11-10', '');
+  assert.equal(f.start, '2026-11-10');
+  assert.equal(draftChanges(judo, { ...eventDraft(f)!, date: seriesDate(judo.date, '2026-11-10', f.start) }), false);
+});
+
+test('création : un formulaire vierge au jour choisi, sans titre il ne s’enregistre pas', () => {
+  const f = eventFields(null, '', '2026-10-20');
+  assert.equal(f.start, '2026-10-20');
+  assert.equal(eventDraft(f), null);
+  assert.equal(eventDraft({ ...f, title: '  ' }), null);
+});
+
+test('une heure de fin avant le début est oubliée, la journée entière n’a pas d’heure', () => {
+  const f = eventFields(null, '', '2026-10-20');
+  assert.equal(eventDraft({ ...f, title: 'x', time: '18:00', endTime: '09:00' })!.endTime, null);
+  assert.equal(eventDraft({ ...f, title: 'x', time: '18:00', endTime: '19:00' })!.endTime, '19:00');
+  const jour = eventDraft({ ...f, title: 'x', allDay: true, time: '18:00', endTime: '19:00' })!;
+  assert.equal(jour.time, '—'); assert.equal(jour.endTime, null);
+});
+
+test('supprimer puis annuler rend l’événement identique, à sa place', () => {
+  const list: EventItem[] = [{ ...judo, id: 'x' }, judo, { ...judo, id: 'y' }];
+  const r = withoutEvent(list, 'e1');
+  assert.deepEqual(r.list.map((e) => e.id), ['x', 'y']);
+  assert.deepEqual(r.restore(r.list), list);
+  assert.deepEqual(r.restore(list), list, 'déjà revenu : rien n’est doublé');
+  assert.equal(withoutEvent(list, 'absent').list, list);
 });

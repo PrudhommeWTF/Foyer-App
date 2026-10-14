@@ -115,7 +115,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
             <div class="tl-events">
               @for (a of g.items; track $index) {
                 @if (a.kind === 'event') {
-                  <div class="tl-ev" (click)="store.editEvent(a.ev.id, a.date)">
+                  <div class="tl-ev" (click)="store.openItem('event', a.ev.id, { occ: a.date })">
                     <span class="tl-bar" [style.background]="evColor(a.ev)"></span>
                     @if (a.ev.who.length) {
                       <div class="tl-av">
@@ -633,7 +633,7 @@ export class HomeScreen {
   /** Clic sur le nom d'une entrée du fil : ouvre la fiche de l'élément concerné. */
   openActivity(a: ActivityEntry): void {
     if (a.kind === 'task') this.store.openTaskItem(a.ref);
-    else if (a.kind === 'event') this.store.editEvent(a.ref);
+    else if (a.kind === 'event') this.store.openItem('event', a.ref);
     else this.store.openShoppingList(a.ref);
   }
 
