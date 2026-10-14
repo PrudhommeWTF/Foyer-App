@@ -20,6 +20,28 @@ bricolage, préparation de repas, assistance aux personnes âgées, assistance
 informatique, autre) et **taux horaire net**. Rien d'autre : pas de contrat, pas
 de bulletin, la gestion se fait sur le site du CESU.
 
+## Les fiches : présence et employé
+
+Une présence et un employé s'ouvrent dans la **fiche d'élément** (voir
+[`fiche-element.md`](fiche-element.md)), par-dessus l'écran :
+
+- **Présence** (tap sur une ligne) : le jour, la durée, la note, qui l'a notée
+  et quand. Modifier : la date, la durée au quart d'heure, la note ; seuls les
+  champs changés partent. **Retirer** se fait sans confirmation, Annuler la
+  remet. Sur un mois figé (déclaré, payé), ni Modifier ni Retirer : on rouvre le
+  mois depuis l'écran. « Ajouter à une autre date » crée dans la fiche ; un
+  doublon le même jour est refusé et la fiche reste ouverte.
+- **Employé** (tap sur son nom) : catégorie CESU, heures du mois, taux courant
+  et historique des taux. Un administrateur le modifie (nom, catégorie, et un
+  nouveau taux daté, dans le même formulaire) ou le **retire** de la liste,
+  après confirmation : ses heures et déclarations restent. « Ajouter un
+  employé » crée dans la fiche.
+
+Le module est relationnel : la fiche **attend la réponse du serveur** (boutons
+grisés) et reste ouverte quand il refuse, le message disant pourquoi. La partie
+pure (champs d'une présence, lecture d'un taux tapé « 14,50 ») est dans
+`core/employe-form.ts`, testée.
+
 ## Ce que le module fait, et ne fait pas
 
 - **Il fait** : compter les heures, tenir le taux horaire dans le temps, donner
@@ -116,7 +138,8 @@ Chaque écriture est attribuée au membre (`by`) et au jeton (`via`). Voir
   `backup.ts`, `http.ts`), monté sur `/api/employes` derrière `requireAdulte`.
   Rappel : `backend/src/notify/reminders.ts` (`cesuDue`, pur) câblé dans
   `scheduler.ts` et `server.ts`.
-- Frontend : `frontend/src/app/screens/employe/` (écran), `core/employes.store.ts`
+- Frontend : `frontend/src/app/screens/employe/` (écran, et les fiches `shift.item.ts` et
+  `employee.item.ts` avec leurs vues et formulaires), `core/employe-form.ts`, `core/employes.store.ts`
   (état + repère d'agenda), `core/employes.api.ts`, `core/employe.format.ts`
   (mise en forme CESU, pure et testée). Réglage sur-mesure du taux :
   `screens/settings/employe.ts`.

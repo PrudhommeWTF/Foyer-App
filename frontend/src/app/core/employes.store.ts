@@ -188,17 +188,28 @@ export class EmployesStore {
     finally { this.busy.set(false); }
   }
 
-  async ajuster(id: number, patch: { day?: string; minutes?: number; note?: string }): Promise<void> {
+  /** Une présence du mois affiché (la fiche ne s'ouvre que depuis lui). */
+  shift(id: number): EmpShift | null { return this.recap()?.shifts.find((x) => x.id === id) ?? null; }
+
+  /** Ajuste une présence ; vrai si le serveur l'a acceptée (sinon le toast dit pourquoi). */
+  async ajuster(id: number, patch: { day?: string; minutes?: number; note?: string }): Promise<boolean> {
     this.busy.set(true);
-    try { await this.api.editShift(id, patch); await this.reloadMonth(); }
-    catch (e) { this.foyer.toast(this.msg(e)); }
+    try {
+      await this.api.editShift(id, patch);
+      const mois = patch.day?.slice(0, 7);
+      if (mois && mois !== this.month()) this.month.set(mois);
+      await this.reloadMonth();
+      return true;
+    } catch (e) { this.foyer.toast(this.msg(e)); return false; }
     finally { this.busy.set(false); }
   }
-  async retirer(shift: EmpShift): Promise<void> {
+  /** Retire une présence, annulable ; vrai si le serveur l'a fait. */
+  async retirer(shift: EmpShift): Promise<boolean> {
     try {
       await this.api.archiveShift(shift.id); await this.reloadMonth();
       this.foyer.toastWithUndo('Présence retirée', () => void this.reAjouter(shift));
-    } catch (e) { this.foyer.toast(this.msg(e)); }
+      return true;
+    } catch (e) { this.foyer.toast(this.msg(e)); return false; }
   }
   private async retirerSilencieux(id: number): Promise<void> { try { await this.api.archiveShift(id); await this.reloadMonth(); } catch { /* rien */ } }
   private async reAjouter(s: EmpShift): Promise<void> { try { await this.api.addShift({ day: s.day, minutes: s.minutes, note: s.note, force: true }, this.empId()); await this.reloadMonth(); } catch { /* rien */ } }

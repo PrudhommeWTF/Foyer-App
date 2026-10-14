@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList' | 'shift' | 'employee';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -103,6 +103,19 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
     kind: 'taskList', label: 'Liste de tâches', newTitle: 'Nouvelle liste', editTitle: 'Modifier la liste',
     screen: 'taches', openLabel: 'Ouvrir dans Tâches', editable: true, removeMode: 'confirm',
   },
+  // Employé à domicile : réservé aux adultes, et rien n'y est jamais effacé. Une
+  // présence « se retire » (annulable) ; un employé « se retire » de la liste,
+  // ses heures et déclarations restent.
+  shift: {
+    kind: 'shift', label: 'Présence', newTitle: 'Ajouter une présence', editTitle: 'Modifier la présence',
+    screen: 'employe', openLabel: 'Ouvrir dans Employé à domicile', editable: true, removeMode: 'undo', removeLabel: 'Retirer',
+    module: 'modEmploye', adultOnly: true,
+  },
+  employee: {
+    kind: 'employee', label: 'Employé à domicile', newTitle: 'Ajouter un employé', editTitle: 'Modifier l’employé',
+    screen: 'employe', openLabel: 'Ouvrir dans Employé à domicile', editable: true, removeMode: 'confirm', removeLabel: 'Retirer',
+    module: 'modEmploye', adultOnly: true,
+  },
 };
 
 /**
@@ -123,7 +136,8 @@ export interface ItemForm {
   /** Quelque chose a-t-il changé depuis l'ouverture ? Décide de « Abandonner les modifications ? ». */
   readonly dirty: Signal<boolean>;
   /** Enregistre, ou dit ce qu'il faut demander d'abord. */
-  submit(scope?: string): ItemResult;
+  /** Une réponse du serveur (module relationnel) peut se faire attendre : la fiche patiente. */
+  submit(scope?: string): ItemResult | Promise<ItemResult>;
 }
 
 /** Une action propre au type, montrée en vue (« Fait », « Déplacer »…). */
@@ -144,7 +158,7 @@ export interface ItemKind<T, S> {
   /** Composant de formulaire : entrées `item` (null à la création) et `ctx`. */
   form?: Type<ItemForm>;
   /** Supprime, ou pose d'abord une question. Absent : pas de bouton Supprimer. */
-  remove?(s: S, it: T, ctx: ItemCtx | undefined, scope?: string): ItemResult;
+  remove?(s: S, it: T, ctx: ItemCtx | undefined, scope?: string): ItemResult | Promise<ItemResult>;
   /**
    * Cet élément-ci se modifie-t-il, se supprime-t-il ? Pour un type modifiable
    * dont certains éléments ne le sont pas (un devoir venu d'ÉcoleDirecte parmi
