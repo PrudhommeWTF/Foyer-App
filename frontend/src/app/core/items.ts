@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -68,6 +68,19 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
     kind: 'slot', label: 'Créneau', newTitle: 'Nouveau créneau', editTitle: 'Modifier le créneau',
     screen: 'planning', openLabel: 'Ouvrir dans Emploi du temps', editable: true, removeMode: 'undo',
   },
+  shop: {
+    kind: 'shop', label: 'Article de courses', newTitle: 'Nouvel article', editTitle: 'Modifier l’article',
+    screen: 'courses', openLabel: 'Ouvrir dans Courses', editable: true, removeMode: 'undo',
+  },
+  // Une liste emporte ses articles, un rayon renvoie les siens au repli : on confirme.
+  shopList: {
+    kind: 'shopList', label: 'Liste de courses', newTitle: 'Nouvelle liste', editTitle: 'Modifier la liste',
+    screen: 'courses', openLabel: 'Ouvrir dans Courses', editable: true, removeMode: 'confirm',
+  },
+  aisle: {
+    kind: 'aisle', label: 'Rayon', newTitle: 'Nouveau rayon', editTitle: 'Modifier le rayon',
+    screen: 'courses', openLabel: 'Ouvrir dans Courses', editable: true, removeMode: 'confirm',
+  },
 };
 
 /**
@@ -115,8 +128,8 @@ export interface ItemKind<T, S> {
    * dont certains éléments ne le sont pas (un devoir venu d'ÉcoleDirecte parmi
    * les tâches). Absent : oui. Jamais de bouton sans effet.
    */
-  canEdit?(it: T): boolean;
-  canRemove?(it: T): boolean;
+  canEdit?(it: T, s: S): boolean;
+  canRemove?(it: T, s: S): boolean;
   /** Actions propres, en vue. */
   actions?(s: S, it: T, ctx?: ItemCtx): ItemAction[];
   /** Emmène dans le module, sur le bon contexte (le mois de l'événement). */

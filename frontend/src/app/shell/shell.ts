@@ -10,7 +10,7 @@ import { SearchModalComponent } from './search-modal';
 import { ItemSheetComponent } from './item-sheet';
 import { HomeScreen } from '../screens/home/home';
 import { CalendarScreen } from '../screens/calendar/calendar';
-import { CoursesScreen } from '../screens/courses';
+import { CoursesScreen } from '../screens/courses/courses';
 import { TachesScreen } from '../screens/taches/taches';
 import { ContactsScreen } from '../screens/contacts';
 import { FideliteScreen } from '../screens/fidelite';

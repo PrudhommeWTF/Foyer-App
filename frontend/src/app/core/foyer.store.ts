@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
-import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
+import { CardFormat, EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
 import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
@@ -19,6 +19,7 @@ import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './
 import { parseQuery, searchRecipes } from './recipe-search';
 import { RecipeData, recipeChanges } from './recipe-form';
 import { SlotDefaults, slotChanges } from './slot-form';
+import { ShopDefaults, ShopFields, shopOps, shopRestoreOps } from './shop-item';
 import { presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { Allergene } from './articles';
@@ -1162,7 +1163,6 @@ export class FoyerStore {
     if (!h.id) return;
     switch (h.kind) {
       case 'contact': this.editContact(h.id); break;
-      case 'shop': this.editShop(h.id); break;
       case 'card': this.showCard(h.id); break;
       case 'member': this.openMembers(); break;
       default: break;
@@ -1381,60 +1381,42 @@ export class FoyerStore {
     const aisles = this._data()?.aisles || [];
     return (aisles.find((a) => isFallbackAisleName(a.name)) || aisles[aisles.length - 1] || aisles[0])?.id || '';
   }
-  openShop(): void {
-    // On fixe l'identifiant dès l'ouverture : une photo peut ainsi être rattachée
-    // à l'article avant même sa sauvegarde (comme pour une recette neuve).
-    this.patch({ showShop: true, shEditId: null, shId: uid('s'), shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: this.defaultAisleId(), shListId: this.activeShopListId(), shPhotoId: null, shPhotoBusy: false });
+  /** Nouvel article, en fiche : dans la liste ouverte, au rayon de repli tant que le nom n'en évoque pas un autre. */
+  openShop(): void { this.openItem('shop', null); }
+  shopDefaults(): ShopDefaults { return { aisleId: this.defaultAisleId(), listId: this.activeShopListId() }; }
+  /**
+   * Enregistre un article depuis sa fiche : seuls les champs changés partent,
+   * l'état à part (il dit qui l'a posé et quand). Un rayon choisi à la main est
+   * retenu pour ce nom, comme à la saisie rapide.
+   */
+  saveShop(id: string, f: ShopFields, isNew: boolean): ItemResult {
+    const before = isNew ? null : this._data()?.shop.find((x) => x.id === id) ?? null;
+    if (!isNew && !before) { this.toast('Cet article n’existe plus'); return { kind: 'invalid' }; }
+    const ops = shopOps(id, before, f);
+    if (!ops.length) return { kind: 'done' };
+    this.pushShopOps(ops);
+    if (!before || before.aisleId !== f.aisleId) this.learnAisle(f.name.trim(), f.aisleId);
+    this.toast(before ? 'Article modifié' : 'Article ajouté');
+    return { kind: 'done' };
   }
-  editShop(id: string): void {
-    const it = this._data()?.shop.find((x) => x.id === id); if (!it) return;
-    this.patch({ showShop: true, shEditId: id, shId: id, shTitle: it.name, shQty: it.qty, shState: it.state, shAisleId: it.aisleId, shListId: it.listId || this.activeShopListId(), shPhotoId: it.photoId ?? null, shPhotoBusy: false });
-  }
-  saveShop(): void {
-    const s = this.ui(); const name = s.shTitle.trim(); if (!name) { this.toast('Donne un nom à l’article'); return; }
-    const qty = s.shQty.trim();
-    if (s.shEditId) {
-      const before = this._data()?.shop.find((x) => x.id === s.shEditId);
-      const ops: ShopOpDraft[] = [{ op: 'edit', id: s.shEditId, name, qty, aisleId: s.shAisleId, listId: s.shListId, photoId: s.shPhotoId }];
-      // L'état est une opération distincte : elle porte qui l'a posé et quand,
-      // ce qu'une simple édition de champs ne dit pas.
-      if (before && before.state !== s.shState) ops.push({ op: 'set-state', id: s.shEditId, state: s.shState });
-      this.pushShopOps(ops);
-    } else {
-      this.pushShopOps([{ op: 'add', id: s.shId, name, qty, aisleId: s.shAisleId, listId: s.shListId, ...(s.shPhotoId ? { photoId: s.shPhotoId } : {}) }]);
-    }
-    // Le rayon a été choisi à la main dans la fiche : on le retient pour ce nom.
-    this.learnAisle(name, s.shAisleId);
-    this.toast(s.shEditId ? 'Article modifié' : 'Article ajouté');
-    this.patch({ showShop: false, shEditId: null });
-  }
-  /** Téléverse une photo pour l'article en cours, et la retient. */
-  async onShopPhoto(file: File): Promise<void> {
-    const ownerId = this.ui().shId; if (!ownerId) return;
-    this.patch({ shPhotoBusy: true });
+  /** Envoie la photo d'un article (existant ou pas encore enregistré) ; son identifiant, ou null en cas d'échec dit par un toast. */
+  async uploadShopPhoto(ownerId: string, file: File): Promise<number | null> {
     try {
       const res = await this.api.uploadFile('shop', ownerId, file);
       this.cachePhoto(res.file.id, file);
-      this.patch({ shPhotoId: res.file.id });
-      // En édition, on l'écrit tout de suite : la photo ne se perd pas si la
-      // fiche est fermée sans « Enregistrer ». En création, elle part avec l'ajout.
-      if (this.ui().shEditId) this.pushShopOps([{ op: 'edit', id: this.ui().shEditId!, photoId: res.file.id }]);
+      return res.file.id;
     } catch (e) {
       this.toast((e as Error).message);
-    } finally {
-      this.patch({ shPhotoBusy: false });
+      return null;
     }
   }
-  /** Retire la photo de l'article en cours. Le fichier est balayé au prochain démarrage. */
-  removeShopPhoto(): void {
-    this.patch({ shPhotoId: null });
-    if (this.ui().shEditId) this.pushShopOps([{ op: 'edit', id: this.ui().shEditId!, photoId: null }]);
-  }
-  delShop(): void {
-    const id = this.ui().shEditId; if (!id) return;
+  /** Supprime un article, sans confirmation : Annuler le remet tel qu'il était, sous le même identifiant. */
+  delShop(id: string): ItemResult {
+    const it = this._data()?.shop.find((x) => x.id === id); if (!it) return { kind: 'done' };
+    const copie = { ...it };
     this.pushShopOps([{ op: 'remove', id }]);
-    this.patch({ showShop: false, shEditId: null });
-    this.toast('Article supprimé');
+    this.toastWithUndo('Article supprimé', () => this.pushShopOps(shopRestoreOps(copie)));
+    return { kind: 'done' };
   }
   /**
    * Supprime les articles cochés d'une liste. Les introuvables ne sont pas
@@ -1450,21 +1432,41 @@ export class FoyerStore {
   }
 
   // ---- shopping lists ---------------------------------------------------
-  newShopList(): void { this.patch({ shopListForm: true, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier' }); }
-  editShopList(id: string): void { const l = this._data()?.shopLists.find((x) => x.id === id); if (!l) return; this.patch({ shopListForm: true, clEditId: id, clName: l.name, clColor: l.color, clIcon: l.icon || 'panier' }); }
-  saveShopList(): void {
-    const s = this.ui(); const name = s.clName.trim(); if (!name) { this.toast('Donne un nom à la liste'); return; }
-    if (s.clEditId) { this.mutate((d) => { const i = d.shopLists.findIndex((l) => l.id === s.clEditId); if (i >= 0) d.shopLists[i] = { ...d.shopLists[i], name, color: s.clColor, icon: s.clIcon }; }); this.toast('Liste modifiée'); this.patch({ shopListForm: false, clEditId: null }); }
-    else { const id = uid('cl'); this.mutate((d) => { d.shopLists.push({ id, name, color: s.clColor, icon: s.clIcon }); }); this.patch({ shopListForm: false, activeShopList: id }); this.toast('Liste de courses créée'); }
+  /** Nouvelle liste, en fiche. */
+  newShopList(): void { this.openItem('shopList', null); }
+  /** Enregistre une liste ; une liste créée devient la liste ouverte. */
+  saveShopList(id: string | null, v: { name: string; color: string; icon: string }): ItemResult {
+    const name = v.name.trim(); if (!name) { this.toast('Donne un nom à la liste'); return { kind: 'invalid' }; }
+    const cur = id ? this._data()?.shopLists.find((l) => l.id === id) : undefined;
+    if (cur) {
+      if (cur.name === name && cur.color === v.color && (cur.icon || 'panier') === v.icon) return { kind: 'done' };
+      this.mutate((d) => { const i = d.shopLists.findIndex((l) => l.id === cur.id); if (i >= 0) d.shopLists[i] = { ...d.shopLists[i], name, color: v.color, icon: v.icon }; });
+      this.toast('Liste modifiée');
+      return { kind: 'done' };
+    }
+    const nid = uid('cl');
+    this.mutate((d) => { if (!d.shopLists.some((l) => l.id === nid)) d.shopLists.push({ id: nid, name, color: v.color, icon: v.icon }); });
+    this.patch({ activeShopList: nid });
+    this.toast('Liste de courses créée');
+    return { kind: 'done' };
   }
-  confirmShopListDel(): void {
-    const id = this.ui().shopListDelId; if (!id) return;
-    // Les listes s'éditent par le document complet ; le serveur retire lui-même
-    // les articles orphelins (voir shopping/repo.ts, reconcile). La copie locale
-    // fait de même pour que l'écran ne montre pas des articles déjà partis.
-    this.mutate((d) => { d.shopLists = d.shopLists.filter((l) => l.id !== id); d.shop = d.shop.filter((x) => x.listId !== id); });
-    this.patch({ shopListDelId: null, activeShopList: this.ui().activeShopList === id ? 'all' : this.ui().activeShopList });
+  /**
+   * Supprime une liste et ses articles, après confirmation : c'est une perte
+   * sans retour. Les listes s'éditent par le document complet ; le serveur
+   * retire lui-même les articles orphelins (shopping/repo.ts, reconcile), la
+   * copie locale fait de même pour ne pas montrer des articles déjà partis.
+   */
+  delShopList(id: string, scope?: string): ItemResult {
+    const l = this._data()?.shopLists.find((x) => x.id === id); if (!l) return { kind: 'done' };
+    if (!scope) {
+      const n = (this._data()?.shop || []).filter((x) => x.listId === id).length;
+      return { kind: 'ask', question: 'Supprimer « ' + l.name + ' »' + (n > 1 ? ' et ses ' + n + ' articles' : n ? ' et son article' : '') + ' ? C’est définitif.',
+        choices: [{ scope: 'all', label: 'Supprimer', danger: true }] };
+    }
+    this.mutate((d) => { d.shopLists = d.shopLists.filter((x) => x.id !== id); d.shop = d.shop.filter((x) => x.listId !== id); });
+    if (this.ui().activeShopList === id) this.patch({ activeShopList: 'all' });
     this.toast('Liste supprimée');
+    return { kind: 'done' };
   }
 
   // ---- lieux (inventaires par lieu de vacances) --------------------------
@@ -1551,20 +1553,23 @@ export class FoyerStore {
     const cur = this.ui().collapsedAisles;
     this.patch({ collapsedAisles: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
   }
-  newAisle(): void { this.patch({ aiForm: true, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '' }); }
-  editAisle(id: string): void { const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return; this.patch({ aiForm: true, aiEditId: id, aiName: a.name, aiColor: a.color, aiKind: a.kind || '' }); }
-  saveAisle(): void {
-    const s = this.ui(); const name = s.aiName.trim(); if (!name) { this.toast('Donne un nom au rayon'); return; }
-    if (s.aiEditId) {
+  /** Nouveau rayon, en fiche. */
+  newAisle(): void { this.openItem('aisle', null); }
+  saveAisle(id: string | null, v: { name: string; color: string; kind: Rayon | '' }): ItemResult {
+    const name = v.name.trim(); if (!name) { this.toast('Donne un nom au rayon'); return { kind: 'invalid' }; }
+    const cur = id ? this._data()?.aisles.find((a) => a.id === id) : undefined;
+    if (cur) {
+      if (cur.name === name && cur.color === v.color && (cur.kind || '') === v.kind) return { kind: 'done' };
       // Les articles désignent le rayon par son identifiant : renommer ne demande
       // plus de rattraper quoi que ce soit dans la liste.
-      this.mutate((d) => { const i = d.aisles.findIndex((a) => a.id === s.aiEditId); if (i >= 0) d.aisles[i] = { ...d.aisles[i], name, color: s.aiColor, kind: s.aiKind || null }; });
+      this.mutate((d) => { const i = d.aisles.findIndex((a) => a.id === cur.id); if (i >= 0) d.aisles[i] = { ...d.aisles[i], name, color: v.color, kind: v.kind || null }; });
       this.toast('Rayon modifié');
-    } else {
-      this.mutate((d) => { d.aisles.push({ id: uid('a'), name, color: s.aiColor, position: d.aisles.length, ...(s.aiKind ? { kind: s.aiKind } : {}) }); });
-      this.toast('Rayon ajouté');
+      return { kind: 'done' };
     }
-    this.patch({ aiForm: false, aiEditId: null });
+    const nid = uid('a');
+    this.mutate((d) => { if (!d.aisles.some((a) => a.id === nid)) d.aisles.push({ id: nid, name, color: v.color, position: d.aisles.length, ...(v.kind ? { kind: v.kind } : {}) }); });
+    this.toast('Rayon ajouté');
+    return { kind: 'done' };
   }
   /** Remonte ou descend un rayon : c'est l'ordre des allées du magasin habituel. */
   moveAisle(id: string, dir: -1 | 1): void {
@@ -1576,17 +1581,24 @@ export class FoyerStore {
     [ids[i], ids[j]] = [ids[j], ids[i]];
     this.mutate((d) => { d.aisles.forEach((a) => { a.position = ids.indexOf(a.id); }); });
   }
-  confirmAisleDel(): void {
-    const id = this.ui().aisleDelId; if (!id) return;
+  /** Supprime un rayon après confirmation ; ses articles passent au rayon de repli, qui lui ne se supprime pas. */
+  delAisle(id: string, scope?: string): ItemResult {
+    const a = this._data()?.aisles.find((x) => x.id === id); if (!a) return { kind: 'done' };
     const fallback = this.defaultAisleId();
-    if (id === fallback) { this.patch({ aisleDelId: null }); this.toast('Ce rayon sert de repli, il ne peut pas être supprimé'); return; }
+    if (id === fallback) { this.toast('Ce rayon sert de repli, il ne peut pas être supprimé'); return { kind: 'invalid' }; }
+    if (!scope) {
+      const n = (this._data()?.shop || []).filter((x) => x.aisleId === id).length;
+      const repli = this._data()?.aisles.find((x) => x.id === fallback)?.name || 'le rayon de repli';
+      return { kind: 'ask', question: 'Supprimer le rayon « ' + a.name + ' » ?' + (n ? ' Ses ' + n + ' article' + (n > 1 ? 's passeront' : ' passera') + ' dans « ' + repli + ' ».' : ''),
+        choices: [{ scope: 'all', label: 'Supprimer', danger: true }] };
+    }
     this.mutate((d) => {
       d.aisles = d.aisles.filter((x) => x.id !== id);
-      d.aisles.forEach((a, i) => { a.position = i; });
+      d.aisles.forEach((x, i) => { x.position = i; });
       d.shop.forEach((x) => { if (x.aisleId === id) x.aisleId = fallback; });
     });
-    this.patch({ aisleDelId: null });
     this.toast('Rayon supprimé');
+    return { kind: 'done' };
   }
 
   // ---- tâches : opérations, file et annulation -----------------------------
@@ -2568,8 +2580,6 @@ export class FoyerStore {
     for (const it of this._data()?.shop || []) if (it.photoId) ids.add(it.photoId);
     const editing = this.formPhotoId();
     if (editing) ids.add(editing);
-    const shopEditing = this.ui().shPhotoId;
-    if (shopEditing) ids.add(shopEditing);
     return [...ids];
   }
 
@@ -3398,7 +3408,4 @@ export class FoyerStore {
     downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), fileName(nom, 'csv'));
     this.toast(items.length + ' articles exportés');
   }
-
-  // ---- add menu picks ---------------------------------------------------
-  pickShopFromMenu(): void { this.patch({ addMenuOpen: false, screen: 'courses' }); this.openShop(); }
 }
