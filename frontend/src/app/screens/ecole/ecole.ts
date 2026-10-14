@@ -1,10 +1,10 @@
 import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FoyerStore } from '../core/foyer.store';
-import { EcoleStore, subjectLabel } from '../core/ecole.store';
-import { EcoleApi, EdAverageView, EdGradeView, EdHomework, EdLifeView, EdVueStudent } from '../core/ecole.api';
-import { IconComponent } from '../core/icon';
-import { normText } from '../core/helpers';
+import { FoyerStore } from '../../core/foyer.store';
+import { EcoleStore, subjectLabel } from '../../core/ecole.store';
+import { EcoleApi, EdAverageView, EdHomework, EdLifeView, EdVueStudent } from '../../core/ecole.api';
+import { IconComponent } from '../../core/icon';
+import { normText } from '../../core/helpers';
 
 interface DayGroup { day: string; label: string; items: EdHomework[]; }
 interface MonthGroup { key: string; label: string; count: number; days: DayGroup[]; }
@@ -74,7 +74,7 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
           </div>
 
           @if (mode() === 'notes') {
-            @if (notes(); as n) {
+            @if (ecole.notes()[s.id]; as n) {
               @if (period(); as p) {
                 <div class="d-head">Moyennes · {{ p.label }}</div>
                 <div class="avg-card">
@@ -90,20 +90,12 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
               }
               <div class="d-head" style="margin-top:16px">Dernières notes</div>
               @for (g of n.grades; track g.id) {
-                <button class="grade" (click)="openGrade.set(openGrade() === g.id ? null : g.id)" [attr.aria-expanded]="openGrade() === g.id">
+                <button class="grade" (click)="store.openItem('grade', '' + g.id)">
                   <div class="g-top">
                     <span class="g-s">{{ subject2(g.subject) }}</span>
                     <span class="g-v" [class.ns]="g.notSignificant">{{ g.value }}{{ g.outOf && isNum(g.value) ? '/' + g.outOf : '' }}</span>
                   </div>
                   <div class="g-meta">{{ g.date ? fr(g.date) : '' }}{{ g.label ? ' · ' + g.label : '' }}@if (g.notSignificant) { · non significative }</div>
-                  @if (openGrade() === g.id) {
-                    <div class="g-detail">
-                      @if (g.kind) { <div><span>Type</span><b>{{ g.kind }}</b></div> }
-                      @if (g.coefficient) { <div><span>Coefficient</span><b>{{ g.coefficient }}</b></div> }
-                      @if (g.classAverage) { <div><span>Moyenne de la classe</span><b>{{ g.classAverage }}</b></div> }
-                      @if (g.classMin || g.classMax) { <div><span>Plus basse · plus haute</span><b>{{ g.classMin || '–' }} · {{ g.classMax || '–' }}</b></div> }
-                    </div>
-                  }
                 </button>
               } @empty {
                 <div class="empty">Aucune note pour l’instant.</div>
@@ -181,7 +173,8 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
                     [attr.aria-pressed]="h.done" [attr.aria-label]="(h.done ? 'Décocher ' : 'Marquer fait : ') + subject(h)">
               @if (h.done) { <f-icon name="check" [size]="16" color="#fff" [width]="3.2" /> }
             </button>
-            <div class="hw-b">
+            <!-- Le corps du devoir ouvre sa fiche ; la case « Fait » reste un geste direct. -->
+            <div class="hw-b" role="button" tabindex="0" (click)="open($event, h)" (keydown.enter)="open($event, h)">
               <div class="hw-t">
                 <span class="subj">{{ subject(h) }}</span>
                 @if (h.isTest) { <span class="badge test">Interrogation</span> }
@@ -232,7 +225,7 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
     .tick { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 2px solid var(--line2); background: var(--surface); cursor: pointer; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
     .tick.on { background: #5F9E6E; border-color: #5F9E6E; }
     .tick:disabled { opacity: .5; cursor: default; }
-    .hw-b { flex: 1; min-width: 0; }
+    .hw-b { flex: 1; min-width: 0; cursor: pointer; }
     .hw-t { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
     .subj { font-size: 14.5px; font-weight: 800; color: var(--ink); }
     .badge { font-size: 10.5px; font-weight: 800; border-radius: 6px; padding: 2px 7px; }
@@ -265,8 +258,6 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
     .g-v { font-size: 16px; font-weight: 900; color: var(--ink); }
     .g-v.ns { color: var(--ink3); text-decoration: line-through; }
     .g-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 3px; }
-    .g-detail { margin-top: 8px; display: grid; gap: 4px; }
-    .g-detail div { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
     .badge.okb { background: #EDF2EB; color: #5F7E5C; }
   `],
 })
@@ -277,16 +268,12 @@ export class EcoleScreen {
 
   readonly pick = signal<number | null>(null);
   readonly mode = signal<'avenir' | 'passe' | 'notes' | 'vie'>('avenir');
-  /** Tout l'historique de l'élève affiché, archives comprises (devoirs retirés d'ÉcoleDirecte depuis). */
-  readonly past = signal<EdHomework[]>([]);
   readonly pastLoading = signal(false);
   /** Recherche dans l'historique : matière, énoncé, professeur, sans tenir compte des accents. */
   readonly query = signal('');
   /** Les mois de « Plus anciens » dépliés (AAAA-MM). */
   readonly openMonths = signal<ReadonlySet<string>>(new Set());
-  readonly notes = signal<{ grades: EdGradeView[]; averages: EdAverageView[] } | null>(null);
   readonly vie = signal<EdLifeView[] | null>(null);
-  readonly openGrade = signal<number | null>(null);
   readonly nonVide = (s: string): boolean => !!s;
 
   constructor() { void this.ecole.load(); }
@@ -312,7 +299,7 @@ export class EcoleScreen {
   private readonly pastOf = computed<EdHomework[]>(() => {
     const s = this.current(); const today = this.ecole.vue()?.today || this.store.todayStr();
     const q = normText(this.query());
-    return this.past().filter((h) => h.studentId === s?.id && h.due < today
+    return this.ecole.archive().filter((h) => h.studentId === s?.id && h.due < today
       && (!q || normText([subjectLabel(h.subject), h.text, h.teacher].join(' ')).includes(q)));
   });
   private readonly weekAgo = computed(() => this.store.addDays(this.ecole.vue()?.today || this.store.todayStr(), -7));
@@ -340,25 +327,26 @@ export class EcoleScreen {
     return [...map].map(([day, items]) => ({ day, label: this.dayLabel(day), items }));
   }
 
-  /** Coche ou décoche ; l'historique chargé suit (la vue du store ne porte que ce qui est à venir). */
-  async tick(h: EdHomework): Promise<void> {
-    const r = await this.ecole.setDone(h, !h.done);
-    this.past.update((l) => l.map((y) => (y.id === r.id ? r : y)));
+  /** Coche ou décoche ; l'historique lu suit (le store le tient à jour). */
+  tick(h: EdHomework): void { void this.ecole.setDone(h, !h.done); }
+  /** Ouvre la fiche du devoir ; un lien de l'énoncé, lui, reste un lien. */
+  open(e: Event, h: EdHomework): void {
+    if ((e.target as HTMLElement | null)?.closest('a')) return;
+    this.store.openItem('homework', '' + h.id);
   }
 
   async showPast(s: EdVueStudent): Promise<void> {
     this.mode.set('passe');
-    if (this.past().some((h) => h.studentId === s.id)) return;
-    const today = this.ecole.vue()?.today || this.store.todayStr();
+    if (this.ecole.archive().some((h) => h.studentId === s.id)) return;
     this.pastLoading.set(true);
-    try { this.past.set((await this.api.archives(s.id, '2000-01-01', this.store.addDays(today, -1))).homework); }
+    try { await this.ecole.loadArchive(s.id); }
     catch (e) { this.store.toast((e as Error).message); }
     finally { this.pastLoading.set(false); }
   }
 
   async showNotes(s: EdVueStudent): Promise<void> {
-    this.mode.set('notes'); this.notes.set(null);
-    try { this.notes.set(await this.api.notes(s.id)); } catch (e) { this.store.toast((e as Error).message); this.mode.set('avenir'); }
+    this.mode.set('notes');
+    try { await this.ecole.loadNotes(s.id); } catch (e) { this.store.toast((e as Error).message); this.mode.set('avenir'); }
   }
   async showVie(s: EdVueStudent): Promise<void> {
     this.mode.set('vie'); this.vie.set(null);
@@ -370,7 +358,8 @@ export class EcoleScreen {
    * la dernière), telles qu'ÉcoleDirecte les renvoie, moyenne générale en tête.
    */
   readonly period = computed<{ label: string; rows: EdAverageView[] } | null>(() => {
-    const a = this.notes()?.averages ?? [];
+    const s = this.current();
+    const a = (s && this.ecole.notes()[s.id]?.averages) || [];
     if (!a.length) return null;
     const today = this.ecole.vue()?.today || this.store.todayStr();
     const codes = [...new Set(a.map((x) => x.periodCode))];

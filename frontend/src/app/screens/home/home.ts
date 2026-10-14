@@ -9,7 +9,7 @@ import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
-import { EcoleStore } from '../../core/ecole.store';
+import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
 type Ahead =
@@ -178,14 +178,23 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
       </div>
     </ng-template>
 
-    <!-- École : ce que la tuile Tâches ne dit pas. Les interrogations de
-         demain, et l'état de la synchronisation, daté, jamais présenté frais
-         s'il ne l'est pas. Rien du tout quand le module est éteint. -->
+    <!-- École : les devoirs de demain, un par ligne et ouvrables en fiche
+         (interrogations d'abord), et l'état de la synchronisation, daté,
+         jamais présenté frais s'il ne l'est pas. Rien quand le module est éteint. -->
     <ng-template #ecoleCard>
       <div class="card rc">
         <div class="rc-head"><span>École</span><button class="rc-link" (click)="store.go('ecole')">Devoirs</button></div>
-        @for (l of ecole.tomorrowLines(); track l) {
-          <div class="rc-row" (click)="store.go('ecole')"><f-icon name="ecole" [size]="14" color="#3D6FA8" [width]="2.2" /><span class="ec-line">{{ l }}</span></div>
+        <!-- Un devoir par ligne, qui s'ouvre en fiche ; un enfant sans rien pour demain le dit. -->
+        @for (st of ecole.tomorrowByStudent(); track st.id) {
+          @for (h of st.items; track h.id) {
+            <button class="rc-row ec-hw" [class.done]="h.done" (click)="store.openItem('homework', '' + h.id)">
+              <f-icon [name]="h.done ? 'check' : 'ecole'" [size]="14" [color]="h.done ? 'var(--sage)' : '#3D6FA8'" [width]="2.2" />
+              <span class="ec-line">@if (ecole.students().length > 1) { <b>{{ st.name }}</b> · }{{ subject(h.subject) }}</span>
+              @if (h.isTest) { <span class="ec-test">interro</span> }
+            </button>
+          } @empty {
+            <div class="rc-row"><f-icon name="ecole" [size]="14" color="var(--ink3)" [width]="2.2" /><span class="ec-line muted">{{ st.name }} : rien pour demain</span></div>
+          }
         } @empty {
           <div class="rc-empty">Aucun élève associé pour l’instant.</div>
         }
@@ -342,7 +351,11 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .rc-link { border: none; background: var(--soft); border-radius: 9px; padding: 5px 11px; font-size: 11.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
     .rc-link:hover { background: var(--soft2); }
     .rc-empty { font-size: 12.5px; font-weight: 700; color: var(--ink3); padding: 6px 2px 4px; }
-    .ec-line { font-size: 13px; font-weight: 700; color: var(--ink); }
+    .ec-line { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ec-line.muted { color: var(--ink3); }
+    .ec-hw { width: 100%; border-left: none; border-right: none; border-bottom: none; background: none; font: inherit; text-align: left; }
+    .ec-hw.done .ec-line { color: var(--ink3); text-decoration: line-through; }
+    .ec-test { flex: none; font-size: 10.5px; font-weight: 800; color: #C6492F; background: #FCE9E3; border-radius: 6px; padding: 2px 6px; }
     .ec-sync { font-size: 11.5px; font-weight: 700; color: var(--ink3); padding-top: 8px; }
     .ec-sync.ko { color: #C6492F; }
     .rc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); cursor: pointer; }
@@ -420,6 +433,7 @@ export class HomeScreen {
   admin = inject(AdminStore);
   private fins = inject(FinancesStore);
   ecole = inject(EcoleStore);
+  readonly subject = subjectLabel;
 
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
   private readonly pillEls = viewChildren<ElementRef<HTMLElement>>('pillBtn');

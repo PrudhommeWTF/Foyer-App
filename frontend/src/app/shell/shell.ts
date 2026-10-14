@@ -21,7 +21,7 @@ import { RecettesScreen } from '../screens/recettes/recettes';
 import { PlanningScreen } from '../screens/planning/planning';
 import { SettingsScreen } from '../screens/settings/settings';
 import { LieuxScreen } from '../screens/lieux/lieux';
-import { EcoleScreen } from '../screens/ecole';
+import { EcoleScreen } from '../screens/ecole/ecole';
 import { EcoleStore } from '../core/ecole.store';
 
 @Component({

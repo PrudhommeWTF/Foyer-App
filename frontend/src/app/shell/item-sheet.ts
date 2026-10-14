@@ -44,48 +44,50 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
           <ng-container *ngComponentOutlet="desc().form!; inputs: { item: item(), ctx: r.ctx }" />
         }
 
-        <div sheetFoot class="foot">
-          @if (ask(); as q) {
-            <div class="q">{{ q.question }}</div>
-            <div class="row wrap">
-              @for (c of q.choices; track c.scope) {
-                <button type="button" class="btn" [class.btn-danger]="c.danger" [class.btn-primary]="!c.danger" [disabled]="busy()" (click)="answer(c.scope)">{{ c.label }}</button>
-              }
-              <button type="button" class="btn btn-soft" (click)="ask.set(null)">Annuler</button>
-            </div>
-          } @else if (discard()) {
-            <div class="q">Abandonner les modifications ?</div>
-            <div class="row">
-              <button type="button" class="btn btn-soft" (click)="discard.set(null)">Non, continuer</button>
-              <button type="button" class="btn btn-danger" (click)="confirmDiscard()">Abandonner</button>
-            </div>
-          } @else if (overwrite()) {
-            <div class="q">Quelqu’un l’a modifié entre-temps sur un autre appareil. Enregistrer quand même, par-dessus ?</div>
-            <div class="row">
-              <button type="button" class="btn btn-soft" (click)="overwrite.set(false)">Annuler</button>
-              <button type="button" class="btn btn-danger" (click)="overwrite.set(false); void save(undefined, true)">Écraser</button>
-            </div>
-          } @else if (gone()) {
-            <div class="row"><button type="button" class="btn btn-primary grow" (click)="store.closeItem()">Fermer</button></div>
-          } @else if (r.mode === 'vue') {
-            <div class="row wrap">
-              @if (canRemove()) {
-                <button type="button" class="btn btn-ghost del" [disabled]="busy()" (click)="void remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> {{ meta().removeLabel || 'Supprimer' }}</button>
-              }
-              @for (a of actions(); track a.label) {
-                <button type="button" class="btn" [class.btn-primary]="!canEdit()" [class.btn-soft]="canEdit()" (click)="a.run()"><f-icon [name]="a.icon" [size]="16" color="currentColor" [width]="2.4" /> {{ a.label }}</button>
-              }
-              @if (canEdit()) {
-                <button type="button" class="btn btn-primary grow" (click)="edit()"><f-icon name="edit" [size]="16" color="#fff" [width]="2.2" /> Modifier</button>
-              }
-            </div>
-          } @else {
-            <div class="row">
-              <button type="button" class="btn btn-soft" (click)="cancelEdit()">Annuler</button>
-              <button type="button" class="btn btn-primary grow" [disabled]="busy()" (click)="void save()">{{ r.id ? 'Sauvegarder' : 'Créer' }}</button>
-            </div>
-          }
-        </div>
+        @if (hasFoot()) {
+          <div sheetFoot class="foot">
+            @if (ask(); as q) {
+              <div class="q">{{ q.question }}</div>
+              <div class="row wrap">
+                @for (c of q.choices; track c.scope) {
+                  <button type="button" class="btn" [class.btn-danger]="c.danger" [class.btn-primary]="!c.danger" [disabled]="busy()" (click)="answer(c.scope)">{{ c.label }}</button>
+                }
+                <button type="button" class="btn btn-soft" (click)="ask.set(null)">Annuler</button>
+              </div>
+            } @else if (discard()) {
+              <div class="q">Abandonner les modifications ?</div>
+              <div class="row">
+                <button type="button" class="btn btn-soft" (click)="discard.set(null)">Non, continuer</button>
+                <button type="button" class="btn btn-danger" (click)="confirmDiscard()">Abandonner</button>
+              </div>
+            } @else if (overwrite()) {
+              <div class="q">Quelqu’un l’a modifié entre-temps sur un autre appareil. Enregistrer quand même, par-dessus ?</div>
+              <div class="row">
+                <button type="button" class="btn btn-soft" (click)="overwrite.set(false)">Annuler</button>
+                <button type="button" class="btn btn-danger" (click)="overwrite.set(false); void save(undefined, true)">Écraser</button>
+              </div>
+            } @else if (gone()) {
+              <div class="row"><button type="button" class="btn btn-primary grow" (click)="store.closeItem()">Fermer</button></div>
+            } @else if (r.mode === 'vue') {
+              <div class="row wrap">
+                @if (canRemove()) {
+                  <button type="button" class="btn btn-ghost del" [disabled]="busy()" (click)="void remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> {{ meta().removeLabel || 'Supprimer' }}</button>
+                }
+                @for (a of actions(); track a.label) {
+                  <button type="button" class="btn" [class.btn-primary]="!canEdit()" [class.btn-soft]="canEdit()" (click)="a.run()"><f-icon [name]="a.icon" [size]="16" color="currentColor" [width]="2.4" /> {{ a.label }}</button>
+                }
+                @if (canEdit()) {
+                  <button type="button" class="btn btn-primary grow" (click)="edit()"><f-icon name="edit" [size]="16" color="#fff" [width]="2.2" /> Modifier</button>
+                }
+              </div>
+            } @else {
+              <div class="row">
+                <button type="button" class="btn btn-soft" (click)="cancelEdit()">Annuler</button>
+                <button type="button" class="btn btn-primary grow" [disabled]="busy()" (click)="void save()">{{ r.id ? 'Sauvegarder' : 'Créer' }}</button>
+              </div>
+            }
+          </div>
+        }
       </f-sheet>
     }
   `,
@@ -136,6 +138,9 @@ export class ItemSheetComponent {
   readonly ask = signal<Ask | null>(null);
   readonly discard = signal<'back' | 'close' | null>(null);
   readonly overwrite = signal(false);
+  /** Une fiche sans rien à faire (une note ÉcoleDirecte) n'a pas de pied : pas de barre vide sous la lecture. */
+  readonly hasFoot = computed(() => this.ref()?.mode !== 'vue' || !!this.ask() || !!this.discard() || this.overwrite() || this.gone()
+    || this.canRemove() || this.canEdit() || this.actions().length > 0);
   /** L'empreinte de l'élément au moment de passer en édition. */
   private readonly baseline = signal('');
 

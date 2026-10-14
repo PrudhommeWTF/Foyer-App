@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
-import { EcoleApi, EdHomework, EdLessonView, EdVue, EdVueStudent } from './ecole.api';
+import { EcoleApi, EdAverageView, EdGradeView, EdHomework, EdLessonView, EdVue, EdVueStudent } from './ecole.api';
 import { DayExtra, FoyerStore } from './foyer.store';
 import { CAL_KINDS } from './constants';
 import { lessonSlots } from './ecole-slots';
@@ -12,8 +12,6 @@ export const subjectLabel = (s: string): string => {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 };
 
-/** « de mathématiques », « d’anglais » : l'élision devant une voyelle. */
-export const deMatiere = (s: string): string => { const m = subjectLabel(s).toLowerCase(); return (/^[aeiouyéèêàâîôûh]/.test(m) ? 'd’' : 'de ') + m; };
 
 /**
  * État du module École côté écran. Tout vient de /api/ecole : le serveur seul
@@ -42,7 +40,7 @@ export class EcoleStore {
     effect(() => {
       const on = this.foyer.authed() && this.foyer.modEcole();
       if (on && !this.timer) { void this.load(); this.timer = setInterval(() => void this.load(), 5 * 60_000); }
-      if (!on && this.timer) { clearInterval(this.timer); this.timer = null; this.vue.set(null); this.lessons.set([]); }
+      if (!on && this.timer) { clearInterval(this.timer); this.timer = null; this.vue.set(null); this.lessons.set([]); this.archive.set([]); this.notes.set({}); }
     });
     effect(() => this.foyer.setExternalDayExtras('ecole', this.dayExtras()));
     effect(() => this.foyer.setExternalSlots('ecole', lessonSlots(this.lessons(), subjectLabel)));
@@ -62,10 +60,49 @@ export class EcoleStore {
   studentOfMember(memberId: string): EdVueStudent | undefined { return this.students().find((s) => s.memberId === memberId); }
   homeworkOf(studentId: number): EdHomework[] { return this.homework().filter((h) => h.studentId === studentId); }
 
-  /** Cocher ou décocher : l'écran change tout de suite, le serveur répond avec l'état vrai. */
-  /** Coche ou décoche ; renvoie le devoir tel qu'enregistré (inchangé si l'envoi échoue). */
+  /**
+   * Les devoirs passés déjà lus (archives comprises), et les notes par élève :
+   * gardés ici plutôt que dans l'écran, pour qu'une fiche les retrouve par
+   * leur identifiant, et que revenir sur l'écran ne les relise pas.
+   */
+  readonly archive = signal<EdHomework[]>([]);
+  readonly notes = signal<Record<number, { grades: EdGradeView[]; averages: EdAverageView[] }>>({});
+
+  /** Lit l'historique d'un élève une fois (jusqu'à hier). */
+  async loadArchive(studentId: number): Promise<void> {
+    if (this.archive().some((h) => h.studentId === studentId)) return;
+    const today = this.vue()?.today || this.foyer.todayStr();
+    const got = (await this.api.archives(studentId, '2000-01-01', this.foyer.addDays(today, -1))).homework;
+    this.archive.update((l) => [...l.filter((h) => h.studentId !== studentId), ...got]);
+  }
+  /** Lit les notes et moyennes d'un élève, à chaque ouverture de l'onglet (elles bougent). */
+  async loadNotes(studentId: number): Promise<void> {
+    const r = await this.api.notes(studentId);
+    this.notes.update((n) => ({ ...n, [studentId]: { grades: r.grades, averages: r.averages } }));
+  }
+
+  /** Un devoir par son identifiant : à venir, ou déjà dans l'historique lu. */
+  homeworkById(id: number): EdHomework | null {
+    return this.homework().find((h) => h.id === id) ?? this.archive().find((h) => h.id === id) ?? null;
+  }
+  /** Une note par son identifiant, avec l'élève et la moyenne de sa matière sur sa période quand ÉcoleDirecte la donne. */
+  gradeById(id: number): { grade: EdGradeView; studentId: number; average: EdAverageView | null } | null {
+    for (const [sid, n] of Object.entries(this.notes())) {
+      const grade = n.grades.find((g) => g.id === id);
+      if (grade) {
+        const average = n.averages.find((a) => a.periodCode === grade.period && subjectLabel(a.subject) === subjectLabel(grade.subject)) ?? null;
+        return { grade, studentId: Number(sid), average };
+      }
+    }
+    return null;
+  }
+
+  /** Coche ou décoche ; renvoie le devoir tel qu'enregistré (inchangé si l'envoi échoue). L'historique lu suit. */
   async setDone(h: EdHomework, fait: boolean): Promise<EdHomework> {
-    const swap = (x: EdHomework): void => this.vue.update((v) => (v ? { ...v, homework: v.homework.map((y) => (y.id === x.id ? x : y)) } : v));
+    const swap = (x: EdHomework): void => {
+      this.vue.update((v) => (v ? { ...v, homework: v.homework.map((y) => (y.id === x.id ? x : y)) } : v));
+      this.archive.update((l) => l.map((y) => (y.id === x.id ? x : y)));
+    };
     swap({ ...h, done: fait, pending: true });
     this.busy.update((s) => new Set([...s, h.id]));
     let out = h;
@@ -80,21 +117,19 @@ export class EcoleStore {
   }
 
   /**
-   * Ce que l'accueil dit en une ligne : par enfant, ce qui reste pour demain,
-   * dont les interrogations. Les devoirs eux-mêmes sont déjà dans la tuile Tâches.
+   * Ce que l'accueil montre de demain : par enfant, un devoir par ligne (les
+   * interrogations d'abord), qui s'ouvre en fiche. Un enfant sans rien pour
+   * demain garde sa ligne, pour qu'on sache qu'il n'a rien plutôt qu'oublié.
    */
-  readonly tomorrowLines = computed<string[]>(() => {
+  readonly tomorrowByStudent = computed<{ id: number; name: string; items: EdHomework[] }[]>(() => {
     const v = this.vue();
     if (!v) return [];
     const demain = this.foyer.addDays(v.today, 1);
-    return v.students.map((s) => {
-      const name = this.foyer.memberName(s.memberId) || s.firstName;
-      const todo = v.homework.filter((h) => h.studentId === s.id && h.due === demain && !h.done);
-      if (!todo.length) return `${name} : rien pour demain`;
-      const tests = todo.filter((h) => h.isTest);
-      return `${name} : ${todo.length} devoir${todo.length > 1 ? 's' : ''} pour demain`
-        + (tests.length ? `, dont ${tests.length === 1 ? 'une interrogation ' + deMatiere(tests[0].subject) : tests.length + ' interrogations'}` : '');
-    });
+    return v.students.map((s) => ({
+      id: s.id, name: this.foyer.memberName(s.memberId) || s.firstName,
+      items: v.homework.filter((h) => h.studentId === s.id && h.due === demain && !h.archived)
+        .sort((a, b) => Number(a.done) - Number(b.done) || Number(b.isTest) - Number(a.isTest) || a.subject.localeCompare(b.subject)),
+    }));
   });
 
   /** La même chose en une ligne courte, pour la tuile de la grille d'accueil : « Demain : Léna 1 · Nolan 2, 1 interro ». */
