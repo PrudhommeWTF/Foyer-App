@@ -2,7 +2,7 @@
 
 Un tap sur un élément, d'où qu'il vienne (accueil, agenda, recherche, notification), ouvre sa **fiche** par-dessus l'écran courant, **sans changer d'écran**. On lit, on modifie dans la même fiche, on ferme : on est toujours là où l'on était, au même endroit du défilement, sur le même mois de l'agenda.
 
-Types passés par la fiche à ce jour : **événement**, **tâche** (y compris préparation et devoirs, voir [`taches.md`](taches.md#fiche-dune-tâche)), **repas** (un créneau d'un jour) et **recette**. Les autres modules suivent (créneau d'emploi du temps, article, lieu, contact, carte, employé, devoir, note).
+Types passés par la fiche à ce jour : **événement**, **tâche** (y compris préparation et devoirs, voir [`taches.md`](taches.md#fiche-dune-tâche)), **repas** (un créneau d'un jour), **recette** et **créneau d'emploi du temps** (voir [`emploi-du-temps.md`](emploi-du-temps.md#fiche-dun-créneau)). Les autres modules suivent (article, lieu, contact, carte, employé, devoir, note).
 
 Un repas mène à ses recettes : un tap sur l'une d'elles ouvre sa fiche **par-dessus** (pile de deux niveaux), et le retour ramène au repas. Un créneau vide s'ouvre directement en saisie, le jour et le moment passés dans `ctx.date` et `ctx.slot`.
 
@@ -15,7 +15,7 @@ Un repas mène à ses recettes : un tap sur l'une d'elles ouvre sa fiche **par-d
 | Sauvegarder | Retour à la vue, l'élément à jour. Sauvegarder sans rien changer n'écrit rien. |
 | Création (menu +, tap sur un jour libre) | La fiche s'ouvre directement en édition, bouton **Créer** ; elle se referme une fois créé. |
 | Supprimer | Pas de confirmation : l'élément disparaît, le toast propose **Annuler** quelques secondes (un repas se « Retire », avec son événement d'agenda, et revient avec lui). Les types à perte lourde se confirment dans la fiche, sans annulation : la recette aujourd'hui, le lieu avec son inventaire plus tard. Sur téléphone, le toast passe en haut de l'écran tant qu'une fiche est ouverte, pour ne pas masquer ses boutons. |
-| Série (événement récurrent) | Enregistrer ou supprimer depuis une occurrence demande « Cette occurrence » ou « Toute la série », au moment d'agir. |
+| Série (événement récurrent, créneau hebdomadaire) | Enregistrer ou supprimer depuis une occurrence demande la portée au moment d'agir : « Cette occurrence » ou « Toute la série » pour un événement ; « Ce jour seulement », « À partir du … » ou « À toute la série » pour un créneau. |
 | Notification | Un tap sur un rappel de tâche ouvre sa fiche : sur l'écran en cours si l'application était ouverte, sur l'accueil sinon. |
 | Retour | Bouton retour Android, glissé de Safari, **Échap** sur Mac, ou poignée glissée vers le bas (seul geste retour d'une PWA installée sur iPhone) : de l'édition à la vue, de la vue à l'écran. Si quelque chose a été saisi, « Abandonner les modifications ? » d'abord. |
 | Modifié ailleurs | La vue suit l'élément. En édition, un bandeau dit « Modifié par Nolwenn à l'instant », et Sauvegarder demande avant d'écraser. |

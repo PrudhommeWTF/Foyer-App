@@ -18,7 +18,7 @@ import { FinancesScreen } from '../screens/finances/finances';
 import { EmployeScreen } from '../screens/employe/employe';
 import { RepasScreen } from '../screens/repas/repas';
 import { RecettesScreen } from '../screens/recettes/recettes';
-import { PlanningScreen } from '../screens/planning';
+import { PlanningScreen } from '../screens/planning/planning';
 import { SettingsScreen } from '../screens/settings/settings';
 import { LieuxScreen } from '../screens/lieux';
 import { EcoleScreen } from '../screens/ecole';
