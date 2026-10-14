@@ -106,7 +106,7 @@ export class TopbarComponent {
     const s = this.store;
     s.patch({ addMenuOpen: false });
     switch (id) {
-      case 'event': s.patch({ screen: 'calendar' }); s.openEvent(); break;
+      case 'event': s.openItem('event', null); break;
       case 'task': s.patch({ screen: 'taches' }); s.openTask(); break;
       case 'shop': s.pickShopFromMenu(); break;
       case 'recipe': s.patch({ screen: 'recettes' }); s.newRecipe(); break;

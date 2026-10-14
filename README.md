@@ -128,6 +128,10 @@ Foyer-App/
   Voir [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md).
 - Le **frontend** est une SPA. Toute la logique métier (dérivés budget, récurrence agenda,
   génération de courses) est portée fidèlement depuis la maquette de design.
+- Un tap sur un élément ouvre sa **fiche** par-dessus l'écran courant (vue, puis « Modifier »
+  dans la même fiche), sans changer d'écran ; le bouton retour, Échap ou la poignée la
+  referment. Un registre de types la rend commune à tous les modules. Voir
+  [`docs/fiche-element.md`](docs/fiche-element.md).
 - L'app utilise un `base href` **relatif** : un seul build fonctionne servi à la racine ou
   derrière un reverse-proxy sur un sous-chemin.
 

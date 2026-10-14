@@ -7,8 +7,9 @@ import { GenerateModal } from './generate-modal';
 import { RepairModal } from './repair-modal';
 import { MemberModalsComponent } from './member-modals';
 import { SearchModalComponent } from './search-modal';
+import { ItemSheetComponent } from './item-sheet';
 import { HomeScreen } from '../screens/home/home';
-import { CalendarScreen } from '../screens/calendar';
+import { CalendarScreen } from '../screens/calendar/calendar';
 import { CoursesScreen } from '../screens/courses';
 import { TachesScreen } from '../screens/taches/taches';
 import { ContactsScreen } from '../screens/contacts';
@@ -29,7 +30,7 @@ import { EcoleStore } from '../core/ecole.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     SidebarComponent, TopbarComponent, NotificationsComponent,
-    MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal,
+    MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal, ItemSheetComponent,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
     FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen,
   ],
@@ -80,6 +81,8 @@ import { EcoleStore } from '../core/ecole.store';
     @if (store.ui().notifOpen) { <app-notifications /> }
     @if (store.ui().searchOpen) { <app-search-modal /> }
     <app-member-modals />
+    <!-- La fiche d'élément : par-dessus n'importe quel écran, sans en changer. -->
+    @if (store.data()) { <app-item-sheet /> }
   `,
   styles: [`
     :host { display: block; }
