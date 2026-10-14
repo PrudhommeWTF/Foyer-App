@@ -82,9 +82,9 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
         </div>
         @for (a of activity(); track $index) {
           <div class="act">
-            <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" />
+            @if (a.author) { <f-avatar [ini]="authorIni(a.author)" color="#3D6FA8" [size]="36" /> } @else { <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" /> }
             <div class="act-b">
-              <div class="act-l"><b>{{ nm(a.by) }}</b>@if (a.via) { <span class="act-via">via un assistant</span>} {{ a.verb }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
+              <div class="act-l"><b>{{ a.author || nm(a.by) }}</b>@if (a.via && a.via !== a.author) { <span class="act-via" [class.ed]="a.via === 'ÉcoleDirecte'">{{ a.via === 'ÉcoleDirecte' ? 'sur ÉcoleDirecte' : 'via un assistant' }}</span>} {{ a.verb }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
               <div class="act-m">
                 <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
                 <span class="act-t">{{ rel(a.at) }}</span>
@@ -331,6 +331,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .act-m { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
     .act-where { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
     .act-via { font-size: 10.5px; font-weight: 800; color: var(--violet); background: rgba(155,111,168,.14); padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
+    .act-via.ed { color: #3D6FA8; background: #E3ECF7; }
     .act-t { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .feed-empty { padding: 30px 10px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 13.5px; line-height: 1.5; }
 
@@ -621,6 +622,11 @@ export class HomeScreen {
   // ---- helpers de rendu ----
   ini(id: string | null): string { return (id && (this.store.data()?.members || []).find((m) => m.id === id)?.ini) || '?'; }
   col(id: string | null): string { return id ? this.store.memberColor(id) : '#8A7E74'; }
+  /** Initiales d'un auteur hors foyer, civilité ôtée : « Mme MAZARS B. » donne « MB ». */
+  authorIni(name: string): string {
+    const w = name.split(/\s+/).filter((x) => x && !/^(M|Mme|Mlle|MM|Mmes|Mr|Mrs)\.?$/i.test(x));
+    return w.slice(0, 2).map((x) => x[0]).join('').toUpperCase() || 'ED';
+  }
   nm(id: string | null): string { return (id && this.store.memberName(id)) || 'Quelqu’un'; }
   rel(iso: string): string { return relTime(iso, Date.now()); }
 

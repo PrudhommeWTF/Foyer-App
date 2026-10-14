@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { recentActivity, relTime } from './activity';
+import { recentActivity, relTime, teacherOf } from './activity';
 import { EventItem, HouseholdState, ShopItem, ShopList, TaskItem, TaskList } from './models';
 
 // Fabriques typées : les fixtures ne portent que ce que le fil lit, mais restent
@@ -54,6 +54,31 @@ describe('recentActivity', () => {
     const done = feed.filter((e) => e.verb === 'a terminé la tâche');
     assert.equal(done.length, 2);
     assert.equal(feed[0].at, '2026-09-08T20:00:00.000Z');
+  });
+
+  it('un devoir ÉcoleDirecte : donné par son professeur, terminé par l’élève sur ÉcoleDirecte ou par un membre dans Foyer', () => {
+    const note = 'Lire le chapitre 2.\n\nDonné par Mme MAZARS B. le 09/10/2026.';
+    const s = state({
+      taskLists: [tList({ id: 'l1', name: 'Devoirs de Raphaël' })],
+      tasks: [
+        task({ id: 't1', text: 'Français : lire', edId: 7, note, who: ['raph'], at: '2026-10-09T17:00:00.000Z', by: null, via: 'ÉcoleDirecte',
+          done: true, doneAt: '2026-10-10T18:00:00.000Z', doneBy: null }),
+        task({ id: 't2', text: 'Maths', edId: 8, note: 'Exercices.', who: ['raph'], at: '2026-10-11T17:00:00.000Z', by: null, via: 'ÉcoleDirecte',
+          done: true, doneAt: '2026-10-12T18:00:00.000Z', doneBy: 'thomas' }),
+      ],
+    });
+    const [d2, a2, d1, a1] = recentActivity(s, 12);
+    assert.deepEqual([a1.author, a1.by, a1.via, a1.verb], ['Mme MAZARS B.', null, 'ÉcoleDirecte', 'a donné le devoir']);
+    assert.deepEqual([d1.author, d1.by, d1.via, d1.verb], [undefined, 'raph', 'ÉcoleDirecte', 'a terminé le devoir']);
+    assert.equal(a2.author, 'ÉcoleDirecte', 'sans professeur connu, la source');
+    assert.deepEqual([d2.by, d2.via], ['thomas', null]);
+  });
+
+  it('professeur tiré de la note de synchronisation', () => {
+    assert.equal(teacherOf('Texte.\n\nDonné par M. ANONYME le 12/10/2026.'), 'M. ANONYME');
+    assert.equal(teacherOf('Donné par Mme MAZARS B..'), 'Mme MAZARS B.');
+    assert.equal(teacherOf('Une note saisie à la main.'), null);
+    assert.equal(teacherOf(undefined), null);
   });
 
   it('respecte la limite', () => {
