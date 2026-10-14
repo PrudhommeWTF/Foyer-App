@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList' | 'shift' | 'employee';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList' | 'shift' | 'employee' | 'homework' | 'grade';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -115,6 +115,18 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
     kind: 'employee', label: 'Employé à domicile', newTitle: 'Ajouter un employé', editTitle: 'Modifier l’employé',
     screen: 'employe', openLabel: 'Ouvrir dans Employé à domicile', editable: true, removeMode: 'confirm', removeLabel: 'Retirer',
     module: 'modEmploye', adultOnly: true,
+  },
+  // École : tout vient d'ÉcoleDirecte, rien ne s'y modifie ni ne s'y supprime.
+  // Seule la case « Fait » d'un devoir s'écrit (et part à ÉcoleDirecte).
+  homework: {
+    kind: 'homework', label: 'Devoir', newTitle: 'Devoir', editTitle: 'Devoir',
+    screen: 'ecole', openLabel: 'Ouvrir dans École', editable: false, readOnlyReason: 'Le devoir vient d’ÉcoleDirecte.', removeMode: null,
+    module: 'modEcole',
+  },
+  grade: {
+    kind: 'grade', label: 'Note', newTitle: 'Note', editTitle: 'Note',
+    screen: 'ecole', openLabel: 'Ouvrir dans École', editable: false, readOnlyReason: 'La note vient d’ÉcoleDirecte.', removeMode: null,
+    module: 'modEcole',
   },
 };
 
