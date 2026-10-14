@@ -1007,7 +1007,7 @@ export class CalendarScreen {
   openExtra(e: Event, ex: DayExtra): void {
     if (!ex.id) return;
     e.stopPropagation();
-    this.store.openTaskItem(ex.id);
+    this.store.openItem('task', ex.id);
   }
 
   /** Couleur du type de créneau, pour marquer d'un coup d'oeil un événement d'emploi du temps. */

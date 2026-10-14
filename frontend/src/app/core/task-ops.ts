@@ -191,3 +191,20 @@ export function inverseOf(op: TaskOpDraft, before: TaskItem | undefined): TaskOp
     case 'reset': return null;
   }
 }
+
+/**
+ * Les champs qu'un brouillon de modification pose sur une tâche : sans date,
+ * ni heure ni rappel ; catégorie et note sans blancs autour.
+ */
+export function draftFields(d: TaskDraft): TaskFields {
+  return { text: d.text, listId: d.listId, who: d.who, due: d.due, time: d.due ? d.time : null, cat: d.cat.trim(), note: d.note.trim(), rec: d.rec, remind: d.due ? d.remind : null };
+}
+
+// Forme comparable d'une tâche ou d'un brouillon : l'ordre des membres et les
+// valeurs vides (absente, nulle, chaîne vide) ne sont pas des différences.
+const shape = (f: TaskFields): string => JSON.stringify([
+  f.text?.trim() || '', f.listId || '', [...(f.who || [])].sort(), f.due || null, (f.due && f.time) || null,
+  f.cat?.trim() || '', f.note?.trim() || '', f.rec ? JSON.stringify(f.rec, Object.keys(f.rec).sort()) : null, (f.due && f.remind) || null,
+]);
+/** Le brouillon change-t-il la tâche ? Enregistrer sans rien toucher ne doit rien envoyer. */
+export function taskDraftChanges(t: TaskItem, d: TaskDraft): boolean { return shape(t) !== shape(draftFields(d)); }

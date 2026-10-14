@@ -2,7 +2,7 @@
 
 Un tap sur un élément, d'où qu'il vienne (accueil, agenda, recherche, notification), ouvre sa **fiche** par-dessus l'écran courant, **sans changer d'écran**. On lit, on modifie dans la même fiche, on ferme : on est toujours là où l'on était, au même endroit du défilement, sur le même mois de l'agenda.
 
-Types passés par la fiche à ce jour : **événement**. Les autres modules suivent, un type par PR (tâche, repas, recette, créneau, article, lieu, contact, carte, employé, devoir, note).
+Types passés par la fiche à ce jour : **événement**, **tâche** (y compris préparation et devoirs, voir [`taches.md`](taches.md#fiche-dune-tâche)). Les autres modules suivent, un type par PR (repas, recette, créneau, article, lieu, contact, carte, employé, devoir, note).
 
 ## Ce que voit l'utilisateur
 
@@ -14,6 +14,7 @@ Types passés par la fiche à ce jour : **événement**. Les autres modules suiv
 | Création (menu +, tap sur un jour libre) | La fiche s'ouvre directement en édition, bouton **Créer** ; elle se referme une fois créé. |
 | Supprimer | Pas de confirmation : l'élément disparaît, le toast propose **Annuler** quelques secondes. Les types à perte lourde (recette, lieu avec son inventaire) demanderont confirmation. |
 | Série (événement récurrent) | Enregistrer ou supprimer depuis une occurrence demande « Cette occurrence » ou « Toute la série », au moment d'agir. |
+| Notification | Un tap sur un rappel de tâche ouvre sa fiche : sur l'écran en cours si l'application était ouverte, sur l'accueil sinon. |
 | Retour | Bouton retour Android, glissé de Safari, **Échap** sur Mac, ou poignée glissée vers le bas (seul geste retour d'une PWA installée sur iPhone) : de l'édition à la vue, de la vue à l'écran. Si quelque chose a été saisi, « Abandonner les modifications ? » d'abord. |
 | Modifié ailleurs | La vue suit l'élément. En édition, un bandeau dit « Modifié par Nolwenn à l'instant », et Sauvegarder demande avant d'écraser. |
 | Supprimé ailleurs | « Cet élément n'existe plus », avec un bouton Fermer. |
@@ -32,7 +33,7 @@ Types passés par la fiche à ce jour : **événement**. Les autres modules suiv
 
 1. Ajouter l'identifiant à `ItemKindId` et sa partie pure à `ITEM_KINDS` (`core/items.ts`) : libellés, écran du module, `editable` (sinon `readOnlyReason`), mode de suppression (`undo`, `confirm` ou `null`), module et réservé aux adultes le cas échéant.
 2. Écrire, dans le dossier du module, un composant de **vue** (entrées `item`, `ctx`, lecture seule) et, si le type est modifiable, un composant de **formulaire** qui implémente `ItemForm` (`dirty` et `submit(scope?)`, qui appelle les méthodes existantes du store et rend `done`, `invalid` ou une question).
-3. Déclarer le descripteur (`ItemKind`) : `load`, `title`, `view`, `form`, `remove`, `actions`, `openIn`, `fingerprint`, `changedBy`. Exemple : `screens/calendar/event.item.ts`.
+3. Déclarer le descripteur (`ItemKind`) : `load`, `title`, `view`, `form`, `remove`, `actions`, `openIn`, `fingerprint`, `changedBy`, et au besoin `canEdit` / `canRemove` (un élément du type qui ne se modifie pas, comme un devoir parmi les tâches) et `openTarget` (« Voir dans École »). Exemples : `screens/calendar/event.item.ts`, `screens/taches/task.item.ts`.
 4. L'inscrire dans `shell/item-registry.ts` (le typage refuse un type sans descripteur).
 5. Remplacer **tous** les points d'entrée du type par `store.openItem(...)` et supprimer l'ancienne modale dans la même PR : jamais deux comportements pour un même type.
 

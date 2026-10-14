@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event';
+export type ItemKindId = 'event' | 'task';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -47,6 +47,10 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   event: {
     kind: 'event', label: 'Événement', newTitle: 'Nouvel événement', editTitle: 'Modifier l’événement',
     screen: 'calendar', openLabel: 'Ouvrir dans Agenda', editable: true, removeMode: 'undo',
+  },
+  task: {
+    kind: 'task', label: 'Tâche', newTitle: 'Nouvelle tâche', editTitle: 'Modifier la tâche',
+    screen: 'taches', openLabel: 'Ouvrir dans Tâches', editable: true, removeMode: 'undo',
   },
 };
 
@@ -90,10 +94,19 @@ export interface ItemKind<T, S> {
   form?: Type<ItemForm>;
   /** Supprime, ou pose d'abord une question. Absent : pas de bouton Supprimer. */
   remove?(s: S, it: T, ctx: ItemCtx | undefined, scope?: string): ItemResult;
+  /**
+   * Cet élément-ci se modifie-t-il, se supprime-t-il ? Pour un type modifiable
+   * dont certains éléments ne le sont pas (un devoir venu d'ÉcoleDirecte parmi
+   * les tâches). Absent : oui. Jamais de bouton sans effet.
+   */
+  canEdit?(it: T): boolean;
+  canRemove?(it: T): boolean;
   /** Actions propres, en vue. */
   actions?(s: S, it: T, ctx?: ItemCtx): ItemAction[];
   /** Emmène dans le module, sur le bon contexte (le mois de l'événement). */
   openIn(s: S, it: T, ctx?: ItemCtx): void;
+  /** Un autre module que celui du type pour cet élément-ci (un devoir : « Voir dans École »). Absent : `meta`. */
+  openTarget?(it: T, s: S): { label: string; screen: string } | null;
   /** Empreinte de l'élément : sert à voir qu'un autre appareil l'a modifié pendant l'édition. */
   fingerprint(it: T): string;
   /** Qui l'a modifié en dernier, pour le dire. */

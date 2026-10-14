@@ -5,7 +5,9 @@
 import type { FoyerStore } from '../core/foyer.store';
 import { ItemKind, ItemKindId } from '../core/items';
 import { EVENT_ITEM } from '../screens/calendar/event.item';
+import { TASK_ITEM } from '../screens/taches/task.item';
 
 export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   event: EVENT_ITEM,
+  task: TASK_ITEM,
 };

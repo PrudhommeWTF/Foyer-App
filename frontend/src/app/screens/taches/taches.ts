@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { FinancesStore } from '../../core/finances.store';
@@ -6,8 +6,7 @@ import { IconComponent } from '../../core/icon';
 import { LIST_ICONS, PALETTE, tint } from '../../core/constants';
 import { ListKind, Place, PlaceItem, TaskItem, TaskList } from '../../core/models';
 import { whoBadges } from '../../core/schedule';
-import { TaskDraft } from '../../core/task-ops';
-import { KIND_LABELS, KIND_ORDER, KIND_SORT, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress, subtasksOf } from '../../core/tasks';
+import { KIND_LABELS, KIND_ORDER, KIND_SORT, REMIND_LABELS, REORDERABLE, TaskGroup, assignedTo, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, subProgress } from '../../core/tasks';
 import { occurrenceProgress, recLabel } from '../../core/recurrence';
 import { parseDay } from '../../core/helpers';
 import { ModalComponent } from '../../shared/modal';
@@ -15,7 +14,6 @@ import { ConfirmComponent } from '../../shared/confirm';
 import { ReorderDirective } from '../../shared/reorder';
 import { SwipeDirective } from '../../shared/swipe';
 import { WhoComponent } from '../../shared/who';
-import { StampComponent } from '../../shared/stamp';
 import { TaskComposerComponent } from './composer';
 
 /**
@@ -34,7 +32,7 @@ import { TaskComposerComponent } from './composer';
   selector: 'screen-taches',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, SwipeDirective, WhoComponent, TaskComposerComponent, StampComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective, SwipeDirective, WhoComponent, TaskComposerComponent],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -227,7 +225,7 @@ import { TaskComposerComponent } from './composer';
                 </span>
               </div>
               <div class="task" fSwipe (swipeRight)="doSwipe(l.task.id, 'right')" (swipeLeft)="doSwipe(l.task.id, 'left')"
-                   [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.editTaskItem(l.task.id)">
+                   [style.border-left]="'4px solid ' + listColor(l.task.listId)" (click)="store.openItem('task', l.task.id)">
                 @if (l.task.rec && l.task.due) {
                   <div class="t-prog" [style.width.%]="taskProgress(l.task) * 100" [style.background]="listColor(l.task.listId)"></div>
                 }
@@ -288,7 +286,7 @@ import { TaskComposerComponent } from './composer';
                       <button class="tick sm" [class.on]="sb.done" (click)="store.toggleTask(sb.id)" [attr.aria-label]="(sb.done ? 'Rouvrir ' : 'Cocher ') + sb.text">
                         @if (sb.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
                       </button>
-                      <button class="sub-text" [class.strike]="sb.done" (click)="store.editTaskItem(sb.id)">{{ sb.text }}</button>
+                      <button class="sub-text" [class.strike]="sb.done" (click)="store.openItem('task', sb.id)">{{ sb.text }}</button>
                       @if (sb.who.length) { <f-who [badges]="badges(sb)" [size]="18" /> }
                     </div>
                   }
@@ -312,7 +310,7 @@ import { TaskComposerComponent } from './composer';
         @if (store.ui().showDone) {
           <div class="list">
             @for (t of done(); track t.id) {
-              <div class="task done" (click)="store.editTaskItem(t.id)">
+              <div class="task done" (click)="store.openItem('task', t.id)">
                 <button class="tick on" (click)="$event.stopPropagation(); store.toggleTask(t.id)" [attr.aria-label]="'Rouvrir ' + t.text"><f-icon name="check" [size]="14" color="#fff" [width]="3.4" /></button>
                 <div class="t-body">
                   <div class="t-text strike">{{ t.text }}</div>
@@ -325,52 +323,6 @@ import { TaskComposerComponent } from './composer';
       }
     </div>
 
-    <!-- Modifier une tâche, ou en créer une depuis le menu « + » -->
-    @if (editing() || store.ui().taskNew) {
-      <f-modal [title]="editing() ? 'Modifier la tâche' : 'Nouvelle tâche'" [maxWidth]="520" (close)="closeTask()">
-        <app-task-composer [task]="editing()" (saved)="saveTask($event)" (deleted)="store.removeTask(editing()!.id, $event)" (closed)="closeTask()" />
-        @if (editing(); as t) {
-          @if (!t.parentId) {
-            <!-- Un seul niveau : une sous-tâche n'a pas de bloc à elle. -->
-            <div class="subs-edit">
-              <div class="field-label">Sous-tâches{{ editSubs().length ? ' · ' + progress(editSubs()) : '' }}</div>
-              <div class="sub-list" [fReorder]="subIds(editSubs())" (reordered)="store.reorderTasks($event)">
-                @for (sb of editSubs(); track sb.id) {
-                  <div class="sub-edit" [attr.data-rid]="sb.id">
-                    <button class="grip sm" data-grip [attr.aria-label]="'Déplacer ' + sb.text">
-                      <f-icon name="grip" [size]="16" color="var(--ink3)" [width]="2.8" />
-                    </button>
-                    <button class="tick sm" [class.on]="sb.done" (click)="store.toggleTask(sb.id)" [attr.aria-label]="(sb.done ? 'Rouvrir ' : 'Cocher ') + sb.text">
-                      @if (sb.done) { <f-icon name="check" [size]="11" color="#fff" [width]="3.4" /> }
-                    </button>
-                    <span class="sub-text" [class.strike]="sb.done">{{ sb.text }}</span>
-                    <button class="icon-btn sm" (click)="store.removeTask(sb.id)" [attr.aria-label]="'Supprimer ' + sb.text">
-                      <f-icon name="trash" [size]="14" color="var(--primary)" [width]="2" />
-                    </button>
-                  </div>
-                }
-              </div>
-              <input class="input sub-add" placeholder="Ajouter une sous-tâche…" enterkeyhint="done" autocomplete="off"
-                     [ngModel]="subText()" (ngModelChange)="subText.set($event)" (keydown.enter)="addSub(t.id)" />
-              <div class="plan-hint">Une sous-tâche porte un intitulé et des membres, pas de date ni de rappel : ceux du parent suffisent.</div>
-            </div>
-          }
-        }
-        @if (editing()?.history?.length) {
-          <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus. -->
-          <div class="hist">
-            <div class="field-label">Réalisations · {{ editing()!.history!.length }}</div>
-            @for (h of lastDone(); track h.at) {
-              <div class="hist-line">{{ store.fmtNumDate(h.at.slice(0, 10)) }}{{ h.by ? ' par ' + store.memberName(h.by) : '' }}@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
-            }
-          </div>
-        }
-        @if (editing(); as t) {
-          <f-stamp [fem]="true" [createdBy]="store.memberName(t.by || '')" [createdAt]="t.at"
-                   [modifiedBy]="store.memberName(t.upBy || '')" [modifiedAt]="t.upAt" />
-        }
-      </f-modal>
-    }
 
     <!-- Liste : nom, type, portée, couleur, icône -->
     @if (store.ui().listForm) {
@@ -574,9 +526,6 @@ import { TaskComposerComponent } from './composer';
     .pill { font-size: 11px; font-weight: 800; padding: 2px 9px; border-radius: 7px; }
     .note-mark { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--ink3); }
     .rec { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--ink3); }
-    .hist { margin-top: 18px; }
-    .hist-line { font-size: 12.5px; font-weight: 700; color: var(--ink2); padding: 4px 0; }
-    .hist-due { color: var(--ink3); }
     .list-badge { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; background: var(--soft2); padding: 2px 8px; border-radius: 6px; }
     .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
     .later { flex: none; border: none; cursor: pointer; padding: 6px 10px; border-radius: 8px; background: var(--soft2); color: var(--ink2); font: inherit; font-size: 11.5px; font-weight: 800; }
@@ -589,10 +538,6 @@ import { TaskComposerComponent } from './composer';
     .tick.sm { width: 18px; height: 18px; border-radius: 6px; }
     .sub-text { flex: 1; min-width: 0; text-align: left; border: none; background: transparent; cursor: pointer; padding: 0; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink2); overflow-wrap: anywhere; }
     .sub-text.strike { color: var(--ink3); text-decoration: line-through; }
-    .subs-edit { margin-top: 20px; }
-    .sub-list { display: flex; flex-direction: column; gap: 6px; }
-    .sub-edit { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 12px; padding: 8px 12px; }
-    .sub-add { margin-top: 10px; padding: 9px 12px; font-size: 13.5px; }
     .t-sub.muted { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 3px; }
     .empty { color: var(--ink3); font-weight: 700; font-size: 13.5px; padding: 16px 0; }
     .done-toggle { display: flex; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .06em; padding: 6px 0 12px; }
@@ -659,7 +604,6 @@ export class TachesScreen {
   readonly kinds = KIND_ORDER;
 
   active = computed(() => this.store.ui().activeList);
-  readonly subText = signal('');
   /** Les listes visibles, dans l'ordre des types puis des positions. */
   lists = computed(() => {
     const all = this.store.visibleTaskLists(this.store.ui().showArchived);
@@ -696,7 +640,6 @@ export class TachesScreen {
   });
   groups = computed<TaskGroup[]>(() => groupOpen(this.scoped(), this.store.todayStr(), this.activeObj()?.kind || 'taches', this.activeObj()?.order === 'manuel' ? 'manuel' : 'echeance'));
   done = computed(() => doneTasks(this.scoped()));
-  editing = computed(() => { const id = this.store.ui().taskEdit; return id ? this.store.task(id) || null : null; });
 
   /** Le glissement à droite termine-t-il la tâche ? Faux si l'utilisateur a inversé les deux sens. */
   rightDone = computed(() => this.store.setting('taskSwipe') !== 'right-delete');
@@ -778,7 +721,6 @@ export class TachesScreen {
   /** Remplissage de la barre de progression d'une tâche récurrente (0 à 1), vers l'occurrence à venir. */
   taskProgress(t: TaskItem): number { return t.rec && t.due ? occurrenceProgress(t.rec, t.due, this.store.todayStr()) : 0; }
   remindOf(t: TaskItem): string { return t.remind ? REMIND_LABELS[t.remind].toLowerCase() : ''; }
-  lastDone() { return (this.editing()?.history || []).slice(-5).reverse(); }
   lateLabel(days: number): string {
     if (days < 7) return days + (days > 1 ? ' jours' : ' jour');
     if (days < 60) { const w = Math.round(days / 7); return w + (w > 1 ? ' semaines' : ' semaine'); }
@@ -796,21 +738,5 @@ export class TachesScreen {
   ids(g: TaskGroup): string[] { return g.lines.map((l) => l.task.id); }
   subIds(subs: TaskItem[]): string[] { return subs.map((sb) => sb.id); }
   progress(subs: TaskItem[]): string { const p = subProgress(subs); return p ? p.done + '/' + p.total : ''; }
-  editSubs(): TaskItem[] { const t = this.editing(); return t ? subtasksOf(this.d().tasks, t.id) : []; }
-  addSub(parentId: string): void {
-    if (this.store.addSubtask(parentId, this.subText())) this.subText.set('');
-  }
 
-  closeTask(): void { this.subText.set(''); this.store.patch({ taskEdit: null, taskNew: false }); }
-  saveTask(draft: TaskDraft & { scope: 'one' | 'all' }): void {
-    const t = this.editing();
-    if (t) {
-      this.store.updateTask(t.id, { text: draft.text, listId: draft.listId, who: draft.who, due: draft.due, time: draft.due ? draft.time : null, cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: draft.due ? draft.remind : null }, draft.scope);
-      if (draft.scope === 'all') this.store.toast(t.rec || draft.rec ? 'Série modifiée' : 'Tâche modifiée');
-    } else {
-      this.store.createTask(draft);
-      this.store.toast('Tâche ajoutée');
-    }
-    this.closeTask();
-  }
 }

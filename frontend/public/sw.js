@@ -173,7 +173,7 @@ self.addEventListener('push', (event) => {
     icon: './icon-192.png',
     badge: './icon-192.png',
     tag: data.tag || undefined,
-    data: { url: data.url || self.registration.scope },
+    data: { url: data.url || self.registration.scope, tag: data.tag || '' },
   };
   event.waitUntil((async () => {
     await self.registration.showNotification(title, options);
@@ -186,9 +186,19 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || self.registration.scope;
+  const data = event.notification.data || {};
+  const url = data.url || self.registration.scope;
+  // Un rappel de tâche (« task-<id> ») ouvre la fiche de la tâche : dans l'app
+  // déjà ouverte par un message, sinon par l'adresse que l'app lit au démarrage.
+  const tag = typeof data.tag === 'string' ? data.tag : '';
+  const fiche = tag.startsWith('task-') ? { kind: 'task', id: tag.slice(5) } : null;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-    for (const client of list) { if ('focus' in client) return client.focus(); }
-    return self.clients.openWindow(url);
+    for (const client of list) {
+      if ('focus' in client) {
+        if (fiche) client.postMessage({ type: 'foyer-fiche', kind: fiche.kind, id: fiche.id });
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(fiche ? url.split('#')[0] + '#fiche=' + fiche.kind + ':' + encodeURIComponent(fiche.id) : url);
   }));
 });

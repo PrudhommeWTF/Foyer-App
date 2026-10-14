@@ -50,8 +50,8 @@ type Scope = 'one' | 'all';
           <input #field class="input" [placeholder]="task() ? 'Intitulé' : 'Ajouter une tâche…'" enterkeyhint="done"
                  autocomplete="off" autocapitalize="sentences"
                  [ngModel]="text()" (ngModelChange)="text.set($event)"
-                 (focus)="focused.set(true)" (keydown.enter)="task() ? askOrDo('save') : submit()" (keydown.escape)="escape()" />
-          @if (!task()) {
+                 (focus)="focused.set(true)" (keydown.enter)="embedded() ? null : task() ? askOrDo('save') : submit()" (keydown.escape)="escape($event)" />
+          @if (!task() && !embedded()) {
             <button class="go" [disabled]="!text().trim()" (click)="submit()" aria-label="Ajouter">
               <f-icon name="check" [size]="18" color="#fff" [width]="3" />
             </button>
@@ -224,7 +224,7 @@ type Scope = 'one' | 'all';
             }
           }
 
-          @if (task(); as t) {
+          @if (task(); as t) { @if (!embedded()) {
             @if (ask()) {
               <!-- Sur une série, la question est posée simplement, et une seule fois. -->
               <div class="ask">
@@ -243,7 +243,7 @@ type Scope = 'one' | 'all';
               </div>
               @if (t.rec) { <div class="hint">{{ recText() }}</div> }
             }
-          }
+          } }
         }
       </div>
     }
@@ -318,6 +318,12 @@ export class TaskComposerComponent {
   readonly listId = input('');
   /** Libellé du bouton replié. Vide : toujours déplié. */
   readonly opener = input('');
+  /**
+   * Dans la fiche d'élément : ni pied ni question de portée (la fiche porte
+   * Annuler, Sauvegarder et la question), et Entrée n'enregistre rien d'elle-même.
+   * La fiche lit le brouillon par `draft()`.
+   */
+  readonly embedded = input(false);
 
   /** `scope` ne compte que pour une série modifiée : cette occurrence, ou toute la série. */
   readonly saved = output<TaskDraft & { scope: Scope }>();
@@ -343,6 +349,7 @@ export class TaskComposerComponent {
   readonly freqs: TaskRec['freq'][] = ['daily', 'weekly', 'monthly', 'yearly'];
   readonly dows = [1, 2, 3, 4, 5, 6, 7];
   private field = viewChild<ElementRef<HTMLInputElement>>('field');
+  private seeded = false;
 
   /** La liste ouverte à l'écran. Mémorisée : l'effet ne repart que si elle change vraiment. */
   private readonly activeList = computed(() => this.listId() || this.store.activeTaskListId());
@@ -354,7 +361,11 @@ export class TaskComposerComponent {
       const t = this.task();
       const fallback = this.activeList();
       untracked(() => {
+        // Dans la fiche, la tâche est relue à chaque changement venu d'ailleurs :
+        // on ne pré-remplit qu'une fois, pour ne pas effacer la saisie en cours.
+        if (t && this.embedded() && this.seeded) return;
         if (t) {
+          this.seeded = true;
           this.text.set(t.text); this.who.set([...t.who]); this.due.set(t.due); this.time.set(t.time ?? null);
           this.cat.set(t.cat || ''); this.note.set(t.note || ''); this.list.set(t.listId); this.rec.set(t.rec ? { ...t.rec } : null); this.remind.set(t.remind ?? null);
         } else {
@@ -376,7 +387,7 @@ export class TaskComposerComponent {
   }
 
   /** La barre se montre dès qu'on écrit, ou toujours quand on modifie. */
-  readonly expanded = computed(() => !!this.task() || this.focused() || !!this.text().trim() || !!this.panel());
+  readonly expanded = computed(() => !!this.task() || this.embedded() || this.focused() || !!this.text().trim() || !!this.panel());
   readonly members = computed(() => this.store.data()?.members || []);
   readonly whoMembers = computed(() => { const ids = new Set(this.who()); return this.members().filter((m) => ids.has(m.id)); });
   /** Une liste « Devoirs de … » ne s'offre pas comme destination : elle se remplit depuis ÉcoleDirecte. */
@@ -488,14 +499,21 @@ export class TaskComposerComponent {
     setTimeout(() => this.field()?.nativeElement.focus(), 0);
   }
 
-  pick(s: string): void { this.text.set(s); this.submit(); }
+  pick(s: string): void { this.text.set(s); if (!this.embedded()) this.submit(); }
 
-  escape(): void {
-    if (this.panel()) { this.panel.set(''); return; }
+  escape(e?: Event): void {
+    // Un panneau ouvert se referme d'abord, sans que la fiche autour ne recule.
+    if (this.panel()) { this.panel.set(''); e?.stopPropagation(); return; }
+    if (this.embedded()) return;
     this.reset();
     this.shown.set(false);
     this.focused.set(false);
     this.closed.emit();
+  }
+
+  /** Ce que la saisie donnerait, tel quel. */
+  draft(): TaskDraft {
+    return { text: this.text().trim(), listId: this.list(), who: this.who(), due: this.due(), time: this.time(), cat: this.cat(), note: this.note(), rec: this.rec(), remind: this.due() ? this.remind() : null };
   }
 
   submit(scope: Scope = 'all'): void {

@@ -5,7 +5,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { addDaysIso } from './helpers';
 import { TaskItem } from './models';
-import { TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
+import { TaskOp, TaskOpDraft, applyTaskOp, draftFields, inverseOf, taskDraftChanges } from './task-ops';
 
 const TODAY = '2026-09-02';
 const task = (over: Partial<TaskItem> = {}): TaskItem =>
@@ -182,4 +182,22 @@ test('annuler la pose d’une liste de courses la retire, et localement la clé 
   assert.deepEqual(back, { op: 'edit', id: 't1', shopListId: null });
   const after = applyTaskOp(applyTaskOp([t], { op: 'edit', id: 't1', shopListId: 'cl1', opId: 'a' }), { ...back!, opId: 'b' } as TaskOp);
   assert.equal('shopListId' in after[0], false);
+});
+
+// ---- la fiche : enregistrer sans rien toucher n'envoie rien ----------------------
+
+test('un brouillon repris tel quel de la tâche ne la change pas', () => {
+  const t = { id: 't1', listId: 'l1', text: 'Piscine', who: ['m2', 'm1'], done: false, due: '2026-10-20', time: '17:00', cat: 'Sport', note: '', rec: { freq: 'weekly' as const, every: 1, base: 'due' as const }, remind: '1h' as const };
+  const draft = { text: 'Piscine', listId: 'l1', who: ['m1', 'm2'], due: '2026-10-20', time: '17:00', cat: 'Sport', note: '', rec: { base: 'due' as const, every: 1, freq: 'weekly' as const }, remind: '1h' as const };
+  assert.equal(taskDraftChanges(t as never, draft), false);
+  assert.equal(taskDraftChanges(t as never, { ...draft, due: '2026-10-21' }), true);
+  assert.equal(taskDraftChanges(t as never, { ...draft, note: 'bonnet' }), true);
+  assert.equal(taskDraftChanges(t as never, { ...draft, rec: { ...draft.rec, every: 2 } }), true);
+});
+
+test('une tâche sans date : heure et rappel ne comptent pas', () => {
+  const t = { id: 't1', listId: 'l1', text: 'Pain', who: [], done: false, due: null };
+  const draft = { text: 'Pain', listId: 'l1', who: [], due: null, time: '09:00', cat: '', note: '  ', rec: null, remind: '1h' as const };
+  assert.equal(taskDraftChanges(t as never, draft), false);
+  assert.deepEqual(draftFields(draft), { text: 'Pain', listId: 'l1', who: [], due: null, time: null, cat: '', note: '', rec: null, remind: null });
 });

@@ -4,7 +4,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { SheetComponent } from '../shared/sheet';
 import { relTime } from '../core/activity';
-import { ItemChoice, ItemForm, ItemResult } from '../core/items';
+import { ITEM_KINDS, ItemChoice, ItemForm, ItemKindId, ItemResult } from '../core/items';
 import { sheetDepth } from '../core/item-sheet';
 import { ITEM_REGISTRY } from './item-registry';
 
@@ -35,7 +35,7 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
         } @else if (r.mode === 'vue') {
           <ng-container *ngComponentOutlet="desc().view; inputs: { item: item(), ctx: r.ctx }" />
           @if (openInShown()) {
-            <button type="button" class="open-in" (click)="openIn()">{{ meta().openLabel }} <f-icon name="chevronRight" [size]="15" color="currentColor" [width]="2.4" /></button>
+            <button type="button" class="open-in" (click)="openIn()">{{ target().label }} <f-icon name="chevronRight" [size]="15" color="currentColor" [width]="2.4" /></button>
           }
         } @else {
           @if (remote(); as rm) {
@@ -68,11 +68,14 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
           } @else if (gone()) {
             <div class="row"><button type="button" class="btn btn-primary grow" (click)="store.closeItem()">Fermer</button></div>
           } @else if (r.mode === 'vue') {
-            <div class="row">
-              @if (desc().remove) {
+            <div class="row wrap">
+              @if (canRemove()) {
                 <button type="button" class="btn btn-ghost del" (click)="remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> Supprimer</button>
               }
-              @if (meta().editable && desc().form) {
+              @for (a of actions(); track a.label) {
+                <button type="button" class="btn" [class.btn-primary]="!canEdit()" [class.btn-soft]="canEdit()" (click)="a.run()"><f-icon [name]="a.icon" [size]="16" color="currentColor" [width]="2.4" /> {{ a.label }}</button>
+              }
+              @if (canEdit()) {
                 <button type="button" class="btn btn-primary grow" (click)="edit()"><f-icon name="edit" [size]="16" color="#fff" [width]="2.2" /> Modifier</button>
               }
             </div>
@@ -119,8 +122,15 @@ export class ItemSheetComponent {
     if (r.mode === 'edition') return r.id ? this.meta().editTitle : this.meta().newTitle;
     return it ? this.desc().title(it) : '';
   });
-  /** « Ouvrir dans Agenda » : inutile quand on y est déjà. */
-  readonly openInShown = computed(() => this.store.ui().screen !== this.meta().screen);
+  /** Où « Ouvrir dans … » emmène : le module du type, sauf avis contraire de l'élément. */
+  readonly target = computed(() => { const it = this.item(); return (it && this.desc().openTarget?.(it, this.store)) || { label: this.meta().openLabel, screen: this.meta().screen }; });
+  /** Inutile quand on y est déjà. */
+  readonly openInShown = computed(() => this.store.ui().screen !== this.target().screen);
+  /** Modifier et Supprimer, seulement quand ils ont un effet. */
+  readonly canEdit = computed(() => { const it = this.item(); return !!it && this.meta().editable && !!this.desc().form && (this.desc().canEdit?.(it) ?? true); });
+  readonly canRemove = computed(() => { const it = this.item(); return !!it && !!this.desc().remove && (this.desc().canRemove?.(it) ?? true); });
+  /** Les actions propres au type (« Fait »…), sur l'élément tel qu'il est maintenant. */
+  readonly actions = computed(() => { const r = this.ref(), it = this.item(); return r && it ? this.desc().actions?.(this.store, it, r.ctx) ?? [] : []; });
 
   // ---- états passagers de la fiche, remis à zéro à chaque changement de fiche ----
   readonly ask = signal<Ask | null>(null);
@@ -161,7 +171,24 @@ export class ItemSheetComponent {
     });
     const onPop = (): void => this.onPop();
     window.addEventListener('popstate', onPop);
-    inject(DestroyRef).onDestroy(() => window.removeEventListener('popstate', onPop));
+    // Ouverte depuis une notification : l'adresse « #fiche=task:<id> » quand l'app
+    // était fermée (la fiche s'ouvre alors sur l'accueil), un message du service
+    // worker quand elle était déjà ouverte (la fiche s'ouvre là où l'on est).
+    const asked = /^#fiche=([a-z]+):(.+)$/.exec(location.hash);
+    if (asked && asked[1] in ITEM_KINDS) {
+      history.replaceState(history.state, '', location.pathname + location.search);
+      this.store.patch({ screen: 'home' });
+      this.store.openItem(asked[1] as ItemKindId, decodeURIComponent(asked[2]));
+    }
+    const onMessage = (e: MessageEvent): void => {
+      const m = e.data as { type?: string; kind?: string; id?: string } | null;
+      if (m?.type === 'foyer-fiche' && m.kind && m.kind in ITEM_KINDS && m.id) this.store.openItem(m.kind as ItemKindId, m.id);
+    };
+    navigator.serviceWorker?.addEventListener('message', onMessage);
+    inject(DestroyRef).onDestroy(() => {
+      window.removeEventListener('popstate', onPop);
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
+    });
   }
 
   // ---- le geste retour ------------------------------------------------------

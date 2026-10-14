@@ -1161,7 +1161,6 @@ export class FoyerStore {
     if (!h.id) return;
     switch (h.kind) {
       case 'contact': this.editContact(h.id); break;
-      case 'task': this.editTaskItem(h.id); break;
       case 'shop': this.editShop(h.id); break;
       case 'recipe': this.patch({ openRecipeId: h.id }); break;
       case 'card': this.showCard(h.id); break;
@@ -1719,20 +1718,23 @@ export class FoyerStore {
    * une copie ponctuelle qui porte la modification, et fait avancer la série :
    * une occurrence retouchée n'est pas un troisième type d'objet.
    */
-  updateTask(id: string, fields: TaskFields, scope: 'one' | 'all' = 'all'): void {
-    const t = this.task(id); if (!t) return;
+  /** Modifie une tâche. Renvoie l'identifiant de la copie ponctuelle quand seule l'occurrence change. */
+  updateTask(id: string, fields: TaskFields, scope: 'one' | 'all' = 'all'): string | null {
+    const t = this.task(id); if (!t) return null;
     if (scope === 'one' && t.rec && t.due) {
       const next = skipOccurrence(t.rec, t.due, this.todayStr());
       const { rec: _rec, ...rest } = fields; void _rec;
       const copy = { ...t, ...rest };
+      const copyId = uid('t');
       this.taskOpsWithUndo([
-        { op: 'add', id: uid('t'), listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null, contractId: copy.contractId ?? null },
+        { op: 'add', id: copyId, listId: copy.listId, text: copy.text, who: copy.who, due: copy.due, time: copy.time ?? null, cat: copy.cat || '', note: copy.note || '', shopListId: copy.shopListId ?? null, remind: copy.remind ?? null, contractId: copy.contractId ?? null },
         { op: 'skip', id, occ: t.due, next },
       ], 'Cette occurrence modifiée, la série continue');
-      return;
+      return copyId;
     }
     if (fields.rec && !(fields.due ?? t.due)) fields.due = this.todayStr();
     this.pushTaskOps([{ op: 'edit', id, ...fields }]);
+    return null;
   }
 
   /** « samedi », « 12/09/2026 » : l'échéance suivante telle qu'on la lit. */
@@ -1765,7 +1767,7 @@ export class FoyerStore {
       // sous une ligne barrée les rendrait invisibles. Un seul geste défait tout.
       this.taskOpsWithUndo(
         [{ op: 'done', id }, ...ouvertes.map((sb) => ({ op: 'done' as const, id: sb.id }))],
-        'Faite, avec ses ' + ouvertes.length + ' sous-tâche' + (ouvertes.length > 1 ? 's' : ''),
+        (ouvertes.length > 1 ? 'Faite, avec ses ' + ouvertes.length + ' sous-tâches' : 'Faite, avec sa sous-tâche'),
       );
       return;
     }
@@ -1829,7 +1831,6 @@ export class FoyerStore {
   skipTask(id: string): void {
     const t = this.task(id); if (!t?.rec || !t.due || t.done) return;
     const next = skipOccurrence(t.rec, t.due, this.todayStr());
-    this.patch({ taskEdit: null });
     this.taskOpWithUndo({ op: 'skip', id, occ: t.due, next }, next ? 'Occurrence passée. Prochaine : ' + this.nextLabel(next) : 'Série terminée');
   }
 
@@ -1852,14 +1853,13 @@ export class FoyerStore {
   removeTask(id: string, scope: 'one' | 'all' = 'all'): void {
     const t = this.task(id); if (!t) return;
     if (scope === 'one' && t.rec) { this.skipTask(id); return; }
-    this.patch({ taskEdit: null });
     const subs = this.subtasks(id);
     if (subs.length) {
       // Les sous-tâches partent avec leur parent, et reviennent avec lui : une
       // seule annulation, sinon on rendrait la tâche sans ce qu'elle portait.
       this.taskOpsWithUndo(
         [...subs.map((sb) => ({ op: 'remove' as const, id: sb.id })), { op: 'remove', id }],
-        'Tâche supprimée, avec ses ' + subs.length + ' sous-tâche' + (subs.length > 1 ? 's' : ''),
+        (subs.length > 1 ? 'Tâche supprimée, avec ses ' + subs.length + ' sous-tâches' : 'Tâche supprimée, avec sa sous-tâche'),
       );
       return;
     }
@@ -1901,11 +1901,6 @@ export class FoyerStore {
     this.toast('Tâche ajoutée');
     return id;
   }
-
-  openTask(): void { this.patch({ taskNew: true }); }
-  editTaskItem(id: string): void { if (this.task(id)) this.patch({ taskEdit: id }); }
-  /** Depuis un autre écran (le calendrier) : l'écran Tâches, la tâche ouverte. */
-  openTaskItem(id: string): void { if (!this.task(id)) return; this.go('taches'); this.patch({ taskEdit: id }); }
 
   // ---- listes de tâches et modèles -------------------------------------------
   // Elles s'éditent par l'enregistrement du document : ce sont des réglages,
@@ -3352,9 +3347,13 @@ export class FoyerStore {
   markAllRead(): void { this.saveRead(this.notifications().map((n) => n.id)); }
   openNotif(id: string, screen?: string): void {
     this.saveRead([id]);
-    // « ev-<événement>-<jour> » : l'événement du jour a sa fiche, ouverte sur place.
-    const ev = /^ev-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(id);
-    if (ev) { this.patch({ notifOpen: false }); this.openItem('event', ev[1], { occ: ev[2] }); return; }
+    // « ev-<événement>-<jour> », « task-<tâche>-<échéance> » : l'élément a sa fiche, ouverte sur place.
+    const el = /^(ev|task)-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(id);
+    if (el) {
+      this.patch({ notifOpen: false });
+      if (el[1] === 'ev') this.openItem('event', el[2], { occ: el[3] }); else this.openItem('task', el[2]);
+      return;
+    }
     this.patch({ notifOpen: false, screen: screen || this.ui().screen });
   }
   /** Marquer une seule notification comme lue, sans quitter le panneau. */
