@@ -289,6 +289,21 @@ describe('Serveur MCP', () => {
     await c.close();
   });
 
+  it('agenda : une date sautée par une série n’apparaît pas, les autres si, et le document la garde', async () => {
+    // Le judo du mardi depuis le 6 janvier 2026, sauf le 13.
+    const etat = await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.admin);
+    const judo = { id: 'eskip', date: '2026-01-06', time: '18:00', title: 'Judo du mardi', who: [], recur: 'weekly', skip: ['2026-01-13'] };
+    const put = await appel(ctx.base, 'PUT', '/state', { version: etat.json.version, state: { ...etat.json.state, events: [...etat.json.state.events, judo] } }, ctx.jetons.admin);
+    assert.equal(put.status, 200);
+    const relu = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.admin)).json.state.events.find((e: { id: string }) => e.id === 'eskip');
+    assert.deepEqual(relu.skip, ['2026-01-13'], 'la sauvegarde du document garde les dates sautées');
+    const c = await connect(tokenRead);
+    assert.doesNotMatch(textOf(await c.callTool({ name: 'agenda', arguments: { du: '2026-01-12', au: '2026-01-18' } })), /Judo du mardi/);
+    assert.match(textOf(await c.callTool({ name: 'agenda', arguments: { du: '2026-01-19', au: '2026-01-25' } })), /Judo du mardi/);
+    assert.match(textOf(await c.callTool({ name: 'agenda', arguments: { du: '2026-01-05', au: '2026-01-11' } })), /Judo du mardi/);
+    await c.close();
+  });
+
   it('lieux de vacances : créer, poser des affaires, changer l’état, déplacer, retirer, supprimer', async () => {
     const c = await connect(tokenWrite);
     const id = textOf(await c.callTool({ name: 'lieu_creer', arguments: { nom: 'Chalet montagne', note: 'Clé sous le pot' } })).match(/\[(pl[^\]]+)\]/)![1];

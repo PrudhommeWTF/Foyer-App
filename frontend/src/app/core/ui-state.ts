@@ -80,6 +80,12 @@ export interface UiState {
   evPickStart: boolean; dpMonth: number;
   /** Le mini-calendrier est-il déplié ? Ouvert d'office à une création sans date choisie, replié en modification et à une création sur un jour précis. */
   evCalOpen: boolean;
+  /**
+   * Occurrence d'une série ouverte depuis l'agenda ('' sinon) : c'est elle que
+   * vise « cette occurrence ». `evAsk` déplie, au moment d'enregistrer ou de
+   * supprimer, la question « cette occurrence ou toute la série ».
+   */
+  evOccDate: string; evAsk: 'save' | 'del' | null;
 
   // shop item modal
   showShop: boolean; shEditId: string | null;
@@ -274,7 +280,7 @@ export function initialUi(): UiState {
     calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(), calSide: true, calHidden: [],
     mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
-    showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1), evCalOpen: false,
+    showEvent: false, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: today, evPickStart: true, dpMonth: (+today.slice(0, 4)) * 12 + (+today.slice(5, 7) - 1), evCalOpen: false, evOccDate: '', evAsk: null,
     showShop: false, shEditId: null, shId: '', shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', shPhotoId: null, shPhotoBusy: false, newShop: '',
     aisleOrderOpen: false, collapsedAisles: [],
     activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,

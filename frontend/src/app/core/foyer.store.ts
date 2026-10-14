@@ -29,6 +29,7 @@ import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoP
 import { UiState, initialUi, rememberScreen } from './ui-state';
 import { ECRANS_ADULTES } from '../shell/nav';
 import { ModuleFlag, SCREEN_MODULE } from './modules';
+import { EventDraft, EventScope, applyToSeries, detachOccurrence, draftChanges, isSeries, seriesDate, withSkip, withoutSkip } from './event-scope';
 import { addDaysIso, addHourHHMM, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, monthIndex, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
@@ -1164,17 +1165,25 @@ export class FoyerStore {
     // Participants « Tous » par défaut : un événement du foyer concerne le plus
     // souvent tout le monde (repas, sortie, vacances). La liste vide vaut « Tous » ;
     // on restreint ensuite en cochant des membres. Voir toggleEvWho.
-    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: start, evPickStart: true, dpMonth: m, evCalOpen: pickedDate == null });
+    this.patch({ showEvent: true, evEditId: null, evTitle: '', evTime: '', evEndTime: '', evPlace: '', evAllDay: false, evWho: [], evRecur: 'none', evEnd: '', evStart: start, evPickStart: true, dpMonth: m, evCalOpen: pickedDate == null, evOccDate: '', evAsk: null });
   }
-  editEvent(id: string): void {
+  /**
+   * Ouvre un événement. `occ` la date de l'occurrence touchée dans l'agenda :
+   * sur une série, le formulaire montre cette date-là, et c'est elle que vise
+   * « cette occurrence » à l'enregistrement. Sans elle (fil d'activité,
+   * recherche), on édite la série depuis son départ.
+   */
+  editEvent(id: string, occ = ''): void {
     const ev = this._data()?.events.find((e) => e.id === id);
     if (!ev) return;
-    const m = monthIndex(ev.date);
+    const evOccDate = occ && isSeries(ev) ? occ : '';
+    const start = evOccDate || ev.date;
+    const m = monthIndex(start);
     // La fiche d'événement ne vit que dans l'écran calendrier : on s'y rend
     // d'abord, sinon un clic venu de l'accueil (fil d'activité, prochains
     // évènements) poserait `showEvent` sans que rien ne s'affiche.
     this.go('calendar');
-    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: ev.date, evEnd: ev.end || '', evPickStart: true, dpMonth: m, evCalOpen: false });
+    this.patch({ showEvent: true, evEditId: id, evTitle: ev.title, evTime: ev.time === '—' ? '' : ev.time, evEndTime: ev.endTime || '', evPlace: ev.place || '', evAllDay: !!ev.allDay || !ev.time || ev.time === '—', evWho: [...(ev.who || [])], evRecur: ev.recur || 'none', evStart: start, evEnd: ev.end || '', evPickStart: true, dpMonth: m, evCalOpen: false, evOccDate, evAsk: null });
   }
   dpPick(ds: string): void {
     const s = this.ui();
@@ -1183,7 +1192,12 @@ export class FoyerStore {
     else if (ds === s.evStart) this.patch({ evEnd: '' });
     else this.patch({ evEnd: ds });
   }
-  saveEvent(): void {
+  /**
+   * Enregistre l'événement. Sur une occurrence de série, la portée est demandée
+   * ici, une fois les champs remplis, et seulement si quelque chose a changé ;
+   * changer la récurrence elle-même ne peut viser que la série.
+   */
+  saveEvent(scope?: EventScope): void {
     const s = this.ui();
     const t = s.evTitle.trim(); if (!t) { this.toast('Donne un titre à l’événement'); return; }
     // Journée entière : pas d'heure. Sinon l'heure de fin n'a de sens qu'avec une
@@ -1194,16 +1208,36 @@ export class FoyerStore {
     const allDay = s.evAllDay || undefined;
     const by = this.me()?.id ?? null;
     const now = new Date().toISOString();
-    this.mutate((d) => {
-      if (s.evEditId) {
-        const i = d.events.findIndex((e) => e.id === s.evEditId);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null, upBy: by, upAt: now };
-      } else {
-        d.events.push({ id: uid('e'), date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null, by, at: now });
-      }
-    });
-    this.toast(s.evEditId ? 'Événement modifié' : 'Événement ajouté à l’agenda');
-    this.patch({ showEvent: false, evEditId: null });
+    const draft: EventDraft = { date: s.evStart, title: t, time, endTime, place, allDay, who: [...s.evWho], recur: s.evRecur, end: s.evEnd || null };
+    const ev = s.evEditId ? this._data()?.events.find((e) => e.id === s.evEditId) : undefined;
+    if (!ev) {
+      this.mutate((d) => { d.events.push({ id: uid('e'), ...draft, by, at: now }); });
+      this.toast('Événement ajouté à l’agenda');
+      this.patch({ showEvent: false, evEditId: null, evAsk: null });
+      return;
+    }
+    const occ = s.evOccDate;
+    const serie: EventDraft = occ ? { ...draft, date: seriesDate(ev.date, occ, draft.date) } : draft;
+    // Rien de changé : rien n'est écrit, pas même l'auteur de la modification.
+    if (!draftChanges(ev, serie)) { this.patch({ showEvent: false, evEditId: null, evAsk: null }); return; }
+    const askable = !!occ && isSeries(ev) && draft.recur === ev.recur;
+    if (askable && !scope) { this.patch({ evAsk: 'save' }); return; }
+    if (askable && scope === 'one') {
+      const { series, single } = detachOccurrence(ev, occ, draft, uid('e'), by, now);
+      this.mutate((d) => {
+        const i = d.events.findIndex((e) => e.id === ev.id);
+        if (i >= 0) d.events[i] = series;
+        d.events.push(single);
+      });
+      this.toast('Cette occurrence modifiée, la série continue');
+    } else {
+      this.mutate((d) => {
+        const i = d.events.findIndex((e) => e.id === ev.id);
+        if (i >= 0) d.events[i] = applyToSeries(d.events[i], serie, by, now);
+      });
+      this.toast(isSeries(ev) ? 'Série modifiée' : 'Événement modifié');
+    }
+    this.patch({ showEvent: false, evEditId: null, evAsk: null });
   }
   /**
    * Saisie de l'heure de début d'un événement. L'heure de fin suit d'une heure
@@ -1235,11 +1269,29 @@ export class FoyerStore {
     this.patch({ evWho: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
   }
 
-  delEvent(): void {
-    const id = this.ui().evEditId; if (!id) return;
-    this.mutate((d) => { d.events = d.events.filter((e) => e.id !== id); });
-    this.patch({ showEvent: false, evEditId: null });
-    this.toast('Événement supprimé');
+  /**
+   * Supprime l'événement, ou seulement l'occurrence ouverte d'une série (la
+   * série saute alors cette date). Pas de confirmation : l'annulation est
+   * offerte quelques secondes, et rend l'événement tel qu'il était.
+   */
+  delEvent(scope?: EventScope): void {
+    const s = this.ui();
+    const ev = s.evEditId ? this._data()?.events.find((e) => e.id === s.evEditId) : undefined; if (!ev) return;
+    const occ = s.evOccDate;
+    if (occ && isSeries(ev) && !scope) { this.patch({ evAsk: 'del' }); return; }
+    this.patch({ showEvent: false, evEditId: null, evAsk: null });
+    if (occ && isSeries(ev) && scope === 'one') {
+      this.mutate((d) => { const i = d.events.findIndex((e) => e.id === ev.id); if (i >= 0) d.events[i] = withSkip(d.events[i], occ); });
+      this.toastWithUndo('Occurrence du ' + this.fmtNumDate(occ) + ' supprimée', () => this.mutate((d) => {
+        const i = d.events.findIndex((e) => e.id === ev.id); if (i >= 0) d.events[i] = withoutSkip(d.events[i], occ);
+      }));
+      return;
+    }
+    const at = this._data()!.events.findIndex((e) => e.id === ev.id);
+    this.mutate((d) => { d.events = d.events.filter((e) => e.id !== ev.id); });
+    this.toastWithUndo(isSeries(ev) ? 'Série supprimée' : 'Événement supprimé', () => this.mutate((d) => {
+      if (!d.events.some((e) => e.id === ev.id)) d.events.splice(Math.min(at, d.events.length), 0, ev);
+    }));
   }
 
   // ---- articles de courses ------------------------------------------------

@@ -105,7 +105,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                         <span class="mnum">{{ c.num }}</span>
                         @for (it of c.items; track $index) {
                           @if (it.kind === 'event') {
-                            <div class="chip-ev tap" [style.background]="store.tint(eventColor(it.ev))" [style.color]="eventColor(it.ev)" (click)="openEventChip($event, it.ev.id)">{{ it.ev.title }}</div>
+                            <div class="chip-ev tap" [style.background]="store.tint(eventColor(it.ev))" [style.color]="eventColor(it.ev)" (click)="openEventChip($event, it.ev.id, c.key)">{{ it.ev.title }}</div>
                           } @else {
                             <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
                               <f-icon name="planning" [size]="10" [color]="slotColor(it.se.k)" [width]="2.4" />
@@ -170,7 +170,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                   @for (col of grid(); track col.key) {
                     <div class="tg-ad-cell">
                       @for (ev of col.allDay; track ev.id) {
-                        <div class="tg-ad-chip tap" [style.background]="store.tint(eventColor(ev))" [style.color]="eventColor(ev)" (click)="store.editEvent(ev.id)">{{ ev.title }}</div>
+                        <div class="tg-ad-chip tap" [style.background]="store.tint(eventColor(ev))" [style.color]="eventColor(ev)" (click)="store.editEvent(ev.id, col.key)">{{ ev.title }}</div>
                       }
                       @for (ex of col.extras; track $index) {
                         <div class="tg-ad-chip" [class.tap]="ex.id" [style.background]="store.tint(ex.color)" [style.color]="ex.color" (click)="openExtra($event, ex)"><span [class.strike]="ex.done">{{ ex.label }}</span></div>
@@ -189,7 +189,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                       @for (p of col.timed; track $index) {
                         @if (p.it.kind === 'event') {
                           <div class="tg-ev" [style.top.%]="p.top" [style.height.%]="p.height" [style.left.%]="p.left" [style.width.%]="p.width"
-                               [style.background]="store.tint(eventColor(p.it.ev))" [style.color]="eventColor(p.it.ev)" [style.border-left]="'3px solid ' + eventColor(p.it.ev)" (click)="store.editEvent(p.it.ev.id)">
+                               [style.background]="store.tint(eventColor(p.it.ev))" [style.color]="eventColor(p.it.ev)" [style.border-left]="'3px solid ' + eventColor(p.it.ev)" (click)="store.editEvent(p.it.ev.id, col.key)">
                             <span class="tg-ev-t">{{ timeLabel(p.it.ev) }}</span>
                             <span class="tg-ev-title">{{ p.it.ev.title }}</span>
                           </div>
@@ -219,7 +219,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                   <div class="col-body">
                     @for (it of col.items; track $index) {
                       @if (it.kind === 'event') {
-                        <div class="col-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="store.editEvent(it.ev.id)">
+                        <div class="col-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="store.editEvent(it.ev.id, col.key)">
                           <div class="ce-time f-display">{{ timeLabel(it.ev) }}</div>
                           <div class="ce-title">{{ it.ev.title }}</div>
                           @if (it.ev.who.length) { <div class="ce-who"><f-who [badges]="eventBadges(it.ev)" /></div> }
@@ -304,7 +304,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
           <div class="side-sel">{{ selLabel() }}</div>
           @for (it of selItems(); track $index) {
             @if (it.kind === 'event') {
-              <div class="side-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="store.editEvent(it.ev.id)">
+              <div class="side-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="store.editEvent(it.ev.id, sel())">
                 <div class="se-top">
                   <div class="se-time f-display">{{ timeLabel(it.ev) }}</div>
                   @if (it.ev.recur !== 'none') {
@@ -350,7 +350,10 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
 
       <!-- ===== event modal ===== -->
       @if (store.ui().showEvent) {
-        <f-modal [title]="modalTitle()" [maxWidth]="470" (close)="store.patch({ showEvent: false })">
+        <f-modal [title]="modalTitle()" [maxWidth]="470" (close)="store.patch({ showEvent: false, evAsk: null })">
+          @if (store.ui().evOccDate) {
+            <div class="occ-note"><f-icon name="refresh" [size]="13" color="#7A9B76" [width]="2.4" /> Occurrence du {{ store.fmtNumDate(store.ui().evOccDate) }} · {{ recurLabel(evStamp()?.recur || 'none') }}</div>
+          }
           <div class="fl">Titre</div>
           <input class="input" [ngModel]="store.ui().evTitle" (ngModelChange)="store.patch({ evTitle: $event })"
                  placeholder="Ex : Rendez-vous dentiste" style="margin-bottom:18px" />
@@ -450,12 +453,27 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                      [modifiedBy]="store.memberName(ev.upBy || '')" [modifiedAt]="ev.upAt" />
           }
 
-          <div class="modal-foot">
-            @if (store.ui().evEditId) {
-              <button class="btn btn-ghost del" (click)="store.delEvent()">Supprimer</button>
-            }
-            <button class="btn btn-primary" (click)="store.saveEvent()">Enregistrer</button>
-          </div>
+          <!-- La portée se demande au moment d'enregistrer ou de supprimer, une fois
+               qu'on sait ce qui change, et dépliée ici plutôt qu'en modale sur modale. -->
+          @if (store.ui().evAsk; as ask) {
+            <div class="scope-ask">
+              <div class="sa-q">{{ ask === 'save' ? 'Appliquer la modification à :' : 'Supprimer :' }}</div>
+              <div class="sa-opts">
+                <button class="btn" [class.btn-primary]="ask === 'save'" [class.btn-danger]="ask === 'del'"
+                        (click)="ask === 'save' ? store.saveEvent('one') : store.delEvent('one')">Cette occurrence ({{ store.fmtNumDate(store.ui().evOccDate) }})</button>
+                <button class="btn" [class.btn-primary]="ask === 'save'" [class.btn-danger]="ask === 'del'"
+                        (click)="ask === 'save' ? store.saveEvent('all') : store.delEvent('all')">Toute la série</button>
+                <button class="btn btn-soft" (click)="store.patch({ evAsk: null })">Annuler</button>
+              </div>
+            </div>
+          } @else {
+            <div class="modal-foot">
+              @if (store.ui().evEditId) {
+                <button class="btn btn-ghost del" (click)="store.delEvent()">Supprimer</button>
+              }
+              <button class="btn btn-primary" (click)="store.saveEvent()">Enregistrer</button>
+            </div>
+          }
         </f-modal>
       }
     </div>
@@ -717,6 +735,11 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .place-opt:hover { background: var(--soft); }
     .place-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .modal-foot { display: flex; gap: 12px; align-items: center; margin-top: 26px; }
+    .occ-note { display: flex; align-items: center; gap: 6px; margin: -6px 0 16px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .scope-ask { margin-top: 22px; padding: 12px 14px; border-radius: 13px; background: var(--soft); }
+    .sa-q { font-size: 13px; font-weight: 800; color: var(--ink); }
+    .sa-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .sa-opts .btn { flex: 1 1 auto; }
     .modal-foot .btn-primary { flex: 1; }
     .del { color: var(--primary); }
   `],
@@ -1105,9 +1128,9 @@ export class CalendarScreen {
   }
 
   /** Une pastille d'événement dans une case de mois ouvre l'événement, sans déclencher la création. */
-  openEventChip(e: Event, id: string): void {
+  openEventChip(e: Event, id: string, occ = ''): void {
     e.stopPropagation();
-    this.store.editEvent(id);
+    this.store.editEvent(id, occ);
   }
 
   /**

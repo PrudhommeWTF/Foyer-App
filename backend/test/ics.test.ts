@@ -100,6 +100,19 @@ describe('flux ICS', () => {
     assert.ok(!buildIcs(sans).includes('LOCATION:'), 'sans lieu, pas de ligne LOCATION');
   });
 
+  it('publie les dates sautées d’une série en EXDATE, sous la forme de DTSTART', () => {
+    const ics = buildIcs(state({
+      events: [
+        { id: 'e1', date: '2026-09-01', time: '18:00', title: 'Judo', who: [], recur: 'weekly', skip: ['2026-09-15', '2026-09-29'] },
+        { id: 'e2', date: '2026-09-02', time: '', title: 'Marché', who: [], recur: 'weekly', skip: ['2026-09-09'] },
+        { id: 'e3', date: '2026-09-03', time: '10:00', title: 'Ponctuel', who: [], recur: 'none', skip: ['2026-09-03'] },
+      ],
+    } as Partial<HouseholdState>));
+    assert.ok(ics.includes('EXDATE:20260915T180000\r\nEXDATE:20260929T180000'), 'une ligne par date, à l’heure de la série');
+    assert.ok(ics.includes('EXDATE;VALUE=DATE:20260909'), 'journée entière : date seule');
+    assert.equal((ics.match(/EXDATE/g) || []).length, 3, 'rien pour un événement ponctuel');
+  });
+
   it('sans échéance, le flux reste exactement celui d’avant', () => {
     const withEvent = state({
       events: [{ id: 'e1', date: '2026-09-01', time: '', title: 'Vacances', who: [], recur: 'none' }],

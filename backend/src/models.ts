@@ -41,6 +41,8 @@ export interface EventItem { id: string; date: string; time: string; title: stri
   by?: string | null; at?: string | null;
   /** Dernier auteur d'une modification, et sa date. Absents tant que l'événement n'a pas été retouché depuis sa création. */
   upBy?: string | null; upAt?: string | null;
+  /** Dates (YYYY-MM-DD) qu'une série saute : occurrence supprimée, ou détachée en événement ponctuel. Publiées en EXDATE. */
+  skip?: string[];
 }
 /**
  * Un rayon du magasin. `kind` est facultatif : il relie un rayon du foyer à un
