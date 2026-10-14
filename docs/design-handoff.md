@@ -145,10 +145,10 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 - Catégorie = `{id,name,color,icon,budget}` · Transaction = `{id,name,amount,type('in'|'out'),catId,month}`.
 
 ### 10. Planning des repas (`repas`)
-- Grille **7 jours × 3 créneaux** (matin/midi/soir). Chaque case = recette liée (`rid`) **ou** texte libre. Navigation par semaine (`weekOffset`). CRUD de chaque repas (modale : mode recette/texte). Alimente « Générer depuis les repas » des courses.
+- Grille **7 jours × 3 créneaux** (matin/midi/soir). Chaque case = recette liée (`rid`) **ou** texte libre. Navigation par semaine (`weekOffset`). Un tap sur un créneau ouvre la **fiche du repas** (vue : plats, convives, agenda ; recette d'un tap, empilée ; « Déplacer » dans la fiche ; « Retirer » annulable) ; un créneau vide s'ouvre directement en saisie. Alimente « Générer depuis les repas » des courses.
 
 ### 11. Carnet de recettes (`recettes`)
-- Grille de cartes recette (couleur **ou photo uploadée**, temps, niveau). CRUD complet : formulaire nom/temps/difficulté/couleur ou photo/ingrédients (liste dynamique)/étapes (liste dynamique). Modale détail avec édition/suppression. Recette = `{id,name,time,level,color|photo,ingr[],steps[]}`.
+- Grille de cartes recette (couleur **ou photo uploadée**, temps, niveau). CRUD complet : formulaire nom/temps/difficulté/couleur ou photo/ingrédients (liste dynamique)/étapes (liste dynamique). Un tap ouvre la **fiche de la recette** (vue détail, « Copier », « Modifier » dans la même fiche, suppression confirmée). Recette = `{id,name,time,level,color|photo,ingr[],steps[]}`.
 
 ### 12. Emploi du temps (`planning`)
 - Sélecteur des **membres du foyer** ; pour chacun, grille **7 jours** de créneaux `{id,memberId,day,start,end,label,type}` (type → couleur : école/travail/sport/loisir/santé/repas/autre/repos). Jours vides = « Libre ». CRUD complet des créneaux (modale). Boutons d'ajout par jour + « Nouveau créneau ».

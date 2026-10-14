@@ -109,7 +109,7 @@ export class TopbarComponent {
       case 'event': s.openItem('event', null); break;
       case 'task': s.openItem('task', null); break;
       case 'shop': s.pickShopFromMenu(); break;
-      case 'recipe': s.patch({ screen: 'recettes' }); s.newRecipe(); break;
+      case 'recipe': s.openItem('recipe', null); break;
       case 'tx': s.patch({ screen: 'finances' }); this.finances.init().then(() => this.finances.newTx()); break;
       case 'slot': s.newSlot(); break;
       case 'contact': s.patch({ screen: 'contacts' }); s.newContact(); break;

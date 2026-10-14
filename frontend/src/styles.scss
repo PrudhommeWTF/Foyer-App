@@ -199,6 +199,9 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
   padding: 14px 20px; border-radius: var(--r-chip); box-shadow: 0 20px 40px -16px rgba(0, 0, 0, .5);
   animation: ftoastL .3s ease;
 }
+@media (max-width: 860px) {
+  .toast.over-sheet { top: max(12px, env(safe-area-inset-top)); bottom: auto; left: 16px; right: 16px; }
+}
 
 /* Checkbox tick */
 .tick {

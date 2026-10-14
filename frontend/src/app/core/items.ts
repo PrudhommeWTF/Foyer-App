@@ -11,18 +11,19 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe';
 
 export type SheetMode = 'vue' | 'edition';
 
 /**
  * Ce que la fiche montre. `id` vide = création (la fiche s'ouvre alors
  * directement en édition). `ctx.occ` désigne l'occurrence touchée d'une série ;
- * `ctx.date` la date proposée à une création ; `ctx.prev` la fiche qu'on
+ * `ctx.date` (et `ctx.slot` pour un repas) le créneau proposé à une création ;
+ * `ctx.prev` la fiche qu'on
  * retrouve au retour (deux niveaux au plus).
  */
 export interface ItemRef { kind: ItemKindId; id: string | null; mode: SheetMode; ctx?: ItemCtx; }
-export interface ItemCtx { occ?: string; date?: string; prev?: ItemRef; }
+export interface ItemCtx { occ?: string; date?: string; slot?: string; prev?: ItemRef; }
 
 /** La partie pure d'un type : ce que les tests vérifient et ce que le shell lit sans charger l'élément. */
 export interface ItemKindMeta {
@@ -37,6 +38,8 @@ export interface ItemKindMeta {
   editable: boolean; readOnlyReason?: string;
   /** Suppression : annulation de quelques secondes, confirmation (perte lourde), ou aucune. */
   removeMode: 'undo' | 'confirm' | null;
+  /** Le mot du bouton quand « Supprimer » ne convient pas (un repas se retire du planning). */
+  removeLabel?: string;
   /** Le module dont dépend le type : éteint, ses fiches ne s'ouvrent pas. */
   module?: ModuleFlag;
   /** Réservé aux adultes. */
@@ -51,6 +54,14 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   task: {
     kind: 'task', label: 'Tâche', newTitle: 'Nouvelle tâche', editTitle: 'Modifier la tâche',
     screen: 'taches', openLabel: 'Ouvrir dans Tâches', editable: true, removeMode: 'undo',
+  },
+  meal: {
+    kind: 'meal', label: 'Repas', newTitle: 'Prévoir le repas', editTitle: 'Modifier le repas',
+    screen: 'repas', openLabel: 'Ouvrir dans Planning des repas', editable: true, removeMode: 'undo', removeLabel: 'Retirer', module: 'modRepas',
+  },
+  recipe: {
+    kind: 'recipe', label: 'Recette', newTitle: 'Nouvelle recette', editTitle: 'Modifier la recette',
+    screen: 'recettes', openLabel: 'Ouvrir dans Carnet de recettes', editable: true, removeMode: 'confirm', module: 'modRepas',
   },
 };
 

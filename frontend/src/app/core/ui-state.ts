@@ -1,11 +1,9 @@
-import { CardFormat, ListKind, MealItem, Rayon, SchedRec, SchedType, SchedWhen, ShopState } from './models';
+import { CardFormat, ListKind, Rayon, SchedRec, SchedType, SchedWhen, ShopState } from './models';
 import { todayIn, weekdayOf } from './helpers';
 import { PasteMode, SchedClip } from './sched-copy';
 import { SchedScope } from './schedule';
 import { HOUSEHOLD_TZ, SCREENS } from './constants';
 import { ItemRef } from './items';
-
-export interface IngrRow { id: string; val: string; }
 
 /** All ephemeral UI state (navigation, modals, form buffers, selections). Not persisted, except the current `screen` which is restored across a refresh. */
 export interface UiState {
@@ -50,22 +48,10 @@ export interface UiState {
   mealAnchor: string;
   /** Vide = automatique : trois jours sur téléphone, la semaine sur grand écran. */
   mealView: '' | '3' | 'week';
-  mealEdit: { dateStr: string; slot: string } | null;
-  /** Plats retenus pour le créneau en cours d'édition, dans l'ordre du service. */
-  mealItems: MealItem[];
-  mealText: string;
-  /** Couverts du créneau en cours d'édition. Vide = le décompte des présents. */
-  mealPax: string;
-  /** Convives exceptionnellement absents du créneau en cours d'édition. */
-  mealAway: string[];
-  /** Suggestions dépliées dans la modale d'un créneau. */
-  mealSuggest: boolean;
   /** Rapport de génération de la liste, affiché avant d'écrire quoi que ce soit. */
   genOpen: boolean;
   /** Recopie d'une période sur la période affichée. `dupBack` = de combien de périodes en arrière. */
   dupOpen: boolean; dupBack: number; dupMode: 'fill' | 'replace';
-  /** Choix du créneau d'arrivée quand on déplace un repas. */
-  moveOpen: boolean;
   /** Rapport d'import du carnet, affiché avant de créer quoi que ce soit. */
   importOpen: boolean;
   /**
@@ -148,16 +134,6 @@ export interface UiState {
   scanOpen: boolean;
 
   // recipes
-  recipeForm: boolean; editingId: string | null; confirmDelId: string | null; openRecipeId: string | null;
-  fRecipeId: string;
-  fName: string; fLevel: string; fColor: string; fPhotoId: number | null; fPhotoBusy: boolean; fIngr: IngrRow[]; fSteps: IngrRow[];
-  fPortions: string; fPrepMin: string; fCookMin: string; fSource: string;
-  /** Import depuis une URL : saisie, état d'attente et avertissements du lecteur. */
-  fImportUrl: string; fImportBusy: boolean; fImportWarnings: string[];
-  /** Étiquettes et note du foyer, dans le formulaire. */
-  fTags: string[]; fTagInput: string; fRating: number;
-  /** Import d'une recette collée en texte : la zone de saisie et son dépliage. */
-  fPasteOpen: boolean; fPaste: string;
   /** Recherche du carnet : « courgette 20min ». */
   recipeSearch: string;
 
@@ -268,7 +244,7 @@ export function initialUi(): UiState {
     screen: persistedScreen(), selDay: today, toast: '', toastUndo: false, toastLabel: 'Annuler', notifOpen: false, addMenuOpen: false,
     searchOpen: false, searchQuery: '',
     calView: defaultCalView(), calAnchor: today, calDisplay: defaultCalDisplay(), calSide: true, calHidden: [],
-    mealAnchor: today, mealView: '', mealEdit: null, mealItems: [], mealText: '', mealPax: '', mealAway: [], mealSuggest: false, genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', moveOpen: false, importOpen: false,
+    mealAnchor: today, mealView: '', genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     item: null,
     showShop: false, shEditId: null, shId: '', shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', shPhotoId: null, shPhotoBusy: false, newShop: '',
@@ -285,11 +261,7 @@ export function initialUi(): UiState {
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     cardSearch: '',
     cardForm: false, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: '#E56B4E', caNote: '', caColorTouched: false, caLogo: '', logoBusy: false, logoOpts: [], logoSearched: false, cardDelId: null, cardShow: null, scanOpen: false,
-    recipeForm: false, editingId: null, confirmDelId: null, openRecipeId: null,
-    fRecipeId: '', fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false, fIngr: [], fSteps: [],
-    fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
-    fImportUrl: '', fImportBusy: false, fImportWarnings: [],
-    fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '', recipeSearch: '',
+    recipeSearch: '',
     schedWho: [], schedDow: weekdayOf(today), schedAnchor: today, schedEdit: false, seEditId: null,
     seDow: weekdayOf(today), seWho: [], seStart: '', seEnd: '', seLabel: '', seType: 'ecole',
     seRec: 'weekly', seDate: today, seFrom: '', seUntil: '', seWhen: 'always', seEvery: 1, seAway: true, seSync: false,

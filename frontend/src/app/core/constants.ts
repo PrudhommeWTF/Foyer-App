@@ -7,6 +7,8 @@ import { ContactCat, SchedType } from './models';
  * du jour courant en a besoin avant qu'aucun service ne soit construit.
  */
 export const HOUSEHOLD_TZ = 'Europe/Paris';
+/** La langue des dates affichées : fixe, comme le fuseau. */
+export const HOUSEHOLD_LOCALE = 'fr-FR';
 
 export const DOW = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
