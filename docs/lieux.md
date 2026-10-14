@@ -108,8 +108,24 @@ du menu. L'écran liste les lieux ; chaque affaire montre son état (pastille et
 style), et un **geste contextuel** propose l'action inverse : « J'ai ramené »
 quand elle est là-bas, « J'ai laissé » quand elle est à la maison. L'en-tête de
 chaque lieu résume « X sur place · Y à la maison », les affaires ramenées
-ressortant en couleur pour penser à les rapporter. Un champ d'ajout en ligne, et
-deux modales (le lieu, l'affaire), complètent l'écran.
+ressortant en couleur pour penser à les rapporter. Un champ d'ajout en ligne
+complète l'écran.
+
+Le lieu et l'affaire ont chacun leur **fiche** (voir
+[`fiche-element.md`](fiche-element.md)), ouverte par-dessus l'écran :
+
+- **Affaire** : un tap sur son nom (le geste de la ligne reste direct). La fiche
+  dit où elle est, qui a fait le dernier geste et quand, dans quel lieu ; elle
+  porte le même geste (« J'ai ramené » ou « J'ai laissé »). Modifier renomme,
+  change la quantité ou le lieu. Supprimer se fait sans confirmation : Annuler
+  la remet sous le même identifiant, dans son état.
+- **Lieu** : un tap sur son en-tête. La fiche montre la note et l'inventaire
+  (sur place, à la maison) ; une affaire s'ouvre d'un tap par-dessus, et le
+  retour ramène au lieu. Supprimer se **confirme** : le lieu emporte son
+  inventaire, sans retour.
+
+Les opérations envoyées ne portent que les champs changés (`core/place-item.ts`,
+testé) : enregistrer sans rien toucher n'écrit rien.
 
 ## Croisement avec les listes de préparation
 
@@ -139,7 +155,8 @@ frontend/src/app/core/
   models.ts        # Place, PlaceItem, PlaceItemState
   api.service.ts   # placesOps, PlacesApplied, LiveSnapshot étendu
   foyer.store.ts   # file foyer.placeQueue, application locale, envoi, adoption, méthodes publiques
-frontend/src/app/screens/lieux.ts   # l'écran
+frontend/src/app/core/place-item.ts  # opérations des fiches (champs changés, restauration), testé
+frontend/src/app/screens/lieux/      # l'écran, place.item.ts et place-item.item.ts (fiches) avec leurs vues et formulaires
 ```
 
 Attention au voisinage de noms : `backend/src/places.ts` (au singulier, un

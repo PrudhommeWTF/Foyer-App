@@ -1,11 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FoyerStore } from '../core/foyer.store';
-import { IconComponent } from '../core/icon';
-import { ModalComponent } from '../shared/modal';
-import { ConfirmComponent } from '../shared/confirm';
-import { LIST_ICONS, PALETTE } from '../core/constants';
-import { Place, PlaceItem } from '../core/models';
+import { FoyerStore } from '../../core/foyer.store';
+import { IconComponent } from '../../core/icon';
+import { LIST_ICONS } from '../../core/constants';
+import { Place, PlaceItem } from '../../core/models';
 
 /**
  * Écran des lieux de vacances : ce qui reste d'une fois sur l'autre à la maison
@@ -18,7 +16,7 @@ import { Place, PlaceItem } from '../core/models';
   selector: 'screen-lieux',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent],
   template: `
     <div class="screen-enter">
       <div class="head-row">
@@ -42,24 +40,24 @@ import { Place, PlaceItem } from '../core/models';
 
       @for (p of places(); track p.id) {
         <div class="place" [style.border-left]="'4px solid ' + p.color">
-          <div class="place-head">
-            <div class="place-ic" [style.background]="p.color"><f-icon [path]="placeIcon(p)" [size]="18" color="#fff" /></div>
-            <div class="place-title">
+          <!-- Tout l'en-tête ouvre la fiche du lieu : le modifier, le supprimer, son inventaire. -->
+          <button class="place-head" (click)="store.openItem('place', p.id)">
+            <span class="place-ic" [style.background]="p.color"><f-icon [path]="placeIcon(p)" [size]="18" color="#fff" /></span>
+            <span class="place-title">
               <span class="place-name f-display">{{ p.name }}</span>
               <span class="place-sub">
                 {{ countThere(p.id) }} sur place@if (countHome(p.id)) { <span class="home-n"> · {{ countHome(p.id) }} à la maison</span> }
               </span>
-            </div>
-            <button class="icon-btn sm" (click)="store.editPlace(p.id)" aria-label="Modifier le lieu"><f-icon name="edit" [size]="16" color="var(--ink2)" /></button>
-            <button class="icon-btn sm" (click)="store.patch({ placeDelId: p.id })" aria-label="Supprimer le lieu"><f-icon name="trash" [size]="16" color="#E56B4E" /></button>
-          </div>
+            </span>
+            <f-icon name="chevronRight" [size]="17" color="var(--ink3)" [width]="2.4" />
+          </button>
 
           @if (p.note) { <div class="place-note">{{ p.note }}</div> }
 
           @for (it of items(p.id); track it.id) {
             <div class="row" [class.home]="it.state === 'ici'">
               <span class="st-dot" [class.there]="it.state === 'la-bas'" [title]="it.state === 'la-bas' ? 'Sur place' : 'À la maison'"></span>
-              <button class="row-body" (click)="store.editPlaceItem(it.id)">
+              <button class="row-body" (click)="store.openItem('placeItem', it.id)">
                 <span class="s-name">{{ it.name }}</span>
                 @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
               </button>
@@ -91,68 +89,6 @@ import { Place, PlaceItem } from '../core/models';
       }
     </div>
 
-    <!-- Lieu -->
-    @if (store.ui().placeForm) {
-      <f-modal [title]="store.ui().plEditId ? 'Modifier le lieu' : 'Nouveau lieu'" [maxWidth]="460" (close)="store.patch({ placeForm: false })">
-        <div class="field-label">Nom du lieu</div>
-        <input class="input mb" placeholder="Ex : Chalet de la montagne, Mobil-home…" [ngModel]="store.ui().plName" (ngModelChange)="store.patch({ plName: $event })" (keydown.enter)="store.savePlace()">
-        <div class="field-label">Note <span class="opt">(facultatif)</span></div>
-        <input class="input mb" placeholder="Adresse, code de la boîte à clés…" [ngModel]="store.ui().plNote" (ngModelChange)="store.patch({ plNote: $event })">
-        <div class="field-label">Couleur</div>
-        <div class="swatch-row mb">
-          @for (c of PALETTE; track c) {
-            <div class="swatch" [style.background]="c" [style.box-shadow]="store.ui().plColor === c ? '0 0 0 3px var(--surface), 0 0 0 5px ' + c : ''" (click)="store.patch({ plColor: c })"></div>
-          }
-        </div>
-        <div class="field-label">Icône</div>
-        <div class="icon-grid mb">
-          @for (k of iconKeys; track k) {
-            <div class="icon-cell" [style.background]="store.ui().plIcon === k ? store.ui().plColor : 'var(--soft2)'" (click)="store.patch({ plIcon: k })">
-              <f-icon [path]="LIST_ICONS[k]" [size]="20" [color]="store.ui().plIcon === k ? '#fff' : 'var(--ink2)'" />
-            </div>
-          }
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-soft grow" (click)="store.patch({ placeForm: false })">Annuler</button>
-          <button class="btn btn-primary grow2" (click)="store.savePlace()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
-    <!-- Affaire -->
-    @if (store.ui().showPlaceItem) {
-      <f-modal title="Modifier l'affaire" [maxWidth]="440" (close)="store.patch({ showPlaceItem: false })">
-        <div class="modal-row">
-          <div class="grow">
-            <div class="field-label">Affaire</div>
-            <input class="input" placeholder="Ex : Skis" [ngModel]="store.ui().piName" (ngModelChange)="store.patch({ piName: $event })" (keydown.enter)="store.savePlaceItem()">
-          </div>
-          <div class="qty-f">
-            <div class="field-label">Quantité</div>
-            <input class="input" placeholder="x1" [ngModel]="store.ui().piQty" (ngModelChange)="store.patch({ piQty: $event })" (keydown.enter)="store.savePlaceItem()">
-          </div>
-        </div>
-        <div class="field-label">Lieu</div>
-        <div class="seg-wrap">
-          @for (p of places(); track p.id) {
-            <div class="seg-opt" [class.on]="store.ui().piPlaceId === p.id" (click)="store.patch({ piPlaceId: p.id })">
-              <span class="s-dot" [style.background]="p.color"></span>{{ p.name }}
-            </div>
-          }
-        </div>
-        <div class="modal-actions">
-          <button class="icon-btn del-btn" (click)="store.delPlaceItem()" aria-label="Supprimer"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
-          <button class="btn btn-soft grow" (click)="store.patch({ showPlaceItem: false })">Annuler</button>
-          <button class="btn btn-primary grow2" (click)="store.savePlaceItem()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
-    @if (store.ui().placeDelId) {
-      <f-confirm title="Supprimer ce lieu ?" (cancel)="store.patch({ placeDelId: null })" (confirm)="store.confirmPlaceDel()">
-        Ce lieu et son inventaire seront supprimés. Cette action est définitive.
-      </f-confirm>
-    }
   `,
   styles: [`
     .head-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
@@ -163,7 +99,7 @@ import { Place, PlaceItem } from '../core/models';
     .sync.off { background: #FCE9E3; color: #C6492F; }
 
     .place { background: var(--surface); border-radius: var(--r-card); padding: 14px 16px 12px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); margin-bottom: 16px; }
-    .place-head { display: flex; align-items: center; gap: 11px; }
+    .place-head { display: flex; align-items: center; gap: 11px; width: 100%; padding: 0; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
     .place-ic { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
     .place-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
     .place-name { font-size: 18px; font-weight: 700; color: var(--ink); }
@@ -192,23 +128,6 @@ import { Place, PlaceItem } from '../core/models';
     .empty { text-align: center; color: var(--ink2); padding: 40px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
     .empty p { font-size: 14px; font-weight: 600; line-height: 1.5; max-width: 420px; margin: 0; }
 
-    .opt { color: var(--ink3); font-weight: 700; }
-    .modal-row { display: flex; gap: 12px; margin-bottom: 16px; }
-    .modal-row .grow { flex: 1; }
-    .qty-f { width: 110px; }
-    .mb { margin-bottom: 20px; }
-    .swatch-row { display: flex; flex-wrap: wrap; gap: 10px; }
-    .swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; }
-    .seg-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
-    .seg-opt { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); border: 2px solid transparent; }
-    .seg-opt.on { background: var(--primary); color: #fff; }
-    .s-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
-    .icon-grid { display: flex; flex-wrap: wrap; gap: 9px; }
-    .icon-cell { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .modal-actions { display: flex; gap: 12px; align-items: center; }
-    .modal-actions .grow { flex: 1; }
-    .modal-actions .grow2 { flex: 1.4; }
-    .del-btn { width: 50px; height: 50px; flex: none; border-radius: 13px; background: var(--soft2); }
 
     @media (min-width: 861px) {
       :host { display: block; max-width: 760px; }
@@ -219,8 +138,6 @@ export class LieuxScreen {
   store = inject(FoyerStore);
 
   readonly LIST_ICONS = LIST_ICONS;
-  readonly PALETTE = PALETTE;
-  readonly iconKeys = Object.keys(LIST_ICONS);
 
   places = computed(() => this.store.placesInOrder());
 

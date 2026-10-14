@@ -20,7 +20,7 @@ import { RepasScreen } from '../screens/repas/repas';
 import { RecettesScreen } from '../screens/recettes/recettes';
 import { PlanningScreen } from '../screens/planning/planning';
 import { SettingsScreen } from '../screens/settings/settings';
-import { LieuxScreen } from '../screens/lieux';
+import { LieuxScreen } from '../screens/lieux/lieux';
 import { EcoleScreen } from '../screens/ecole';
 import { EcoleStore } from '../core/ecole.store';
 

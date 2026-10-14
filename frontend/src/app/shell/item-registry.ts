@@ -12,6 +12,8 @@ import { SLOT_ITEM } from '../screens/planning/slot.item';
 import { SHOP_ITEM } from '../screens/courses/shop.item';
 import { SHOP_LIST_ITEM } from '../screens/courses/shop-list.item';
 import { AISLE_ITEM } from '../screens/courses/aisle.item';
+import { PLACE_ITEM } from '../screens/lieux/place.item';
+import { PLACE_ITEM_ITEM } from '../screens/lieux/place-item.item';
 
 export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   event: EVENT_ITEM,
@@ -22,4 +24,6 @@ export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   shop: SHOP_ITEM,
   shopList: SHOP_LIST_ITEM,
   aisle: AISLE_ITEM,
+  place: PLACE_ITEM,
+  placeItem: PLACE_ITEM_ITEM,
 };
