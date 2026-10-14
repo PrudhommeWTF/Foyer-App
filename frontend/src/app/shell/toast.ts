@@ -13,7 +13,9 @@ import { FoyerStore } from '../core/foyer.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (store.ui().toast) {
-      <div class="toast">
+      <!-- Une fiche ouverte sur téléphone tient ses boutons en bas, à portée du pouce :
+           le toast passe alors en haut plutôt que de les masquer. -->
+      <div class="toast" [class.over-sheet]="!!store.ui().item">
         <span>{{ store.ui().toast }}</span>
         @if (store.ui().toastUndo) { <button class="undo" (click)="store.undoLast()">{{ store.ui().toastLabel }}</button> }
       </div>

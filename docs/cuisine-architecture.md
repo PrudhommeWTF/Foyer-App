@@ -551,7 +551,8 @@ Ce qui a changé et pourquoi :
   ensuite sans changer de forme une seconde fois : le nombre de couverts réel et
   les convives absents, prévus au modèle cible.
 
-  Dans la modale, un tap sur une recette l'ajoute au menu, un second l'en retire.
+  Dans le formulaire du repas (sa fiche, en édition), un tap sur une recette
+  l'ajoute au menu, un second l'en retire.
   La génération de la liste de courses prend les ingrédients de **tous** les
   plats du créneau : une entrée et un dessert en ont autant besoin que le plat.
 
@@ -638,7 +639,7 @@ téléphone déjà dans le magasin.
 
 Les quantités suivent le nombre de couverts : une recette pour 6 servie à 4 voit
 ses nombres multipliés par 4/6. Par défaut, les couverts valent la taille du
-foyer ; la modale d'un créneau permet d'y déroger, et **seule la dérogation est
+foyer ; le formulaire d'un créneau permet d'y déroger, et **seule la dérogation est
 enregistrée** (`MealValue.pax`), pour qu'un chiffre recopié partout ne se périme
 pas au premier changement de famille. Une recette sans portions connues n'est pas
 mise à l'échelle, et le rapport le dit.
@@ -764,14 +765,14 @@ recomposé parce qu'il nomme le créneau (« Dîner : … ») ; le laisser tel q
 après un passage de midi au soir écrirait un mensonge.
 
 Deux gestes, selon l'écran. Sur grand écran, le **glisser-déposer** dans la
-grille, le créneau visé s'éclairant au survol. Sur téléphone, un bouton
-**« Déplacer »** ouvre la liste des créneaux affichés, chacun annoncé avec ce
-qu'il porte déjà : glisser au doigt dans une liste qui défile se rate une fois
-sur trois et déplace le mauvais repas.
+grille, le créneau visé s'éclairant au survol. Partout, la fiche du repas porte
+**« Déplacer vers un autre créneau »**, qui se déplie dans la fiche même et
+liste les créneaux de la semaine du repas, chacun annoncé avec ce qu'il porte
+déjà : glisser au doigt dans une liste qui défile se rate une fois sur trois et
+déplace le mauvais repas. La fiche suit ensuite le repas à son nouveau créneau.
 
-La modale du repas s'efface pendant ce choix. Deux modales empilées se
-recouvrent, et les clics partent dans celle du dessus : le premier essai de
-déplacement ne faisait donc rien du tout, sans le moindre message.
+Ce choix ne s'ouvre plus en modale par-dessus la modale du repas : deux modales
+empilées se recouvraient, et les clics partaient dans celle du dessus.
 
 ## Les deux liens avec le reste du foyer
 
@@ -788,8 +789,8 @@ seconde, il mène à celle qui existe.
 
 **Le repas à l'agenda** (`EventItem.mealKey`) rend un repas visible à ceux qui ne
 regardent que le calendrier, ce qui est le cas quand on reçoit. Le bouton
-enregistre le repas **et** crée l'événement : les deux vont ensemble, un
-événement décrivant un repas non enregistré mentirait dès la modale refermée.
+« À l'agenda » est dans la fiche du repas, en vue : il porte sur le repas
+enregistré, si bien qu'aucun événement ne peut décrire un repas qui ne l'est pas.
 L'heure vient du créneau (`MEAL_SLOTS[].at`), le titre nomme le menu, et les
 couverts n'y figurent que s'ils ont été précisés.
 

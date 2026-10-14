@@ -70,7 +70,7 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
           } @else if (r.mode === 'vue') {
             <div class="row wrap">
               @if (canRemove()) {
-                <button type="button" class="btn btn-ghost del" (click)="remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> Supprimer</button>
+                <button type="button" class="btn btn-ghost del" (click)="remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> {{ meta().removeLabel || 'Supprimer' }}</button>
               }
               @for (a of actions(); track a.label) {
                 <button type="button" class="btn" [class.btn-primary]="!canEdit()" [class.btn-soft]="canEdit()" (click)="a.run()"><f-icon [name]="a.icon" [size]="16" color="currentColor" [width]="2.4" /> {{ a.label }}</button>

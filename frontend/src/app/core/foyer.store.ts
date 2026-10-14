@@ -17,7 +17,7 @@ import { moveMeal } from './meal-move';
 import { createArticle, learnRayon, linkForm, scanRecipes, searchArticles } from './ingredient-repair';
 import { Conflict, checkRecipe, conflictLabel, hasDiet, mealConflicts } from './diet';
 import { parseQuery, searchRecipes } from './recipe-search';
-import { readRecipeText } from './recipe-text';
+import { RecipeData, recipeChanges } from './recipe-form';
 import { presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { Allergene } from './articles';
@@ -32,11 +32,11 @@ import { ModuleFlag, SCREEN_MODULE } from './modules';
 import { EventDraft, EventFields, applyToSeries, detachOccurrence, draftChanges, eventDraft, isSeries, seriesDate, withSkip, withoutEvent, withoutSkip } from './event-scope';
 import { ITEM_KINDS, ItemCtx, ItemKindId, ItemResult } from './items';
 import { sheetBack, sheetEdit, sheetOpen, sheetSaved } from './item-sheet';
-import { addDaysIso, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, normText, num, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
-import { HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, isFallbackAisleName, tint, grad } from './constants';
+import { addDaysIso, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, normText, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
+import { HOUSEHOLD_LOCALE, HOUSEHOLD_TZ, MEAL_SLOTS, SCHED_AWAY_DEFAULT, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
 import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
-import { mealItemName, mealNames, recipeTime } from './meals';
+import { mealItemName, mealNames, recipeTime, sameMeal, splitMealKey } from './meals';
 
 /**
  * Octets vers base64, par tranches : `String.fromCharCode(...tableau)` dépasse la
@@ -209,7 +209,7 @@ export class FoyerStore {
 
   // ---- regional formatting ----------------------------------------------
   // Foyer cible la France métropolitaine : locale et fuseau sont fixes.
-  readonly locale = 'fr-FR';
+  readonly locale = HOUSEHOLD_LOCALE;
   readonly timeZone = HOUSEHOLD_TZ;
 
   /**
@@ -1108,7 +1108,7 @@ export class FoyerStore {
     }
     // Un écran de module désactivé ramène à l'accueil, comme une porte fermée.
     if (!this.screenEnabled(screen)) { this.patch({ screen: 'home', addMenuOpen: false, notifOpen: false }); return; }
-    this.patch({ screen, openRecipeId: null, addMenuOpen: false, notifOpen: false, item: null });
+    this.patch({ screen, addMenuOpen: false, notifOpen: false, item: null });
   }
 
   // ---- fiche d'élément --------------------------------------------------
@@ -1162,7 +1162,6 @@ export class FoyerStore {
     switch (h.kind) {
       case 'contact': this.editContact(h.id); break;
       case 'shop': this.editShop(h.id); break;
-      case 'recipe': this.patch({ openRecipeId: h.id }); break;
       case 'card': this.showCard(h.id); break;
       case 'member': this.openMembers(); break;
       default: break;
@@ -2081,58 +2080,37 @@ export class FoyerStore {
     return names.length ? names.join(' · ') : null;
   }
 
-  editMeal(dateStr: string, slot: string): void {
-    const v = this._data()?.meals[dateStr + '-' + slot];
-    this.patch({
-      mealEdit: { dateStr, slot }, mealItems: (v?.items || []).map((i) => ({ ...i })), mealText: '',
-      mealPax: v?.pax ? String(v.pax) : '', mealAway: [...(v?.away || [])],
-    });
+  /** Un tap sur un créneau : sa fiche s'il est garni, sinon sa saisie directement. */
+  openMeal(dateStr: string, slot: string): void {
+    const key = dateStr + '-' + slot;
+    if (this.mealAt(key)) this.openItem('meal', key); else this.openItem('meal', null, { date: dateStr, slot });
   }
-  /** Un tap sur un convive le retire du créneau, un second l'y remet. */
-  toggleMealGuest(id: string): void {
-    const away = this.ui().mealAway;
-    this.patch({ mealAway: away.includes(id) ? away.filter((x) => x !== id) : [...away, id] });
-  }
-  /** Un tap sur une recette l'ajoute au menu, un second l'en retire. */
-  toggleMealRecipe(rid: string): void {
-    const items = this.ui().mealItems;
-    const i = items.findIndex((x) => x.rid === rid);
-    this.patch({ mealItems: i >= 0 ? items.filter((_, k) => k !== i) : [...items, { rid }] });
-  }
-  isMealRecipe(rid: string): boolean { return this.ui().mealItems.some((x) => x.rid === rid); }
-  addMealText(): void {
-    const t = this.ui().mealText.trim(); if (!t) return;
-    this.patch({ mealItems: [...this.ui().mealItems, { text: t }], mealText: '' });
-  }
-  removeMealItem(index: number): void {
-    this.patch({ mealItems: this.ui().mealItems.filter((_, i) => i !== index) });
-  }
+
+  /** Le repas d'un créneau (« 2026-10-20-soir »), s'il porte au moins un plat. */
+  mealAt(key: string): MealValue | null { const v = this._data()?.meals[key]; return v?.items?.length ? v : null; }
+
   /**
-   * Le repas tel que la modale le décrit. Les couverts ne sont enregistrés que
-   * s'ils dérogent à la taille du foyer : un chiffre recopié partout se
+   * Le repas tel que le formulaire le décrit. Les couverts ne sont retenus que
+   * s'ils dérogent au décompte des présents : un chiffre recopié partout se
    * périmerait au premier changement de famille.
    */
-  private mealFromForm(): MealValue {
-    const s = this.ui();
-    const pax = parseInt(s.mealPax, 10);
-    const attendus = this.editingPresence()?.pax ?? this.householdPax();
+  mealFromForm(dateStr: string, slot: string, items: MealItem[], paxText: string, away: string[]): MealValue {
+    const pax = parseInt(paxText, 10);
+    const attendus = this.presenceWith(dateStr, slot, away).pax;
     return {
-      items: s.mealItems,
-      // Les couverts ne sont retenus que s'ils dérogent au décompte des présents :
-      // un chiffre recopié partout se périmerait au premier changement de famille.
+      items: items.map((i) => ({ ...i })),
       ...(Number.isFinite(pax) && pax > 0 && pax !== attendus ? { pax } : {}),
-      ...(s.mealAway.length ? { away: [...s.mealAway] } : {}),
+      ...(away.length ? { away: [...away] } : {}),
     };
   }
 
-  saveMeal(): void {
-    const e = this.ui().mealEdit; if (!e) return;
-    const value = this.mealFromForm();
-    if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
-    const key = e.dateStr + '-' + e.slot;
+  /** Enregistre un créneau. Rien de changé : rien n'est écrit. */
+  saveMeal(key: string, value: MealValue): ItemResult {
+    if (!value.items.length) { this.toast('Choisis au moins un plat'); return { kind: 'invalid' }; }
+    if (sameMeal(this._data()?.meals[key], value)) return { kind: 'done' };
     this.mutate((d) => { d.meals[key] = value; });
-    this.patch({ mealEdit: null });
     this.toast(value.items.length > 1 ? value.items.length + ' plats enregistrés' : 'Repas enregistré');
+    return { kind: 'done' };
   }
   /**
    * Écrit une copie de repas déjà calculée. Le rapport est produit par l'écran,
@@ -2197,30 +2175,23 @@ export class FoyerStore {
    *
    * Rappuyer met l'événement à jour plutôt que d'en créer un second.
    */
-  addMealToCalendar(): void {
-    const e = this.ui().mealEdit; if (!e) return;
-    const value = this.mealFromForm();
-    if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
-    const heure = this.mealTimes()[e.slot];
-    const titre = this.titleFor(value, e.slot);
-    const key = e.dateStr + '-' + e.slot;
+  addMealToCalendar(key: string): void {
+    const value = this.mealAt(key); if (!value) return;
+    const { dateStr, slot } = splitMealKey(key);
+    const heure = this.mealTimes()[slot];
+    const titre = this.titleFor(value, slot);
     const existant = this.mealEvent(key);
     const by = this.me()?.id ?? null;
     const now = new Date().toISOString();
     this.mutate((d) => {
-      d.meals[key] = value;
-      if (existant) {
-        const i = d.events.findIndex((x) => x.id === existant.id);
-        if (i >= 0) d.events[i] = { ...d.events[i], date: e.dateStr, title: titre, time: heure || '—', upBy: by, upAt: now };
-      } else {
-        d.events.push({
-          id: uid('e'), date: e.dateStr, title: titre, time: heure || '—',
-          who: [by || this.members()[0]?.id].filter((x): x is string => !!x), recur: 'none', end: null, mealKey: key, by, at: now,
-        });
-      }
+      const i = existant ? d.events.findIndex((x) => x.id === existant.id) : -1;
+      if (i >= 0) d.events[i] = { ...d.events[i], date: dateStr, title: titre, time: heure || '—', upBy: by, upAt: now };
+      else d.events.push({
+        id: uid('e'), date: dateStr, title: titre, time: heure || '—',
+        who: [by || this.members()[0]?.id].filter((x): x is string => !!x), recur: 'none', end: null, mealKey: key, by, at: now,
+      });
     });
-    this.patch({ mealEdit: null });
-    this.toast(existant ? 'Repas enregistré, événement mis à jour' : 'Repas enregistré et ajouté à l’agenda');
+    this.toast(existant ? 'Événement d’agenda mis à jour' : 'Repas ajouté à l’agenda');
   }
 
   /** Titre d'agenda pour un repas donné, réutilisé quand un repas change de créneau. */
@@ -2230,43 +2201,34 @@ export class FoyerStore {
   }
 
   /**
-   * Déplace un repas vers un autre créneau. Le repas en cours d'édition est
-   * enregistré au passage : déplacer une modale non enregistrée perdrait les
-   * plats qu'on venait d'y choisir.
+   * Déplace un repas vers un autre créneau (glisser-déposer, ou « Déplacer » de
+   * sa fiche). Un créneau occupé échange son repas : rien n'est perdu. Vrai
+   * quand quelque chose a bougé.
    */
-  moveMealTo(to: string): void {
-    const e = this.ui().mealEdit; if (!e) return;
-    const from = e.dateStr + '-' + e.slot;
-    const value = this.mealFromForm();
-    if (!value.items.length) { this.toast('Choisis au moins un plat'); return; }
-    this.applyMove({ ...(this._data()?.meals || {}), [from]: value }, from, to);
-    this.patch({ mealEdit: null, moveOpen: false });
-  }
-
-  /** Déplacement direct, sans passer par la modale : le glisser-déposer. */
-  moveMealBetween(from: string, to: string): void {
-    this.applyMove(this._data()?.meals || {}, from, to);
-  }
-
-  private applyMove(meals: Record<string, MealValue>, from: string, to: string): void {
-    const d = this._data(); if (!d) return;
-    const res = moveMeal(meals, d.events, from, to,
+  moveMealBetween(from: string, to: string): boolean {
+    const d = this._data(); if (!d) return false;
+    const res = moveMeal(d.meals, d.events, from, to,
       (v, slot) => this.titleFor(v, slot),
       (slot) => this.mealTimes()[slot] || '—');
-    if (!res.moved) { this.toast('Rien à déplacer'); return; }
+    if (!res.moved) { this.toast('Rien à déplacer'); return false; }
     this.mutate((dd) => { dd.meals = res.meals; dd.events = res.events; });
     this.toast(res.swapped ? 'Les deux repas ont été échangés' : 'Repas déplacé');
+    return true;
   }
 
-  clearMeal(): void {
-    const e = this.ui().mealEdit; if (!e) return;
-    const key = e.dateStr + '-' + e.slot;
-    // L'événement qui venait de ce repas part avec lui : garder un dîner annulé
-    // à l'agenda serait pire que de ne l'y avoir jamais mis.
-    const avaitEvenement = !!this.mealEvent(key);
+  /**
+   * Retire le repas d'un créneau, et l'événement d'agenda qui en venait : garder
+   * un dîner annulé à l'agenda serait pire que de ne l'y avoir jamais mis.
+   * L'annulation rend les deux.
+   */
+  clearMeal(key: string): void {
+    const d0 = this._data(); const meal = d0?.meals[key]; if (!d0 || !meal) return;
+    const ev = this.mealEvent(key);
     this.mutate((d) => { delete d.meals[key]; d.events = d.events.filter((x) => x.mealKey !== key); });
-    this.patch({ mealEdit: null });
-    this.toast(avaitEvenement ? 'Repas retiré, et son événement d’agenda' : 'Repas retiré');
+    this.toastWithUndo(ev ? 'Repas retiré, et son événement d’agenda' : 'Repas retiré', () => this.mutate((d) => {
+      if (!d.meals[key]) d.meals[key] = meal;
+      if (ev && !d.events.some((x) => x.id === ev.id)) d.events.push(ev);
+    }));
   }
   /** Couverts par défaut : tout le foyer, sauf dérogation posée sur le créneau. */
   householdPax(): number { return Math.max(this._data()?.members.length || 0, 1); }
@@ -2284,26 +2246,25 @@ export class FoyerStore {
   }
 
   /**
-   * Présence du créneau **en cours d'édition**, dérogations de la modale
-   * comprises et couverts manuels exclus. Lue depuis le formulaire et non
-   * depuis l'état enregistré : sans cela, retirer un convive ne changerait rien
-   * à l'écran tant qu'on n'a pas enregistré, et le geste paraîtrait sans effet.
+   * Présence d'un créneau avec les absences en cours de saisie, couverts
+   * manuels exclus. Lue depuis le formulaire et non depuis l'état enregistré :
+   * sans cela, retirer un convive ne changerait rien à l'écran tant qu'on n'a
+   * pas enregistré, et le geste paraîtrait sans effet.
    */
-  readonly editingPresence = computed(() => {
-    const e = this.ui().mealEdit; if (!e) return null;
+  presenceWith(dateStr: string, slot: string, away: string[]) {
     const d = this._data();
-    return presenceAt({ members: d?.members || [], sched: this.schedAll(), cal: this.calendar(), mealTimes: this.mealTimes() }, e.dateStr, e.slot, { items: [], away: this.ui().mealAway });
-  });
+    return presenceAt({ members: d?.members || [], sched: this.schedAll(), cal: this.calendar(), mealTimes: this.mealTimes() }, dateStr, slot, { items: [], away });
+  }
 
   // ---- suggestions ---------------------------------------------------------
   /**
-   * Ce qu'on pourrait mettre dans le créneau ouvert, et pourquoi. Rien n'est
-   * calculé tant que la modale est fermée : le carnet entier est relu à chaque
-   * appel, et l'écran Repas se redessine à chaque survol de cellule.
+   * Ce qu'on pourrait mettre dans un créneau, et pourquoi. Le carnet entier est
+   * relu à chaque appel : le formulaire du repas le garde dans un computed, et
+   * rien n'est calculé tant qu'il n'est pas ouvert.
    */
-  readonly suggestions = computed<SuggestReport | null>(() => {
-    const e = this.ui().mealEdit; const d = this._data();
-    if (!e || !d) return null;
+  mealSuggestions(dateStr: string, slot: string): SuggestReport | null {
+    const d = this._data();
+    if (!d) return null;
     return suggestMeals({
       recipes: d.recipes, meals: d.meals, members: d.members, sched: this.schedAll(), cal: this.calendar(), index: this.articleIndex(),
       mealTimes: this.mealTimes(),
@@ -2313,9 +2274,9 @@ export class FoyerStore {
         rapideMin: this.setting('suggestQuickMin'),
       },
       shop: d.shop.filter((i) => i.listId === this.activeShopListId()),
-      dateStr: e.dateStr, slot: e.slot,
+      dateStr, slot,
     });
-  });
+  }
 
   /** Référentiel d'articles, base intégrée plus les corrections du foyer. */
   readonly articleIndex = computed(() => buildArticleIndex(this._data()?.articles || []));
@@ -2409,7 +2370,7 @@ export class FoyerStore {
   }
 
   /** Ouvre la recette d'où vient une ligne : seul endroit où un intertitre se corrige. */
-  openRepairRecipe(id: string): void { this.patch({ repairOpen: false, screen: 'recettes', openRecipeId: id }); }
+  openRepairRecipe(id: string): void { this.patch({ repairOpen: false }); this.openItem('recipe', id); }
 
   /** Rapport de la dernière génération préparée, affiché avant d'écrire. */
   readonly genReport = signal<PlanReport | null>(null);
@@ -2532,66 +2493,54 @@ export class FoyerStore {
   }
 
   // ---- recipes ----------------------------------------------------------
-  // L'identifiant est tiré à l'ouverture du formulaire, avant l'enregistrement :
-  // une photo a besoin d'un propriétaire pour être rangée, y compris sur une
-  // recette qui n'existe pas encore.
-  newRecipe(): void {
-    this.patch({
-      recipeForm: true, editingId: null, fRecipeId: uid('r'),
-      fName: '', fLevel: 'Facile', fColor: '#7A9B76', fPhotoId: null, fPhotoBusy: false,
-      fPortions: '', fPrepMin: '', fCookMin: '', fSource: '',
-      fImportUrl: '', fImportBusy: false, fImportWarnings: [],
-      fTags: [], fTagInput: '', fRating: 0, fPasteOpen: false, fPaste: '',
-      fIngr: [{ id: uid('i'), val: '' }], fSteps: [{ id: uid('p'), val: '' }],
-    });
-  }
-  editRecipe(id: string): void {
-    const r = this._data()?.recipes.find((x) => x.id === id); if (!r) return;
-    this.patch({
-      recipeForm: true, editingId: id, fRecipeId: id, openRecipeId: null,
-      fName: r.name, fLevel: r.level, fColor: r.color, fPhotoId: r.photoId ?? null, fPhotoBusy: false,
-      fPortions: num(r.portions), fPrepMin: num(r.prepMin), fCookMin: num(r.cookMin), fSource: r.source || '',
-      fImportUrl: '', fImportBusy: false, fImportWarnings: [],
-      fTags: [...(r.tags || [])], fTagInput: '', fRating: r.rating || 0, fPasteOpen: false, fPaste: '',
-      fIngr: r.ingr.map((v) => ({ id: uid('i'), val: v })), fSteps: r.steps.map((v) => ({ id: uid('p'), val: v })),
-    });
-  }
+  // Le formulaire (screens/recettes/recipe-form.ts) garde sa saisie ; le store
+  // ne porte que ce qui parle au serveur et l'enregistrement.
 
   /**
-   * Remplit le formulaire depuis une page de recette. Le serveur fait l'appel
-   * sortant et la lecture (voir backend/src/recipes) ; ici on ne fait que poser
-   * le résultat dans les champs, que l'utilisateur relit avant d'enregistrer.
-   * C'est cette relecture qui tient lieu d'écran de reprise manuelle.
+   * Lit une page de recette. Le serveur fait l'appel sortant et la lecture
+   * (voir backend/src/recipes) ; le formulaire pose le résultat dans ses
+   * champs, que l'utilisateur relit avant d'enregistrer.
    */
-  async importRecipe(): Promise<void> {
-    const s = this.ui();
-    const url = s.fImportUrl.trim();
-    if (!url) { this.toast('Collez l’adresse de la recette'); return; }
-    this.patch({ fImportBusy: true, fImportWarnings: [] });
+  async importRecipeFrom(url: string, ownerId: string) {
+    const res = await this.api.importRecipe(url, ownerId);
+    if (res.photoId) this.photoUrls.update((m) => { const c = { ...m }; delete c[res.photoId!]; return c; });
+    return res;
+  }
+
+  /** Envoie la photo d'une recette (existante ou pas encore enregistrée) ; son identifiant, ou null en cas d'échec dit par un toast. */
+  async uploadRecipePhoto(ownerId: string, file: File): Promise<number | null> {
     try {
-      const res = await this.api.importRecipe(url, s.fRecipeId);
-      const r = res.recipe;
-      if (res.photoId) this.photoUrls.update((m) => { const c = { ...m }; delete c[res.photoId!]; return c; });
-      this.patch({
-        fName: r.name,
-        fPortions: num(r.portions), fPrepMin: num(r.prepMin), fCookMin: num(r.cookMin),
-        fSource: r.source,
-        // Un import ne doit pas effacer ce qui a déjà été saisi à la main : les
-        // listes vides du formulaire neuf sont remplacées, une saisie ne l'est
-        // que si la page a effectivement quelque chose à mettre à la place.
-        fIngr: r.ingr.length ? r.ingr.map((v) => ({ id: uid('i'), val: v })) : s.fIngr,
-        fSteps: r.steps.length ? r.steps.map((v) => ({ id: uid('p'), val: v })) : s.fSteps,
-        ...(res.photoId ? { fPhotoId: res.photoId } : {}),
-        fImportWarnings: res.warnings,
-        fImportUrl: '',
-      });
-      this.toast('Recette importée, relisez-la avant d’enregistrer');
+      const res = await this.api.uploadFile('recipe', ownerId, file);
+      this.cachePhoto(res.file.id, file);
+      return res.file.id;
     } catch (e) {
-      // Le message du serveur dit quoi faire : le relayer tel quel.
-      this.patch({ fImportWarnings: [(e as Error).message] });
-    } finally {
-      this.patch({ fImportBusy: false });
+      // Le message du serveur nomme le format attendu : le relayer tel quel vaut
+      // mieux qu'un « échec » qui ne dit pas quoi faire.
+      this.toast((e as Error).message);
+      return null;
     }
+  }
+
+  /** La photo que montre un formulaire ouvert, pour qu'elle se télécharge comme les autres. */
+  readonly formPhotoId = signal<number | null>(null);
+
+  /** Enregistre une recette (`isNew` : l'identifiant a été tiré à l'ouverture du formulaire). */
+  saveRecipe(id: string, data: RecipeData, isNew: boolean): ItemResult {
+    const cur = isNew ? undefined : this._data()?.recipes.find((r) => r.id === id);
+    if (cur && !recipeChanges(cur, data)) return { kind: 'done' };
+    this.mutate((d) => {
+      const i = d.recipes.findIndex((r) => r.id === id);
+      if (i >= 0) d.recipes[i] = { ...d.recipes[i], ...data };
+      else d.recipes.unshift({ id, ...data });
+    });
+    this.toast(cur ? 'Recette modifiée' : 'Recette ajoutée au carnet');
+    return { kind: 'done' };
+  }
+
+  /** Supprime une recette. Définitif : la fiche l'a fait confirmer. */
+  deleteRecipe(id: string): void {
+    this.mutate((d) => { d.recipes = d.recipes.filter((r) => r.id !== id); });
+    this.toast('Recette supprimée');
   }
 
   /** Durée totale d'une recette, pour les vignettes et l'accueil. */
@@ -2619,7 +2568,7 @@ export class FoyerStore {
     const ids = new Set<number>();
     for (const r of this._data()?.recipes || []) if (r.photoId) ids.add(r.photoId);
     for (const it of this._data()?.shop || []) if (it.photoId) ids.add(it.photoId);
-    const editing = this.ui().fPhotoId;
+    const editing = this.formPhotoId();
     if (editing) ids.add(editing);
     const shopEditing = this.ui().shPhotoId;
     if (shopEditing) ids.add(shopEditing);
@@ -2645,37 +2594,7 @@ export class FoyerStore {
     for (const url of Object.values(this.photoUrls())) if (url) URL.revokeObjectURL(url);
     this.photoUrls.set({});
   }
-  async onRecipePhoto(file: File): Promise<void> {
-    const ownerId = this.ui().fRecipeId; if (!ownerId) return;
-    this.patch({ fPhotoBusy: true });
-    try {
-      const res = await this.api.uploadFile('recipe', ownerId, file);
-      this.cachePhoto(res.file.id, file);
-      this.patch({ fPhotoId: res.file.id });
-    } catch (e) {
-      // Le message du serveur nomme le format attendu : le relayer tel quel vaut
-      // mieux qu'un « échec » qui ne dit pas quoi faire.
-      this.toast((e as Error).message);
-    } finally {
-      this.patch({ fPhotoBusy: false });
-    }
-  }
-  addIngr(): void { this.patch({ fIngr: [...this.ui().fIngr, { id: uid('i'), val: '' }] }); }
-  addStep(): void { this.patch({ fSteps: [...this.ui().fSteps, { id: uid('p'), val: '' }] }); }
-  setIngr(id: string, val: string): void { this.patch({ fIngr: this.ui().fIngr.map((x) => (x.id === id ? { ...x, val } : x)) }); }
-  removeIngr(id: string): void { this.patch({ fIngr: this.ui().fIngr.filter((x) => x.id !== id) }); }
-  setStep(id: string, val: string): void { this.patch({ fSteps: this.ui().fSteps.map((x) => (x.id === id ? { ...x, val } : x)) }); }
-  removeStep(id: string): void { this.patch({ fSteps: this.ui().fSteps.filter((x) => x.id !== id) }); }
   // ---- étiquettes, note, recherche et collage ------------------------------
-
-  addTag(): void {
-    const t = this.ui().fTagInput.trim().toLowerCase();
-    if (!t) return;
-    this.patch({ fTags: this.ui().fTags.includes(t) ? this.ui().fTags : [...this.ui().fTags, t], fTagInput: '' });
-  }
-  removeTag(t: string): void { this.patch({ fTags: this.ui().fTags.filter((x) => x !== t) }); }
-  /** Un second tap sur l'étoile courante retire la note : sinon elle serait indélébile. */
-  setRating(n: number): void { this.patch({ fRating: this.ui().fRating === n ? 0 : n }); }
 
   /** Le carnet filtré par la ligne de recherche. */
   readonly recipeHits = computed(() =>
@@ -2690,47 +2609,6 @@ export class FoyerStore {
     return j === 0 ? "faite aujourd'hui" : j === 1 ? 'faite hier' : j < 7 ? 'faite il y a ' + j + ' jours' : 'faite il y a ' + semaines(j);
   }
 
-  /**
-   * Lit la recette collée et remplit le formulaire. Rien n'est enregistré : ce
-   * qui a été compris se relit dans les champs, et ce qui ne l'a pas été est
-   * dit au-dessus.
-   */
-  applyPaste(): void {
-    const texte = this.ui().fPaste;
-    const r = readRecipeText(texte, this.articleIndex());
-    if (!r.ingr.length && !r.steps.length && !r.name) { this.toast(r.warnings[0] || 'Rien à lire dans ce texte'); return; }
-    this.patch({
-      ...(r.name ? { fName: r.name } : {}),
-      ...(r.portions ? { fPortions: String(r.portions) } : {}),
-      ...(r.prepMin ? { fPrepMin: String(r.prepMin) } : {}),
-      ...(r.cookMin ? { fCookMin: String(r.cookMin) } : {}),
-      fIngr: (r.ingr.length ? r.ingr : ['']).map((v) => ({ id: uid('i'), val: v })),
-      fSteps: (r.steps.length ? r.steps : ['']).map((v) => ({ id: uid('p'), val: v })),
-      fImportWarnings: r.warnings, fPasteOpen: false, fPaste: '',
-    });
-    this.toast(r.ingr.length + ' ingrédients et ' + r.steps.length + ' étapes lus');
-  }
-
-  saveRecipe(): void {
-    const s = this.ui(); const name = s.fName.trim(); if (!name) { this.toast('Donne un nom à la recette'); return; }
-    const ingr = s.fIngr.map((x) => x.val.trim()).filter(Boolean);
-    const steps = s.fSteps.map((x) => x.val.trim()).filter(Boolean);
-    const int = (v: string): number | null => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
-    const data = {
-      name, level: s.fLevel, color: s.fColor, photoId: s.fPhotoId,
-      portions: int(s.fPortions), prepMin: int(s.fPrepMin), cookMin: int(s.fCookMin),
-      source: s.fSource.trim() || null,
-      tags: s.fTags, rating: s.fRating > 0 ? s.fRating : null,
-      ingr, steps,
-    };
-    this.mutate((d) => {
-      if (s.editingId) { const i = d.recipes.findIndex((r) => r.id === s.editingId); if (i >= 0) d.recipes[i] = { ...d.recipes[i], ...data }; }
-      else d.recipes.unshift({ id: s.fRecipeId || uid('r'), ...data });
-    });
-    this.toast(s.editingId ? 'Recette modifiée' : 'Recette ajoutée au carnet');
-    this.patch({ recipeForm: false, editingId: null });
-  }
-  confirmRecipeDel(): void { const id = this.ui().confirmDelId; if (!id) return; this.mutate((d) => { d.recipes = d.recipes.filter((r) => r.id !== id); }); this.patch({ confirmDelId: null, openRecipeId: this.ui().openRecipeId === id ? null : this.ui().openRecipeId }); this.toast('Recette supprimée'); }
 
   // ---- emploi du temps --------------------------------------------------
   //

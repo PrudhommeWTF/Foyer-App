@@ -197,7 +197,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
       <div class="card rc">
         <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
         @for (m of todayMeals(); track m.key) {
-          <div class="rc-row meal" (click)="store.go('repas')">
+          <div class="rc-row meal" (click)="store.openMeal(store.todayStr(), m.key)">
             <span class="m-dot" [style.background]="m.dot"></span>
             <span class="m-slot">{{ m.short }}</span>
             <span class="m-dish" [class.none]="!m.label">{{ m.label || 'À planifier' }}</span>
