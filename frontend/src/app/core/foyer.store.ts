@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, signal, untracked } from '@angular/core';
+import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
@@ -276,6 +276,13 @@ export class FoyerStore {
 
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Les fiches d'un module relationnel (l'employé à domicile) lisent leur
+   * propre store, qui dépend lui-même de celui-ci : elles le demandent ici,
+   * au moment d'ouvrir, plutôt que par un import qui bouclerait.
+   */
+  readonly injector = inject(Injector);
 
   constructor(private api: ApiService) {
     // Theme side effect: reflect the theme setting onto <html>. Le thème est une

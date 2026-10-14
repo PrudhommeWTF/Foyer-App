@@ -49,7 +49,7 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
             <div class="q">{{ q.question }}</div>
             <div class="row wrap">
               @for (c of q.choices; track c.scope) {
-                <button type="button" class="btn" [class.btn-danger]="c.danger" [class.btn-primary]="!c.danger" (click)="answer(c.scope)">{{ c.label }}</button>
+                <button type="button" class="btn" [class.btn-danger]="c.danger" [class.btn-primary]="!c.danger" [disabled]="busy()" (click)="answer(c.scope)">{{ c.label }}</button>
               }
               <button type="button" class="btn btn-soft" (click)="ask.set(null)">Annuler</button>
             </div>
@@ -70,7 +70,7 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
           } @else if (r.mode === 'vue') {
             <div class="row wrap">
               @if (canRemove()) {
-                <button type="button" class="btn btn-ghost del" (click)="remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> {{ meta().removeLabel || 'Supprimer' }}</button>
+                <button type="button" class="btn btn-ghost del" [disabled]="busy()" (click)="void remove()"><f-icon name="trash" [size]="16" color="currentColor" [width]="2.2" /> {{ meta().removeLabel || 'Supprimer' }}</button>
               }
               @for (a of actions(); track a.label) {
                 <button type="button" class="btn" [class.btn-primary]="!canEdit()" [class.btn-soft]="canEdit()" (click)="a.run()"><f-icon [name]="a.icon" [size]="16" color="currentColor" [width]="2.4" /> {{ a.label }}</button>
@@ -82,7 +82,7 @@ interface Ask { question: string; choices: ItemChoice[]; action: 'save' | 'remov
           } @else {
             <div class="row">
               <button type="button" class="btn btn-soft" (click)="cancelEdit()">Annuler</button>
-              <button type="button" class="btn btn-primary grow" (click)="void save()">{{ r.id ? 'Sauvegarder' : 'Créer' }}</button>
+              <button type="button" class="btn btn-primary grow" [disabled]="busy()" (click)="void save()">{{ r.id ? 'Sauvegarder' : 'Créer' }}</button>
             </div>
           }
         </div>
@@ -271,16 +271,25 @@ export class ItemSheetComponent {
       if (this.remote()) { this.overwrite.set(true); return; }
     }
     const form = this.form(); if (!form) return;
-    this.handle(form.submit(scope), 'save');
+    await this.run(() => form.submit(scope), 'save');
   }
-  remove(scope?: string): void {
-    const r = this.ref(), it = this.item(); if (!r || !it) return;
-    const res = this.desc().remove?.(this.store, it, r.ctx, scope); if (!res) return;
-    this.handle(res, 'remove');
+  async remove(scope?: string): Promise<void> {
+    const r = this.ref(), it = this.item(), del = this.desc().remove; if (!r || !it || !del) return;
+    await this.run(() => del(this.store, it, r.ctx, scope), 'remove');
   }
   answer(scope: string): void {
     const a = this.ask(); this.ask.set(null);
-    if (a?.action === 'remove') this.remove(scope); else void this.save(scope, true);
+    if (a?.action === 'remove') void this.remove(scope); else void this.save(scope, true);
+  }
+  /**
+   * Un module relationnel (l'employé à domicile) répond au serveur : la fiche
+   * attend sa réponse, boutons grisés, et reste ouverte si elle refuse.
+   */
+  readonly busy = signal(false);
+  private async run(fn: () => ItemResult | Promise<ItemResult>, action: Ask['action']): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set(true);
+    try { this.handle(await fn(), action); } finally { this.busy.set(false); }
   }
   private handle(res: ItemResult, action: Ask['action']): void {
     if (res.kind === 'ask') { this.ask.set({ question: res.question, choices: res.choices, action }); return; }
