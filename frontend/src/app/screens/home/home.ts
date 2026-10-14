@@ -132,7 +132,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                     </div>
                   </div>
                 } @else {
-                  <div class="tl-ev" (click)="store.openTaskItem(a.task.id)">
+                  <div class="tl-ev" (click)="store.openItem('task', a.task.id)">
                     <span class="tl-bar" [style.background]="a.color"></span>
                     @if (a.task.who.length) {
                       <div class="tl-av">
@@ -167,7 +167,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
           </div>
         }
         @for (t of latestTasks(); track t.t.id) {
-          <div class="rc-row task" (click)="store.openTaskItem(t.t.id)">
+          <div class="rc-row task" (click)="store.openItem('task', t.t.id)">
             <span class="t-dot" [style.background]="t.color" [class.done]="t.t.done"></span>
             <span class="t-text" [class.strike]="t.t.done">{{ t.t.text }}</span>
             <span class="t-list">{{ t.list }}</span>
@@ -632,7 +632,7 @@ export class HomeScreen {
 
   /** Clic sur le nom d'une entrée du fil : ouvre la fiche de l'élément concerné. */
   openActivity(a: ActivityEntry): void {
-    if (a.kind === 'task') this.store.openTaskItem(a.ref);
+    if (a.kind === 'task') this.store.openItem('task', a.ref);
     else if (a.kind === 'event') this.store.openItem('event', a.ref);
     else this.store.openShoppingList(a.ref);
   }

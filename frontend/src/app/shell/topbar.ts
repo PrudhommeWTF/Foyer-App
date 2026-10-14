@@ -107,7 +107,7 @@ export class TopbarComponent {
     s.patch({ addMenuOpen: false });
     switch (id) {
       case 'event': s.openItem('event', null); break;
-      case 'task': s.patch({ screen: 'taches' }); s.openTask(); break;
+      case 'task': s.openItem('task', null); break;
       case 'shop': s.pickShopFromMenu(); break;
       case 'recipe': s.patch({ screen: 'recettes' }); s.newRecipe(); break;
       case 'tx': s.patch({ screen: 'finances' }); this.finances.init().then(() => this.finances.newTx()); break;

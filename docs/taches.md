@@ -356,6 +356,11 @@ est en place, et comment l'exploiter.
 | **Tâche qui m'est affectée** | Tout de suite, quand quelqu'un d'autre m'affecte une tâche (création ou modification). Pas quand je m'affecte moi-même, pas pour une tâche faite. | Le membre affecté. |
 | **Départ approche** (liste de préparation) | À 18 h chaque jour, du jour `départ - remindDaysBefore` à la veille, tant qu'il reste au moins une affaire à préparer. Une seule notification par liste et par jour. | Le membre concerné (`forMember`) s'il a un compte, plus les adultes du foyer. |
 
+Un tap sur un rappel d'échéance ou sur « tâche qui m'est affectée » ouvre la
+**fiche de la tâche** : par-dessus l'écran en cours si l'application était
+ouverte, sur l'accueil sinon (le service worker passe `#fiche=task:<id>` dans
+l'adresse, que l'application lit au démarrage puis efface).
+
 Le rappel de départ compte les jours et les affaires restantes (« Départ de
 Nolan dans 3 jours : il reste 6 affaires à préparer. ») et ouvre l'application au
 tap. Sa clé de journal est `prep|<listId>|<date>` : un rappel raté à 18 h part
@@ -539,6 +544,31 @@ Une tâche **sans responsable** n'y est pas : « le premier qui passe » n'est �
 personne en particulier, et « Toutes » la montre déjà. La vue n'a pas de saisie :
 elle rassemble, elle ne range pas.
 
+## Fiche d'une tâche
+
+Un tap sur une tâche, d'où qu'il vienne (écran Tâches, accueil, agenda,
+recherche, notification), ouvre sa **fiche** par-dessus l'écran courant (voir
+[`fiche-element.md`](fiche-element.md)) :
+
+- **En vue** : échéance et rappel, récurrence, membres, liste et catégorie, la
+  note entière, les liens (courses, contrat), les **sous-tâches qu'on coche
+  sur place**, les réalisations d'une série, qui l'a créée et modifiée. Une
+  sous-tâche rappelle son parent, qui s'ouvre d'un tap (la fiche de la
+  sous-tâche reste derrière, le retour y ramène).
+- **Fait** d'un tap (annulable), ou **Rouvrir** sur une tâche faite.
+- **Modifier** : le composeur habituel, dans la fiche, avec la gestion des
+  sous-tâches. Enregistrer sans rien changer n'envoie rien. Sur une série,
+  « cette occurrence seulement » ou « toute la série », demandé à
+  l'enregistrement ; la fiche suit alors la copie ponctuelle.
+- **Supprimer** : annulable ; sur une série, « passer cette occurrence » ou
+  « supprimer la série », comme avant.
+- **Devoir ÉcoleDirecte** (tâche d'une liste « Devoirs de … ») : ni Modifier
+  ni Supprimer, la source est ÉcoleDirecte ; « Fait » tant qu'il ne l'est pas,
+  et pas de décochage depuis la fiche. « Voir dans École » quand le module est
+  allumé.
+- Créer une tâche depuis le menu « + » ouvre la fiche en édition, sans changer
+  d'écran. La saisie rapide en tête de liste ne change pas.
+
 ## Liens avec le reste du foyer
 
 Le principe est le même partout : une tâche liée **reste une tâche**. Elle se
@@ -604,7 +634,8 @@ L'emploi du temps n'est **jamais modifié** par une tâche.
 ### Agenda et flux ICS
 
 - Le calendrier montre les tâches datées le jour de leur échéance, avec
-  l'heure ; un **tap** ouvre la tâche (écran Tâches, modale de modification).
+  l'heure ; un **tap** ouvre la fiche de la tâche par-dessus l'agenda (voir
+  « Fiche d’une tâche » plus haut).
 - Le flux ICS partagé n'inclut les tâches que sur demande : *Paramètres →
   Partage du calendrier → Inclure les tâches datées* (`settings.icsTasks`,
   éteint par défaut : le flux est l'agenda de la famille). Alors chaque tâche
@@ -647,9 +678,10 @@ curl -s "http://localhost:3000/api/calendar/feed.ics?token=$TOKEN" | grep -c '^S
 | `backend/src/ics.ts` | Le flux ICS, dont les tâches datées quand `settings.icsTasks` est activé. |
 | `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles, la clôture proposée depuis les courses. |
 | `frontend/src/app/core/finances.store.ts` | `taskFromDeadline`, `taskFromSaving` (la tâche porte le contrat) et `openContract` (le contrat en un tap). |
-| `frontend/src/app/screens/taches/composer.ts` | La saisie rapide et sa barre d'action, réutilisée par l'accueil et la modale de modification. |
+| `frontend/src/app/screens/taches/composer.ts` | La saisie rapide et sa barre d'action : en tête de liste dans l'écran Tâches, et dans la fiche (mode `embedded`, sans son pied). |
+| `frontend/src/app/screens/taches/task-view.ts`, `task-form.ts`, `task.item.ts` | La fiche d'une tâche : la vue, le formulaire (composer et sous-tâches) et sa déclaration au registre. |
 | `frontend/src/app/screens/taches/taches.ts` | L'écran. |
-| `frontend/src/app/screens/home/taches.ts`, `core/tiles/taches.tile.ts` | La tuile d'accueil et son fournisseur. |
+| `frontend/src/app/screens/home/home.ts` | L'accueil, dont « Dernières tâches » et les tâches de la frise « À venir ». |
 
 ## Migration 9
 
@@ -774,7 +806,6 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8099/api/live | pytho
 | `frontend/src/app/core/availability.test.ts` | Rien sans membre affecté, les créneaux du jour des membres affectés, le conflit à une heure (fin de créneau et créneau sans fin exclus), le jour le plus libre, rien quand tous se valent. |
 | `frontend/src/app/core/links.test.ts` | La clôture proposée seulement quand plus rien n'est à prendre, sur la bonne liste, jamais sur une liste vide ni une tâche faite. |
 | `frontend/src/app/core/tasks.test.ts` (tranche 5) | Les sous-tâches sous leur parent et dans leur ordre, celle qui reste ouverte sous un parent coché, celle dont le parent n'est pas là, les compteurs qui ne comptent pas les détails, l'ordre manuel là où il décide et là où il départage, `reorder` sur des indices absurdes. |
-| `frontend/src/app/core/tiles/tiles.test.ts` | La tuile d'accueil : trois vides différents, compteur sur le jour seulement. |
 
 Tous tournent en CI (`npm test` dans `backend/` et dans `frontend/`).
 
