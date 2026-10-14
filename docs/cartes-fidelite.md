@@ -65,6 +65,23 @@ Deux chemins mènent au même endroit (code + format pré-remplis) :
 
 À défaut, le code et le format se saisissent à la main.
 
+Les deux chemins sont dans le formulaire de la carte : la caméra s'ouvre **dans
+la fiche même** (plus dans une fenêtre par-dessus), et « Arrêter le scan » la
+coupe. Un code lu remplit le code et son format, le reste du formulaire garde ce
+qui était saisi.
+
+## La fiche d'une carte
+
+Un tap sur une tuile ouvre la **fiche** de la carte (voir
+[`fiche-element.md`](fiche-element.md)) : c'est elle qu'on présente en caisse, le
+code redessiné en grand, sur fond blanc même en thème sombre. L'ouvrir depuis
+l'écran compte un usage (le classement « fréquemment utilisées ») ; ce compteur
+n'est pas une modification et ne déclenche pas l'alerte « modifié ailleurs ».
+Modifier passe la même fiche en formulaire. Supprimer se fait sans confirmation :
+Annuler remet la carte, logo et usage compris. (Avant la fiche, le bouton
+Supprimer de l'affichage plein écran ne faisait rien : la confirmation n'était
+plus branchée.) Le menu + crée une carte par-dessus l'écran courant.
+
 ## Formats
 
 On lit et on réaffiche les symbologies qu'une carte de fidélité porte en
@@ -88,7 +105,10 @@ chargement de l'application, qui reste identique.
 |---|---|
 | `frontend/src/app/core/cards.ts` | Le noyau pur : formats, correspondance vers bwip-js, traduction depuis le scanner, monogramme (initiales et couleur). |
 | `frontend/src/app/core/cards.test.ts` | Formats, traduction d'un format de scan, monogramme stable. |
-| `frontend/src/app/screens/fidelite.ts` | L'écran : liste, affichage plein écran du code, saisie, scan caméra, import photo et recherche de logo. |
+| `frontend/src/app/screens/fidelite/fidelite.ts` | L'écran : les tuiles, par usage ou par nom. |
+| `frontend/src/app/screens/fidelite/card-view.ts` | La fiche en lecture : le code redessiné pour la caisse. |
+| `frontend/src/app/screens/fidelite/card-form.ts` | Le formulaire : scan caméra en place, import photo, recherche de logo, format, couleur, note. |
+| `frontend/src/app/core/contact-card.ts` | Champs, validation et comparaison « rien changé » des fiches carte et contact (testé). |
 | `frontend/src/app/core/models.ts` | `LoyaltyCard` (dont `logo`), `CardFormat`, le champ `cards` du document. |
 | `backend/src/logos.ts` | La recherche de logo relayée : autocomplétion Clearbit + lecture des images, en data-URI, avec dégradation silencieuse. |
 | `backend/test/logos.test.ts` | Le parseur des candidats et le garde sous deux caractères. |
