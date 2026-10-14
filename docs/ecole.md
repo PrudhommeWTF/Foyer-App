@@ -18,7 +18,7 @@ Messagerie, formulaires, porte-monnaie cantine : pas dans cette version.
 
 | Où | Quoi |
 |---|---|
-| **École** (menu, section « Le foyer ») | Un onglet par enfant (un enfant ne voit que lui). Devoirs groupés par jour, demain en tête, énoncé lisible (liens gardés), badge « Interrogation », case « Fait », mention « non transmis » tant qu'ÉcoleDirecte ne l'a pas reçue, « modifié le … » quand le professeur a changé l'énoncé. « Semaine passée » relit l'historique, devoirs retirés d'ÉcoleDirecte compris. |
+| **École** (menu, section « Le foyer ») | Un onglet par enfant (un enfant ne voit que lui). Devoirs groupés par jour, demain en tête, énoncé lisible (liens gardés), badge « Interrogation », case « Fait », mention « non transmis » tant qu'ÉcoleDirecte ne l'a pas reçue, « modifié le … » quand le professeur a changé l'énoncé. « Passés » garde tout l'historique, devoirs retirés d'ÉcoleDirecte compris : la semaine écoulée dépliée, les mois plus anciens repliés sous « Plus anciens », et une recherche (matière, énoncé, professeur, sans tenir compte des accents) sur l'ensemble. |
 | **Tâches** | Une liste « Devoirs de <prénom> » par élève associé, une tâche par devoir à venir, affectée à l'enfant, échéance à la date de rendu, étiquette « ÉcoleDirecte ». Pas de « + » : une tâche maison va dans une autre liste. Une interrogation porte le rappel « la veille à 18 h ». |
 | **Emploi du temps** | Les cours importés, à côté des créneaux saisis à la main (le car scolaire reste), étiquetés « ÉcoleDirecte », en lecture seule, annulés barrés. |
 | **Planning des repas** | La présence tient compte des cours : un demi-pensionnaire qui a cours le matin et l'après-midi n'est pas attendu à midi ; un cours annulé libère. Case « Demi-pensionnaire » par élève dans Paramètres → École. |
@@ -56,7 +56,7 @@ avec « non transmis » et repart au passage suivant.
 **Ce que la synchronisation ne fait jamais.** Elle ne recrée pas une tâche que
 quelqu'un a supprimée. Elle retire la tâche une semaine après la date de rendu
 (ou quand le devoir disparaît d'ÉcoleDirecte) : le devoir, lui, reste dans
-l'écran École. Elle ne crée pas de tâche pour un devoir déjà passé.
+l'écran École (onglet « Passés », sans limite de durée). Elle ne crée pas de tâche pour un devoir déjà passé.
 
 **Requêtes par passage, par élève** : la liste du cahier de textes, le détail
 des jours qui le demandent (devoir nouveau ; aujourd'hui, demain et après-demain
