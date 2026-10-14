@@ -63,17 +63,20 @@ export class EcoleStore {
   homeworkOf(studentId: number): EdHomework[] { return this.homework().filter((h) => h.studentId === studentId); }
 
   /** Cocher ou décocher : l'écran change tout de suite, le serveur répond avec l'état vrai. */
-  async setDone(h: EdHomework, fait: boolean): Promise<void> {
+  /** Coche ou décoche ; renvoie le devoir tel qu'enregistré (inchangé si l'envoi échoue). */
+  async setDone(h: EdHomework, fait: boolean): Promise<EdHomework> {
     const swap = (x: EdHomework): void => this.vue.update((v) => (v ? { ...v, homework: v.homework.map((y) => (y.id === x.id ? x : y)) } : v));
     swap({ ...h, done: fait, pending: true });
     this.busy.update((s) => new Set([...s, h.id]));
+    let out = h;
     try {
-      swap((await this.api.fait(h.id, fait)).homework);
+      out = (await this.api.fait(h.id, fait)).homework;
     } catch (e) {
-      swap(h);
       this.foyer.toast((e as Error).message || 'La case n’a pas pu être enregistrée.');
     }
+    swap(out);
     this.busy.update((s) => { const n = new Set(s); n.delete(h.id); return n; });
+    return out;
   }
 
   /**

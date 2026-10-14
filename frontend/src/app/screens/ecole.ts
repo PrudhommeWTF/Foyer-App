@@ -1,10 +1,13 @@
+import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FoyerStore } from '../core/foyer.store';
 import { EcoleStore, subjectLabel } from '../core/ecole.store';
 import { EcoleApi, EdAverageView, EdGradeView, EdHomework, EdLifeView, EdVueStudent } from '../core/ecole.api';
 import { IconComponent } from '../core/icon';
+import { normText } from '../core/helpers';
 
 interface DayGroup { day: string; label: string; items: EdHomework[]; }
+interface MonthGroup { key: string; label: string; count: number; days: DayGroup[]; }
 
 /**
  * L'écran « École » : les devoirs des enfants, rapatriés d'ÉcoleDirecte.
@@ -19,7 +22,7 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
   selector: 'screen-ecole',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, NgTemplateOutlet],
   template: `
     <div class="screen-enter">
       @if (ecole.syncLine(); as s) { <div class="screen-sub sync" [class.ko]="!s.ok">{{ s.text }}</div> }
@@ -128,44 +131,83 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
             } @else {
               <div class="hint">Chargement…</div>
             }
+          } @else if (mode() === 'passe') {
+            <div class="search">
+              <f-icon name="search" [size]="17" color="var(--ink3)" [width]="2.2" />
+              <input [value]="query()" (input)="query.set($any($event.target).value)" placeholder="Rechercher dans l’historique…" aria-label="Rechercher dans les devoirs passés" />
+            </div>
+            @if (pastLoading()) {
+              <div class="hint">Chargement…</div>
+            } @else if (query().trim()) {
+              @for (m of pastMonths(); track m.key) {
+                <div class="month-h">{{ m.label }}<span class="d-n">{{ m.count }}</span></div>
+                @for (g of m.days; track g.day) { <ng-container [ngTemplateOutlet]="dayTpl" [ngTemplateOutletContext]="{ $implicit: g }" /> }
+              } @empty {
+                <div class="empty">Aucun devoir passé ne correspond à « {{ query().trim() }} ».</div>
+              }
+            } @else {
+              @for (g of recent(); track g.day) { <ng-container [ngTemplateOutlet]="dayTpl" [ngTemplateOutletContext]="{ $implicit: g }" /> }
+              @empty { <div class="empty">Rien la semaine passée.</div> }
+              @if (pastMonths().length) {
+                <div class="older-h">Plus anciens</div>
+                @for (m of pastMonths(); track m.key) {
+                  <button class="col-toggle" (click)="toggleMonth(m.key)" [attr.aria-expanded]="openMonths().has(m.key)">
+                    <f-icon [name]="openMonths().has(m.key) ? 'chevronDown' : 'chevronRight'" [size]="14" color="var(--ink2)" [width]="2.4" />
+                    {{ m.label }}<span class="d-n">{{ m.count }}</span>
+                  </button>
+                  @if (openMonths().has(m.key)) {
+                    @for (g of m.days; track g.day) { <ng-container [ngTemplateOutlet]="dayTpl" [ngTemplateOutletContext]="{ $implicit: g }" /> }
+                  }
+                }
+              }
+            }
           } @else {
           @for (g of groups(); track g.day) {
-            <div class="day">
-              <div class="d-head">{{ g.label }}<span class="d-n">{{ g.items.length }}</span></div>
-              @for (h of g.items; track h.id) {
-                <div class="hw" [class.done]="h.done" [class.archived]="h.archived">
-                  <button class="tick" [class.on]="h.done" [disabled]="ecole.busy().has(h.id) || h.archived" (click)="ecole.setDone(h, !h.done)"
-                          [attr.aria-pressed]="h.done" [attr.aria-label]="(h.done ? 'Décocher ' : 'Marquer fait : ') + subject(h)">
-                    @if (h.done) { <f-icon name="check" [size]="16" color="#fff" [width]="3.2" /> }
-                  </button>
-                  <div class="hw-b">
-                    <div class="hw-t">
-                      <span class="subj">{{ subject(h) }}</span>
-                      @if (h.isTest) { <span class="badge test">Interrogation</span> }
-                      @if (h.pending) { <span class="badge pend" [title]="h.doneError || 'Envoi à ÉcoleDirecte à la prochaine synchronisation'">non transmis</span> }
-                      @if (h.archived) { <span class="badge off">retiré d’ÉcoleDirecte</span> }
-                    </div>
-                    @if (h.html) { <div class="txt" [innerHTML]="h.html"></div> } @else { <div class="txt muted">Énoncé pas encore récupéré.</div> }
-                    <div class="meta">
-                      @if (h.teacher) { <span>{{ h.teacher }}</span> }
-                      @if (h.givenOn) { <span>donné le {{ fr(h.givenOn) }}</span> }
-                      @if (h.modifiedAt) { <span class="mod">modifié {{ ecole.when(h.modifiedAt) }}</span> }
-                      @if (h.pending && h.doneError) { <span class="ko">{{ h.doneError }}</span> }
-                    </div>
-                  </div>
-                </div>
-              }
-            </div>
+            <ng-container [ngTemplateOutlet]="dayTpl" [ngTemplateOutletContext]="{ $implicit: g }" />
           } @empty {
-            <div class="empty">{{ mode() === 'avenir' ? 'Rien à faire dans les prochains jours.' : 'Rien la semaine passée.' }}</div>
+            <div class="empty">Rien à faire dans les prochains jours.</div>
           }
           }
         }
       }
     </div>
+
+    <ng-template #dayTpl let-g>
+      <div class="day">
+        <div class="d-head">{{ g.label }}<span class="d-n">{{ g.items.length }}</span></div>
+        @for (h of g.items; track h.id) {
+          <div class="hw" [class.done]="h.done" [class.archived]="h.archived">
+            <button class="tick" [class.on]="h.done" [disabled]="ecole.busy().has(h.id) || h.archived" (click)="tick(h)"
+                    [attr.aria-pressed]="h.done" [attr.aria-label]="(h.done ? 'Décocher ' : 'Marquer fait : ') + subject(h)">
+              @if (h.done) { <f-icon name="check" [size]="16" color="#fff" [width]="3.2" /> }
+            </button>
+            <div class="hw-b">
+              <div class="hw-t">
+                <span class="subj">{{ subject(h) }}</span>
+                @if (h.isTest) { <span class="badge test">Interrogation</span> }
+                @if (h.pending) { <span class="badge pend" [title]="h.doneError || 'Envoi à ÉcoleDirecte à la prochaine synchronisation'">non transmis</span> }
+                @if (h.archived) { <span class="badge off">retiré d’ÉcoleDirecte</span> }
+              </div>
+              @if (h.html) { <div class="txt" [innerHTML]="h.html"></div> } @else { <div class="txt muted">Énoncé pas encore récupéré.</div> }
+              <div class="meta">
+                @if (h.teacher) { <span>{{ h.teacher }}</span> }
+                @if (h.givenOn) { <span>donné le {{ fr(h.givenOn) }}</span> }
+                @if (h.modifiedAt) { <span class="mod">modifié {{ ecole.when(h.modifiedAt) }}</span> }
+                @if (h.pending && h.doneError) { <span class="ko">{{ h.doneError }}</span> }
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+    </ng-template>
   `,
   styles: [`
     .sync { margin: 0 0 14px; }
+    .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 14px; padding: 11px 14px; box-shadow: var(--sh-card); margin-bottom: 16px; }
+    .search input { flex: 1; min-width: 0; border: none; background: transparent; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); outline: none; }
+    .older-h, .month-h { font-size: 13px; font-weight: 800; color: var(--ink); margin: 22px 0 10px; display: flex; gap: 8px; align-items: center; }
+    .older-h { border-top: 1px solid var(--line); padding-top: 16px; }
+    .col-toggle { display: flex; width: 100%; align-items: center; gap: 6px; border: none; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); padding: 8px 0; text-align: left; }
     .screen-sub.ko { color: #C6492F; }
     .hint, .small { font-size: 12.5px; font-weight: 600; color: var(--ink3); line-height: 1.45; }
     .small { margin-top: 4px; }
@@ -235,8 +277,13 @@ export class EcoleScreen {
 
   readonly pick = signal<number | null>(null);
   readonly mode = signal<'avenir' | 'passe' | 'notes' | 'vie'>('avenir');
-  /** La semaine passée, archives comprises (devoirs retirés d'ÉcoleDirecte depuis). */
+  /** Tout l'historique de l'élève affiché, archives comprises (devoirs retirés d'ÉcoleDirecte depuis). */
   readonly past = signal<EdHomework[]>([]);
+  readonly pastLoading = signal(false);
+  /** Recherche dans l'historique : matière, énoncé, professeur, sans tenir compte des accents. */
+  readonly query = signal('');
+  /** Les mois de « Plus anciens » dépliés (AAAA-MM). */
+  readonly openMonths = signal<ReadonlySet<string>>(new Set());
   readonly notes = signal<{ grades: EdGradeView[]; averages: EdAverageView[] } | null>(null);
   readonly vie = signal<EdLifeView[] | null>(null);
   readonly openGrade = signal<number | null>(null);
@@ -254,9 +301,6 @@ export class EcoleScreen {
     const s = this.current(); const v = this.ecole.vue();
     if (!s || !v) return [];
     const today = v.today, demain = this.store.addDays(today, 1);
-    if (this.mode() === 'passe') {
-      return this.byDay(this.past().filter((h) => h.studentId === s.id && h.due < today)).reverse();
-    }
     const upcoming = this.ecole.homeworkOf(s.id).filter((h) => h.due >= today);
     const groups = this.byDay(upcoming.filter((h) => h.due > today));
     // Demain d'abord, puis les jours suivants ; ce qui était pour aujourd'hui ferme la marche.
@@ -264,17 +308,52 @@ export class EcoleScreen {
     return [...groups.filter((g) => g.day === demain), ...groups.filter((g) => g.day !== demain), ...todayGroup];
   });
 
+  /** Les devoirs passés de l'élève affiché, filtrés par la recherche. */
+  private readonly pastOf = computed<EdHomework[]>(() => {
+    const s = this.current(); const today = this.ecole.vue()?.today || this.store.todayStr();
+    const q = normText(this.query());
+    return this.past().filter((h) => h.studentId === s?.id && h.due < today
+      && (!q || normText([subjectLabel(h.subject), h.text, h.teacher].join(' ')).includes(q)));
+  });
+  private readonly weekAgo = computed(() => this.store.addDays(this.ecole.vue()?.today || this.store.todayStr(), -7));
+  /** La semaine écoulée, dépliée, du plus récent au plus ancien. */
+  readonly recent = computed<DayGroup[]>(() => this.byDay(this.pastOf().filter((h) => h.due >= this.weekAgo())).reverse());
+  /** Au-delà (ou tout, pendant une recherche) : par mois, du plus récent au plus ancien. */
+  readonly pastMonths = computed<MonthGroup[]>(() => {
+    const all = !!this.query().trim();
+    const days = this.byDay(this.pastOf().filter((h) => all || h.due < this.weekAgo())).reverse();
+    const months = new Map<string, DayGroup[]>();
+    for (const d of days) { const k = d.day.slice(0, 7); (months.get(k) ?? months.set(k, []).get(k)!).push(d); }
+    return [...months].map(([key, ds]) => ({ key, label: this.monthLabel(key), count: ds.reduce((n, d) => n + d.items.length, 0), days: ds }));
+  });
+  toggleMonth(key: string): void {
+    const next = new Set(this.openMonths()); if (!next.delete(key)) next.add(key); this.openMonths.set(next);
+  }
+  private monthLabel(key: string): string {
+    const t = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(key + '-01T12:00:00Z'));
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
   private byDay(list: EdHomework[]): DayGroup[] {
     const map = new Map<string, EdHomework[]>();
     for (const h of list.slice().sort((a, b) => a.due.localeCompare(b.due) || Number(b.isTest) - Number(a.isTest))) (map.get(h.due) ?? map.set(h.due, []).get(h.due)!).push(h);
     return [...map].map(([day, items]) => ({ day, label: this.dayLabel(day), items }));
   }
 
+  /** Coche ou décoche ; l'historique chargé suit (la vue du store ne porte que ce qui est à venir). */
+  async tick(h: EdHomework): Promise<void> {
+    const r = await this.ecole.setDone(h, !h.done);
+    this.past.update((l) => l.map((y) => (y.id === r.id ? r : y)));
+  }
+
   async showPast(s: EdVueStudent): Promise<void> {
     this.mode.set('passe');
+    if (this.past().some((h) => h.studentId === s.id)) return;
     const today = this.ecole.vue()?.today || this.store.todayStr();
-    try { this.past.set((await this.api.archives(s.id, this.store.addDays(today, -7), this.store.addDays(today, -1))).homework); }
+    this.pastLoading.set(true);
+    try { this.past.set((await this.api.archives(s.id, '2000-01-01', this.store.addDays(today, -1))).homework); }
     catch (e) { this.store.toast((e as Error).message); }
+    finally { this.pastLoading.set(false); }
   }
 
   async showNotes(s: EdVueStudent): Promise<void> {
