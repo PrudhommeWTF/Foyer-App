@@ -166,8 +166,9 @@ comportements :
 - **Réutilisable.** « Tout remettre à zéro » efface les coches sans toucher aux
   articles : le trousseau reste, prêt pour le prochain départ. C'est une
   **opération** dédiée (voir plus bas), pas un PUT du document, et elle pose
-  `lastResetAt`. Changer la date de départ sur une liste encore cochée propose
-  la remise à zéro dans la foulée.
+  `lastResetAt`. Changer la date de départ sur une liste encore cochée fait
+  demander, au moment d'enregistrer la fiche : « Enregistrer et tout remettre
+  à zéro » ou « Enregistrer sans rien décocher ».
 - **Elle rappelle.** À J-`remindDaysBefore` (défaut 3, borné à `[1, 30]`) et
   jusqu'à la veille, un rappel part tant qu'il reste au moins une affaire à
   préparer. Voir « Rappels et notifications ».
@@ -568,6 +569,30 @@ recherche, notification), ouvre sa **fiche** par-dessus l'écran courant (voir
   allumé.
 - Créer une tâche depuis le menu « + » ouvre la fiche en édition, sans changer
   d'écran. La saisie rapide en tête de liste ne change pas.
+
+## Fiche d'une liste
+
+Le nom de la liste ouverte, en tête de l'écran, ouvre sa **fiche** (voir
+[`fiche-element.md`](fiche-element.md)) : son type, qui la voit, ce qui reste à
+faire ; pour une préparation, le départ, le rappel et le lieu de destination
+(qui s'ouvre par-dessus, le retour ramène à la liste).
+
+- **Archiver** (ou **Restaurer**) et **En modèle** sont des actions de la fiche,
+  plus des boutons de l'en-tête ; « Tout décocher » (corvées, checklists) et
+  « Tout remettre à zéro » (préparation) restent sur l'écran, au plus près des
+  cases.
+- **Modifier** reprend le formulaire de la liste dans la fiche ; « Nouveau
+  départ », sur une préparation dont la date est passée, ouvre la fiche
+  directement en édition. « Nouvelle liste » crée dans la fiche.
+- **Supprimer** se confirme (la liste emporte ses tâches) et propose
+  **Archiver plutôt**, qui range sans rien perdre.
+- Une liste « Devoirs de … » se lit sans Modifier ni Supprimer : elle suit son
+  élève dans ÉcoleDirecte.
+- Partir d'un **modèle** reste une fenêtre à part : c'est un assistant de
+  création, pas un élément qu'on consulte.
+
+La partie pure (champs, effacement des champs de préparation sur un autre
+type, comparaison « rien changé ») est dans `core/task-list-form.ts`, testée.
 
 ## Liens avec le reste du foyer
 

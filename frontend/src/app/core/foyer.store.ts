@@ -20,6 +20,7 @@ import { RecipeData, recipeChanges } from './recipe-form';
 import { SlotDefaults, slotChanges } from './slot-form';
 import { ShopDefaults, ShopFields, shopOps, shopRestoreOps } from './shop-item';
 import { CardData, ContactData, cardChanges, contactChanges } from './contact-card';
+import { TaskListData, taskListChanges } from './task-list-form';
 import { PlaceFields, PlaceItemFields, placeItemOps, placeItemRestoreOps, placeOps } from './place-item';
 import { presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
@@ -1914,46 +1915,31 @@ export class FoyerStore {
   // Elles s'éditent par l'enregistrement du document : ce sont des réglages,
   // pas des coches, et le serveur en tire lui-même les conséquences pour les tâches.
 
-  newTaskList(kind: ListKind = 'taches'): void {
-    const icon = kind === 'taches' ? 'maison' : kind === 'preparation' ? 'valise' : 'checklist';
-    this.patch({ listForm: true, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: icon, lKind: kind, lScope: 'shared', lOrder: 'echeance', lForMember: null, lDeparture: '', lRemind: 3, lPlace: '' });
-  }
-  editTaskList(id: string): void {
-    const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return;
-    this.patch({ listForm: true, listEditId: id, lName: l.name, lColor: l.color, lIcon: l.icon || 'checklist', lKind: l.kind, lScope: l.scope, lOrder: l.order === 'manuel' ? 'manuel' : 'echeance',
-      lForMember: l.forMember ?? null, lDeparture: l.departure ?? '', lRemind: l.remindDaysBefore ?? 3, lPlace: l.placeId ?? '' });
-  }
-  /** Les champs propres à une liste de préparation, ou de quoi les effacer si elle n'en est pas (ou plus) une. */
-  private prepFields(): Partial<TaskList> {
-    const s = this.ui();
-    if (s.lKind !== 'preparation') return { forMember: null, departure: null, remindDaysBefore: null, lastResetAt: null, placeId: null };
-    const remind = Math.min(30, Math.max(1, Math.round(s.lRemind || 3)));
-    return { forMember: s.lForMember || null, departure: s.lDeparture || null, remindDaysBefore: remind, placeId: s.lPlace || null };
-  }
-  saveTaskList(): void {
-    const s = this.ui(); const name = s.lName.trim(); if (!name) { this.toast('Donne un nom à la liste'); return; }
-    // Une liste de préparation est toujours partagée : l'enfant coche son sac.
-    const scope = s.lKind === 'preparation' ? 'shared' : s.lScope;
-    const extra = this.prepFields();
-    // Le mode manuel ne concerne que les tâches et les corvées ; ailleurs il est
-    // absent (échéance par défaut, la checklist étant manuelle par nature).
-    const order = (s.lKind === 'taches' || s.lKind === 'corvees') && s.lOrder === 'manuel' ? 'manuel' : undefined;
-    if (s.listEditId) {
-      const before = this._data()?.taskLists.find((l) => l.id === s.listEditId);
-      this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === s.listEditId); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], name, color: s.lColor, icon: s.lIcon, kind: s.lKind, scope, order, ...extra }; });
-      this.toast('Liste modifiée');
-      this.patch({ listForm: false, listEditId: null });
-      // Nouveau départ : la date a changé et des affaires restent cochées de la
-      // dernière fois. On propose de repartir de zéro dans la foulée.
-      const hasChecked = (this._data()?.tasks || []).some((t) => t.listId === s.listEditId && t.done);
-      if (s.lKind === 'preparation' && extra.departure && before?.departure !== extra.departure && hasChecked) {
-        this.patch({ prepResetId: s.listEditId });
-      }
-      return;
+  /** Nouvelle liste, en fiche. */
+  newTaskList(): void { this.openItem('taskList', null); }
+  /**
+   * Enregistre une liste depuis sa fiche. Nouveau départ d'une préparation dont
+   * des affaires restent cochées de la dernière fois : la fiche demande s'il
+   * faut repartir de zéro, au moment d'enregistrer.
+   */
+  saveTaskList(id: string | null, data: TaskListData, scope?: string): ItemResult {
+    const before = id ? this._data()?.taskLists.find((l) => l.id === id) : undefined;
+    if (!before) {
+      const nid = this.createTaskList(data.name, data.color, data.icon, data.kind, data.scope, data);
+      this.patch({ activeList: nid });
+      this.toast('Liste créée');
+      return { kind: 'done' };
     }
-    const id = this.createTaskList(name, s.lColor, s.lIcon, s.lKind, scope, { ...extra, ...(order ? { order } : {}) });
-    this.patch({ listForm: false, activeList: id });
-    this.toast('Liste créée');
+    if (!taskListChanges(before, data)) return { kind: 'done' };
+    const hasChecked = (this._data()?.tasks || []).some((t) => t.listId === before.id && t.done);
+    const nouveauDepart = data.kind === 'preparation' && !!data.departure && before.departure !== data.departure && hasChecked;
+    if (nouveauDepart && !scope) {
+      return { kind: 'ask', question: 'Nouveau départ : des affaires sont encore cochées de la dernière fois.', choices: [
+        { scope: 'reset', label: 'Enregistrer et tout remettre à zéro' }, { scope: 'keep', label: 'Enregistrer sans rien décocher' }] };
+    }
+    this.mutate((d) => { const i = d.taskLists.findIndex((l) => l.id === before.id); if (i >= 0) d.taskLists[i] = { ...d.taskLists[i], ...data }; });
+    if (scope === 'reset') this.resetList(before.id); else this.toast('Liste modifiée');
+    return { kind: 'done' };
   }
   private createTaskList(name: string, color: string, icon: string, kind: ListKind, scope: string, extra: Partial<TaskList> = {}): string {
     const id = uid('l');
@@ -1969,12 +1955,23 @@ export class FoyerStore {
     if (this.ui().activeList === id && archived) this.patch({ activeList: 'all' });
     this.toastWithUndo(archived ? 'Liste archivée' : 'Liste restaurée', () => this.archiveTaskList(id, !archived));
   }
-  confirmTaskListDel(): void {
-    const id = this.ui().listDelId; if (!id) return;
-    // Les tâches partent avec la liste : le serveur le fait de son côté, l'écran l'anticipe.
-    this.mutate((d) => { d.taskLists = d.taskLists.filter((l) => l.id !== id); d.tasks = d.tasks.filter((t) => t.listId !== id); });
-    this.patch({ listDelId: null, activeList: this.ui().activeList === id ? 'all' : this.ui().activeList });
+  /**
+   * Supprime une liste et ses tâches, après confirmation : c'est sans retour.
+   * La question propose d'archiver plutôt, qui range sans rien perdre. Les
+   * tâches partent avec la liste : le serveur le fait, l'écran l'anticipe.
+   */
+  delTaskList(id: string, scope?: string): ItemResult {
+    const l = this._data()?.taskLists.find((x) => x.id === id); if (!l) return { kind: 'done' };
+    if (!scope) {
+      const n = (this._data()?.tasks || []).filter((t) => t.listId === id).length;
+      return { kind: 'ask', question: 'Supprimer « ' + l.name + ' »' + (n > 1 ? ' et ses ' + n + ' tâches' : n ? ' et sa tâche' : '') + ' ? Pour la garder sans l’afficher, archivez-la plutôt.',
+        choices: [...(l.archived ? [] : [{ scope: 'archive', label: 'Archiver plutôt' }]), { scope: 'all', label: 'Supprimer', danger: true }] };
+    }
+    if (scope === 'archive') { this.archiveTaskList(id, true); return { kind: 'done' }; }
+    this.mutate((d) => { d.taskLists = d.taskLists.filter((x) => x.id !== id); d.tasks = d.tasks.filter((t) => t.listId !== id); });
+    if (this.ui().activeList === id) this.patch({ activeList: 'all' });
     this.toast('Liste supprimée');
+    return { kind: 'done' };
   }
 
   /** Le contenu d'une liste devient un modèle : ses intitulés, faits ou non, dans l'ordre. */
