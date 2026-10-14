@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -80,6 +80,15 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   aisle: {
     kind: 'aisle', label: 'Rayon', newTitle: 'Nouveau rayon', editTitle: 'Modifier le rayon',
     screen: 'courses', openLabel: 'Ouvrir dans Courses', editable: true, removeMode: 'confirm',
+  },
+  // Un lieu emporte son inventaire : on confirme. Une affaire se remet d'un Annuler.
+  place: {
+    kind: 'place', label: 'Lieu', newTitle: 'Nouveau lieu', editTitle: 'Modifier le lieu',
+    screen: 'lieux', openLabel: 'Ouvrir dans Lieux de vacances', editable: true, removeMode: 'confirm',
+  },
+  placeItem: {
+    kind: 'placeItem', label: 'Affaire', newTitle: 'Nouvelle affaire', editTitle: 'Modifier l’affaire',
+    screen: 'lieux', openLabel: 'Ouvrir dans Lieux de vacances', editable: true, removeMode: 'undo',
   },
 };
 

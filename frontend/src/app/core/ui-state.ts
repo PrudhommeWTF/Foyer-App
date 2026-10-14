@@ -93,12 +93,6 @@ export interface UiState {
   /** Choix d'un modèle pour créer une liste. */
   tplOpen: boolean;
 
-  // lieux (inventaires par lieu de vacances)
-  placeForm: boolean; plEditId: string | null;
-  plName: string; plColor: string; plIcon: string; plNote: string; placeDelId: string | null;
-  /** Modale d'une affaire (renommer, quantité, changer de lieu). */
-  showPlaceItem: boolean; piEditId: string | null; piName: string; piQty: string; piPlaceId: string;
-
   // contacts
   contactSearch: string; contactCat: string;
   contactForm: boolean; coEditId: string | null;
@@ -226,8 +220,6 @@ export function initialUi(): UiState {
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', lOrder: 'echeance', listDelId: null,
     lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
     tplOpen: false,
-    placeForm: false, plEditId: null, plName: '', plColor: '#4E93B8', plIcon: 'voyage', plNote: '', placeDelId: null,
-    showPlaceItem: false, piEditId: null, piName: '', piQty: '', piPlaceId: '',
     contactSearch: '', contactCat: 'Tous',
     contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     cardSearch: '',

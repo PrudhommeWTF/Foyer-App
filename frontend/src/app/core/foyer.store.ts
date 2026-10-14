@@ -20,6 +20,7 @@ import { parseQuery, searchRecipes } from './recipe-search';
 import { RecipeData, recipeChanges } from './recipe-form';
 import { SlotDefaults, slotChanges } from './slot-form';
 import { ShopDefaults, ShopFields, shopOps, shopRestoreOps } from './shop-item';
+import { PlaceFields, PlaceItemFields, placeItemOps, placeItemRestoreOps, placeOps } from './place-item';
 import { presenceAt } from './presence';
 import { SuggestReport, daysBetween, lastServed, semaines, suggestMeals } from './suggest';
 import { Allergene } from './articles';
@@ -1482,32 +1483,30 @@ export class FoyerStore {
     return (this._data()?.placeItems || []).filter((i) => i.placeId === placeId);
   }
 
-  openPlace(): void {
-    this.patch({ placeForm: true, plEditId: null, plName: '', plColor: '#4E93B8', plIcon: 'voyage', plNote: '' });
+  /** Nouveau lieu, en fiche. */
+  openPlace(): void { this.openItem('place', null); }
+  /** Enregistre un lieu depuis sa fiche : seuls les champs changés partent. */
+  savePlace(id: string | null, f: PlaceFields): ItemResult {
+    if (!f.name.trim()) { this.toast('Donne un nom au lieu'); return { kind: 'invalid' }; }
+    const before = id ? this._data()?.places.find((x) => x.id === id) ?? null : null;
+    if (id && !before) { this.toast('Ce lieu n’existe plus'); return { kind: 'invalid' }; }
+    const ops = placeOps(id || uid('lieu'), before, f);
+    if (!ops.length) return { kind: 'done' };
+    this.pushPlaceOps(ops);
+    this.toast(before ? 'Lieu modifié' : 'Lieu créé');
+    return { kind: 'done' };
   }
-  editPlace(id: string): void {
-    const p = this._data()?.places.find((x) => x.id === id); if (!p) return;
-    this.patch({ placeForm: true, plEditId: id, plName: p.name, plColor: p.color, plIcon: p.icon || 'voyage', plNote: p.note || '' });
-  }
-  savePlace(): void {
-    const s = this.ui(); const name = s.plName.trim(); if (!name) { this.toast('Donne un nom au lieu'); return; }
-    const note = s.plNote.trim();
-    if (s.plEditId) {
-      this.pushPlaceOps([{ op: 'place-edit', id: s.plEditId, name, color: s.plColor, icon: s.plIcon, note }]);
-      this.toast('Lieu modifié');
-      this.patch({ placeForm: false, plEditId: null });
-    } else {
-      const id = uid('lieu');
-      this.pushPlaceOps([{ op: 'place-add', id, name, color: s.plColor, icon: s.plIcon, ...(note ? { note } : {}) }]);
-      this.patch({ placeForm: false });
-      this.toast('Lieu créé');
+  /** Supprime un lieu après confirmation : il emporte son inventaire, sans retour. */
+  delPlace(id: string, scope?: string): ItemResult {
+    const p = this._data()?.places.find((x) => x.id === id); if (!p) return { kind: 'done' };
+    if (!scope) {
+      const n = this.itemsOfPlace(id).length;
+      return { kind: 'ask', question: 'Supprimer « ' + p.name + ' »' + (n > 1 ? ' et ses ' + n + ' affaires' : n ? ' et son affaire' : '') + ' ? C’est définitif.',
+        choices: [{ scope: 'all', label: 'Supprimer', danger: true }] };
     }
-  }
-  confirmPlaceDel(): void {
-    const id = this.ui().placeDelId; if (!id) return;
     this.pushPlaceOps([{ op: 'place-remove', id }]);
-    this.patch({ placeDelId: null });
     this.toast('Lieu supprimé');
+    return { kind: 'done' };
   }
 
   /** Ajoute une affaire à un lieu, restée là-bas par défaut. */
@@ -1518,22 +1517,24 @@ export class FoyerStore {
   /** Les deux gestes : « J'ai laissé » (là-bas) et « J'ai ramené » (ici). */
   setPlaceItemState(id: string, state: PlaceItemState): void { this.pushPlaceOps([{ op: 'set-state', id, state }]); }
 
-  editPlaceItem(id: string): void {
-    const it = this._data()?.placeItems.find((x) => x.id === id); if (!it) return;
-    this.patch({ showPlaceItem: true, piEditId: id, piName: it.name, piQty: it.qty, piPlaceId: it.placeId });
-  }
-  savePlaceItem(): void {
-    const s = this.ui(); const id = s.piEditId; if (!id) return;
-    const name = s.piName.trim(); if (!name) { this.toast('Donne un nom à l’affaire'); return; }
-    this.pushPlaceOps([{ op: 'edit', id, name, qty: s.piQty.trim(), placeId: s.piPlaceId }]);
-    this.patch({ showPlaceItem: false, piEditId: null });
+  /** Enregistre une affaire depuis sa fiche : seuls les champs changés partent. */
+  savePlaceItem(id: string, f: PlaceItemFields): ItemResult {
+    if (!f.name.trim()) { this.toast('Donne un nom à l’affaire'); return { kind: 'invalid' }; }
+    const before = this._data()?.placeItems.find((x) => x.id === id);
+    if (!before) { this.toast('Cette affaire n’existe plus'); return { kind: 'invalid' }; }
+    const ops = placeItemOps(before, f);
+    if (!ops.length) return { kind: 'done' };
+    this.pushPlaceOps(ops);
     this.toast('Affaire modifiée');
+    return { kind: 'done' };
   }
-  delPlaceItem(): void {
-    const id = this.ui().piEditId; if (!id) return;
+  /** Supprime une affaire, sans confirmation : Annuler la remet à l'identique, état compris. */
+  delPlaceItem(id: string): ItemResult {
+    const it = this._data()?.placeItems.find((x) => x.id === id); if (!it) return { kind: 'done' };
+    const copie = { ...it };
     this.pushPlaceOps([{ op: 'remove', id }]);
-    this.patch({ showPlaceItem: false, piEditId: null });
-    this.toast('Affaire supprimée');
+    this.toastWithUndo('Affaire supprimée', () => this.pushPlaceOps(placeItemRestoreOps(copie)));
+    return { kind: 'done' };
   }
 
   // ---- rayons -------------------------------------------------------------
