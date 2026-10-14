@@ -1,18 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FoyerStore } from '../core/foyer.store';
-import { IconComponent } from '../core/icon';
-import { AvatarComponent } from '../shared/avatar';
-import { ModalComponent } from '../shared/modal';
-import { ConfirmComponent } from '../shared/confirm';
-import { CONTACT_CATS, CONTACT_CAT_COLORS, tint } from '../core/constants';
-import { contactIni } from '../core/helpers';
+import { FoyerStore } from '../../core/foyer.store';
+import { IconComponent } from '../../core/icon';
+import { AvatarComponent } from '../../shared/avatar';
+import { CONTACT_CATS, CONTACT_CAT_COLORS, tint } from '../../core/constants';
+import { contactIni } from '../../core/helpers';
 
 @Component({
   selector: 'screen-contacts',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, AvatarComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, AvatarComponent],
   template: `
     <div class="screen-enter">
       <div class="head-row">
@@ -37,7 +35,8 @@ import { contactIni } from '../core/helpers';
       <div class="grid">
         @for (c of filtered(); track c.id) {
           <div class="card contact">
-            <div class="top">
+            <!-- Le haut de la carte ouvre la fiche (la modifier, la supprimer) ; appeler et écrire restent directs. -->
+            <button class="top" (click)="store.openItem('contact', c.id)">
               <f-avatar [ini]="contactIni(c.name)" [color]="c.color" [size]="54" />
               <div class="info">
                 <div class="name-row">
@@ -50,7 +49,8 @@ import { contactIni } from '../core/helpers';
                   <span class="cat-name">{{ c.cat }}</span>
                 </div>
               </div>
-            </div>
+              <f-icon name="chevronRight" [size]="17" color="var(--ink3)" [width]="2.4" />
+            </button>
             <div class="lines">
               <a class="line" [href]="'tel:' + c.phone"><f-icon name="phone" [size]="15" color="var(--ink3)" [width]="2" /><span>{{ c.phone }}</span></a>
               @if (c.email) {
@@ -59,8 +59,6 @@ import { contactIni } from '../core/helpers';
             </div>
             <div class="actions">
               <a class="call" [href]="'tel:' + c.phone"><f-icon name="phone" [size]="16" color="#5F7E5C" [width]="2" /> Appeler</a>
-              <button class="icon-btn" (click)="store.editContact(c.id)"><f-icon name="edit" [size]="17" color="var(--ink2)" [width]="2" /></button>
-              <button class="icon-btn" (click)="store.patch({ contactDelId: c.id })"><f-icon name="trash" [size]="17" color="var(--primary)" [width]="2" /></button>
             </div>
           </div>
         } @empty {
@@ -69,69 +67,6 @@ import { contactIni } from '../core/helpers';
       </div>
     </div>
 
-    @if (store.ui().contactForm) {
-      <f-modal [title]="formTitle()" [maxWidth]="520" (close)="store.patch({ contactForm: false })">
-        <div class="form-row">
-          <div class="field">
-            <div class="field-label">Nom</div>
-            <input class="input" [ngModel]="store.ui().coName" (ngModelChange)="store.patch({ coName: $event })" placeholder="Ex : Dr. Martin" />
-          </div>
-          <div class="field">
-            <div class="field-label">Rôle</div>
-            <input class="input" [ngModel]="store.ui().coRole" (ngModelChange)="store.patch({ coRole: $event })" placeholder="Ex : Dentiste" />
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <div class="field-label">Téléphone</div>
-            <input class="input" [ngModel]="store.ui().coPhone" (ngModelChange)="store.patch({ coPhone: $event })" placeholder="06 12 34 56 78" />
-          </div>
-          <div class="field">
-            <div class="field-label">Email (option.)</div>
-            <input class="input" [ngModel]="store.ui().coEmail" (ngModelChange)="store.patch({ coEmail: $event })" placeholder="email@exemple.fr" />
-          </div>
-        </div>
-        <div class="field-label">Date de naissance (option.)</div>
-        <input class="input" type="date" [ngModel]="store.ui().coBirthday" (ngModelChange)="store.patch({ coBirthday: $event })" style="margin-bottom:14px" />
-
-        <div class="field-label">Catégorie</div>
-        <div class="cat-opts">
-          @for (cat of CONTACT_CATS; track cat) {
-            <div class="cat-opt" [class.on]="store.ui().coCat === cat"
-                 [style.border-color]="store.ui().coCat === cat ? CONTACT_CAT_COLORS[cat] : 'transparent'"
-                 [style.background]="tint(CONTACT_CAT_COLORS[cat])" [style.color]="CONTACT_CAT_COLORS[cat]"
-                 (click)="store.patch({ coCat: cat })">
-              <span class="dot" [style.background]="CONTACT_CAT_COLORS[cat]"></span>{{ cat }}
-            </div>
-          }
-        </div>
-
-        <div class="field-label">Couleur</div>
-        <div class="swatch-row">
-          @for (col of colors; track col) {
-            <div class="swatch" [class.on]="store.ui().coColor === col" [style.background]="col"
-                 [style.box-shadow]="store.ui().coColor === col ? '0 0 0 3px var(--surface),0 0 0 5px ' + col : 'none'"
-                 (click)="store.patch({ coColor: col })"></div>
-          }
-        </div>
-
-        <div class="urgent-toggle" (click)="store.patch({ coUrgent: !store.ui().coUrgent })">
-          <div class="ut-label"><f-icon name="urgent" [size]="18" color="var(--primary)" [width]="2" /><span>Contact d'urgence</span></div>
-          <div class="switch" [class.on]="store.ui().coUrgent"><div class="knob"></div></div>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn btn-soft" (click)="store.patch({ contactForm: false })">Annuler</button>
-          <button class="btn btn-primary" (click)="store.saveContact()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
-    @if (store.ui().contactDelId) {
-      <f-confirm title="Supprimer ce contact ?" (cancel)="store.patch({ contactDelId: null })" (confirm)="store.confirmContactDel()">
-        « {{ delName() }} » sera retiré de vos contacts. Cette action est définitive.
-      </f-confirm>
-    }
   `,
   styles: [`
     .head-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
@@ -148,7 +83,7 @@ import { contactIni } from '../core/helpers';
     @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
 
     .card.contact { padding: 20px; border-radius: 20px; }
-    .top { display: flex; align-items: flex-start; gap: 16px; }
+    .top { display: flex; align-items: flex-start; gap: 16px; width: 100%; padding: 0; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
     .info { flex: 1; min-width: 0; }
     .name-row { display: flex; align-items: center; gap: 8px; }
     .name { font-weight: 800; font-size: 16px; color: var(--ink); }
@@ -165,35 +100,19 @@ import { contactIni } from '../core/helpers';
 
     .actions { display: flex; gap: 8px; }
     .call { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 10px; border-radius: 12px; background: #EDF2EB; color: #5F7E5C; font-size: 13px; font-weight: 800; cursor: pointer; text-decoration: none; }
-    .actions .icon-btn { width: 42px; height: 42px; border-radius: 12px; background: var(--soft2); }
 
     .card.empty { grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 15px; }
 
-    .form-row { display: flex; gap: 12px; margin-bottom: 20px; }
-    .field { flex: 1; min-width: 0; }
-    .cat-opts { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 20px; }
-    .cat-opt { display: flex; align-items: center; gap: 7px; padding: 9px 14px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
-    .cat-opt .dot { width: 9px; height: 9px; border-radius: 3px; }
 
-    .urgent-toggle { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-radius: 13px; background: var(--soft); cursor: pointer; margin: 4px 0 8px; }
-    .ut-label { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 800; color: var(--ink); }
-    .switch { width: 46px; height: 26px; border-radius: 20px; background: var(--line2); position: relative; transition: background .2s; flex: none; }
-    .switch.on { background: var(--primary); }
-    .switch .knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .2s; }
-    .switch.on .knob { left: 23px; }
 
-    .modal-actions { display: flex; gap: 12px; margin-top: 8px; justify-content: flex-end; }
   `],
 })
 export class ContactsScreen {
   store = inject(FoyerStore);
   d = this.store.d;
 
-  CONTACT_CATS = CONTACT_CATS;
   CONTACT_CAT_COLORS = CONTACT_CAT_COLORS;
   contactIni = contactIni;
-  tint = tint;
-  colors = ['#9B6FA8', '#E56B4E', '#4E93B8', '#F0B24B', '#7A9B76', '#C77DA5'];
 
   catChips = computed(() => {
     const cs = this.d().contacts;
@@ -212,8 +131,6 @@ export class ContactsScreen {
     });
   });
 
-  formTitle = computed(() => (this.store.ui().coEditId ? 'Modifier le contact' : 'Nouveau contact'));
-  delName = computed(() => this.d().contacts.find((c) => c.id === this.store.ui().contactDelId)?.name || '');
 
   chipBg(color: string): string { return color ? tint(color) : 'var(--surface)'; }
   chipColor(color: string): string { return color || 'var(--ink2)'; }

@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -89,6 +89,14 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   placeItem: {
     kind: 'placeItem', label: 'Affaire', newTitle: 'Nouvelle affaire', editTitle: 'Modifier l’affaire',
     screen: 'lieux', openLabel: 'Ouvrir dans Lieux de vacances', editable: true, removeMode: 'undo',
+  },
+  contact: {
+    kind: 'contact', label: 'Contact', newTitle: 'Nouveau contact', editTitle: 'Modifier le contact',
+    screen: 'contacts', openLabel: 'Ouvrir dans Contacts', editable: true, removeMode: 'undo',
+  },
+  card: {
+    kind: 'card', label: 'Carte de fidélité', newTitle: 'Nouvelle carte', editTitle: 'Modifier la carte',
+    screen: 'fidelite', openLabel: 'Ouvrir dans Cartes de fidélité', editable: true, removeMode: 'undo', module: 'modFidelite',
   },
 };
 

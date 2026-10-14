@@ -1,4 +1,4 @@
-import { CardFormat, ListKind, Rayon } from './models';
+import { ListKind, Rayon } from './models';
 import { todayIn, weekdayOf } from './helpers';
 import { PasteMode, SchedClip } from './sched-copy';
 import { HOUSEHOLD_TZ, SCREENS } from './constants';
@@ -95,27 +95,9 @@ export interface UiState {
 
   // contacts
   contactSearch: string; contactCat: string;
-  contactForm: boolean; coEditId: string | null;
-  coName: string; coRole: string; coPhone: string; coEmail: string; coCat: string; coColor: string; coUrgent: boolean; coBirthday: string;
-  contactDelId: string | null;
 
   // cartes de fidélité
   cardSearch: string;
-  cardForm: boolean; caEditId: string | null;
-  caName: string; caCode: string; caFormat: CardFormat; caColor: string; caNote: string;
-  /** L'utilisateur a choisi la couleur : le nom ne la reppropose plus. */
-  caColorTouched: boolean;
-  /** Logo choisi (data-URI), ou '' pour le monogramme. */
-  caLogo: string;
-  /** Recherche de logo en cours, et les logos proposés (data-URI) tirés du nom. */
-  logoBusy: boolean; logoOpts: { name: string; domain: string; dataUri: string }[];
-  /** Une recherche a été lancée : distingue « pas encore cherché » de « rien trouvé ». */
-  logoSearched: boolean;
-  cardDelId: string | null;
-  /** Carte affichée en plein écran (son code réaffiché), ou null. */
-  cardShow: string | null;
-  /** La modale de scan par la caméra est ouverte. */
-  scanOpen: boolean;
 
   // recipes
   /** Recherche du carnet : « courgette 20min ». */
@@ -221,9 +203,7 @@ export function initialUi(): UiState {
     lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
     tplOpen: false,
     contactSearch: '', contactCat: 'Tous',
-    contactForm: false, coEditId: null, coName: '', coRole: '', coPhone: '', coEmail: '', coCat: 'Famille', coColor: '#9B6FA8', coUrgent: false, coBirthday: '', contactDelId: null,
     cardSearch: '',
-    cardForm: false, caEditId: null, caName: '', caCode: '', caFormat: 'qr', caColor: '#E56B4E', caNote: '', caColorTouched: false, caLogo: '', logoBusy: false, logoOpts: [], logoSearched: false, cardDelId: null, cardShow: null, scanOpen: false,
     recipeSearch: '',
     schedWho: [], schedDow: weekdayOf(today), schedAnchor: today, schedMove: null,
     schedClip: null, schedPasteOpen: false, schedPasteMode: 'merge', schedPasteDows: [], schedPasteWho: null,

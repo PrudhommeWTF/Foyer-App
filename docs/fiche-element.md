@@ -2,7 +2,9 @@
 
 Un tap sur un élément, d'où qu'il vienne (accueil, agenda, recherche, notification), ouvre sa **fiche** par-dessus l'écran courant, **sans changer d'écran**. On lit, on modifie dans la même fiche, on ferme : on est toujours là où l'on était, au même endroit du défilement, sur le même mois de l'agenda.
 
-Types passés par la fiche à ce jour : **événement**, **tâche** (y compris préparation et devoirs, voir [`taches.md`](taches.md#fiche-dune-tâche)), **repas** (un créneau d'un jour), **recette**, **créneau d'emploi du temps** (voir [`emploi-du-temps.md`](emploi-du-temps.md#fiche-dun-créneau)), **article de courses**, **liste de courses**, **rayon**, **lieu** et **affaire** (voir [`lieux.md`](lieux.md#lécran)). Les autres modules suivent (contact, carte, liste de tâches, employé, devoir, note).
+Types passés par la fiche à ce jour : **événement**, **tâche** (y compris préparation et devoirs, voir [`taches.md`](taches.md#fiche-dune-tâche)), **repas** (un créneau d'un jour), **recette**, **créneau d'emploi du temps** (voir [`emploi-du-temps.md`](emploi-du-temps.md#fiche-dun-créneau)), **article de courses**, **liste de courses**, **rayon**, **lieu**, **affaire** (voir [`lieux.md`](lieux.md#lécran)), **contact** et **carte de fidélité** (voir [`cartes-fidelite.md`](cartes-fidelite.md#la-fiche-dune-carte)). Les autres modules suivent (liste de tâches, employé, devoir, note).
+
+Sur une carte de contact, « Appeler » reste un lien direct ; le haut de la carte ouvre la fiche, où le téléphone et l'email sont aussi des liens.
 
 Sur la liste de courses, la **case** d'un article se coche toujours d'un tap direct (en magasin, une fiche par article serait un geste de trop) ; c'est le **nom** qui ouvre la fiche. Le nom de la liste ouverte mène à la fiche de la liste (et de là à la tâche qui l'ouvre, par-dessus) ; le crayon d'un rayon, dans « Ordre des rayons », à la fiche du rayon, par-dessus cette fenêtre. Un article créé dans la fiche suit le rayon que son nom évoque, comme à la saisie rapide, tant qu'on n'en choisit pas un à la main.
 

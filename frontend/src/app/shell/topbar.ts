@@ -112,8 +112,8 @@ export class TopbarComponent {
       case 'recipe': s.openItem('recipe', null); break;
       case 'tx': s.patch({ screen: 'finances' }); this.finances.init().then(() => this.finances.newTx()); break;
       case 'slot': s.newSlot(); break;
-      case 'contact': s.patch({ screen: 'contacts' }); s.newContact(); break;
-      case 'card': s.patch({ screen: 'fidelite' }); s.newCard(); break;
+      case 'contact': s.newContact(); break;
+      case 'card': s.newCard(); break;
       case 'member': s.newMember(); break;
     }
   }

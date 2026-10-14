@@ -121,7 +121,7 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 - Fil de discussion familial (bulles par membre, couleur d'identité). **Envoi de message seul** (pas d'édition/suppression). Champ de saisie + bouton envoyer.
 
 ### 7. Contacts importants (`contacts`)
-- Recherche live (nom/rôle/téléphone) + filtres par catégorie (Urgences, Santé, École, Famille, Maison, Autre) avec compteurs. Cartes contact : avatar initiales coloré, catégorie, téléphone, email, badge « urgent », actions appeler/modifier/supprimer. CRUD complet (modale formulaire + confirmation de suppression). Contact = `{id,name,role,phone,email,cat,urgent,color,ini}`.
+- Recherche live (nom/rôle/téléphone) + filtres par catégorie (Urgences, Santé, École, Famille, Maison, Autre) avec compteurs. Cartes contact : avatar initiales coloré, catégorie, téléphone, email, badge « urgent », action « Appeler » directe ; le haut de la carte ouvre la **fiche du contact** (téléphone, email, anniversaire et âge ; Modifier dans la même fiche ; suppression annulable). Contact = `{id,name,role,phone,email,cat,urgent,color,ini}`.
 
 ### 8. Documents (`documents`) — retiré
 
