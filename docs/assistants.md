@@ -64,7 +64,7 @@ accessibles par l'assistant.
 
 Écriture (jeton `write` seulement), par domaine :
 
-- **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise).
+- **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise). Ces outils visent toujours la série entière ; les occurrences qu'une série saute (modifiées ou supprimées seules dans l'app) n'apparaissent pas dans `agenda`.
 - **Courses** : ajouter, changer l'état (à prendre / au panier / introuvable),
   modifier (nom, quantité, rayon, liste), retirer ; créer, renommer, supprimer
   une liste de courses.

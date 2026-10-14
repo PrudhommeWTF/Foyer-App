@@ -22,6 +22,7 @@ export function occursOn(ev: EventItem, ds: string): boolean {
     const end = ev.end || ev.date;
     return ds >= ev.date && ds <= end;
   }
+  if (ev.skip?.includes(ds)) return false;
   if (ev.date === ds) return true;
   const d = parseDay(ds);
   const start = parseDay(ev.date);

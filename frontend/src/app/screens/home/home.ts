@@ -115,7 +115,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
             <div class="tl-events">
               @for (a of g.items; track $index) {
                 @if (a.kind === 'event') {
-                  <div class="tl-ev" (click)="store.editEvent(a.ev.id)">
+                  <div class="tl-ev" (click)="store.editEvent(a.ev.id, a.date)">
                     <span class="tl-bar" [style.background]="evColor(a.ev)"></span>
                     @if (a.ev.who.length) {
                       <div class="tl-av">

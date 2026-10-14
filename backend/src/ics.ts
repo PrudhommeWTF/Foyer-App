@@ -70,7 +70,16 @@ export function buildIcs(state: HouseholdState, deadlines: Deadline[] = [], cal:
       L.push(`DTEND:${icsDate(endDate)}T${pad2(+eh)}${pad2(+em)}00`);
     }
     const rr = icsRrule(ev.recur);
-    if (rr) L.push(`RRULE:${rr}`);
+    if (rr) {
+      L.push(`RRULE:${rr}`);
+      // Les dates sautées par la série, sous la même forme que DTSTART (date seule
+      // ou date et heure locales) : sinon l'agenda abonné ne les reconnaît pas.
+      const skip = (ev.skip || []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+      // Une ligne par date : le flux ne replie pas ses lignes, et une liste
+      // dépasserait vite les 75 octets que la norme autorise.
+      const [hh, mm] = allDay ? ['', ''] : ev.time.split(':');
+      for (const d of skip) L.push(allDay ? `EXDATE;VALUE=DATE:${icsDate(d)}` : `EXDATE:${icsDate(d)}T${pad2(+hh)}${pad2(+mm)}00`);
+    }
     L.push(`SUMMARY:${icsEsc(ev.title)}`);
     if (ev.place) L.push(`LOCATION:${icsEsc(ev.place)}`);
     const who = (ev.who || []).map(mname).filter(Boolean).join(', ');

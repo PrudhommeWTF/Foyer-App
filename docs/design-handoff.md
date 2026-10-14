@@ -99,7 +99,8 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 
 ### 3. Calendrier partagé (`calendar`)
 - Vues **3 jours / Semaine / Mois** commutables ; navigation période précédente/suivante avec libellé de mois propre.
-- Événements colorés par membre, récurrence (`none/daily/weekday/weekly/monthly`) et événements multi-jours (champ date de fin, rendu en barre continue).
+- Événements colorés par membre, récurrence (`none/daily/weekday/weekly/biweekly/monthly`) et événements multi-jours (champ date de fin, rendu en barre continue).
+- Une série porte ses dates sautées (`skip`). Ouverte depuis une occurrence, la modale le dit ; à l'enregistrement (s'il y a un changement) ou à la suppression, elle demande « cette occurrence » ou « toute la série ». « Cette occurrence » saute la date dans la série et crée un événement ponctuel qui porte la modification (logique pure dans `core/event-scope.ts`). Le flux ICS publie les dates sautées en `EXDATE`. Une suppression s'annule depuis le toast. Changer la récurrence elle-même vise toujours la série ; déplacer la date d'une série ouverte sur une occurrence décale toute la série d'autant.
 - Panneau latéral agenda : clic sur un événement → modale édition/suppression. Ajout via + ou datepicker maison (sélection de plage en 2 clics : 1er = début, 2e = fin).
 
 ### 4. Listes de courses (`courses`) — multi-listes

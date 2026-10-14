@@ -316,7 +316,7 @@ function eventOccurrences(e: EventItem, from: string, to: string): string[] {
   let cur = e.date;
   let guard = 0;
   while (cur <= to && guard++ < 800) {
-    if (cur >= from) {
+    if (cur >= from && !(step(cur) && (e.skip || []).includes(cur))) {
       // Un événement multi-jours non récurrent couvre sa plage : on le rattache à
       // la première date visible de la fenêtre.
       dates.push(cur < from ? from : cur);
