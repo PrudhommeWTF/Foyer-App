@@ -14,8 +14,10 @@ export interface ActivityEntry {
   at: string;
   /** Auteur (identifiant de membre), ou null si le geste n'en portait pas. */
   by: string | null;
-  /** Nom du jeton d'accès quand le geste vient d'un assistant, sinon null. Affiché « (via un assistant) ». */
+  /** Nom du jeton d'accès quand le geste vient d'un assistant, « ÉcoleDirecte » pour la synchronisation École, sinon null. */
   via?: string | null;
+  /** Auteur hors foyer, à afficher à la place d'un membre : le professeur qui a donné un devoir. */
+  author?: string;
   /** Verbe nommant le type d'item : « a ajouté la tâche », « a programmé l'évènement », « a mis au panier l'article »... */
   verb: string;
   /** Ce qui a changé : l'intitulé de la tâche, de l'événement ou de l'article. */
@@ -37,6 +39,17 @@ const SHOP_VERB: Record<string, string> = {
   indisponible: 'a noté introuvable l’article',
 };
 
+const ED = 'ÉcoleDirecte';
+
+/**
+ * Le professeur d'un devoir, tiré de la note que la synchronisation écrit
+ * (« Donné par Mme Martin le 09/10/2026. »), ou null.
+ */
+export function teacherOf(note: string | undefined): string | null {
+  const m = /(?:^|\n)Donné par (.+?)(?: le \d{2}\/\d{2}\/\d{4})?\.\s*$/.exec(note || '');
+  return m ? m[1].trim() : null;
+}
+
 /**
  * Les `limit` changements les plus récents, du plus récent au plus ancien. Une
  * tâche récurrente laisse une ligne par achèvement (son historique), parce que
@@ -49,6 +62,14 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
     const l = tList(t.listId);
     const where = l?.name || 'Tâches';
     const color = l?.color || '#7A9B76';
+    if (t.edId) {
+      // Un devoir importé d'ÉcoleDirecte : donné par son professeur, et coché soit
+      // dans Foyer (par un membre), soit sur ÉcoleDirecte (par l'élève, sans auteur).
+      const base = { what: t.text, where, color, kind: 'task' as const, ref: t.id };
+      if (t.at) out.push({ ...base, at: t.at, by: null, via: ED, author: teacherOf(t.note) || ED, verb: 'a donné le devoir' });
+      if (t.done && t.doneAt) out.push({ ...base, at: t.doneAt, by: t.doneBy ?? t.who[0] ?? null, via: t.doneBy ? null : ED, verb: 'a terminé le devoir' });
+      continue;
+    }
     if (t.at) out.push({ at: t.at, by: t.by ?? null, via: t.via ?? null, verb: 'a ajouté la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
     if (t.history?.length) {
       for (const h of t.history) if (h.at) out.push({ at: h.at, by: h.by, verb: 'a terminé la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
