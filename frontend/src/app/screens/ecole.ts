@@ -22,12 +22,7 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
   imports: [IconComponent],
   template: `
     <div class="screen-enter">
-      <div class="screen-head">
-        <div>
-          <h1>École</h1>
-          @if (ecole.syncLine(); as s) { <div class="screen-sub" [class.ko]="!s.ok">{{ s.text }}</div> }
-        </div>
-      </div>
+      @if (ecole.syncLine(); as s) { <div class="screen-sub sync" [class.ko]="!s.ok">{{ s.text }}</div> }
 
       @if (ecole.indispo() && !ecole.vue()) {
         <div class="banner ko">Foyer ne répond pas : les devoirs ne peuvent pas être affichés pour l’instant.</div>
@@ -170,6 +165,7 @@ interface DayGroup { day: string; label: string; items: EdHomework[]; }
     </div>
   `,
   styles: [`
+    .sync { margin: 0 0 14px; }
     .screen-sub.ko { color: #C6492F; }
     .hint, .small { font-size: 12.5px; font-weight: 600; color: var(--ink3); line-height: 1.45; }
     .small { margin-top: 4px; }
