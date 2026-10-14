@@ -106,7 +106,7 @@ Transitions ponctuelles : `left .2s` sur les knobs de toggle.
 ### 4. Listes de courses (`courses`) — multi-listes
 - **Puces de listes** en haut : « Toutes » + une puce par liste (couleur, icône, compteur d'articles non cochés) + « Nouvelle liste ». Chaque liste a `{id,name,color,icon}`.
 - **En-tête de liste active** : icône + nom + boutons modifier/supprimer (la suppression retire la liste et ses articles, avec confirmation).
-- **Colonne gauche** : champ d'ajout rapide + articles groupés **par rayon** (cartes de catégorie avec modifier/supprimer). Article = `{id,name,qty,cat,done,listId}`. Case à cocher (validé = sauge, texte barré). Clic sur un article → modale édition (nom, quantité, rayon, **liste**).
+- **Colonne gauche** : champ d'ajout rapide + articles groupés **par rayon** (cartes de catégorie avec modifier/supprimer). Article = `{id,name,qty,cat,done,listId}`. Case à cocher (validé = sauge, texte barré). Clic sur le nom d'un article → **fiche de l'article** (état et qui l'a posé, rayon, liste, photo ; « Cocher », « Modifier » dans la même fiche, suppression annulable) ; la case, elle, coche directement. Le nom de la liste et le crayon d'un rayon ouvrent leur fiche.
 - **Colonne droite** : carte **Progression** (`{cochés}/{total}` de la liste active) + carte **Générer depuis les repas** (ajoute les ingrédients du planning de la semaine à la liste active, en dédupliquant).
 - Modale « Nouvelle/Modifier liste » : nom, couleur (6 choix), icône (grille d'icônes).
 

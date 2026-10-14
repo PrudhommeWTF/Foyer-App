@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FoyerStore } from '../core/foyer.store';
-import { IconComponent } from '../core/icon';
-import { ModalComponent } from '../shared/modal';
-import { ConfirmComponent } from '../shared/confirm';
-import { LIST_ICONS, PALETTE } from '../core/constants';
-import { RAYONS, normaliseName } from '../core/articles';
-import { cap } from '../core/helpers';
-import { searchArticles } from '../core/ingredient-repair';
-import { Aisle, Rayon, ShopItem, ShopState } from '../core/models';
+import { FoyerStore } from '../../core/foyer.store';
+import { IconComponent } from '../../core/icon';
+import { ModalComponent } from '../../shared/modal';
+import { ConfirmComponent } from '../../shared/confirm';
+import { LIST_ICONS } from '../../core/constants';
+import { normaliseName } from '../../core/articles';
+import { cap } from '../../core/helpers';
+import { searchArticles } from '../../core/ingredient-repair';
+import { Aisle, Rayon, ShopItem } from '../../core/models';
 
 /**
  * Une suggestion d'ajout. `id` désigne un article déjà dans la liste active (le
@@ -77,14 +77,12 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
 
       <!-- En-tête de la liste active -->
       @if (activeList(); as al) {
-        <div class="list-head">
-          <div class="list-ic" [style.background]="al.color"><f-icon [path]="LIST_ICONS[al.icon]" [size]="18" color="#fff" /></div>
+        <!-- Le nom de la liste ouvre sa fiche : la modifier, la supprimer, sa tâche. -->
+        <button class="list-head" (click)="store.openItem('shopList', al.id)">
+          <span class="list-ic" [style.background]="al.color"><f-icon [path]="LIST_ICONS[al.icon]" [size]="18" color="#fff" /></span>
           <span class="list-name f-display">{{ al.name }}</span>
-          <div class="head-acts">
-            <button class="icon-btn sm" (click)="store.editShopList(al.id)" aria-label="Modifier la liste"><f-icon name="edit" [size]="16" color="var(--ink2)" /></button>
-            <button class="icon-btn sm" (click)="store.patch({ shopListDelId: al.id })" aria-label="Supprimer la liste"><f-icon name="trash" [size]="16" color="#E56B4E" /></button>
-          </div>
-        </div>
+          <f-icon name="chevronRight" [size]="17" color="var(--ink3)" [width]="2.4" />
+        </button>
       }
 
       <!-- Ajout rapide, placé sous le nom de la liste comme la saisie d'une
@@ -206,7 +204,7 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
                         [attr.aria-label]="'Cocher ' + it.name">
                   @if (it.state === 'indisponible') { <f-icon name="x" [size]="15" color="#C6492F" [width]="3" /> }
                 </button>
-                <button class="row-body" (click)="store.editShop(it.id)">
+                <button class="row-body" (click)="store.openItem('shop', it.id)">
                   @if (store.photoUrl(it.photoId); as ph) { <span class="s-thumb" [style.background-image]="'url(' + ph + ')'"></span> }
                   <span class="s-name">{{ it.name }}</span>
                   @if (it.state === 'indisponible') { <span class="s-flag">introuvable</span> }
@@ -230,7 +228,7 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
                 <button class="tick on" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Décocher ' + it.name">
                   <f-icon name="check" [size]="14" color="#fff" [width]="3.4" />
                 </button>
-                <button class="row-body" (click)="store.editShop(it.id)">
+                <button class="row-body" (click)="store.openItem('shop', it.id)">
                   <span class="s-name done">{{ it.name }}</span>
                   @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
                 </button>
@@ -245,70 +243,6 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
 
     </div>
 
-    <!-- Article -->
-    @if (store.ui().showShop) {
-      <f-modal [title]="store.ui().shEditId ? 'Modifier l\\'article' : 'Nouvel article'" [maxWidth]="440" (close)="store.patch({ showShop: false })">
-        <div class="modal-row">
-          <div class="grow">
-            <div class="field-label">Article</div>
-            <input class="input" placeholder="Ex : Pommes" [ngModel]="store.ui().shTitle" (ngModelChange)="store.patch({ shTitle: $event })" (keydown.enter)="store.saveShop()">
-          </div>
-          <div class="qty-f">
-            <div class="field-label">Quantité</div>
-            <input class="input" placeholder="x1" [ngModel]="store.ui().shQty" (ngModelChange)="store.patch({ shQty: $event })" (keydown.enter)="store.saveShop()">
-          </div>
-        </div>
-
-        <div class="field-label">État</div>
-        <div class="seg mb">
-          @for (st of states; track st.k) {
-            <button class="grow" [class.active]="store.ui().shState === st.k" (click)="store.patch({ shState: st.k })">{{ st.label }}</button>
-          }
-        </div>
-
-        <div class="field-label">Rayon</div>
-        <div class="seg-wrap">
-          @for (a of store.aislesInOrder(); track a.id) {
-            <div class="seg-opt" [class.on]="store.ui().shAisleId === a.id" (click)="store.patch({ shAisleId: a.id })">
-              <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
-            </div>
-          }
-        </div>
-        <div class="field-label">Liste</div>
-        <div class="seg-wrap">
-          @for (l of lists(); track l.id) {
-            <div class="seg-opt" [class.on]="store.ui().shListId === l.id" (click)="store.patch({ shListId: l.id })">
-              <span class="s-dot" [style.background]="l.color"></span>{{ l.name }}
-            </div>
-          }
-        </div>
-
-        <div class="field-label">Photo <span class="opt">(facultatif)</span></div>
-        @if (store.photoUrl(store.ui().shPhotoId); as ph) {
-          <div class="photo-preview">
-            <div class="photo-img" [style.background-image]="'url(' + ph + ')'"></div>
-            <button class="btn btn-soft" (click)="store.removeShopPhoto()">
-              <f-icon name="x" [size]="15" color="var(--ink2)" /> Retirer la photo
-            </button>
-          </div>
-        } @else {
-          <label class="photo-upload" [class.busy]="store.ui().shPhotoBusy">
-            <input type="file" accept="image/*" [disabled]="store.ui().shPhotoBusy" (change)="onShopPhoto($event)">
-            <f-icon name="upload" [size]="18" color="var(--ink2)" />
-            <span>{{ store.ui().shPhotoBusy ? 'Envoi…' : 'Ajouter une photo' }}</span>
-          </label>
-        }
-
-        <div class="modal-actions">
-          @if (store.ui().shEditId) {
-            <button class="icon-btn del-btn" (click)="store.delShop()" aria-label="Supprimer"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
-          }
-          <button class="btn btn-soft grow" (click)="store.patch({ showShop: false })">Annuler</button>
-          <button class="btn btn-primary grow2" (click)="store.saveShop()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
     <!-- Ordre des rayons -->
     @if (store.ui().aisleOrderOpen) {
       <f-modal title="Ordre des rayons" [maxWidth]="440" (close)="store.patch({ aisleOrderOpen: false })">
@@ -318,7 +252,7 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
             <div class="order-row">
               <span class="s-dot" [style.background]="a.color"></span>
               <span class="order-name">{{ a.name }}</span>
-              <button class="icon-btn sm" (click)="store.editAisle(a.id)" aria-label="Modifier le rayon" title="Modifier">
+              <button class="icon-btn sm" (click)="store.openItem('aisle', a.id)" aria-label="Fiche du rayon" title="Fiche du rayon">
                 <f-icon name="edit" [size]="15" color="var(--ink2)" [width]="2.2" />
               </button>
               <button class="icon-btn sm" [disabled]="i === 0" (click)="store.moveAisle(a.id, -1)" aria-label="Monter">
@@ -334,73 +268,6 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
           <button class="btn btn-primary grow" (click)="store.patch({ aisleOrderOpen: false })">Terminé</button>
         </div>
       </f-modal>
-    }
-
-    <!-- Liste -->
-    @if (store.ui().shopListForm) {
-      <f-modal [title]="store.ui().clEditId ? 'Modifier la liste' : 'Nouvelle liste'" [maxWidth]="460" (close)="store.patch({ shopListForm: false })">
-        <div class="field-label">Nom de la liste</div>
-        <input class="input mb" placeholder="Ex : Drive, Boulangerie…" [ngModel]="store.ui().clName" (ngModelChange)="store.patch({ clName: $event })">
-        <div class="field-label">Couleur</div>
-        <div class="swatch-row mb">
-          @for (c of PALETTE; track c) {
-            <div class="swatch" [style.background]="c" [style.box-shadow]="store.ui().clColor === c ? '0 0 0 3px var(--surface), 0 0 0 5px ' + c : ''" (click)="store.patch({ clColor: c })"></div>
-          }
-        </div>
-        <div class="field-label">Icône</div>
-        <div class="icon-grid mb">
-          @for (k of iconKeys; track k) {
-            <div class="icon-cell" [style.background]="store.ui().clIcon === k ? store.ui().clColor : 'var(--soft2)'" (click)="store.patch({ clIcon: k })">
-              <f-icon [path]="LIST_ICONS[k]" [size]="20" [color]="store.ui().clIcon === k ? '#fff' : 'var(--ink2)'" />
-            </div>
-          }
-        </div>
-        <div class="modal-actions">
-          <button class="btn btn-soft grow" (click)="store.patch({ shopListForm: false })">Annuler</button>
-          <button class="btn btn-primary grow2" (click)="store.saveShopList()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
-    <!-- Rayon -->
-    @if (store.ui().aiForm) {
-      <f-modal [title]="store.ui().aiEditId ? 'Modifier le rayon' : 'Nouveau rayon'" [maxWidth]="440" (close)="store.patch({ aiForm: false })">
-        <div class="field-label">Nom du rayon</div>
-        <input class="input mb" placeholder="Ex : Boulangerie, Surgelés…" [ngModel]="store.ui().aiName" (ngModelChange)="store.patch({ aiName: $event })">
-        <div class="field-label">Couleur</div>
-        <div class="swatch-row mb">
-          @for (c of PALETTE; track c) {
-            <div class="swatch" [style.background]="c" [style.box-shadow]="store.ui().aiColor === c ? '0 0 0 3px var(--surface), 0 0 0 5px ' + c : ''" (click)="store.patch({ aiColor: c })"></div>
-          }
-        </div>
-        <div class="field-label">Type de rayon</div>
-        <div class="hint mb2">Sert à ranger automatiquement les ingrédients générés depuis les repas. Facultatif : sans lui, le nom du rayon suffit souvent.</div>
-        <div class="seg-wrap">
-          <div class="seg-opt" [class.on]="!store.ui().aiKind" (click)="store.patch({ aiKind: '' })">Aucun</div>
-          @for (r of RAYONS; track r.key) {
-            <div class="seg-opt" [class.on]="store.ui().aiKind === r.key" (click)="store.patch({ aiKind: r.key })">{{ r.name }}</div>
-          }
-        </div>
-        <div class="modal-actions">
-          @if (store.ui().aiEditId && store.ui().aiEditId !== store.defaultAisleId()) {
-            <button class="icon-btn del-btn" (click)="askDeleteAisle()" aria-label="Supprimer le rayon"><f-icon name="trash" [size]="18" color="#E56B4E" /></button>
-          }
-          <button class="btn btn-soft grow" (click)="store.patch({ aiForm: false })">Annuler</button>
-          <button class="btn btn-primary grow2" (click)="store.saveAisle()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
-
-    @if (store.ui().shopListDelId) {
-      <f-confirm title="Supprimer cette liste ?" (cancel)="store.patch({ shopListDelId: null })" (confirm)="store.confirmShopListDel()">
-        Cette liste et ses articles seront supprimés. Cette action est définitive.
-      </f-confirm>
-    }
-
-    @if (store.ui().aisleDelId) {
-      <f-confirm title="Supprimer ce rayon ?" (cancel)="store.patch({ aisleDelId: null })" (confirm)="store.confirmAisleDel()">
-        Ce rayon sera supprimé. Ses articles passeront dans le rayon de repli.
-      </f-confirm>
     }
 
     <!-- Seul geste destructif de l'écran, donc le seul à confirmer. -->
@@ -427,10 +294,9 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
     .sync { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 13px; background: var(--soft2); color: var(--ink2); font-size: 12.5px; font-weight: 700; margin-bottom: 14px; }
     .sync.off { background: #FCE9E3; color: #C6492F; }
 
-    .list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .list-head { display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 14px; padding: 0; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
     .list-ic { width: 34px; height: 34px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
     .list-name { font-size: 19px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
-    .head-acts { display: flex; gap: 6px; }
 
     .by-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     .by-head .acts { display: flex; gap: 14px; align-items: center; }
@@ -478,14 +344,8 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
     .s-name.done { color: var(--ink3); text-decoration: line-through; }
     .row.unavail .s-name { color: #C6492F; }
     .s-qty { font-size: 13px; font-weight: 800; color: var(--ink3); flex: none; }
-    /* Vignette du produit dans la liste, et sélecteur de photo dans la fiche. */
+    /* Vignette du produit dans la liste. */
     .s-thumb { flex: none; width: 30px; height: 30px; border-radius: 8px; background-size: cover; background-position: center; box-shadow: 0 2px 6px -3px rgba(90,60,40,.6); }
-    .opt { font-weight: 700; color: var(--ink3); text-transform: none; letter-spacing: 0; }
-    .photo-upload { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 12px; background: var(--soft); font-size: 13.5px; font-weight: 800; color: var(--ink2); cursor: pointer; margin-bottom: 6px; }
-    .photo-upload input { display: none; }
-    .photo-upload.busy { opacity: .6; pointer-events: none; }
-    .photo-preview { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
-    .photo-img { width: 64px; height: 64px; border-radius: 12px; background-size: cover; background-position: center; flex: none; box-shadow: 0 6px 14px -8px rgba(90,60,40,.6); }
     .who { width: 10px; height: 10px; border-radius: 50%; flex: none; }
     .empty { color: var(--ink2); font-weight: 700; font-size: 14px; padding: 24px 0; }
 
@@ -508,23 +368,14 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
     .up { transform: rotate(90deg); }
     .down { transform: rotate(90deg); }
     .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
-    .mb2 { margin-bottom: 10px; }
 
-    .modal-row { display: flex; gap: 12px; margin-bottom: 16px; }
-    .modal-row .grow { flex: 1; }
-    .qty-f { width: 110px; }
     .mb { margin-bottom: 20px; }
-    .seg .grow { flex: 1; }
     .seg-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
     .seg-opt { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-radius: 11px; font-size: 13.5px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); border: 2px solid transparent; }
     .seg-opt.on { background: var(--primary); color: #fff; }
     .s-dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
-    .icon-grid { display: flex; flex-wrap: wrap; gap: 9px; }
-    .icon-cell { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
     .modal-actions { display: flex; gap: 12px; align-items: center; }
     .modal-actions .grow { flex: 1; }
-    .modal-actions .grow2 { flex: 1.4; }
-    .del-btn { width: 50px; height: 50px; flex: none; border-radius: 13px; background: var(--soft2); }
 
     /* Sur large écran, la liste reste une colonne lisible plutôt que de s'étirer. */
     @media (min-width: 861px) {
@@ -537,18 +388,6 @@ export class CoursesScreen {
   d = this.store.d;
 
   readonly LIST_ICONS = LIST_ICONS;
-  readonly RAYONS = RAYONS;
-  readonly PALETTE = PALETTE;
-  readonly iconKeys = Object.keys(LIST_ICONS);
-  // Le sélecteur d'état de la fiche : c'est là qu'on marque « introuvable », pas
-  // par un geste sur la ligne (qui ne fait que cocher). « panier » reste la
-  // valeur en base, lue « coché » à l'écran.
-  readonly states: { k: ShopState; label: string }[] = [
-    { k: 'a-prendre', label: 'À prendre' },
-    { k: 'panier', label: 'Coché' },
-    { k: 'indisponible', label: 'Introuvable' },
-  ];
-
   /** Menu « Affichage » ouvert. Éphémère, propre à ce composant. */
   readonly menuOpen = signal(false);
   /** Confirmation « Supprimer les cochés » ouverte. */
@@ -707,20 +546,8 @@ export class CoursesScreen {
     this.qaAisleOverride.set(null);
   }
 
-  /** Ferme la fiche du rayon et demande confirmation de sa suppression. */
-  askDeleteAisle(): void { const id = this.store.ui().aiEditId; if (id) this.store.patch({ aiForm: false, aisleDelId: id }); }
-
   countFor(id: string): number { return this.d().shop.filter((x) => x.listId === id && x.state === 'a-prendre').length; }
 
   whoColor(it: ShopItem): string | null { return it.by ? this.store.memberColor(it.by) : null; }
   whoName(it: ShopItem): string { return it.by ? 'Coché par ' + this.store.memberName(it.by) : ''; }
-
-  /** Une photo choisie pour l'article en cours : on la téléverse et on la retient. */
-  onShopPhoto(e: Event): void {
-    const input = e.target as HTMLInputElement;
-    const f = input.files?.[0];
-    // Le champ est vidé : reposer deux fois le même fichier doit relancer l'envoi.
-    input.value = '';
-    if (f) void this.store.onShopPhoto(f);
-  }
 }

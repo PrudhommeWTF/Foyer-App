@@ -108,7 +108,7 @@ export class TopbarComponent {
     switch (id) {
       case 'event': s.openItem('event', null); break;
       case 'task': s.openItem('task', null); break;
-      case 'shop': s.pickShopFromMenu(); break;
+      case 'shop': s.openShop(); break;
       case 'recipe': s.openItem('recipe', null); break;
       case 'tx': s.patch({ screen: 'finances' }); this.finances.init().then(() => this.finances.newTx()); break;
       case 'slot': s.newSlot(); break;

@@ -157,7 +157,7 @@ cochage ou à la première suppression de cochés. Aucune donnée ancienne n'est
 reconstruite, et c'est sans conséquence (la suppression d'un coché capture son
 nom au passage).
 
-**À l'écran** (`screens/courses.ts`) : un menu « Affichage » unique porte la
+**À l'écran** (`screens/courses/courses.ts` ; fiches d'article, de liste et de rayon à côté : `shop.item.ts`, `shop-list.item.ts`, `aisle.item.ts`, partie pure dans `core/shop-item.ts`) : un menu « Affichage » unique porte la
 préférence d'appareil (masquer les cochés), le seul geste destructif (les
 supprimer, avec confirmation) et le reste (ordre des rayons, nouveau rayon,
 export). Quand les cochés sont masqués, l'en-tête de chaque rayon dit « 3 à

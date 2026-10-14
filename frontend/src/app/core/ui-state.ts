@@ -1,4 +1,4 @@
-import { CardFormat, ListKind, Rayon, ShopState } from './models';
+import { CardFormat, ListKind, Rayon } from './models';
 import { todayIn, weekdayOf } from './helpers';
 import { PasteMode, SchedClip } from './sched-copy';
 import { HOUSEHOLD_TZ, SCREENS } from './constants';
@@ -67,23 +67,14 @@ export interface UiState {
    */
   item: ItemRef | null;
 
-  // shop item modal
-  showShop: boolean; shEditId: string | null;
-  /** Identifiant de l'article en cours (créé ou édité) : sert à rattacher une photo avant même la sauvegarde. */
-  shId: string;
-  shTitle: string; shQty: string; shState: ShopState; shAisleId: string; shListId: string;
-  /** Photo du produit en cours d'édition, et téléversement en cours. */
-  shPhotoId: number | null; shPhotoBusy: boolean;
+  // courses
   newShop: string;
   /** Réordonnancement des rayons : l'ordre des allées du magasin habituel. */
   aisleOrderOpen: boolean;
   /** Rayons repliés (par identifiant) : on masque leurs articles, cochés ou non. Par appareil, non persisté. */
   collapsedAisles: string[];
   // shop lists
-  activeShopList: string; shopListForm: boolean; clEditId: string | null;
-  clName: string; clColor: string; clIcon: string; shopListDelId: string | null;
-  // aisles
-  aiForm: boolean; aiEditId: string | null; aiName: string; aiColor: string; aiKind: Rayon | ''; aisleDelId: string | null;
+  activeShopList: string;
 
   // tâches
   /** Terminées dépliées, listes archivées montrées, section « À venir » repliée. */
@@ -228,10 +219,9 @@ export function initialUi(): UiState {
     mealAnchor: today, mealView: '', genOpen: false, dupOpen: false, dupBack: 1, dupMode: 'fill', importOpen: false,
     repairOpen: false, repForm: '', repMode: 'lier', repSearch: '', repName: '', repRayon: 'epicerie', repPantry: false, repAllerg: [],
     item: null,
-    showShop: false, shEditId: null, shId: '', shTitle: '', shQty: '', shState: 'a-prendre', shAisleId: '', shListId: '', shPhotoId: null, shPhotoBusy: false, newShop: '',
+    newShop: '',
     aisleOrderOpen: false, collapsedAisles: [],
-    activeShopList: 'all', shopListForm: false, clEditId: null, clName: '', clColor: '#7A9B76', clIcon: 'panier', shopListDelId: null,
-    aiForm: false, aiEditId: null, aiName: '', aiColor: '#7A9B76', aiKind: '', aisleDelId: null,
+    activeShopList: 'all',
     showDone: false, showArchived: false, soonCollapsed: false,
     activeList: 'all', listForm: false, listEditId: null, lName: '', lColor: '#E56B4E', lIcon: 'checklist', lKind: 'taches', lScope: 'shared', lOrder: 'echeance', listDelId: null,
     lForMember: null, lDeparture: '', lRemind: 3, lPlace: '', prepResetId: null,
