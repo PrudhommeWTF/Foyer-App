@@ -47,10 +47,10 @@ export function readSettings(memberId: string | null = null): SettingsView {
   const values: Record<string, boolean | number | string> = {};
   const stored: string[] = [];
   for (const d of ALL) {
-    // Les réglages de déploiement ne vivent pas dans le document : ils sont
-    // servis à part (voir deploymentView). Les mêler ici les ferait passer pour
-    // des valeurs du foyer, vides de surcroît.
-    if (d.scope === 'deploiement') continue;
+    // Les réglages de déploiement (servis à part) et ceux de l'appareil (dans le
+    // localStorage du navigateur, jamais côté serveur) ne vivent pas dans le
+    // document : les mêler ici les ferait passer pour des valeurs du foyer.
+    if (d.scope === 'deploiement' || d.scope === 'appareil') continue;
     const bucket = bucketOf(doc, d, memberId);
     values[d.key] = effective(d, bucket);
     if (bucket[d.key] !== undefined) stored.push(d.key);
@@ -101,6 +101,10 @@ export function applySettings(
     if (!d) { refused.push({ key, kind: 'valeur', error: `Le réglage « ${key} » n’existe pas.` }); continue; }
     if (d.scope === 'deploiement') {
       refused.push({ key, kind: 'droit', error: `« ${d.label} » est fixé par le serveur et ne se change pas ici.` });
+      continue;
+    }
+    if (d.scope === 'appareil') {
+      refused.push({ key, kind: 'droit', error: `« ${d.label} » ne concerne que cet appareil et ne s’enregistre pas sur le serveur.` });
       continue;
     }
     // Un réglage du foyer engage tout le monde : administrateur uniquement. Une

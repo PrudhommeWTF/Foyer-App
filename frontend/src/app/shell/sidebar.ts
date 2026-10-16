@@ -72,9 +72,12 @@ const FOLD_KEY = 'foyer.menuReduit';
             </div>
           }
         </button>
-        <button class="icon-btn" (click)="store.toggleDark()" title="Changer de thème">
-          @if (store.setting('dark')) { <f-icon name="sun" [size]="19" color="#F0B24B" /> }
-          @else { <f-icon name="moon" [size]="19" color="#8A7E74" /> }
+        <button class="icon-btn" (click)="store.cycleTheme()" [title]="themeTitle()">
+          @switch (store.devicePref('theme')) {
+            @case ('clair') { <f-icon name="sun" [size]="19" color="#F0B24B" /> }
+            @case ('sombre') { <f-icon name="moon" [size]="19" color="#8A7E74" /> }
+            @default { <f-icon name="themeAuto" [size]="19" color="#8A7E74" /> }
+          }
         </button>
         @if (!store.isChild()) {
         <button class="icon-btn" [class.on]="store.ui().screen === 'settings'" (click)="store.go('settings')" title="Paramètres">
@@ -131,6 +134,14 @@ export class SidebarComponent {
   readonly reduit = signal(read());
 
   titrePlier(): string { return this.reduit() ? 'Déplier le menu' : 'Replier le menu'; }
+
+  /** Le titre du bouton de thème dit l'état courant et le prochain au clic. */
+  themeTitle(): string {
+    const cur = this.store.devicePref('theme');
+    const nom: Record<string, string> = { clair: 'Clair', sombre: 'Sombre', systeme: 'Système' };
+    const suivant: Record<string, string> = { clair: 'sombre', sombre: 'système', systeme: 'clair' };
+    return `Thème : ${nom[cur] || 'Système'} (toucher pour ${suivant[cur] || 'clair'})`;
+  }
 
   basculer(): void {
     const v = !this.reduit();

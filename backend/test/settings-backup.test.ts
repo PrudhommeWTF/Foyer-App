@@ -52,23 +52,23 @@ describe('export de la configuration', () => {
   });
 
   it('les préférences exportées sont bien celles de chacun', () => {
-    applySettings({ dark: true }, 'm1', false);
+    applySettings({ ecoleNotifDevoirs: true }, 'm1', false);
     const dump = exportConfig('1.2.3');
-    assert.equal(dump.prefs['m1'].values['dark'], true);
-    assert.equal(dump.prefs['me'].values['dark'], false);
+    assert.equal(dump.prefs['m1'].values['ecoleNotifDevoirs'], true);
+    assert.equal(dump.prefs['me'].values['ecoleNotifDevoirs'], false);
   });
 });
 
 describe('import : le cas de la recette', () => {
   it('j’exporte, je change trois réglages, je réimporte : je retrouve exactement l’état précédent', () => {
     applySettings({ academie: 'Rennes' }, 'me', true);
-    applySettings({ dark: true }, 'me', false);
+    applySettings({ ecoleNotifDevoirs: true }, 'me', false);
     const avant = exportConfig('1.2.3');
     const etatAvant = JSON.stringify({ s: readSettings('me').values, c: readSettings('m1').values });
 
     // Trois modifications, de portées différentes.
     applySettings({ academie: 'Paris', showBreakfast: true }, 'me', true);
-    applySettings({ dark: false }, 'me', false);
+    applySettings({ ecoleNotifDevoirs: false }, 'me', false);
     assert.notEqual(JSON.stringify({ s: readSettings('me').values, c: readSettings('m1').values }), etatAvant);
 
     const rapport = importConfig(avant, 'me');
@@ -86,12 +86,12 @@ describe('import : le cas de la recette', () => {
   });
 
   it('le journal nomme celui qui a fait le geste, pas celui dont on restaure les préférences', () => {
-    applySettings({ dark: true }, 'm1', false);
+    applySettings({ ecoleNotifDevoirs: true }, 'm1', false);
     const dump = exportConfig('1.2.3');
-    applySettings({ dark: false }, 'm1', false);
+    applySettings({ ecoleNotifDevoirs: false }, 'm1', false);
     importConfig(dump, 'me');
     const ligne = db.prepare('SELECT key, member_id FROM hh_settings_log ORDER BY id DESC LIMIT 1').get() as { key: string; member_id: string };
-    assert.equal(ligne.key, 'dark');
+    assert.equal(ligne.key, 'ecoleNotifDevoirs');
     assert.equal(ligne.member_id, 'me', 'c’est l’administrateur qui a importé');
   });
 });
@@ -112,9 +112,9 @@ describe('import : ce qu’il refuse, et ce qu’il écarte', () => {
     const rapport = importConfig({
       format: 'foyer.reglages', version: 1, generatedAt: '', household: 'Prudhomme',
       settings: { academie: 'Rennes', reglageDisparu: true, showBreakfast: 'peut-être' },
-      prefs: { me: { name: 'Thomas', values: { dark: true } } },
+      prefs: { me: { name: 'Thomas', values: { ecoleNotifDevoirs: true } } },
     }, 'me');
-    assert.deepEqual(rapport.applied.sort(), ['academie', 'dark (Thomas)']);
+    assert.deepEqual(rapport.applied.sort(), ['academie', 'ecoleNotifDevoirs (Thomas)']);
     assert.deepEqual(rapport.ecartes.map((e) => e.key).sort(), ['reglageDisparu', 'showBreakfast']);
     assert.match(rapport.ecartes.find((e) => e.key === 'reglageDisparu')!.reason, /n’existe plus/);
     assert.equal(doc()['settings']['academie'], 'Rennes', 'ce qui pouvait passer est bien passé');
@@ -125,11 +125,11 @@ describe('import : ce qu’il refuse, et ce qu’il écarte', () => {
       format: 'foyer.reglages', version: 1, generatedAt: '', household: '',
       settings: {},
       prefs: {
-        me: { name: 'Thomas', values: { dark: true } },
-        parti: { name: 'Grand-père', values: { dark: true } },
+        me: { name: 'Thomas', values: { ecoleNotifDevoirs: true } },
+        parti: { name: 'Grand-père', values: { ecoleNotifDevoirs: true } },
       },
     }, 'me');
-    assert.deepEqual(rapport.applied, ['dark (Thomas)']);
+    assert.deepEqual(rapport.applied, ['ecoleNotifDevoirs (Thomas)']);
     assert.deepEqual(rapport.ecartes, [{ key: '(toutes)', member: 'Grand-père', reason: 'ce membre n’existe plus dans le foyer' }]);
   });
 

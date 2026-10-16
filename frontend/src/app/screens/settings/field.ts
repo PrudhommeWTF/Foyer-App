@@ -28,6 +28,7 @@ import { SettingDecl, checkValue } from '../../core/settings/registry';
           <div class="lab">
             {{ d.label }}
             @if (d.scope === 'personnel') { <span class="tag perso">Personnel</span> }
+            @if (d.scope === 'appareil') { <span class="tag perso">Cet appareil</span> }
             @if (where(); as w) { <span class="tag sec">{{ w }}</span> }
           </div>
           <div class="desc">{{ d.desc }}</div>

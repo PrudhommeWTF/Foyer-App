@@ -41,7 +41,8 @@ import { sheetBack, sheetEdit, sheetOpen, sheetSaved } from './item-sheet';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, normText, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_LOCALE, HOUSEHOLD_TZ, MEAL_SLOTS, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
-import { SettingDecl, SettingKey, SettingValue, declOf, householdDefaults, setting, validate } from './settings/registry';
+import { ALL, DeviceKey, DeviceValue, SettingDecl, SettingKey, SettingValue, checkValue, declOf, householdDefaults, setting, validate } from './settings/registry';
+import { THEME_COLOR_DARK, THEME_COLOR_LIGHT, ThemeChoice, effectiveDark } from './theme';
 import { mealItemName, mealNames, recipeTime, sameMeal, splitMealKey } from './meals';
 
 /**
@@ -70,6 +71,23 @@ function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
 const SHOP_HIDE_CHECKED_KEY = 'foyer.shopHideChecked';
 function loadShopHideChecked(): boolean {
   try { return localStorage.getItem(SHOP_HIDE_CHECKED_KEY) !== '0'; } catch { return true; }
+}
+
+// Préférences propres à cet appareil (portée `appareil` du registre) : le thème,
+// par exemple. Rangées dans localStorage sous `foyer.pref.<clé>`, jamais dans le
+// document ni envoyées au serveur. Même try/catch que l'écran courant : en mode
+// privé, le choix vaut pour la session.
+const DEVICE_PREFIX = 'foyer.pref.';
+function loadDevicePrefs(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    for (const d of ALL) {
+      if (d.scope !== 'appareil') continue;
+      const v = localStorage.getItem(DEVICE_PREFIX + d.key);
+      if (v !== null) out[d.key] = v;
+    }
+  } catch { /* privé : les valeurs par défaut s'appliquent */ }
+  return out;
 }
 
 
@@ -286,12 +304,21 @@ export class FoyerStore {
    */
   readonly injector = inject(Injector);
 
+  /** Préférences de cet appareil (localStorage), tenues en signal pour la réactivité. */
+  private readonly devicePrefs = signal<Record<string, string>>(loadDevicePrefs());
+  /** Le média clair/sombre de l'appareil, écouté pour suivre « Système » en direct. */
+  private darkMedia: MediaQueryList | null = null;
+
   constructor(private api: ApiService) {
-    // Theme side effect: reflect the theme setting onto <html>. Le thème est une
-    // préférence personnelle : il suit le membre connecté, pas le foyer.
-    effect(() => {
-      document.documentElement.classList.toggle('dark', setting('dark', this._data(), this.currentMemberId()));
-    });
+    // Thème : préférence de CET appareil (localStorage), pas du document. L'effet
+    // réapplique quand le choix change ; un écouteur du média le réapplique quand
+    // l'appareil bascule clair/sombre en cours de journée (iOS le soir), pour que
+    // « Système » suive en direct sans toucher à l'app.
+    effect(() => { this.devicePref('theme'); this.applyTheme(); });
+    try {
+      this.darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
+      this.darkMedia.addEventListener('change', () => this.applyTheme());
+    } catch { /* matchMedia indisponible : on garde le choix explicite */ }
 
     // La pastille sur l'icône de l'app suit le nombre de notifications non lues :
     // le même compteur que la cloche, porté sur l'icône (écran d'accueil, dock).
@@ -505,6 +532,8 @@ export class FoyerStore {
       this.isChild.set(me.enfant);
       this.totpOn.set(me.totp);
       this.totpRecoveryLeft.set(me.totpRecoveryLeft);
+      // Reprise douce du thème, maintenant que le membre et le document sont là.
+      this.migrateThemeOnce();
     } catch { /* ignore */ }
     // Quelle version le serveur exécute réellement : la première question quand
     // un écran ne ressemble pas à ce que la mise à jour annonçait.
@@ -1165,7 +1194,51 @@ export class FoyerStore {
   backItem(): void { this.patch({ item: sheetBack(this.ui().item) }); }
   itemSaved(id?: string): void { this.patch({ item: sheetSaved(this.ui().item, id) }); }
 
-  toggleDark(): void { this.setSetting('dark', !this.setting('dark')); }
+  /** Lit une préférence d'appareil (localStorage), ou son défaut du registre. */
+  devicePref<K extends DeviceKey>(key: K): DeviceValue<K> {
+    const d = declOf(key)!;
+    const raw = this.devicePrefs()[key];
+    if (raw === undefined) return d.default as DeviceValue<K>;
+    const c = checkValue(d, raw);
+    return (c.ok ? c.value : d.default) as DeviceValue<K>;
+  }
+  /** Écrit une préférence d'appareil : signal (réactif) + localStorage, rien côté serveur. */
+  setDevicePref<K extends DeviceKey>(key: K, val: DeviceValue<K>): void {
+    const c = validate(key, val);
+    if (!c.ok) { this.toast(c.error); return; }
+    const v = String(c.value);
+    this.devicePrefs.update((p) => ({ ...p, [key]: v }));
+    try { localStorage.setItem(DEVICE_PREFIX + key, v); } catch { /* privé : vaut pour la session */ }
+  }
+  /** Pose la classe `dark` sur <html> et la couleur de la barre d'état, selon le choix et le média. */
+  private applyTheme(): void {
+    const dark = effectiveDark(this.devicePref('theme'), this.darkMedia ? this.darkMedia.matches : false);
+    try { document.documentElement.classList.toggle('dark', dark); } catch { /* pas de DOM */ }
+    try {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', dark ? THEME_COLOR_DARK : THEME_COLOR_LIGHT);
+    } catch { /* pas de DOM */ }
+  }
+  /** Bouton de la barre latérale : clair, puis sombre, puis système, en boucle. */
+  cycleTheme(): void {
+    const order: ThemeChoice[] = ['clair', 'sombre', 'systeme'];
+    const next = order[(order.indexOf(this.devicePref('theme') as ThemeChoice) + 1) % order.length];
+    this.setDevicePref('theme', next);
+  }
+  /**
+   * Reprise douce, une seule fois par appareil, au premier lancement après la
+   * mise à jour : si cet appareil n'a pas encore de choix de thème et que le
+   * membre portait l'ancien « dark = true » dans le document, on pose « sombre » ;
+   * sinon « systeme ». Lu en brut (dark n'est plus dans le registre) ; la clé une
+   * fois posée fait sauter la reprise les fois suivantes.
+   */
+  private migrateThemeOnce(): void {
+    try { if (localStorage.getItem(DEVICE_PREFIX + 'theme') !== null) return; } catch { return; }
+    const me = this.currentMemberId();
+    const prefs = (this._data()?.prefs || {}) as Record<string, Record<string, unknown> | undefined>;
+    const oldDark = me ? prefs[me]?.['dark'] : undefined;
+    this.setDevicePref('theme', oldDark === true ? 'sombre' : 'systeme');
+  }
 
   // ---- global search ----------------------------------------------------
   openSearch(): void { this.patch({ searchOpen: true, searchQuery: '' }); }
@@ -3241,11 +3314,14 @@ export class FoyerStore {
     // Un réglage qu'une variable d'environnement écrase ne vaut pas ce que le
     // document en dit : c'est le serveur qui a raison, et la page doit montrer
     // ce qui s'applique, pas ce qui est rangé.
+    // Portée appareil : la valeur vit dans le localStorage, pas dans le document.
+    if (d.scope === 'appareil') return this.devicePref(d.key as DeviceKey);
     const info = this.settingsInfo();
     if (info && info.overrides[d.key] !== undefined) return info.values[d.key];
     return this.setting(d.key as SettingKey);
   }
   writeDeclared(d: SettingDecl, val: boolean | number | string): Promise<void> {
+    if (d.scope === 'appareil') { this.setDevicePref(d.key as DeviceKey, val as DeviceValue<DeviceKey>); return Promise.resolve(); }
     return this.setSetting(d.key as SettingKey, val as SettingValue<SettingKey>);
   }
 

@@ -12,6 +12,7 @@ const SCOPE_LABELS: Record<string, string> = {
   deploiement: 'Déploiement',
   foyer: 'Foyer',
   personnel: 'Personnel',
+  appareil: 'Appareil',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -45,13 +46,14 @@ export function render(): string {
   L.push('consomme. Cette page est **engendrée depuis le registre** (`backend/src/settings/registry.ts`,');
   L.push('copie identique dans `frontend/src/app/core/settings/registry.ts`), donc elle ne peut pas mentir.');
   L.push('');
-  L.push('## Les trois portées');
+  L.push('## Les quatre portées');
   L.push('');
   L.push('| Portée | Où c’est écrit | Qui peut le changer |');
   L.push('|---|---|---|');
   L.push('| **Déploiement** | variables d’environnement (`/etc/foyer/foyer.env` en LXC, `docker-compose.yml` en Docker) | l’administrateur du serveur, suivi d’un redémarrage du service |');
   L.push('| **Foyer** | document du foyer, clé `settings` | un administrateur du foyer, depuis l’application |');
-  L.push('| **Personnel** | document du foyer, par membre | le membre lui-même, depuis l’application |');
+  L.push('| **Personnel** | document du foyer, par membre (partagé entre ses appareils) | le membre lui-même, depuis l’application |');
+  L.push('| **Appareil** | localStorage du navigateur, clé `foyer.pref.<clé>` (jamais envoyé au serveur) | le membre, sur cet appareil seulement |');
   L.push('');
   L.push('Un réglage appartient à **une seule** portée. Quand une variable d’environnement');
   L.push('l’emporte sur un réglage du foyer, la colonne « Variable prioritaire » la nomme, et');
