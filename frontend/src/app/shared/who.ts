@@ -21,10 +21,10 @@ import { WHO_SHOWN, WhoBadge } from '../core/schedule';
   template: `
     @if (badges().length) {
       <span class="who" [title]="names()">
-        @for (b of shown(); track b.id) {
-          <f-avatar [ini]="b.ini" [color]="b.color" [size]="size()" border="2px solid var(--surface)" />
+        @for (b of shown(); track b.id; let first = $first) {
+          <f-avatar [ini]="b.ini" [color]="b.color" [size]="size()" border="2px solid var(--surface)" [style.margin-left.px]="first ? null : -overlap()" />
         }
-        @if (extra() > 0) { <span class="more" [style.height.px]="size()" [style.min-width.px]="size()">+{{ extra() }}</span> }
+        @if (extra() > 0) { <span class="more" [style.height.px]="size()" [style.min-width.px]="size()" [style.margin-left.px]="-overlap()">+{{ extra() }}</span> }
       </span>
     } @else {
       <span class="none">Sans membre</span>
@@ -33,8 +33,7 @@ import { WHO_SHOWN, WhoBadge } from '../core/schedule';
   styles: [`
     :host { display: inline-flex; min-width: 0; }
     .who { display: inline-flex; align-items: center; }
-    .who > :not(:first-child) { margin-left: -6px; }
-    .more { display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; margin-left: -6px;
+    .more { display: inline-flex; align-items: center; justify-content: center; padding: 0 5px;
             border-radius: 999px; background: var(--soft2); color: var(--ink2); border: 2px solid var(--surface);
             font-size: 10.5px; font-weight: 800; box-sizing: border-box; }
     .none { font-size: 10.5px; font-weight: 800; color: var(--ink3); background: var(--soft2);
@@ -46,6 +45,8 @@ export class WhoComponent {
   readonly size = input(22);
 
   readonly shown = computed(() => this.badges().slice(0, WHO_SHOWN));
+  /** Each avatar covers a third of the previous one, whatever the size. */
+  readonly overlap = computed(() => Math.round(this.size() / 3));
   readonly extra = computed(() => Math.max(0, this.badges().length - WHO_SHOWN));
   /** Les noms au complet pour le survol : le débordement compté reste consultable. */
   readonly names = computed(() => this.badges().map((b) => b.name).join(', '));

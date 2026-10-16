@@ -124,7 +124,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                     <span class="tl-bar" [style.background]="evColor(a.ev)"></span>
                     @if (a.ev.who.length) {
                       <div class="tl-av">
-                        @for (m of whoAv(a.ev.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="tlAvSize()" /> }
+                        @for (m of whoAv(a.ev.who); track m.id; let first = $first) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="tlAvSize()" border="2px solid var(--surface)" [style.margin-left.px]="first ? null : -tlOverlap()" /> }
                       </div>
                     }
                     <div class="tl-main">
@@ -141,7 +141,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                     <span class="tl-bar" [style.background]="a.color"></span>
                     @if (a.task.who.length) {
                       <div class="tl-av">
-                        @for (m of whoAv(a.task.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="tlAvSize()" /> }
+                        @for (m of whoAv(a.task.who); track m.id; let first = $first) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="tlAvSize()" border="2px solid var(--surface)" [style.margin-left.px]="first ? null : -tlOverlap()" /> }
                       </div>
                     }
                     <div class="tl-main">
@@ -381,7 +381,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .tl-ev { display: flex; align-items: stretch; gap: 10px; cursor: pointer; }
     .tl-bar { flex: none; width: 4px; border-radius: 3px; align-self: stretch; }
     .tl-av { flex: none; display: flex; align-items: center; }
-    .tl-av .avatar + .avatar { margin-left: -9px; box-shadow: 0 0 0 2px var(--surface); }
     .tl-main { min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; }
     .tl-title { font-size: 14px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tl-time { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 12px; font-weight: 700; color: var(--ink2); min-width: 0; }
@@ -451,7 +450,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .home-m .tl-wd { font-size: 10px; }
     .home-m .tl-num { margin-top: 1px; font-size: 18px; }
     .home-m .tl-events { gap: 8px; }
-    .home-m .tl-av .avatar + .avatar { margin-left: -7px; }
     .home-m .tl-main { flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; }
     .home-m .tl-title { flex: 1 1 auto; min-width: 0; font-size: 13.5px; }
     /* The time never gives way to the title: the title is the one that truncates. */
@@ -484,6 +482,8 @@ export class HomeScreen {
   readonly trackH = computed(() => this.slideH()[this.active()] || null);
   readonly avSize = computed(() => (this.store.narrow() ? 26 : 36));
   readonly tlAvSize = computed(() => (this.store.narrow() ? 22 : 28));
+  /** Several people on one entry: each avatar covers a third of the previous one. */
+  readonly tlOverlap = computed(() => Math.round(this.tlAvSize() / 3));
   /** Un rechargement du document est en cours (bouton « Réessayer »). */
   readonly reloading = signal(false);
   private lastTouch = 0;
