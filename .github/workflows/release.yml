@@ -4,13 +4,17 @@ name: Release
 # vX.Y.Z-rc.N pour une préversion). Mode d'emploi : docs/RELEASES.md.
 #
 # Ordre, chaque étape bloquant la suivante : contrôle du tag, mêmes contrôles
-# que la CI, build et essai de fumée par architecture, puis publication. Un
-# échec où que ce soit = aucune release.
+# que la CI, puis en parallèle le build et l'essai de fumée des archives par
+# architecture et ceux de l'image Docker multi-architecture, enfin publication.
+# Un échec où que ce soit = aucune release, et aucune étiquette d'image : l'image
+# n'est poussée que par son empreinte (invisible sans elle), et ne reçoit ses
+# étiquettes (1.4.0, latest…) qu'une fois tout le reste réussi.
 on:
   push:
     tags: ['v*']
 
-# Lecture seule partout ; seul le job de publication reçoit contents: write.
+# Lecture seule partout ; seul le job de publication reçoit contents: write, et
+# seuls les deux jobs de l'image reçoivent packages: write.
 permissions:
   contents: read
 
@@ -20,6 +24,9 @@ concurrency:
 
 env:
   NG_CLI_ANALYTICS: "false"
+  # Nom de l'image en minuscules (GHCR l'exige) : ghcr.io/prudhommewtf/foyer-app
+  # pour ce dépôt, celui du propriétaire pour un fork.
+  IMAGE_OWNER: ${{ github.repository_owner }}
 
 jobs:
   tag:
@@ -162,9 +169,149 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  image:
+    name: Image Docker
+    needs: [tag, checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      name: ${{ steps.name.outputs.name }}
+      digest: ${{ steps.push.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Nom de l'image
+        id: name
+        run: echo "name=ghcr.io/${IMAGE_OWNER,,}/foyer-app" >> "$GITHUB_OUTPUT"
+
+      # Étiquettes : 1.4.0, 1.4, 1 et latest pour une stable ; 1.4.0-rc.1 et next
+      # pour une préversion, jamais latest (ni la mineure, ni la majeure : un
+      # « docker pull …:1.4 » ne doit pas tomber sur une préversion).
+      - name: Étiquettes et labels OCI
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          # Annotations aussi au niveau de l'index multi-architecture : c'est là
+          # que la page du package GHCR lit sa description.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
+        with:
+          images: ${{ steps.name.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.tag.outputs.prerelease != 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.tag.outputs.prerelease != 'true' }}
+            type=raw,value=latest,enable=${{ needs.tag.outputs.prerelease != 'true' }}
+            type=raw,value=next,enable=${{ needs.tag.outputs.prerelease == 'true' }}
+          labels: |
+            org.opencontainers.image.title=Foyer
+            org.opencontainers.image.description=Foyer, application de gestion familiale auto-hébergée (agenda, tâches, courses, repas, finances).
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ needs.tag.outputs.version }}
+          annotations: |
+            org.opencontainers.image.title=Foyer
+            org.opencontainers.image.description=Foyer, application de gestion familiale auto-hébergée (agenda, tâches, courses, repas, finances).
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ needs.tag.outputs.version }}
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      # D'abord amd64 seul, chargé dans le démon local pour l'essai de fumée.
+      # Le cache GitHub Actions (même portée que le push ci-dessous) évite de
+      # tout recompiler, en particulier better-sqlite3 en arm64 sous QEMU.
+      - name: Build amd64 pour l'essai
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: foyer-app:smoke
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: FOYER_VERSION=${{ needs.tag.outputs.version }}
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
+
+      - name: Essai de fumée de l'image
+        run: scripts/release/smoke-image.sh foyer-app:smoke "${{ needs.tag.outputs.version }}" linux/amd64
+
+      - name: Connexion à GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Poussée par empreinte seulement, sans étiquette : si une autre étape du
+      # workflow échoue, rien n'est visible sous 1.4.0 ni latest (il reste une
+      # version non étiquetée dans le package, voir docs/RELEASES.md). L'amd64
+      # sort du cache de l'étape d'essai : c'est la même image.
+      - name: Build multi-architecture et poussée par empreinte
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: FOYER_VERSION=${{ needs.tag.outputs.version }}
+          outputs: type=image,name=${{ steps.name.outputs.name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
+
+      - name: Contrôle de l'index poussé
+        env:
+          REF: ${{ steps.name.outputs.name }}@${{ steps.push.outputs.digest }}
+        run: |
+          docker buildx imagetools inspect "$REF"
+          platforms="$(docker buildx imagetools inspect "$REF" --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}')"
+          for p in linux/amd64 linux/arm64; do
+            [[ " $platforms " == *" $p "* ]] || { echo "::error::plateforme $p absente de l'index ($platforms)"; exit 1; }
+          done
+
+  image-tags:
+    name: Étiquettes de l'image
+    needs: [tag, build, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Connexion à GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Les étiquettes pointent sur l'index déjà poussé et essayé : aucun
+      # rebuild, la même empreinte sous chaque nom.
+      - name: Pose des étiquettes
+        env:
+          REF: ${{ needs.image.outputs.name }}@${{ needs.image.outputs.digest }}
+          TAGS: ${{ needs.image.outputs.tags }}
+        run: |
+          args=()
+          while read -r t; do [[ -n "$t" ]] && args+=(-t "$t"); done <<< "$TAGS"
+          (( ${#args[@]} )) || { echo "::error::aucune étiquette calculée"; exit 1; }
+          docker buildx imagetools create "${args[@]}" "$REF"
+          while read -r t; do
+            [[ -n "$t" ]] || continue
+            got="$(docker buildx imagetools inspect "$t" --format '{{.Manifest.Digest}}')"
+            [[ "$got" == "${{ needs.image.outputs.digest }}" ]] || { echo "::error::$t pointe sur $got"; exit 1; }
+            echo "$t -> $got"
+          done <<< "$TAGS"
+
   publish:
     name: Publication
-    needs: [tag, build]
+    needs: [tag, build, image, image-tags]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -196,20 +343,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.tag.outputs.version }}
           PRERELEASE: ${{ needs.tag.outputs.prerelease }}
+          IMAGE: ${{ needs.image.outputs.name }}
+          DIGEST: ${{ needs.image.outputs.digest }}
         run: |
           if [ "$PRERELEASE" = true ]; then
             flags=(--prerelease --latest=false)
+            moving=next
           else
             flags=(--prerelease=false --latest)
+            moving=latest
           fi
+          notes="$(printf '%s\n' \
+            '## Image Docker' \
+            '' \
+            '```bash' \
+            "docker pull ${IMAGE}:${VERSION}" \
+            '```' \
+            '' \
+            "Plateformes \`linux/amd64\` et \`linux/arm64\`, aussi étiquetée \`${moving}\`. Empreinte de l'index :" \
+            '' \
+            '```' \
+            "${IMAGE}@${DIGEST}" \
+            '```')"
           files=(./*.tar.gz ./*.sha256)
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG existante : téléversement des fichiers et publication."
             gh release upload "$TAG" "${files[@]}" --clobber
-            gh release edit "$TAG" --draft=false "${flags[@]}"
+            body="$(gh release view "$TAG" --json body --jq .body)"
+            [[ "$body" == *"$DIGEST"* ]] || body="$(printf '%s\n\n%s\n' "$notes" "$body")"
+            gh release edit "$TAG" --draft=false "${flags[@]}" --notes "$body"
           else
-            gh release create "$TAG" --verify-tag --generate-notes "${flags[@]}" "${files[@]}"
+            # --notes est placé avant les notes générées.
+            gh release create "$TAG" --verify-tag --generate-notes --notes "$notes" "${flags[@]}" "${files[@]}"
           fi
           gh release view "$TAG" --json url,isDraft,isPrerelease,assets \
             --jq '"\(.url) brouillon=\(.isDraft) préversion=\(.isPrerelease) fichiers=\([.assets[].name] | join(", "))"'

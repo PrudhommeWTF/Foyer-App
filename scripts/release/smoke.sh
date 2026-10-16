@@ -74,25 +74,8 @@ for _ in $(seq 1 60); do
   curl -fsS "$BASE/api/health" > "$WORK/health.json" 2>/dev/null && break
   sleep 1
 done
-grep -q '"ok":true' "$WORK/health.json" 2>/dev/null || fail "/api/health ne répond pas"
-echo "   /api/health : $(cat "$WORK/health.json")"
-
-echo "4. Page d'accueil"
-curl -fsS "$BASE/" > "$WORK/index.html" || fail "page d'accueil injoignable"
-grep -q '<base href="./">' "$WORK/index.html" || fail "la page d'accueil n'est pas l'app compilée"
-
-echo "5. Écriture en base (onboarding)"
-CODE="$(curl -sS -o "$WORK/setup.json" -w '%{http_code}' -c "$WORK/cookies" \
-  -H 'Content-Type: application/json' \
-  -d '{"household":{"name":"Essai"},"admin":{"name":"Essai","email":"essai@example.invalid","password":"essai-de-fumee-1234"}}' \
-  "$BASE/api/setup")"
-[[ "$CODE" == 201 ]] || fail "onboarding : HTTP $CODE $(cat "$WORK/setup.json")"
-
-echo "6. Version annoncée"
-curl -fsS -b "$WORK/cookies" "$BASE/api/system/version" > "$WORK/version.json" || fail "/api/system/version injoignable"
-GOT="$(node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).current))' "$WORK/version.json")"
-[[ "$GOT" == "$VERSION" ]] || fail "version annoncée « $GOT », attendue « $VERSION »"
-echo "   version : $GOT"
+# Contrôles HTTP partagés avec l'essai de l'image Docker (smoke-image.sh).
+"$(dirname "${BASH_SOURCE[0]}")/smoke-api.sh" "$BASE" "$VERSION" "$WORK" || fail "contrôles HTTP"
 
 echo "7. Arrêt"
 stop
