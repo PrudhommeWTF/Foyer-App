@@ -1,0 +1,215 @@
+name: Release
+
+# Publie une release GitHub à chaque tag de version poussé (vX.Y.Z, ou
+# vX.Y.Z-rc.N pour une préversion). Mode d'emploi : docs/RELEASES.md.
+#
+# Ordre, chaque étape bloquant la suivante : contrôle du tag, mêmes contrôles
+# que la CI, build et essai de fumée par architecture, puis publication. Un
+# échec où que ce soit = aucune release.
+on:
+  push:
+    tags: ['v*']
+
+# Lecture seule partout ; seul le job de publication reçoit contents: write.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NG_CLI_ANALYTICS: "false"
+
+jobs:
+  tag:
+    name: Contrôle du tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      epoch: ${{ steps.epoch.outputs.epoch }}
+    steps:
+      # Historique complet : il faut tous les tags (ordre des versions) et main
+      # (le commit tagué doit en faire partie).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Format, ordre et appartenance à main
+        id: check
+        run: scripts/release/check-tag.sh "$GITHUB_REF_NAME"
+
+      # Date du commit, pour des archives reproductibles (le conteneur de build
+      # n'a pas à relire l'historique Git).
+      - name: Date du commit
+        id: epoch
+        run: echo "epoch=$(git log -1 --format=%ct "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+
+  checks:
+    name: Contrôles (comme la CI)
+    needs: tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Recherche de secrets
+        run: node scripts/cherche-secrets.js
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Audit des dépendances (backend)
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Test backend
+        working-directory: backend
+        run: npm test
+
+      - name: Lint code mort (backend)
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Audit des dépendances (frontend)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
+
+      - name: Typage des tests (frontend)
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Lint code mort (frontend)
+        working-directory: frontend
+        run: npx tsc -p tsconfig.app.json --noUnusedLocals --noUnusedParameters --noEmit
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: [tag, checks]
+    # Runners natifs, construction dans Debian 13 : better-sqlite3 est un module
+    # natif, chaque archive se construit sur l'architecture qu'elle vise.
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    container: debian:trixie
+    timeout-minutes: 30
+    steps:
+      - name: Outils système
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl file git xz-utils python3 make g++
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Empaquetage
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+          SOURCE_DATE_EPOCH: ${{ needs.tag.outputs.epoch }}
+        run: scripts/release/package.sh "$VERSION" "$ARCH" dist-release
+
+      - name: Essai de fumée
+        env:
+          VERSION: ${{ needs.tag.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: scripts/release/smoke.sh "dist-release/foyer-app-linux-${ARCH}.tar.gz" "$VERSION" "$ARCH"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: dist-release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publication
+    needs: [tag, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist-release
+          merge-multiple: true
+
+      - name: Vérification des empreintes
+        working-directory: dist-release
+        run: |
+          for arch in x86_64 arm64; do
+            for f in "foyer-app-linux-${arch}.tar.gz" "foyer-app-linux-${arch}.tar.gz.sha256"; do
+              [ -f "$f" ] || { echo "::error::$f manquant"; exit 1; }
+            done
+          done
+          sha256sum -c ./*.sha256
+
+      # Une release créée à la main depuis la page GitHub ne fait pas échouer le
+      # workflow : elle reçoit les fichiers et est publiée. Une préversion n'est
+      # jamais marquée « latest » (les foyers du canal stable ne doivent pas la
+      # voir arriver).
+      - name: Publication de la release
+        working-directory: dist-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.tag.outputs.prerelease }}
+        run: |
+          if [ "$PRERELEASE" = true ]; then
+            flags=(--prerelease --latest=false)
+          else
+            flags=(--prerelease=false --latest)
+          fi
+          files=(./*.tar.gz ./*.sha256)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG existante : téléversement des fichiers et publication."
+            gh release upload "$TAG" "${files[@]}" --clobber
+            gh release edit "$TAG" --draft=false "${flags[@]}"
+          else
+            gh release create "$TAG" --verify-tag --generate-notes "${flags[@]}" "${files[@]}"
+          fi
+          gh release view "$TAG" --json url,isDraft,isPrerelease,assets \
+            --jq '"\(.url) brouillon=\(.isDraft) préversion=\(.isPrerelease) fichiers=\([.assets[].name] | join(", "))"'
