@@ -82,12 +82,17 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
         </div>
         @for (a of activity(); track $index) {
           <div class="act">
-            @if (a.author) { <f-avatar [ini]="authorIni(a.author)" color="#3D6FA8" [size]="36" /> } @else { <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="36" /> }
+            @if (a.author) { <f-avatar [ini]="authorIni(a.author)" color="#3D6FA8" [size]="avSize()" /> } @else { <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="avSize()" /> }
             <div class="act-b">
-              <div class="act-l"><b>{{ a.author || nm(a.by) }}</b>@if (a.via && a.via !== a.author) { <span class="act-via" [class.ed]="a.via === 'ÉcoleDirecte'">{{ a.via === 'ÉcoleDirecte' ? 'sur ÉcoleDirecte' : 'via un assistant' }}</span>} {{ a.verb }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
+              <div class="act-l"><b>{{ a.author || nm(a.by) }}</b>@if (a.via && a.via !== a.author) { <span class="act-via" [class.ed]="a.via === 'ÉcoleDirecte'">{{ a.via === 'ÉcoleDirecte' ? 'sur ÉcoleDirecte' : 'via un assistant' }}</span>} {{ store.narrow() ? verbShort(a.verb) : a.verb }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
               <div class="act-m">
-                <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
-                <span class="act-t">{{ rel(a.at) }}</span>
+                @if (store.narrow()) {
+                  <span class="act-dot" [style.background]="a.color" [title]="a.where"></span>
+                  <span class="act-t">{{ relShort(a.at) }}</span>
+                } @else {
+                  <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
+                  <span class="act-t">{{ rel(a.at) }}</span>
+                }
               </div>
             </div>
           </div>
@@ -119,7 +124,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                     <span class="tl-bar" [style.background]="evColor(a.ev)"></span>
                     @if (a.ev.who.length) {
                       <div class="tl-av">
-                        @for (m of whoAv(a.ev.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="28" /> }
+                        @for (m of whoAv(a.ev.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="tlAvSize()" /> }
                       </div>
                     }
                     <div class="tl-main">
@@ -136,7 +141,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                     <span class="tl-bar" [style.background]="a.color"></span>
                     @if (a.task.who.length) {
                       <div class="tl-av">
-                        @for (m of whoAv(a.task.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="28" /> }
+                        @for (m of whoAv(a.task.who); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="tlAvSize()" /> }
                       </div>
                     }
                     <div class="tl-main">
@@ -236,12 +241,14 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     </ng-template>
 
     <div class="screen-enter">
-      <div class="home-head">
-        <div>
-          <div class="hello f-script">{{ hello() }}</div>
-          <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}</div>
+      @if (!store.narrow()) {
+        <div class="home-head">
+          <div>
+            <div class="hello f-script">{{ hello() }}</div>
+            <div class="screen-sub">{{ store.fmtLongDate(store.todayStr()) }}</div>
+          </div>
         </div>
-      </div>
+      }
 
       @if (store.data() && admin.pushInvite()) { <ng-container [ngTemplateOutlet]="pushCard" /> }
 
@@ -259,9 +266,9 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
         <!-- ===== mobile : carousel + grille de modules ===== -->
         <div class="home-m">
           <div class="carousel">
-            <div class="track fscroll-x" #track (scroll)="onScroll(track)" (pointerdown)="onTouch()">
+            <div class="track fscroll-x" #track [style.height.px]="trackH()" (scroll)="onScroll(track)" (pointerdown)="onTouch()">
               @for (sl of slides(); track sl.key) {
-                <div class="slide">
+                <div class="slide" #slideEl>
                   @switch (sl.key) {
                     @case ('activity') { <ng-container [ngTemplateOutlet]="feedCard" /> }
                     @case ('agenda') { <ng-container [ngTemplateOutlet]="agendaCard" /> }
@@ -271,9 +278,10 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                 </div>
               }
             </div>
-            <div class="pills">
+            <div class="dots" role="tablist">
               @for (sl of slides(); track sl.key; let i = $index) {
-                <button #pillBtn class="pill" [class.on]="active() === i" (click)="goSlide(i)">{{ sl.label }}</button>
+                <button class="dot" role="tab" [class.on]="active() === i" [attr.aria-selected]="active() === i"
+                        [attr.aria-label]="sl.label" [title]="sl.label" (click)="goSlide(i)"></button>
               }
             </div>
           </div>
@@ -403,21 +411,53 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .f-val.neg { color: #C2503A; }
 
     /* ===== mobile : carousel + grille ===== */
-    .home-m { display: flex; flex-direction: column; gap: 20px; }
+    .home-m { display: flex; flex-direction: column; gap: 14px; }
     .fscroll-x { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .fscroll-x::-webkit-scrollbar { display: none; }
-    .track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; align-items: stretch; }
+    .track { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; align-items: flex-start; transition: height .2s ease; }
     /* min-width: 0 est vital : sans lui, un volet au contenu long (une tâche au
        titre à rallonge) déborde de 100% (min-width: auto = min-content d'un item
        flex), la largeur du volet devient indéfinie, l'ellipsis intérieure ne
        s'applique plus, et le carousel se désaligne. Bridé à 100%, le contenu est
        tronqué proprement à l'intérieur. */
+    /* Each slide keeps its own height (align-items: flex-start on the track) and
+       the track takes the height of the one shown: a short « Repas » no longer
+       reserves the room of the long « Activité ». */
     .slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; display: flex; box-sizing: border-box; }
     .slide > .card { flex: 1; min-width: 0; }
-    .pills { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; }
-    .pill { flex: none; border: none; background: var(--soft); color: var(--ink2); border-radius: 20px; padding: 7px 15px; font-size: 12px; font-weight: 800; cursor: pointer; }
-    .pill.on { background: #FCE9E3; color: var(--primary); }
-    :host-context(:root.dark) .pill.on { background: rgba(229,107,78,.18); }
+    /* One dot per slide. The button is a 24px touch target, the dot is drawn inside. */
+    .dots { display: flex; justify-content: center; gap: 2px; margin-top: 6px; }
+    .dot { width: 24px; height: 24px; flex: none; border: none; background: none; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .dot::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: var(--line2); transition: width .2s ease, background .2s ease; }
+    .dot.on::before { width: 20px; background: var(--primary); }
+
+    /* ===== mobile : denser cards ===== */
+    .home-m .feed { padding: 14px 16px; }
+    .home-m .feed-head { font-size: 13.5px; margin-bottom: 4px; }
+    .home-m .act { align-items: center; gap: 10px; padding: 8px 0; }
+    .home-m .act:first-of-type { padding-top: 4px; }
+    .home-m .act-b { display: flex; align-items: center; gap: 8px; }
+    /* One line: author and verb stay whole, the item's name is what truncates
+       (a <button> is atomic inline, it can't be cut by the line's ellipsis). */
+    .home-m .act-l { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 4px; font-size: 13.5px; white-space: nowrap; overflow: hidden; }
+    .home-m .act-l > b, .home-m .act-via { flex: none; }
+    .home-m .act-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+    .home-m .act-m { flex: none; margin-top: 0; gap: 6px; }
+    .act-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .home-m .rc { padding: 14px 16px; }
+    .home-m .rc-head { margin-bottom: 4px; }
+    .home-m .tl-group { gap: 10px; padding: 7px 0; }
+    .home-m .tl-day { width: 30px; }
+    .home-m .tl-wd { font-size: 10px; }
+    .home-m .tl-num { margin-top: 1px; font-size: 18px; }
+    .home-m .tl-events { gap: 8px; }
+    .home-m .tl-av .avatar + .avatar { margin-left: -7px; }
+    .home-m .tl-main { flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; }
+    .home-m .tl-title { flex: 1 1 auto; min-width: 0; font-size: 13.5px; }
+    /* The time never gives way to the title: the title is the one that truncates. */
+    .home-m .tl-time { flex: none; max-width: 45%; margin-top: 0; font-size: 11.5px; }
+    .home-m .tl-time f-icon { display: none; }
+    .home-m .tl-pill { padding: 3px 10px; font-size: 12.5px; }
 
     .mods { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .mod { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; text-align: left; min-width: 0; }
@@ -436,8 +476,14 @@ export class HomeScreen {
   readonly subject = subjectLabel;
 
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
-  private readonly pillEls = viewChildren<ElementRef<HTMLElement>>('pillBtn');
+  private readonly slideEls = viewChildren<ElementRef<HTMLElement>>('slideEl');
   readonly active = signal(0);
+  /** Measured height of each carousel slide, kept current by a ResizeObserver. */
+  private readonly slideH = signal<number[]>([]);
+  /** The track is as tall as the slide shown (null until measured: natural height). */
+  readonly trackH = computed(() => this.slideH()[this.active()] || null);
+  readonly avSize = computed(() => (this.store.narrow() ? 26 : 36));
+  readonly tlAvSize = computed(() => (this.store.narrow() ? 22 : 28));
   /** Un rechargement du document est en cours (bouton « Réessayer »). */
   readonly reloading = signal(false);
   private lastTouch = 0;
@@ -461,9 +507,17 @@ export class HomeScreen {
     const timer = setInterval(() => this.autoAdvance(), 6000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
 
-    // La pastille active reste visible : la file de pastilles déborde de l'écran,
-    // et une section atteinte hors champ ne se verrait pas sans ça.
-    effect(() => { this.pillEls()[this.active()]?.nativeElement.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); });
+    // Follow the slides' heights: content changes (a task ticked, a slide that
+    // loads later) resize the track without waiting for a swipe.
+    effect((onCleanup) => {
+      const els = this.slideEls().map((e) => e.nativeElement);
+      if (!els.length || typeof ResizeObserver === 'undefined') return;
+      const measure = () => this.slideH.set(els.map((el) => el.offsetHeight));
+      const ro = new ResizeObserver(measure);
+      els.forEach((el) => ro.observe(el));
+      measure();
+      onCleanup(() => ro.disconnect());
+    });
   }
 
   readonly hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
@@ -643,6 +697,13 @@ export class HomeScreen {
   }
   nm(id: string | null): string { return (id && this.store.memberName(id)) || 'Quelqu’un'; }
   rel(iso: string): string { return relTime(iso, Date.now()); }
+  /** « il y a 5 min » → « 5 min », for the one-line activity rows on a phone. */
+  relShort(iso: string): string { return this.rel(iso).replace(/^il y a /, ''); }
+  /**
+   * « a programmé l’évènement » → « a programmé »: on a one-line row the item's
+   * name matters more than its type, which the coloured dot already gives.
+   */
+  verbShort(verb: string): string { return verb.replace(/ (la tâche|le devoir|l’évènement|l’article)$/, ''); }
 
   /** Clic sur le nom d'une entrée du fil : ouvre la fiche de l'élément concerné. */
   openActivity(a: ActivityEntry): void {

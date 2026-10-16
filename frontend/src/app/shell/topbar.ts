@@ -13,10 +13,19 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
   imports: [IconComponent, AvatarComponent],
   template: `
     <div class="topbar">
-      @if (store.narrow()) {
-        <button class="mbrand" (click)="store.go('home')" title="Accueil" aria-label="Accueil"><f-icon name="home" [size]="21" color="#fff" [width]="2.2" /></button>
+      @if (helloBar()) {
+        <!-- Mobile home: the greeting and the date live in the bar instead of
+             taking a block of the screen. The home button is pointless here. -->
+        <div class="hello-t">
+          <div class="hello f-script">{{ hello() }}</div>
+          <div class="hello-d">{{ store.fmtLongDate(store.todayStr()) }}</div>
+        </div>
+      } @else {
+        @if (store.narrow()) {
+          <button class="mbrand" (click)="store.go('home')" title="Accueil" aria-label="Accueil"><f-icon name="home" [size]="21" color="#fff" [width]="2.2" /></button>
+        }
+        <div class="title f-display">{{ title() }}</div>
       }
-      <div class="title f-display">{{ title() }}</div>
       <div class="spacer"></div>
 
       @if (!store.narrow()) {
@@ -62,6 +71,9 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
     /* Une seule ligne, toujours : la barre a une hauteur fixe, et un titre qui
        passe à la ligne déborde par-dessus le contenu. */
     .title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hello-t { min-width: 0; }
+    .hello { font-size: 25px; font-weight: 700; line-height: 1; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hello-d { margin-top: 2px; font-size: 11.5px; font-weight: 700; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* Le champ de recherche cède la place avant le titre : « Planning des repas »
        tronqué en « Planning de… » sur un écran qui a la place est un aveu. */
     .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: none; border-radius: 14px; padding: 10px 16px; flex: 0 1 280px; min-width: 46px; box-shadow: var(--sh-float); font-size: 14px; font-weight: 600; color: var(--ink3); cursor: text; font-family: inherit; text-align: left; transition: box-shadow .15s ease; }
@@ -101,6 +113,9 @@ export class TopbarComponent {
     return (this.store.narrow() ? SCREEN_TITLES_SHORT[s] : '') || SCREEN_TITLES[s] || 'Foyer';
   });
   unread = this.store.unreadCount;
+  /** On a phone, the home screen's bar greets instead of titling. */
+  helloBar = computed(() => this.store.narrow() && this.store.ui().screen === 'home');
+  hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
 
   pick(id: string): void {
     const s = this.store;
