@@ -191,6 +191,11 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
   padding: 26px;
 }
 .modal-title { font-family: var(--font-display); font-size: 21px; font-weight: 700; color: var(--ink); }
+/* Modale « haute » sur téléphone : presque tout l'écran, pour faire défiler une
+   longue liste (ordre des rayons) et la réordonner au doigt sans être à l'étroit. */
+@media (max-width: 860px) {
+  .modal-card.tall { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
+}
 
 /* Toast */
 .toast {

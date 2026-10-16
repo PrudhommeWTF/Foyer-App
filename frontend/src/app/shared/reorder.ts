@@ -1,6 +1,10 @@
 import { Directive, ElementRef, HostListener, inject, input, output } from '@angular/core';
 import { reorder } from '../core/tasks';
 
+/** Marge (px) sous le bord où le glisser déclenche le défilement, et vitesse max par trame. */
+const EDGE = 56;
+const MAX_SPEED = 16;
+
 /**
  * Réordonner une liste au doigt, sans dépendance.
  *
@@ -29,6 +33,12 @@ export class ReorderDirective {
   readonly ids = input.required<readonly string[]>({ alias: 'fReorder' });
   /** Le nouvel ordre, une fois la ligne lâchée. */
   readonly reordered = output<string[]>();
+  /**
+   * Faire défiler le conteneur quand on tire près d'un bord. Pour une longue
+   * liste dans une zone défilante (la modale « Ordre des rayons » sur iPhone) ;
+   * inutile pour les sous-tâches, d'où le défaut désactivé.
+   */
+  readonly autoscroll = input(false);
 
   private from = -1;
   private to = -1;
@@ -37,9 +47,27 @@ export class ReorderDirective {
   private rects: DOMRect[] = [];
   private step = 0;
   private grip: HTMLElement | null = null;
+  // Défilement automatique : le conteneur défilant, son décalage au début du
+  // glisser (pour corriger la géométrie), la dernière ordonnée du doigt et la
+  // trame en cours.
+  private scroller: HTMLElement | null = null;
+  private startScroll = 0;
+  private lastY = 0;
+  private raf = 0;
 
   private lines(): HTMLElement[] {
     return Array.from(this.host.nativeElement.querySelectorAll<HTMLElement>(':scope > [data-rid]'));
+  }
+
+  /** Le premier ancêtre réellement défilant (la carte de la modale, en pratique). */
+  private findScroller(): HTMLElement | null {
+    let el: HTMLElement | null = this.host.nativeElement.parentElement;
+    while (el) {
+      const oy = getComputedStyle(el).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
+      el = el.parentElement;
+    }
+    return null;
   }
 
   @HostListener('pointerdown', ['$event'])
@@ -63,7 +91,10 @@ export class ReorderDirective {
     this.from = from;
     this.to = from;
     this.startY = e.clientY;
+    this.lastY = e.clientY;
     this.grip = grip;
+    this.scroller = this.autoscroll() ? this.findScroller() : null;
+    this.startScroll = this.scroller ? this.scroller.scrollTop : 0;
     grip.setPointerCapture(e.pointerId);
     rows[from].style.position = 'relative';
     rows[from].style.zIndex = '2';
@@ -73,30 +104,72 @@ export class ReorderDirective {
   @HostListener('pointermove', ['$event'])
   onMove(e: PointerEvent): void {
     if (this.from < 0) return;
-    const dy = e.clientY - this.startY;
+    this.lastY = e.clientY;
+    this.layout();
+    // Près d'un bord de la zone défilante, on enclenche un défilement continu.
+    if (this.scroller) { if (this.edgeSpeed()) this.startAuto(); else this.stopAuto(); }
+  }
 
-    // La place visée se lit sous le **doigt**, pas au centre de la ligne tirée.
-    // Avec des lignes de hauteurs différentes (un parent et ses sous-tâches face
-    // à une ligne simple), comparer les centres demandait de tirer bien au-delà
-    // de la ligne voulue pour la dépasser, ce qui rendait le geste inutilisable.
-    // On compte les autres lignes dont le milieu est déjà passé : c'est
-    // exactement l'indice d'arrivée, une fois la ligne tirée retirée du rang.
+  /**
+   * Replace la ligne tirée sous le doigt et décale les autres pour ouvrir la
+   * place. Les rects sont figés au début du glisser ; quand le conteneur défile,
+   * on corrige par le décalage de défilement (startScroll) pour que la cible et
+   * la ligne tirée restent justes.
+   */
+  private layout(): void {
+    const scrollDelta = this.scroller ? this.scroller.scrollTop - this.startScroll : 0;
+    const dy = this.lastY - this.startY;
+
+    // La place visée se lit sous le doigt, pas au centre de la ligne tirée. On
+    // compte les autres lignes dont le milieu (corrigé du défilement) est déjà
+    // passé : c'est l'indice d'arrivée, la ligne tirée retirée du rang.
     let to = 0;
     for (let i = 0; i < this.rects.length; i++) {
       if (i === this.from) continue;
-      if (e.clientY > this.rects[i].top + this.rects[i].height / 2) to++;
+      if (this.lastY > this.rects[i].top - scrollDelta + this.rects[i].height / 2) to++;
       else break;
     }
     this.to = to;
 
-    // Les autres se décalent d'exactement la place que la ligne tirée libère ou
-    // réclame : sa hauteur, écart compris.
     for (let i = 0; i < this.rows.length; i++) {
-      if (i === this.from) { this.rows[i].style.transform = `translateY(${dy}px)`; continue; }
+      // La ligne tirée suit le doigt ; comme le contenu a défilé de scrollDelta,
+      // on l'ajoute pour qu'elle reste collée au doigt plutôt qu'au contenu.
+      if (i === this.from) { this.rows[i].style.transform = `translateY(${dy + scrollDelta}px)`; continue; }
       const shift = to > this.from && i > this.from && i <= to ? -this.step
         : to < this.from && i >= to && i < this.from ? this.step : 0;
       this.rows[i].style.transform = shift ? `translateY(${shift}px)` : '';
     }
+  }
+
+  /** La vitesse de défilement voulue (px/trame) selon la proximité d'un bord, bornée. 0 = pas de défilement. */
+  private edgeSpeed(): number {
+    const s = this.scroller;
+    if (!s) return 0;
+    const r = s.getBoundingClientRect();
+    const max = s.scrollHeight - s.clientHeight;
+    if (this.lastY < r.top + EDGE && s.scrollTop > 0) {
+      return -Math.ceil(((r.top + EDGE - this.lastY) / EDGE) * MAX_SPEED);
+    }
+    if (this.lastY > r.bottom - EDGE && s.scrollTop < max) {
+      return Math.ceil(((this.lastY - (r.bottom - EDGE)) / EDGE) * MAX_SPEED);
+    }
+    return 0;
+  }
+
+  private startAuto(): void {
+    if (this.raf) return;
+    const tick = (): void => {
+      const v = this.edgeSpeed();
+      if (this.from < 0 || !this.scroller || !v) { this.raf = 0; return; }
+      this.scroller.scrollTop += v;
+      this.layout();
+      this.raf = requestAnimationFrame(tick);
+    };
+    this.raf = requestAnimationFrame(tick);
+  }
+
+  private stopAuto(): void {
+    if (this.raf) { cancelAnimationFrame(this.raf); this.raf = 0; }
   }
 
   @HostListener('pointerup', ['$event'])
@@ -104,11 +177,13 @@ export class ReorderDirective {
   onUp(e: PointerEvent): void {
     if (this.from < 0) return;
     const { from, to } = this;
+    this.stopAuto();
     this.grip?.releasePointerCapture(e.pointerId);
     for (const r of this.rows) { r.style.transform = ''; r.style.position = ''; r.style.zIndex = ''; r.style.opacity = ''; }
     this.from = -1;
     this.rows = [];
     this.grip = null;
+    this.scroller = null;
     if (from !== to) this.reordered.emit(reorder(this.ids(), from, to));
   }
 

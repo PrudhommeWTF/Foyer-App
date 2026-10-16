@@ -533,6 +533,17 @@ Un déplacement renumérote de 0 à n et n'envoie que les positions qui changent
 Deux appareils qui réordonnent en même temps ne perdent aucune tâche : le
 dernier lot reçu fait foi sur les positions qu'il touche.
 
+La même directive sert à **l'ordre des rayons** (écran Courses, modale « Ordre
+des rayons »), où elle remplace les flèches monter/descendre, inutilisables avec
+25 rayons debout en magasin (les flèches restent, en secours accessibilité). Le
+rayon de repli (« À trier ») y est épinglé en tête et n'est pas déplaçable. Une
+option `autoscroll` (désactivée par défaut, donc sans effet sur les tâches) fait
+défiler la zone près des bords pendant le glisser, pour une longue liste dans la
+modale plein écran sur téléphone ; la géométrie du geste est corrigée du
+défilement pour que la cible reste juste. L'ordre des rayons est enregistré en
+une écriture (`store.reorderAisles`, calcul pur `core/aisles.ts`), par le même
+chemin document que les autres rayons.
+
 ## La vue « À moi »
 
 Une puce à côté de « Toutes », visible dès qu'un membre est reconnu. Elle
@@ -698,7 +709,7 @@ curl -s "http://localhost:3000/api/calendar/feed.ics?token=$TOKEN" | grep -c '^S
 | `frontend/src/app/core/tasks.ts` | Ce qui se voit et dans quel ordre, la tolérance, les suggestions, les dates d'un tap, l'imbrication des sous-tâches, l'ordre manuel, ce qui m'est affecté. |
 | `frontend/src/app/core/recurrence.ts` | Le moteur de récurrence : l'occurrence suivante dans les deux modes, le saut d'occurrence, la fenêtre de tolérance, le libellé de la règle. |
 | `frontend/src/app/core/availability.ts` | La disponibilité lue dans l'emploi du temps : créneaux du jour, conflit à une heure, jour le plus libre. Pur, lecture seule. |
-| `frontend/src/app/shared/reorder.ts` | Le glisser-déposer, à la poignée, au doigt comme au clavier. Sans dépendance. |
+| `frontend/src/app/shared/reorder.ts` | Le glisser-déposer, à la poignée, au doigt comme au clavier. Sans dépendance. Réutilisé pour l'ordre des rayons (option `autoscroll` pour une longue liste défilante). |
 | `frontend/src/app/core/links.ts` | Les intitulés déposés entre modules, et la tâche à proposer de clore quand la liste de courses est finie. |
 | `backend/src/ics.ts` | Le flux ICS, dont les tâches datées quand `settings.icsTasks` est activé. |
 | `frontend/src/app/core/foyer.store.ts` | La file, le sondage commun, les gestes, les listes et les modèles, la clôture proposée depuis les courses. |
