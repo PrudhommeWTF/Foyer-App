@@ -214,6 +214,25 @@ je recommande.
   et affiche la réponse.
 - **Dans la cloche**, les rappels émis, qu'ils soient partis ou non.
 
+### État lu/non-lu, partagé entre les appareils d'un membre
+
+L'état lu des notifications (le compteur de la cloche et la pastille d'icône
+`setAppBadge`) vit dans le **document du foyer** (`members[].readNotifs`), donc
+partagé entre les appareils d'un même membre. Deux points le rendent fiable :
+
+- **Il suit sans recharger.** Le sondage différentiel `/live` renvoie le
+  `readNotifs` du **membre authentifié** (jamais celui des autres), et il tourne
+  sur **tous les écrans** quand l'app est visible (rapide sur Courses, Tâches,
+  Lieux ou sous une fiche ouverte, lent ailleurs). Lire une notification sur un
+  appareil fait descendre la cloche et la pastille de l'autre en moins d'une
+  minute, sans geste. Comme `readNotifs` fait partie du document, une réponse
+  `unchanged` (version identique) suffit à dire « rien de nouveau ».
+- **Deux lectures simultanées ne s'écrasent pas.** L'écriture fait l'**union**
+  dans la closure de mutation, au moment où elle s'applique (`core/notifs.ts`,
+  `mergeReadNotifs`), pas sur un instantané figé : rejouée après un conflit sur
+  la version serveur, elle garde la lecture faite ailleurs (A lit n1, B lit n2,
+  résultat {n1, n2}), puis élague les identifiants qui ne sont plus affichables.
+
 ## 6. Ce qui sort, et comment le couper
 
 Sans `FOYER_NOTIFY_URL`, aucune requête ne part, jamais. Avec, ce qui part

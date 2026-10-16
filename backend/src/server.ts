@@ -370,7 +370,12 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
     res.json({ version, unchanged: true });
     return;
   }
-  res.json({ version, shop: shopItemsOf(doc), tasks: taskItemsOf(doc), places: placesOf(doc), placeItems: placeItemsOf(doc) });
+  // L'état lu des notifications vit dans le document (members[].readNotifs), donc
+  // partagé entre les appareils d'un membre. On ne renvoie que celui du membre
+  // authentifié, jamais celui des autres : la cloche et la pastille d'un appareil
+  // suivent une lecture faite ailleurs sans recharger tout le document.
+  const readNotifs = currentMember(req as AuthedRequest)?.readNotifs || [];
+  res.json({ version, shop: shopItemsOf(doc), tasks: taskItemsOf(doc), places: placesOf(doc), placeItems: placeItemsOf(doc), readNotifs });
 });
 
 // Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un

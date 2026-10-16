@@ -75,7 +75,7 @@ export interface StoredFile { id: number; name: string; mime: string; size: numb
  * Instantané des sous-arbres qui s'écrivent par opérations : courses et tâches.
  * `unchanged` évite de les renvoyer pour rien.
  */
-export interface LiveSnapshot { version: number; shop?: ShopItem[]; tasks?: TaskItem[]; places?: Place[]; placeItems?: PlaceItem[]; unchanged?: boolean; }
+export interface LiveSnapshot { version: number; shop?: ShopItem[]; tasks?: TaskItem[]; places?: Place[]; placeItems?: PlaceItem[]; readNotifs?: string[]; unchanged?: boolean; }
 
 interface OpBase { opId: string; by?: string | null; at?: string; }
 export type ShopOp =
