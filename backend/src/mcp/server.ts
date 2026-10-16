@@ -114,7 +114,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'courses_ajouter',
     write: true,
-    description: 'Ajoute des articles à une liste de courses (défaut : la principale). Ne crée pas de doublon d’un article déjà « à prendre ».',
+    description: 'Ajoute des articles à une liste de courses (défaut : la principale). Ne crée pas de doublon d’un article déjà « à prendre ». Le `rayon` se donne par son nom, sans emoji et sans tenir compte des accents ni de la casse (« frais », « fruits & légumes ») ; voir l’outil `rayons` pour la liste. Un rayon non reconnu ne bloque pas : l’article est ajouté au rayon de repli et la réponse le signale.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -213,7 +213,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'courses_modifier',
     write: true,
-    description: 'Modifie un article de courses (par [id]) : nom, quantité, rayon (nom), ou liste (nom). Ne change que les champs fournis.',
+    description: 'Modifie un article de courses (par [id]) : nom, quantité, rayon (nom), ou liste (nom). Ne change que les champs fournis. Le `rayon` se donne par son nom, sans emoji et sans tenir compte des accents ni de la casse (« frais », « fruits & légumes ») ; voir l’outil `rayons`. Un rayon non reconnu range l’article au rayon de repli et la réponse le signale.',
     inputSchema: { type: 'object', properties: { id: S.string(80), nom: S.string(200), qte: S.string(40), rayon: S.string(80), liste: S.string(80) }, required: ['id'] },
     run: (ctx, a) => t.coursesModifier(ctx, { id: str(a.id) || '', nom: str(a.nom), qte: str(a.qte), rayon: str(a.rayon), liste: str(a.liste) }),
   },

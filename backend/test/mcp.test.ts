@@ -105,6 +105,35 @@ describe('Serveur MCP', () => {
     assert.equal(lait.via, 'Assistant écriture', 'la provenance porte le nom du jeton');
   });
 
+  it('courses : rayon reconnu tolérant, rayon inconnu rangé au repli et signalé (ajout + modif)', async () => {
+    // Jeton dédié : le limiteur anti-rafale compte par jeton, on évite d'épuiser
+    // le budget du jeton write partagé par le reste de la suite.
+    const token = await creerJeton(ctx.jetons.membre, 'Assistant rayons', 'write', 'MotDePasseSolide2');
+    const c = await connect(token);
+    // Ajout groupé : « frais » reconnu malgré la casse/emoji, « fraix » non reconnu.
+    const add = textOf(await c.callTool({ name: 'courses_ajouter', arguments: { articles: [
+      { nom: 'Chorizo', rayon: 'frais' }, { nom: 'Saucisson', rayon: 'fraix' }, { nom: 'Mortadelle', rayon: 'frais' },
+    ] } }));
+    assert.match(add, /Chorizo/);
+    assert.match(add, /Rayon « fraix » inconnu/, 'le rayon mal orthographié est signalé');
+    assert.match(add, /Non classé/);
+    assert.match(add, /Rayons possibles/);
+
+    const st = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state;
+    const aisleName = (id: string): string => (st.aisles || []).find((a: { id: string; name: string }) => a.id === id)?.name || '';
+    const item = (name: string) => (st.shop || []).find((i: { name: string }) => i.name === name);
+    assert.equal(aisleName(item('Chorizo').aisleId), '🥛 Frais', 'le chorizo est bien rangé au frais');
+    assert.match(aisleName(item('Saucisson').aisleId), /Non classé/, 'le saucisson est tombé au repli, pas dans un rayon inventé');
+
+    // Modification avec un rayon inconnu : l'article est modifié, mais placé au
+    // repli, et la réponse ne prétend pas que « charcuterie » a été appliqué.
+    const mod = textOf(await c.callTool({ name: 'courses_modifier', arguments: { id: item('Mortadelle').id, rayon: 'charcuterie' } }));
+    await c.close();
+    assert.match(mod, /modifié/);
+    assert.match(mod, /Rayon « charcuterie » inconnu/);
+    assert.match(mod, /Non classé/);
+  });
+
   it('un jeton read ne peut pas appeler un outil d’écriture', async () => {
     const c = await connect(tokenRead);
     const res = await c.callTool({ name: 'courses_ajouter', arguments: { articles: [{ nom: 'Beurre' }] } });
