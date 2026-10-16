@@ -10,6 +10,7 @@ import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCa
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex, resolveArticleKey } from './ingredients';
 import { reorderAisleIds } from './aisles';
+import { mergeReadNotifs } from './notifs';
 import { PlanLine, PlanReport, aisleForRayon, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
 import { closableShoppingTask, mealEventTitle, shoppingTaskLabel } from './links';
@@ -324,15 +325,17 @@ export class FoyerStore {
       rememberScreen(screen);
     });
 
-    // Le sondage tourne sur les écrans qui montrent ce qui se coche à deux :
-    // Courses, Tâches et l'accueil. Ailleurs il ne servirait qu'à vider la
-    // batterie. Il s'arrête aussi quand l'onglet passe en arrière-plan.
+    // Le sondage tourne sur tout écran quand l'app est visible : rapide là où ça
+    // se coche à deux (Courses, Tâches, Lieux, ou une fiche ouverte), lent
+    // ailleurs. La cadence lente suffit à faire suivre la cloche et la pastille
+    // quand une notification est lue sur un autre appareil. Il s'arrête hors ligne
+    // d'auth et quand l'onglet passe en arrière-plan (cf. startLivePolling).
     effect(() => {
       const screen = this.ui().screen;
       // Une fiche ouverte suit l'élément de près, quel que soit l'écran dessous :
       // c'est elle qui doit dire « modifié par Nolwenn » avant qu'on écrase.
       const fiche = !!this.ui().item;
-      const cadence = !this.authed() ? 0 : fiche || screen === 'courses' || screen === 'taches' || screen === 'lieux' ? LIVE_POLL_MS : screen === 'home' ? HOME_POLL_MS : 0;
+      const cadence = !this.authed() ? 0 : fiche || screen === 'courses' || screen === 'taches' || screen === 'lieux' ? LIVE_POLL_MS : HOME_POLL_MS;
       if (cadence) this.startLivePolling(cadence); else this.stopLivePolling();
     });
 
@@ -353,7 +356,9 @@ export class FoyerStore {
       if (!this.authed()) return;
       void this.flushQueues();
       if (this.saveState() === 'error') void this.flush();
-      if (this.ui().screen === 'courses' || this.ui().screen === 'taches' || this.ui().screen === 'lieux') void this.pollLive();
+      // Au réveil, on relit tout de suite, quel que soit l'écran : la cloche et la
+      // pastille repartent à jour sans attendre la prochaine minuterie.
+      void this.pollLive();
     });
     setInterval(() => this.advanceClock(), 60_000);
   }
@@ -881,6 +886,23 @@ export class FoyerStore {
     this._data.set({ ...cur, shop: items });
     for (const op of this.shopQueue()) this.applyShopLocally(op);
   }
+  /**
+   * Reprend l'état lu des notifications venu du serveur (une lecture d'un autre
+   * appareil), en UNION avec le local : on ne perd ni la lecture d'ici pas encore
+   * enregistrée, ni celle d'ailleurs. Pas d'élagage ici (c'est l'écriture qui
+   * borne la liste) pour ne jamais retirer la lecture d'un autre appareil.
+   */
+  private adoptReadNotifs(serverIds: string[]): void {
+    const cur = this._data(); const me = this.currentMemberId();
+    if (!cur || !me) return;
+    const members = cur.members.map((m) => {
+      if (m.id !== me) return m;
+      const union = new Set(m.readNotifs || []);
+      for (const id of serverIds) union.add(id);
+      return { ...m, readNotifs: [...union] };
+    });
+    this._data.set({ ...cur, members });
+  }
 
   private adoptTasks(items: TaskItem[]): void {
     const cur = this._data(); if (!cur) return;
@@ -996,6 +1018,9 @@ export class FoyerStore {
       if (snap.shop) this.adoptShop(snap.shop);
       if (snap.tasks) this.adoptTasks(snap.tasks);
       if (snap.places || snap.placeItems) this.adoptPlaces(snap.places, snap.placeItems);
+      // L'état lu des notifications : une lecture faite sur l'autre appareil fait
+      // descendre le compteur de la cloche et la pastille d'icône ici, sans action.
+      if (snap.readNotifs) this.adoptReadNotifs(snap.readNotifs);
       // Le reste du document (les événements…) ne voyage pas par ce canal. Sur
       // l'accueil et sous une fiche ouverte, une version qui a bougé le fait
       // relire, pour qu'un événement modifié ailleurs s'y voie sans recharger.
@@ -3136,9 +3161,14 @@ export class FoyerStore {
   private saveRead(ids: string[]): void {
     const me = this.currentMemberId();
     if (!me) return;
+    // L'union est faite DANS la closure, sur l'état où elle s'applique (le serveur
+    // au rejeu), pas sur un instantané local figé : sans quoi un rejeu après
+    // conflit écraserait la lecture faite en même temps sur l'autre appareil.
     const live = new Set(this.notifications().map((n) => n.id));
-    const next = [...new Set([...this.readNotifs(), ...ids])].filter((id) => live.has(id));
-    this.mutate((d) => { const m = d.members.find((x) => x.id === me); if (m) m.readNotifs = next; });
+    this.mutate((d) => {
+      const m = d.members.find((x) => x.id === me);
+      if (m) m.readNotifs = mergeReadNotifs(m.readNotifs || [], ids, live);
+    });
   }
   markAllRead(): void { this.saveRead(this.notifications().map((n) => n.id)); }
   openNotif(id: string, screen?: string): void {
