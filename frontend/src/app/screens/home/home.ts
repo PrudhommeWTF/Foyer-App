@@ -410,7 +410,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .f-val.neg { color: #C2503A; }
 
     /* ===== mobile : carousel + grille ===== */
-    .home-m { display: flex; flex-direction: column; gap: 14px; }
+    .home-m { display: flex; flex-direction: column; gap: 12px; }
     .fscroll-x { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .fscroll-x::-webkit-scrollbar { display: none; }
     .track { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; align-items: flex-start; transition: height .2s ease; }
@@ -425,7 +425,10 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; display: flex; box-sizing: border-box; }
     .slide > .card { flex: 1; min-width: 0; }
     /* One dot per slide. The button is a 24px touch target, the dot is drawn inside. */
-    .dots { display: flex; justify-content: center; gap: 2px; margin-top: 6px; }
+    /* Le bouton d'un point fait 24px (cible tactile) pour un point de 8px dessiné
+       au centre : 8px de blanc sous le point. On les annule ici pour que l'écart
+       jusqu'aux cartes de modules soit celui, homogène, qui sépare les cartes (12px). */
+    .dots { display: flex; justify-content: center; gap: 2px; margin-top: 6px; margin-bottom: -8px; }
     .dot { width: 24px; height: 24px; flex: none; border: none; background: none; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .dot::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: var(--line2); transition: width .2s ease, background .2s ease; }
     .dot.on::before { width: 20px; background: var(--primary); }
