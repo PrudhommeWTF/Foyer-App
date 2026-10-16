@@ -9,13 +9,14 @@
 // événements), portent l'auteur (`by` = membre) et la provenance (`via` = nom
 // du jeton), et respectent la portée et le rôle du membre.
 import { getHousehold, db, saveHousehold } from '../db';
-import { HouseholdState, EventItem, Recipe, SchedSlot, MealValue, MealItem, ShopList, TaskList, ListKind, Place } from '../models';
+import { HouseholdState, EventItem, Recipe, SchedSlot, MealValue, MealItem, ShopList, TaskList, ListKind, Place, Aisle } from '../models';
 import { applyShoppingOps, preserveShopping } from '../shopping/repo';
 import { applyTaskOps, preserveTasks } from '../tasks/repo';
 import { applyPlaceOps } from '../places/repo';
 import { TaskItem } from '../tasks/ops';
 import { byOrd, orderedOf } from '../tasks/ordering';
-import { FALLBACK_AISLE_NAMES } from '../shopping/ops';
+import { FALLBACK_AISLE_NAMES, isFallbackAisleName } from '../shopping/ops';
+import { matchAisle, nearestAisleNames, rayonFailureNote } from '../shopping/aisle-match';
 import { addDaysIso, publishedSlotOccurrences } from '../schedule';
 import { effectiveSetting } from '../settings/repo';
 import { fetchPublic } from '../recipes/fetch';
@@ -103,9 +104,25 @@ function resolveShopList(s: HouseholdState, name?: string) {
 function fallbackAisle(s: HouseholdState) {
   return (s.aisles || []).find((a) => FALLBACK_AISLE_NAMES.includes(a.name)) || (s.aisles || [])[0] || null;
 }
-function resolveAisle(s: HouseholdState, rayon?: string) {
-  if (rayon) { const n = norm(rayon); const a = (s.aisles || []).find((x) => norm(x.name) === n); if (a) return a; }
-  return fallbackAisle(s);
+type RayonFail = { reason: 'inconnu' | 'ambigu'; matches: string[] };
+/**
+ * Résout un rayon depuis un texte libre, pour tout outil de courses qui en prend
+ * un. Rend le rayon reconnu (`fail: null`), ou le rayon de repli assorti d'un
+ * motif d'échec (inconnu ou ambigu) : l'article est rangé quand même, mais
+ * l'appelant doit alors dire dans sa réponse que le rayon n'a pas été appliqué.
+ * Un rayon absent (saisie sans rayon) n'est pas un échec : on range au repli sans
+ * rien signaler.
+ */
+function resolveRayon(s: HouseholdState, rayon: string | undefined): { aisle: Aisle | null; fail: RayonFail | null } {
+  if (!rayon || !rayon.trim()) return { aisle: fallbackAisle(s), fail: null };
+  const m = matchAisle(s.aisles || [], rayon);
+  if (m.kind === 'one') return { aisle: m.aisle, fail: null };
+  if (m.kind === 'ambiguous') return { aisle: fallbackAisle(s), fail: { reason: 'ambigu', matches: m.aisles.map((a) => a.name) } };
+  return { aisle: fallbackAisle(s), fail: { reason: 'inconnu', matches: [] } };
+}
+/** Les libellés à suggérer dans la note d'échec : les candidats pour une ambiguïté, les plus proches sinon. */
+function rayonSuggestions(s: HouseholdState, rayonText: string, fail: RayonFail): string[] {
+  return fail.reason === 'ambigu' ? fail.matches : nearestAisleNames(s.aisles || [], rayonText, 3, (a) => isFallbackAisleName(a.name));
 }
 
 // ---- Résolveurs et constantes partagés pour le CRUD -----------------------
@@ -408,13 +425,20 @@ export function coursesAjouter(ctx: McpCtx, articles: { nom: string; qte?: strin
   const ops: unknown[] = [];
   const ajoutes: string[] = [];
   const deja: string[] = [];
+  // Échecs de rayon regroupés par texte saisi : un article mal rangé ne se perd
+  // pas, mais la réponse nomme chaque rayon non reconnu et les articles touchés.
+  const rayonFails = new Map<string, { fail: RayonFail; noms: string[] }>();
   for (const a of articles) {
     const nom = (a.nom || '').trim();
     if (!nom) continue;
     if (existing.has(norm(nom))) { deja.push(nom); continue; }
     existing.add(norm(nom));
-    const aisle = resolveAisle(s, a.rayon);
+    const { aisle, fail } = resolveRayon(s, a.rayon);
     if (!aisle) return 'Aucun rayon disponible pour ranger l’article.';
+    if (fail) {
+      const key = (a.rayon || '').trim();
+      (rayonFails.get(key) ?? rayonFails.set(key, { fail, noms: [] }).get(key)!).noms.push(nom);
+    }
     ops.push({ op: 'add', opId: genId('op'), id: genId('it'), name: nom, qty: (a.qte || '').trim(), aisleId: aisle.id, listId: list.id, by: ctx.memberId, via: ctx.via, at });
     ajoutes.push(nom + (a.qte ? ' (' + a.qte + ')' : ''));
   }
@@ -422,6 +446,10 @@ export function coursesAjouter(ctx: McpCtx, articles: { nom: string; qte?: strin
   const parts: string[] = [];
   parts.push(ajoutes.length ? `Ajouté à « ${list.name} » : ${ajoutes.join(', ')}.` : 'Rien ajouté.');
   if (deja.length) parts.push(`Déjà présent (non ajouté) : ${deja.join(', ')}.`);
+  const fbName = fallbackAisle(s)?.name || 'Non classé';
+  for (const [rayonText, { fail, noms }] of rayonFails) {
+    parts.push(rayonFailureNote(rayonText, fail.reason, fbName, rayonSuggestions(s, rayonText, fail), noms));
+  }
   return parts.join(' ');
 }
 
@@ -626,13 +654,20 @@ export function coursesModifier(ctx: McpCtx, args: { id: string; nom?: string; q
   const it = (s.shop || []).find((i) => i.id === args.id);
   if (!it) return 'Article introuvable (identifiant).';
   const op: Record<string, unknown> = { op: 'edit', opId: genId('op'), id: args.id, by: ctx.memberId, via: ctx.via, at: new Date().toISOString() };
+  let rayonNote = '';
   if (args.nom !== undefined) { const n = args.nom.trim(); if (!n) return 'Le nom ne peut pas être vide.'; op['name'] = n; }
   if (args.qte !== undefined) op['qty'] = args.qte.trim();
-  if (args.rayon !== undefined) { const a = resolveAisle(s, args.rayon); if (!a) return 'Rayon introuvable.'; op['aisleId'] = a.id; }
+  // Un rayon vide n'est pas une demande de déplacement : on n'y touche pas.
+  if (args.rayon !== undefined && args.rayon.trim()) {
+    const { aisle, fail } = resolveRayon(s, args.rayon);
+    if (!aisle) return 'Aucun rayon disponible pour ranger l’article.';
+    op['aisleId'] = aisle.id;
+    if (fail) rayonNote = ' ' + rayonFailureNote(args.rayon.trim(), fail.reason, aisle.name, rayonSuggestions(s, args.rayon.trim(), fail));
+  }
   if (args.liste !== undefined) { const l = resolveShopList(s, args.liste); if (!l) return `Liste « ${args.liste} » inconnue.`; op['listId'] = l.id; }
   const res = applyShoppingOps([op]);
   if (res.skipped.length) return res.skipped[0].reason;
-  return `Article « ${(op['name'] as string) || it.name} » modifié.`;
+  return `Article « ${(op['name'] as string) || it.name} » modifié.${rayonNote}`;
 }
 
 /** Retire des articles d'une liste de courses, par identifiants. */

@@ -67,7 +67,11 @@ accessibles par l'assistant.
 - **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise). Ces outils visent toujours la série entière ; les occurrences qu'une série saute (modifiées ou supprimées seules dans l'app) n'apparaissent pas dans `agenda`.
 - **Courses** : ajouter, changer l'état (à prendre / au panier / introuvable),
   modifier (nom, quantité, rayon, liste), retirer ; créer, renommer, supprimer
-  une liste de courses.
+  une liste de courses. Le rayon se donne par son nom, sans emoji ni souci
+  d'accents ou de casse (« frais », « fruits & légumes ») ; l'outil `rayons`
+  liste les noms. Un rayon non reconnu ne bloque pas : l'article est rangé au
+  rayon de repli et la réponse le signale au lieu de laisser croire qu'il a été
+  appliqué.
 - **Tâches** : créer (au besoin en tête), modifier, terminer, rouvrir, ranger
   dans l'ordre du foyer (`tache_deplacer`), supprimer ; créer, renommer,
   archiver, supprimer une liste de tâches.
