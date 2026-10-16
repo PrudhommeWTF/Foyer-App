@@ -40,11 +40,11 @@ jobs:
     steps:
       # Historique complet : il faut tous les tags (ordre des versions) et main
       # (le commit tagué doit en faire partie).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -64,12 +64,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Recherche de secrets
         run: node scripts/cherche-secrets.js
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -139,9 +139,9 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl file git xz-utils python3 make g++
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -162,7 +162,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: scripts/release/smoke.sh "dist-release/foyer-app-linux-${ARCH}.tar.gz" "$VERSION" "$ARCH"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: release-${{ matrix.arch }}
           path: dist-release/
@@ -317,7 +317,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: release-*
           path: dist-release
