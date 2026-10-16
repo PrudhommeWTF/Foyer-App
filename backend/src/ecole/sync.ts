@@ -139,7 +139,12 @@ async function syncStudent(c: EdClient, s: EdSession, st: repo.Student, member: 
     const task = h.taskId ? tasks.get(h.taskId) : undefined;
     return [h.id, decideDone({ ed: h.doneEd, synced: h.doneSynced, local: localDone(h, task) })];
   }));
-  for (const h of rows) { const d = decisions.get(h.id)!; if (d.synced !== h.doneSynced) repo.patchHomework(h.id, { doneSynced: d.synced }); }
+  for (const h of rows) {
+    const d = decisions.get(h.id)!;
+    // Sans tâche, c'est la coche locale qui suit ÉcoleDirecte ; une tâche suit plus bas.
+    const follow = d.follow !== null && !(h.taskId && tasks.get(h.taskId)) && h.doneLocal !== null && h.doneLocal !== d.follow;
+    if (d.synced !== h.doneSynced || follow) repo.patchHomework(h.id, { doneSynced: d.synced, ...(follow ? { doneLocal: d.follow } : {}) });
+  }
   const toSend = rows.filter((h) => decisions.get(h.id)!.send !== null && !h.archivedAt);
   if (toSend.length) {
     const done = toSend.filter((h) => decisions.get(h.id)!.send).map((h) => h.edId);
@@ -181,12 +186,13 @@ async function syncStudent(c: EdClient, s: EdSession, st: repo.Student, member: 
     } else if (plan.kind === 'remove') {
       ops.push({ op: 'remove', opId: opId('remove', h.id), id: task!.id, ...base });
       // La valeur de la coche survit à la tâche, pour l'écran École.
-      after.push({ id: h.id, patch: { taskId: null, doneLocal: task!.done } });
+      after.push({ id: h.id, patch: { taskId: null, doneLocal: decisions.get(h.id)?.follow ?? task!.done } });
     } else if (plan.kind === 'dropped') {
       after.push({ id: h.id, patch: { taskDroppedAt: now, doneLocal: fresh.doneSynced ?? fresh.doneEd } });
     }
-    if (task && plan.kind !== 'remove' && decisions.get(h.id)?.checkTask && !task.done) {
-      ops.push({ op: 'done', opId: opId('done', h.id), id: task.id, ...base });
+    const follow = decisions.get(h.id)?.follow ?? null;
+    if (task && plan.kind !== 'remove' && follow !== null && task.done !== follow) {
+      ops.push({ op: follow ? 'done' : 'reopen', opId: opId(follow ? 'done' : 'reopen', h.id), id: task.id, ...base });
     }
   }
   if (ops.length) {

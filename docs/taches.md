@@ -608,10 +608,10 @@ réapparaître ou bouger toute seule.
   tâches sont écrites par le serveur avec les mêmes opérations que les autres
   (`applyTaskOps`, marquées « de confiance »), donc mêmes journaux, même rejeu.
 - Exception au principe ci-dessus, assumée : la synchronisation **met à jour**
-  le titre, la note et l'échéance quand le professeur change le devoir, coche la
-  tâche quand le devoir est fait dans ÉcoleDirecte, et la retire une semaine
-  après la date de rendu. Elle ne la décoche jamais et ne la recrée jamais si
-  quelqu'un l'a supprimée.
+  le titre, la note et l'échéance quand le professeur change le devoir, coche ou
+  décoche la tâche quand le devoir l'est dans ÉcoleDirecte, et la retire une
+  semaine après la date de rendu. Elle ne la recrée jamais si quelqu'un l'a
+  supprimée.
 - La liste ne se crée, ne se renomme ni ne se supprime à la main (`PUT /state`
   remet la sienne), et aucune tâche n'y entre depuis un téléphone ou un
   assistant (opération écartée avec la raison). Elle compte dans « Toutes » et

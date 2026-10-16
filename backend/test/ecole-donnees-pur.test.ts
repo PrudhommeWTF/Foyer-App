@@ -62,24 +62,24 @@ describe('École : énoncés', () => {
 
 describe('École : « fait » dans les deux sens', () => {
   it('rien ne bouge : rien ne part', () => {
-    assert.deepEqual(decideDone({ ed: false, synced: false, local: false }), { send: null, checkTask: false, synced: false });
+    assert.deepEqual(decideDone({ ed: false, synced: false, local: false }), { send: null, follow: null, synced: false });
   });
   it('coché dans Foyer : envoyé ; décoché dans Foyer : envoyé aussi (geste volontaire)', () => {
-    assert.deepEqual(decideDone({ ed: false, synced: false, local: true }), { send: true, checkTask: false, synced: false });
-    assert.deepEqual(decideDone({ ed: true, synced: true, local: false }), { send: false, checkTask: false, synced: true });
+    assert.deepEqual(decideDone({ ed: false, synced: false, local: true }), { send: true, follow: null, synced: false });
+    assert.deepEqual(decideDone({ ed: true, synced: true, local: false }), { send: false, follow: null, synced: true });
   });
-  it('fait dans ÉcoleDirecte : la tâche se coche ; défait dans ÉcoleDirecte : rien ne se décoche, rien ne repart', () => {
-    assert.deepEqual(decideDone({ ed: true, synced: false, local: false }), { send: null, checkTask: true, synced: true });
-    assert.deepEqual(decideDone({ ed: false, synced: true, local: true }), { send: null, checkTask: false, synced: true });
-    // Stable au passage suivant : pas de bras de fer.
-    assert.deepEqual(decideDone({ ed: false, synced: true, local: true }).send, null);
+  it('fait dans ÉcoleDirecte : Foyer coche ; défait dans ÉcoleDirecte : Foyer décoche, rien ne repart', () => {
+    assert.deepEqual(decideDone({ ed: true, synced: false, local: false }), { send: null, follow: true, synced: true });
+    assert.deepEqual(decideDone({ ed: false, synced: true, local: true }), { send: null, follow: false, synced: false });
+    // Une fois suivi, plus rien ne bouge : pas de boucle.
+    assert.deepEqual(decideDone({ ed: false, synced: false, local: false }), { send: null, follow: null, synced: false });
   });
   it('les deux ont bougé : d’accord, c’est le nouvel accord ; en désaccord, Foyer l’emporte', () => {
-    assert.deepEqual(decideDone({ ed: true, synced: false, local: true }), { send: null, checkTask: false, synced: true });
-    assert.deepEqual(decideDone({ ed: false, synced: true, local: false }), { send: null, checkTask: false, synced: false });
+    assert.deepEqual(decideDone({ ed: true, synced: false, local: true }), { send: null, follow: null, synced: true });
+    assert.deepEqual(decideDone({ ed: false, synced: true, local: false }), { send: null, follow: null, synced: false });
   });
   it('première fois (pas d’accord connu) : ÉcoleDirecte fait foi', () => {
-    assert.deepEqual(decideDone({ ed: true, synced: null, local: true }), { send: null, checkTask: false, synced: true });
+    assert.deepEqual(decideDone({ ed: true, synced: null, local: true }), { send: null, follow: null, synced: true });
   });
 });
 
