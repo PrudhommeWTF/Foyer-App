@@ -49,8 +49,9 @@ deux heures qui suivent l'heure réglée.
 **« Fait » dans les deux sens.** Cocher dans l'écran École ou dans Tâches, c'est
 la même coche ; elle part à ÉcoleDirecte au passage suivant. Coché dans
 ÉcoleDirecte (par l'enfant sur l'application officielle), la tâche se coche au
-passage suivant. Décoché dans ÉcoleDirecte : rien ne se décoche dans Foyer, et
-rien ne repart (pas de bras de fer). Un envoi qui échoue laisse la case cochée
+passage suivant ; décoché dans ÉcoleDirecte, elle se décoche de même, et rien
+ne repart. Si les deux côtés ont changé en sens contraire entre deux passages,
+le geste fait dans Foyer l'emporte et part. Un envoi qui échoue laisse la case cochée
 avec « non transmis » et repart au passage suivant.
 
 **Ce que la synchronisation ne fait jamais.** Elle ne recrée pas une tâche que

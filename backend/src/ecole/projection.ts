@@ -11,9 +11,8 @@
  *
  * Règles :
  *   - seul Foyer a bougé : on envoie à ÉcoleDirecte ;
- *   - seul ÉcoleDirecte a bougé vers « fait » : on coche la tâche ;
- *   - ÉcoleDirecte a décoché : on ne décoche rien dans Foyer, et on ne renvoie
- *     rien non plus (pas de bras de fer avec l'enfant). Rien ne se décoche seul ;
+ *   - seul ÉcoleDirecte a bougé : Foyer suit, dans un sens comme dans l'autre
+ *     (la tâche se coche ou se décoche) ;
  *   - les deux ont bougé : s'ils sont d'accord, c'est le nouvel accord ; sinon
  *     le geste fait dans Foyer l'emporte et part.
  * Aucune boucle : une valeur envoyée devient l'accord dès que l'envoi réussit.
@@ -22,8 +21,8 @@ export interface DoneState { ed: boolean; synced: boolean | null; local: boolean
 export interface DoneDecision {
   /** La valeur à envoyer à ÉcoleDirecte, ou null. */
   send: boolean | null;
-  /** Cocher la tâche (ÉcoleDirecte dit fait). */
-  checkTask: boolean;
+  /** La valeur que Foyer doit reprendre d'ÉcoleDirecte (tâche ou coche locale), ou null. */
+  follow: boolean | null;
   /** Le point d'accord à retenir, sans compter un envoi pas encore réussi. */
   synced: boolean;
 }
@@ -32,10 +31,10 @@ export function decideDone(s: DoneState): DoneDecision {
   const synced = s.synced ?? s.ed;
   const localMoved = s.local !== synced;
   const edMoved = s.ed !== synced;
-  if (localMoved && !edMoved) return { send: s.local, checkTask: false, synced };
-  if (edMoved && !localMoved) return s.ed ? { send: null, checkTask: true, synced: true } : { send: null, checkTask: false, synced };
-  if (localMoved && edMoved) return s.local === s.ed ? { send: null, checkTask: false, synced: s.ed } : { send: s.local, checkTask: false, synced };
-  return { send: null, checkTask: false, synced };
+  if (localMoved && !edMoved) return { send: s.local, follow: null, synced };
+  if (edMoved && !localMoved) return { send: null, follow: s.ed, synced: s.ed };
+  if (localMoved && edMoved) return s.local === s.ed ? { send: null, follow: null, synced: s.ed } : { send: s.local, follow: null, synced };
+  return { send: null, follow: null, synced };
 }
 
 /** Une tâche projetée, telle que la synchronisation la veut. */

@@ -132,16 +132,19 @@ describe('École : devoirs, tâches et emploi du temps (HTTP)', () => {
     assert.equal(ed.faits.length, n, 'pas de renvoi en boucle');
   });
 
-  it('coché dans ÉcoleDirecte : la tâche se coche au passage suivant ; décoché dans ÉcoleDirecte : rien ne se décoche, rien ne repart', async () => {
+  it('coché dans ÉcoleDirecte : la tâche se coche au passage suivant ; décoché dans ÉcoleDirecte : elle se décoche, rien ne repart', async () => {
     ed.cahier[jourParis(1)].find((r) => r.idDevoir === 5002)!.effectue = true;
     await synchro();
     assert.equal((await tacheDe(5002))!.done, true);
     ed.cahier[jourParis(3)].find((r) => r.idDevoir === 5003)!.effectue = false;
     const n = ed.faits.length;
     await synchro();
-    assert.equal((await tacheDe(5003))!.done, true, 'rien ne se décoche tout seul');
+    assert.equal((await tacheDe(5003))!.done, false, 'Foyer suit ÉcoleDirecte');
+    assert.equal((await devoir(5003)).done, false);
+    assert.equal((await devoir(5003)).pending, false);
     await synchro();
-    assert.equal(ed.faits.length, n, 'et pas de bras de fer');
+    assert.equal((await tacheDe(5003))!.done, false);
+    assert.equal(ed.faits.length, n, 'et rien ne repart');
   });
 
   it('décoché dans Foyer pendant une panne : reste décoché, « non transmis » avec la raison, puis part au retour', async () => {
@@ -178,6 +181,17 @@ describe('École : devoirs, tâches et emploi du temps (HTTP)', () => {
     await synchro();
     assert.equal((await taches()).some((x) => x.id === t.id), false, 'pas de résurrection');
     assert.ok(await devoir(5001), 'le devoir reste dans l’écran École');
+
+    // Sans tâche, la case de l'écran École suit ÉcoleDirecte dans les deux sens.
+    const n = ed.faits.length;
+    ed.cahier[jourParis(1)].find((r) => r.idDevoir === 5001)!.effectue = true;
+    await synchro();
+    assert.equal((await devoir(5001)).done, true);
+    ed.cahier[jourParis(1)].find((r) => r.idDevoir === 5001)!.effectue = false;
+    await synchro();
+    assert.equal((await devoir(5001)).done, false);
+    await synchro();
+    assert.equal(ed.faits.length, n, 'rien ne repart');
 
     const t3 = (await tacheDe(5003))!;
     delete ed.cahier[jourParis(3)];
