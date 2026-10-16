@@ -40,7 +40,7 @@ ENV PORT=8099
 ENV FOYER_DATA_DIR=/data
 ENV FOYER_STATIC_DIR=/app/public
 # Version affichée / comparée aux releases GitHub. Injectée depuis le tag Git au
-# build (voir .github/workflows/docker.yml) ; vide → repli sur package.json.
+# build (job « image » de .github/workflows/release.yml) ; vide → repli sur package.json.
 ARG FOYER_VERSION=
 ENV FOYER_VERSION=${FOYER_VERSION}
 # Le processus tourne sans privilèges. L'image node fournit déjà l'utilisateur

@@ -48,18 +48,18 @@ vous installez sur votre serveur, votre NAS ou un conteneur Proxmox**.
 ## 🚀 En trois minutes
 
 ```bash
-git clone https://github.com/PrudhommeWTF/Foyer-App.git
-cd Foyer-App
+mkdir foyer && cd foyer
+curl -fsSLO https://raw.githubusercontent.com/PrudhommeWTF/Foyer-App/main/docker-compose.yml
 # secret de session obligatoire : générez-en un fort dans un fichier .env
 echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
-docker compose up -d --build
+docker compose up -d
 ```
 
 Ouvrez **http://localhost:8099**. Au premier démarrage, un assistant crée votre foyer, votre
 compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier démarrage](#-premier-démarrage--onboarding).)
 
-> Pas envie de compiler ? Une image multi-arch préconstruite (`amd64`, `arm64`) est publiée à
-> chaque version : voir [Image préconstruite](#image-préconstruite-sans-build).
+> C'est l'image publiée à chaque release (`amd64`, `arm64`). Épingler une version, mettre à
+> jour ou construire depuis les sources : voir [Démarrage rapide](#-démarrage-rapide-docker-compose).
 
 ## ✨ Ce que Foyer sait faire
 
@@ -137,22 +137,27 @@ Foyer-App/
 
 ## 🚀 Démarrage rapide (Docker Compose)
 
+### Image publiée (recommandé, sans clone)
+
+Chaque release publie une image multi-architecture (`linux/amd64`, `linux/arm64`) sur
+`ghcr.io/prudhommewtf/foyer-app`. Il suffit du fichier compose :
+
 ```bash
-git clone https://github.com/PrudhommeWTF/Foyer-App.git
-cd Foyer-App
+mkdir foyer && cd foyer
+curl -fsSLO https://raw.githubusercontent.com/PrudhommeWTF/Foyer-App/main/docker-compose.yml
 # secret de session obligatoire : générez-en un fort dans un fichier .env
 echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
-docker compose up -d --build
+# clé de chiffrement du module École (facultative, à garder avec vos sauvegardes)
+echo "FOYER_SECRET_KEY=$(openssl rand -base64 32)" >> .env
+docker compose pull
+docker compose up -d
 ```
 
 ➡️ Ouvrez **http://localhost:8099**. **Au premier démarrage**, l'assistant de configuration
 s'ouvre : il crée votre foyer, votre compte administrateur (email + mot de passe), les membres
 et vos préférences. Voir [Premier démarrage](#-premier-démarrage--onboarding).
 
-### Image préconstruite (sans build)
-
-Une image multi-arch (`amd64`, `arm64`) est publiée par la CI. Décommentez la ligne `image:`
-dans `docker-compose.yml`, ou lancez directement :
+Sans compose :
 
 ```bash
 # Le port n'est publié que sur la boucle locale : mettez votre reverse-proxy devant.
@@ -162,6 +167,44 @@ dans `docker-compose.yml`, ou lancez directement :
 docker run -d --name foyer -p 127.0.0.1:8099:8099 -v foyer-data:/data \
   -e FOYER_JWT_SECRET="$(openssl rand -hex 32)" \
   ghcr.io/prudhommewtf/foyer-app:latest
+```
+
+### Étiquettes, épinglage et mise à jour
+
+| Étiquette | Pointe sur |
+|---|---|
+| `latest` | la dernière version **stable** |
+| `1` | la dernière `1.x.y` stable |
+| `1.17` | la dernière `1.17.y` stable (correctifs seulement) |
+| `1.17.0` | exactement cette version, ne bouge jamais |
+| `next` | la dernière **préversion** (`1.18.0-rc.1`…), à réserver aux essais |
+
+Une préversion ne reçoit que son numéro exact et `next` : `latest`, `1` et `1.17` ne
+tombent jamais sur une préversion. Rien n'est publié en dehors d'une release.
+
+Pour **épingler**, remplacez `latest` dans `docker-compose.yml` par `1.17` (correctifs
+automatiques) ou `1.17.0` (figé). Pour **mettre à jour** :
+
+```bash
+docker compose pull && docker compose up -d
+docker image prune -f   # facultatif : retire l'ancienne image devenue orpheline
+```
+
+Avec un numéro figé, changez d'abord le numéro dans le fichier. La base vit dans le volume
+`foyer-data` : elle survit à la mise à jour, et ses migrations s'appliquent au démarrage.
+Sauvegardez avant une version majeure ([Sauvegarde](#-sauvegarde-et-restauration)).
+
+Pour retrouver exactement une image publiée, la release GitHub donne son empreinte :
+`docker pull ghcr.io/prudhommewtf/foyer-app@sha256:…`.
+
+### Build local (depuis les sources)
+
+```bash
+git clone https://github.com/PrudhommeWTF/Foyer-App.git
+cd Foyer-App
+echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
+# dans docker-compose.yml : commentez « image: … » et décommentez « build: . »
+docker compose up -d --build
 ```
 
 ### Variables d'environnement
@@ -483,12 +526,11 @@ conservée dans [`docs/`](docs/).
 
 - `.github/workflows/ci.yml` : build backend + frontend, **tests** et détection de code mort à
   chaque push/PR.
-- `.github/workflows/docker.yml` : publie une image **multi-arch** (`amd64`, `arm64`) sur
-  `ghcr.io/<owner>/foyer-app` (tags `latest` + `sha` sur la branche par défaut ; `X.Y.Z` et
-  `X.Y` sur un tag Git de version). La version affichée dans l'app provient du tag Git.
 - `.github/workflows/release.yml` : sur un tag `vX.Y.Z`, rejoue les contrôles de la CI, construit
-  et essaie une archive par architecture (`x86_64`, `arm64`), puis publie la release GitHub avec
-  ses empreintes SHA-256. Mode d'emploi : [`docs/RELEASES.md`](docs/RELEASES.md).
+  et essaie une archive par architecture (`x86_64`, `arm64`) **et** l'image Docker multi-arch,
+  puis publie la release GitHub (empreintes SHA-256, image et son digest) et étiquette l'image
+  sur `ghcr.io/prudhommewtf/foyer-app`. Rien n'est publié si une étape échoue, ni en dehors d'un
+  tag. Mode d'emploi : [`docs/RELEASES.md`](docs/RELEASES.md).
 
 ## 📝 Licence
 

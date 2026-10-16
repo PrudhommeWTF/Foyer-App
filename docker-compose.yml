@@ -2,9 +2,11 @@
 # Usage:  docker compose up -d   →   http://localhost:8099
 services:
   foyer:
-    build: .
-    # Or use the prebuilt image published by CI:
-    # image: ghcr.io/prudhommewtf/foyer-app:latest
+    # Image publiée à chaque release (amd64, arm64). « latest » suit la dernière
+    # version stable ; pour épingler, remplacez par un numéro (…:1.17 ou …:1.17.0).
+    image: ghcr.io/prudhommewtf/foyer-app:latest
+    # Ou construire depuis ce dépôt cloné (commentez « image » ci-dessus) :
+    # build: .
     container_name: foyer
     restart: unless-stopped
     # Publié sur la boucle locale seulement : le backend n'a aucune raison d'être

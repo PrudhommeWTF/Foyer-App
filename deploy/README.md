@@ -12,7 +12,7 @@ charge reste **LXC Proxmox (ci-dessous)** ou **Docker**.
 Voir le [README principal](../README.md#-démarrage-rapide-docker-compose).
 
 ```bash
-docker compose up -d --build   # → http://localhost:8099
+docker compose pull && docker compose up -d   # image GHCR → http://localhost:8099
 ```
 
 ## 📦 LXC Proxmox (installation native, sans Docker)
