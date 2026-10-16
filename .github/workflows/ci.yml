@@ -17,14 +17,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Un secret arrivé dans l'historique Git est compromis même retiré ensuite :
       # le seul moment où l'attraper est avant qu'il n'y entre. Bloquant.
       - name: Recherche de secrets
         run: node scripts/cherche-secrets.js
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
