@@ -6,13 +6,14 @@ Tous les réglages de l’application, leur portée, leur valeur par défaut et 
 consomme. Cette page est **engendrée depuis le registre** (`backend/src/settings/registry.ts`,
 copie identique dans `frontend/src/app/core/settings/registry.ts`), donc elle ne peut pas mentir.
 
-## Les trois portées
+## Les quatre portées
 
 | Portée | Où c’est écrit | Qui peut le changer |
 |---|---|---|
 | **Déploiement** | variables d’environnement (`/etc/foyer/foyer.env` en LXC, `docker-compose.yml` en Docker) | l’administrateur du serveur, suivi d’un redémarrage du service |
 | **Foyer** | document du foyer, clé `settings` | un administrateur du foyer, depuis l’application |
-| **Personnel** | document du foyer, par membre | le membre lui-même, depuis l’application |
+| **Personnel** | document du foyer, par membre (partagé entre ses appareils) | le membre lui-même, depuis l’application |
+| **Appareil** | localStorage du navigateur, clé `foyer.pref.<clé>` (jamais envoyé au serveur) | le membre, sur cet appareil seulement |
 
 Un réglage appartient à **une seule** portée. Quand une variable d’environnement
 l’emporte sur un réglage du foyer, la colonne « Variable prioritaire » la nomme, et
@@ -24,13 +25,13 @@ Votre compte, votre affichage, et ce qui vous interpelle.
 
 ### Apparence
 
-Comment l’application se présente à vous, sur tous vos appareils.
+Comment l’application se présente à vous. Le thème est propre à chaque appareil.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
-| `dark` | Thème sombre | Personnel | oui / non | désactivé | — | Apparence | — |
+| `theme` | Thème | Appareil | liste | `systeme` | `systeme`, `clair`, `sombre` | Apparence | — |
 
-- **Thème sombre** (`dark`) : Bascule l’application en couleurs sombres, sur tous vos appareils. Propre à vous : votre choix ne change rien à l’affichage des autres membres.
+- **Thème** (`theme`) : Clair, sombre, ou le réglage de cet appareil. Propre à cet appareil : vos autres appareils et les autres membres ne sont pas concernés.
 
 ### Notifications et rappels
 

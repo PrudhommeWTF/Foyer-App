@@ -148,12 +148,27 @@ const GESTES = new Set(['compte', 'membres']);
                           }
                         </div>
                       } @else if (champs(s.id).length) {
-                        <div class="fields">
-                          @for (d of champs(s.id); track d.key) {
-                            <f-setting [decl]="d" [value]="store.readDeclared(d)" [lock]="store.settingLock(d)"
-                              (change)="store.writeDeclared(d, $event)" />
-                          }
-                        </div>
+                        @if (champsDoc(s.id).length) {
+                          <div class="fields">
+                            @for (d of champsDoc(s.id); track d.key) {
+                              <f-setting [decl]="d" [value]="store.readDeclared(d)" [lock]="store.settingLock(d)"
+                                (change)="store.writeDeclared(d, $event)" />
+                            }
+                          </div>
+                        }
+                        @if (champsAppareil(s.id).length) {
+                          <!-- Réglages propres à l'appareil : localStorage, jamais le serveur. -->
+                          <div class="device-group">
+                            <div class="dg-head">Sur cet appareil</div>
+                            <div class="dg-desc">Ces choix ne concernent que cet appareil.</div>
+                            <div class="fields">
+                              @for (d of champsAppareil(s.id); track d.key) {
+                                <f-setting [decl]="d" [value]="store.readDeclared(d)" [lock]="store.settingLock(d)"
+                                  (change)="store.writeDeclared(d, $event)" />
+                              }
+                            </div>
+                          </div>
+                        }
                         @if (modifiable(s.id) && !toutParDefaut(s.id)) {
                           <button class="reset-sec" (click)="resetSection(s.id)">Revenir aux valeurs par défaut de cette section</button>
                         }
@@ -506,6 +521,9 @@ const GESTES = new Set(['compte', 'membres']);
     .upd-eye { position: absolute; top: 0; right: 0; height: 100%; width: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; cursor: pointer; }
     .upd-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
     .sep { border: none; border-top: 2px solid var(--line); margin: 22px 0 0; }
+    .device-group { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+    .dg-head { font-size: 13px; font-weight: 800; color: var(--ink); text-transform: uppercase; letter-spacing: .04em; }
+    .dg-desc { font-size: 12.5px; font-weight: 600; color: var(--ink2); margin: 2px 0 10px; }
     .groupe { margin: 18px 0 2px; }
     .gl { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); }
     .gd { font-size: 12px; font-weight: 700; color: var(--ink3); line-height: 1.45; }
@@ -728,6 +746,10 @@ export class SettingsScreen {
   reglages(section: string): SettingDecl[] { return ALL.filter((d) => d.section === section && d.scope !== 'deploiement'); }
   /** Ce que le champ engendré prend en charge : le reste a son contrôle écrit à la main. */
   champs(section: string): SettingDecl[] { return this.reglages(section).filter((d) => !d.custom); }
+  /** Les réglages d'une section qui vivent dans le document (foyer/personnel). */
+  champsDoc(section: string): SettingDecl[] { return this.champs(section).filter((d) => d.scope !== 'appareil'); }
+  /** Les réglages d'une section propres à l'appareil (localStorage), groupés à part. */
+  champsAppareil(section: string): SettingDecl[] { return this.champs(section).filter((d) => d.scope === 'appareil'); }
   nomSection(id: string): string { return SECTIONS.find((s) => s.id === id)?.label || id; }
   basculer(id: string): void { this.store.patch({ settingsSection: this.ouvert() === id ? '' : id }); }
   aller(id: string): void { this.q.set(''); this.store.patch({ settingsSection: id }); }

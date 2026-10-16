@@ -93,6 +93,10 @@ function scan(): { reads: Usage[]; writes: Usage[]; refs: Usage[]; direct: strin
     for (const m of src.matchAll(/\bsetSetting\(\s*'([\w.]+)'/g)) writes.push({ key: m[1], where });
     for (const m of src.matchAll(/\bdeclOf\(\s*'([\w.]+)'/g)) refs.push({ key: m[1], where });
     for (const m of src.matchAll(/\beffectiveSetting\(\s*'([\w.]+)'/g)) reads.push({ key: m[1], where });
+    // Portée `appareil` : lue et écrite dans le localStorage par son propre
+    // accesseur, pas par setting()/setSetting(). Le garde-fou la couvre de même.
+    for (const m of src.matchAll(/\bdevicePref\(\s*'([\w.]+)'/g)) reads.push({ key: m[1], where });
+    for (const m of src.matchAll(/\bsetDevicePref\(\s*'([\w.]+)'/g)) writes.push({ key: m[1], where });
     for (const m of src.matchAll(/process\.env(?:\.(\w+)|\[\s*'(\w+)'\s*\])/g)) env.add(m[1] || m[2]);
     if (DIRECT_ACCESS_ALLOWED.has(where)) continue;
     if (/\.settings\s*[?!]?\s*(\.\w|\[)/.test(src)) direct.push(where);
@@ -220,6 +224,17 @@ test('registre : chaque section a un groupe connu et quelque chose à montrer', 
   }
 });
 
+test('registre : un réglage d’appareil ne part jamais dans le document envoyé au serveur', () => {
+  const appareil = ALL.filter((d) => d.scope === 'appareil').map((d) => d.key);
+  assert.ok(appareil.includes('theme'), 'le thème est bien une préférence d’appareil');
+  const foyer = householdDefaults() as Record<string, unknown>;
+  const membre = memberDefaults() as Record<string, unknown>;
+  for (const k of appareil) {
+    assert.ok(!(k in foyer), `${k} ne doit pas figurer dans les réglages du foyer (document)`);
+    assert.ok(!(k in membre), `${k} ne doit pas figurer dans les préférences du membre (document)`);
+  }
+});
+
 test('registre : aucune clé n’est rangée dans deux endroits à la fois', () => {
   const foyer = new Set(Object.keys(householdDefaults()));
   const doublons = Object.keys(memberDefaults()).filter((k) => foyer.has(k));
@@ -230,12 +245,12 @@ test('registre : aucune clé n’est rangée dans deux endroits à la fois', () 
 
 test('lecture : un document sans réglages rend les valeurs par défaut', () => {
   assert.equal(setting('academie', null), '');
-  assert.equal(setting('dark', {}), false);
+  assert.equal(setting('icsTasks', {}), false);
   assert.equal(setting('prefNotifs', { settings: {} }), true);
 });
 
 test('lecture : une valeur d’un type inattendu rend le défaut plutôt que de casser l’écran', () => {
-  assert.equal(setting('dark', { settings: { dark: 'oui' } }), false);
+  assert.equal(setting('icsTasks', { settings: { icsTasks: 'oui' } }), false);
   assert.equal(setting('academie', { settings: { academie: 'Marseille' } }), '', 'une académie qui n’existe pas ne fige pas le calendrier');
   assert.equal(setting('showBreakfast', { settings: { showBreakfast: null } }), false);
 });
@@ -248,9 +263,9 @@ test('lecture : une valeur valide est rendue telle quelle', () => {
 // ---- portée personnelle ----------------------------------------------------
 
 test('lecture : une préférence se lit dans la table du membre, pas dans les réglages partagés', () => {
-  const doc = { settings: { dark: true }, prefs: { me: { dark: false } } };
-  assert.equal(setting('dark', doc, 'me'), false, 'la préférence du membre décide, pas une valeur partagée résiduelle');
-  assert.equal(setting('dark', doc, 'autre'), false, 'un membre sans préférence prend le défaut, jamais celle d’un autre');
+  const doc = { settings: { prefNotifs: true }, prefs: { me: { prefNotifs: false } } };
+  assert.equal(setting('prefNotifs', doc, 'me'), false, 'la préférence du membre décide, pas une valeur partagée résiduelle');
+  assert.equal(setting('prefNotifs', doc, 'autre'), true, 'un membre sans préférence prend le défaut, jamais celle d’un autre');
 });
 
 test('lecture : sans membre, une préférence rend son défaut plutôt que celle de quelqu’un', () => {
@@ -260,18 +275,18 @@ test('lecture : sans membre, une préférence rend son défaut plutôt que celle
 });
 
 test('lecture : chacun voit la sienne', () => {
-  const doc = { prefs: { me: { dark: true }, claire: { dark: false } } };
-  assert.equal(setting('dark', doc, 'me'), true);
-  assert.equal(setting('dark', doc, 'claire'), false);
+  const doc = { prefs: { me: { pushReminders: true }, claire: { pushReminders: false } } };
+  assert.equal(setting('pushReminders', doc, 'me'), true);
+  assert.equal(setting('pushReminders', doc, 'claire'), false);
 });
 
 // ---- contrôle de saisie : un test par type, sur les bornes ------------------
 
 test('contrôle : type « oui / non »', () => {
-  assert.ok(validate('dark', true).ok);
-  assert.ok(validate('dark', false).ok);
-  assert.equal(validate('dark', 'true').ok, false);
-  assert.equal(validate('dark', 1).ok, false);
+  assert.ok(validate('icsTasks', true).ok);
+  assert.ok(validate('icsTasks', false).ok);
+  assert.equal(validate('icsTasks', 'true').ok, false);
+  assert.equal(validate('icsTasks', 1).ok, false);
 });
 
 test('contrôle : type « liste »', () => {

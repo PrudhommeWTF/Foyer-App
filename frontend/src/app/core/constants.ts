@@ -82,6 +82,7 @@ export const ICONS: Record<string, string> = {
   trash: 'M5 7h14M9 7V5h6v2M6 7l1 13h10l1-13',
   sun: 'M12 8a4 4 0 1 0 .01 0M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19',
   moon: 'M20 14.5A8 8 0 0 1 9.5 4 7 7 0 1 0 20 14.5z',
+  themeAuto: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 3v18',
   eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7zM12 9a3 3 0 1 0 .01 0',
   eyeOff: 'M4 4l16 16M2 12s4-7 10-7c1.5 0 2.9.35 4.1.9M22 12s-4 7-10 7c-1.5 0-2.9-.35-4.1-.9',
   // Panneau latéral droit : un cadre dont la colonne de droite, détachée par un

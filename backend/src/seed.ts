@@ -107,7 +107,7 @@ export interface OnboardingMember {
 }
 
 export interface OnboardingInput {
-  household: { name: string; theme?: 'light' | 'dark'; academie?: string };
+  household: { name: string; academie?: string };
   admin: { name: string; role?: string; color?: string; email: string; birthday?: string | null };
   members?: OnboardingMember[];
 }
@@ -149,11 +149,12 @@ export function buildInitialState(input: OnboardingInput): HouseholdState {
     members: [admin, ...others],
     ...scaffold(),
     profile: { memberId: adminId },
-    // Les valeurs par défaut viennent du registre ; l'onboarding n'en pose que
-    // deux, celles qu'il a demandées. Le thème est une préférence personnelle :
-    // il va à celui qui vient de le choisir, pas à tout le foyer.
+    // Les valeurs par défaut viennent du registre ; l'onboarding ne pose que
+    // l'académie. Le thème n'est plus un réglage du document : c'est une
+    // préférence d'appareil (localStorage), écrite par le navigateur qui fait
+    // l'onboarding, et rien n'est à stocker ici.
     settings: { ...householdDefaults(), academie: input.household.academie || '' },
-    prefs: { [adminId]: { ...memberDefaults(), dark: input.household.theme === 'dark' } },
+    prefs: { [adminId]: { ...memberDefaults() } },
   };
 }
 

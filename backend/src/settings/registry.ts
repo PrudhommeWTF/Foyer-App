@@ -39,9 +39,13 @@
  *     depuis l'interface, affiché en lecture seule pour qu'on sache ce qui
  *     s'applique réellement.
  *   - `foyer`       : partagé, dans le document, écrit par un administrateur.
- *   - `personnel`   : propre à un membre, écrit par lui-même.
+ *   - `personnel`   : propre à un membre, dans le document, écrit par lui-même,
+ *     donc partagé entre ses appareils.
+ *   - `appareil`    : propre à **cet** appareil, rangé dans le localStorage du
+ *     navigateur (`foyer.pref.<clé>`), jamais envoyé au serveur ni dans le
+ *     document. Le serveur déclare la clé mais ne la stocke pas.
  */
-export type SettingScope = 'deploiement' | 'foyer' | 'personnel';
+export type SettingScope = 'deploiement' | 'foyer' | 'personnel' | 'appareil';
 
 /** Le type décide du contrôle de saisie et de la forme du champ engendré. */
 export type SettingType = 'bool' | 'int' | 'decimal' | 'enum' | 'text' | 'time' | 'secret';
@@ -130,7 +134,7 @@ export const GROUPS: readonly SettingGroup[] = [
  */
 export const SECTIONS: readonly SettingSection[] = [
   { id: 'compte', group: 'moi', label: 'Mon compte', desc: 'Votre prénom, vos initiales, votre couleur, votre adresse de connexion et votre mot de passe.' },
-  { id: 'affichage', group: 'moi', label: 'Apparence', desc: 'Comment l’application se présente à vous, sur tous vos appareils.' },
+  { id: 'affichage', group: 'moi', label: 'Apparence', desc: 'Comment l’application se présente à vous. Le thème est propre à chaque appareil.' },
   { id: 'notifications', group: 'moi', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'membres', group: 'cercle', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres, et qui peut se connecter.' },
   { id: 'calendriers', group: 'cercle', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
@@ -191,11 +195,16 @@ const ACADEMIE_OPTIONS: readonly SettingOption[] = [
  */
 export const REGISTRY = [
   {
-    key: 'dark',
-    type: 'bool', scope: 'personnel', section: 'affichage', module: 'Apparence',
-    label: 'Thème sombre',
-    desc: 'Bascule l’application en couleurs sombres, sur tous vos appareils. Propre à vous : votre choix ne change rien à l’affichage des autres membres.',
-    default: false,
+    key: 'theme',
+    type: 'enum', scope: 'appareil', section: 'affichage', module: 'Apparence',
+    label: 'Thème',
+    desc: 'Clair, sombre, ou le réglage de cet appareil. Propre à cet appareil : vos autres appareils et les autres membres ne sont pas concernés.',
+    default: 'systeme',
+    options: [
+      { value: 'systeme', label: 'Système' },
+      { value: 'clair', label: 'Clair' },
+      { value: 'sombre', label: 'Sombre' },
+    ],
   },
   {
     key: 'academie',
@@ -788,6 +797,14 @@ type AllValues = { [D in Decl as D['key']]: ValueOfType<D['type']> };
  */
 export type SettingKey = Extract<Decl, { scope: 'foyer' | 'personnel' }>['key'];
 export type SettingValue<K extends SettingKey> = AllValues[K];
+
+/**
+ * Les réglages propres à l'appareil. Ils ne se lisent pas avec `setting()` (qui
+ * lit le document) : ils vivent dans le localStorage du navigateur, et le code
+ * les lit avec son propre accesseur (`store.devicePref('clé')`).
+ */
+export type DeviceKey = Extract<Decl, { scope: 'appareil' }>['key'];
+export type DeviceValue<K extends DeviceKey> = AllValues[K];
 
 /** Les réglages fixés par la machine, affichés en lecture seule. */
 export const DEPLOYMENT: readonly SettingDecl[] = ALL.filter((d) => d.scope === 'deploiement');

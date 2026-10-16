@@ -99,34 +99,34 @@ describe('réglages : qui a le droit', () => {
 
 describe('réglages : les préférences personnelles', () => {
   it('un membre non administrateur écrit les siennes sans rien demander à personne', async () => {
-    const { status, json } = await appel('PATCH', 'adulte', { changes: { dark: true } });
+    const { status, json } = await appel('PATCH', 'adulte', { changes: { ecoleNotifDevoirs: true } });
     assert.equal(status, 200);
-    assert.deepEqual(json.changed, ['dark']);
-    assert.equal(prefsDe('m-adulte')['dark'], true);
+    assert.deepEqual(json.changed, ['ecoleNotifDevoirs']);
+    assert.equal(prefsDe('m-adulte')['ecoleNotifDevoirs'], true);
   });
 
   it('la préférence de l’un ne touche pas celle de l’autre', async () => {
-    await appel('PATCH', 'adulte', { changes: { dark: true } });
-    assert.equal(prefsDe('m-adulte')['dark'], true);
-    assert.equal(prefsDe('m-admin')['dark'], false, 'le thème de l’un n’impose rien à l’autre');
+    await appel('PATCH', 'adulte', { changes: { ecoleNotifDevoirs: true } });
+    assert.equal(prefsDe('m-adulte')['ecoleNotifDevoirs'], true);
+    assert.equal(prefsDe('m-admin')['ecoleNotifDevoirs'], false, 'la préférence de l’un n’impose rien à l’autre');
   });
 
   it('chacun lit ses propres valeurs', async () => {
-    await appel('PATCH', 'adulte', { changes: { dark: true } });
-    assert.equal((await appel('GET', 'adulte')).json.values.dark, true);
-    assert.equal((await appel('GET', 'admin')).json.values.dark, false);
+    await appel('PATCH', 'adulte', { changes: { ecoleNotifDevoirs: true } });
+    assert.equal((await appel('GET', 'adulte')).json.values.ecoleNotifDevoirs, true);
+    assert.equal((await appel('GET', 'admin')).json.values.ecoleNotifDevoirs, false);
   });
 
   it('un compte sans fiche de membre ne peut pas écrire de préférence, et on lui dit pourquoi', async () => {
-    const { status, json } = await appel('PATCH', 'anonyme', { changes: { dark: true } });
+    const { status, json } = await appel('PATCH', 'anonyme', { changes: { ecoleNotifDevoirs: true } });
     assert.equal(status, 403);
     assert.match(json.error, /rattaché à aucun membre/);
   });
 
   it('un lot mélangeant foyer et personnel est refusé en entier pour un non-administrateur', async () => {
-    const { status } = await appel('PATCH', 'adulte', { changes: { dark: true, showBreakfast: true } });
+    const { status } = await appel('PATCH', 'adulte', { changes: { ecoleNotifDevoirs: true, showBreakfast: true } });
     assert.equal(status, 403);
-    assert.equal(prefsDe('m-adulte')['dark'], false, 'la préférence licite du lot n’est pas écrite non plus');
+    assert.equal(prefsDe('m-adulte')['ecoleNotifDevoirs'], false, 'la préférence licite du lot n’est pas écrite non plus');
   });
 });
 
@@ -135,6 +135,14 @@ describe('réglages : ce qui est refusé, et ce que le refus explique', () => {
     const { status, json } = await appel('PATCH', 'admin', { changes: { nImporteQuoi: true } });
     assert.equal(status, 422);
     assert.match(json.error, /nImporteQuoi/);
+  });
+
+  it('un réglage d’appareil (thème) est refusé : il ne s’enregistre jamais sur le serveur', async () => {
+    const { status, json } = await appel('PATCH', 'admin', { changes: { theme: 'sombre' } });
+    assert.equal(status, 403, 'portée appareil : pas un problème de valeur mais de lieu');
+    assert.match(json.error, /cet appareil/i);
+    assert.equal(reglages()['theme'], undefined, 'rien n’a été écrit dans les réglages du foyer');
+    assert.equal(prefsDe('m-admin')['theme'], undefined, 'rien non plus dans les préférences du membre');
   });
 
   it('une valeur hors domaine est refusée, et rien du lot n’est écrit', async () => {
@@ -181,9 +189,9 @@ describe('réglages : le journal des modifications', () => {
   });
 
   it('une préférence personnelle est journalisée elle aussi, au nom de son membre', async () => {
-    await appel('PATCH', 'adulte', { changes: { dark: true } });
+    await appel('PATCH', 'adulte', { changes: { ecoleNotifDevoirs: true } });
     const { json } = await appel('GET', 'admin');
-    assert.equal(json.log[0].key, 'dark');
+    assert.equal(json.log[0].key, 'ecoleNotifDevoirs');
     assert.equal(json.log[0].memberId, 'm-adulte');
   });
 
@@ -293,7 +301,7 @@ describe('réglages : la porte de PUT /api/state', () => {
     // Elle ne s'écrit pas par là de toute façon : le serveur remet le bloc
     // d'avant. Ce qui compte est de ne pas transformer un vieux client bavard
     // en compte qui ne peut plus rien enregistrer.
-    assert.equal(settingsChanged(base, { ...base, dark: true }), false);
+    assert.equal(settingsChanged(base, { ...base, ecoleNotifDevoirs: true }), false);
   });
 
   it('une clé retirée du registre ne fait pas refuser les sauvegardes d’un vieux document', () => {
@@ -311,24 +319,24 @@ describe('réglages : la porte de PUT /api/state', () => {
 });
 
 describe('réglages : les préférences des autres, dans PUT /api/state', () => {
-  const prefs = { 'm-admin': { dark: false }, 'm-adulte': { dark: false } };
+  const prefs = { 'm-admin': { ecoleNotifDevoirs: false }, 'm-adulte': { ecoleNotifDevoirs: false } };
 
   it('modifier les siennes est licite', () => {
-    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-adulte': { dark: true } }, 'm-adulte'), false);
+    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-adulte': { ecoleNotifDevoirs: true } }, 'm-adulte'), false);
   });
 
   it('modifier celles d’un autre est détecté, même pour un administrateur', () => {
-    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-adulte': { dark: true } }, 'm-admin'), true);
+    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-adulte': { ecoleNotifDevoirs: true } }, 'm-admin'), true);
   });
 
   it('en ajouter pour quelqu’un d’autre, ou lui en retirer, est détecté aussi', () => {
-    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-tiers': { dark: true } }, 'm-adulte'), true);
-    assert.equal(foreignPrefsChanged(prefs, { 'm-adulte': { dark: false } }, 'm-adulte'), true);
+    assert.equal(foreignPrefsChanged(prefs, { ...prefs, 'm-tiers': { ecoleNotifDevoirs: true } }, 'm-adulte'), true);
+    assert.equal(foreignPrefsChanged(prefs, { 'm-adulte': { ecoleNotifDevoirs: false } }, 'm-adulte'), true);
   });
 
   it('un document sans préférences ne bloque rien', () => {
     assert.equal(foreignPrefsChanged(undefined, undefined, 'm-adulte'), false);
-    assert.equal(foreignPrefsChanged(undefined, { 'm-adulte': { dark: true } }, 'm-adulte'), false);
+    assert.equal(foreignPrefsChanged(undefined, { 'm-adulte': { ecoleNotifDevoirs: true } }, 'm-adulte'), false);
   });
 });
 
@@ -340,9 +348,9 @@ describe('réglages : un enfant n’entre pas', () => {
   });
 
   it('et il ne peut pas écrire ses propres préférences par cette porte', async () => {
-    const { status } = await appel('PATCH', 'enfant', { changes: { dark: true } });
+    const { status } = await appel('PATCH', 'enfant', { changes: { ecoleNotifDevoirs: true } });
     assert.equal(status, 403);
-    assert.equal(prefsDe('m-enfant')['dark'], undefined, 'rien n’a été écrit');
+    assert.equal(prefsDe('m-enfant')['ecoleNotifDevoirs'], undefined, 'rien n’a été écrit');
   });
 
   it('ni exporter la configuration du foyer', async () => {

@@ -150,7 +150,7 @@ export interface PushStatus { publicKey: string; devices: PushDevice[]; subscrib
 export interface PushTestResult { memberId: string; status: PushSendStatus; devices: number; total: number; error: string | null; }
 
 export interface SetupPayload {
-  household: { name: string; theme: 'light' | 'dark'; academie?: string };
+  household: { name: string; academie?: string };
   admin: { name: string; role: string; color: string; email: string; password: string; birthday?: string };
   members: { name: string; role: string; color: string; email?: string; password?: string; birthday?: string }[];
 }

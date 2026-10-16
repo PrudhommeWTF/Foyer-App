@@ -4,6 +4,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
 import { contactIni, uid } from '../core/helpers';
+import { ThemeChoice } from '../core/theme';
 
 interface ObMember { id: string; name: string; role: string; color: string; ini: string; email: string; password: string; birthday: string; }
 
@@ -163,9 +164,11 @@ const INTRO = [
                   <p class="sub">Adaptez Foyer à vos habitudes.</p>
                   <label class="field-label">Thème</label>
                   <div class="opts">
-                    <button class="opt" [class.on]="theme() === 'light'" (click)="setTheme('light')"><f-icon name="sun" [size]="18" [color]="theme() === 'light' ? '#E56B4E' : 'var(--ink2)'" /> Clair</button>
-                    <button class="opt" [class.on]="theme() === 'dark'" (click)="setTheme('dark')"><f-icon name="moon" [size]="18" [color]="theme() === 'dark' ? '#E56B4E' : 'var(--ink2)'" /> Sombre</button>
+                    <button class="opt" [class.on]="theme() === 'clair'" (click)="setTheme('clair')"><f-icon name="sun" [size]="18" [color]="theme() === 'clair' ? '#E56B4E' : 'var(--ink2)'" /> Clair</button>
+                    <button class="opt" [class.on]="theme() === 'sombre'" (click)="setTheme('sombre')"><f-icon name="moon" [size]="18" [color]="theme() === 'sombre' ? '#E56B4E' : 'var(--ink2)'" /> Sombre</button>
+                    <button class="opt" [class.on]="theme() === 'systeme'" (click)="setTheme('systeme')"><f-icon name="themeAuto" [size]="18" [color]="theme() === 'systeme' ? '#E56B4E' : 'var(--ink2)'" /> Système</button>
                   </div>
+                  <p class="hint" style="margin-top:8px">« Système » suit le réglage clair ou sombre de cet appareil. Ce choix ne concerne que cet appareil.</p>
                 </div>
               }
 
@@ -179,7 +182,7 @@ const INTRO = [
                     <div class="rrow"><span>Membres</span><div class="ravatars">
                       @for (m of allMembers(); track m.id) { <f-avatar [ini]="m.ini" [color]="m.color" [size]="30" border="2px solid var(--surface)" /> }
                     </div></div>
-                    <div class="rrow"><span>Préférences</span><b>Thème : {{ theme() === 'dark' ? 'sombre' : 'clair' }}</b></div>
+                    <div class="rrow"><span>Préférences</span><b>Thème : {{ themeLabel() }}</b></div>
                   </div>
                 </div>
               }
@@ -312,7 +315,7 @@ export class OnboardingComponent {
   mPassword = signal('');
   mBirthday = signal('');
   mColor = signal('#4E93B8');
-  theme = signal<'light' | 'dark'>('light');
+  theme = signal<ThemeChoice>('systeme');
   busy = signal(false);
 
   ini = computed(() => contactIni(this.name().trim() || '?'));
@@ -321,9 +324,13 @@ export class OnboardingComponent {
   suggestions = computed(() => ['Famille ' + (this.name().trim() || 'Dupont'), 'Chez nous', 'La Maisonnée', 'Le Nid']);
   allMembers = computed<ObMember[]>(() => [{ id: 'me', name: this.name(), role: this.role(), color: this.color(), ini: this.ini(), email: '', password: '', birthday: '' }, ...this.members()].slice(0, 6));
 
-  setTheme(t: 'light' | 'dark'): void {
+  themeLabel(): string { return { clair: 'clair', sombre: 'sombre', systeme: 'système' }[this.theme()]; }
+
+  setTheme(t: ThemeChoice): void {
+    // Préférence de cet appareil (localStorage) : rien ne part dans le document.
+    // Le store l'applique (classe `dark`, barre d'état) et suit le système au besoin.
     this.theme.set(t);
-    document.documentElement.classList.toggle('dark', t === 'dark');
+    this.store.setDevicePref('theme', t);
   }
 
   addMember(): void {
@@ -365,7 +372,7 @@ export class OnboardingComponent {
     if (this.busy()) return;
     this.busy.set(true);
     const ok = await this.store.completeSetup({
-      household: { name: this.famName().trim(), theme: this.theme() },
+      household: { name: this.famName().trim() },
       admin: { name: this.name().trim(), role: this.role().trim(), color: this.color(), email: this.email().trim(), password: this.password(), birthday: this.birthday() || undefined },
       members: this.members().map((m) => ({ name: m.name, role: m.role, color: m.color, birthday: m.birthday || undefined, email: m.email || undefined, password: m.password || undefined })),
     });
