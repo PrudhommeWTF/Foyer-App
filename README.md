@@ -486,6 +486,9 @@ conservée dans [`docs/`](docs/).
 - `.github/workflows/docker.yml` : publie une image **multi-arch** (`amd64`, `arm64`) sur
   `ghcr.io/<owner>/foyer-app` (tags `latest` + `sha` sur la branche par défaut ; `X.Y.Z` et
   `X.Y` sur un tag Git de version). La version affichée dans l'app provient du tag Git.
+- `.github/workflows/release.yml` : sur un tag `vX.Y.Z`, rejoue les contrôles de la CI, construit
+  et essaie une archive par architecture (`x86_64`, `arm64`), puis publie la release GitHub avec
+  ses empreintes SHA-256. Mode d'emploi : [`docs/RELEASES.md`](docs/RELEASES.md).
 
 ## 📝 Licence
 
