@@ -9,7 +9,7 @@ import { IconComponent } from '../core/icon';
   imports: [IconComponent],
   template: `
     <div class="modal-overlay" (click)="close.emit()">
-      <div class="modal-card fscroll" [style.max-width.px]="maxWidth()" (click)="$event.stopPropagation()">
+      <div class="modal-card fscroll" [class.tall]="tall()" [style.max-width.px]="maxWidth()" (click)="$event.stopPropagation()">
         @if (title()) {
           <div class="head">
             <div class="modal-title">{{ title() }}</div>
@@ -27,5 +27,7 @@ import { IconComponent } from '../core/icon';
 export class ModalComponent {
   readonly title = input('');
   readonly maxWidth = input(480);
+  /** Sur téléphone, occupe presque toute la hauteur (longue liste à faire défiler). */
+  readonly tall = input(false);
   readonly close = output<void>();
 }

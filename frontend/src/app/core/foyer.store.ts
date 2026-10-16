@@ -9,6 +9,7 @@ import { downloadBlob } from './download';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex, resolveArticleKey } from './ingredients';
+import { reorderAisleIds } from './aisles';
 import { PlanLine, PlanReport, aisleForRayon, buildPlan, keyOfLine } from './shopping-plan';
 import { CopyReport, applyMealCopy } from './meal-copy';
 import { closableShoppingTask, mealEventTitle, shoppingTaskLabel } from './links';
@@ -1578,15 +1579,16 @@ export class FoyerStore {
     this.toast('Rayon ajouté');
     return { kind: 'done' };
   }
-  /** Remonte ou descend un rayon : c'est l'ordre des allées du magasin habituel. */
-  moveAisle(id: string, dir: -1 | 1): void {
-    const ordered = this.aislesInOrder();
-    const i = ordered.findIndex((a) => a.id === id);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= ordered.length) return;
-    const ids = ordered.map((a) => a.id);
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    this.mutate((d) => { d.aisles.forEach((a) => { a.position = ids.indexOf(a.id); }); });
+  /**
+   * Réordonne les rayons (ordre des allées du magasin), par glisser-déposer ou
+   * par les flèches de secours. `ids` est l'ordre voulu des rayons déplaçables ;
+   * le repli « À trier » reste épinglé en tête. Une seule écriture, par le même
+   * chemin que le reste des rayons (le document, via `mutate`).
+   */
+  reorderAisles(ids: string[]): void {
+    if (!this._data()) return;
+    const order = reorderAisleIds(this.aislesInOrder().map((a) => a.id), this.defaultAisleId(), ids);
+    this.mutate((d) => { d.aisles.forEach((a) => { const i = order.indexOf(a.id); if (i >= 0) a.position = i; }); });
   }
   /** Supprime un rayon après confirmation ; ses articles passent au rayon de repli, qui lui ne se supprime pas. */
   delAisle(id: string, scope?: string): ItemResult {

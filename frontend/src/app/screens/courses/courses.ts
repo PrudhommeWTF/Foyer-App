@@ -8,6 +8,8 @@ import { LIST_ICONS } from '../../core/constants';
 import { normaliseName } from '../../core/articles';
 import { cap } from '../../core/helpers';
 import { searchArticles } from '../../core/ingredient-repair';
+import { ReorderDirective } from '../../shared/reorder';
+import { reorder } from '../../core/tasks';
 import { Aisle, Rayon, ShopItem } from '../../core/models';
 
 /**
@@ -30,7 +32,7 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
   selector: 'screen-courses',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, ReorderDirective],
   template: `
     <div class="screen-enter">
       <!-- Listes -->
@@ -245,20 +247,32 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
 
     <!-- Ordre des rayons -->
     @if (store.ui().aisleOrderOpen) {
-      <f-modal title="Ordre des rayons" [maxWidth]="440" (close)="store.patch({ aisleOrderOpen: false })">
-        <div class="hint mb">Rangez les rayons dans l'ordre où vous les parcourez en magasin. La liste de courses suit cet ordre.</div>
-        <div class="order-list">
-          @for (a of store.aislesInOrder(); track a.id; let i = $index, last = $last) {
-            <div class="order-row">
+      <f-modal title="Ordre des rayons" [maxWidth]="440" [tall]="true" (close)="store.patch({ aisleOrderOpen: false })">
+        <div class="hint mb">Glissez un rayon par sa poignée pour le ranger dans l'ordre où vous le parcourez en magasin. La liste de courses suit cet ordre.</div>
+        <!-- Le repli « À trier » reste en tête : il reçoit les articles sans rayon, il ne se déplace pas. -->
+        @if (triageAisle(); as t) {
+          <div class="order-row locked">
+            <span class="grip-ph" aria-hidden="true"><f-icon name="lock" [size]="15" color="var(--ink3)" [width]="2.2" /></span>
+            <span class="s-dot" [style.background]="t.color"></span>
+            <span class="order-name">{{ t.name }}</span>
+            <span class="order-fixed">en tête</span>
+          </div>
+        }
+        <div class="order-list" [fReorder]="orderIds()" [autoscroll]="true" (reordered)="store.reorderAisles($event)">
+          @for (a of otherAisles(); track a.id; let i = $index, last = $last) {
+            <div class="order-row" [attr.data-rid]="a.id">
+              <button class="grip" data-grip (click)="$event.stopPropagation()" [attr.aria-label]="'Déplacer ' + a.name">
+                <f-icon name="grip" [size]="18" color="var(--ink3)" [width]="3" />
+              </button>
               <span class="s-dot" [style.background]="a.color"></span>
               <span class="order-name">{{ a.name }}</span>
               <button class="icon-btn sm" (click)="store.openItem('aisle', a.id)" aria-label="Fiche du rayon" title="Fiche du rayon">
                 <f-icon name="edit" [size]="15" color="var(--ink2)" [width]="2.2" />
               </button>
-              <button class="icon-btn sm" [disabled]="i === 0" (click)="store.moveAisle(a.id, -1)" aria-label="Monter">
+              <button class="icon-btn sm" [disabled]="i === 0" (click)="nudge(a.id, -1)" aria-label="Monter">
                 <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
               </button>
-              <button class="icon-btn sm" [disabled]="last" (click)="store.moveAisle(a.id, 1)" aria-label="Descendre">
+              <button class="icon-btn sm" [disabled]="last" (click)="nudge(a.id, 1)" aria-label="Descendre">
                 <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" class="down" />
               </button>
             </div>
@@ -365,6 +379,13 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
     .order-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: var(--soft); }
     .order-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; color: var(--ink); }
     .order-row .icon-btn[disabled] { opacity: .3; }
+    /* Poignée : on tire par elle, jamais par la ligne (sinon la liste ne défile plus). */
+    .order-row .grip { flex: none; border: none; background: transparent; cursor: grab; padding: 4px; margin: -4px 0 -4px -4px; border-radius: 7px; touch-action: none; display: flex; align-items: center; }
+    .order-row .grip:active { cursor: grabbing; background: var(--soft2); }
+    .order-row .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
+    .order-row.locked { background: var(--soft2); margin-bottom: 8px; }
+    .order-row.locked .grip-ph { flex: none; width: 26px; display: flex; align-items: center; justify-content: center; }
+    .order-fixed { font-size: 11.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; }
     .up { transform: rotate(90deg); }
     .down { transform: rotate(90deg); }
     .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
@@ -424,8 +445,19 @@ export class CoursesScreen {
 
   /** Le rayon « À trier » (repli) : ses lignes gagnent des puces de rangement. */
   isTriage(aisle: Aisle): boolean { return aisle.id === this.store.defaultAisleId(); }
-  /** Les rayons où ranger un article « à trier » : tous sauf le repli lui-même. */
+  /** Les rayons où ranger un article « à trier » : tous sauf le repli lui-même. Sert aussi de liste déplaçable à la modale « Ordre des rayons ». */
   otherAisles = computed<Aisle[]>(() => this.store.aislesInOrder().filter((a) => a.id !== this.store.defaultAisleId()));
+  /** Le rayon de repli (épinglé en tête de la modale « Ordre des rayons »), ou rien s'il n'y en a pas. */
+  triageAisle = computed<Aisle | null>(() => this.store.aislesInOrder().find((a) => a.id === this.store.defaultAisleId()) ?? null);
+  /** Les identifiants des rayons déplaçables, dans l'ordre affiché, pour fReorder. */
+  orderIds = computed<string[]>(() => this.otherAisles().map((a) => a.id));
+  /** Flèches de secours (accessibilité) : décale un rayon d'un cran, même chemin que le glisser. */
+  nudge(id: string, dir: -1 | 1): void {
+    const ids = this.otherAisles().map((a) => a.id);
+    const i = ids.indexOf(id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    this.store.reorderAisles(reorder(ids, i, j));
+  }
   /** Supprime les cochés de la vue (liste active, ou toutes si « Toutes »). */
   confirmClear(): void {
     this.askClear.set(false);
