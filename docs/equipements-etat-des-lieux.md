@@ -45,3 +45,12 @@ Fonction pure, calculée à la lecture. Trois états à l'achat au lieu de deux 
 ## Écart constaté en cours de route
 
 - Le plafond d'un fichier est fixe (20 Mo) au lieu de suivre le réglage `maxUploadMb` : ce réglage est rangé dans la section Repas, qui disparaît quand on éteint Repas et cuisine, et son libellé parle de photos de recettes. Une photo réduite pèse moins d'un mégaoctet, une facture scannée quelques-uns : un réglage de plus n'apporterait rien.
+
+## Décision après la tranche 1 : une seule liste de pièces
+
+Entretien, fusionné pendant la tranche 1, a posé un socle commun de pièces dans le document du foyer (`rooms`). Garder `eqp_rooms` aurait donné deux listes pour une même maison. Validé : Équipements utilise le socle commun dès la tranche 2. Conséquences visibles :
+
+- une seule liste, modifiable depuis l'écran Équipements, que voit aussi Entretien ;
+- une pièce se **supprime** (ses appareils passent « Sans pièce ») au lieu de s'archiver ;
+- un foyer neuf naît sans pièce, comme Entretien le voulait ; l'écran Équipements propose la liste de départ en un geste ;
+- les installations qui ont connu la tranche 1 voient leurs pièces reprises une fois, au démarrage (voir [`equipements.md`](equipements.md#les-pièces-de-la-maison)).

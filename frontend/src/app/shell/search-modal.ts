@@ -2,17 +2,19 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, computed
 import { FormsModule } from '@angular/forms';
 import { FoyerStore, SearchHit } from '../core/foyer.store';
 import { FinancesStore } from '../core/finances.store';
+import { EquipementsStore } from '../core/equipements.store';
 import { IconComponent } from '../core/icon';
 import { tint } from '../core/constants';
 
 const KIND_LABEL: Record<string, string> = {
   contact: 'Contact', task: 'Tâche', event: 'Agenda', shop: 'Course',
-  recipe: 'Recette', card: 'Carte', fin: 'Finances', member: 'Membre',
+  recipe: 'Recette', card: 'Carte', fin: 'Finances', member: 'Membre', equipment: 'Équipement',
 };
 
 /**
  * Global search palette: fuzzy-ish (accent/case-insensitive) matching across
- * contacts, tasks, events, courses, recipes, cartes de fidélité and members,
+ * contacts, tasks, events, courses, recipes, cartes de fidélité, members and
+ * equipment (brand, model, serial number),
  * plus finance operations (searched server-side, since they live in tables).
  * Selecting a result navigates to its screen and opens its detail.
  */
@@ -77,11 +79,17 @@ const KIND_LABEL: Record<string, string> = {
 export class SearchModalComponent implements AfterViewInit {
   store = inject(FoyerStore);
   finances = inject(FinancesStore);
+  private eqp = inject(EquipementsStore);
   tintOf = tint;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Local matches first, then finance operations fetched from the server (module actif). */
-  allResults = computed<SearchHit[]>(() => [...this.store.searchResults(), ...(this.store.modFinances() ? this.finances.searchHits() : [])]);
+  allResults = computed<SearchHit[]>(() => [
+    ...this.store.searchResults(),
+    // Les équipements sont déjà en mémoire (quelques dizaines) : cherchés sur place, marque, modèle, série.
+    ...(this.store.modEquipements() ? this.eqp.searchHits(this.store.ui().searchQuery) : []),
+    ...(this.store.modFinances() ? this.finances.searchHits() : []),
+  ]);
 
   onQuery(q: string): void {
     this.store.patch({ searchQuery: q });

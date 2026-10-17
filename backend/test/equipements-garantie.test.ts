@@ -142,3 +142,15 @@ describe('Dimensions d’une image (en-tête seul)', () => {
     assert.equal(imageSize(Buffer.alloc(64), 'image/png'), null);
   });
 });
+
+describe('Garantie : une seule règle, côté serveur et côté application', () => {
+  it('les deux copies de warranty.ts sont identiques (l’aperçu du formulaire ne ment pas)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const root = path.join(__dirname, '..', '..');
+    assert.equal(
+      fs.readFileSync(path.join(root, 'backend', 'src', 'equipements', 'warranty.ts'), 'utf-8'),
+      fs.readFileSync(path.join(root, 'frontend', 'src', 'app', 'core', 'warranty.ts'), 'utf-8'),
+      'Recopiez backend/src/equipements/warranty.ts sur frontend/src/app/core/warranty.ts.');
+  });
+});

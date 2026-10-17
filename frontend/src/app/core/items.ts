@@ -11,7 +11,7 @@ import type { Signal, Type } from '@angular/core';
 import type { ModuleFlag } from './modules';
 
 /** Les types d'élément qui passent par la fiche. Un module s'y ajoute en déclarant le sien. */
-export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList' | 'shift' | 'employee' | 'homework' | 'grade';
+export type ItemKindId = 'event' | 'task' | 'meal' | 'recipe' | 'slot' | 'shop' | 'shopList' | 'aisle' | 'place' | 'placeItem' | 'contact' | 'card' | 'taskList' | 'shift' | 'employee' | 'homework' | 'grade' | 'equipment';
 
 export type SheetMode = 'vue' | 'edition';
 
@@ -115,6 +115,13 @@ export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
     kind: 'employee', label: 'Employé à domicile', newTitle: 'Ajouter un employé', editTitle: 'Modifier l’employé',
     screen: 'employe', openLabel: 'Ouvrir dans Employé à domicile', editable: true, removeMode: 'confirm', removeLabel: 'Retirer',
     module: 'modEmploye', adultOnly: true,
+  },
+  // Équipements : une fiche ne se supprime jamais, elle s'archive (son
+  // historique de pannes reste lisible). Tout membre lit, les adultes modifient.
+  equipment: {
+    kind: 'equipment', label: 'Équipement', newTitle: 'Nouvel équipement', editTitle: 'Modifier l’équipement',
+    screen: 'equipements', openLabel: 'Ouvrir dans Équipements', editable: true, removeMode: 'confirm', removeLabel: 'Archiver',
+    module: 'modEquipements',
   },
   // École : tout vient d'ÉcoleDirecte, rien ne s'y modifie ni ne s'y supprime.
   // Seule la case « Fait » d'un devoir s'écrit (et part à ÉcoleDirecte).
