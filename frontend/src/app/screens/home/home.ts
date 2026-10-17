@@ -5,7 +5,6 @@ import { AdminStore } from '../../core/admin.store';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
-import { ModalComponent } from '../../shared/modal';
 import { ReorderDirective } from '../../shared/reorder';
 import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
@@ -72,7 +71,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
   selector: 'screen-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, NgTemplateOutlet, ModalComponent, ReorderDirective],
+  imports: [IconComponent, AvatarComponent, NgTemplateOutlet, ReorderDirective],
   template: `
     <!-- Invitation à activer les rappels, au premier lancement installé. -->
     <ng-template #pushCard>
@@ -278,7 +277,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
       } @else if (store.narrow()) {
         <!-- ===== mobile : carousel + grille de modules ===== -->
         <div class="home-m">
-          <div class="carousel">
+          <div class="carousel" [class.editing]="editMods()">
             <div class="track fscroll-x" #track [style.height.px]="trackH()" (scroll)="onScroll(track)" (pointerdown)="onTouch()">
               @for (sl of slides(); track sl.key) {
                 <div class="slide" #slideEl>
@@ -291,62 +290,68 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                 </div>
               }
             </div>
-            <div class="dots" role="tablist">
-              @for (sl of slides(); track sl.key; let i = $index) {
-                <button class="dot" role="tab" [class.on]="active() === i" [attr.aria-selected]="active() === i"
-                        [attr.aria-label]="sl.label" [title]="sl.label" (click)="goSlide(i)"></button>
-              }
+            <!-- Points du carrousel et action « Réorganiser » sur la même ligne : les
+                 points restent centrés (colonne auto), l'action tient à droite. -->
+            <div class="carousel-foot">
+              <span class="foot-side"></span>
+              <div class="dots" role="tablist">
+                @for (sl of slides(); track sl.key; let i = $index) {
+                  <button class="dot" role="tab" [class.on]="active() === i" [attr.aria-selected]="active() === i"
+                          [attr.aria-label]="sl.label" [title]="sl.label" (click)="goSlide(i)"></button>
+                }
+              </div>
+              <div class="foot-side foot-act">
+                @if (modules().length > 1) {
+                  @if (!editMods()) {
+                    <button class="org-link" (click)="startEditMods()" aria-label="Réorganiser les raccourcis">
+                      <f-icon name="edit" [size]="16" color="var(--ink2)" [width]="2.2" />
+                    </button>
+                  } @else {
+                    <button class="org-link" (click)="cancelEditMods()">Annuler</button>
+                    <button class="org-link save" (click)="saveEditMods()">Sauvegarder</button>
+                  }
+                }
+              </div>
             </div>
           </div>
 
           <div class="mods-wrap">
-            @if (modules().length > 1) {
-              <div class="mods-head">
-                <button class="org-link" (click)="modOrderOpen.set(true)" aria-label="Organiser les raccourcis">
-                  <f-icon name="grip" [size]="14" color="var(--ink2)" [width]="2.4" /> Organiser
-                </button>
+            @if (!editMods()) {
+              <div class="mods">
+                @for (m of modules(); track m.id) {
+                  <button class="mod" (click)="store.go(m.id)">
+                    <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="23" [color]="m.color" [width]="2.1" /></span>
+                    <span class="mod-b">
+                      <span class="mod-l">{{ m.label }}</span>
+                      <span class="mod-s">{{ m.sub }}</span>
+                    </span>
+                  </button>
+                }
+              </div>
+            } @else {
+              <!-- Mode édition : glisser par la poignée (une colonne pour un geste fiable),
+                   puis Sauvegarder. L'ordre ne change qu'au clic sur Sauvegarder. -->
+              <div class="hint mb-s">Glissez un raccourci par sa poignée pour le ranger, puis Sauvegarder. Propre à cet appareil.</div>
+              <div class="mods editing" [fReorder]="draftIds()" [autoscroll]="true" (reordered)="draftOrder.set($event)">
+                @for (m of draftMods(); track m.id; let i = $index, last = $last) {
+                  <div class="mod edit" [attr.data-rid]="m.id">
+                    <button class="grip" data-grip [attr.aria-label]="'Déplacer ' + m.label">
+                      <f-icon name="grip" [size]="18" color="var(--ink3)" [width]="3" />
+                    </button>
+                    <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="19" [color]="m.color" [width]="2.1" /></span>
+                    <span class="order-name">{{ m.label }}</span>
+                    <button class="icon-btn sm" [disabled]="i === 0" (click)="nudgeDraft(m.id, -1)" aria-label="Monter">
+                      <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
+                    </button>
+                    <button class="icon-btn sm" [disabled]="last" (click)="nudgeDraft(m.id, 1)" aria-label="Descendre">
+                      <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" class="down" />
+                    </button>
+                  </div>
+                }
               </div>
             }
-            <div class="mods">
-              @for (m of modules(); track m.id) {
-                <button class="mod" (click)="store.go(m.id)">
-                  <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="23" [color]="m.color" [width]="2.1" /></span>
-                  <span class="mod-b">
-                    <span class="mod-l">{{ m.label }}</span>
-                    <span class="mod-s">{{ m.sub }}</span>
-                  </span>
-                </button>
-              }
-            </div>
           </div>
         </div>
-
-        <!-- Organiser les raccourcis : glisser-déposer, propre à cet appareil. -->
-        @if (modOrderOpen()) {
-          <f-modal title="Organiser les raccourcis" [maxWidth]="440" [tall]="true" (close)="modOrderOpen.set(false)">
-            <div class="hint mb">Glissez un module par sa poignée pour le ranger. L'accueil met vos préférés en tête. Propre à cet appareil.</div>
-            <div class="order-list" [fReorder]="modIds()" [autoscroll]="true" (reordered)="reorderMods($event)">
-              @for (m of modules(); track m.id; let i = $index, last = $last) {
-                <div class="order-row" [attr.data-rid]="m.id">
-                  <button class="grip" data-grip (click)="$event.stopPropagation()" [attr.aria-label]="'Déplacer ' + m.label">
-                    <f-icon name="grip" [size]="18" color="var(--ink3)" [width]="3" />
-                  </button>
-                  <span class="mod-ic sm" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="17" [color]="m.color" [width]="2.1" /></span>
-                  <span class="order-name">{{ m.label }}</span>
-                  <button class="icon-btn sm" [disabled]="i === 0" (click)="nudgeMod(m.id, -1)" aria-label="Monter">
-                    <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
-                  </button>
-                  <button class="icon-btn sm" [disabled]="last" (click)="nudgeMod(m.id, 1)" aria-label="Descendre">
-                    <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" class="down" />
-                  </button>
-                </div>
-              }
-            </div>
-            <div class="modal-actions" style="margin-top:18px">
-              <button class="btn btn-primary grow" (click)="modOrderOpen.set(false)">Terminé</button>
-            </div>
-          </f-modal>
-        }
       } @else {
         <!-- ===== desktop : fil + bandeau ===== -->
         <div class="home-wrap">
@@ -477,7 +482,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     /* Le bouton d'un point fait 24px (cible tactile) pour un point de 8px dessiné
        au centre : 8px de blanc sous le point. On les annule ici pour que l'écart
        jusqu'aux cartes de modules soit celui, homogène, qui sépare les cartes (12px). */
-    .dots { display: flex; justify-content: center; gap: 2px; margin-top: 6px; margin-bottom: -8px; }
+    .dots { display: flex; justify-content: center; gap: 2px; }
     .dot { width: 24px; height: 24px; flex: none; border: none; background: none; padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .dot::before { content: ''; width: 8px; height: 8px; border-radius: 4px; background: var(--line2); transition: width .2s ease, background .2s ease; }
     .dot.on::before { width: 20px; background: var(--primary); }
@@ -517,23 +522,34 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .mod-l { font-size: 13.5px; font-weight: 800; color: var(--ink); line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     .mod-s { font-size: 11px; font-weight: 700; color: var(--ink3); line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     .mods-wrap { display: flex; flex-direction: column; }
-    .mods-head { display: flex; justify-content: flex-end; margin-bottom: 8px; }
-    .org-link { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink2); background: none; border: none; cursor: pointer; padding: 2px; }
-    /* Modale « Organiser les raccourcis » : même dispositif que l'ordre des rayons. */
+    /* Points et action « Réorganiser » sur une même ligne : grille 1fr auto 1fr
+       pour que les points restent centrés quelle que soit la largeur de l'action.
+       Les marges verticales (reprises des points) collent la ligne au carrousel
+       au-dessus et laissent l'écart homogène de 12px vers la grille en dessous. */
+    .carousel-foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 6px; margin-bottom: -8px; }
+    .foot-side { min-width: 0; }
+    .foot-act { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+    /* En réorganisation, les points disparaissent (le défilement est verrouillé) et
+       les liens du contenu sont neutralisés jusqu'à « Sauvegarder ». */
+    .carousel.editing .dots { display: none; }
+    .carousel.editing .track { pointer-events: none; opacity: .5; }
+    .org-link { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); background: none; border: none; cursor: pointer; padding: 2px; }
+    .org-link.save { color: var(--sage); }
     .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
-    .hint.mb { margin-bottom: 20px; }
-    .order-list { display: flex; flex-direction: column; gap: 8px; }
-    .order-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: var(--soft); }
-    .order-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; color: var(--ink); }
-    .order-row .icon-btn[disabled] { opacity: .3; }
-    .order-row .grip { flex: none; border: none; background: transparent; cursor: grab; padding: 4px; margin: -4px 0 -4px -4px; border-radius: 7px; touch-action: none; display: flex; align-items: center; }
-    .order-row .grip:active { cursor: grabbing; background: var(--soft2); }
-    .order-row .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
-    .order-row .mod-ic.sm { width: 32px; height: 32px; border-radius: 10px; }
+    .hint.mb-s { margin-bottom: 12px; }
+    /* Tuiles en mode édition : une colonne (geste de glisser fiable), poignée à
+       gauche, flèches de secours à droite. */
+    .mods.editing { display: flex; flex-direction: column; gap: 8px; }
+    .mod.edit { gap: 10px; padding: 9px 12px; cursor: default; }
+    .mod.edit:active { background: var(--surface); }
+    .mod.edit .mod-ic { width: 34px; height: 34px; border-radius: 11px; }
+    .order-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 800; color: var(--ink); }
+    .mod.edit .icon-btn[disabled] { opacity: .3; }
+    .mod.edit .grip { flex: none; border: none; background: transparent; cursor: grab; padding: 4px; margin: -4px 0 -4px -4px; border-radius: 7px; touch-action: none; display: flex; align-items: center; }
+    .mod.edit .grip:active { cursor: grabbing; background: var(--soft2); }
+    .mod.edit .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
     .up { transform: rotate(90deg); }
     .down { transform: rotate(90deg); }
-    .modal-actions { display: flex; gap: 12px; align-items: center; }
-    .modal-actions .grow { flex: 1; }
   `],
 })
 export class HomeScreen {
@@ -636,8 +652,6 @@ export class HomeScreen {
 
   /** L'ordre choisi des raccourcis sur cet appareil (localStorage), réactif. */
   readonly homeModOrder = signal<string[]>(loadHomeMods());
-  /** Modale « Organiser les raccourcis » ouverte. */
-  readonly modOrderOpen = signal(false);
 
   readonly modules = computed<Mod[]>(() => {
     const d = this.store.data();
@@ -653,20 +667,31 @@ export class HomeScreen {
     const rest = mods.filter((m) => !rank.has(m.id));
     return [...ranked, ...rest];
   });
-  /** Les identifiants des raccourcis dans l'ordre affiché, pour fReorder. */
-  readonly modIds = computed<string[]>(() => this.modules().map((m) => m.id));
-
-  /** Enregistre le nouvel ordre des raccourcis (glisser-déposer) sur cet appareil. */
+  /** Enregistre le nouvel ordre des raccourcis sur cet appareil. */
   reorderMods(ids: string[]): void {
     this.homeModOrder.set(ids);
     try { localStorage.setItem(HOME_MODS_KEY, JSON.stringify(ids)); } catch { /* privé : vaut pour la session */ }
   }
-  /** Flèches de secours (accessibilité) : décale un raccourci d'un cran. */
-  nudgeMod(id: string, dir: -1 | 1): void {
-    const ids = this.modIds();
+
+  // Réorganisation en place : « Réorganiser » entre en mode édition sur une copie
+  // de travail (draftOrder), on glisse ou on pousse aux flèches, puis « Sauvegarder »
+  // valide (ou « Annuler » jette). L'ordre réel ne bouge qu'à la sauvegarde.
+  readonly editMods = signal(false);
+  readonly draftOrder = signal<string[]>([]);
+  readonly draftMods = computed<Mod[]>(() => {
+    const by = new Map(this.modules().map((m) => [m.id, m] as const));
+    return this.draftOrder().map((id) => by.get(id)).filter((m): m is Mod => !!m);
+  });
+  readonly draftIds = computed<string[]>(() => this.draftMods().map((m) => m.id));
+  startEditMods(): void { this.draftOrder.set(this.modules().map((m) => m.id)); this.editMods.set(true); }
+  cancelEditMods(): void { this.editMods.set(false); }
+  saveEditMods(): void { this.reorderMods(this.draftOrder()); this.editMods.set(false); }
+  /** Flèches de secours (accessibilité) : décale un raccourci d'un cran dans la copie. */
+  nudgeDraft(id: string, dir: -1 | 1): void {
+    const ids = this.draftOrder();
     const i = ids.indexOf(id); const j = i + dir;
     if (i < 0 || j < 0 || j >= ids.length) return;
-    this.reorderMods(reorder(ids, i, j));
+    this.draftOrder.set(reorder(ids, i, j));
   }
 
   /**
