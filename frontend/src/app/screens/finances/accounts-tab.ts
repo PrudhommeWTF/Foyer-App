@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-import { ModalComponent } from '../../shared/modal';
+import { SheetComponent } from '../../shared/sheet';
+import { FinLoanChart } from './charts/loan-chart';
 import { ConfirmComponent } from '../../shared/confirm';
 import { WhoComponent } from '../../shared/who';
 import { MemberPickerComponent } from '../../shared/member-picker';
@@ -22,17 +23,25 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
   selector: 'fin-accounts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, WhoComponent, MemberPickerComponent, CheckComponent],
+  imports: [FormsModule, IconComponent, SheetComponent, ConfirmComponent, WhoComponent, MemberPickerComponent, CheckComponent, FinLoanChart],
   template: `
     <div class="bar">
-      <div class="hint">Un compte archivé garde tout son historique mais sort des alertes de mois incomplet.</div>
+      <div class="worth">
+        Patrimoine net : <b [class.neg]="worth().net < 0">{{ eurInt(worth().net) }}</b>
+        · {{ eurInt(worth().assets) }} d'avoirs@if (worth().debts) {, {{ eurInt(worth().debts) }} restant dû}
+      </div>
       <div class="spacer"></div>
-      <button class="btn btn-primary" (click)="store.newAccount()"><f-icon name="plus" [size]="16" color="#fff" [width]="2.6" /> Nouveau compte</button>
+      @if (archivedCount()) {
+        <button class="btn btn-soft" (click)="store.patch({ acShowArchived: !store.ui().acShowArchived })" [attr.aria-pressed]="store.ui().acShowArchived">
+          {{ store.ui().acShowArchived ? 'Masquer' : 'Afficher' }} les archivés ({{ archivedCount() }})
+        </button>
+      }
+      <button class="btn btn-primary" (click)="store.newAccount()"><f-icon name="plus" [size]="16" color="#fff" [width]="2.6" /> Compte</button>
     </div>
 
     <div class="grid">
-      @for (a of store.accounts(); track a.id) {
-        <div class="card" [class.arch]="a.archived" (click)="store.editAccount(a.id)">
+      @for (a of shown(); track a.id) {
+        <button type="button" class="card" [class.arch]="a.archived" (click)="store.editAccount(a.id)" [attr.aria-label]="'Modifier le compte ' + a.name">
           <div class="top">
             <div class="idz">
               <div class="badge" [style.background]="foyer.tint(kindColor(a.kind))" [style.color]="kindColor(a.kind)">{{ kindLabel(a.kind) }}</div>
@@ -45,32 +54,33 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
           <div class="name">{{ a.name }}</div>
           @if (a.kind === 'credit') {
             @if (loan(a.id); as l) {
-              <div class="bal f-display">{{ fmt(l.owed) }} €</div>
-              <div class="meta">capital restant dû, sur {{ fmt(l.principal) }} € empruntés</div>
-              <div class="gauge"><div class="fill" [style.width]="pct(l.progress)"></div></div>
+              <div class="bal f-display">{{ eurInt(l.owed) }} <small>restant dû</small></div>
+              <div class="gauge" role="img" [attr.aria-label]="round(l.progress * 100) + ' % remboursé'"><div class="fill" [style.width]="pct(l.progress)"></div></div>
               <div class="meta">
-                {{ round(l.progress * 100) }} % remboursé, {{ l.left }} échéance{{ l.left > 1 ? 's' : '' }} restante{{ l.left > 1 ? 's' : '' }}
+                {{ round(l.progress * 100) }} % remboursé sur {{ eurInt(l.principal) }} · {{ l.left }} échéance{{ l.left > 1 ? 's' : '' }}
+                · {{ fmt(a.loan!.payment) }} €@if (a.loan!.insurance) { + {{ fmt(a.loan!.insurance) }} € d'assurance} / mois
+                · dernière le {{ foyer.fmtNumDate(l.endsOn) }}
               </div>
-              <div class="anchor">{{ fmt(l.monthly) }} € par mois, dernière échéance le {{ foyer.fmtNumDate(l.endsOn) }}</div>
             } @else {
-              <div class="bal f-display muted">—</div>
+              <div class="bal f-display muted">·</div>
               <div class="meta muted">Termes du prêt à renseigner</div>
             }
           } @else {
-            <div class="bal f-display" [style.color]="store.balanceOf(a.id) < 0 ? 'var(--primary)' : 'var(--ink)'">{{ fmt(store.balanceOf(a.id)) }} €</div>
+            <div class="bal f-display" [class.neg]="store.balanceOf(a.id) < 0">{{ fmt(store.balanceOf(a.id)) }} €</div>
+            @if (spark(a.id); as sp) {
+              <svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none" role="img" aria-label="Solde sur six mois"><polyline [attr.points]="sp" /></svg>
+            }
             <div class="meta">
               @if (cov(a.id); as c) {
                 @if (c.count) {
                   <span>{{ c.count }} opération{{ c.count > 1 ? 's' : '' }}, jusqu'au {{ foyer.fmtNumDate(c.lastDate || '') }}</span>
                 } @else { <span class="muted">Aucune opération</span> }
               }
+              @if (store.aliasesOf(a.id).length; as n) { <span>· {{ n }} alias</span> }
             </div>
             @if (a.openingDate) { <div class="anchor">{{ anchorLabel(a) }}</div> }
           }
-          @if (store.aliasesOf(a.id).length; as n) {
-            <div class="aliases">{{ n }} libellé{{ n > 1 ? 's' : '' }} d'export rattaché{{ n > 1 ? 's' : '' }}</div>
-          }
-        </div>
+        </button>
       } @empty {
         <div class="empty">
           <div class="empty-title">Aucun compte</div>
@@ -79,9 +89,47 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
       }
     </div>
 
+    @for (a of credits(); track a.id) {
+      <section class="panel">
+        <div class="p-head">
+          <div class="p-title">{{ a.name }} · capital restant dû</div>
+          <button class="btn btn-soft sm" (click)="toggleTable(a.id)" [attr.aria-expanded]="openTable() === a.id">Tableau d'amortissement</button>
+        </div>
+        @if (store.schedules()[a.id]; as sch) {
+          @if (sch.length) {
+            <fin-loan-chart [schedule]="sch" [today]="foyer.todayStr()" [width]="foyer.narrow() ? 380 : 900" [height]="foyer.narrow() ? 220 : 260" />
+            <div class="legend">
+              <span class="lg"><span class="ln"></span>Capital restant dû</span>
+              <span class="lg"><span class="tk"></span>Aujourd'hui</span>
+            </div>
+            @if (openTable() === a.id) {
+              <div class="tbl-wrap">
+                <table class="tbl">
+                  <thead><tr><th>Date</th><th>Échéance</th><th>Capital</th><th>Intérêts</th><th>Assurance</th><th>Restant dû</th></tr></thead>
+                  <tbody>
+                    @for (i of sch; track i.n) {
+                      <tr [class.past]="i.date <= foyer.todayStr()">
+                        <td>{{ foyer.fmtNumDate(i.date) }}</td><td>{{ fmt(i.total) }} €</td><td>{{ fmt(i.principal) }} €</td>
+                        <td>{{ fmt(i.interest) }} €</td><td>{{ fmt(i.insurance) }} €</td><td>{{ fmt(i.owed) }} €</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          } @else {
+            <div class="meta muted">Échéancier indisponible : vérifiez les termes du prêt.</div>
+          }
+        } @else {
+          <div class="meta">Chargement de l'échéancier…</div>
+        }
+      </section>
+    }
+
     <!-- FORMULAIRE DE COMPTE -->
     @if (store.ui().acForm) {
-      <f-modal [title]="store.ui().acId ? 'Modifier le compte' : 'Nouveau compte'" [maxWidth]="520" (close)="store.patch({ acForm: false })">
+      <f-sheet [heading]="store.ui().acId ? 'Modifier le compte' : 'Nouveau compte'" [maxWidth]="560" [full]="true"
+               (close)="store.patch({ acForm: false })" (back)="store.patch({ acForm: false })">
         <div class="field-label first">Nom du compte</div>
         <input class="input" [ngModel]="store.ui().acName" (ngModelChange)="store.patch({ acName: $event })" placeholder="Ex : Compte joint" />
 
@@ -190,7 +238,7 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
           <button class="btn btn-soft" (click)="store.patch({ acForm: false })">Annuler</button>
           <button class="btn btn-primary" [disabled]="store.ui().busy" (click)="store.saveAccount()">Enregistrer</button>
         </div>
-      </f-modal>
+      </f-sheet>
     }
 
     @if (store.ui().acDelId) {
@@ -203,13 +251,15 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
   styles: [`
     .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); line-height: 1.5; }
     .hint.sm { margin-top: 8px; }
-    .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+    .bar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 16px; }
     .spacer { flex: 1; }
-    .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); max-width: 460px; }
+    .worth { font-size: 14px; font-weight: 700; color: var(--ink2); }
+    .worth b { color: var(--ink); font-weight: 800; }
+    .neg { color: var(--status-crit) !important; }
 
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
     :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
-    .card { background: var(--surface); border-radius: 18px; padding: 18px; box-shadow: var(--sh-card); cursor: pointer; }
+    .card { background: var(--surface); border-radius: 18px; padding: 18px; box-shadow: var(--sh-card); cursor: pointer; border: none; text-align: left; font-family: inherit; color: inherit; display: block; width: 100%; }
     .card:hover { background: var(--soft); }
     .card.arch { opacity: .62; }
     .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
@@ -222,7 +272,24 @@ const KINDS: { k: AccountKind; label: string; color: string }[] = [
     .meta .muted, .alias-empty { font-style: italic; }
     .aliases { margin-top: 8px; font-size: 11.5px; font-weight: 800; color: var(--ink3); }
     .gauge { margin-top: 8px; height: 7px; border-radius: 99px; background: var(--soft2); overflow: hidden; }
-    .fill { height: 100%; border-radius: 99px; background: #B8735A; }
+    .fill { height: 100%; border-radius: 99px; background: var(--chart-pos); }
+    .bal small { font-family: var(--font-body); font-size: 13px; font-weight: 700; color: var(--ink2); }
+    .spark { display: block; width: 100%; height: 40px; margin: 4px 0 6px; }
+    .spark polyline { fill: none; stroke: var(--chart-pos); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    .panel { background: var(--surface); border-radius: var(--r-card-lg); padding: 20px 22px; box-shadow: var(--sh-card); margin-top: 16px; }
+    .p-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .p-title { font-size: 16px; font-weight: 800; color: var(--ink); }
+    .btn.sm { padding: 7px 12px; font-size: 12.5px; }
+    .legend { display: flex; gap: 16px; margin-top: 8px; }
+    .lg { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .lg .ln { width: 14px; height: 3px; border-radius: 2px; background: var(--chart-pos); }
+    .lg .tk { width: 3px; height: 13px; border-radius: 1px; background: var(--ink); }
+    .tbl-wrap { margin-top: 14px; max-height: 380px; overflow: auto; border-radius: 12px; border: 1px solid var(--line); }
+    .tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+    .tbl th { position: sticky; top: 0; background: var(--soft); text-align: right; padding: 7px 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink3); }
+    .tbl td { text-align: right; padding: 6px 10px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 700; white-space: nowrap; }
+    .tbl th:first-child, .tbl td:first-child { text-align: left; }
+    .tbl tr.past td { color: var(--ink3); }
     .field-label.sm { font-size: 10.5px; }
     .anchor { margin-top: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink3); line-height: 1.35; }
     .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
@@ -272,4 +339,36 @@ export class FinancesAccountsTab {
     return `${base}, ${n} opération${s} antérieure${s} déjà comprise${s}`;
   }
   delName = computed(() => this.store.accounts().find((a) => a.id === this.store.ui().acDelId)?.name || '');
+
+  /** Euros entiers : un patrimoine se lit à l'euro, pas au centime. */
+  eurInt = (cents: number): string => (cents < 0 ? '−' : '') + Math.round(Math.abs(cents) / 100).toLocaleString('fr-FR') + ' €';
+
+  readonly archivedCount = computed(() => this.store.accounts().filter((a) => a.archived).length);
+  /** Les archivés restent repliés tant qu'on ne demande pas à les voir. */
+  readonly shown = computed(() => this.store.accounts().filter((a) => !a.archived || this.store.ui().acShowArchived));
+  readonly credits = computed(() => this.store.accounts().filter((a) => a.kind === 'credit' && !a.archived && a.loan));
+
+  /** Avoirs (comptes actifs hors crédit) moins capital restant dû des crédits actifs. */
+  readonly worth = computed(() => {
+    const active = this.store.accounts().filter((a) => !a.archived);
+    const assets = active.filter((a) => a.kind !== 'credit').reduce((t, a) => t + this.store.balanceOf(a.id), 0);
+    const debts = active.filter((a) => a.kind === 'credit').reduce((t, a) => t + (this.store.loanOf(a.id)?.owed ?? 0), 0);
+    return { assets, debts, net: assets - debts };
+  });
+
+  /** La petite courbe des six derniers mois, en points SVG (200 × 40). */
+  spark(id: number): string | null {
+    const h = this.store.history()[id] ?? [];
+    if (h.length < 2) return null;
+    const mn = Math.min(...h), span = Math.max(...h) - mn || 1;
+    return h.map((v, i) => `${(i / (h.length - 1)) * 200},${36 - ((v - mn) / span) * 32}`).join(' ');
+  }
+
+  readonly openTable = signal<number | null>(null);
+  toggleTable(id: number): void { this.openTable.set(this.openTable() === id ? null : id); }
+
+  constructor() {
+    // L'échéancier de chaque crédit se charge à l'affichage (et après une modification des termes).
+    effect(() => { for (const a of this.credits()) if (!this.store.schedules()[a.id]) void this.store.loadSchedule(a.id); });
+  }
 }

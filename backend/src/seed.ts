@@ -5,6 +5,7 @@
 import { HouseholdState } from './models';
 import { FALLBACK_AISLE_NAME } from './shopping/ops';
 import { householdDefaults, memberDefaults } from './settings/registry';
+import { entretienList } from './entretien/list';
 
 /**
  * Rayons de départ. Leur `position` donne l'ordre de parcours du magasin, que
@@ -54,7 +55,7 @@ const STARTER_TASK_LIST = (): HouseholdState['taskLists'][number] =>
  * quand on ajoute une collection au document.
  */
 function scaffold(): Pick<HouseholdState,
-  'events' | 'aisles' | 'articles' | 'shopLists' | 'shop' | 'shopMemory' | 'taskLists' | 'taskTemplates' | 'tasks' | 'places' | 'placeItems' | 'contacts' | 'cards' | 'meals' | 'recipes' | 'sched'> {
+  'events' | 'aisles' | 'articles' | 'shopLists' | 'shop' | 'shopMemory' | 'taskLists' | 'taskTemplates' | 'tasks' | 'places' | 'placeItems' | 'rooms' | 'contacts' | 'cards' | 'meals' | 'recipes' | 'sched'> {
   return {
     events: [],
     aisles: STARTER_AISLES(),
@@ -62,11 +63,14 @@ function scaffold(): Pick<HouseholdState,
     shopLists: [{ id: 'cl1', name: 'Courses de la semaine', color: '#7A9B76', icon: 'panier' }],
     shop: [],
     shopMemory: {},
-    taskLists: [STARTER_TASK_LIST()],
+    // La liste Entretien existe dès le départ : le module est activé par défaut,
+    // et sa liste ne se crée ni ne se supprime à la main (voir entretien/list.ts).
+    taskLists: [STARTER_TASK_LIST(), entretienList(1) as HouseholdState['taskLists'][number]],
     taskTemplates: [],
     tasks: [],
     places: [],
     placeItems: [],
+    rooms: [],
     contacts: [],
     cards: [],
     meals: {},

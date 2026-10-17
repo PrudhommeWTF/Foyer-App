@@ -434,3 +434,192 @@ test('« reset » déjà appliqué est acquitté sans être rejoué (file hors l
   assert.equal(r2.applied.length, 1);
   assert.deepEqual(r2.listResets, [], 'un rejeu ne repose pas lastResetAt');
 });
+
+// ---- Entretien : « Fait aujourd'hui », une seule fois, et le stock avec ----
+//
+// Un geste d'entretien est une tâche de la liste Entretien. La coche est la même
+// opération `done` que partout ; ces tests fixent ce qu'elle fait de plus.
+
+const entCtx = (opts: { applied?: string[]; rooms?: string[] } = {}) => ({
+  ...ctx({ lists: ['l1', 'entretien'], kinds: { entretien: 'entretien' }, applied: opts.applied }),
+  roomIds: new Set(opts.rooms ?? ['p-cuisine']),
+});
+const brita = (over: Partial<TaskItem> = {}): TaskItem => ({
+  id: 'g1', listId: 'entretien', text: 'Carafe Brita : changer la cartouche', who: [], due: null, done: false,
+  rec: { freq: 'weekly', every: 4, base: 'done' }, remind: 'morning',
+  maintenance: { roomId: 'p-cuisine', stock: { qty: 4, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche Brita MAXTRA PRO', countedAt: '2026-10-01' } },
+  ...over,
+});
+// 10 h à Paris le 17/10/2026 (heure d'été, UTC+2).
+const LE_17 = '2026-10-17T08:00:00.000Z';
+
+test('entretien : « Fait aujourd’hui » sur un geste jamais noté lance la série et prend une cartouche', () => {
+  const r = applyOps([brita()], [op({ op: 'done', id: 'g1', occ: '', by: 'thomas', at: LE_17 })], entCtx());
+  const g = r.items[0];
+  assert.equal(g.due, '2026-11-14', 'quatre semaines après le jour du geste');
+  assert.equal(g.done, false, 'une série ne se termine pas');
+  assert.deepEqual(g.history, [{ at: LE_17, by: 'thomas', due: null, used: 1 }]);
+  assert.equal(g.maintenance?.stock?.qty, 3);
+  assert.equal(g.maintenance?.stock?.countedAt, '2026-10-17', 'le stock est daté du geste');
+  assert.equal(g.remind, 'morning', 'le rappel choisi avant la première fois est toujours là');
+});
+
+test('entretien : deux téléphones à jour notent le même geste le même jour, une seule réalisation et un seul décrément', () => {
+  const r1 = applyOps([brita()], [op({ op: 'done', id: 'g1', occ: '', by: 'thomas', at: LE_17 })], entCtx());
+  // Nolwenn a rechargé : elle voit la nouvelle échéance, et tape deux minutes plus tard.
+  const r2 = applyOps(r1.items, [op({ op: 'done', id: 'g1', occ: '2026-11-14', by: 'nolwenn', at: '2026-10-17T08:02:00.000Z' })], entCtx());
+  assert.equal(r2.applied.length, 1, 'acquittée, pas refusée : le téléphone la retire de sa file');
+  assert.equal(r2.items[0].history?.length, 1);
+  assert.equal(r2.items[0].history?.[0].by, 'thomas', 'la première réalisation reste l’information vraie');
+  assert.equal(r2.items[0].maintenance?.stock?.qty, 3, 'pas de second décrément');
+  assert.equal(r2.items[0].due, '2026-11-14');
+});
+
+test('entretien : un téléphone périmé qui note le même geste est sans objet', () => {
+  const r1 = applyOps([brita()], [op({ op: 'done', id: 'g1', occ: '', by: 'thomas', at: LE_17 })], entCtx());
+  // Parti hors ligne avant la coche de Thomas : il croit encore le geste jamais noté.
+  const r2 = applyOps(r1.items, [op({ op: 'done', id: 'g1', occ: '', by: 'nolwenn', at: '2026-10-18T08:00:00.000Z' })], entCtx());
+  assert.equal(r2.items[0].history?.length, 1);
+  assert.equal(r2.items[0].maintenance?.stock?.qty, 3);
+});
+
+test('entretien : une coche rejouée après une coupure (même opération) ne prend rien de plus', () => {
+  const coche = op({ op: 'done', id: 'g1', occ: '', by: 'thomas', at: LE_17 });
+  const r1 = applyOps([brita()], [coche], entCtx());
+  const r2 = applyOps(r1.items, [coche], entCtx({ applied: [coche.opId] }));
+  assert.deepEqual(r2.items, r1.items);
+});
+
+test('entretien : pas de retard cumulé, la date suivante part du jour du geste et c’est le serveur qui la calcule', () => {
+  const g = brita({ due: '2026-11-14', history: [{ at: LE_17, by: 'thomas', due: null, used: 1 }] });
+  // Un client qui enverrait la date théorique (14/11 + 4 semaines) ne l'impose pas.
+  const r = applyOps([g], [op({ op: 'done', id: 'g1', occ: '2026-11-14', next: '2026-12-12', by: 'thomas', at: '2026-11-20T09:00:00.000Z' })], entCtx());
+  assert.equal(r.items[0].due, '2026-12-18');
+});
+
+test('entretien : le jour du geste est celui de Paris, pas celui du serveur', () => {
+  // 23 h 30 UTC le 17 : il est 1 h 30 le 18 à Paris.
+  const r = applyOps([brita()], [op({ op: 'done', id: 'g1', occ: '', by: 'me', at: '2026-10-17T23:30:00.000Z' })], entCtx());
+  assert.equal(r.items[0].due, '2026-11-15');
+  assert.equal(r.items[0].maintenance?.stock?.countedAt, '2026-10-18');
+});
+
+test('entretien : annuler la toute première réalisation rend « Pas encore noté » et la cartouche', () => {
+  const r1 = applyOps([brita()], [op({ op: 'done', id: 'g1', occ: '', by: 'thomas', at: LE_17 })], entCtx());
+  const r2 = applyOps(r1.items, [op({ op: 'reopen', id: 'g1', occ: '' })], entCtx());
+  const g = r2.items[0];
+  assert.equal(g.due, null, 'de nouveau jamais noté');
+  assert.deepEqual(g.history, []);
+  assert.equal(g.maintenance?.stock?.qty, 4);
+});
+
+test('entretien : « Fait un autre jour » par le foyer (grands-parents, aucun membre)', () => {
+  const r = applyOps([brita()], [op({ op: 'done', id: 'g1', occ: '', at: '2026-10-12T10:00:00.000Z' })], entCtx());
+  assert.equal(r.items[0].history?.[0].by, null);
+  assert.equal(r.items[0].due, '2026-11-09');
+});
+
+test('entretien : une réalisation antérieure à la dernière notée est refusée, avec la date', () => {
+  const g = brita({ due: '2026-11-14', history: [{ at: LE_17, by: 'thomas', due: null, used: 1 }] });
+  const r = applyOps([g], [op({ op: 'done', id: 'g1', occ: '2026-11-14', at: '2026-10-10T10:00:00.000Z' })], entCtx());
+  assert.equal(r.skipped.length, 1);
+  assert.match(r.skipped[0].reason, /17\/10\/2026/);
+  assert.equal(r.items[0].due, '2026-11-14');
+});
+
+test('entretien : un stock vide ne descend pas sous zéro, et la réalisation est notée quand même', () => {
+  const g = brita({ maintenance: { stock: { qty: 0, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche', countedAt: '2026-10-01' } } });
+  const r = applyOps([g], [op({ op: 'done', id: 'g1', occ: '', at: LE_17 })], entCtx());
+  assert.equal(r.items[0].maintenance?.stock?.qty, 0);
+  assert.deepEqual(r.items[0].history?.[0], { at: LE_17, by: null, due: null }, 'rien de pris, rien à rendre');
+});
+
+test('entretien : un geste fait pendant sa pause met fin à la pause', () => {
+  const g = brita({ due: '2027-04-15', maintenance: { pausedUntil: '2027-04-15' } });
+  const r = applyOps([g], [op({ op: 'done', id: 'g1', occ: '2027-04-15', at: LE_17 })], entCtx());
+  assert.equal(r.items[0].maintenance, undefined);
+  assert.equal(r.items[0].due, '2026-11-14');
+});
+
+test('entretien : « j’en ai racheté 6 » s’ajoute, « j’en compte 4 » remplace, avec la date du comptage', () => {
+  const r1 = applyOps([brita({ maintenance: { stock: { qty: 3, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche', countedAt: '2026-10-17' } } })],
+    [op({ op: 'stock', id: 'g1', add: 6, on: '2026-10-20', by: 'me' })], entCtx());
+  assert.equal(r1.items[0].maintenance?.stock?.qty, 9);
+  assert.equal(r1.items[0].maintenance?.stock?.countedAt, '2026-10-20');
+  const r2 = applyOps(r1.items, [op({ op: 'stock', id: 'g1', set: 4, at: LE_17 })], entCtx());
+  assert.equal(r2.items[0].maintenance?.stock?.qty, 4);
+  assert.equal(r2.items[0].maintenance?.stock?.countedAt, '2026-10-17');
+});
+
+test('entretien : un rachat et un geste notés en même temps sur deux téléphones se composent', () => {
+  const depart = [brita()];
+  const a = applyOps(depart, [op({ op: 'done', id: 'g1', occ: '', at: LE_17 })], entCtx());
+  const b = applyOps(a.items, [op({ op: 'stock', id: 'g1', add: 6, at: LE_17 })], entCtx());
+  assert.equal(b.items[0].maintenance?.stock?.qty, 9, '4 - 1 + 6 : aucune des deux intentions n’a écrasé l’autre');
+});
+
+test('entretien : l’opération de stock refuse ce qui ne se compte pas', () => {
+  const sans = applyOps([brita({ maintenance: {} })], [op({ op: 'stock', id: 'g1', add: 1 })], entCtx());
+  assert.equal(sans.skipped.length, 1, 'pas de stock sur ce geste');
+  const deux = applyOps([brita()], [op({ op: 'stock', id: 'g1', add: 1, set: 3 })], entCtx());
+  assert.equal(deux.skipped.length, 1, 'ajouter ou compter, pas les deux');
+  const neg = applyOps([brita()], [op({ op: 'stock', id: 'g1', set: -2 })], entCtx());
+  assert.equal(neg.skipped.length, 1);
+  const moins = applyOps([brita()], [op({ op: 'stock', id: 'g1', add: -10 })], entCtx());
+  assert.equal(moins.items[0].maintenance?.stock?.qty, 0, 'on en jette plus qu’il n’y en a : zéro, pas moins');
+});
+
+test('entretien : modifier la fiche ne réécrit jamais la quantité d’un stock déjà là', () => {
+  // Formulaire ouvert avant le geste noté sur l'autre téléphone : il porte encore 4.
+  const r = applyOps([brita({ maintenance: { stock: { qty: 3, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche', countedAt: '2026-10-17' } } })],
+    [op({ op: 'edit', id: 'g1', maintenance: { stock: { qty: 4, unit: 'cartouches', use: 1, threshold: 2, article: 'Cartouche Brita MAXTRA PRO' } } })], entCtx());
+  const st = r.items[0].maintenance?.stock;
+  assert.equal(st?.qty, 3);
+  assert.equal(st?.threshold, 2, 'le reste de la fiche, lui, est modifié');
+  assert.equal(st?.article, 'Cartouche Brita MAXTRA PRO');
+});
+
+test('entretien : la création pose le stock donné, daté du jour ; une pièce inconnue tombe sans faire échouer', () => {
+  const r = applyOps([], [op({
+    op: 'add', id: 'g2', listId: 'entretien', text: 'Lave-vaisselle : sel', at: LE_17,
+    rec: { freq: 'monthly', every: 1, base: 'done' },
+    maintenance: { roomId: 'p-disparue', howto: 'Quand le voyant s’allume.', catalogId: 'lave-vaisselle-sel', stock: { qty: 2, unit: 'paquet', article: 'Sel régénérant' } },
+  })], entCtx());
+  const m = r.items[0].maintenance;
+  assert.equal(m?.roomId, undefined);
+  assert.equal(m?.howto, 'Quand le voyant s’allume.');
+  assert.equal(m?.catalogId, 'lave-vaisselle-sel');
+  assert.deepEqual(m?.stock, { article: 'Sel régénérant', unit: 'paquet', qty: 2, use: 1, threshold: 0, countedAt: '2026-10-17' });
+});
+
+test('entretien : les champs d’entretien ne valent que dans la liste Entretien', () => {
+  const r = applyOps([task()], [op({ op: 'edit', id: 't1', maintenance: { howto: 'x' } })], entCtx());
+  assert.equal(r.skipped.length, 1);
+  assert.equal(r.items[0].maintenance, undefined);
+  const bad = applyOps([brita()], [op({ op: 'edit', id: 'g1', maintenance: { stock: { article: 'x', qty: 1.5 } } })], entCtx());
+  assert.equal(bad.skipped.length, 1, 'une quantité qui n’est pas entière est une erreur de saisie, nommée');
+});
+
+test('une tâche ordinaire garde sa règle : deux coches le même jour sur une série quotidienne avancent deux fois', () => {
+  const t = task({ rec: { freq: 'daily', every: 1, base: 'done' }, due: '2026-09-05' });
+  const r1 = applyOps([t], [op({ op: 'done', id: 't1', occ: '2026-09-05', next: '2026-09-06', at: '2026-09-05T08:00:00Z' })], ctx());
+  const r2 = applyOps(r1.items, [op({ op: 'done', id: 't1', occ: '2026-09-06', next: '2026-09-07', at: '2026-09-05T09:00:00Z' })], ctx());
+  assert.equal(r2.items[0].history?.length, 2, 'la règle « une fois par jour » est propre aux gestes d’entretien');
+});
+
+test('un rappel sans date est gardé sur une série, retiré sur une tâche ponctuelle', () => {
+  const r = applyOps([], [
+    op({ op: 'add', id: 'a', listId: 'l1', text: 'Série', rec: { freq: 'weekly', every: 1, base: 'done' }, due: null, remind: 'morning' }),
+    op({ op: 'add', id: 'b', listId: 'l1', text: 'Ponctuelle', due: null, remind: 'morning' }),
+  ], ctx());
+  assert.equal(r.items.find((t) => t.id === 'a')?.remind, 'morning');
+  assert.equal(r.items.find((t) => t.id === 'b')?.remind, undefined);
+});
+
+test('une pièce supprimée : le geste passe « Sans pièce », il ne disparaît pas', () => {
+  const rep = reconcile([brita()], new Set(['entretien']), new Set(['me']), new Set(), new Set());
+  assert.equal(rep.items.length, 1);
+  assert.equal(rep.items[0].maintenance?.roomId, undefined);
+  assert.equal(rep.items[0].maintenance?.stock?.qty, 4, 'le reste de la fiche est intact');
+  assert.equal(rep.unlinked, 1);
+});

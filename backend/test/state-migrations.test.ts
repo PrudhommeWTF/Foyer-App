@@ -267,7 +267,7 @@ test('la migration part de la version atteinte, pas du début', () => {
   const doc = { recipes: [{ id: 'r1', name: 'A', photo: PNG_DATA_URL }], aisles: [], shop: [] };
   const res = run(doc, 1);
   assert.equal(res.stored.length, 0, 'la migration 1 ne doit pas être rejouée');
-  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+  assert.deepEqual(res.outcome.applied.map((a) => a.version), [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
   assert.equal(res.outcome.to, STATE_VERSION);
 });
 
@@ -581,7 +581,8 @@ test('migration 9 : un membre disparu laisse la tâche sans responsable, et le d
 
 test('migration 9 : les listes deviennent typées, partagées et ordonnées ; les modèles apparaissent', () => {
   const { doc } = run(foyerTaches([], [{ id: 'l1', name: 'Maison' }, { id: 'l2', name: 'Valise' }]), 8);
-  assert.deepEqual(doc['taskLists'].map((l: Record<string, unknown>) => [l['kind'], l['scope'], l['position']]), [['taches', 'shared', 0], ['taches', 'shared', 1]]);
+  // La migration 14, jouée à la suite, ajoute la liste Entretien : elle n'est pas l'objet de ce test.
+  assert.deepEqual(doc['taskLists'].filter((l: Record<string, unknown>) => l['id'] !== 'entretien').map((l: Record<string, unknown>) => [l['kind'], l['scope'], l['position']]), [['taches', 'shared', 0], ['taches', 'shared', 1]]);
   assert.deepEqual(doc['taskTemplates'], []);
 });
 
@@ -590,7 +591,10 @@ test('migration 9 : rejouée sur un document déjà migré, elle ne change rien'
     ...foyerTaches([{ id: 't1', text: 'Notaire', who: ['m1'], due: '2026-09-05', time: '18:00', done: true, doneBy: 'me', listId: 'l1', note: 'RDV', ord: 'a0' }],
       [{ id: 'l1', name: 'Maison', kind: 'checklist', scope: 'm1', position: 3, archived: true }]),
     taskTemplates: [{ id: 'tp1', name: 'Valise', kind: 'checklist', items: ['Maillots'] }],
+    // Déjà passé par la migration 14 aussi : la liste Entretien et les pièces sont là.
+    rooms: [],
   };
+  migre.taskLists.push({ id: 'entretien', name: 'Entretien', color: '#7A9B76', icon: 'outils', kind: 'entretien', scope: 'shared', position: 4 } as never);
   const avant = JSON.stringify(migre);
   run(migre, 8);
   assert.equal(JSON.stringify(migre), avant);

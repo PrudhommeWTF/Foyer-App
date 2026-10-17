@@ -6,7 +6,7 @@
 // Un module éteint est un drapeau de réglage foyer à `false`. Activés par défaut,
 // sauf École : il contacte un service extérieur, on ne l'allume qu'exprès.
 
-export type ModuleFlag = 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye' | 'modEcole' | 'modEquipements';
+export type ModuleFlag = 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements';
 
 export interface ModuleDef {
   flag: ModuleFlag;
@@ -24,6 +24,7 @@ export const MODULES: ModuleDef[] = [
   { flag: 'modFidelite', id: 'fidelite', label: 'Cartes de fidélité', desc: 'Les cartes de fidélité du foyer.', screens: ['fidelite'] },
   { flag: 'modFinances', id: 'finances', label: 'Finances', desc: 'Les comptes, opérations, budgets et contrats.', screens: ['finances'] },
   { flag: 'modEmploye', id: 'employe', label: 'Employé à domicile', desc: 'Le suivi des heures et la déclaration CESU.', screens: ['employe'] },
+  { flag: 'modEntretien', id: 'entretien', label: 'Entretien de la maison', desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, la liste Entretien se cache dans Tâches et ses rappels se taisent ; les gestes sont conservés.', screens: [] },
   // L'écran arrive avec la tranche suivante : en attendant, le drapeau ferme
   // l'API du module et sa section de réglages.
   { flag: 'modEquipements', id: 'equipements', label: 'Équipements', desc: 'Les fiches des appareils de la maison : facture, plaque, numéro de série et garantie.', screens: [] },

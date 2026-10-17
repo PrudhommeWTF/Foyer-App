@@ -20,20 +20,20 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [ ] | Recherche toutes périodes | Opérations | Opérations (texte ou montant) | Amélioré |
-| [ ] | Filtres compte (archivés compris), catégorie, sans catégorie | Opérations | Opérations | Conservé |
-| [ ] | Filtres étiquette et contrat (pastilles retirables), Effacer | Opérations | Opérations | Conservé |
-| [ ] | Ligne : icône (virement, recette, catégorie), compte, chemin de catégorie, étiquettes, pointée | Opérations | Tableau groupé par jour | Amélioré |
-| [ ] | Pagination 50 / page | Opérations | Opérations | Conservé |
-| [ ] | Saisie / modification : sens, libellé, montant, compte, date, catégorie, contrat, notes, pointée | Fenêtre | Fiche latérale (ordinateur) ou panneau (téléphone) | Amélioré |
-| [ ] | Suggestion de catégorie (« déjà classé ainsi N× ») | Fenêtre | Fiche, avec le reste de l'enveloppe | Amélioré |
-| [ ] | Origine de la catégorie (règle X / à la main) | Fenêtre | Fiche | Conservé |
-| [ ] | Créer une règle depuis une opération | Fenêtre | Fiche | Conservé |
-| [ ] | Suppression confirmée | Fenêtre | Fiche | Conservé |
-| [ ] | Filtre « non pointées » | · | Opérations | Nouveau |
-| [ ] | Libellé d'origine | Seulement dans l'export CSV | Fiche | Enfin affiché |
-| [ ] | Justificatif sur une opération | Serveur seulement | Fiche | Enfin affiché |
-| [~] | À classer en un geste | Filtre « Sans catégorie » | Aperçu (boîte) + pastille Opérations (Aperçu : PR 1) | Amélioré |
+| [x] | Recherche toutes périodes | Opérations | Opérations (texte ou montant) | Amélioré |
+| [x] | Filtres compte (archivés compris), catégorie, sans catégorie | Opérations | Opérations | Conservé |
+| [x] | Filtres étiquette et contrat (pastilles retirables), Effacer | Opérations | Opérations | Conservé |
+| [x] | Ligne : icône (virement, recette, catégorie), compte, chemin de catégorie, étiquettes, pointée | Opérations | Tableau groupé par jour | Amélioré |
+| [x] | Pagination 50 / page | Opérations | Opérations | Conservé |
+| [x] | Saisie / modification : sens, libellé, montant, compte, date, catégorie, contrat, notes, pointée | Fenêtre | Fiche latérale (ordinateur) ou panneau (téléphone) | Amélioré |
+| [x] | Suggestion de catégorie (« déjà classé ainsi N× ») | Fenêtre | Fiche, avec le reste de l'enveloppe | Amélioré |
+| [x] | Origine de la catégorie (règle X / à la main) | Fenêtre | Fiche | Conservé |
+| [x] | Créer une règle depuis une opération | Fenêtre | Fiche | Conservé |
+| [x] | Suppression confirmée | Fenêtre | Fiche | Conservé |
+| [x] | Filtre « non pointées » | · | Opérations | Nouveau |
+| [x] | Libellé d'origine | Seulement dans l'export CSV | Fiche | Enfin affiché |
+| [x] | Justificatif sur une opération | Serveur seulement | Fiche | Enfin affiché |
+| [x] | À classer en un geste | Filtre « Sans catégorie » | Aperçu (boîte) + pastille Opérations | Amélioré |
 
 ## Bilan (PR 1)
 
@@ -52,13 +52,13 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [ ] | Types courant / pro / épargne / crédit, titulaires | Comptes | Comptes | Conservé |
-| [ ] | Solde, couverture (N opérations, jusqu'au…), solde d'ouverture daté | Comptes | Comptes | Conservé |
-| [ ] | Archivage (sort des alertes), suppression refusée si opérations | Comptes | Comptes (archivés repliés) | Conservé |
-| [ ] | Alias d'import (ajout, retrait) | Comptes | Fiche du compte | Conservé |
-| [~] | Crédit : termes, capital restant dû, % remboursé, échéances restantes | Comptes | Comptes + Aperçu (Aperçu : PR 1) | Amélioré |
-| [ ] | Tableau d'amortissement | Serveur seulement | Comptes (courbe + tableau) | Enfin affiché |
-| [ ] | Patrimoine net | · | Comptes | Nouveau |
+| [x] | Types courant / pro / épargne / crédit, titulaires | Comptes | Comptes | Conservé |
+| [x] | Solde, couverture (N opérations, jusqu'au…), solde d'ouverture daté | Comptes | Comptes | Conservé |
+| [x] | Archivage (sort des alertes), suppression refusée si opérations | Comptes | Comptes (archivés repliés) | Conservé |
+| [x] | Alias d'import (ajout, retrait) | Comptes | Fiche du compte | Conservé |
+| [x] | Crédit : termes, capital restant dû, % remboursé, échéances restantes | Comptes | Comptes + Aperçu | Amélioré |
+| [x] | Tableau d'amortissement | Serveur seulement | Comptes (courbe + tableau) | Enfin affiché |
+| [x] | Patrimoine net | · | Comptes | Nouveau |
 
 ## Catégories (PR 3)
 
@@ -73,16 +73,16 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [~] | Échéances 6 mois : préavis, reconduction, fin ; urgence < 30 j ; Tâche | Contrats | Contrats › Échéances + Aperçu (Aperçu : PR 1) | Amélioré |
-| [ ] | Biens : immobilier / véhicule / autre, vendu, adresse, dates, notes | Contrats | Contrats | Conservé |
-| [ ] | Contrat : tous les champs, références, personnes, statut | Contrats | Fiche du contrat | Conservé |
-| [ ] | Coût réel 12 mois, hors fourchette, voir ces opérations | Contrats | Jauge fourchette / dernier prélèvement | Amélioré |
-| [ ] | Pièces jointes (PDF, images, 20 Mo, doublons) | Contrats | Fiche du contrat | Conservé |
-| [ ] | Créer une règle pour ce contrat | Contrats | Fiche du contrat | Conservé |
-| [ ] | Relevés de compteur : index, HP/HC, conso par période, comparaison à un an | Contrats (énergie) | Fiche : graphique kWh/jour | Amélioré |
-| [ ] | Modifier un relevé | Serveur seulement | Fiche du contrat | Enfin affiché |
+| [x] | Échéances 6 mois : préavis, reconduction, fin ; urgence < 30 j ; Tâche | Contrats | Contrats › Échéances + Aperçu | Amélioré |
+| [x] | Biens : immobilier / véhicule / autre, vendu, adresse, dates, notes | Contrats | Contrats | Conservé |
+| [x] | Contrat : tous les champs, références, personnes, statut | Contrats | Fiche du contrat | Conservé |
+| [x] | Coût réel 12 mois, hors fourchette, voir ces opérations | Contrats | Jauge fourchette / dernier prélèvement | Amélioré |
+| [x] | Pièces jointes (PDF, images, 20 Mo, doublons) | Contrats | Fiche du contrat | Conservé |
+| [x] | Créer une règle pour ce contrat | Contrats | Fiche du contrat | Conservé |
+| [x] | Relevés de compteur : index, HP/HC, conso par période, comparaison à un an | Contrats (énergie) | Fiche : graphique kWh/jour | Amélioré |
+| [x] | Modifier un relevé | Serveur seulement | Fiche du contrat | Enfin affiché |
 | [x] | Relevés en retard | Serveur seulement (/home) | Aperçu « À surveiller » + notification | Enfin affiché |
-| [ ] | Pistes d'économies : totaux, statuts, Tâche, gain annuel | Contrats | Contrats › Économies | Conservé |
+| [x] | Pistes d'économies : totaux, statuts, Tâche, gain annuel | Contrats | Contrats › Économies | Conservé |
 
 ## Règles (PR 3)
 

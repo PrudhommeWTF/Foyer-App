@@ -80,7 +80,7 @@ compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier dé
 | 🥗 **Contraintes alimentaires** | Allergènes (liste européenne) et aliments refusés par membre. Les recettes affichent leurs allergènes et à qui elles ne conviennent pas ; le planning signale le créneau en cause. Honnête sur ses limites : un ingrédient non reconnu n'est pas vérifié, et l'interface le dit. |
 | ☎️ **Contacts** | Un carnet de contacts (urgences, santé, école) avec recherche transverse. |
 | 💳 **Cartes de fidélité** | Les cartes de tout le foyer, une fois pour toutes : **scannées par la caméra** (ou lues sur une photo), leur code (QR ou code-barres) est **réaffiché en grand** à présenter en caisse. Rangées par nom, avec un logo : soit un monogramme aux initiales, soit un vrai logo cherché en ligne d'après le nom (option `cardLogoSearch`, coupable). Le code reste du texte dans le document, jamais un fichier sur le disque. |
-| ⚙️ **Paramètres** | Thème, membres et accès, rappels sur cet appareil, partage du calendrier, mises à jour. **Activation des modules** : un administrateur peut désactiver « Repas et cuisine », « Cartes de fidélité », « Finances », « Employé à domicile », « Équipements » et activer « École » (masqués partout et accès fermés, sans perte de données ; réactivation avec reprise ou remise à zéro). [Registre complet](docs/parametres.md) |
+| ⚙️ **Paramètres** | Thème, membres et accès, rappels sur cet appareil, partage du calendrier, mises à jour. **Activation des modules** : un administrateur peut désactiver « Repas et cuisine », « Cartes de fidélité », « Finances », « Employé à domicile », « Entretien de la maison », « Équipements » et activer « École » (masqués partout et accès fermés, sans perte de données ; réactivation avec reprise ou remise à zéro). [Registre complet](docs/parametres.md) |
 
 Chaque membre a sa couleur d'identité. Thème clair/sombre synchronisé. Interface responsive
 (bureau et mobile avec barre d'onglets).
@@ -520,6 +520,7 @@ conservée dans [`docs/`](docs/).
 | Cuisine (recettes → repas → courses) | [`docs/cuisine-architecture.md`](docs/cuisine-architecture.md) |
 | Finances (architecture et cahier de recette) | [`docs/finances-architecture.md`](docs/finances-architecture.md), [`docs/finances-cahier-de-recette.md`](docs/finances-cahier-de-recette.md) |
 | Employé à domicile (heures, CESU) | [`docs/employe-domicile.md`](docs/employe-domicile.md) |
+| Entretien de la maison (gestes, stock, catalogue) | [`docs/entretien.md`](docs/entretien.md) |
 | Équipements (fiches, garanties, fichiers, exploitation) | [`docs/equipements.md`](docs/equipements.md), [`docs/equipements-etat-des-lieux.md`](docs/equipements-etat-des-lieux.md) |
 | École (ÉcoleDirecte : connexion, exploitation, quand l'API change) | [`docs/ecole.md`](docs/ecole.md), [`docs/ecole-etat-des-lieux.md`](docs/ecole-etat-des-lieux.md) |
 | Emploi du temps | [`docs/emploi-du-temps.md`](docs/emploi-du-temps.md) |

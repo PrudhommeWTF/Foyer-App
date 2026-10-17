@@ -67,6 +67,8 @@ export interface FinFlow {
   previous: { month: string; categoryId: number | null; spentToDay: number }[];
   /** Ce que chaque contrat a débité dans le mois. */
   contracts: { contractId: number; amount: number; date: string }[];
+  /** Les transferts de budget du mois entre enveloppes. */
+  moves: FinBudgetMove[];
 }
 
 export interface FinTransaction {
@@ -76,7 +78,12 @@ export interface FinTransaction {
   /** Rule that decided the current category; null when set by hand. */
   ruleId: number | null;
   tags: string[];
+  /** Pour un virement interne : le compte de l'autre côté, s'il est connu. */
+  transferAccountId: number | null;
 }
+
+/** Du budget déplacé d'une enveloppe à une autre, pour un mois. Centimes, positif. */
+export interface FinBudgetMove { id: number; month: string; fromCategoryId: number; toCategoryId: number; amount: number; createdAt: string; }
 
 export interface FinAlias { id: number; accountId: number; labelNorm: string; labelRaw: string; }
 
@@ -149,7 +156,7 @@ export interface TxPayload {
 
 export interface TxQuery {
   from?: string; to?: string; accountId?: number; categoryId?: number;
-  uncategorised?: boolean; contractId?: number; tag?: string; q?: string; limit?: number; offset?: number;
+  uncategorised?: boolean; uncleared?: boolean; contractId?: number; tag?: string; q?: string; limit?: number; offset?: number;
 }
 
 /** Thin client over /api/finances, reusing ApiService's token and error handling. */
@@ -203,6 +210,7 @@ export class FinancesApi {
     if (q.accountId) p.set('accountId', String(q.accountId));
     if (q.categoryId) p.set('categoryId', String(q.categoryId));
     if (q.uncategorised) p.set('uncategorised', '1');
+    if (q.uncleared) p.set('uncleared', '1');
     if (q.contractId) p.set('contractId', String(q.contractId));
     if (q.tag) p.set('tag', q.tag);
     if (q.q) p.set('q', q.q);
@@ -224,6 +232,14 @@ export class FinancesApi {
     return this.api.del(`finances/transactions/${id}`);
   }
 
+  createBudgetMove(p: { month: string; fromCategoryId: number; toCategoryId: number; amount: string }): Promise<{ move: FinBudgetMove; moves: FinBudgetMove[] }> {
+    return this.api.post('finances/budget-moves', p);
+  }
+  deleteBudgetMove(id: number): Promise<{ ok: boolean }> { return this.api.del(`finances/budget-moves/${id}`); }
+  /** Le tableau d'amortissement d'un compte de crédit (vide sans termes de prêt). */
+  loanSchedule(accountId: number): Promise<{ instalments: FinInstalment[] }> {
+    return this.api.request(`finances/accounts/${accountId}/schedule`);
+  }
   flow(month: string): Promise<{ flow: FinFlow }> {
     return this.api.request('finances/flow?month=' + encodeURIComponent(month));
   }
@@ -251,6 +267,9 @@ export class FinancesApi {
   }
   createReading(p: FinReadingPayload): Promise<{ reading: FinReading }> {
     return this.api.post('finances/readings', p);
+  }
+  updateReading(id: number, p: FinReadingPayload): Promise<{ reading: FinReading }> {
+    return this.api.put(`finances/readings/${id}`, p);
   }
   deleteReading(id: number): Promise<{ readings: FinReading[]; periods: FinPeriod[] }> {
     return this.api.del(`finances/readings/${id}`);

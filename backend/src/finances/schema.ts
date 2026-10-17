@@ -9,7 +9,7 @@ import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
-export const FIN_SCHEMA_VERSION = 6;
+export const FIN_SCHEMA_VERSION = 7;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -326,6 +326,26 @@ const MIGRATIONS: Migration[] = [
       // sa catégorie sort des enveloppes. On part des contrats déjà saisis.
       db.exec('ALTER TABLE fin_categories ADD COLUMN fixed INTEGER NOT NULL DEFAULT 0');
       db.exec(MARK_FIXED_SQL);
+    },
+  },
+  {
+    version: 7,
+    label: 'enveloppes : transferts de budget',
+    up: (db) => {
+      db.exec(`
+        -- Un transfert déplace du budget d'une enveloppe à une autre, pour un
+        -- mois seulement. Le budget de référence ne bouge pas : celui du mois
+        -- vaut référence + transferts entrants - transferts sortants.
+        CREATE TABLE fin_budget_moves (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          month TEXT NOT NULL,
+          from_category_id INTEGER NOT NULL REFERENCES fin_categories(id) ON DELETE CASCADE,
+          to_category_id INTEGER NOT NULL REFERENCES fin_categories(id) ON DELETE CASCADE,
+          amount INTEGER NOT NULL CHECK (amount > 0),
+          created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f','now'))
+        );
+        CREATE INDEX fin_budget_moves_month ON fin_budget_moves (month);
+      `);
     },
   },
 ];

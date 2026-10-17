@@ -1,10 +1,19 @@
 // Le moteur de récurrence des tâches : quand revient une tâche qu'on vient de
 // faire.
 //
-// Il vit côté client, et lui seul : le serveur reçoit l'occurrence suivante
-// avec la coche et vérifie sa forme, pas son calcul. C'est cohérent avec le
-// reste de l'application (le store frontend porte la logique métier), et ça
-// évite deux moteurs identiques dans deux paquets qui ne partagent aucun code.
+// **Ce fichier existe en deux copies identiques octet pour octet :**
+//
+//   frontend/src/app/core/recurrence.ts
+//   backend/src/tasks/recurrence.ts
+//
+// Le navigateur calcule l'occurrence suivante d'une coche et l'envoie avec
+// elle ; le serveur se sert de la même règle là où personne ne la lui envoie
+// (un geste d'entretien, noté depuis l'écran ou par un assistant). Un seul
+// moteur, donc, et la CI échoue à la moindre différence entre les deux copies
+// (backend/test/recurrence-copy.test.ts), comme pour le registre des réglages.
+// C'est aussi pourquoi ce fichier n'importe rien : il doit rester copiable tel
+// quel, et ses calculs de dates se font en UTC pour ne dépendre ni du fuseau du
+// navigateur ni de celui du serveur.
 //
 // Deux modes, explicites, et c'est ce qui compte vraiment chez nous :
 //
@@ -18,20 +27,34 @@
 //     avec deux jours de retard, la suivante tombe le dimanche d'après, pas le
 //     samedi. Les jours de la semaine n'ont pas de sens ici : la cadence part
 //     du geste.
-//
-// L'échéance de la série est **toujours** une date : sans elle, « toutes les
-// semaines » ne veut rien dire. La saisie en pose une par défaut.
-import { addDaysIso, pad2, parseDay, weekdayOf } from './helpers';
-import { TaskItem, TaskRec } from './models';
+
+/** La règle d'une série, telle que la portent les tâches (RecRule des deux côtés). */
+export interface RecRule {
+  freq: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  every: number;
+  days?: number[];
+  base: 'due' | 'done';
+  grace?: number;
+  until?: string | null;
+}
+/** Ce que le calendrier lit d'une tâche pour savoir si elle tombe un jour donné. */
+export interface RecTask { due: string | null; rec?: RecRule | null; }
+
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+const utc = (iso: string): number => { const [y, m, d] = iso.split('-').map(Number); return Date.UTC(y || 1970, (m || 1) - 1, d || 1); };
+const isoOf = (t: number): string => { const d = new Date(t); return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`; };
+const addDaysIso = (iso: string, n: number): string => isoOf(utc(iso) + n * 86400000);
+/** Lundi = 1 … dimanche = 7. */
+const weekdayOf = (iso: string): number => { const j = new Date(utc(iso)).getUTCDay(); return j === 0 ? 7 : j; };
 
 /** Au-delà, on cesse de chercher : une règle qui ne tombe sur rien en cinq ans est vide. */
 const HORIZON_DAYS = 366 * 5;
 
-const daysBetween = (a: string, b: string): number => Math.round((parseDay(b).getTime() - parseDay(a).getTime()) / 86400000);
+const daysBetween = (a: string, b: string): number => Math.round((utc(b) - utc(a)) / 86400000);
 const dom = (iso: string): number => parseInt(iso.slice(8, 10), 10);
 const month = (iso: string): number => parseInt(iso.slice(5, 7), 10);
 const year = (iso: string): number => parseInt(iso.slice(0, 4), 10);
-const daysInMonth = (y: number, m: number): number => new Date(y, m, 0).getDate();
+const daysInMonth = (y: number, m: number): number => new Date(Date.UTC(y, m, 0)).getUTCDate();
 /** Le lundi de la semaine d'une date. */
 const mondayOf = (iso: string): string => addDaysIso(iso, 1 - weekdayOf(iso));
 
@@ -44,7 +67,7 @@ export function addMonthsClamped(iso: string, n: number): string {
 }
 
 /** La règle tombe-t-elle ce jour-là, la série étant ancrée sur `origin` ? */
-function matches(rec: TaskRec, origin: string, day: string): boolean {
+function matches(rec: RecRule, origin: string, day: string): boolean {
   const every = Math.max(1, rec.every || 1);
   switch (rec.freq) {
     case 'daily': return daysBetween(origin, day) % every === 0;
@@ -65,14 +88,14 @@ function matches(rec: TaskRec, origin: string, day: string): boolean {
 }
 
 /** La première date de la règle strictement après `after`, ou null au-delà de l'horizon. */
-function firstMatchAfter(rec: TaskRec, origin: string, after: string): string | null {
+function firstMatchAfter(rec: RecRule, origin: string, after: string): string | null {
   let day = addDaysIso(after, 1);
   for (let i = 0; i < HORIZON_DAYS; i++, day = addDaysIso(day, 1)) if (matches(rec, origin, day)) return day;
   return null;
 }
 
 /** Un pas de la cadence à partir d'une date : N jours, N semaines, N mois, N ans. */
-function stepFrom(iso: string, rec: TaskRec): string {
+function stepFrom(iso: string, rec: RecRule): string {
   const n = Math.max(1, rec.every || 1);
   switch (rec.freq) {
     case 'daily': return addDaysIso(iso, n);
@@ -86,7 +109,7 @@ function stepFrom(iso: string, rec: TaskRec): string {
  * L'échéance suivante d'une série dont on vient de solder l'occurrence `due`,
  * le jour `doneOn`. Null quand la série s'arrête (fin dépassée).
  */
-export function nextOccurrence(rec: TaskRec, due: string, doneOn: string): string | null {
+export function nextOccurrence(rec: RecRule, due: string, doneOn: string): string | null {
   const next = rec.base === 'done'
     ? stepFrom(doneOn, rec)
     : firstMatchAfter(rec, due, due > doneOn ? due : doneOn);
@@ -96,17 +119,17 @@ export function nextOccurrence(rec: TaskRec, due: string, doneOn: string): strin
 }
 
 /** L'échéance courante d'une série, décalée d'une occurrence sans la faire. */
-export function skipOccurrence(rec: TaskRec, due: string, today: string): string | null {
+export function skipOccurrence(rec: RecRule, due: string, today: string): string | null {
   return nextOccurrence(rec, due, rec.base === 'done' ? (due > today ? due : today) : due);
 }
 
 /** Dernier jour où une occurrence n'est pas encore en retard : l'échéance, plus la tolérance. */
-export function windowEnd(due: string, rec: TaskRec | null | undefined): string {
+export function windowEnd(due: string, rec: RecRule | null | undefined): string {
   return rec?.grace ? addDaysIso(due, rec.grace) : due;
 }
 
 /** Un pas de cadence EN ARRIÈRE : l'occurrence précédente, une cadence avant `iso`. Miroir de stepFrom. */
-function stepBack(iso: string, rec: TaskRec): string {
+function stepBack(iso: string, rec: RecRule): string {
   const n = Math.max(1, rec.every || 1);
   switch (rec.freq) {
     case 'daily': return addDaysIso(iso, -n);
@@ -122,7 +145,7 @@ function stepBack(iso: string, rec: TaskRec): string {
  * que l'occurrence approche : vide au lendemain de la précédente, pleine à
  * l'échéance et au-delà.
  */
-export function occurrenceProgress(rec: TaskRec, due: string, today: string): number {
+export function occurrenceProgress(rec: RecRule, due: string, today: string): number {
   if (today >= due) return 1;
   const start = stepBack(due, rec);
   if (today <= start) return 0;
@@ -141,7 +164,7 @@ export function occurrenceProgress(rec: TaskRec, due: string, today: string): nu
  * connu d'avance, donc on ne montre que l'échéance courante plutôt que d'inventer
  * des dates.
  */
-export function taskOccursOn(task: TaskItem, date: string): boolean {
+export function taskOccursOn(task: RecTask, date: string): boolean {
   if (!task.due) return false;
   if (!task.rec) return task.due === date;
   if (date < task.due) return false;
@@ -151,8 +174,8 @@ export function taskOccursOn(task: TaskItem, date: string): boolean {
 }
 
 export const DOW_SHORT = ['', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
-export const FREQ_LABELS: Record<TaskRec['freq'], string> = { daily: 'Chaque jour', weekly: 'Chaque semaine', monthly: 'Chaque mois', yearly: 'Chaque année' };
-const EVERY_LABELS: Record<TaskRec['freq'], (n: number) => string> = {
+export const FREQ_LABELS: Record<RecRule['freq'], string> = { daily: 'Chaque jour', weekly: 'Chaque semaine', monthly: 'Chaque mois', yearly: 'Chaque année' };
+const EVERY_LABELS: Record<RecRule['freq'], (n: number) => string> = {
   daily: (n) => `Tous les ${n} jours`,
   weekly: (n) => `Toutes les ${n} semaines`,
   monthly: (n) => `Tous les ${n} mois`,
@@ -160,7 +183,7 @@ const EVERY_LABELS: Record<TaskRec['freq'], (n: number) => string> = {
 };
 
 /** « Toutes les 2 semaines (lun., jeu.) », « Chaque semaine après la réalisation, souplesse 3 j ». */
-export function recLabel(rec: TaskRec, fmt?: (iso: string) => string): string {
+export function recLabel(rec: RecRule, fmt?: (iso: string) => string): string {
   const n = Math.max(1, rec.every || 1);
   let s = n === 1 ? FREQ_LABELS[rec.freq] : EVERY_LABELS[rec.freq](n);
   if (rec.freq === 'weekly' && rec.base === 'due' && rec.days?.length) s += ' (' + rec.days.map((d) => DOW_SHORT[d]).join(', ') + ')';

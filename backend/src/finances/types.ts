@@ -63,6 +63,13 @@ export interface Transaction {
   /** Rule that last decided the category or label; null when set by hand. */
   ruleId: number | null;
   tags: string[];
+  /** Pour un virement interne : le compte de l'autre côté, s'il est connu. */
+  transferAccountId: number | null;
+}
+
+/** Du budget déplacé d'une enveloppe à une autre, pour un mois. Centimes, positif. */
+export interface BudgetMove {
+  id: number; month: string; fromCategoryId: number; toCategoryId: number; amount: number; createdAt: string;
 }
 
 /** Per-account coverage, used to flag incomplete months. */
@@ -110,6 +117,8 @@ export interface MonthFlow {
   previous: { month: string; categoryId: number | null; spentToDay: number }[];
   /** Ce que les contrats ont débité ce mois : une charge fixe payée. */
   contracts: { contractId: number; amount: number; date: string }[];
+  /** Les transferts de budget du mois, déjà comptés dans `MonthSummary.categories[].budget`. */
+  moves: BudgetMove[];
 }
 
 export const ACCOUNT_KINDS: AccountKind[] = ['courant', 'pro', 'epargne', 'credit'];

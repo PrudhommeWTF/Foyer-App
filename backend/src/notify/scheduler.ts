@@ -5,6 +5,7 @@
 // qui rend un redémarrage sans conséquence (rien n'est renvoyé deux fois) et
 // une longue coupure lisible (les rappels tombés pendant sont notés manqués).
 import type { TaskItem } from '../tasks/ops';
+import { ENTRETIEN_LIST_ID } from '../entretien/list';
 import { PushPayload, SendReport, notify, recordMissed } from './push';
 import { EmpMonthState, PrepList, PrepMember, QuietHours, ReminderHit, cesuDue, dueReminders, parisWall, preparationDue, previousMonth } from './reminders';
 
@@ -30,8 +31,10 @@ export interface SchedulerDeps {
    * le service.
    */
   rules: () => { paused: boolean; quiet: QuietHours };
-  /** Ce membre veut-il ce genre de rappel sur son téléphone ? */
-  wants: (memberId: string, kind: 'reminder' | 'assigned') => boolean;
+  /** Ce membre veut-il ce genre de rappel sur son téléphone ? `entretien` : les gestes de la liste Entretien. */
+  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien') => boolean;
+  /** Le module Entretien est-il actif ? Éteint, ses gestes ne rappellent plus (ils restent dans la base). */
+  entretienOn: () => boolean;
   log: (line: string) => void;
 }
 
@@ -54,15 +57,23 @@ export async function tick(deps: SchedulerDeps, nowWall = parisWall()): Promise<
   // de la période ne sont pas rattrapés, et l'écran le dit avant de suspendre.
   if (paused) return;
 
-  const { hits, missed } = dueReminders(deps.tasks(), deps.accounts(), nowWall, quiet);
+  // Les gestes d'entretien rappellent comme toute tâche, sauf que chacun choisit
+  // de les recevoir à part (entretienRappel), et qu'un module éteint les tait.
+  const all = deps.tasks();
+  const gestes = new Set(all.filter((t) => t.listId === ENTRETIEN_LIST_ID).map((t) => t.id));
+  const entretienOn = deps.entretienOn();
+  const tasks = entretienOn ? all : all.filter((t) => !gestes.has(t.id));
+  const wantsHit = (h: ReminderHit, m: string): boolean => deps.wants(m, gestes.has(h.taskId) ? 'entretien' : 'reminder');
+
+  const { hits, missed } = dueReminders(tasks, deps.accounts(), nowWall, quiet);
   for (const h of missed) {
-    const pour = h.memberIds.filter((m) => deps.wants(m, 'reminder'));
+    const pour = h.memberIds.filter((m) => wantsHit(h, m));
     if (!pour.length) continue;
     const n = recordMissed(h.key, pour, payloadOf(h, deps.url()));
     if (n) deps.log(`Notifications : rappel manqué pour « ${h.title} » (prévu ${h.fireAt.replace('T', ' ')}, service arrêté à ce moment-là).`);
   }
   for (const h of hits) {
-    const pour = h.memberIds.filter((m) => deps.wants(m, 'reminder'));
+    const pour = h.memberIds.filter((m) => wantsHit(h, m));
     if (!pour.length) continue;
     const parts = reached(await notify(h.key, pour, payloadOf(h, deps.url())));
     if (parts) deps.log(`Notifications : rappel « ${h.title} » (${h.fireAt.replace('T', ' ')}) → ${parts}`);

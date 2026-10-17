@@ -15,7 +15,7 @@ import { initRulesRepo, tagsFor } from './rules-repo';
 import { initSuggestRepo } from './suggest-repo';
 import { centsToDecimal, monthRange, normaliseLabel, shiftMonth } from './money';
 import {
-  Account, AccountCoverage, Category, CategorySummary, LoanTerms, MonthFlow, MonthSummary, Transaction, TxKind,
+  Account, AccountCoverage, BudgetMove, Category, CategorySummary, LoanTerms, MonthFlow, MonthSummary, Transaction, TxKind,
 } from './types';
 
 let database: Database;
@@ -88,13 +88,20 @@ interface TxRow {
   label_raw: string; label: string; category_id: number | null; contract_id: number | null;
   notes: string; cleared: number; transfer_group: string | null; import_id: number | null;
   rule_id: number | null;
+  /** Présent quand la requête l'a demandé (voir TX_SELECT). */
+  transfer_account_id?: number | null;
 }
 const toTransaction = (r: TxRow, tags: string[] = []): Transaction => ({
   id: r.id, accountId: r.account_id, date: r.date, amount: r.amount, kind: r.kind as TxKind,
   labelRaw: r.label_raw, label: r.label, categoryId: r.category_id, contractId: r.contract_id,
   notes: r.notes, cleared: !!r.cleared, transferGroup: r.transfer_group, importId: r.import_id,
-  ruleId: r.rule_id, tags,
+  ruleId: r.rule_id, tags, transferAccountId: r.transfer_account_id ?? null,
 });
+
+/** Une opération et, pour un virement, le compte de l'autre côté. */
+const TX_SELECT = `SELECT t.*, (SELECT x.account_id FROM fin_transactions x
+  WHERE t.transfer_group IS NOT NULL AND x.transfer_group = t.transfer_group AND x.id <> t.id LIMIT 1) AS transfer_account_id
+  FROM fin_transactions t`;
 
 // ---- accounts ------------------------------------------------------------
 export function listAccounts(): Account[] {
@@ -285,7 +292,21 @@ export function countChildren(id: number): number {
 // ---- transactions --------------------------------------------------------
 export interface TxFilter {
   from?: string; to?: string; accountId?: number; categoryId?: number;
-  uncategorised?: boolean; contractId?: number; q?: string; tag?: string; limit?: number; offset?: number;
+  uncategorised?: boolean; uncleared?: boolean; contractId?: number; q?: string; tag?: string; limit?: number; offset?: number;
+}
+
+/**
+ * Une recherche qui ressemble à un montant : « 241,30 » vise ce montant exact,
+ * « 241 » les montants de 241,00 à 241,99. Centimes, en valeur absolue ;
+ * null quand la saisie n'est pas un montant.
+ */
+export function amountQuery(q: string): { min: number; max: number } | null {
+  const m = /^[-−+]?\s*(\d{1,3}(?:[\s  ]?\d{3})*|\d+)(?:[.,](\d{1,2}))?\s*€?$/.exec(q.trim());
+  if (!m) return null;
+  const euros = Number(m[1].replace(/[\s  ]/g, ''));
+  if (m[2] === undefined) return { min: euros * 100, max: euros * 100 + 99 };
+  const cents = euros * 100 + Number(m[2].padEnd(2, '0'));
+  return { min: cents, max: cents };
 }
 
 function whereClause(f: TxFilter): { sql: string; params: unknown[] } {
@@ -295,10 +316,17 @@ function whereClause(f: TxFilter): { sql: string; params: unknown[] } {
   if (f.to) { parts.push('t.date <= ?'); params.push(f.to); }
   if (f.accountId) { parts.push('t.account_id = ?'); params.push(f.accountId); }
   if (f.categoryId) { parts.push('t.category_id = ?'); params.push(f.categoryId); }
-  if (f.uncategorised) parts.push('t.category_id IS NULL');
+  // « Sans catégorie » vise les dépenses : une recette ou un virement n'en ont jamais.
+  if (f.uncategorised) parts.push("t.category_id IS NULL AND t.kind = 'depense'");
+  if (f.uncleared) parts.push('t.cleared = 0');
   if (f.contractId) { parts.push('t.contract_id = ?'); params.push(f.contractId); }
   if (f.tag) { parts.push('t.id IN (SELECT tt.transaction_id FROM fin_transaction_tags tt JOIN fin_tags g ON g.id = tt.tag_id WHERE g.name = ?)'); params.push(f.tag); }
-  if (f.q) { parts.push("(fnorm(t.label) LIKE ? OR fnorm(t.label_raw) LIKE ? OR fnorm(t.notes) LIKE ?)"); const like = `%${normaliseLabel(f.q)}%`; params.push(like, like, like); }
+  if (f.q) {
+    const like = `%${normaliseLabel(f.q)}%`;
+    const amt = amountQuery(f.q);
+    parts.push(`(fnorm(t.label) LIKE ? OR fnorm(t.label_raw) LIKE ? OR fnorm(t.notes) LIKE ?${amt ? ' OR ABS(t.amount) BETWEEN ? AND ?' : ''})`);
+    params.push(like, like, like, ...(amt ? [amt.min, amt.max] : []));
+  }
   return { sql: parts.length ? 'WHERE ' + parts.join(' AND ') : '', params };
 }
 
@@ -308,14 +336,14 @@ export function listTransactions(f: TxFilter): { rows: Transaction[]; total: num
   const limit = Math.min(Math.max(f.limit ?? 200, 1), 1000);
   const offset = Math.max(f.offset ?? 0, 0);
   const rows = database.prepare(
-    `SELECT t.* FROM fin_transactions t ${sql} ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`,
+    `${TX_SELECT} ${sql} ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`,
   ).all(...params, limit, offset) as TxRow[];
   const tags = tagsFor(rows.map((r) => r.id));
   return { rows: rows.map((r) => toTransaction(r, tags.get(r.id) ?? [])), total };
 }
 
 export function getTransaction(id: number): Transaction | null {
-  const r = database.prepare('SELECT * FROM fin_transactions WHERE id = ?').get(id) as TxRow | undefined;
+  const r = database.prepare(`${TX_SELECT} WHERE t.id = ?`).get(id) as TxRow | undefined;
   return r ? toTransaction(r, tagsFor([id]).get(id) ?? []) : null;
 }
 
@@ -413,9 +441,11 @@ export function monthSummary(month: string, today = new Date().toISOString().sli
   const spentBy = new Map(spentRows.map((r) => [r.catId, r.spent]));
 
   const roots = (database.prepare('SELECT * FROM fin_categories WHERE parent_id IS NULL ORDER BY position, id').all() as CategoryRow[]).map(toCategory);
+  // Le budget du mois : la référence, plus ce que les transferts y ont ajouté ou retiré.
+  const net = movesNet(month, month);
   const categories: CategorySummary[] = roots.map((c) => ({
     categoryId: c.id, name: c.name, color: c.color, icon: c.icon,
-    budget: c.monthlyBudget, spent: spentBy.get(c.id) || 0,
+    budget: c.monthlyBudget + (net.get(c.id) ?? 0), spent: spentBy.get(c.id) || 0,
   }));
 
   const uncategorised = (database.prepare(`
@@ -481,7 +511,39 @@ export function monthFlow(month: string, today = new Date().toISOString().slice(
     SELECT contract_id AS contractId, SUM(-amount) AS amount, MAX(date) AS date FROM fin_transactions
     WHERE contract_id IS NOT NULL AND date >= ? AND date <= ? GROUP BY contract_id
   `).all(from, to) as MonthFlow['contracts'];
-  return { month, days, day, daily, previous, contracts };
+  return { month, days, day, daily, previous, contracts, moves: listBudgetMoves(month) };
+}
+
+// ---- budget moves ----------------------------------------------------------
+interface MoveRow { id: number; month: string; from_category_id: number; to_category_id: number; amount: number; created_at: string; }
+const toMove = (r: MoveRow): BudgetMove => ({
+  id: r.id, month: r.month, fromCategoryId: r.from_category_id, toCategoryId: r.to_category_id, amount: r.amount, createdAt: r.created_at,
+});
+
+export function listBudgetMoves(month: string): BudgetMove[] {
+  return (database.prepare('SELECT * FROM fin_budget_moves WHERE month = ? ORDER BY id').all(month) as MoveRow[]).map(toMove);
+}
+
+export function createBudgetMove(month: string, fromCategoryId: number, toCategoryId: number, amount: number): BudgetMove {
+  const info = database.prepare('INSERT INTO fin_budget_moves (month, from_category_id, to_category_id, amount) VALUES (?, ?, ?, ?)')
+    .run(month, fromCategoryId, toCategoryId, amount);
+  return toMove(database.prepare('SELECT * FROM fin_budget_moves WHERE id = ?').get(info.lastInsertRowid) as MoveRow);
+}
+
+export function deleteBudgetMove(id: number): boolean {
+  return database.prepare('DELETE FROM fin_budget_moves WHERE id = ?').run(id).changes > 0;
+}
+
+/** Solde des transferts par catégorie, de `from` à `to` (mois inclus) : entrants moins sortants. */
+export function movesNet(from: string, to: string): Map<number, number> {
+  const rows = database.prepare(`
+    SELECT cat, SUM(delta) AS net FROM (
+      SELECT to_category_id AS cat, amount AS delta FROM fin_budget_moves WHERE month >= ? AND month <= ?
+      UNION ALL
+      SELECT from_category_id AS cat, -amount AS delta FROM fin_budget_moves WHERE month >= ? AND month <= ?
+    ) GROUP BY cat
+  `).all(from, to, from, to) as { cat: number; net: number }[];
+  return new Map(rows.map((r) => [r.cat, r.net]));
 }
 
 /** Months that hold at least one operation, most recent first. */

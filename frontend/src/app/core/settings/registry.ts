@@ -271,6 +271,14 @@ export const REGISTRY = [
     default: false,
   },
   {
+    key: 'modEntretien',
+    type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
+    custom: true,
+    label: 'Entretien de la maison',
+    desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, la liste Entretien se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.',
+    default: true,
+  },
+  {
     key: 'modEquipements',
     type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
     custom: true,
@@ -324,6 +332,13 @@ export const REGISTRY = [
     type: 'bool', scope: 'personnel', section: 'notifications', module: 'Tâches',
     label: 'Sur le téléphone : quand on m’affecte une tâche',
     desc: 'Quelqu’un du foyer vous affecte une tâche : vous êtes prévenu tout de suite, sans attendre d’ouvrir l’application.',
+    default: true,
+  },
+  {
+    key: 'entretienRappel',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Entretien',
+    label: 'Sur le téléphone : rappels d’entretien',
+    desc: 'Le rappel d’un geste d’entretien (changer la cartouche, tester l’alarme) arrive sur vos appareils abonnés. Coupé, vous ne recevez plus ceux-là, les rappels de vos autres tâches continuent. Un geste jamais noté ne rappelle pas : on ne réclame pas ce dont on ignore la dernière fois.',
     default: true,
   },
   {

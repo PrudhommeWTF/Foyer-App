@@ -45,6 +45,7 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 | `quietTo` | Fin des heures de silence | Foyer | heure | `07:00` | HH:MM | Notifications | — |
 | `pushReminders` | Sur le téléphone : rappels de mes tâches | Personnel | oui / non | activé | — | Tâches | — |
 | `pushAssigned` | Sur le téléphone : quand on m’affecte une tâche | Personnel | oui / non | activé | — | Tâches | — |
+| `entretienRappel` | Sur le téléphone : rappels d’entretien | Personnel | oui / non | activé | — | Entretien | — |
 | `notifEvents` | Dans la cloche : agenda du jour et de demain | Personnel | oui / non | activé | — | Agenda | — |
 | `notifTasks` | Dans la cloche : tâches du jour et en retard | Personnel | oui / non | activé | — | Tâches | — |
 | `notifBirthdays` | Dans la cloche : anniversaires | Personnel | oui / non | activé | — | Contacts | — |
@@ -57,6 +58,7 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 - **Fin des heures de silence** (`quietTo`) : Heure à laquelle les rappels reprennent, et à laquelle arrivent ceux qui ont été reportés pendant la nuit.
 - **Sur le téléphone : rappels de mes tâches** (`pushReminders`) : Le rappel réglé sur une tâche datée (à l’heure, une heure avant, la veille au soir, le matin) arrive sur vos appareils abonnés. Coupé, la tâche garde son rappel mais vous ne le recevez plus.
 - **Sur le téléphone : quand on m’affecte une tâche** (`pushAssigned`) : Quelqu’un du foyer vous affecte une tâche : vous êtes prévenu tout de suite, sans attendre d’ouvrir l’application.
+- **Sur le téléphone : rappels d’entretien** (`entretienRappel`) : Le rappel d’un geste d’entretien (changer la cartouche, tester l’alarme) arrive sur vos appareils abonnés. Coupé, vous ne recevez plus ceux-là, les rappels de vos autres tâches continuent. Un geste jamais noté ne rappelle pas : on ne réclame pas ce dont on ignore la dernière fois.
 - **Dans la cloche : agenda du jour et de demain** (`notifEvents`) : Les événements d’aujourd’hui et de demain apparaissent dans la cloche en haut de l’écran.
 - **Dans la cloche : tâches du jour et en retard** (`notifTasks`) : Les tâches datées à faire aujourd’hui et celles qui ont dépassé leur échéance apparaissent dans la cloche.
 - **Dans la cloche : anniversaires** (`notifBirthdays`) : Les anniversaires des membres et des contacts, dans les sept jours qui viennent.
@@ -92,6 +94,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 | `modFinances` | Finances | Foyer | oui / non | activé | — | Foyer | — |
 | `modEmploye` | Employé à domicile | Foyer | oui / non | activé | — | Foyer | — |
 | `modEcole` | École (ÉcoleDirecte) | Foyer | oui / non | désactivé | — | Foyer | — |
+| `modEntretien` | Entretien de la maison | Foyer | oui / non | activé | — | Foyer | — |
 | `modEquipements` | Équipements | Foyer | oui / non | activé | — | Foyer | — |
 
 - **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
@@ -99,6 +102,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 - **Finances** (`modFinances`) : Les comptes, opérations, budgets et contrats. Désactivé, l’écran, la tuile d’accueil, les notifications, les repères d’agenda et l’accès API disparaissent ; les données relationnelles du module sont conservées.
 - **Employé à domicile** (`modEmploye`) : Le suivi des heures et la déclaration CESU. Désactivé, l’écran, les repères d’agenda, les rappels, l’accès API et les outils d’assistant disparaissent ; les employés et présences sont conservés.
 - **École (ÉcoleDirecte)** (`modEcole`) : Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.
+- **Entretien de la maison** (`modEntretien`) : Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, la liste Entretien se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.
 - **Équipements** (`modEquipements`) : Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.
 
 ## Les modules

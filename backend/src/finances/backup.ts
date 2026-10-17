@@ -24,7 +24,7 @@ const TABLES = [
   'fin_imports', 'fin_import_coverage',
   'fin_transactions', 'fin_tags', 'fin_transaction_tags',
   'fin_readings', 'fin_rules', 'fin_rule_conditions', 'fin_rule_actions',
-  'fin_savings', 'fin_attachments',
+  'fin_savings', 'fin_attachments', 'fin_budget_moves',
 ] as const;
 
 export interface ModuleBackup {

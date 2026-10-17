@@ -73,8 +73,10 @@ export type { ShopItem, ShopState } from './shopping/ops';
  * ou une checklist (valise, fournitures, idées) vit dans son propre onglet.
  * Une liste `devoirs` (« Devoirs de Nolan ») est créée et remplie par le module
  * École : elle ne se crée, ne se supprime ni ne se remplit à la main.
+ * La liste `entretien` est unique, partagée, et appartient au module Entretien :
+ * ses tâches sont les gestes d'entretien de la maison (voir entretien/list.ts).
  */
-export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation' | 'devoirs';
+export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation' | 'devoirs' | 'entretien';
 export interface TaskList {
   id: string; name: string; color: string; icon: string;
   kind: ListKind;
@@ -102,6 +104,12 @@ export interface TaskTemplate { id: string; name: string; kind: ListKind; color:
 export type { TaskItem } from './tasks/ops';
 // La forme des lieux et de leurs affaires vit avec le moteur qui les écrit.
 export type { Place, PlaceItem, PlaceItemState } from './places/ops';
+/**
+ * Une pièce de la maison (« Cuisine », « Garage », « Jardin »). Socle commun,
+ * hors de tout module : Entretien y range ses gestes, et Équipements y rangera
+ * ses appareils. Écrite par l'enregistrement du document, comme les listes.
+ */
+export interface Room { id: string; name: string; position: number; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 /**
  * Une carte de fidélité : un code partagé par tout le foyer, réaffiché à l'écran
@@ -212,6 +220,8 @@ export interface HouseholdState {
   /** Lieux de vacances et affaires qui y restent : écrits par opérations (voir places/ops.ts). */
   places: Place[];
   placeItems: PlaceItem[];
+  /** Pièces de la maison, socle commun (voir Room). */
+  rooms: Room[];
   contacts: Contact[];
   cards: LoyaltyCard[];
   meals: Record<string, MealValue>;

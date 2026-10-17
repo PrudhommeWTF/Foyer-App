@@ -34,6 +34,9 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Compiled backend + built frontend
 COPY --from=backend /build/backend/dist ./dist
+# Données livrées avec l'application (catalogue des gestes d'entretien), lues
+# depuis dist/ en ../config ; surchargeables dans FOYER_DATA_DIR.
+COPY --from=backend /build/backend/config ./config
 COPY --from=frontend /build/frontend/dist/frontend/browser ./public
 
 ENV PORT=8099

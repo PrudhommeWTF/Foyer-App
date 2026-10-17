@@ -10,7 +10,7 @@ export interface TaskListFields {
 }
 
 /** L'icône par défaut de chaque type : changer de type la propose, tant qu'on n'en a pas choisi une autre. */
-export const KIND_ICONS: Record<ListKind, string> = { taches: 'maison', corvees: 'checklist', checklist: 'checklist', preparation: 'valise', devoirs: 'ecole' };
+export const KIND_ICONS: Record<ListKind, string> = { taches: 'maison', corvees: 'checklist', checklist: 'checklist', preparation: 'valise', devoirs: 'ecole', entretien: 'outils' };
 
 export function taskListFields(l: TaskList | null): TaskListFields {
   if (!l) return { name: '', color: '#E56B4E', icon: KIND_ICONS.taches, kind: 'taches', scope: 'shared', order: 'echeance', forMember: null, departure: '', remind: 3, placeId: '' };

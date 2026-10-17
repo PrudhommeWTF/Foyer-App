@@ -2,7 +2,7 @@ import { Injectable, Injector, computed, effect, inject, signal, untracked } fro
 import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
-import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf } from './task-ops';
+import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf, lastDoneDay } from './task-ops';
 import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { downloadBlob } from './download';
@@ -592,6 +592,7 @@ export class FoyerStore {
     s.taskTemplates ||= [];
     s.places ||= [];
     s.placeItems ||= [];
+    s.rooms ||= [];
     s.cards ||= [];
     s.settings ||= householdDefaults();
     s.prefs ||= {};
@@ -1153,9 +1154,10 @@ export class FoyerStore {
   readonly modEquipements = computed(() => this.setting('modEquipements') !== false);
   // École est le seul module éteint par défaut : il faut l'avoir allumé.
   readonly modEcole = computed(() => this.setting('modEcole') === true);
+  readonly modEntretien = computed(() => this.setting('modEntretien') !== false);
   moduleOn(flag: ModuleFlag): boolean {
     return flag === 'modRepas' ? this.modRepas() : flag === 'modFidelite' ? this.modFidelite() : flag === 'modFinances' ? this.modFinances()
-      : flag === 'modEcole' ? this.modEcole() : flag === 'modEquipements' ? this.modEquipements() : this.modEmploye();
+      : flag === 'modEcole' ? this.modEcole() : flag === 'modEntretien' ? this.modEntretien() : flag === 'modEquipements' ? this.modEquipements() : this.modEmploye();
   }
   /** Un écran est-il accessible ? (module actif, ou écran hors module.) */
   screenEnabled(screen: string): boolean {
@@ -1727,7 +1729,8 @@ export class FoyerStore {
     const taskLists = op.op === 'reset'
       ? cur.taskLists.map((l) => (l.id === op.id ? { ...l, lastResetAt: op.at ?? new Date().toISOString() } : l))
       : cur.taskLists;
-    this._data.set({ ...cur, tasks: applyTaskOp(cur.tasks, op), taskLists });
+    const kindOf = (id: string) => cur.taskLists.find((l) => l.id === id)?.kind;
+    this._data.set({ ...cur, tasks: applyTaskOp(cur.tasks, op, kindOf), taskLists });
   }
 
   /** Empile une ou plusieurs opérations : affichage immédiat, envoi groupé. */
@@ -1790,7 +1793,9 @@ export class FoyerStore {
 
   /** Les listes que ce membre a le droit de voir. */
   visibleTaskLists(includeArchived = false): TaskList[] {
-    return visibleLists(this._data()?.taskLists || [], this.currentMemberId(), includeArchived);
+    // Module Entretien éteint : sa liste se cache dans Tâches (ses gestes sont gardés), pour ne pas surprendre.
+    const lists = visibleLists(this._data()?.taskLists || [], this.currentMemberId(), includeArchived);
+    return this.modEntretien() ? lists : lists.filter((l) => l.kind !== 'entretien');
   }
 
   /** La liste où atterrit une saisie : celle qui est ouverte, sinon la première liste « tâches » visible. */
@@ -1866,14 +1871,21 @@ export class FoyerStore {
     const t = this.task(id); if (!t) return;
     if (t.done) { this.taskOpWithUndo({ op: 'reopen', id, ...(t.rec ? { occ: t.due || '' } : {}) }, 'Tâche rouverte'); return; }
     const subs = this.subtasks(id);
-    if (t.rec && t.due) {
-      const next = nextOccurrence(t.rec, t.due, this.todayStr());
+    const today = this.todayStr();
+    // Un geste d'entretien se note une fois par jour : le second tap le dit au
+    // lieu de se taire (le serveur l'ignorerait de toute façon).
+    const geste = !!t.rec && this.data()?.taskLists.find((l) => l.id === t.listId)?.kind === 'entretien';
+    if (geste && lastDoneDay(t) === today) { this.toast('Déjà noté aujourd’hui'); return; }
+    // Une série a une échéance, sauf un geste d'entretien jamais noté : la
+    // cadence part alors d'aujourd'hui.
+    if (t.rec && (t.due || geste)) {
+      const next = nextOccurrence(t.rec, t.due || today, today);
       const msg = next ? 'Faite. Prochaine : ' + this.nextLabel(next) : 'Faite, la série s’arrête là';
       // Une série qui avance repart avec ses cases : les sous-tâches d'une
       // occurrence soldée sont celles de la suivante, à refaire.
       const remises = next ? subs.filter((sb) => sb.done) : [];
       this.taskOpsWithUndo(
-        [{ op: 'done', id, occ: t.due, next }, ...remises.map((sb) => ({ op: 'reopen' as const, id: sb.id }))],
+        [{ op: 'done', id, occ: t.due || '', next }, ...remises.map((sb) => ({ op: 'reopen' as const, id: sb.id }))],
         remises.length ? msg + ', cases remises à zéro' : msg,
       );
       return;
