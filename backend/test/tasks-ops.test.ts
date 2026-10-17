@@ -440,10 +440,7 @@ test('« reset » déjà appliqué est acquitté sans être rejoué (file hors l
 // Un geste d'entretien est une tâche de la liste Entretien. La coche est la même
 // opération `done` que partout ; ces tests fixent ce qu'elle fait de plus.
 
-const entCtx = (opts: { applied?: string[]; rooms?: string[] } = {}) => ({
-  ...ctx({ lists: ['l1', 'entretien'], kinds: { entretien: 'entretien' }, applied: opts.applied }),
-  roomIds: new Set(opts.rooms ?? ['p-cuisine']),
-});
+const entCtx = (opts: { applied?: string[] } = {}) => ctx({ lists: ['l1', 'entretien'], kinds: { entretien: 'entretien' }, applied: opts.applied });
 const brita = (over: Partial<TaskItem> = {}): TaskItem => ({
   id: 'g1', listId: 'entretien', text: 'Carafe Brita : changer la cartouche', who: [], due: null, done: false,
   rec: { freq: 'weekly', every: 4, base: 'done' }, remind: 'morning',
@@ -579,14 +576,14 @@ test('entretien : modifier la fiche ne réécrit jamais la quantité d’un stoc
   assert.equal(st?.article, 'Cartouche Brita MAXTRA PRO');
 });
 
-test('entretien : la création pose le stock donné, daté du jour ; une pièce inconnue tombe sans faire échouer', () => {
+test('entretien : la création pose le stock donné, daté du jour ; la pièce est gardée même si le document ne l’a pas encore', () => {
   const r = applyOps([], [op({
     op: 'add', id: 'g2', listId: 'entretien', text: 'Lave-vaisselle : sel', at: LE_17,
     rec: { freq: 'monthly', every: 1, base: 'done' },
     maintenance: { roomId: 'p-disparue', howto: 'Quand le voyant s’allume.', catalogId: 'lave-vaisselle-sel', stock: { qty: 2, unit: 'paquet', article: 'Sel régénérant' } },
   })], entCtx());
   const m = r.items[0].maintenance;
-  assert.equal(m?.roomId, undefined);
+  assert.equal(m?.roomId, 'p-disparue', 'la pièce créée en même temps arrive par le document, peut-être après');
   assert.equal(m?.howto, 'Quand le voyant s’allume.');
   assert.equal(m?.catalogId, 'lave-vaisselle-sel');
   assert.deepEqual(m?.stock, { article: 'Sel régénérant', unit: 'paquet', qty: 2, use: 1, threshold: 0, countedAt: '2026-10-17' });

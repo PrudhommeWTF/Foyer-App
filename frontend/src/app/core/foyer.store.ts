@@ -3,6 +3,7 @@ import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayl
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf, lastDoneDay } from './task-ops';
+import { ENTRETIEN_LIST_ID, GesteDraft, createOp, editOps, middayOf } from './entretien';
 import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { downloadBlob } from './download';
@@ -1734,9 +1735,9 @@ export class FoyerStore {
   }
 
   /** Empile une ou plusieurs opérations : affichage immédiat, envoi groupé. */
-  private pushTaskOps(ops: TaskOpDraft[]): void {
-    const by = this.me()?.id ?? null;
-    const at = new Date().toISOString();
+  private pushTaskOps(ops: TaskOpDraft[], stamp: { at?: string; by?: string | null } = {}): void {
+    const by = stamp.by !== undefined ? stamp.by : this.me()?.id ?? null;
+    const at = stamp.at ?? new Date().toISOString();
     const full = ops.map((o) => ({ ...o, opId: uid('op'), by, at }) as TaskOp);
     for (const op of full) this.applyTaskLocally(op);
     this.saveTaskQueue([...this.taskQueue(), ...full]);
@@ -1790,6 +1791,70 @@ export class FoyerStore {
   }
 
   task(id: string): TaskItem | undefined { return this._data()?.tasks.find((t) => t.id === id); }
+
+  // ---- entretien : des tâches de la liste Entretien (voir core/entretien.ts) --
+
+  /** Les gestes d'entretien, sous-tâches exclues. */
+  readonly gestes = computed(() => (this._data()?.tasks || []).filter((t) => t.listId === ENTRETIEN_LIST_ID && !t.parentId));
+  /** Les pièces de la maison (socle commun), dans leur ordre. */
+  readonly rooms = computed(() => (this._data()?.rooms || []).slice().sort((a, b) => a.position - b.position));
+  roomName(id: string | null | undefined): string { return id ? this.rooms().find((r) => r.id === id)?.name || '' : ''; }
+  /** Une pièce par son nom : celle qui existe (casse et accents ignorés), sinon une nouvelle. Rend son identifiant. */
+  ensureRoom(name: string): string | null {
+    const n = name.trim(); if (!n) return null;
+    const found = this.rooms().find((r) => normText(r.name) === normText(n));
+    if (found) return found.id;
+    const id = uid('p');
+    this.mutate((d) => { d.rooms = [...(d.rooms || []), { id, name: n, position: (d.rooms || []).length }]; });
+    return id;
+  }
+
+  /** Crée un geste ; une « dernière fois » connue est notée aussitôt comme une réalisation datée. */
+  createGeste(d: GesteDraft): void {
+    const id = uid('t');
+    this.pushTaskOps([createOp(d, id)]);
+    if (d.lastDone && !d.fixed) this.pushTaskOps([{ op: 'done', id, occ: '' }], { at: middayOf(d.lastDone) });
+    this.toast('Geste ajouté');
+  }
+  /** Modifie la fiche d'un geste (jamais la quantité d'un stock déjà là). */
+  saveGeste(id: string, d: GesteDraft): void {
+    const t = this.task(id); if (!t) return;
+    this.taskOpsWithUndo(editOps(t, d), 'Geste modifié');
+  }
+  /**
+   * « Fait un autre jour » : la date et la personne choisies, ou personne (« le
+   * foyer »). Aujourd'hui, c'est la coche ordinaire (toggleTask).
+   */
+  gesteFaitLe(id: string, day: string, by: string | null): void {
+    const t = this.task(id); if (!t?.rec || t.done) return;
+    const last = lastDoneDay(t);
+    if (last === day) { this.toast('Déjà noté ce jour-là'); return; }
+    if (last > day) { this.toast('Une réalisation plus récente est déjà notée, le ' + this.fmtNumDate(last)); return; }
+    const next = nextOccurrence(t.rec, t.due || day, day);
+    const op: TaskOpDraft = { op: 'done', id, occ: t.due || '', next };
+    const back = inverseOf(op, t);
+    this.pushTaskOps([op], { at: middayOf(day), by });
+    const msg = 'Noté au ' + this.fmtNumDate(day) + (next ? '. Prochaine : ' + this.fmtNumDate(next) : '');
+    if (back) this.toastWithUndo(msg, () => this.pushTaskOps([back])); else this.toast(msg);
+  }
+  /** En pause jusqu'à un jour (hivernage) : l'échéance y est posée, le geste revient seul. Null : reprendre aujourd'hui. */
+  pauseGeste(id: string, until: string | null): void {
+    const t = this.task(id); if (!t) return;
+    const today = this.todayStr();
+    this.taskOpWithUndo({ op: 'edit', id, due: until || today, maintenance: { pausedUntil: until } },
+      until ? 'En pause jusqu’au ' + this.fmtNumDate(until) : 'Geste repris');
+  }
+  /** Archiver : la série s'arrête sans réalisation, son historique reste. Réactiver : elle repart d'aujourd'hui. */
+  archiveGeste(id: string, archive: boolean): void {
+    const t = this.task(id); if (!t) return;
+    // Les annulations sont écrites ici : l'inverse générique d'un saut ne rouvre
+    // pas une série terminée, et celui d'une réouverture noterait une réalisation.
+    const today = this.todayStr();
+    const ops: TaskOpDraft[] = archive ? [{ op: 'skip', id, occ: t.due || '', next: null }] : [{ op: 'reopen', id }, { op: 'edit', id, due: today }];
+    const back: TaskOpDraft[] = archive ? [{ op: 'reopen', id }, { op: 'edit', id, due: t.due }] : [{ op: 'skip', id, occ: today, next: null }, { op: 'edit', id, due: t.due }];
+    this.pushTaskOps(ops);
+    this.toastWithUndo(archive ? 'Geste archivé' : 'Geste réactivé', () => this.pushTaskOps(back));
+  }
 
   /** Les listes que ce membre a le droit de voir. */
   visibleTaskLists(includeArchived = false): TaskList[] {

@@ -6,6 +6,7 @@ import { ITEM_KINDS, ItemKind } from '../../core/items';
 import { TaskItem } from '../../core/models';
 import { TaskView } from './task-view';
 import { TaskForm } from './task-form';
+import { ENTRETIEN_LIST_ID } from '../../core/entretien';
 
 export const TASK_ITEM: ItemKind<TaskItem, FoyerStore> = {
   meta: ITEM_KINDS.task,
@@ -30,10 +31,12 @@ export const TASK_ITEM: ItemKind<TaskItem, FoyerStore> = {
     : [{ label: 'Fait', icon: 'check', run: () => s.toggleTask(t.id) }],
   openIn: (s, t) => {
     if (t.edId && s.modEcole()) { s.go('ecole'); return; }
+    if (t.listId === ENTRETIEN_LIST_ID && s.modEntretien()) { s.go('entretien'); return; }
     s.go('taches');
     s.patch({ activeList: t.listId });
   },
-  openTarget: (t, s) => (t.edId && s.modEcole() ? { label: 'Voir dans École', screen: 'ecole' } : null),
+  openTarget: (t, s) => (t.edId && s.modEcole() ? { label: 'Voir dans École', screen: 'ecole' }
+    : t.listId === ENTRETIEN_LIST_ID && s.modEntretien() ? { label: 'Ouvrir dans Entretien', screen: 'entretien' } : null),
   fingerprint: (t) => JSON.stringify(t),
   changedBy: (t) => ({ by: t.upBy ?? t.by ?? null, at: t.upAt ?? t.at ?? null }),
 };
