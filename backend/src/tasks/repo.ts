@@ -50,7 +50,6 @@ export function applyTaskOps(ops: unknown, opts: { trusted?: boolean } = {}): Ap
       listKind: (id) => taskLists().find((l) => l['id'] === id)?.['kind'] as string | undefined,
       memberIds: idsOf(doc, 'members'),
       shopListIds: idsOf(doc, 'shopLists'),
-      roomIds: idsOf(doc, 'rooms'),
       alreadyApplied: (opId) => !!journal.get(opId),
       trusted: opts.trusted === true,
     });

@@ -41,9 +41,11 @@ maintenance?: {
 ```
 
 Refusés hors de la liste Entretien. Validés dans `backend/src/tasks/ops.ts`
-(les tâches ne passent pas par la validation du document). Une pièce inconnue
-tombe sans faire échouer le geste ; une quantité ou une date mal formée est
-refusée et nommée.
+(les tâches ne passent pas par la validation du document). La pièce n'est pas
+vérifiée contre `rooms` : une pièce créée avec le geste part par
+l'enregistrement du document, qui peut arriver après lui (hors ligne) ; une
+pièce qui n'arrive jamais est retirée à l'enregistrement suivant du document.
+Une quantité ou une date mal formée est refusée et nommée.
 
 `use` est ce qu'un geste consomme (un test des quatre détecteurs prend quatre
 piles). `countedAt` est le jour du dernier changement connu de la quantité :
