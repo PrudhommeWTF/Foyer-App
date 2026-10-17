@@ -38,28 +38,38 @@ describe('publication de l’image Docker', () => {
     assert.doesNotMatch(on, /branches|workflow_dispatch|pull_request|schedule/);
   });
 
-  it('packages: write reste limité aux deux jobs de l’image', () => {
+  it('packages: write reste limité aux jobs de l’image et de l’index', () => {
     const top = release.slice(0, release.indexOf('\njobs:'));
     assert.doesNotMatch(top, /^\s*packages:/m);
     for (const id of ['tag', 'checks', 'build', 'publish']) assert.doesNotMatch(job(release, id), /packages:/, id);
-    for (const id of ['image', 'image-tags']) assert.match(job(release, id), /packages: write/, id);
+    for (const id of ['image', 'manifest']) assert.match(job(release, id), /packages: write/, id);
   });
 
   it('les étiquettes et la release attendent que tout ait réussi', () => {
     assert.match(job(release, 'image'), /needs: \[tag, checks\]/);
     assert.match(job(release, 'image'), /push-by-digest=true/);
-    assert.match(job(release, 'image-tags'), /needs: \[tag, build, image\]/);
-    assert.match(job(release, 'publish'), /needs: \[tag, build, image, image-tags\]/);
+    assert.match(job(release, 'manifest'), /needs: \[tag, build, image\]/);
+    assert.match(job(release, 'publish'), /needs: \[tag, build, manifest\]/);
+  });
+
+  it('chaque architecture se construit sur son runner natif, sans émulation', () => {
+    // Plus de QEMU : son émulation arm64 de « npm ci » se figeait. Chaque archi
+    // part sur sa machine, et l'index les réunit.
+    assert.doesNotMatch(release, /setup-qemu-action/);
+    const img = job(release, 'image');
+    assert.match(img, /ubuntu-24\.04-arm/);
+    assert.match(img, /platforms: linux\/\$\{\{ matrix\.arch \}\}/);
+    assert.match(job(release, 'manifest'), /imagetools create/);
   });
 
   it('une préversion ne reçoit ni latest, ni mineure, ni majeure', () => {
-    const tags = job(release, 'image').split('\n').filter((l) => /type=(semver|raw)/.test(l));
+    const tags = job(release, 'manifest').split('\n').filter((l) => /type=(semver|raw)/.test(l));
     for (const l of tags) {
       if (/pattern=\{\{version\}\}/.test(l)) continue;
       const cond = /enable=\$\{\{ needs\.tag\.outputs\.prerelease (!=|==) 'true' \}\}/.exec(l)?.[1];
       if (/value=next/.test(l)) assert.equal(cond, '==', l);
       else assert.equal(cond, '!=', `${l.trim()} doit être réservée aux versions stables`);
     }
-    assert.match(job(release, 'image'), /flavor: latest=false/);
+    assert.match(job(release, 'manifest'), /flavor: latest=false/);
   });
 });
