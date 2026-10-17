@@ -126,11 +126,11 @@ export function visibleLists(lists: TaskList[], me: string | null, includeArchiv
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 }
 
-/** Les types qu'on choisit en créant une liste. `devoirs` n'en est pas : ces listes naissent du module École. */
+/** Les types qu'on choisit en créant une liste. Ni `devoirs` ni `entretien` : ces listes naissent de leur module. */
 export const KIND_ORDER: ListKind[] = ['taches', 'corvees', 'checklist', 'preparation'];
 /** L'ordre des types dans les puces : l'affaire du jour d'abord, devoirs compris. */
-export const KIND_SORT: ListKind[] = ['taches', 'devoirs', 'corvees', 'checklist', 'preparation'];
-export const KIND_LABELS: Record<ListKind, string> = { taches: 'Tâches', corvees: 'Corvées', checklist: 'Checklist', preparation: 'Préparation', devoirs: 'Devoirs ÉcoleDirecte' };
+export const KIND_SORT: ListKind[] = ['taches', 'devoirs', 'corvees', 'entretien', 'checklist', 'preparation'];
+export const KIND_LABELS: Record<ListKind, string> = { taches: 'Tâches', corvees: 'Corvées', checklist: 'Checklist', preparation: 'Préparation', devoirs: 'Devoirs ÉcoleDirecte', entretien: 'Entretien' };
 
 /**
  * Les tâches de l'affaire du jour : celles des listes « tâches » et « devoirs »

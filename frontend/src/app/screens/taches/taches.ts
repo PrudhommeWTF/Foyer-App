@@ -106,7 +106,7 @@ import { TaskComposerComponent } from './composer';
           @if (l.kind === 'devoirs' && store.screenEnabled('ecole')) {
             <button class="btn btn-soft sm" (click)="store.go('ecole')"><f-icon name="ecole" [size]="15" color="var(--ink2)" [width]="2.2" /> Écran École</button>
           }
-          @if (l.kind !== 'taches' && l.kind !== 'preparation' && l.kind !== 'devoirs') {
+          @if (l.kind === 'corvees' || l.kind === 'checklist') {
             <button class="btn btn-soft sm" (click)="store.uncheckAll(l.id)"><f-icon name="refresh" [size]="15" color="var(--ink2)" [width]="2.2" /> Tout décocher</button>
           }
         } @else {

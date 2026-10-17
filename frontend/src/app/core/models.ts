@@ -145,7 +145,7 @@ export interface PlaceItem {
  * sans peser sur la journée. C'est ce qui range « la tâche qui n'aurait jamais
  * dû en être une » : une liste d'idées est une checklist, hors du quotidien.
  */
-export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation' | 'devoirs';
+export type ListKind = 'taches' | 'corvees' | 'checklist' | 'preparation' | 'devoirs' | 'entretien';
 export interface TaskList {
   id: string; name: string; color: string; icon: string;
   kind: ListKind;
@@ -208,8 +208,25 @@ export interface TaskRec {
  * à l'heure de la tâche (9 h sans heure), une heure avant, la veille à 18 h, le matin à 9 h.
  */
 export type Remind = 'at' | '1h' | 'eve' | 'morning';
-/** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
-export interface TaskDone { at: string; by: string | null; due: string | null; }
+/**
+ * Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle
+ * soldait. `used` : ce qu'un geste d'entretien a pris dans son stock.
+ */
+export interface TaskDone { at: string; by: string | null; due: string | null; used?: number; }
+/**
+ * Le consommable d'un geste d'entretien (cartouche, filtre, piles) : `use` par
+ * geste fait, `countedAt` le jour du dernier changement connu de la quantité.
+ */
+export interface MaintenanceStock { qty: number; unit: string; use: number; threshold: number; article: string; countedAt: string; }
+/** Ce qu'une tâche de la liste Entretien porte en plus. Voir backend tasks/ops.ts. */
+export interface Maintenance { roomId?: string; howto?: string; stock?: MaintenanceStock; pausedUntil?: string; catalogId?: string; }
+/** Une modification des champs d'entretien : une clé absente n'est pas touchée, une clé à null est retirée. */
+export interface MaintenancePatch {
+  roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null;
+  stock?: (Omit<MaintenanceStock, 'countedAt'> & { countedAt?: string }) | null;
+}
+/** Une pièce de la maison, socle commun (Entretien y range ses gestes). */
+export interface Room { id: string; name: string; position: number; }
 /**
  * Une tâche. Elle ne voyage plus dans l'enregistrement du document : chaque
  * geste est une opération ciblée (voir task-ops.ts), ce qui rend impossible
@@ -270,6 +287,8 @@ export interface TaskItem {
    * (ord, id), jamais sur `ord` seul.
    */
   ord?: string;
+  /** Geste d'entretien (liste Entretien seulement) : pièce, détail, stock, pause. */
+  maintenance?: Maintenance;
 }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: ContactCat; color: string; urgent: boolean; birthday?: string | null; }
 /**
@@ -460,6 +479,8 @@ export interface HouseholdState {
   /** Lieux de vacances et affaires qui y restent : écrits par opérations (voir places.ops). */
   places: Place[];
   placeItems: PlaceItem[];
+  /** Pièces de la maison, socle commun. */
+  rooms: Room[];
   contacts: Contact[];
   cards: LoyaltyCard[];
   meals: Record<string, MealValue>;
