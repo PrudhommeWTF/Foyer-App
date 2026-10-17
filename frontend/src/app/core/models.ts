@@ -201,6 +201,8 @@ export interface TaskRec {
   base: 'due' | 'done';
   grace?: number;
   until?: string | null;
+  /** La saison, bornes comprises en MM-JJ : la série ne tombe que de `from` à `to` (voir recurrence.ts). */
+  season?: { from: string; to: string } | null;
 }
 /**
  * Le réglage de rappel d'une tâche. Aucun par défaut, réglé tâche par tâche.

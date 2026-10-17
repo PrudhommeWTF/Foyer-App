@@ -72,9 +72,9 @@ du geste, stock repris d'un coup, et l'historique garde « via un assistant ».
 |---|---|
 | `entretien_liste` | Les gestes d'entretien de la maison d'ici 7 jours (défaut, retards compris), en retard, ou tous, filtrables par pièce ou appareil : `[id]`, fréquence, dernière fois et par qui, prochaine date, stock |
 | `entretien_fait` (écriture) | Note un geste fait aujourd'hui (ou à une date), par le membre du jeton, un autre membre ou « le foyer ». Une seule réalisation par jour ; la prochaine date part du jour du geste ; le stock baisse |
-| `entretien_creer` (écriture) | Crée un geste : intitulé, fréquence en français (« tous les 6 mois »), pièce (créée au besoin), appareil, consommable. Il reste « pas encore noté » jusqu'à la première fois |
+| `entretien_creer` (écriture) | Crée un geste : intitulé, fréquence en français (« tous les 6 mois »), pièce (créée au besoin), appareil, consommable, et saison facultative (« de mai à septembre » ; avec « 1 fois par an », c'est une fenêtre : « à faire entre le 01/09 et le 31/10 »). Sans saison, il reste « pas encore noté » jusqu'à la première fois |
 | `entretien_stock` (écriture) | « J'en ai racheté 6 » (ajout) ou « il en reste 4 » (comptage), daté |
-| `entretien_pause` (écriture) | Met un geste en pause jusqu'à une date (hivernage) ; il revient seul |
+| `entretien_pause` (écriture) | Met un geste en pause jusqu'à une date (absence, panne) ; il revient seul. Pour ce qui revient chaque année, la saison est le bon outil |
 
 Écriture (jeton `write` seulement), par domaine :
 

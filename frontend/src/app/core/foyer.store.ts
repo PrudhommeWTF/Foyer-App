@@ -1847,7 +1847,7 @@ export class FoyerStore {
   /** Crée un geste ; une « dernière fois » connue est notée aussitôt comme une réalisation datée. */
   createGeste(d: GesteDraft): void {
     const id = uid('t');
-    this.pushTaskOps([createOp(d, id)]);
+    this.pushTaskOps([createOp(d, id, this.todayStr())]);
     if (d.lastDone && !d.fixed) this.pushTaskOps([{ op: 'done', id, occ: '' }], { at: middayOf(d.lastDone) });
     this.toast('Geste ajouté');
   }
@@ -1872,7 +1872,7 @@ export class FoyerStore {
     const msg = 'Noté au ' + this.fmtNumDate(day) + (next ? '. Prochaine : ' + this.fmtNumDate(next) : '');
     if (back) this.toastWithUndo(msg, () => this.pushTaskOps([back])); else this.toast(msg);
   }
-  /** En pause jusqu'à un jour (hivernage) : l'échéance y est posée, le geste revient seul. Null : reprendre aujourd'hui. */
+  /** En pause jusqu'à un jour (absence, panne ; une saison qui revient chaque année passe par rec.season) : l'échéance y est posée, le geste revient seul. Null : reprendre aujourd'hui. */
   pauseGeste(id: string, until: string | null): void {
     const t = this.task(id); if (!t) return;
     const today = this.todayStr();

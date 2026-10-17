@@ -503,16 +503,16 @@ const TOOLS: ToolDef[] = [
   {
     name: 'entretien_creer',
     write: true,
-    description: 'Crée un geste d’entretien qui revient à partir du jour où il est fait. `frequence` en français : « toutes les 4 semaines », « tous les 6 mois », « 1 fois par an », « tous les 5 ans ». `piece` : nom (créée si elle n’existe pas). `equipement` : nom d’un appareil du module Équipements. `stock` : { article, qte, unite, seuil } pour un consommable. Le geste reste « pas encore noté » jusqu’à entretien_fait.',
+    description: 'Crée un geste d’entretien qui revient à partir du jour où il est fait. `frequence` en français : « toutes les 4 semaines », « tous les 6 mois », « 1 fois par an », « tous les 5 ans ». `piece` : nom (créée si elle n’existe pas). `equipement` : nom d’un appareil du module Équipements. `stock` : { article, qte, unite, seuil } pour un consommable. `saison` facultative : « de mai à septembre » (le geste ne revient pas hors saison, la piscine) ; avec « 1 fois par an », c’est une fenêtre (« ramonage, 1 fois par an, de septembre à octobre » : à faire entre ces dates, en retard après). Sans saison, le geste reste « pas encore noté » jusqu’à entretien_fait.',
     inputSchema: {
       type: 'object',
       properties: {
-        titre: S.string(300), frequence: S.string(60), piece: S.string(60), equipement: S.string(120),
+        titre: S.string(300), frequence: S.string(60), saison: S.string(60), piece: S.string(60), equipement: S.string(120),
         stock: { type: 'object', properties: { article: S.string(120), qte: { type: 'integer', minimum: 0 }, unite: S.string(30), seuil: { type: 'integer', minimum: 0 } } },
       },
       required: ['titre', 'frequence'],
     },
-    run: (ctx, a) => en.entretienCreer(ctx, { titre: str(a.titre) || '', frequence: str(a.frequence) || '', piece: str(a.piece), equipement: str(a.equipement), stock: (a.stock && typeof a.stock === 'object' ? a.stock : undefined) as never }),
+    run: (ctx, a) => en.entretienCreer(ctx, { titre: str(a.titre) || '', frequence: str(a.frequence) || '', saison: str(a.saison), piece: str(a.piece), equipement: str(a.equipement), stock: (a.stock && typeof a.stock === 'object' ? a.stock : undefined) as never }),
   },
   {
     name: 'entretien_stock',
@@ -524,7 +524,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'entretien_pause',
     write: true,
-    description: 'Met un geste en pause jusqu’à une date (hivernage de la piscine) : il disparaît des échéances et revient seul ce jour-là. `jusqu_au` AAAA-MM-JJ.',
+    description: 'Met un geste en pause jusqu’à une date (absence, appareil en panne ; pour une saison qui revient chaque année, créez plutôt le geste avec une `saison`) : il disparaît des échéances et revient seul ce jour-là. `jusqu_au` AAAA-MM-JJ.',
     inputSchema: { type: 'object', properties: { id: S.string(300), jusqu_au: S.date }, required: ['id', 'jusqu_au'] },
     run: (ctx, a) => en.entretienPause(ctx, { id: str(a.id) || '', jusqu_au: str(a.jusqu_au) || '' }),
   },

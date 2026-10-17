@@ -192,6 +192,7 @@ interface TaskRec {
   base: 'due' | 'done'; // à date fixe, ou après la réalisation
   grace?: number;       // tolérance en jours avant d'être en retard
   until?: string | null;
+  season?: { from: string; to: string } | null; // MM-JJ : la série ne tombe que dans cette partie de l'année
 }
 // sur la tâche :
 rec?: TaskRec | null;
@@ -241,6 +242,24 @@ le 15 avril » avec quinze jours de souplesse est due du 15 au 30 avril, et en
 retard à partir du 1er mai. L'échéance s'affiche « vers le 15/04/2026 », et le
 retard se compte depuis la fin de la tolérance. C'est une échéance approximative
 plutôt qu'une fausse précision, sans plage à deux bornes.
+
+Une **fenêtre** annuelle (ramoner entre le 1er septembre et le 31 octobre) est
+exactement cela : une règle annuelle à date fixe, l'échéance au début de la
+fenêtre, la souplesse jusqu'à sa fin. Le formulaire d'un geste d'entretien la
+saisit par ses deux dates (« À partir du », « Au plus tard le ») ; le moteur
+n'a rien de plus à savoir.
+
+### La saison
+
+`season` (bornes comprises, en `MM-JJ`) limite une série répétée à une partie
+de l'année : le pH de la piscine chaque semaine, de mai à septembre. Une
+occurrence qui tomberait hors saison saute au **début de la saison suivante**
+(le 4 octobre devient le 1er mai) ; à date fixe, seules les dates de la règle
+qui tombent dans la saison comptent, au calendrier comme pour la suivante.
+Une saison peut passer le 31 décembre (`11-01` à `03-31`), et une borne au
+29 février tombe le 28 les autres années. Hors saison, rien ne court : la barre
+de progression reste vide jusqu'à la reprise, et aucun rappel ne part avant
+elle puisque l'échéance est la reprise.
 
 ### Cette occurrence, ou toute la série
 

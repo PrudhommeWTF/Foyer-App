@@ -19,14 +19,15 @@ Menu « Le foyer » → **Entretien**. Par défaut, les gestes par date :
 |---|---|
 | En retard | Échéance (plus sa souplesse) dépassée. |
 | Dans les N jours | À faire d'ici l'horizon du réglage `entretienHorizonJours` (14 par défaut). |
-| Plus tard | Au-delà, et les gestes en pause. |
+| Plus tard | Au-delà, les gestes en pause, et ceux de saison en attendant la reprise. |
 | Pas encore noté | Jamais faits : pas de date, jamais en retard. |
 | Archivés | Repliés en bas, avec « Réactiver ». |
 
 Le segment **Par pièce** range les mêmes gestes par pièce (« Sans pièce » en
 dernier). Chaque ligne dit le geste, son détail, la pièce, la fréquence en
 clair (« toutes les 4 semaines »), « Fait le … par … » ou « Pas encore noté »,
-la prochaine date ou la pause, le stock, et porte **Fait aujourd'hui** : un
+la prochaine date (« Reprend le 01/05/2027 » hors saison, « Entre le 01/09 et le
+31/10 » puis « À faire d'ici le 31/10 » pour une fenêtre) ou la pause, le stock, et porte **Fait aujourd'hui** : un
 tap, annulable quelques secondes (le bouton devient « ✓ Fait aujourd'hui »).
 Le menu « … » propose **Fait un autre jour** (date, et qui : un membre ou « le
 foyer »), **Modifier**, **Mettre en pause** jusqu'à une date (ou **Reprendre
@@ -35,10 +36,30 @@ maintenant**), **Archiver**, et la fiche avec l'historique complet.
 **Nouveau geste** ouvre le catalogue (recherche, rangé par famille) ou une
 fiche libre. Depuis le catalogue, tout est prérempli, pièce comprise (créée si
 elle n'existe pas) : choisir, puis « Créer le geste ». On y règle la
-fréquence (semaines, mois, années, ou date fixe avec souplesse), la pièce, le
+fréquence (semaines, mois, années, ou date fixe), la pièce, le
 détail, le stock, qui s'en charge, le rappel, et « Dernière fois » quand on la
 connaît (le geste part alors de cette date au lieu de rester « Pas encore
 noté »). La quantité d'un stock existant ne se modifie pas dans la fiche.
+
+### Saisons et fenêtres
+
+Deux besoins différents, deux réglages de la fiche :
+
+| Besoin | Exemple | Dans la fiche |
+|---|---|---|
+| Répété, mais seulement une partie de l'année | Le pH de la piscine chaque semaine, de mai à septembre | Semaines, mois ou années, puis « Seulement une partie de l'année » : de tel mois à tel mois. |
+| Une fois par an, dans une fenêtre | Ramoner entre le 1er septembre et le 31 octobre | « Date fixe », « À partir du » et « Au plus tard le ». |
+
+Un geste de **saison** ne revient pas hors saison : fait le 28 septembre, le
+suivant tombe le 1er mai, pas le 5 octobre, et il attend dans « Plus tard » en
+disant « Reprend le … », sans rappel d'ici là. Créé hors saison, il prend
+directement la date de reprise. La saison remplace la pause pour ce qui revient
+chaque année ; la pause reste pour l'imprévu (absence, appareil en panne).
+
+Un geste à **fenêtre** n'est en retard qu'après la fin de la fenêtre. C'est la
+souplesse du moteur de récurrence, saisie par sa date de fin (voir
+`docs/taches.md`, « La saison » et « La tolérance »). Fait dans la fenêtre, il
+revient au début de la fenêtre de l'année suivante.
 
 Dans **Tâches**, la liste Entretien a son onglet ; la fiche d'un geste y montre
 la pièce, le stock, le détail et toutes ses réalisations, avec « Ouvrir dans
@@ -134,8 +155,12 @@ geste choisi est une copie modifiable. Livré dans
 (tout membre, 403 quand le module est éteint).
 
 Chaque entrée : `id`, `titre`, `howto`, `famille` (regroupe la liste de choix),
-`piece` (suggérée), `rec` (`freq`, `every`, `base`, `grace`), et `article`
-éventuel (`nom`, `unite`, `use`, `seuil`). `pieces` : les pièces proposées au
+`piece` (suggérée), `rec` (`freq`, `every`, `base`, `grace`, `season`), et
+`article` éventuel (`nom`, `unite`, `use`, `seuil`). `season`
+(`{ "from": "05-01", "to": "09-30" }`) est la saison d'un geste répété
+(`base: "done"`), ou la **fenêtre** d'un geste à date fixe (`base: "due"`) :
+à la création, elle devient la prochaine échéance (la fenêtre qui court, sinon
+la suivante) et sa souplesse. `pieces` : les pièces proposées au
 premier usage.
 
 ### L'adapter à votre foyer
