@@ -187,7 +187,7 @@ describe('transactions', () => {
     assert.equal(repo.listTransactions({ from: '2026-08-01', to: '2026-08-31' }).total, 2);
     assert.equal(repo.listTransactions({ accountId: perso }).total, 1);
     assert.equal(repo.listTransactions({ categoryId: loisirs }).total, 1);
-    assert.equal(repo.listTransactions({ uncategorised: true }).total, 2);
+    assert.equal(repo.listTransactions({ uncategorised: true }).total, 1, '« sans catégorie » : les dépenses seules, pas la rémunération');
     assert.equal(repo.listTransactions({ q: 'carrefour' }).total, 1, 'la recherche ignore la casse');
     assert.equal(repo.listTransactions({ q: 'chateau' }).total, 1);
     assert.equal(repo.listTransactions({ q: 'château' }).total, 1, 'la recherche ignore les accents');

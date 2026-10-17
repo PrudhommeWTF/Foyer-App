@@ -6,9 +6,9 @@ import {
   FinAttachment, FinDeadline, FinEnergySummary, FinHome, FinImport, FinImportPreview, FinImportSuggestion, FinOwnerKind,
   FinPeriod, FinPeriodicity, FinReading, FinSaving, FinSavingStatus, FinSavingsTotals,
   FinLoanView, FinMonthSummary, FinRule, FinRuleInput, FinRulePreview, FinTag, FinTransfer,
-  FinTransferCandidate, FinTransaction, FinancesApi, TxKind, FinFlow,
+  FinTransferCandidate, FinTransaction, FinancesApi, TxKind, FinFlow, FinInstalment,
 } from './finances.api';
-import { BudgetProposal, fixedCharges, remainingToFinish } from './finances-plan';
+import { BudgetProposal, daysLeft, envelopes, fixedCharges, remainingToFinish } from './finances-plan';
 import { DayExtra, FoyerStore, SearchHit } from './foyer.store';
 import { Notif } from './models';
 import { CAL_KINDS } from './constants';
@@ -35,7 +35,7 @@ export interface FinancesUi {
 
   // transaction filters
   fltQuery: string; fltAccount: number | null; fltCategory: number | null;
-  fltUncategorised: boolean; fltTag: string; fltContract: number | null; page: number;
+  fltUncategorised: boolean; fltUncleared: boolean; fltTag: string; fltContract: number | null; page: number;
 
   // transaction form
   txForm: boolean; txId: number | null;
@@ -43,10 +43,16 @@ export interface FinancesUi {
   txAccount: number | null; txCategory: number | null; txContract: number | null;
   txNotes: string; txCleared: boolean;
   txDelId: number | null;
+  /** L'opération ouverte est un virement interne : elle le reste à l'enregistrement. */
+  txTransfer: boolean;
   /** Catégorie suggérée pour le libellé en cours (advisory), ou null. */
   txSuggest: { categoryId: number; via: 'merchant' | 'similar'; seen: number } | null;
 
+  // envelope sheet: the envelope open, its budget being edited, a transfer being typed
+  envId: number | null; envBudget: string | null; mvFrom: number | null; mvAmount: string;
+
   // account form
+  acShowArchived: boolean;
   acForm: boolean; acId: number | null;
   acName: string; acKind: AccountKind; acMembers: string[]; acOpening: string; acOpeningDate: string; acArchived: boolean;
   acPrincipal: string; acRate: string; acPayment: string; acInsurance: string; acFirstOn: string;
@@ -108,10 +114,11 @@ export interface FinancesUi {
 function initialUi(month: string): FinancesUi {
   return {
     tab: 'apercu', orgTab: 'categories', menuOpen: false, month,
-    fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0,
+    fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltUncleared: false, fltTag: '', fltContract: null, page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
-    txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null, txSuggest: null,
-    acForm: false, acId: null, acName: '', acKind: 'courant', acMembers: [], acOpening: '',
+    txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null, txTransfer: false, txSuggest: null,
+    envId: null, envBudget: null, mvFrom: null, mvAmount: '',
+    acShowArchived: false, acForm: false, acId: null, acName: '', acKind: 'courant', acMembers: [], acOpening: '',
     acPrincipal: '', acRate: '', acPayment: '', acInsurance: '', acFirstOn: '',
     acOpeningDate: '', acArchived: false, acAliasInput: '', acDelId: null,
     catForm: false, catId: null, catName: '', catBudget: '', catColor: '#7A9B76', catIcon: 'facture',
@@ -208,6 +215,12 @@ export class FinancesStore {
   readonly classifyHint = signal<{ txId: number; categoryId: number } | null>(null);
   /** Moyennes des trois derniers mois complets, quand aucune enveloppe n'existe encore. */
   readonly completeMonths = signal<FinMonthSummary[]>([]);
+  /** Opérations du mois affiché pas encore pointées sur un relevé. */
+  readonly unclearedCount = signal(0);
+  /** Dépenses du mois de l'enveloppe ouverte (sous-catégories comprises). */
+  readonly envOps = signal<FinTransaction[]>([]);
+  /** Tableau d'amortissement par compte de crédit, chargé à la demande. */
+  readonly schedules = signal<Record<number, FinInstalment[]>>({});
   /** Summary of the month we are actually in, for notifications and the home tile. */
   readonly currentSummary = signal<FinMonthSummary | null>(null);
   readonly searchHits = signal<SearchHit[]>([]);
@@ -475,6 +488,7 @@ export class FinancesStore {
     this.coverage.set([]); this.months.set([]); this.aliases.set([]);
     this.transactions.set([]); this.total.set(0); this.summary.set(null);
     this.history.set({}); this.flow.set(null); this.toClassify.set([]); this.classifyHint.set(null); this.completeMonths.set([]);
+    this.unclearedCount.set(0); this.envOps.set([]); this.schedules.set({});
     this.currentSummary.set(null); this.searchHits.set([]); this.dashboard.set(null);
     this.assets.set([]); this.contracts.set([]); this.deadlines.set([]); this.costs.set({});
     this.pieces.set({}); this.attachments.set([]);
@@ -555,6 +569,7 @@ export class FinancesStore {
         accountId: u.fltAccount ?? undefined,
         categoryId: u.fltCategory ?? undefined,
         uncategorised: u.fltUncategorised || undefined,
+        uncleared: u.fltUncleared || undefined,
         contractId: u.fltContract ?? undefined,
         tag: u.fltTag || undefined,
         q: u.fltQuery.trim() || undefined,
@@ -591,14 +606,16 @@ export class FinancesStore {
     const month = this.ui().month;
     try {
       const { from, to } = this.monthBounds(month);
-      const [{ flow }, tx] = await Promise.all([
+      const [{ flow }, tx, uncleared] = await Promise.all([
         this.api.flow(month),
         this.api.transactions({ from, to, uncategorised: true, limit: 1000 }),
+        this.api.transactions({ from, to, uncleared: true, limit: 1 }),
       ]);
       if (this.ui().month !== month) return;
       this.flow.set(flow);
-      // Une recette ou un virement n'a jamais de catégorie : seules les dépenses sont « à classer ».
-      this.toClassify.set(tx.rows.filter((t) => t.kind === 'depense'));
+      this.unclearedCount.set(uncleared.total);
+      // « Sans catégorie » ne ramène que des dépenses : une recette ou un virement n'en ont jamais.
+      this.toClassify.set(tx.rows);
       await Promise.all([this.loadClassifyHint(), this.envelopeCount() ? Promise.resolve() : this.loadCompleteMonths()]);
     } catch (e) { this.error.set((e as Error).message); }
   }
@@ -681,7 +698,7 @@ export class FinancesStore {
   /** Open the Finances screen filtered on a search hit's label. */
   openSearchHit(h: SearchHit): void {
     this.foyer.go('finances');
-    this.patch({ tab: 'operations', fltQuery: h.title, fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0 });
+    this.patch({ tab: 'operations', fltQuery: h.title, fltAccount: null, fltCategory: null, fltUncategorised: false, fltUncleared: false, fltTag: '', fltContract: null, page: 0 });
     void this.reloadTransactions();
   }
 
@@ -690,7 +707,7 @@ export class FinancesStore {
     void this.reloadTransactions();
   }
   clearFilters(): void {
-    this.patch({ fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', fltContract: null, page: 0 });
+    this.patch({ fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltUncleared: false, fltTag: '', fltContract: null, page: 0 });
     void this.reloadTransactions();
   }
   /** True when the active filters make the month bounds meaningless. */
@@ -700,7 +717,7 @@ export class FinancesStore {
   });
   readonly hasFilters = computed(() => {
     const u = this.ui();
-    return !!(u.fltQuery.trim() || u.fltAccount || u.fltCategory || u.fltUncategorised || u.fltTag || u.fltContract);
+    return !!(u.fltQuery.trim() || u.fltAccount || u.fltCategory || u.fltUncategorised || u.fltUncleared || u.fltTag || u.fltContract);
   });
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / PAGE_SIZE)));
   goPage(p: number): void {
@@ -716,8 +733,9 @@ export class FinancesStore {
       tab: 'operations', menuOpen: false, txForm: true, txId: null, txLabel: '', txAmount: '', txSign: 'out',
       txDate: this.isCurrentMonth() ? today : from,
       txAccount: this.ui().fltAccount ?? this.activeLedgerAccounts()[0]?.id ?? null,
-      txCategory: null, txContract: null, txNotes: '', txCleared: false, txSuggest: null,
+      txCategory: null, txContract: null, txNotes: '', txCleared: false, txTransfer: false, txSuggest: null,
     });
+    this.attachments.set([]);
   }
 
   editTx(id: number): void {
@@ -726,9 +744,24 @@ export class FinancesStore {
     this.patch({
       txForm: true, txId: t.id, txLabel: t.label, txAmount: fmtEuros(Math.abs(t.amount)),
       txSign: t.amount < 0 ? 'out' : 'in', txDate: t.date, txAccount: t.accountId,
-      txCategory: t.categoryId, txContract: t.contractId, txNotes: t.notes, txCleared: t.cleared, txSuggest: null,
+      txCategory: t.categoryId, txContract: t.contractId, txNotes: t.notes, txCleared: t.cleared,
+      txTransfer: t.kind === 'virement', txSuggest: null,
     });
+    this.attachments.set([]);
+    void this.loadAttachments('transaction', t.id);
   }
+
+  /** La transaction affichée dans la liste, pour la fiche. */
+  readonly openTx = computed(() => { const id = this.ui().txId; return id ? this.transactions().find((t) => t.id === id) ?? null : null; });
+
+  /** La catégorie racine d'une catégorie : c'est elle qui porte l'enveloppe. */
+  rootOf(id: number | null): number | null {
+    const c = id ? this.categories().find((x) => x.id === id) : null;
+    return c ? (c.fixed ? c.id : c.parentId ?? c.id) : null;
+  }
+
+  /** Les enveloppes du mois affiché, triées par tension (voir finances-plan). */
+  readonly envelopes = computed(() => { const f = this.flow(); return f ? envelopes(this.categories(), f) : []; });
 
   /**
    * Saisie du libellé : on met à jour le champ, et on demande une catégorie
@@ -773,11 +806,14 @@ export class FinancesStore {
     if (!u.txDate) { this.foyer.toast('Choisissez une date'); return; }
     const signed = u.txSign === 'out' ? -Math.abs(cents) : Math.abs(cents);
 
+    // Un virement interne le reste : réécrit en dépense ou en recette, il
+    // compterait dans les dépenses tout en restant apparié à l'autre compte.
+    const spend = u.txSign === 'out' && !u.txTransfer;
     const payload = {
       accountId: u.txAccount, date: u.txDate, amount: (signed / 100).toFixed(2),
-      kind: (u.txSign === 'out' ? 'depense' : 'recette') as TxKind,
-      label, categoryId: u.txSign === 'out' ? u.txCategory : null,
-      contractId: u.txSign === 'out' ? u.txContract : null,
+      kind: (u.txTransfer ? 'virement' : u.txSign === 'out' ? 'depense' : 'recette') as TxKind,
+      label, categoryId: spend ? u.txCategory : null,
+      contractId: spend ? u.txContract : null,
       notes: u.txNotes.trim(), cleared: u.txCleared,
     };
     this.patch({ busy: true });
@@ -786,11 +822,82 @@ export class FinancesStore {
       else await this.api.createTransaction(payload);
       this.patch({ txForm: false, txId: null, busy: false });
       await this.afterWrite();
-      this.foyer.toast(u.txId ? 'Opération modifiée' : 'Opération ajoutée');
+      this.foyer.toast(u.txId ? 'Opération modifiée' : this.addedToast(spend ? u.txCategory : null, u.txDate));
     } catch (e) {
       this.patch({ busy: false });
       this.foyer.toast((e as Error).message);
     }
+  }
+
+  /** « Ajouté · Alimentation · il reste 305 € pour 14 jours » quand la dépense tombe dans une enveloppe du mois affiché. */
+  private addedToast(categoryId: number | null, date: string): string {
+    const f = this.flow();
+    const e = this.envelopes().find((x) => x.categoryId === this.rootOf(categoryId));
+    if (!f || !e || date.slice(0, 7) !== f.month) return 'Opération ajoutée';
+    if (e.left < 0) return `Ajouté · ${e.name} · enveloppe dépassée de ${fmtEurosInt(-e.left)} €`;
+    const days = daysLeft(f);
+    return `Ajouté · ${e.name} · il reste ${fmtEurosInt(e.left)} € pour ${days} jour${days > 1 ? 's' : ''}`;
+  }
+
+  // ---- envelopes ---------------------------------------------------------
+  /** Ouvre la fiche d'une enveloppe : ses dépenses du mois, sous-catégories comprises. */
+  async openEnvelope(id: number): Promise<void> {
+    this.patch({ envId: id, envBudget: null, mvFrom: null, mvAmount: '' });
+    this.envOps.set([]);
+    await this.loadEnvOps(id);
+  }
+
+  private async loadEnvOps(id: number): Promise<void> {
+    const { from, to } = this.monthBounds(this.ui().month);
+    try {
+      const { rows } = await this.api.transactions({ from, to, limit: 1000 });
+      this.envOps.set(rows.filter((t) => t.kind === 'depense' && t.categoryId !== null && this.rootOf(t.categoryId) === id));
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Modifie le budget de référence d'une enveloppe, depuis sa fiche. */
+  async saveEnvelopeBudget(): Promise<void> {
+    const u = this.ui();
+    const c = this.categories().find((x) => x.id === u.envId);
+    const cents = parseEuros(u.envBudget ?? '');
+    if (!c || cents === null) { this.foyer.toast('Budget invalide, par exemple 900'); return; }
+    try {
+      await this.api.updateCategory(c.id, { parentId: c.parentId, name: c.name, monthlyBudget: (Math.abs(cents) / 100).toFixed(2), color: c.color, icon: c.icon });
+      this.patch({ envBudget: null });
+      await this.afterWrite();
+      this.foyer.toast(`Budget de référence : ${fmtEurosInt(Math.abs(cents))} € par mois`);
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Transfère du budget d'une autre enveloppe vers celle qui est ouverte, pour le mois affiché. */
+  async moveBudget(): Promise<void> {
+    const u = this.ui();
+    const cents = parseEuros(u.mvAmount);
+    if (!u.envId || !u.mvFrom) { this.foyer.toast('Choisissez l’enveloppe d’où vient le budget'); return; }
+    if (cents === null || cents <= 0) { this.foyer.toast('Saisissez un montant, par exemple 50'); return; }
+    try {
+      await this.api.createBudgetMove({ month: u.month, fromCategoryId: u.mvFrom, toCategoryId: u.envId, amount: (cents / 100).toFixed(2) });
+      this.patch({ mvFrom: null, mvAmount: '' });
+      await this.afterWrite();
+      this.foyer.toast(`${fmtEurosInt(cents)} € transférés depuis « ${this.categoryPath(u.mvFrom)} »`);
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  async deleteBudgetMove(id: number): Promise<void> {
+    try {
+      await this.api.deleteBudgetMove(id);
+      await this.afterWrite();
+      this.foyer.toast('Transfert annulé');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Charge le tableau d'amortissement d'un crédit, une fois. */
+  async loadSchedule(accountId: number, force = false): Promise<void> {
+    if (this.schedules()[accountId] && !force) return;
+    try {
+      const { instalments } = await this.api.loanSchedule(accountId);
+      this.schedules.update((m) => ({ ...m, [accountId]: instalments }));
+    } catch (e) { this.foyer.toast((e as Error).message); }
   }
 
   async confirmTxDel(): Promise<void> {
@@ -809,7 +916,11 @@ export class FinancesStore {
 
   /** Anything that changes money reloads the list, the balances and the summary. */
   private async afterWrite(): Promise<void> {
+    // Des termes de prêt modifiés changent l'échéancier : il se rechargera à l'affichage.
+    this.schedules.set({});
+    const env = this.ui().envId;
     await Promise.all([
+      env ? this.loadEnvOps(env) : Promise.resolve(),
       this.reloadTransactions(), this.reloadSummary(), this.refreshReference(), this.reloadPlan(),
       this.dashboard() ? this.loadDashboard() : Promise.resolve(),
       this.loadContracts(),
@@ -1362,7 +1473,7 @@ export class FinancesStore {
 
   /** Filter the operation list on a tag, from the rules tab. */
   filterByTag(name: string): void {
-    this.patch({ tab: 'operations', fltTag: name, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltContract: null, page: 0 });
+    this.patch({ tab: 'operations', fltTag: name, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltUncleared: false, fltContract: null, page: 0 });
     void this.reloadTransactions();
   }
 
@@ -1525,7 +1636,7 @@ export class FinancesStore {
 
   /** Show the operations attached to a contract, over the whole history. */
   openContractOperations(id: number): void {
-    this.patch({ tab: 'operations', fltContract: id, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltTag: '', page: 0 });
+    this.patch({ tab: 'operations', fltContract: id, fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltUncleared: false, fltTag: '', page: 0 });
     void this.reloadTransactions();
   }
 

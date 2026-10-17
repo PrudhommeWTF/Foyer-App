@@ -17,7 +17,7 @@ import { ChartTip, FinTip, eur } from './tip';
   imports: [IconComponent, FinTip],
   template: `
     @let e = env();
-    <div class="ev" [class.over]="e.left < 0" tabindex="0" [attr.aria-label]="aria()"
+    <div class="ev" [class.over]="e.left < 0" tabindex="0" role="button" [attr.aria-label]="aria() + ', ouvrir la fiche'"
          (pointermove)="tip.at($event, host, tipValue(), tipLabel())" (pointerleave)="tip.hide()"
          (focus)="tip.on($event.target, host, tipValue(), tipLabel())" (blur)="tip.hide()">
       <div class="top">
@@ -33,7 +33,7 @@ import { ChartTip, FinTip, eur } from './tip';
       </div>
       <div class="meter"><span [style.width.%]="fill()"></span><i [style.left]="'calc(' + pace() * 100 + '% - 1px)'"></i></div>
       <div class="per">
-        @if (e.left < 0) { Budget de {{ eur(e.budget) }} dépassé }
+        @if (e.left < 0) { Budget de {{ eur(e.budget) }} dépassé · transférer depuis une autre ? }
         @else if (current()) { {{ eur(e.perDay) }} / jour · sur {{ eur(e.budget) }} }
         @else { {{ eur(e.spent) }} sur {{ eur(e.budget) }} }
       </div>
@@ -42,7 +42,8 @@ import { ChartTip, FinTip, eur } from './tip';
   `,
   styles: [`
     :host { display: block; position: relative; }
-    .ev { border: 1.5px solid var(--line); border-radius: 16px; padding: 13px 14px; background: var(--surface); outline: none; height: 100%; box-sizing: border-box; }
+    .ev { border: 1.5px solid var(--line); border-radius: 16px; padding: 13px 14px; background: var(--surface); outline: none; height: 100%; box-sizing: border-box; cursor: pointer; }
+    .ev:hover { border-color: var(--line2); }
     .ev:focus-visible { border-color: var(--ink3); }
     .top { display: flex; align-items: center; gap: 9px; min-width: 0; }
     .ic { width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; flex: none; }

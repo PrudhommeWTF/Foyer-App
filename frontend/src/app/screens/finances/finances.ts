@@ -11,6 +11,7 @@ import { FinancesContractsTab } from './contracts-tab';
 import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
 import { FinMonthNav } from './month-nav';
+import { FinEnvelopeSheet } from './envelope-sheet';
 import { AlertComponent } from '../../shared/alert';
 import { SheetComponent } from '../../shared/sheet';
 import { eur } from './charts/tip';
@@ -34,7 +35,7 @@ const ORG_TABS: { id: FinOrgTab; label: string }[] = [
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    IconComponent, AlertComponent, SheetComponent, FinMonthNav, FinancesApercu, FinancesTransactionsTab, FinancesTendances,
+    IconComponent, AlertComponent, SheetComponent, FinMonthNav, FinEnvelopeSheet, FinancesApercu, FinancesTransactionsTab, FinancesTendances,
     FinancesAccountsTab, FinancesCategoriesTab, FinancesContractsTab, FinancesRulesTab, FinancesImportTab,
   ],
   template: `
@@ -101,6 +102,8 @@ const ORG_TABS: { id: FinOrgTab; label: string }[] = [
         }
       }
     </div>
+
+    @if (ui().envId) { <fin-envelope-sheet /> }
 
     @if (ui().menuOpen) {
       <f-sheet heading="Finances" (close)="store.patch({ menuOpen: false })" (back)="store.patch({ menuOpen: false })">

@@ -144,6 +144,7 @@ describe('charges fixes', () => {
     contract(ancien, { status: 'resilie' });
     // On rejoue une base arrêtée à la migration 5.
     db.exec('ALTER TABLE fin_categories DROP COLUMN fixed');
+    db.exec('DROP TABLE fin_budget_moves');
     db.prepare("UPDATE fin_meta SET value = '5' WHERE key = 'schema_version'").run();
     migrateFinances(db);
     const fixed = repo.listCategories().filter((c) => c.fixed).map((c) => c.id);
