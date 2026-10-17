@@ -9,6 +9,8 @@ import { GROUP_ORDER, GesteGroup, freqLabel, gesteGroup, groupLabel, lastDoneLab
 import { lastDoneDay } from '../../core/task-ops';
 import { GesteForm } from './geste-form';
 import { EquipementsStore } from '../../core/equipements.store';
+import { EntretienApi } from '../../core/entretien.api';
+import { FinancesStore, fmtEurosInt } from '../../core/finances.store';
 
 /** Une section de l'écran : un groupe de dates, ou une pièce. */
 interface Section { key: string; title: string; gestes: TaskItem[]; late?: boolean; }
@@ -32,6 +34,11 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
           <f-icon name="plus" [size]="17" color="#fff" [width]="2.6" /> Nouveau geste
         </button>
       </div>
+      @if (couts(); as c) {
+        <p class="couts">Environ <b>{{ eur(c.forecast) }} € par an</b> prévus, {{ eur(c.real12) }} € dépensés sur 12 mois.
+          @if (store.modFinances()) { <button type="button" class="lien" (click)="voirFinances()">Le détail dans Finances</button> }
+        </p>
+      }
 
       @if (actifs().length) {
         <div class="seg tri" role="group" aria-label="Ranger les gestes">
@@ -75,6 +82,7 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
           <span class="g-meta">
             @if (store.roomName(t.maintenance?.roomId); as r) { <span class="room"><f-icon name="home" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ r }}</span> }
             @if (t.rec) { <span>{{ freq(t) }}</span> }
+            @if (coutAn(t); as c) { <span>{{ c }}</span> }
           </span>
           @if (eqpName(t); as e) {
             <span class="eqp" role="link" (click)="$event.stopPropagation(); store.openItem('equipment', '' + t.maintenance?.equipmentId)">{{ e }}</span>
@@ -165,6 +173,9 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
   styles: [`
     .head-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
     .intro { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; margin: 2px 0; }
+    .couts { font-size: 13px; font-weight: 700; color: var(--ink2); background: var(--soft); border-radius: 12px; padding: 10px 13px; margin: 0 0 12px; line-height: 1.5; }
+    .couts b { color: var(--ink); }
+    .lien { border: none; background: none; padding: 0; font: inherit; font-weight: 800; color: var(--primary); cursor: pointer; text-decoration: underline; }
     .new-btn { flex: none; display: inline-flex; align-items: center; gap: 7px; }
     .tri { margin-bottom: 6px; }
     .sec-title { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 9px; }
@@ -249,6 +260,19 @@ export class EntretienScreen {
     return out.filter((s) => s.gestes.length);
   });
   readonly menuGeste = computed(() => { const id = this.menuId(); return id ? this.store.task(id) ?? null : null; });
+
+  private readonly api = inject(EntretienApi);
+  private readonly fin = inject(FinancesStore);
+  readonly eur = fmtEurosInt;
+  constructor() { if (!this.store.isChild()) void this.api.chargerCouts(); }
+  /** Le bilan des coûts, pour les adultes, dès qu'un geste est chiffré. */
+  readonly couts = computed(() => { const s = this.api.couts(); return !this.store.isChild() && s?.gestes.length ? s.totals : null; });
+  /** « ≈ 195 €/an », ou « sous contrat » : adultes seulement (le serveur ne sert pas les montants aux enfants). */
+  coutAn(t: TaskItem): string {
+    const c = this.store.isChild() || t.done ? undefined : this.api.cout(t.id);
+    return !c ? '' : c.contractId !== null ? 'sous contrat' : c.forecast ? `≈ ${fmtEurosInt(c.forecast)} €/an` : '';
+  }
+  voirFinances(): void { this.fin.goTab('contrats'); this.fin.patch({ contratsTab: 'entretien' }); this.store.go('finances'); }
 
   private fmt = (d: string): string => this.store.fmtNumDate(d);
   freq(t: TaskItem): string { return t.rec ? freqLabel(t.rec) : ''; }

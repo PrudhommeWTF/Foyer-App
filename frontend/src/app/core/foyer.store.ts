@@ -1844,11 +1844,16 @@ export class FoyerStore {
     return id;
   }
 
-  /** Crée un geste ; une « dernière fois » connue est notée aussitôt comme une réalisation datée. */
-  createGeste(d: GesteDraft): void {
+  /**
+   * Crée un geste ; une « dernière fois » connue est notée aussitôt comme une
+   * réalisation datée. `avant` passe entre les deux : le coût du geste, que le
+   * serveur doit connaître avant la réalisation pour la chiffrer.
+   */
+  createGeste(d: GesteDraft, avant?: (id: string) => Promise<unknown>): void {
     const id = uid('t');
     this.pushTaskOps([createOp(d, id, this.todayStr())]);
-    if (d.lastDone && !d.fixed) this.pushTaskOps([{ op: 'done', id, occ: '' }], { at: middayOf(d.lastDone) });
+    const fait = (): void => { if (d.lastDone && !d.fixed) this.pushTaskOps([{ op: 'done', id, occ: '' }], { at: middayOf(d.lastDone) }); };
+    if (avant) void avant(id).finally(fait); else fait();
     this.toast('Geste ajouté');
   }
   /** Modifie la fiche d'un geste (jamais la quantité d'un stock déjà là). */

@@ -4,7 +4,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskRec } from './models';
-import { addMonthsClamped, inSeason, isSeasonDay, nextOccurrence, occurrenceProgress, recLabel, seasonLabel, seasonStart, seasonWindow, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
+import { addMonthsClamped, inSeason, isSeasonDay, nextOccurrence, occurrencesPerYear, occurrenceProgress, recLabel, seasonLabel, seasonStart, seasonWindow, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
 
 const rec = (over: Partial<TaskRec> = {}): TaskRec => ({ freq: 'weekly', every: 1, base: 'due', ...over });
 
@@ -207,4 +207,14 @@ test('la barre reste vide hors saison, jusqu’à la reprise', () => {
   const r = rec({ base: 'done', season: { from: '05-01', to: '09-30' } });
   assert.equal(occurrenceProgress(r, '2027-05-01', '2027-01-10'), 0);
   assert.ok(occurrenceProgress(r, '2027-05-08', '2027-05-05') > 0.5);
+});
+
+test('passages par an : la cadence, ou la règle déroulée quand une saison s’en mêle', () => {
+  assert.equal(occurrencesPerYear(rec({ base: 'done', every: 4 }), '2026-10-17'), 13);
+  assert.equal(occurrencesPerYear(rec({ freq: 'monthly', every: 6, base: 'done' }), '2026-10-17'), 2);
+  assert.equal(occurrencesPerYear(rec({ freq: 'yearly', every: 2, base: 'due' }), '2026-10-17'), 0.5);
+  const piscine = occurrencesPerYear(rec({ base: 'done', season: { from: '05-01', to: '09-30' } }), '2026-10-17');
+  assert.ok(piscine >= 21 && piscine <= 23, `la piscine de mai à septembre : ~22 fois, reçu ${piscine}`);
+  const deux = occurrencesPerYear(rec({ days: [1, 4] }), '2026-10-19');
+  assert.ok(deux >= 104 && deux <= 105, `lundi et jeudi : deux fois par semaine, reçu ${deux}`);
 });

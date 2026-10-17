@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { FoyerStore } from '../../core/foyer.store';
-import { FinancesStore } from '../../core/finances.store';
+import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
+import { EntretienApi } from '../../core/entretien.api';
 import { IconComponent } from '../../core/icon';
 import { StampComponent } from '../../shared/stamp';
 import { WhoComponent } from '../../shared/who';
@@ -66,6 +67,12 @@ import { parisDay } from '../../core/task-ops';
         <div class="row">
           <span class="ic"><f-icon name="panier" [size]="18" color="#7A9B76" [width]="2.2" /></span>
           <div class="txt"><div class="main">{{ stock() }}</div><div class="sub">{{ m.stock.article }} · {{ m.stock.use }} par geste, racheter à partir de {{ m.stock.threshold }}</div></div>
+        </div>
+      }
+      @if (cout(); as c) {
+        <div class="row">
+          <span class="ic"><f-icon name="budget" [size]="18" color="#7A9B76" [width]="2.2" /></span>
+          <div class="txt"><div class="main">{{ c.main }}</div>@if (c.sub) { <div class="sub">{{ c.sub }}</div> }</div>
         </div>
       }
       @if (m.howto) { <div class="note">{{ m.howto }}</div> }
@@ -146,6 +153,19 @@ import { parisDay } from '../../core/task-ops';
 export class TaskView {
   readonly store = inject(FoyerStore);
   private readonly fin = inject(FinancesStore);
+  private readonly entApi = inject(EntretienApi);
+  /** Ce que coûte un geste d'entretien : adultes seulement, lu à part (les montants ne sont pas dans le document). */
+  readonly cout = computed(() => {
+    const t = this.item();
+    if (!t.maintenance || this.store.isChild()) return null;
+    this.entApi.assurer();
+    const c = this.entApi.cout(t.id);
+    if (!c) return null;
+    const contrat = c.contractId !== null ? this.entApi.couts()?.contracts.find((x) => x.id === c.contractId)?.name : '';
+    const main = c.contractId !== null ? `Couvert par le contrat « ${contrat || '?'} »` : c.forecast ? `Environ ${fmtEurosInt(c.forecast)} € par an` : 'Pas de coût prévu';
+    const sub = [c.amount ? `${fmtEuros(c.amount)} € à chaque fois` : '', c.real12 ? `${fmtEurosInt(c.real12)} € sur 12 mois` : ''].filter(Boolean).join(' · ');
+    return { main, sub };
+  });
   readonly item = input.required<TaskItem>();
   readonly ctx = input<ItemCtx | undefined>(undefined);
 

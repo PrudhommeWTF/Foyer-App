@@ -7,6 +7,8 @@ import { ModalComponent } from '../../shared/modal';
 import { CatalogueEntry, GesteDraft, catalogueByFamily, draftFromCatalogue, draftOf, freqLabel, draftRec, stockLabel } from '../../core/entretien';
 import { REMIND_LABELS } from '../../core/tasks';
 import { addDaysIso, normText } from '../../core/helpers';
+import { occurrencesPerYear } from '../../core/recurrence';
+import { fmtEuros, fmtEurosInt, parseEuros } from '../../core/finances.store';
 import { Remind } from '../../core/models';
 import { EquipementsStore } from '../../core/equipements.store';
 
@@ -123,6 +125,26 @@ import { EquipementsStore } from '../../core/equipements.store';
           </div>
         }
 
+        @if (!store.isChild()) {
+          <div class="field-label">Coût <span class="opt">(facultatif, visible des adultes seulement)</span></div>
+          @let contrats = store.modFinances() ? api.couts()?.contracts ?? [] : [];
+          @if (contrats.length) {
+            <select class="input mb-s" aria-label="Contrat qui couvre le geste" [ngModel]="contratId() ?? ''" (ngModelChange)="contratId.set($event ? +$event : null)">
+              <option value="">Payé à chaque fois</option>
+              @for (c of contrats; track c.id) { <option [value]="c.id">Couvert par le contrat « {{ c.name }} »{{ c.provider ? ' (' + c.provider + ')' : '' }}</option> }
+            </select>
+          }
+          @if (contratId() === null) {
+            <div class="every cout">
+              <input class="input" inputmode="decimal" placeholder="0,00" aria-label="Coût à chaque fois, en euros" [ngModel]="cout()" (ngModelChange)="cout.set($event)" />
+              <span>€ à chaque fois</span>
+            </div>
+            <div class="hint">{{ prevision() || 'La cartouche, le ramonage : noté à chaque réalisation, au prix du moment, et totalisé dans Finances.' }}</div>
+          } @else {
+            <div class="hint">Déjà compté dans le contrat : le geste n’ajoute rien à la dépense.</div>
+          }
+        }
+
         <div class="field-label">Qui s'en charge</div>
         <div class="chips">
           <button type="button" class="chip-o" [class.on]="!v.who.length" (click)="set({ who: [] })">Le premier qui passe</button>
@@ -170,6 +192,9 @@ import { EquipementsStore } from '../../core/equipements.store';
     .seg.wrap { flex-wrap: wrap; }
     .every { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; font-weight: 800; color: var(--ink2); }
     .num { width: 82px; text-align: center; }
+    .mb-s { margin-bottom: 10px; }
+    .cout { margin-top: 0; }
+    .cout .input { width: 120px; text-align: right; }
     .saison { margin: 0 0 4px; }
     .saison select { flex: 1; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
@@ -205,6 +230,19 @@ export class GesteForm implements OnInit {
   /** Une pièce à créer à l'enregistrement, quand celle du catalogue (ou saisie) n'existe pas encore. */
   readonly roomNew = signal('');
   readonly erreur = signal('');
+  /** Le coût saisi, en euros (texte), et le contrat qui couvre le geste. Adultes seulement. */
+  readonly cout = signal('');
+  readonly contratId = signal<number | null>(null);
+  private coutInitial = '';
+  private contratInitial: number | null = null;
+  /** « Environ 195 € par an (13 fois) », d'après la fréquence saisie. */
+  readonly prevision = computed(() => {
+    const c = parseEuros(this.cout());
+    if (!c || c <= 0) return '';
+    const n = occurrencesPerYear(draftRec(this.f()), this.f().fixedDate || this.store.todayStr());
+    const fois = Math.round(n * 10) / 10;
+    return `Environ ${fmtEurosInt(Math.round(c * n))} € par an (${String(fois).replace('.', ',')} fois).`;
+  });
 
   readonly titre = computed(() => (this.id() ? 'Modifier le geste' : 'Nouveau geste'));
   readonly familles = computed(() => { const c = this.api.catalogue(); return c ? catalogueByFamily(c, this.q()) : []; });
@@ -215,9 +253,17 @@ export class GesteForm implements OnInit {
 
   ngOnInit(): void {
     const t = this.id() ? this.store.task(this.id()!) : undefined;
+    if (!this.store.isChild()) void this.api.chargerCouts().then(() => this.lireCout());
     if (t) { this.f.set(draftOf(t)); return; }
     this.choix.set(true);
     void this.api.charger();
+  }
+
+  private lireCout(): void {
+    const c = this.id() ? this.api.cout(this.id()!) : undefined;
+    this.coutInitial = c?.amount ? fmtEuros(c.amount) : '';
+    this.contratInitial = c?.contractId ?? null;
+    this.cout.set(this.coutInitial); this.contratId.set(this.contratInitial);
   }
 
   freq(g: CatalogueEntry): string { return freqLabel({ freq: g.rec.freq, every: g.rec.every, base: g.rec.base }); }
@@ -260,9 +306,15 @@ export class GesteForm implements OnInit {
     if (!v.text.trim()) { this.erreur.set('Dites quel est le geste.'); return; }
     if (v.fixed && !v.fixedDate) { this.erreur.set('Une date fixe demande la prochaine date.'); return; }
     if (v.stock && !v.stock.article.trim()) { this.erreur.set('Dites ce que le geste consomme, ou décochez le stock.'); return; }
+    const montant = this.contratId() === null && this.cout().trim() ? parseEuros(this.cout()) : null;
+    if (this.contratId() === null && this.cout().trim() && (montant === null || montant <= 0)) { this.erreur.set('Un coût s’écrit en euros : 15 ou 15,90.'); return; }
     const roomId = this.roomNew().trim() ? this.store.ensureRoom(this.roomNew()) : v.roomId;
     const d = { ...v, roomId };
-    if (this.id()) this.store.saveGeste(this.id()!, d); else this.store.createGeste(d);
+    const chiffrer = !this.store.isChild() && (this.cout().trim() !== this.coutInitial || this.contratId() !== this.contratInitial);
+    const enregistrer = (id: string): Promise<void> => this.api.setCout(id, montant, this.contratId(), () => this.store.flushTaskQueue())
+      .then((ok) => { if (!ok) this.store.toast('Le coût n’a pas pu être enregistré : réessayez une fois en ligne.'); });
+    if (this.id()) { this.store.saveGeste(this.id()!, d); if (chiffrer) void enregistrer(this.id()!); }
+    else this.store.createGeste(d, chiffrer ? enregistrer : undefined);
     this.close.emit();
   }
 }

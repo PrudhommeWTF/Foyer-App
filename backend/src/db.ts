@@ -9,6 +9,8 @@ import { initEmployesRepo } from './employes/repo';
 import { migrateEcole } from './ecole/schema';
 import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
+import { migrateEntretien } from './entretien/schema';
+import { initCosts } from './entretien/costs';
 import { initEquipementsRepo, referencedFileIds as eqpFileIds } from './equipements/repo';
 import { adoptSharedRooms } from './equipements/rooms';
 import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
@@ -162,6 +164,9 @@ initPlaces(db);
 // de hh_attachments, et le ménage ci-dessous doit les voir avant de balayer.
 migrateEquipements(db);
 initEquipementsRepo(db);
+// Les coûts des gestes d'entretien : hors du document, qui part aussi aux enfants.
+migrateEntretien(db);
+initCosts(db);
 migrateHouseholdDocument();
 // Après le document : les pièces d'Équipements rejoignent le socle Maison.
 adoptSharedRooms(db);

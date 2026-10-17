@@ -23,6 +23,15 @@ export type StockAlertHook = (taskIds: string[], meta: { by: string | null; via:
 let stockAlertHook: StockAlertHook | null = null;
 export function onStockAlerts(fn: StockAlertHook | null): void { stockAlertHook = fn; }
 
+/**
+ * Appelé **dans** la transaction d'un lot, avec les tâches avant et après :
+ * ce qui doit être écrit avec le lot ou pas du tout. Le module Entretien y
+ * inscrit le coût des réalisations (entretien/costs.ts).
+ */
+export type CommitHook = (before: TaskItem[], after: TaskItem[]) => void;
+let commitHook: CommitHook | null = null;
+export function onTaskCommit(fn: CommitHook | null): void { commitHook = fn; }
+
 /** Au-delà, le journal des opérations est élagué : c'est une mémoire courte contre les rejeux, pas un historique. */
 const OPS_JOURNAL_MAX = 2000;
 
@@ -91,6 +100,7 @@ export function applyTaskOps(ops: unknown, opts: { trusted?: boolean } = {}): Ap
       doc['taskLists'] = taskLists().map((l) => (byId.has(l['id']) ? { ...l, lastResetAt: byId.get(l['id']) } : l));
     }
     const nextVersion = writeDoc(doc);
+    commitHook?.(before, result.items);
 
     const remember = database.prepare('INSERT OR IGNORE INTO hh_task_ops (op_id) VALUES (?)');
     for (const opId of result.applied) remember.run(opId);

@@ -26,7 +26,7 @@ import { cap, pad2 } from './helpers';
 export type FinTab = 'apercu' | 'operations' | 'tendances' | 'comptes' | 'contrats' | 'organiser';
 export type FinOrgTab = 'categories' | 'regles' | 'import' | 'donnees';
 /** Contrats : la liste des biens et contrats, les échéances, les pistes d'économies. */
-export type FinContratsTab = 'contrats' | 'echeances' | 'economies';
+export type FinContratsTab = 'contrats' | 'echeances' | 'economies' | 'entretien';
 
 export interface FinancesUi {
   tab: FinTab;
@@ -191,7 +191,7 @@ export function frMonthLabel(month: string): string {
 }
 
 /** Parse a typed amount into cents; null when nothing numeric was entered. */
-function parseEuros(v: string): number | null {
+export function parseEuros(v: string): number | null {
   const s = String(v ?? '').replace(/[\s  €]/g, '').replace(',', '.');
   if (!s || !/^-?\d*\.?\d*$/.test(s) || !/\d/.test(s)) return null;
   return Math.round(parseFloat(s) * 100);
