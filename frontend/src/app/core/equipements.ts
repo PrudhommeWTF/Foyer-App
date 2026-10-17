@@ -3,6 +3,8 @@
 import type { Room } from './models';
 import type { EqpFields, EqpItem } from './equipements.api';
 import type { WarrantyState } from './warranty';
+import type { DayExtra } from './agenda';
+import { CAL_KINDS } from './constants';
 
 /** Minuscules, sans accents ni espaces : « ab 12 CD » trouve « AB12cd ». Les tirets comptent. Même règle que le serveur. */
 export const eqpNorm = (s: string): string => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, '');
@@ -42,6 +44,38 @@ export const WARRANTY_TONE: Record<WarrantyState, { bg: string; fg: string }> = 
   hors_garantie: { bg: 'var(--soft2)', fg: 'var(--ink3)' },
   inconnue: { bg: 'var(--soft)', fg: 'var(--ink3)' },
 };
+
+/**
+ * Les repères d'agenda : au dernier jour couvert de chaque garantie encore en
+ * cours, pour les appareils toujours là (en service ou en panne). Une garantie
+ * inconnue ou déjà finie ne pose rien : l'agenda regarde devant.
+ */
+export function warrantyDayExtras(items: EqpItem[]): Record<string, DayExtra[]> {
+  const out: Record<string, DayExtra[]> = {};
+  for (const it of items) {
+    const w = it.warranty;
+    if (!w.until || (w.state !== 'sous_garantie' && w.state !== 'expire_bientot')) continue;
+    if (it.archivedAt || (it.status !== 'en_service' && it.status !== 'en_panne')) continue;
+    (out[w.until] ??= []).push({ kind: 'garantie', label: 'Fin de garantie', color: CAL_KINDS['garantie'].color, sub: it.name });
+  }
+  return out;
+}
+
+/**
+ * La ligne de la tuile d'accueil : ce qui demande d'agir (appareils en panne,
+ * garanties qui expirent dans le délai d'alerte), sinon le simple compte.
+ */
+export function homeLine(items: EqpItem[], alertDays: number): string {
+  const live = items.filter((i) => !i.archivedAt);
+  const panne = live.filter((i) => i.status === 'en_panne').length;
+  const expire = live.filter((i) => i.warranty.state === 'expire_bientot' && (i.status === 'en_service' || i.status === 'en_panne')).length;
+  const parts = [
+    panne ? `${panne} appareil${panne > 1 ? 's' : ''} en panne` : '',
+    expire ? `${expire} garantie${expire > 1 ? 's expirent' : ' expire'} dans les ${alertDays} jours` : '',
+  ].filter(Boolean);
+  if (parts.length) return parts.join(' · ');
+  return live.length ? `${live.length} fiche${live.length > 1 ? 's' : ''}, rien à signaler` : 'Aucune fiche';
+}
 
 /** Les pièces proposées quand le foyer n'en a encore aucune. */
 export const STARTER_ROOM_NAMES = ['Cuisine', 'Salon', 'Salle de bain', 'Chambre 1', 'Chambre 2', 'Bureau', 'Buanderie', 'Garage', 'Cave', 'Extérieur'];

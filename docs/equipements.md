@@ -8,7 +8,7 @@ Le module se livre en trois tranches. Ce document décrit ce qui existe **aujour
 |---|---|---|
 | 1 | Tables `eqp_*`, fichiers, API, calcul de garantie, réglages, sauvegarde | **livrée** |
 | 2 | Pièces partagées avec Entretien, écran (liste groupée par pièce, recherche, filtres, fiche, prise de vue iPhone), menu « + », recherche globale | **livrée** |
-| 3 | Rappels de fin de garantie, repères d'agenda, tuile d'accueil, outils d'assistant, export pour l'assurance | à venir |
+| 3 | Rappels de fin de garantie, repères d'agenda, tuile d'accueil, outils d'assistant, export pour l'assurance | **livrée** |
 
 ## L'écran
 
@@ -32,9 +32,42 @@ Menu, groupe « Le foyer », **Équipements**.
 
 **Photos** : réduites dans le navigateur à 2 000 px de côté, en JPEG, avant l'envoi. Le redessin efface les métadonnées EXIF, position GPS comprise. Safari sur iPhone lit le HEIC et l'envoie converti ; Chrome ou Firefox sur Mac ne savent pas le lire et le disent, avec la marche à suivre (Aperçu, Exporter en JPEG).
 
+**Menu ⋯, « Pour l'assurance »** (adultes) : la liste en PDF, la liste en tableur (CSV), ou la liste et les factures dans un zip. Voir [Export pour l'assurance](#export-pour-lassurance).
+
 **Recherche globale** (loupe en haut) : les équipements y répondent par désignation, marque, modèle ou numéro de série ; « Somfy » trouve l'alarme.
 
 Un enfant voit l'écran et les fiches, sans numéro de série, prix, vendeur ni coût, sans facture ni plaque, et sans aucun bouton d'écriture.
+
+## Ce qui prévient
+
+- **Rappel sur le téléphone**, aux adultes qui ont gardé « Sur le téléphone : fins de garantie » (Paramètres, Notifications, activé par défaut) : quand il reste moins de `eqpGarantieAlerteJours` jours (60 par défaut) avant la fin d'une garantie, à partir de 9 h. **Une seule fois par appareil et par date de fin** : la clé du journal d'envoi est `eqp-garantie|<id>|<date de fin>`, si bien qu'une garantie prolongée prévient à nouveau, et qu'un réglage changé ne fait pas repartir un rappel déjà reçu. Un tap ouvre la fiche. Un enfant n'en reçoit jamais ; « Suspendre tous les rappels du foyer » les coupe comme les autres.
+- **Repère d'agenda** au dernier jour de chaque garantie en cours (« Fin de garantie », avec le nom de l'appareil), pour les appareils encore là (en service ou en panne). Ce n'est pas un événement : rien n'est écrit dans l'agenda, et le flux ICS ne le porte pas.
+- **Tuile d'accueil** « Équipements » : ce qui demande d'agir d'abord (« 1 appareil en panne · 2 garanties expirent dans les 60 jours »), sinon « 12 fiches, rien à signaler ». Un tap ouvre l'écran.
+
+Les trois disparaissent quand le module est éteint.
+
+## Export pour l'assurance
+
+Réservé aux adultes (un compte enfant reçoit 403). Il porte les appareils encore là : en service ou en panne, non archivés. Remplacés, donnés, vendus, jetés et archivés n'y sont pas.
+
+| Format | Contenu |
+|---|---|
+| PDF | Un tableau A4 paysage : pièce, désignation, marque, modèle, numéro de série, date et prix d'achat, garantie, facture jointe ou non ; en pied, la valeur d'achat connue et le nombre d'appareils sans prix. S'ouvre sur l'iPhone. |
+| CSV | Les mêmes colonnes et la catégorie, le vendeur, l'état à l'achat, le statut, et pour chaque appareil le chemin de sa facture dans le zip. Séparateur `;`, UTF-8 avec BOM, dates JJ/MM/AAAA, prix « 549,99 » : s'ouvre tel quel dans Numbers et Excel. Une valeur qui commencerait par `=`, `+`, `-` ou `@` est neutralisée (pas de formule exécutée au double-clic). |
+| Zip | `equipements.csv`, `equipements.pdf`, et `factures/<pièce> - <désignation>.pdf`. **Une facture jointe à plusieurs fiches n'y est qu'une fois** ; le CSV dit, pour chaque appareil, quel fichier la porte. Une facture absente du disque est listée dans `absentes.txt` au lieu de faire échouer l'export. |
+
+Le PDF et le zip sont écrits sans dépendance (`backend/src/export/`) : le zip n'est pas compressé (PDF et JPEG le sont déjà) et part au fil de l'eau, une facture à la fois en mémoire.
+
+En shell, avec le jeton de session d'un adulte :
+
+```sh
+curl -s -H "Authorization: Bearer $JETON" -OJ https://foyer.example.fr/api/equipements/export/assurance.zip
+unzip -l equipements-assurance-*.zip
+```
+
+## Assistant (MCP)
+
+Six outils, décrits dans [`assistants.md`](assistants.md#équipements) : `equipements_liste`, `equipement_detail`, `equipement_pieces` (lecture), `equipement_creer`, `equipement_modifier`, `equipement_evenement` (écriture, adultes, jeton `write`). Même validation et même filtre enfant que l'écran ; aucun fichier ne sort par l'assistant. Une écriture garde le nom du jeton (`created_via`) et passe au journal du service.
 
 ## Qui voit quoi
 
@@ -44,6 +77,7 @@ Un enfant voit l'écran et les fiches, sans numéro de série, prix, vendeur ni 
 | Numéro de série, prix, vendeur, bien immobilier, coût d'une réparation | oui | **non** (absents de la réponse, pas seulement cachés) |
 | Ouvrir une facture ou une photo de plaque | oui | **non** (403) |
 | Ouvrir une notice ou une photo | oui | oui |
+| Exporter pour l'assurance, recevoir les rappels de fin de garantie | oui | non |
 | Rechercher par numéro de série | oui | non |
 | Créer, modifier, archiver, joindre, noter une panne | oui | non (403) |
 | Sauvegarder, restaurer le module | administrateur | non |
@@ -112,9 +146,8 @@ Les mois courts sont respectés : un achat le 31/01 avec 1 mois de garantie fini
 |---|---|---|---|
 | `modEquipements` | foyer | activé | Désactivé : API en 403, section de réglages masquée ; les données restent. |
 | `eqpGarantieDefautMois` | foyer | 24 (0 à 120) | Durée par défaut d'un appareil neuf sans durée saisie. 0 = pas de règle, garantie inconnue. |
-| `eqpGarantieAlerteJours` | foyer | 60 (7 à 180) | Seuil de la pastille orange « Garantie expire le … ». |
-
-Le réglage personnel de rappel (`eqpGarantieRappel`) arrive avec les rappels, en tranche 3 : le déclarer avant qu'un rappel existe serait un réglage sans effet.
+| `eqpGarantieAlerteJours` | foyer | 60 (7 à 180) | Seuil de la pastille orange « Garantie expire le … », de la tuile d'accueil et du rappel sur le téléphone. |
+| `eqpGarantieRappel` | personnel | activé | « Sur le téléphone : fins de garantie », dans Notifications. Coupé, ce membre ne reçoit plus ces rappels. |
 
 ## API
 
@@ -134,6 +167,7 @@ Tout est sous `/api/equipements`, derrière la session (cookie ou `Authorization
 | POST | `/items/:id/attachments?kind=&filename=&label=` | adulte | joindre un fichier (corps brut) |
 | GET | `/attachments/:id[?download=1]` | membre (enfant : notice et photo) | ouvrir |
 | PUT, DELETE | `/attachments/:id` | adulte | requalifier, retirer |
+| GET | `/export/assurance.csv`, `.pdf`, `.zip` | adulte | export pour l'assurance |
 | GET | `/export.json` | administrateur | sauvegarde du module |
 | POST | `/restore { backup, confirm: "REMPLACER" }` | administrateur | restauration du module |
 

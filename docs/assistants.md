@@ -106,6 +106,26 @@ comprises, exactement comme dans l'app : à manier avec le même soin. Chaque
 écriture est **attribuée** au membre, et le fil d'activité de l'accueil affiche
 « (via un assistant) ».
 
+### Équipements
+
+Quand le module **Équipements** est actif (il l'est par défaut), six outils
+lisent et notent les fiches des appareils de la maison. La garantie est
+calculée à la date du jour, avec les règles du foyer, comme dans l'écran.
+
+| Outil | Ce qu'il fait |
+|---|---|
+| `equipements_liste` | Les appareils avec leur `[id]`, marque et modèle, pièce et garantie (« Sous garantie jusqu'au … »). Filtres : `piece`, `garantie` (`sous_garantie`, `expire_bientot`, `hors_garantie`, `inconnue`), `categorie`, `recherche` (désignation, marque, modèle, numéro de série) |
+| `equipement_detail` | La fiche complète (par `id`, ou `nom` s'il est unique) : garantie expliquée, numéro de série, achat, pièces jointes présentes, historique des pannes et réparations |
+| `equipement_pieces` | Les pièces de la maison et le nombre d'appareils dans chacune |
+| `equipement_creer` (écriture, adultes) | Crée une fiche : `nom` seul suffit, puis `piece`, `marque`, `modele`, `serie`, `achete_le`, `prix`, `garantie_mois` |
+| `equipement_modifier` (écriture, adultes) | Change les champs donnés, dont `garantie_fin` (extension) et `statut` |
+| `equipement_evenement` (écriture, adultes) | Note une panne, un appel au SAV, une réparation (avec son coût) : une panne passe la fiche « en panne », une réparation la remet « en service » |
+
+**Un enfant lit sans numéro de série ni montant**, et ne crée ni ne modifie
+rien : les outils d'écriture lui sont invisibles et refusés. **Aucun fichier ne
+sort par l'assistant** : il dit qu'une facture est jointe, elle s'ouvre dans
+l'application. Module éteint : les six outils disparaissent.
+
 ## Brancher chaque client
 
 Remplacez `foyer.exemple.fr` par l'adresse de votre instance et `foyer_…` par
@@ -205,6 +225,10 @@ un assistant ».
 - « À quelle heure Nolan sort jeudi ? »
 - « Quelles sont les dernières notes de Léo en maths ? »
 - « J'ai fini mes exercices de maths, coche-les. » (jeton de l'enfant)
+- « Le lave-vaisselle fuit depuis ce matin. » (adulte : panne notée, fiche « en panne »)
+- « Le lave-vaisselle est-il encore sous garantie ? Donne-moi son numéro de série. »
+- « Quelles garanties se terminent bientôt ? »
+- « Ajoute l'ampli Onkyo TX-SR444 au salon, acheté le 7 novembre 2017. » (adulte)
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
 réglage, terminer une tâche récurrente, ou supprimer quelque chose. Le suivi de

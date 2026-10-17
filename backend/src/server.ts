@@ -24,7 +24,7 @@ import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup
 import { preserveEntretienList, preserveRooms } from './entretien/list';
 import { moduleCounts as entCounts, resetModule as entReset } from './entretien/repo';
 import { entretienRouter } from './entretien/routes';
-import { equipementsRouter } from './equipements/routes';
+import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
@@ -651,11 +651,12 @@ export function start(): void {
    * La préférence est personnelle : chacun coupe les siennes sans rien imposer
    * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
    */
-  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien'): boolean => {
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie'): boolean => {
     const state = getHousehold().state as HouseholdState;
     // Les clés sont écrites en toutes lettres : une clé calculée ne dit rien
     // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
     if (kind === 'entretien') return setting('entretienRappel', state, memberId);
+    if (kind === 'garantie') return setting('eqpGarantieRappel', state, memberId);
     return kind === 'reminder'
       ? setting('pushReminders', state, memberId)
       : setting('pushAssigned', state, memberId);
@@ -700,6 +701,9 @@ export function start(): void {
     }),
     wants: memberWants,
     entretienOn: () => effectiveSetting('modEntretien') !== false,
+    garanties: () => (effectiveSetting('modEquipements') === false
+      ? { items: [], alertDays: 0 }
+      : { items: watchedWarranties(), alertDays: eqpRules().alertDays }),
     log: notifLog,
   });
 

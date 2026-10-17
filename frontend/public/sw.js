@@ -188,10 +188,12 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};
   const url = data.url || self.registration.scope;
-  // Un rappel de tâche (« task-<id> ») ouvre la fiche de la tâche : dans l'app
-  // déjà ouverte par un message, sinon par l'adresse que l'app lit au démarrage.
+  // Un rappel de tâche (« task-<id> ») ouvre la fiche de la tâche, une fin de
+  // garantie (« eqp-<id> ») celle de l'équipement : dans l'app déjà ouverte par
+  // un message, sinon par l'adresse que l'app lit au démarrage.
   const tag = typeof data.tag === 'string' ? data.tag : '';
-  const fiche = tag.startsWith('task-') ? { kind: 'task', id: tag.slice(5) } : null;
+  const fiche = tag.startsWith('task-') ? { kind: 'task', id: tag.slice(5) }
+    : tag.startsWith('eqp-') ? { kind: 'equipment', id: tag.slice(4) } : null;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     for (const client of list) {
       if ('focus' in client) {
