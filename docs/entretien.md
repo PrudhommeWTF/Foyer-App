@@ -160,20 +160,19 @@ Chaque entrée : `id`, `titre`, `howto`, `famille` (regroupe la liste de choix),
 (`{ "from": "05-01", "to": "09-30" }`) est la saison d'un geste répété
 (`base: "done"`), ou la **fenêtre** d'un geste à date fixe (`base: "due"`) :
 à la création, elle devient la prochaine échéance (la fenêtre qui court, sinon
-la suivante) et sa souplesse. `pieces` : les pièces proposées au
-premier usage.
+la suivante) et sa souplesse. La pièce d'un geste se propose par son nom
+(`piece`) : retrouvée dans les pièces du foyer, ou créée avec le geste.
 
 ### L'adapter à votre foyer
 
 Créez un fichier **du même nom dans le dossier des données**, avec seulement ce
 qui change. Il est fusionné avec le catalogue livré par identifiant : une
-entrée de même `id` remplace, une nouvelle s'ajoute, `"retire": true` masque,
-et `pieces`, s'il est présent, remplace la liste des pièces. Il est relu dès
-qu'il change, sans redémarrer, et une mise à jour de Foyer ne l'écrase pas.
+entrée de même `id` remplace, une nouvelle s'ajoute, `"retire": true` masque.
+Il est relu dès qu'il change, sans redémarrer, et une mise à jour de Foyer ne
+l'écrase pas. Une clé `pieces` laissée par une version précédente est ignorée.
 
 ```json
 {
-  "pieces": ["Cuisine", "Salle de bain", "Buanderie", "Atelier", "Jardin"],
   "gestes": [
     { "id": "piscine-ph", "retire": true },
     { "id": "carafe-filtrante", "titre": "Carafe Brita : changer la cartouche", "famille": "Eau", "piece": "Cuisine",

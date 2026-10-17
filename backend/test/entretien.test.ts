@@ -28,11 +28,11 @@ describe('Entretien', () => {
     assert.deepEqual(state.rooms, []);
   });
 
-  it('le catalogue livré propose une trentaine de gestes et des pièces, à tout membre', async () => {
+  it('le catalogue livré propose une trentaine de gestes, à tout membre', async () => {
     const r = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, E());
     assert.equal(r.status, 200);
     assert.ok(r.json.gestes.length >= 30, `${r.json.gestes.length} gestes`);
-    assert.ok(r.json.pieces.includes('Cuisine'));
+    assert.equal(r.json.pieces, undefined, 'plus de liste de pièces : la pièce d’un geste se suggère par son nom (piece)');
     const brita = r.json.gestes.find((g: { id: string }) => g.id === 'carafe-filtrante');
     assert.deepEqual(brita.rec, { freq: 'weekly', every: 4, base: 'done' });
     assert.equal(brita.article.unite, 'cartouche');
@@ -64,7 +64,6 @@ describe('Entretien', () => {
   it('une surcharge dans le dossier des données s’applique sans redémarrer, et une surcharge illisible ne casse rien', async () => {
     const file = path.join(ctx.dir, 'entretien-catalogue.json');
     fs.writeFileSync(file, JSON.stringify({
-      pieces: ['Cuisine', 'Atelier'],
       gestes: [
         { id: 'carafe-filtrante', retire: true },
         { id: 'aquarium', titre: 'Aquarium : changer un quart de l’eau', famille: 'Maison', rec: { freq: 'weekly', every: 2, base: 'done' } },
@@ -72,7 +71,6 @@ describe('Entretien', () => {
       ],
     }));
     let r = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, M());
-    assert.deepEqual(r.json.pieces, ['Cuisine', 'Atelier']);
     assert.ok(!r.json.gestes.some((g: { id: string }) => g.id === 'carafe-filtrante'), 'retiré');
     assert.ok(r.json.gestes.some((g: { id: string }) => g.id === 'aquarium'), 'ajouté');
     assert.ok(r.json.gestes.some((g: { id: string }) => g.id === 'ramonage'), 'le reste du catalogue livré demeure');
