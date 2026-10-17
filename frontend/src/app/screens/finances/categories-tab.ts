@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ToggleComponent } from '../../shared/toggle';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
@@ -12,55 +14,55 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
   selector: 'fin-categories-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent],
+  imports: [NgTemplateOutlet, FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent, ToggleComponent],
   template: `
-    <div class="bar">
-      <div class="hint">Le budget mensuel de référence sert de repère : il ne bloque rien, il situe le réel. Les dépenses d'une sous-catégorie remontent sur sa parente.</div>
-      <div class="spacer"></div>
-      <button class="btn btn-primary" (click)="store.newCategory(null)"><f-icon name="plus" [size]="16" color="#fff" [width]="2.6" /> Nouvelle catégorie</button>
-    </div>
-
-    <div class="grid">
-      @for (c of store.rootCategories(); track c.id) {
-        <div class="card">
-          <div class="top">
-            <div class="idz">
-              <div class="chip" [style.background]="foyer.tint(c.color)"><f-icon [path]="CAT_ICONS[c.icon] || CAT_ICONS['facture']" [size]="18" [color]="c.color" [width]="2" /></div>
-              <div>
-                <div class="name">{{ c.name }}</div>
-                <div class="budget">{{ c.fixed ? 'charge fixe · ' : '' }}{{ c.monthlyBudget > 0 ? fmtInt(c.monthlyBudget) + ' € par mois' : 'sans budget de référence' }}</div>
-              </div>
-            </div>
-            <div class="acts">
-              <button class="icon-btn sm" (click)="store.editCategory(c.id)" aria-label="Modifier"><f-icon name="edit" [size]="14" color="var(--ink2)" /></button>
-              <button class="icon-btn sm" (click)="store.patch({ catDelId: c.id })" aria-label="Supprimer"><f-icon name="trash" [size]="14" color="var(--primary)" /></button>
-            </div>
-          </div>
-
-          @if (store.childrenOf(c.id); as subs) {
-            @if (subs.length) {
-              <div class="subs">
-                @for (s of subs; track s.id) {
-                  <div class="sub">
-                    <span class="sub-dot" [style.background]="s.color"></span>
-                    <span class="sub-name">{{ s.name }}</span>
-                    @if (s.monthlyBudget > 0) { <span class="sub-budget">{{ fmtInt(s.monthlyBudget) }} €</span> }
-                    <button class="icon-btn sm" (click)="store.editCategory(s.id)" aria-label="Modifier"><f-icon name="edit" [size]="13" color="var(--ink3)" /></button>
-                    <button class="icon-btn sm" (click)="store.patch({ catDelId: s.id })" aria-label="Supprimer"><f-icon name="trash" [size]="13" color="var(--primary)" /></button>
-                  </div>
-                }
-              </div>
-            }
+    <section class="panel">
+      <div class="tbl" role="table" aria-label="Catégories">
+        <div class="tr th" role="row">
+          <span role="columnheader" class="c-name">Catégorie</span>
+          <span role="columnheader" class="num">Budget / mois</span>
+          <span role="columnheader" class="num">Moyenne {{ avgMonths() }}</span>
+          <span role="columnheader" class="c-fixed">Fixe</span>
+          <span role="columnheader"><span class="sr">Actions</span></span>
+        </div>
+        @for (c of store.rootCategories(); track c.id) {
+          <ng-container [ngTemplateOutlet]="row" [ngTemplateOutletContext]="{ $implicit: c, sub: false }" />
+          @for (s of store.childrenOf(c.id); track s.id) {
+            <ng-container [ngTemplateOutlet]="row" [ngTemplateOutletContext]="{ $implicit: s, sub: true }" />
           }
-          <button class="addsub" (click)="store.newCategory(c.id)"><f-icon name="plus" [size]="13" color="var(--primary)" [width]="2.8" /> Sous-catégorie</button>
-        </div>
-      } @empty {
-        <div class="empty">
-          <div class="empty-title">Aucune catégorie</div>
-          <div class="empty-txt">Créez-en une pour commencer à classer vos opérations.</div>
-        </div>
-      }
-    </div>
+          <div class="tr add" role="row"><button class="addsub" (click)="store.newCategory(c.id)">+ Sous-catégorie de {{ c.name }}</button></div>
+        } @empty {
+          <div class="empty">Aucune catégorie. Créez-en une pour commencer à classer vos opérations.</div>
+        }
+      </div>
+      <div class="foot">
+        <button class="addsub strong" (click)="store.newCategory(null)">+ Catégorie</button>
+        <span class="hint">Une catégorie « fixe » sort des enveloppes et alimente la liste des charges fixes. Le budget de référence ne bloque rien : il situe le réel.</span>
+      </div>
+    </section>
+
+    <ng-template #row let-c let-sub="sub">
+      @let avg = store.catAverages().averages[c.id] ?? 0;
+      @let over = c.monthlyBudget > 0 && avg > c.monthlyBudget * 1.05;
+      <div class="tr" role="row" [class.sub]="sub">
+        <span class="c-name" role="cell">
+          @if (sub) { <span class="dot" [style.background]="c.color"></span> }
+          @else { <span class="chip" [style.background]="foyer.tint(c.color)"><f-icon [path]="CAT_ICONS[c.icon] || CAT_ICONS['facture']" [size]="16" [color]="c.color" [width]="2" /></span> }
+          <button class="name" (click)="store.editCategory(c.id)" [attr.aria-label]="'Modifier ' + c.name">{{ c.name }}</button>
+        </span>
+        <span class="num" role="cell">{{ c.monthlyBudget > 0 ? fmtInt(c.monthlyBudget) + ' €' : '·' }}</span>
+        <span class="num" role="cell" [class.over]="over">@if (over) {<span aria-hidden="true">⚠ </span>}{{ avg ? fmtInt(avg) + ' €' : '·' }}@if (over) {<span class="sr"> au-dessus du budget</span>}</span>
+        <span class="c-fixed" role="cell">
+          @if (!sub || !isRootFixed(c.parentId)) {
+            <f-toggle [on]="c.fixed" [label]="'Charge fixe : ' + c.name" (toggled)="store.toggleFixed(c.id, $event)" />
+          }
+        </span>
+        <span class="acts" role="cell">
+          <button class="icon-btn sm" (click)="store.editCategory(c.id)" [attr.aria-label]="'Modifier ' + c.name"><f-icon name="edit" [size]="13" color="var(--ink2)" /></button>
+          <button class="icon-btn sm" (click)="store.patch({ catDelId: c.id })" [attr.aria-label]="'Supprimer ' + c.name"><f-icon name="trash" [size]="13" color="var(--primary)" /></button>
+        </span>
+      </div>
+    </ng-template>
 
     <!-- FORMULAIRE DE CATÉGORIE -->
     @if (store.ui().catForm) {
@@ -109,30 +111,38 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
     }
   `,
   styles: [`
-    .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-    .spacer { flex: 1; }
-    .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); max-width: 560px; line-height: 1.45; }
-
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-    :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
-    .card { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: var(--sh-card); }
-    .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-    .idz { display: flex; align-items: center; gap: 11px; min-width: 0; }
-    .chip { width: 34px; height: 34px; flex: none; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
-    .name { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .panel { background: var(--surface); border-radius: var(--r-card-lg); padding: 14px 22px 18px; box-shadow: var(--sh-card); }
+    .tr { display: grid; grid-template-columns: minmax(0, 1fr) 110px 120px 60px 76px; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+    .th { font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); }
+    .tr.add { display: block; padding: 4px 0 10px 46px; }
+    .c-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .tr.sub .c-name { padding-left: 46px; }
+    .chip { width: 34px; height: 34px; flex: none; border-radius: 11px; display: grid; place-items: center; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+    .name { border: none; background: none; padding: 0; font-family: inherit; font-size: 14.5px; font-weight: 800; color: var(--ink); cursor: pointer; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tr.sub .name { font-weight: 700; font-size: 13.5px; }
+    .num { text-align: right; font-size: 14px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .num.over { color: var(--status-crit); }
+    .c-fixed { display: flex; justify-content: center; }
+    .acts { display: flex; gap: 4px; justify-content: flex-end; }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    @media (max-width: 720px) {
+      .tr { grid-template-columns: minmax(0, 1fr) 70px 78px 50px; }
+      .acts { display: none; }
+      .tr.sub .c-name, .tr.add { padding-left: 22px; }
+    }
+    /* Sur téléphone, le nom prend toute la ligne, les chiffres passent dessous. */
+    @media (max-width: 560px) {
+      .tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 50px; row-gap: 6px; }
+      .c-name { grid-column: 1 / -1; }
+      .th .c-name { display: none; }
+    }
+    .addsub { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; font-family: inherit; }
+    .addsub.strong { font-size: 13.5px; }
+    .foot { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; margin-top: 14px; }
+    .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); line-height: 1.45; }
+    .empty { padding: 24px 0; font-size: 13px; font-weight: 700; color: var(--ink3); }
     .check { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--ink2); cursor: pointer; }
-    .budget { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; }
-    .acts { display: flex; gap: 5px; flex: none; }
-
-    .subs { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
-    .sub { display: flex; align-items: center; gap: 8px; }
-    .sub-dot { width: 8px; height: 8px; flex: none; border-radius: 3px; }
-    .sub-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sub-budget { font-size: 11.5px; font-weight: 800; color: var(--ink3); }
-    .addsub { display: flex; align-items: center; gap: 6px; margin-top: 12px; background: none; border: none; padding: 0; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; font-family: inherit; }
-    .empty { grid-column: 1 / -1; background: var(--surface); border-radius: 16px; padding: 34px 24px; text-align: center; box-shadow: var(--sh-card); }
-    .empty-title { font-size: 15px; font-weight: 800; color: var(--ink); }
-    .empty-txt { font-size: 13px; font-weight: 700; color: var(--ink3); margin-top: 6px; }
 
     .parent { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin-bottom: 14px; }
     .frow { display: flex; gap: 12px; }
@@ -169,6 +179,13 @@ export class FinancesCategoriesTab {
     return this.store.ui().catParent ? 'Nouvelle sous-catégorie' : 'Nouvelle catégorie';
   });
   delName = computed(() => this.store.categories().find((c) => c.id === this.store.ui().catDelId)?.name || '');
+  constructor() { void this.store.loadCategoryAverages(); }
+
+  /** « 3 mois », ou ce qu'il y a de mois complets ; « · » quand il n'y en a aucun. */
+  readonly avgMonths = computed(() => { const n = this.store.catAverages().months.length; return n ? `${n} mois` : '(aucun mois complet)'; });
+  /** Une sous-catégorie d'une catégorie fixe l'est déjà par sa parente. */
+  isRootFixed(parentId: number | null): boolean { return !!parentId && !!this.store.categories().find((c) => c.id === parentId)?.fixed; }
+
   delChildren = computed(() => {
     const id = this.store.ui().catDelId;
     return id ? this.store.childrenOf(id).length : 0;

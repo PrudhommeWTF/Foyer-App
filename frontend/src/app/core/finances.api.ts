@@ -232,6 +232,10 @@ export class FinancesApi {
     return this.api.del(`finances/transactions/${id}`);
   }
 
+  /** Moyenne de chaque catégorie sur les trois derniers mois complets (centimes). */
+  categoryAverages(): Promise<{ months: string[]; averages: Record<number, number> }> {
+    return this.api.request('finances/categories/averages');
+  }
   createBudgetMove(p: { month: string; fromCategoryId: number; toCategoryId: number; amount: string }): Promise<{ move: FinBudgetMove; moves: FinBudgetMove[] }> {
     return this.api.post('finances/budget-moves', p);
   }

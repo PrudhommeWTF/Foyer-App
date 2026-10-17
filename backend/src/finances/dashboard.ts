@@ -7,7 +7,7 @@ import type { Database } from 'better-sqlite3';
 import { MonthSummary } from './types';
 import { monthRange, shiftMonth } from './money';
 import { gapsOver } from './import-repo';
-import { listCategories, monthSummary, movesNet } from './repo';
+import { availableMonths, listCategories, monthSummary, movesNet } from './repo';
 
 let database: Database;
 export function initDashboard(db: Database): void { database = db; }
@@ -184,4 +184,37 @@ export function dashboard(month: string, today = new Date().toISOString().slice(
     },
     topExpenses: topExpenses(from, to),
   };
+}
+
+/**
+ * La dépense moyenne de chaque catégorie sur les trois derniers mois complets
+ * (le mois en cours exclu, un mois incomplet ou vide écarté). Une catégorie
+ * principale compte ses sous-catégories ; une sous-catégorie, elle seule.
+ * Virements internes exclus, comme partout.
+ */
+export function categoryAverages(today = new Date().toISOString().slice(0, 10)): { months: string[]; averages: Record<number, number> } {
+  const held = new Set(availableMonths());
+  const months: string[] = [];
+  for (let k = 1; k <= 24 && months.length < 3; k++) {
+    const m = shiftMonth(today.slice(0, 7), -k);
+    if (held.has(m) && !isIncomplete(m, today)) months.push(m);
+  }
+  const parent = new Map(listCategories().map((c) => [c.id, c.parentId]));
+  const totals = new Map<number, number>();
+  const stmt = database.prepare(`
+    SELECT category_id AS id, SUM(-amount) AS spent FROM fin_transactions
+    WHERE date >= ? AND date <= ? AND kind <> 'virement' AND amount < 0 AND category_id IS NOT NULL
+    GROUP BY category_id
+  `);
+  for (const m of months) {
+    const { from, to } = monthRange(m);
+    for (const r of stmt.all(from, to) as { id: number; spent: number }[]) {
+      totals.set(r.id, (totals.get(r.id) ?? 0) + r.spent);
+      const p = parent.get(r.id);
+      if (p) totals.set(p, (totals.get(p) ?? 0) + r.spent);
+    }
+  }
+  const averages: Record<number, number> = {};
+  for (const [id, t] of totals) averages[id] = Math.round(t / months.length);
+  return { months, averages };
 }

@@ -24,7 +24,7 @@ import { cap, pad2 } from './helpers';
 
 /** Les six espaces du module. Organiser regroupe ce qui range : catégories, règles, import. */
 export type FinTab = 'apercu' | 'operations' | 'tendances' | 'comptes' | 'contrats' | 'organiser';
-export type FinOrgTab = 'categories' | 'regles' | 'import';
+export type FinOrgTab = 'categories' | 'regles' | 'import' | 'donnees';
 /** Contrats : la liste des biens et contrats, les échéances, les pistes d'économies. */
 export type FinContratsTab = 'contrats' | 'echeances' | 'economies';
 
@@ -114,6 +114,9 @@ export interface FinancesUi {
   ruleDelId: number | null; ruleError: string; ruleBusy: boolean;
   /** « Tout réappliquer » also overwrites the categories corrected by hand. */
   applyForce: boolean;
+  /** « Réappliquer… » : sur tout l'historique, une période ou un compte. */
+  applyOpen: boolean; applyScope: 'all' | 'period' | 'account';
+  applyFrom: string; applyTo: string; applyAccount: number | null;
 
   busy: boolean;
 }
@@ -144,7 +147,7 @@ function initialUi(month: string): FinancesUi {
     restorePending: null, restoreName: '',
     ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
     ruleConditions: [], ruleActions: [], ruleDelId: null, ruleError: '', ruleBusy: false,
-    applyForce: false,
+    applyForce: false, applyOpen: false, applyScope: 'all', applyFrom: '', applyTo: '', applyAccount: null,
     busy: false,
   };
 }
@@ -222,6 +225,8 @@ export class FinancesStore {
   readonly classifyHint = signal<{ txId: number; categoryId: number } | null>(null);
   /** Moyennes des trois derniers mois complets, quand aucune enveloppe n'existe encore. */
   readonly completeMonths = signal<FinMonthSummary[]>([]);
+  /** Moyenne réelle par catégorie sur les trois derniers mois complets, et ces mois. */
+  readonly catAverages = signal<{ months: string[]; averages: Record<number, number> }>({ months: [], averages: {} });
   /** Opérations du mois affiché pas encore pointées sur un relevé. */
   readonly unclearedCount = signal(0);
   /** Dépenses du mois de l'enveloppe ouverte (sous-catégories comprises). */
@@ -259,6 +264,12 @@ export class FinancesStore {
   /** Identifiants d'opérations cochées dans la revue des suggestions d'import. */
   readonly catPicked = signal<Set<number>>(new Set());
   readonly transfers = signal<FinTransfer[]>([]);
+  /**
+   * Le dernier import validé, pour les étapes « Ranger » et « Fait » : ce qu'il
+   * a inséré, ce que les règles ont rangé, et ce que la revue a ajouté. Null
+   * tant qu'aucun import n'a été validé dans cette visite, ou après « Nouvel import ».
+   */
+  readonly lastImport = signal<{ filename: string; inserted: number; filed: number; sorted: number; merged: number; done: boolean } | null>(null);
 
   // Categorisation rules
   readonly rules = signal<FinRule[]>([]);
@@ -501,7 +512,7 @@ export class FinancesStore {
     this.pieces.set({}); this.attachments.set([]);
     this.readings.set([]); this.periods.set([]); this.energy.set(null);
     this.savings.set([]); this.savingsTotals.set({ pending: 0, done: 0, count: 0, openCount: 0 });
-    this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]);
+    this.preview.set(null); this.imports.set([]); this.candidates.set([]); this.transfers.set([]); this.lastImport.set(null);
     this.rules.set([]); this.tags.set([]); this.rulePreview.set(null); this.applyReport.set(null);
     this.loaded.set(false); this.error.set(''); this.loadedAt.set('');
     this.home.set(null); this.homeError.set(''); this.homeLoadedAt.set('');
@@ -1093,6 +1104,23 @@ export class FinancesStore {
     }
   }
 
+  async loadCategoryAverages(): Promise<void> {
+    try { this.catAverages.set(await this.api.categoryAverages()); } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
+  /** Bascule « charge fixe » depuis le tableau des catégories. */
+  async toggleFixed(id: number, fixed: boolean): Promise<void> {
+    const c = this.categories().find((x) => x.id === id);
+    if (!c) return;
+    try {
+      await this.api.updateCategory(c.id, {
+        parentId: c.parentId, name: c.name, monthlyBudget: (c.monthlyBudget / 100).toFixed(2), color: c.color, icon: c.icon, fixed,
+      });
+      await this.afterWrite();
+      this.foyer.toast(fixed ? `« ${c.name} » est une charge fixe, hors enveloppes` : `« ${c.name} » redevient une enveloppe possible`);
+    } catch (e) { this.foyer.toast((e as Error).message); }
+  }
+
   async confirmCategoryDel(): Promise<void> {
     const id = this.ui().catDelId;
     if (!id) return;
@@ -1156,6 +1184,7 @@ export class FinancesStore {
     try {
       const r = await this.api.commitImport(p.importId);
       this.preview.set(null);
+      this.lastImport.set({ filename: p.filename, inserted: r.inserted, filed: r.categorised?.changed ?? 0, sorted: 0, merged: 0, done: false });
       this.patch({ importBusy: false });
       // Les suggestions apprises pour ce que les règles n'ont pas rangé : cochées
       // d'avance, l'utilisateur revoit puis applique en lot (ou ferme la revue).
@@ -1173,6 +1202,10 @@ export class FinancesStore {
       this.patch({ importBusy: false, importError: (e as Error).message });
     }
   }
+
+  /** Termine la revue d'un import (étape « Fait »), ou repart d'un fichier neuf. */
+  finishImport(): void { this.dismissCatSuggest(); this.lastImport.update((l) => (l ? { ...l, done: true } : l)); }
+  newImport(): void { this.lastImport.set(null); }
 
   async discardPreview(): Promise<void> {
     const p = this.preview();
@@ -1208,6 +1241,7 @@ export class FinancesStore {
     this.patch({ importBusy: true });
     try {
       const { changed } = await this.api.categoriseTransactions(items);
+      this.lastImport.update((l) => (l ? { ...l, sorted: l.sorted + changed } : l));
       this.dismissCatSuggest();
       this.patch({ importBusy: false });
       this.foyer.toast(`${changed} opération${changed > 1 ? 's' : ''} rangée${changed > 1 ? 's' : ''}`);
@@ -1265,6 +1299,7 @@ export class FinancesStore {
     this.patch({ importBusy: true });
     try {
       const r = await this.api.mergeTransfers(pairs);
+      this.lastImport.update((l) => (l ? { ...l, merged: l.merged + r.merged } : l));
       this.patch({ importBusy: false });
       this.foyer.toast(r.failed.length
         ? `${r.merged} virement(s) validé(s), ${r.failed.length} refusé(s)`
@@ -1468,7 +1503,15 @@ export class FinancesStore {
     if (this.ui().ruleBusy) return;
     this.patch({ ruleBusy: true, ruleError: '' });
     try {
-      const { report } = await this.api.applyRules({ force: this.ui().applyForce });
+      const u = this.ui();
+      if (u.applyScope === 'period' && (!u.applyFrom || !u.applyTo)) { this.patch({ ruleBusy: false }); this.foyer.toast('Choisissez le début et la fin de la période'); return; }
+      if (u.applyScope === 'account' && !u.applyAccount) { this.patch({ ruleBusy: false }); this.foyer.toast('Choisissez un compte'); return; }
+      const { report } = await this.api.applyRules({
+        force: u.applyForce,
+        ...(u.applyScope === 'period' ? { from: u.applyFrom, to: u.applyTo } : {}),
+        ...(u.applyScope === 'account' ? { accountId: u.applyAccount! } : {}),
+      });
+      this.patch({ applyOpen: false });
       this.applyReport.set(report);
       this.patch({ ruleBusy: false });
       await Promise.all([this.loadRules(), this.afterWrite()]);

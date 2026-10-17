@@ -142,3 +142,32 @@ describe('filtres des opérations', () => {
     assert.equal(repo.monthSummary('2026-10', '2026-10-17').expense, 0);
   });
 });
+
+describe('moyennes par catégorie', () => {
+  it('trois derniers mois complets, mois en cours exclu, une principale avec ses sous-catégories', async () => {
+    const { categoryAverages } = await import('../src/finances/dashboard');
+    const loisirs = cat('Loisirs', 25000);
+    const resto = repo.createCategory({ parentId: loisirs, name: 'Restaurants', monthlyBudget: 0, color: '#000', icon: 'facture' }).id;
+    tx('2026-07-10', -30000, { categoryId: loisirs });
+    tx('2026-08-10', -20000, { categoryId: resto });
+    tx('2026-09-10', -10000, { categoryId: resto });
+    tx('2026-09-11', -50000, { kind: 'virement' });
+    tx('2026-06-10', -99900, { categoryId: loisirs }); // quatrième mois : hors fenêtre
+    tx('2026-10-05', -77700, { categoryId: loisirs }); // mois en cours : exclu
+    const r = categoryAverages('2026-10-17');
+    assert.deepEqual(r.months, ['2026-09', '2026-08', '2026-07']);
+    assert.equal(r.averages[loisirs], 20000);
+    assert.equal(r.averages[resto], 10000);
+  });
+
+  it('écarte un mois que les imports ne couvrent pas', async () => {
+    const { categoryAverages } = await import('../src/finances/dashboard');
+    const alim = cat('Courses', 0);
+    const id = imports.createDraft('relevé.csv', 'CSV');
+    imports.commitImport(id, [], new Map([[joint, { from: '2026-09-01', to: '2026-09-15' }]]));
+    tx('2026-09-10', -10000, { categoryId: alim });
+    tx('2026-08-10', -20000, { categoryId: alim });
+    const r = categoryAverages('2026-10-17');
+    assert.ok(!r.months.includes('2026-09'), 'septembre ne va que jusqu’au 15 pour le compte joint');
+  });
+});

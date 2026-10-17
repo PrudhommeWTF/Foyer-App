@@ -10,6 +10,7 @@ import { FinancesCategoriesTab } from './categories-tab';
 import { FinancesContractsTab } from './contracts-tab';
 import { FinancesRulesTab } from './rules-tab';
 import { FinancesImportTab } from './import-tab';
+import { FinancesDataTab } from './data-tab';
 import { FinMonthNav } from './month-nav';
 import { FinEnvelopeSheet } from './envelope-sheet';
 import { AlertComponent } from '../../shared/alert';
@@ -28,6 +29,7 @@ const ORG_TABS: { id: FinOrgTab; label: string }[] = [
   { id: 'categories', label: 'Catégories' },
   { id: 'regles', label: 'Règles' },
   { id: 'import', label: 'Import' },
+  { id: 'donnees', label: 'Données' },
 ];
 
 @Component({
@@ -36,7 +38,7 @@ const ORG_TABS: { id: FinOrgTab; label: string }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     IconComponent, AlertComponent, SheetComponent, FinMonthNav, FinEnvelopeSheet, FinancesApercu, FinancesTransactionsTab, FinancesTendances,
-    FinancesAccountsTab, FinancesCategoriesTab, FinancesContractsTab, FinancesRulesTab, FinancesImportTab,
+    FinancesAccountsTab, FinancesCategoriesTab, FinancesContractsTab, FinancesRulesTab, FinancesImportTab, FinancesDataTab,
   ],
   template: `
     <div class="screen-enter">
@@ -56,7 +58,7 @@ const ORG_TABS: { id: FinOrgTab; label: string }[] = [
                     (click)="openMenu()">⋯</button>
           } @else {
             <button role="tab" [attr.aria-selected]="ui().tab === 'organiser'" [class.active]="ui().tab === 'organiser'"
-                    aria-label="Organiser : catégories, règles, import" title="Organiser" (click)="store.goTab('organiser')">
+                    aria-label="Organiser : catégories, règles, import, données" title="Organiser" (click)="store.goTab('organiser')">
               <f-icon name="gear" [size]="17" [width]="2.2" />
             </button>
           }
@@ -98,6 +100,7 @@ const ORG_TABS: { id: FinOrgTab; label: string }[] = [
             @case ('categories') { <fin-categories-tab /> }
             @case ('regles') { <fin-rules-tab /> }
             @case ('import') { <fin-import-tab /> }
+            @case ('donnees') { <fin-data-tab /> }
           }
         }
       }
@@ -182,8 +185,10 @@ export class FinancesScreen {
         sub: plural(s.categories().length, 'catégorie') + ' · ' + plural(s.envelopeCount(), 'enveloppe') },
       { tab: 'organiser' as FinTab, org: 'regles' as FinOrgTab, label: 'Règles', icon: 'refresh', color: 'var(--violet)', bg: 'var(--tint-violet)',
         sub: plural(s.rules().length, 'règle') + ' · ' + plural(s.tags().length, 'étiquette') },
-      { tab: 'organiser' as FinTab, org: 'import' as FinOrgTab, label: 'Import et données', icon: 'upload', color: 'var(--primary)', bg: 'var(--tint-primary)',
-        sub: (ago === null ? 'Relevés CSV, OFX, CAMT.053, xlsx' : ago === 0 ? "Dernier import : aujourd'hui" : `Dernier import : il y a ${plural(ago, 'jour')}`) + ' · export, sauvegarde' },
+      { tab: 'organiser' as FinTab, org: 'import' as FinOrgTab, label: 'Import', icon: 'upload', color: 'var(--primary)', bg: 'var(--tint-primary)',
+        sub: (ago === null ? 'Relevés CSV, OFX, CAMT.053, xlsx' : ago === 0 ? "Dernier import : aujourd'hui" : `Dernier import : il y a ${plural(ago, 'jour')}`) },
+      { tab: 'organiser' as FinTab, org: 'donnees' as FinOrgTab, label: 'Données', icon: 'export', color: 'var(--ink2)', bg: 'var(--soft2)',
+        sub: this.foyer.isAdmin() ? 'Export CSV, sauvegarde, restauration' : 'Réservé à un administrateur' },
     ];
   });
 

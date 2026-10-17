@@ -24,8 +24,16 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       <f-alert kind="error" class="mb"><span>{{ err }}</span></f-alert>
     }
 
-    <!-- DÉPÔT DU FICHIER -->
-    @if (!store.preview()) {
+    <ol class="steps" aria-label="Étapes de l'import">
+      @for (st of STEPS; track st; let i = $index) {
+        <li [class.on]="step() === i + 1" [class.past]="step() > i + 1" [attr.aria-current]="step() === i + 1 ? 'step' : null">
+          <span class="sn">@if (step() > i + 1) { <f-icon name="check" [size]="11" color="currentColor" [width]="3.4" /> } @else { {{ i + 1 }} }</span>{{ st }}
+        </li>
+      }
+    </ol>
+
+    <!-- 1. FICHIER -->
+    @if (step() === 1) {
       <label class="drop" [class.busy]="store.ui().importBusy"
              (dragover)="$event.preventDefault()" (drop)="onDrop($event)">
         <input type="file" hidden accept=".csv,.tsv,.txt,.ofx,.qfx,.xml,.xls,.xlsx" (change)="onPick($event)" />
@@ -35,8 +43,8 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </label>
     }
 
-    <!-- RAPPORT AVANT VALIDATION -->
-    @if (store.preview(); as p) {
+    <!-- 2. COMPTES : rapport du fichier lu, rattachement, validation -->
+    @if (step() === 2 && store.preview(); as p) {
       <div class="card report">
         <div class="rh">
           <div>
@@ -80,6 +88,9 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
           </div>
         }
 
+        @if (!p.unknownAccounts.length && p.perAccount.length) {
+          <div class="ok">Tous les libellés de compte sont reconnus. Vérifiez la répartition, puis importez.</div>
+        }
         <!-- Détail par compte, en cartes plutôt qu'en tableau, comme le reste de l'app. -->
         @if (p.perAccount.length) {
           <div class="pa-list">
@@ -121,8 +132,19 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </div>
     }
 
-    <!-- CATÉGORIES SUGGÉRÉES APRÈS IMPORT -->
-    @if (store.catSuggest().length) {
+    <!-- 3. RANGER : catégories suggérées et virements internes -->
+    @if (step() === 3 && store.lastImport(); as l) {
+      <div class="card">
+        <div class="ch">
+          <div>
+            <div class="card-title sm">{{ l.filename }} : {{ l.inserted }} opération{{ l.inserted > 1 ? 's' : '' }} importée{{ l.inserted > 1 ? 's' : '' }}</div>
+            <div class="rmeta">{{ rangeHint() }}</div>
+          </div>
+          <button class="btn btn-primary" [disabled]="store.ui().importBusy" (click)="store.finishImport()">Terminer</button>
+        </div>
+      </div>
+    }
+    @if (step() === 3 && store.catSuggest().length) {
       <div class="card">
         <div class="ch">
           <div>
@@ -151,8 +173,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </div>
     }
 
-    <!-- VIREMENTS INTERNES PROPOSÉS -->
-    @if (store.candidates().length) {
+    @if (step() === 3 && store.candidates().length) {
       <div class="card">
         <div class="ch">
           <div>
@@ -195,8 +216,26 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     }
 
 
-    <!-- VIREMENTS DÉJÀ VALIDÉS -->
-    @if (store.transfers().length) {
+    <!-- 4. FAIT -->
+    @if (step() === 4 && store.lastImport(); as l) {
+      <div class="card done">
+        <f-icon name="check" [size]="26" color="var(--sage-dark)" [width]="2.6" />
+        <div class="card-title sm">Import terminé</div>
+        <div class="figs">
+          <div class="fig strong"><div class="fig-n f-display">{{ l.inserted }}</div><div class="fig-l">importée{{ l.inserted > 1 ? 's' : '' }}</div></div>
+          <div class="fig"><div class="fig-n f-display">{{ l.filed }}</div><div class="fig-l">rangée{{ l.filed > 1 ? 's' : '' }} par les règles</div></div>
+          <div class="fig"><div class="fig-n f-display">{{ l.sorted }}</div><div class="fig-l">rangée{{ l.sorted > 1 ? 's' : '' }} à la revue</div></div>
+          <div class="fig"><div class="fig-n f-display">{{ l.merged }}</div><div class="fig-l">virement{{ l.merged > 1 ? 's' : '' }} rapproché{{ l.merged > 1 ? 's' : '' }}</div></div>
+        </div>
+        <div class="acts">
+          <button class="btn btn-soft" (click)="store.goTab('operations')">Voir les opérations</button>
+          <button class="btn btn-primary grow" (click)="store.newImport()">Importer un autre relevé</button>
+        </div>
+      </div>
+    }
+
+    <!-- VIREMENTS DÉJÀ VALIDÉS ET HISTORIQUE : sous l'étape 1 -->
+    @if (step() === 1 && store.transfers().length) {
       <div class="card">
         <div class="card-title sm">Virements internes validés</div>
         <div class="rmeta">Séparer un virement rend ses deux lignes à leur nature de dépense et de recette.</div>
@@ -213,7 +252,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </div>
     }
 
-    <!-- HISTORIQUE -->
+    @if (step() === 1) {
     <div class="card">
       <div class="card-title sm">Imports</div>
       <div class="rmeta">Annuler un import retire uniquement les lignes qu'il a créées. Rien d'autre ne bouge, et vous pouvez le rejouer ensuite.</div>
@@ -239,6 +278,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
         }
       </div>
     </div>
+    }
 
     @if (store.ui().undoImportId) {
       <f-confirm [maxWidth]="440" title="Annuler cet import ?" cancelLabel="Garder" confirmLabel="Annuler l'import"
@@ -251,49 +291,25 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
       </f-confirm>
     }
 
-    <!-- EXPORTS -->
-    <div class="panel">
-      <div class="panel-title">Exporter</div>
-      <div class="panel-sub">Vos opérations dans un tableur (CSV), pour les retravailler ailleurs. La sauvegarde complète du module (JSON) est ci-dessous.</div>
-      <div class="backup-acts">
-        <button class="btn btn-soft" (click)="store.exportCsv()"><f-icon name="export" [size]="16" color="var(--ink2)" /> Exporter les opérations (CSV)</button>
-      </div>
-    </div>
-
-    <!-- SAUVEGARDE DU MODULE -->
-    <div class="panel backup">
-      <div class="panel-title">Sauvegarde du module Finances</div>
-      <div class="panel-sub">
-        Comptes, catégories, contrats, opérations, règles et étiquettes, en un fichier JSON.
-        Ce n'est <strong>pas</strong> une sauvegarde complète : les pièces jointes restent sur le disque du serveur,
-        et la sauvegarde du fichier SQLite reste la référence.
-      </div>
-      <div class="backup-acts">
-        <button class="btn btn-soft" (click)="store.exportModule()">
-          <f-icon name="export" [size]="16" color="var(--ink2)" /> Télécharger la sauvegarde
-        </button>
-        <label class="btn btn-soft">
-          <input type="file" accept="application/json,.json" hidden (change)="onRestorePick($event)" />
-          <f-icon name="upload" [size]="16" color="var(--ink2)" /> Restaurer depuis un fichier
-        </label>
-      </div>
-    </div>
-
-    @if (store.ui().restorePending) {
-      <f-confirm [maxWidth]="460" icon="urgent" title="Remplacer toutes les données du module ?" confirmLabel="Remplacer"
-        [disabled]="store.ui().busy" (cancel)="store.patch({ restorePending: null, restoreName: '' })" (confirm)="store.confirmRestore()">
-        <strong>{{ store.ui().restoreName }}</strong> va remplacer l'intégralité du module Finances :
-        comptes, opérations, contrats, règles. Ce qui existe aujourd'hui et ne figure pas dans ce
-        fichier sera perdu. Le reste du foyer (agenda, courses, tâches) n'est pas touché.
-        <br /><br />
-        L'opération est en tout ou rien : si le fichier est incohérent, rien ne change.
-      </f-confirm>
-    }
   `,
   styles: [`
     f-alert.mb { display: block; margin-bottom: 16px; }
     .banner-title { font-weight: 800; margin-bottom: 4px; }
     .banner-hint { font-size: 12.5px; font-weight: 700; opacity: .85; line-height: 1.45; }
+
+    .steps { display: flex; gap: 6px; list-style: none; margin: 0 0 18px; padding: 0; flex-wrap: wrap; }
+    .steps li { display: flex; align-items: center; gap: 7px; padding: 7px 12px 7px 8px; border-radius: 99px; background: var(--soft2); color: var(--ink3); font-size: 12.5px; font-weight: 800; }
+    .steps li.on { background: var(--ink); color: var(--surface); }
+    .steps li.past { color: var(--ink2); }
+    .sn { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); color: var(--ink2); font-size: 11px; }
+    .steps li.on .sn { color: var(--ink); }
+    @media (max-width: 560px) {
+      .steps { gap: 4px; flex-wrap: nowrap; }
+      .steps li { padding: 6px 8px 6px 6px; gap: 5px; font-size: 11.5px; }
+      .sn { width: 17px; height: 17px; font-size: 10px; }
+    }
+    .done { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+    .done .figs, .done .acts { width: 100%; margin-bottom: 0; }
 
     .drop { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 24px; border-radius: 20px; border: 2px dashed var(--line2); background: var(--surface); cursor: pointer; text-align: center; margin-bottom: 18px; }
     .drop:hover { border-color: var(--primary); background: var(--soft); }
@@ -324,6 +340,7 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .sel { flex: none; width: 250px; max-width: 100%; height: 40px; padding: 0 12px; text-overflow: ellipsis; }
     .unknown .btn { flex: none; }
 
+    .ok { font-size: 12.5px; font-weight: 800; color: var(--sage-dark); margin-bottom: 10px; }
     .pa-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
     .pa-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; background: var(--soft); border-radius: 12px; padding: 12px 14px; }
     .pa-name { font-size: 13.5px; font-weight: 800; color: var(--ink); }
@@ -371,11 +388,6 @@ const CONFIDENCE: Record<FinConfidence, { label: string; color: string }> = {
     .icov { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
     .empty { font-size: 13px; font-weight: 700; color: var(--ink3); padding: 10px 0; }
 
-    .panel.backup { background: var(--surface); border-radius: 18px; padding: 18px; margin-top: 18px; box-shadow: var(--sh-card); }
-    .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
-    .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 4px; line-height: 1.55; }
-    .backup-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-    .backup-acts label.btn { cursor: pointer; }
   `],
 })
 export class FinancesImportTab {
@@ -392,6 +404,17 @@ export class FinancesImportTab {
   setMapping(label: string, accountId: number | null): void {
     this.store.patch({ mapping: { ...this.store.ui().mapping, [label]: accountId } });
   }
+  readonly STEPS = ['Fichier', 'Comptes', 'Ranger', 'Fait'];
+  /** L'étape courante découle de l'état du store : brouillon lu, import écrit, revue terminée. */
+  readonly step = computed(() => {
+    const l = this.store.lastImport();
+    return l ? (l.done ? 4 : 3) : this.store.preview() ? 2 : 1;
+  });
+  readonly rangeHint = computed(() => {
+    const l = this.store.lastImport(), left = this.store.catSuggest().length || this.store.candidates().length;
+    return (l?.filed ? `${l.filed} rangée${l.filed > 1 ? 's' : ''} par vos règles. ` : '')
+      + (left ? 'Revoyez ci-dessous ce qui reste à ranger, puis terminez.' : "Rien d'autre à ranger : tout est en ordre.");
+  });
   undoTarget = computed(() => this.store.imports().find((i) => i.id === this.store.ui().undoImportId));
 
   /** Reliable candidates first, doubtful ones behind a fold. */
@@ -399,14 +422,6 @@ export class FinancesImportTab {
     { key: 'sure', items: this.store.strongCandidates() },
     { key: 'faible', items: this.store.weakCandidates() },
   ].filter((g) => g.items.length));
-
-  /** Read the backup file, without restoring anything: the modal asks first. */
-  onRestorePick(ev: Event): void {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) void this.store.stageRestore(file);
-    input.value = '';
-  }
 
   onPick(ev: Event): void {
     const input = ev.target as HTMLInputElement;

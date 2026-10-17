@@ -11,7 +11,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <button type="button" class="toggle" [class.on]="on()" role="switch" [attr.aria-checked]="on()"
-            (click)="toggled.emit(!on())"><span class="knob"></span></button>
+            [attr.aria-label]="label() || null" (click)="toggled.emit(!on())"><span class="knob"></span></button>
   `,
   styles: [`
     .toggle { width: 42px; height: 24px; flex: none; border: none; border-radius: 99px; background: var(--soft2); cursor: pointer; padding: 0; position: relative; transition: background .15s; }
@@ -22,5 +22,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 })
 export class ToggleComponent {
   readonly on = input(false);
+  /** Nom lu par un lecteur d'écran quand aucun texte visible n'accompagne l'interrupteur. */
+  readonly label = input('');
   readonly toggled = output<boolean>();
 }

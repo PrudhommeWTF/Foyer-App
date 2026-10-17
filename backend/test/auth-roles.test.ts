@@ -26,7 +26,7 @@ describe('un compte enfant n’entre pas dans Finances', () => {
     ['GET', '/finances/export.json'], ['GET', '/finances/export.csv'],
     ['GET', '/finances/home?month=2026-09'], ['GET', '/finances/dashboard?month=2026-09'],
     ['GET', '/finances/flow?month=2026-09'],
-    ['POST', '/finances/budget-moves'],
+    ['POST', '/finances/budget-moves'], ['GET', '/finances/categories/averages'],
     ['POST', '/finances/transactions'], ['POST', '/finances/accounts'],
   ];
   for (const [method, chemin] of routes) {
