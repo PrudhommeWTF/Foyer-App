@@ -5,7 +5,7 @@ import express, { NextFunction, Request, Response, Router } from 'express';
 import * as repo from './repo';
 import { exportCsv, monthSummary } from './repo';
 import { isIsoDate, isMonth, parseCents } from './money';
-import { dashboard } from './dashboard';
+import { categoryAverages, dashboard } from './dashboard';
 import { attachmentsRouter } from './attachments-routes';
 import * as backup from './backup';
 import { effectiveSetting } from '../settings/repo';
@@ -377,6 +377,9 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
 
   // ---- categories ----
   r.get('/categories', handler((_req, res) => res.json({ categories: repo.listCategories() })));
+
+  // La moyenne réelle de chaque catégorie, en face de son budget (Organiser › Catégories).
+  r.get('/categories/averages', handler((_req, res) => res.json(categoryAverages())));
 
   r.post('/categories', handler((req, res) => {
     res.status(201).json({ category: repo.createCategory(categoryInput(req.body || {})) });

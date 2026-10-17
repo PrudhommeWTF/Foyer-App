@@ -64,10 +64,10 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [ ] | Deux niveaux, budget de référence, couleur, icône | Catégories | Organiser › Catégories | Déplacé |
-| [ ] | Suppression avec sous-catégories | Catégories | Organiser › Catégories | Déplacé |
-| [~] | Charge fixe (hors enveloppes) | · | Organiser › Catégories (case du formulaire actuel et migration : PR 1) | Nouveau |
-| [ ] | Moyenne réelle en face du budget | · | Organiser › Catégories | Nouveau |
+| [x] | Deux niveaux, budget de référence, couleur, icône | Catégories | Organiser › Catégories | Déplacé |
+| [x] | Suppression avec sous-catégories | Catégories | Organiser › Catégories | Déplacé |
+| [x] | Charge fixe (hors enveloppes) | · | Organiser › Catégories (bascule « Fixe » dans le tableau ; migration : PR 1) | Nouveau |
+| [x] | Moyenne réelle en face du budget | · | Organiser › Catégories | Nouveau |
 
 ## Contrats, biens, économies (PR 3)
 
@@ -88,24 +88,24 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [ ] | Conditions (libellé, montant, sens, compte, jour, date) et opérateurs | Règles | Organiser › Règles | Déplacé |
-| [ ] | Toutes / au moins une, actions multiples, ordre, arrêt, activation | Règles | Organiser › Règles (phrases) | Amélioré |
-| [ ] | Tester (aperçu), Enregistrer et appliquer | Règles | Organiser › Règles | Conservé |
-| [ ] | Réappliquer sur l'historique, forcer, rapport | Règles | Organiser › Règles | Conservé |
-| [ ] | Réappliquer sur une période ou un compte | Serveur seulement | Organiser › Règles | Enfin affiché |
-| [ ] | Étiquettes (compte, clic → Opérations) | Règles | Organiser › Règles | Conservé |
+| [x] | Conditions (libellé, montant, sens, compte, jour, date) et opérateurs | Règles | Organiser › Règles | Déplacé |
+| [x] | Toutes / au moins une, actions multiples, ordre, arrêt, activation | Règles | Organiser › Règles (phrases) | Amélioré |
+| [x] | Tester (aperçu), Enregistrer et appliquer | Règles | Organiser › Règles | Conservé |
+| [x] | Réappliquer sur l'historique, forcer, rapport | Règles | Organiser › Règles | Conservé |
+| [x] | Réappliquer sur une période ou un compte | Serveur seulement | Organiser › Règles | Enfin affiché |
+| [~] | Étiquettes (compte, clic → Opérations) | Règles | Organiser › Règles (bloc présent, non vérifié au navigateur faute d'étiquette dans les données de démo) | Conservé |
 
 ## Import et données (PR 3)
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [ ] | Formats CSV/Bankin', OFX, CAMT.053, xlsx ; rien avant validation | Import | Organiser › Import + bouton dans Opérations | Déplacé |
-| [ ] | Rapport : lignes, copies, déjà là, nouvelles ; rejets | Import | Import, étape 1 | Conservé |
-| [ ] | Comptes inconnus à rattacher (alias) | Import | Import, étape 2 | Amélioré |
-| [ ] | Catégories suggérées après import | Import | Import, étape 3 | Amélioré |
-| [ ] | Virements internes proposés (confiance), validés, séparer | Import | Import, étape 3 + historique | Amélioré |
-| [ ] | Historique des imports, annuler, réimporter | Import | Organiser › Import | Conservé |
-| [ ] | Export CSV, sauvegarde JSON, restauration (admin) | Import | Organiser › Données | Déplacé |
+| [x] | Formats CSV/Bankin', OFX, CAMT.053, xlsx ; rien avant validation | Import | Organiser › Import + bouton dans Opérations | Déplacé |
+| [x] | Rapport : lignes, copies, déjà là, nouvelles ; rejets | Import | Import, en tête de l'étape 2 (le fichier lu) | Conservé |
+| [x] | Comptes inconnus à rattacher (alias) | Import | Import, étape 2 | Amélioré |
+| [x] | Catégories suggérées après import | Import | Import, étape 3 | Amélioré |
+| [x] | Virements internes proposés (confiance), validés, séparer | Import | Import, étape 3 + historique | Amélioré |
+| [x] | Historique des imports, annuler, réimporter | Import | Organiser › Import | Conservé |
+| [x] | Export CSV, sauvegarde JSON, restauration (admin) | Import | Organiser › Données | Déplacé |
 
 ## Hors du module (PR 1-3)
 
