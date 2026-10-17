@@ -6,11 +6,35 @@ Le module se livre en trois tranches. Ce document décrit ce qui existe **aujour
 
 | Tranche | Contenu | État |
 |---|---|---|
-| 1 | Tables `eqp_*`, pièces de départ, fichiers, API, calcul de garantie, réglages, sauvegarde | **livrée** |
-| 2 | Écran (liste groupée par pièce, recherche, filtres, fiche, prise de vue iPhone), menu « + », recherche globale | à venir |
+| 1 | Tables `eqp_*`, fichiers, API, calcul de garantie, réglages, sauvegarde | **livrée** |
+| 2 | Pièces partagées avec Entretien, écran (liste groupée par pièce, recherche, filtres, fiche, prise de vue iPhone), menu « + », recherche globale | **livrée** |
 | 3 | Rappels de fin de garantie, repères d'agenda, tuile d'accueil, outils d'assistant, export pour l'assurance | à venir |
 
-Tant que la tranche 2 n'est pas livrée, le module n'a **pas d'écran** : seuls son interrupteur (Paramètres, « Modules actifs ») et sa section de réglages sont visibles, et l'API répond.
+## L'écran
+
+Menu, groupe « Le foyer », **Équipements**.
+
+- **En tête** : la recherche (désignation, marque, modèle, numéro de série ; casse, accents et espaces ignorés, les tirets comptent), « Ajouter un équipement », deux filtres (pièce, état de garantie) et le nombre de fiches.
+- **Les cartes**, groupées par pièce dans l'ordre des pièces, puis « Sans pièce » : icône de catégorie, désignation, « marque · modèle », pastille de garantie (vert « Sous garantie jusqu'au … », orange « Garantie expire le … », gris « Hors garantie depuis le … » ou « Garantie inconnue ») et, s'il le faut, le statut (« En panne » en rouge). Un appareil remplacé, donné, jeté ou archivé est grisé.
+- **Menu ⋯** : « Gérer les pièces » (adultes) et « Voir les fiches archivées ».
+- **Aucune pièce** : l'écran propose de créer les pièces de départ en un geste (Cuisine, Salon, Salle de bain, Chambre 1, Chambre 2, Bureau, Buanderie, Garage, Cave, Extérieur), ou de les choisir soi-même.
+- **Aucune fiche** : un texte d'accueil explique le module.
+
+**La fiche** s'ouvre par-dessus l'écran (le composant de fiche commun) :
+
+- en tête la pastille de garantie et son explication (« 24 mois à partir du 12/03/2025, règle par défaut. »), puis le statut s'il n'est pas « en service » ;
+- pièce, catégorie, marque et modèle, **numéro de série avec un bouton Copier**, date et prix d'achat, vendeur, état à l'achat ;
+- les **pièces jointes** en vignettes (un tap ouvre la photo ou le PDF) et quatre boutons : « Photo de la plaque » (ouvre directement l'appareil photo sur iPhone), « Facture », « Notice », « Photo » ;
+- l'**historique** : noter une panne, un appel au SAV, une réparation (avec son coût) sans passer en modification ;
+- « Archiver » et « Modifier » en bas. En modification, la pastille de garantie se recalcule pendant qu'on tape, avec la même fonction que le serveur.
+
+**Créer** : « + » puis « Équipement », ou « Ajouter un équipement ». Trois champs suffisent : désignation, pièce, photo de la plaque prise sur le moment. « Plus de détails » ouvre le reste, qu'on complète plus tard.
+
+**Photos** : réduites dans le navigateur à 2 000 px de côté, en JPEG, avant l'envoi. Le redessin efface les métadonnées EXIF, position GPS comprise. Safari sur iPhone lit le HEIC et l'envoie converti ; Chrome ou Firefox sur Mac ne savent pas le lire et le disent, avec la marche à suivre (Aperçu, Exporter en JPEG).
+
+**Recherche globale** (loupe en haut) : les équipements y répondent par désignation, marque, modèle ou numéro de série ; « Somfy » trouve l'alarme.
+
+Un enfant voit l'écran et les fiches, sans numéro de série, prix, vendeur ni coût, sans facture ni plaque, et sans aucun bouton d'écriture.
 
 ## Qui voit quoi
 
@@ -55,14 +79,25 @@ Les mois courts sont respectés : un achat le 31/01 avec 1 mois de garantie fini
 - Chaque fichier a une ligne dans `hh_attachments` (genre `equipment`) ; `eqp_attachments` relie une fiche à un fichier, avec son genre (`facture`, `plaque`, `notice`, `photo`, `autre`).
 - Ces fichiers ne passent **que** par `/api/equipements/attachments/:id`, qui vérifie le module et le rôle à chaque requête. La route générique `/api/files/:id` répond 404 pour eux.
 - Formats acceptés (reconnus d'après le contenu, pas l'extension) : JPEG, PNG, WEBP pour toutes les pièces ; PDF en plus pour une facture, une notice ou « autre ». Une plaque ou une photo est forcément une image.
-- **Photos : 2 000 px au plus sur le grand côté.** L'application les réduit avant l'envoi (tranche 2) ; le serveur lit les dimensions dans l'en-tête et refuse au-delà (422).
+- **Photos : 2 000 px au plus sur le grand côté.** L'application les réduit avant l'envoi ; le serveur lit les dimensions dans l'en-tête et refuse au-delà (422).
 - **HEIC refusé** (415) avec un message qui dit quoi faire : sur iPhone, Foyer envoie du JPEG ; depuis un Mac, exporter en JPEG dans Aperçu.
 - Taille : 20 Mo au plus par fichier. Une photo réduite pèse moins d'un mégaoctet, une facture scannée quelques-uns.
 - Retirer une pièce jointe efface le fichier du disque dès que plus aucune fiche ne le cite. Le ménage du démarrage ne touche jamais un fichier cité par une fiche.
 
 ## Les pièces de la maison
 
-Une donnée du foyer, pas du code : table `eqp_rooms`. Dix pièces sont posées à la création du module et à chaque remise à zéro : Cuisine, Salon, Salle de bain, Chambre 1, Chambre 2, Bureau, Buanderie, Garage, Cave, Extérieur. On les renomme, réordonne et archive. Une pièce qui contient encore des appareils ne s'archive pas : il faut d'abord les déplacer.
+**Une seule liste pour tout le foyer**, partagée avec Entretien : le socle Maison (`rooms` dans le document du foyer, `{ id, name, position }`). Une fiche garde l'identifiant de sa pièce (`eqp_items.room_ref`).
+
+- Un foyer neuf n'a aucune pièce (choix d'Entretien) ; l'écran Équipements propose les pièces de départ en un geste.
+- On les renomme, réordonne, ajoute et supprime depuis le menu ⋯ de l'écran (« Gérer les pièces »). Supprimer une pièce ne supprime aucun appareil : ils passent « Sans pièce » (un Annuler de quelques secondes la remet).
+- Les pièces appartiennent au foyer, pas au module : la remise à zéro d'Équipements ne les touche pas, et éteindre le module non plus.
+
+**Reprise de la première version.** La tranche 1 rangeait les pièces dans sa propre table `eqp_rooms`. Au premier démarrage de la tranche 2, une reprise unique (drapeau `rooms_adopted` dans `eqp_meta`) :
+
+- recopie les pièces non archivées d'`eqp_rooms` dans le socle Maison **s'il est vide**, dans leur ordre et avec leurs noms (« Chambre de Nolan » reste « Chambre de Nolan ») ;
+- rattache chaque fiche à la pièce du socle qui porte le même nom (casse et accents ignorés), créée au besoin.
+
+`eqp_rooms` et `eqp_items.room_id` restent en base, inutilisés : une migration additive ne supprime rien. Le journal le dit : `Équipements : pièces reprises dans la liste partagée du foyer (… pièce(s) recopiée(s), … fiche(s) rattachée(s)).`
 
 ## Ce qui n'est jamais supprimé
 
@@ -87,10 +122,10 @@ Tout est sous `/api/equipements`, derrière la session (cookie ou `Authorization
 
 | Méthode | Chemin | Qui | Rôle |
 |---|---|---|---|
-| GET | `/bootstrap` | membre | pièces, fiches, règles de garantie, biens immobiliers (s'il y en a plusieurs dans Finances) |
-| GET | `/items?q=&room=&garantie=&categorie=&statut=&archived=1` | membre | liste filtrée |
+| GET | `/bootstrap` | membre | fiches, règles de garantie, droit d'écrire, biens immobiliers (s'il y en a plusieurs dans Finances) |
+| GET | `/items?q=&room=&garantie=&categorie=&statut=&archived=1` | membre | liste filtrée ; `room` est l'identifiant d'une pièce du socle Maison, ou `none` pour les fiches sans pièce |
 | GET | `/items/:id` | membre | fiche complète : pièces jointes, historique, remplacements |
-| POST | `/items` | adulte | créer (seul `name` est requis) |
+| POST | `/items` | adulte | créer (seul `name` est requis ; `room_id` est l'identifiant d'une pièce du socle Maison) |
 | PUT | `/items/:id` | adulte | modifier (champs présents seulement) |
 | POST | `/items/:id/archive`, `/items/:id/unarchive` | adulte | archiver, désarchiver |
 | POST | `/items/:id/replace` `{ by, day? }` | adulte | marquer remplacé par une autre fiche |
@@ -99,11 +134,10 @@ Tout est sous `/api/equipements`, derrière la session (cookie ou `Authorization
 | POST | `/items/:id/attachments?kind=&filename=&label=` | adulte | joindre un fichier (corps brut) |
 | GET | `/attachments/:id[?download=1]` | membre (enfant : notice et photo) | ouvrir |
 | PUT, DELETE | `/attachments/:id` | adulte | requalifier, retirer |
-| GET, POST | `/rooms` | membre, adulte | lister, créer |
-| PUT | `/rooms/:id`, `/rooms-order { ids }` | adulte | renommer, réordonner |
-| POST | `/rooms/:id/archive`, `/rooms/:id/unarchive` | adulte | archiver (pièce vide), désarchiver |
 | GET | `/export.json` | administrateur | sauvegarde du module |
 | POST | `/restore { backup, confirm: "REMPLACER" }` | administrateur | restauration du module |
+
+Les pièces ne sont plus servies par le module (les routes `/rooms` de la tranche 1 ont disparu) : elles se lisent et s'écrivent avec le document du foyer (`GET` et `PUT /api/state`, clé `rooms`).
 
 ## Exploitation
 
@@ -146,10 +180,23 @@ docker start foyer
 ```sh
 journalctl -u foyer -b | grep 'Équipements'
 # [foyer] Équipements : migration 1 appliquée (tables du module Équipements et pièces de départ).
+# [foyer] Équipements : migration 2 appliquée (fiches rattachées aux pièces partagées du foyer).
+# [foyer] Équipements : pièces reprises dans la liste partagée du foyer (10 pièce(s) recopiée(s), 0 fiche(s) rattachée(s)).
 
-sqlite3 /var/lib/foyer/foyer.db "SELECT value FROM eqp_meta WHERE key = 'schema_version';"   # 1
-sqlite3 /var/lib/foyer/foyer.db "SELECT position, name FROM eqp_rooms ORDER BY position;"
+DB=/var/lib/foyer/foyer.db
+sqlite3 $DB "SELECT value FROM eqp_meta WHERE key = 'schema_version';"   # 2
+sqlite3 $DB "SELECT value FROM eqp_meta WHERE key = 'rooms_adopted';"    # date de la reprise
+# Les pièces partagées, telles que le document du foyer les porte
+sqlite3 $DB "SELECT json_extract(r.value, '$.position'), json_extract(r.value, '$.name')
+             FROM household, json_each(household.state, '$.rooms') r ORDER BY 1;"
+# Les fiches dont la pièce n'existe plus (elles s'affichent « Sans pièce »)
+sqlite3 $DB "SELECT i.id, i.name FROM eqp_items i WHERE i.room_ref IS NOT NULL AND i.room_ref NOT IN
+             (SELECT json_extract(r.value, '$.id') FROM household, json_each(household.state, '$.rooms') r);"
 ```
+
+### Avant la mise à jour de la tranche 2
+
+Elle ajoute une colonne (`eqp_items.room_ref`) et écrit dans le document du foyer (les pièces reprises). Même archive que ci-dessus, avec le même retour arrière : restaurer l'archive remet la base et le document d'avant, la reprise se rejouera au démarrage suivant.
 
 ### Sauvegarde
 

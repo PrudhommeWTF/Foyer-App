@@ -10,6 +10,7 @@ import { migrateEcole } from './ecole/schema';
 import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
 import { initEquipementsRepo, referencedFileIds as eqpFileIds } from './equipements/repo';
+import { adoptSharedRooms } from './equipements/rooms';
 import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
 import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
 import * as files from './storage/files';
@@ -162,6 +163,8 @@ initPlaces(db);
 migrateEquipements(db);
 initEquipementsRepo(db);
 migrateHouseholdDocument();
+// Après le document : les pièces d'Équipements rejoignent le socle Maison.
+adoptSharedRooms(db);
 
 // Fichiers qu'aucune entité du document ne cite plus (recette supprimée, photo
 // remplacée, formulaire abandonné). Le ménage se fait ici plutôt qu'à chaque

@@ -52,7 +52,8 @@ c'est ce que l'écran affiche en « Stock au … ».
 ### Les pièces (socle Maison)
 
 `rooms: { id, name, position }[]` dans le document, hors de tout module : le
-futur module Équipements y rangera aussi ses appareils. Une pièce supprimée fait
+module Équipements y range aussi ses appareils, et c'est depuis son écran
+(menu ⋯, « Gérer les pièces ») qu'on les renomme, réordonne ou supprime. Une pièce supprimée fait
 passer ses gestes « Sans pièce », elle ne les supprime pas. Un téléphone resté
 sur une version antérieure, qui ne connaît pas `rooms`, ne les efface pas en
 enregistrant.

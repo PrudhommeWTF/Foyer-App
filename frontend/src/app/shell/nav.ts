@@ -10,8 +10,8 @@ export interface NavItem { id: string; label: string; icon: string; }
  */
 export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'employe', 'settings']);
 
-/** Les entrées du menu « + » qui mènent à ces écrans. */
-export const AJOUTS_ADULTES: ReadonlySet<string> = new Set(['tx']);
+/** Les entrées du menu « + » qui mènent à ces écrans, ou qui créent ce qu'un enfant ne peut pas écrire (un équipement). */
+export const AJOUTS_ADULTES: ReadonlySet<string> = new Set(['tx', 'equipment']);
 
 /**
  * Les groupes de navigation, tels qu'ils s'affichent pour ce compte. `enabled`
@@ -47,6 +47,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Le foyer',
     items: [
       { id: 'lieux', label: 'Lieux de vacances', icon: 'map-pin' },
+      { id: 'equipements', label: 'Équipements', icon: 'home' },
       { id: 'contacts', label: 'Contacts', icon: 'contacts' },
       { id: 'fidelite', label: 'Cartes de fidélité', icon: 'card' },
       { id: 'employe', label: 'Employé à domicile', icon: 'users' },
@@ -63,6 +64,7 @@ export const ADD_MENU: { id: string; label: string; sub: string; icon: string; t
   { id: 'tx', label: 'Opération', sub: 'Dépense ou recette', icon: 'budget', tint: '#EDF2EB', color: '#7A9B76' },
   { id: 'slot', label: 'Créneau', sub: 'Emploi du temps', icon: 'planning', tint: '#E5F0F4', color: '#4E93B8' },
   { id: 'contact', label: 'Contact', sub: 'Carnet du foyer', icon: 'contacts', tint: '#F2ECF5', color: '#9B6FA8' },
+  { id: 'equipment', label: 'Équipement', sub: 'Appareil de la maison', icon: 'home', tint: '#EDF2EB', color: '#7A9B76' },
   { id: 'card', label: 'Carte de fidélité', sub: 'Scanner ou saisir', icon: 'card', tint: '#E5F0F4', color: '#4E93B8' },
   { id: 'member', label: 'Membre', sub: 'Ajouter au foyer', icon: 'userPlus', tint: '#FDF0DA', color: '#F0B24B' },
 ];

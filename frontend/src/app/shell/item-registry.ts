@@ -21,6 +21,7 @@ import { SHIFT_ITEM } from '../screens/employe/shift.item';
 import { EMPLOYEE_ITEM } from '../screens/employe/employee.item';
 import { HOMEWORK_ITEM } from '../screens/ecole/homework.item';
 import { GRADE_ITEM } from '../screens/ecole/grade.item';
+import { EQUIPMENT_ITEM } from '../screens/equipements/equipment.item';
 
 export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   event: EVENT_ITEM,
@@ -40,4 +41,5 @@ export const ITEM_REGISTRY: { [K in ItemKindId]: ItemKind<any, FoyerStore> } = {
   employee: EMPLOYEE_ITEM,
   homework: HOMEWORK_ITEM,
   grade: GRADE_ITEM,
+  equipment: EQUIPMENT_ITEM,
 };

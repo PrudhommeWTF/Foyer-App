@@ -1578,6 +1578,46 @@ export class FoyerStore {
     return { kind: 'done' };
   }
 
+  // ---- pièces de la maison (socle Maison) --------------------------------
+  // Une seule liste pour tout le foyer, dans le document : Entretien y range ses
+  // gestes, Équipements ses appareils. Supprimer une pièce ne supprime rien
+  // d'autre : ce qui y était rangé passe « sans pièce ».
+
+  /** Les pièces, dans leur ordre. */
+  readonly rooms = computed(() => [...(this._data()?.rooms || [])].sort((a, b) => a.position - b.position));
+  addRoom(name: string): string {
+    const id = uid('p');
+    this.mutate((d) => { d.rooms ||= []; d.rooms.push({ id, name, position: d.rooms.reduce((m, r) => Math.max(m, r.position + 1), 0) }); });
+    return id;
+  }
+  /** Ajoute en une fois celles de ces pièces qui n'existent pas déjà (même nom, casse et accents ignorés). */
+  addRooms(names: string[]): void {
+    this.mutate((d) => {
+      d.rooms ||= [];
+      for (const name of names) {
+        if (d.rooms.some((r) => normText(r.name) === normText(name))) continue;
+        d.rooms.push({ id: uid('p'), name, position: d.rooms.reduce((m, r) => Math.max(m, r.position + 1), 0) });
+      }
+    });
+  }
+  renameRoom(id: string, name: string): void { this.mutate((d) => { const r = (d.rooms || []).find((x) => x.id === id); if (r) r.name = name; }); }
+  /** Monte (-1) ou descend (+1) une pièce, et renumérote pour garder un ordre sans trou. */
+  moveRoom(id: string, delta: -1 | 1): void {
+    this.mutate((d) => {
+      const list = [...(d.rooms || [])].sort((a, b) => a.position - b.position);
+      const i = list.findIndex((r) => r.id === id), j = i + delta;
+      if (i < 0 || j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      list.forEach((r, k) => { r.position = k; });
+    });
+  }
+  removeRoom(id: string): void {
+    const r = this._data()?.rooms?.find((x) => x.id === id); if (!r) return;
+    const copie = structuredClone(r);
+    this.mutate((d) => { d.rooms = (d.rooms || []).filter((x) => x.id !== id); });
+    this.toastWithUndo('Pièce « ' + r.name + ' » supprimée', () => this.mutate((d) => { if (!d.rooms.some((x) => x.id === copie.id)) d.rooms.push(copie); }));
+  }
+
   // ---- lieux (inventaires par lieu de vacances) --------------------------
   // Comme les courses, tout passe par des opérations : ni les lieux ni les
   // affaires ne voyagent dans l'enregistrement du document complet.

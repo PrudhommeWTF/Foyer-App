@@ -209,14 +209,14 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
  * visent qu'un écran de cette liste ; un test vérifie que la navigation n'en
  * oublie aucun.
  */
-export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'contacts', 'fidelite', 'finances', 'employe', 'ecole', 'repas', 'recettes', 'planning', 'settings'] as const;
+export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'contacts', 'fidelite', 'finances', 'employe', 'equipements', 'ecole', 'repas', 'recettes', 'planning', 'settings'] as const;
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
   lieux: 'Lieux de vacances',
   contacts: 'Contacts importants', fidelite: 'Cartes de fidélité', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
-  ecole: 'École',
+  ecole: 'École', equipements: 'Équipements',
 };
 
 /**

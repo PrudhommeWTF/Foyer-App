@@ -9,7 +9,7 @@
 // restauration les reconnaît sur le disque par leur empreinte, quel que soit
 // l'identifiant qu'ils avaient ailleurs, et dit combien manquent.
 import type { Database } from 'better-sqlite3';
-import { EQP_SCHEMA_VERSION, seedRooms } from './schema';
+import { EQP_SCHEMA_VERSION } from './schema';
 import * as files from '../storage/files';
 import { blobPath, relPathFor, releaseBlob } from '../storage/blobs';
 import { log } from '../log';
@@ -17,8 +17,13 @@ import { log } from '../log';
 let database: Database;
 export function initBackup(db: Database): void { database = db; }
 
-/** Tables du module, dans l'ordre des dépendances. */
-const TABLES = ['eqp_rooms', 'eqp_items', 'eqp_attachments', 'eqp_events'] as const;
+/**
+ * Tables du module, dans l'ordre des dépendances. `eqp_rooms` n'en fait plus
+ * partie : les pièces vivent dans le document du foyer (socle Maison), que la
+ * sauvegarde de la base emporte. Une fiche restaurée garde l'identifiant de sa
+ * pièce ; une pièce supprimée entre-temps la laisse « sans pièce ».
+ */
+const TABLES = ['eqp_items', 'eqp_attachments', 'eqp_events'] as const;
 
 interface FileEntry { id: number; name: string; mime: string; size: number; sha256: string; ext: string; }
 
@@ -150,8 +155,9 @@ export function restoreModule(backup: unknown): RestoreReport {
 export function moduleCounts(): Record<string, number> { return counts(); }
 
 /**
- * Efface toutes les données du module (tables eqp_*, et les fichiers qui ne
- * servaient qu'à lui), puis repose les pièces de départ. Rend le décompte d'avant.
+ * Efface toutes les données du module (fiches, historique, pièces jointes et
+ * les fichiers qui ne servaient qu'à elles). Les pièces de la maison restent :
+ * elles appartiennent au foyer, Entretien s'en sert aussi. Rend le décompte d'avant.
  */
 export function resetModule(): Record<string, number> {
   const before = counts();
@@ -159,7 +165,6 @@ export function resetModule(): Record<string, number> {
     database.pragma('defer_foreign_keys = ON');
     for (const t of [...TABLES].reverse()) database.prepare(`DELETE FROM ${t}`).run();
     dropModuleFiles();
-    seedRooms(database);
   })();
   return before;
 }

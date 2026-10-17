@@ -15,12 +15,14 @@
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
-export const EQP_SCHEMA_VERSION = 1;
+export const EQP_SCHEMA_VERSION = 2;
 
 /**
- * Les pièces proposées à la création du module. Ce sont des données, pas du
- * code : on les renomme, les réordonne ou les archive depuis l'écran. Elles sont
- * recréées par une remise à zéro du module.
+ * Les pièces de départ de la migration 1, quand le module rangeait ses pièces
+ * dans `eqp_rooms`. Depuis la migration 2, les pièces vivent dans le **socle
+ * Maison** du document (`rooms`), partagé avec Entretien : `eqp_rooms` ne sert
+ * plus qu'à la reprise des installations qui l'ont connue (voir rooms.ts), et
+ * l'écran propose sa propre liste de départ quand le socle est vide.
  */
 export const STARTER_ROOMS: readonly { name: string; icon: string }[] = [
   { name: 'Cuisine', icon: 'cuisine' },
@@ -126,6 +128,23 @@ const MIGRATIONS: Migration[] = [
         CREATE INDEX eqp_events_item ON eqp_events(item_id, at);
       `);
       seedRooms(db);
+    },
+  },
+  {
+    version: 2,
+    label: 'fiches rattachées aux pièces partagées du foyer',
+    up: (db) => {
+      // La pièce d'une fiche désigne désormais une pièce du socle Maison
+      // (document, identifiant texte), la même liste que celle d'Entretien.
+      // room_id et eqp_rooms restent en place, inutilisés après la reprise :
+      // une migration additive ne supprime rien.
+      db.exec('ALTER TABLE eqp_items ADD COLUMN room_ref TEXT');
+      // Pas encore de foyer (installation neuve) : les pièces de départ de la
+      // migration 1 n'ont servi à personne, il n'y a rien à reprendre. Le
+      // foyer naîtra avec un socle vide, comme Entretien le veut.
+      if (!db.prepare('SELECT 1 FROM household WHERE id = 1').get()) {
+        db.prepare("INSERT OR REPLACE INTO eqp_meta (key, value) VALUES ('rooms_adopted', 'installation neuve')").run();
+      }
     },
   },
 ];
