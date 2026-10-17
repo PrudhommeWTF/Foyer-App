@@ -26,6 +26,7 @@ import * as files from '../storage/files';
 import { log } from '../log';
 import { getHousehold } from '../db';
 import { matches } from './search';
+import { insuranceCsv, insurancePdf, insuranceRows, insuranceZip } from './export';
 
 type Guard = (req: Request, res: Response, next: NextFunction) => void;
 
@@ -96,7 +97,7 @@ const optMonths = (v: unknown): number | null => {
   return n;
 };
 /** Les pièces du socle Maison (document du foyer), partagées avec Entretien. */
-const houseRooms = (): { id: string; name: string; position: number }[] => {
+export const houseRooms = (): { id: string; name: string; position: number }[] => {
   const rooms = (getHousehold().state as { rooms?: unknown }).rooms;
   return Array.isArray(rooms) ? rooms.filter((r) => r && typeof r.id === 'string') : [];
 };
@@ -113,8 +114,8 @@ const assetRef = (v: unknown): number | null => {
   return a;
 };
 
-/** Les champs d'une fiche présents dans le corps, validés. Absent = inchangé. */
-function itemFields(b: Record<string, unknown>): repo.ItemFields {
+/** Les champs d'une fiche présents dans le corps, validés. Absent = inchangé. Sert aussi à l'assistant (MCP). */
+export function itemFields(b: Record<string, unknown>): repo.ItemFields {
   const f: repo.ItemFields = {};
   const has = (k: string): boolean => b[k] !== undefined;
   if (has('name')) f.name = text(b['name'], 'name', 120, true);
@@ -185,6 +186,19 @@ export function listViews(q: { recherche?: string; piece?: string; garantie?: Wa
     .filter((it) => !q.recherche || matches(it, q.recherche, child))
     .map((it) => view(it, child, ctx))
     .filter((v) => !q.garantie || v.warranty.state === q.garantie);
+}
+
+/**
+ * Les garanties à surveiller pour le rappel de fin : fiches actives, appareils
+ * encore là (en service ou en panne), dont la date de fin est connue.
+ */
+export function watchedWarranties(): { id: number; name: string; until: string; daysLeft: number }[] {
+  const t = today(), r = rules();
+  return repo.listItems(false)
+    .filter((it) => it.status === 'en_service' || it.status === 'en_panne')
+    .map((it) => ({ it, w: computeWarranty(it, r, t) }))
+    .filter(({ w }) => w.until !== null && w.daysLeft !== null)
+    .map(({ it, w }) => ({ id: it.id, name: it.name, until: w.until!, daysLeft: w.daysLeft! }));
 }
 
 /** Une fiche complète : pièces jointes et historique, filtrés pour un enfant. */
@@ -369,6 +383,25 @@ export function equipementsRouter(requireAdmin: Guard): Router {
     if (gone.orphan) files.remove(gone.fileId);
     log.info(`Équipements : ${a.kind} « ${a.name} » retirée par ${who(req)}.`);
     res.json({ item: detailView(a.itemId, false) });
+  }));
+
+  // ---- export pour l'assurance (adultes) ----
+  // L'inventaire de la maison avec sa valeur : jamais pour un compte enfant.
+  r.get('/export/assurance.:format', adulte, handler((req, res) => {
+    const format = oneOf(req.params['format'], ['csv', 'pdf', 'zip'] as const, 'format');
+    const t = today();
+    const rows = insuranceRows(rules(), t);
+    const household = String((getHousehold().state as { familyName?: string }).familyName || '');
+    const name = `equipements-assurance-${t}.${format}`;
+    log.info(`Équipements : export pour l’assurance (${format}, ${rows.length} appareil(s)) par ${who(req)}.`);
+    res.setHeader('Content-Disposition', contentDisposition('attachment', name, 'export'));
+    res.setHeader('Cache-Control', 'private, no-store');
+    if (format === 'csv') { res.type('text/csv; charset=utf-8').send(insuranceCsv(rows)); return; }
+    if (format === 'pdf') { res.type('application/pdf').send(insurancePdf(rows, household, t)); return; }
+    // Le zip part au fil de l'eau : une facture à la fois en mémoire.
+    res.type('application/zip');
+    insuranceZip(res, rows, household, t);
+    res.end();
   }));
 
   // ---- sauvegarde / restauration du module (administrateur) ----

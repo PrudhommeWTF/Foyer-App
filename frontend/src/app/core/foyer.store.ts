@@ -3306,7 +3306,7 @@ export class FoyerStore {
   private readonly externalDayExtras = computed(() => {
     const out: Record<string, DayExtra[]> = {};
     // Un module éteint ne pose plus ses repères, même si son store tourne encore.
-    const off = (src: string): boolean => (src === 'finances' && !this.modFinances()) || (src === 'employe' && !this.modEmploye()) || (src === 'ecole' && !this.modEcole());
+    const off = (src: string): boolean => (src === 'finances' && !this.modFinances()) || (src === 'employe' && !this.modEmploye()) || (src === 'ecole' && !this.modEcole()) || (src === 'equipements' && !this.modEquipements());
     for (const [source, map] of Object.entries(this.extDayExtraSources())) {
       if (off(source)) continue;
       for (const [ds, items] of Object.entries(map)) (out[ds] ??= []).push(...items);

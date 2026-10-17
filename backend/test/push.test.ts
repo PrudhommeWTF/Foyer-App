@@ -192,6 +192,7 @@ describe('planificateur', () => {
     rappelJour: () => 3,
     url: () => '',
     entretienOn: () => true,
+    garanties: () => ({ items: [], alertDays: 60 }),
     // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
     // ses rappels. Les tests qui éprouvent ces règles les posent eux-mêmes.
     rules: () => ({ paused: false, quiet: { from: '', to: '' } }),
@@ -225,6 +226,26 @@ describe('planificateur', () => {
     assert.equal(sent.length, 0, 'module éteint : le geste ne rappelle pas');
     await tick(deps([{ ...geste, id: 'g3', due: null }], log), '2026-09-05T09:00');
     assert.equal(sent.length, 0, 'jamais noté : pas de date, pas de rappel');
+  });
+
+  it('fin de garantie : une fois par fiche et par date de fin, aux adultes qui le veulent, à partir de 9 h', async () => {
+    addDevice('m1', sub('a'), ''); addDevice('me', sub('b'), '');
+    const log: string[] = [];
+    const lave = { id: 7, name: 'Lave-vaisselle', until: '2026-10-30', daysLeft: 25 };
+    const garanties = (items: typeof lave[]) => () => ({ items, alertDays: 60 });
+    const wants = (m: string, kind: string) => !(m === 'm1' && kind === 'garantie');
+    await tick(deps([], log, { garanties: garanties([lave]), wants }), '2026-10-05T08:59');
+    assert.equal(sent.length, 0, 'pas avant 9 h');
+    await tick(deps([], log, { garanties: garanties([lave]), wants }), '2026-10-05T09:00');
+    assert.deepEqual(sent.map((s) => s.endpoint.slice(-1)), ['b'], 'm1 a coupé les fins de garantie');
+    assert.equal(sent[0].title, 'Garantie bientôt terminée');
+    assert.ok(log.some((l) => l.includes('Lave-vaisselle : sous garantie jusqu’au 30/10/2026 (encore 25 jours).')), log.join('\n'));
+    await tick(deps([], log, { garanties: garanties([{ ...lave, daysLeft: 24 }]), wants }), '2026-10-06T09:00');
+    assert.equal(sent.length, 1, 'une seule fois pour cette date de fin, même le lendemain');
+    await tick(deps([], log, { garanties: garanties([{ ...lave, until: '2027-10-30', daysLeft: 20 }]), wants }), '2027-10-10T09:00');
+    assert.equal(sent.length, 2, 'garantie prolongée : la nouvelle fin prévient à nouveau');
+    await tick(deps([], log, { garanties: garanties([{ id: 8, name: 'Four', until: '2026-12-31', daysLeft: 80 }, { id: 9, name: 'TV', until: '2026-10-01', daysLeft: -5 }]), wants }), '2026-10-12T09:00');
+    assert.equal(sent.length, 2, 'ni au-delà du seuil, ni une garantie déjà finie');
   });
 
   it('une tâche faite entre-temps n’est plus rappelée ; reportée, elle l’est à nouveau', async () => {

@@ -81,3 +81,31 @@ describe('Photos : réduction avant envoi', () => {
     assert.equal(jpegName('plaque'), 'plaque.jpg');
   });
 });
+
+describe('Équipements : repères d’agenda', () => {
+  it('au dernier jour des garanties en cours, appareils encore là seulement', async () => {
+    const { warrantyDayExtras } = await import('./equipements');
+    const w = (state: WarrantyState, until: string | null) => ({ state, until, since: null, daysLeft: 1, source: null, months: null, label: '', explain: '' });
+    const out = warrantyDayExtras([
+      fiche(1, { name: 'Lave-vaisselle', warranty: w('sous_garantie', '2027-03-12') }),
+      fiche(2, { name: 'Four', warranty: w('expire_bientot', '2026-12-01') }),
+      fiche(3, { name: 'Ampli', warranty: w('hors_garantie', '2019-11-07') }),
+      fiche(4, { name: 'Vieux four', status: 'remplace', warranty: w('sous_garantie', '2027-01-01') }),
+      fiche(5, { name: 'Robot', warranty: w('inconnue', null) }),
+    ]);
+    assert.deepEqual(Object.keys(out).sort(), ['2026-12-01', '2027-03-12']);
+    assert.equal(out['2027-03-12'][0].sub, 'Lave-vaisselle');
+    assert.equal(out['2027-03-12'][0].label, 'Fin de garantie');
+  });
+});
+
+describe('Équipements : tuile d’accueil', () => {
+  it('dit d’abord ce qui demande d’agir, sinon le compte', async () => {
+    const { homeLine } = await import('./equipements');
+    assert.equal(homeLine([], 60), 'Aucune fiche');
+    assert.equal(homeLine([fiche(1), fiche(2, { state: 'sous_garantie' })], 60), '2 fiches, rien à signaler');
+    assert.equal(homeLine([fiche(1, { status: 'en_panne' }), fiche(2, { state: 'expire_bientot' }), fiche(3, { state: 'expire_bientot' })], 60),
+      '1 appareil en panne · 2 garanties expirent dans les 60 jours');
+    assert.equal(homeLine([fiche(1, { state: 'expire_bientot', archivedAt: '2026-01-01' })], 30), 'Aucune fiche', 'une fiche archivée ne compte pas');
+  });
+});

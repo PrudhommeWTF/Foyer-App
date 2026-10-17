@@ -243,3 +243,31 @@ export function cesuDue(emps: EmpMonthState[], month: string, adults: string[], 
   }
   return hits;
 }
+
+/** Une garantie d'équipement vue par le planificateur : déjà calculée (voir equipements/warranty.ts). */
+export interface WarrantyWatch { id: number; name: string; until: string; daysLeft: number; }
+
+/**
+ * Le rappel de fin de garantie (module Équipements) : une garantie qui se
+ * termine dans moins de `alertDays` jours (réglage eqpGarantieAlerteJours)
+ * prévient les adultes, à partir de 9 h, **une seule fois par fiche et par date
+ * de fin** : la clé porte la date, si bien qu'une garantie prolongée prévient à
+ * nouveau à l'approche de sa nouvelle fin, et qu'un réglage changé ne fait pas
+ * repartir un rappel déjà reçu.
+ *
+ * Le jour même de la fin compte encore (« jusqu'au » est inclusif). Une
+ * garantie déjà terminée ne rappelle plus : il est trop tard pour agir.
+ */
+export function warrantyDue(items: WarrantyWatch[], adults: string[], nowWall: string, alertDays: number): ReminderHit[] {
+  if (nowWall.slice(11, 16) < MORNING || !adults.length) return [];
+  const fr = (d: string): string => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+  return (items || []).filter((w) => w.daysLeft >= 0 && w.daysLeft < alertDays).map((w) => ({
+    key: `eqp-garantie|${w.id}|${w.until}`,
+    taskId: 'eqp-' + w.id,
+    memberIds: [...adults],
+    title: 'Garantie bientôt terminée',
+    body: `${w.name} : sous garantie jusqu’au ${fr(w.until)}`
+      + (w.daysLeft === 0 ? ', dernier jour.' : ` (encore ${w.daysLeft} jour${w.daysLeft > 1 ? 's' : ''}).`),
+    fireAt: nowWall.slice(0, 10) + 'T' + MORNING,
+  }));
+}

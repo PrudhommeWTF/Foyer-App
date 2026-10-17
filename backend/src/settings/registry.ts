@@ -343,6 +343,13 @@ export const REGISTRY = [
     default: true,
   },
   {
+    key: 'eqpGarantieRappel',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Équipements',
+    label: 'Sur le téléphone : fins de garantie',
+    desc: 'Vous prévient quand la garantie d’un équipement arrive à échéance, une seule fois par appareil, au seuil réglé dans la section Équipements (60 jours par défaut). Réservé aux adultes : un compte enfant n’en reçoit jamais.',
+    default: true,
+  },
+  {
     key: 'notifEvents',
     type: 'bool', scope: 'personnel', section: 'notifications', module: 'Agenda',
     label: 'Dans la cloche : agenda du jour et de demain',
