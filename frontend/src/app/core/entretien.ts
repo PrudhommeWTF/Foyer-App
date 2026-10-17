@@ -188,7 +188,7 @@ export interface CatalogueEntry {
   rec: { freq: TaskRec['freq']; every: number; base: 'due' | 'done'; grace?: number; season?: Season };
   article?: { nom: string; unite: string; use: number; seuil: number };
 }
-export interface Catalogue { pieces: string[]; gestes: CatalogueEntry[]; }
+export interface Catalogue { gestes: CatalogueEntry[]; }
 
 /**
  * Un brouillon vide, ou prérempli depuis une ligne du catalogue. La pièce est

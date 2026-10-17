@@ -64,7 +64,6 @@ test('stock en clair, et le seuil', () => {
 });
 
 const CATALOGUE: Catalogue = {
-  pieces: ['Cuisine'],
   gestes: [
     { id: 'carafe-filtrante', titre: 'Carafe filtrante : changer la cartouche', famille: 'Eau', piece: 'Cuisine', rec: { freq: 'weekly', every: 4, base: 'done' },
       article: { nom: 'Cartouche pour carafe filtrante', unite: 'cartouche', use: 1, seuil: 1 } },
