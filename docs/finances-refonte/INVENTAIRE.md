@@ -93,7 +93,7 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 | [x] | Tester (aperçu), Enregistrer et appliquer | Règles | Organiser › Règles | Conservé |
 | [x] | Réappliquer sur l'historique, forcer, rapport | Règles | Organiser › Règles | Conservé |
 | [x] | Réappliquer sur une période ou un compte | Serveur seulement | Organiser › Règles | Enfin affiché |
-| [~] | Étiquettes (compte, clic → Opérations) | Règles | Organiser › Règles (bloc présent, non vérifié au navigateur faute d'étiquette dans les données de démo) | Conservé |
+| [x] | Étiquettes (compte, clic → Opérations) | Règles | Organiser › Règles | Conservé |
 
 ## Import et données (PR 3)
 
@@ -113,7 +113,7 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 |---|---|---|---|---|
 | [x] | Tuile d'accueil (revenus, dépenses, solde, compte courant) | Accueil, ordinateur | Accueil, + reste du mois, + téléphone | Amélioré |
 | [x] | Notifications : budget dépassé, mois incomplet, préavis | Notifications | Inchangé | Conservé |
-| [ ] | Échéances dans l'agenda et le flux ICS | Agenda | Inchangé | Conservé |
+| [x] | Échéances dans l'agenda et le flux ICS | Agenda | Inchangé | Conservé |
 | [x] | Tâche depuis échéance / économie, lien retour vers le contrat | Tâches | Inchangé | Conservé |
 | [x] | Recherche globale, menu « + Opération » | Barre du haut | Inchangé (vers Opérations) | Conservé |
 | [x] | Réservé aux adultes, jamais aux jetons, module désactivable | Partout | Inchangé | Conservé |
