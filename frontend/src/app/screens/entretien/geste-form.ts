@@ -1,0 +1,220 @@
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { FoyerStore } from '../../core/foyer.store';
+import { EntretienApi } from '../../core/entretien.api';
+import { IconComponent } from '../../core/icon';
+import { ModalComponent } from '../../shared/modal';
+import { CatalogueEntry, GesteDraft, catalogueByFamily, draftFromCatalogue, draftOf, freqLabel, draftRec, stockLabel } from '../../core/entretien';
+import { REMIND_LABELS } from '../../core/tasks';
+import { normText } from '../../core/helpers';
+import { Remind } from '../../core/models';
+
+/**
+ * Créer ou modifier un geste d'entretien. À la création, on choisit d'abord
+ * dans le catalogue (tout est prérempli : trois taps jusqu'au geste) ou on
+ * part d'une fiche libre. Le catalogue propose, il n'impose rien : le geste
+ * créé est une copie qu'on ajuste.
+ */
+@Component({
+  selector: 'app-geste-form',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FormsModule, IconComponent, ModalComponent],
+  template: `
+    <f-modal [title]="titre()" [maxWidth]="520" [tall]="true" (close)="close.emit()">
+      @if (choix()) {
+        <!-- 1. Choisir dans le catalogue, ou partir d'une fiche libre. -->
+        <button type="button" class="libre" (click)="choisir(null)">
+          <f-icon name="plus" [size]="17" color="var(--primary)" [width]="2.6" /> Geste libre, sans modèle
+        </button>
+        <input class="input search" placeholder="Chercher : carafe, chaudière, filtre…" [ngModel]="q()" (ngModelChange)="q.set($event)" autocomplete="off" />
+        @if (api.erreur()) { <div class="ko">{{ api.erreur() }}</div> }
+        @else if (!api.catalogue()) { <div class="hint">Chargement du catalogue…</div> }
+        @for (f of familles(); track f.famille) {
+          <div class="field-label fam">{{ f.famille }}</div>
+          @for (g of f.gestes; track g.id) {
+            <button type="button" class="cat" (click)="choisir(g)">
+              <span class="cat-t">{{ g.titre }}</span>
+              <span class="cat-s">{{ freq(g) }}@if (g.article) { · {{ g.article.nom }} }@if (dejaLa(g.id)) { <b class="deja"> · déjà dans vos gestes</b> }</span>
+            </button>
+          }
+        } @empty {
+          @if (api.catalogue()) { <div class="hint">Rien ne correspond. Créez un geste libre.</div> }
+        }
+      } @else {
+        @let v = f();
+        <div class="field-label">Le geste</div>
+        <input class="input mb" placeholder="Ex : Carafe filtrante : changer la cartouche" [ngModel]="v.text" (ngModelChange)="set({ text: $event })" />
+
+        <div class="field-label">Fréquence</div>
+        <div class="seg wrap">
+          <button type="button" [class.active]="!v.fixed && v.freq === 'weekly'" (click)="set({ fixed: false, freq: 'weekly' })">Semaines</button>
+          <button type="button" [class.active]="!v.fixed && v.freq === 'monthly'" (click)="set({ fixed: false, freq: 'monthly' })">Mois</button>
+          <button type="button" [class.active]="!v.fixed && v.freq === 'yearly'" (click)="set({ fixed: false, freq: 'yearly' })">Années</button>
+          <button type="button" [class.active]="v.fixed" (click)="set({ fixed: true, fixedDate: v.fixedDate || store.todayStr() })">Date fixe</button>
+        </div>
+        <div class="every">
+          <span>{{ v.fixed ? 'Tous les' : (v.freq === 'weekly' ? 'Toutes les' : 'Tous les') }}</span>
+          <input class="input num" type="number" min="1" max="99" inputmode="numeric" [ngModel]="v.every" (ngModelChange)="set({ every: +$event || 1 })" aria-label="Nombre" />
+          <span>{{ unite() }}</span>
+        </div>
+        <div class="hint">{{ v.fixed ? 'À date fixe : la visite de la chaudière, chaque octobre.' : 'À partir du jour où le geste est fait : trois jours de retard ne se traînent pas.' }} ({{ resume() }})</div>
+        @if (v.fixed) {
+          <div class="two">
+            <label class="lab">Prochaine fois<input class="input" type="date" [ngModel]="v.fixedDate" (ngModelChange)="set({ fixedDate: $event })" /></label>
+            <label class="lab">Souplesse (jours)<input class="input" type="number" min="0" max="365" inputmode="numeric" [ngModel]="v.grace" (ngModelChange)="set({ grace: +$event || 0 })" /></label>
+          </div>
+        }
+
+        <div class="field-label">Pièce</div>
+        <div class="chips">
+          <button type="button" class="chip-o" [class.on]="!v.roomId && !roomNew().trim()" (click)="set({ roomId: null }); roomNew.set('')">Aucune</button>
+          @for (r of store.rooms(); track r.id) {
+            <button type="button" class="chip-o" [class.on]="v.roomId === r.id" (click)="set({ roomId: r.id }); roomNew.set('')">{{ r.name }}</button>
+          }
+        </div>
+        <input class="input" [class.mb]="!roomNew().trim()" placeholder="Ou une nouvelle pièce : Garage, Jardin…" aria-label="Nouvelle pièce" [ngModel]="roomNew()" (ngModelChange)="roomNew.set($event); set({ roomId: null })" />
+        @if (roomNew().trim()) { <div class="hint">La pièce « {{ roomNew().trim() }} » sera créée avec le geste.</div> }
+
+        <div class="field-label">Détail <span class="opt">(facultatif)</span></div>
+        <textarea class="input mb" rows="2" placeholder="Ce qu'il faut savoir pour le faire" [ngModel]="v.howto" (ngModelChange)="set({ howto: $event })"></textarea>
+
+        <label class="check"><input type="checkbox" [ngModel]="!!v.stock" (ngModelChange)="toggleStock($event)" /> Ce geste consomme quelque chose (cartouche, filtre, piles)</label>
+        @if (v.stock; as st) {
+          <div class="stock">
+            <label class="lab">Article, tel qu'il ira dans les courses<input class="input" [ngModel]="st.article" (ngModelChange)="setStock({ article: $event })" placeholder="Cartouche Brita MAXTRA PRO" /></label>
+            <div class="two">
+              @if (stockActuel(); as s) {
+                <div class="lab">En stock<div class="ro">{{ s }}</div></div>
+              } @else {
+                <label class="lab">En stock<input class="input" type="number" min="0" inputmode="numeric" [ngModel]="st.qty" (ngModelChange)="setStock({ qty: +$event || 0 })" /></label>
+              }
+              <label class="lab">Unité<input class="input" [ngModel]="st.unit" (ngModelChange)="setStock({ unit: $event })" placeholder="cartouche" /></label>
+            </div>
+            <div class="two">
+              <label class="lab">Pris à chaque fois<input class="input" type="number" min="1" max="99" inputmode="numeric" [ngModel]="st.use" (ngModelChange)="setStock({ use: +$event || 1 })" /></label>
+              <label class="lab">Racheter à partir de<input class="input" type="number" min="0" inputmode="numeric" [ngModel]="st.threshold" (ngModelChange)="setStock({ threshold: +$event || 0 })" /></label>
+            </div>
+          </div>
+        }
+
+        <div class="field-label">Qui s'en charge</div>
+        <div class="chips">
+          <button type="button" class="chip-o" [class.on]="!v.who.length" (click)="set({ who: [] })">Le premier qui passe</button>
+          @for (m of store.d().members; track m.id) {
+            <button type="button" class="chip-o" [class.on]="v.who.includes(m.id)" (click)="toggleWho(m.id)">{{ m.name }}</button>
+          }
+        </div>
+
+        <div class="field-label">Rappel</div>
+        <select class="input mb" [ngModel]="v.remind || ''" (ngModelChange)="set({ remind: ($event || null) })">
+          <option value="">Aucun</option>
+          @for (r of reminds; track r) { <option [value]="r">{{ REMIND_LABELS[r] }}</option> }
+        </select>
+
+        @if (!id() && !v.fixed) {
+          <div class="field-label">Dernière fois</div>
+          <div class="chips">
+            <button type="button" class="chip-o" [class.on]="!v.lastDone" (click)="set({ lastDone: null })">Je ne sais pas</button>
+            <button type="button" class="chip-o" [class.on]="!!v.lastDone" (click)="set({ lastDone: v.lastDone || store.todayStr() })">Je sais quand</button>
+          </div>
+          @if (v.lastDone) { <input class="input mb" type="date" [max]="store.todayStr()" [ngModel]="v.lastDone" (ngModelChange)="set({ lastDone: $event || null })" /> }
+          @else { <div class="hint">Le geste restera « Pas encore noté », sans date ni rappel, jusqu'à la première fois.</div> }
+        }
+
+        @if (erreur()) { <div class="ko">{{ erreur() }}</div> }
+        <div class="f-act">
+          <button class="btn btn-soft" (click)="id() ? close.emit() : retour()">{{ id() ? 'Annuler' : 'Retour' }}</button>
+          <button class="btn btn-primary" (click)="valider()">{{ id() ? 'Enregistrer' : 'Créer le geste' }}</button>
+        </div>
+      }
+    </f-modal>
+  `,
+  styles: [`
+    .mb { margin-bottom: 18px; }
+    .opt { color: var(--ink3); font-weight: 700; text-transform: none; letter-spacing: 0; }
+    .hint { font-size: 12.5px; font-weight: 600; color: var(--ink3); line-height: 1.45; margin: 8px 0 18px; }
+    .ko { font-size: 12.5px; font-weight: 800; color: #C6492F; margin: 8px 0; }
+    .libre { display: flex; align-items: center; gap: 8px; width: 100%; border: 2px dashed var(--line2); background: none; border-radius: 13px; padding: 13px 14px; font: inherit; font-size: 14px; font-weight: 800; color: var(--primary); cursor: pointer; margin-bottom: 12px; }
+    .search { margin-bottom: 6px; }
+    .fam { margin-top: 16px; }
+    .cat { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; border: none; background: var(--soft); border-radius: 12px; padding: 11px 13px; margin-bottom: 6px; font: inherit; cursor: pointer; }
+    .cat-t { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .cat-s { font-size: 12px; font-weight: 700; color: var(--ink3); }
+    .deja { color: var(--sage); font-weight: 800; }
+    .seg.wrap { flex-wrap: wrap; }
+    .every { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; font-weight: 800; color: var(--ink2); }
+    .num { width: 82px; text-align: center; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .lab { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; color: var(--ink2); }
+    .ro { padding: 13px 0; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+    .chip-o { border: 2px solid var(--line); background: var(--surface); border-radius: 11px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; }
+    .chip-o.on { border-color: var(--primary); color: var(--primary); }
+    .check { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--ink); margin-bottom: 14px; cursor: pointer; }
+    .check input { width: 20px; height: 20px; accent-color: var(--primary); }
+    .stock { background: var(--soft); border-radius: 13px; padding: 12px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 10px; }
+    .stock .two { margin-bottom: 0; }
+    /* Toujours à portée de pouce : créer depuis le catalogue tient en trois taps, sans faire défiler. */
+    .f-act { display: flex; gap: 8px; margin-top: 22px; position: sticky; bottom: -1px; padding: 12px 0 4px; background: var(--surface); }
+    .f-act .btn { flex: 1; }
+  `],
+})
+export class GesteForm implements OnInit {
+  readonly store = inject(FoyerStore);
+  readonly api = inject(EntretienApi);
+  /** Le geste à modifier ; null pour en créer un. */
+  readonly id = input<string | null>(null);
+  readonly close = output<void>();
+  readonly REMIND_LABELS = REMIND_LABELS;
+  readonly reminds: Remind[] = ['morning', 'eve', 'at'];
+
+  readonly choix = signal(false);
+  readonly q = signal('');
+  readonly f = signal<GesteDraft>(draftFromCatalogue(null, '', null));
+  /** Une pièce à créer à l'enregistrement, quand celle du catalogue (ou saisie) n'existe pas encore. */
+  readonly roomNew = signal('');
+  readonly erreur = signal('');
+
+  readonly titre = computed(() => (this.id() ? 'Modifier le geste' : 'Nouveau geste'));
+  readonly familles = computed(() => { const c = this.api.catalogue(); return c ? catalogueByFamily(c, this.q()) : []; });
+  readonly unite = computed(() => { const v = this.f(); return v.fixed || v.freq === 'yearly' ? 'ans' : v.freq === 'weekly' ? 'semaines' : 'mois'; });
+  readonly resume = computed(() => freqLabel(draftRec(this.f())));
+  /** Le stock d'un geste existant ne se réécrit pas ici : on le montre tel qu'il est. */
+  readonly stockActuel = computed(() => { const s = this.id() ? this.store.task(this.id()!)?.maintenance?.stock : undefined; return s ? stockLabel(s, (d) => this.store.fmtNumDate(d)) : ''; });
+
+  ngOnInit(): void {
+    const t = this.id() ? this.store.task(this.id()!) : undefined;
+    if (t) { this.f.set(draftOf(t)); return; }
+    this.choix.set(true);
+    void this.api.charger();
+  }
+
+  freq(g: CatalogueEntry): string { return freqLabel({ freq: g.rec.freq, every: g.rec.every, base: g.rec.base }); }
+  dejaLa(catalogId: string): boolean { return this.store.gestes().some((t) => t.maintenance?.catalogId === catalogId); }
+
+  /** Une ligne du catalogue (ou rien : geste libre) préremplit la fiche ; sa pièce est retrouvée par son nom, sinon proposée à la création. */
+  choisir(g: CatalogueEntry | null): void {
+    const room = g?.piece ? this.store.rooms().find((r) => normText(r.name) === normText(g.piece!)) : undefined;
+    this.f.set(draftFromCatalogue(g, this.store.todayStr(), room?.id ?? null));
+    this.roomNew.set(g?.piece && !room ? g.piece : '');
+    this.choix.set(false);
+  }
+  retour(): void { this.erreur.set(''); this.choix.set(true); void this.api.charger(); }
+
+  set(p: Partial<GesteDraft>): void { this.f.update((f) => ({ ...f, ...p })); }
+  setStock(p: Partial<NonNullable<GesteDraft['stock']>>): void { this.f.update((f) => (f.stock ? { ...f, stock: { ...f.stock, ...p } } : f)); }
+  toggleStock(on: boolean): void { this.set({ stock: on ? { qty: 0, unit: '', use: 1, threshold: 1, article: '' } : null }); }
+  toggleWho(id: string): void { const w = this.f().who; this.set({ who: w.includes(id) ? w.filter((x) => x !== id) : [...w, id] }); }
+
+  valider(): void {
+    const v = this.f();
+    if (!v.text.trim()) { this.erreur.set('Dites quel est le geste.'); return; }
+    if (v.fixed && !v.fixedDate) { this.erreur.set('Une date fixe demande la prochaine date.'); return; }
+    if (v.stock && !v.stock.article.trim()) { this.erreur.set('Dites ce que le geste consomme, ou décochez le stock.'); return; }
+    const roomId = this.roomNew().trim() ? this.store.ensureRoom(this.roomNew()) : v.roomId;
+    const d = { ...v, roomId };
+    if (this.id()) this.store.saveGeste(this.id()!, d); else this.store.createGeste(d);
+    this.close.emit();
+  }
+}

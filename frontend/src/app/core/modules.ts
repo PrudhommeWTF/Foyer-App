@@ -24,12 +24,12 @@ export const MODULES: ModuleDef[] = [
   { flag: 'modFidelite', id: 'fidelite', label: 'Cartes de fidélité', desc: 'Les cartes de fidélité du foyer.', screens: ['fidelite'] },
   { flag: 'modFinances', id: 'finances', label: 'Finances', desc: 'Les comptes, opérations, budgets et contrats.', screens: ['finances'] },
   { flag: 'modEmploye', id: 'employe', label: 'Employé à domicile', desc: 'Le suivi des heures et la déclaration CESU.', screens: ['employe'] },
-  { flag: 'modEntretien', id: 'entretien', label: 'Entretien de la maison', desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, la liste Entretien se cache dans Tâches et ses rappels se taisent ; les gestes sont conservés.', screens: [] },
+  { flag: 'modEntretien', id: 'entretien', label: 'Entretien de la maison', desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran, la liste Entretien dans Tâches et ses rappels disparaissent ; les gestes sont conservés.', screens: ['entretien'] },
   { flag: 'modEquipements', id: 'equipements', label: 'Équipements', desc: 'Les fiches des appareils de la maison : facture, plaque, numéro de série et garantie.', screens: ['equipements'] },
   { flag: 'modEcole', id: 'ecole', label: 'École (ÉcoleDirecte)', desc: 'Les devoirs et l’emploi du temps des enfants, rapatriés d’ÉcoleDirecte. Désactivé, Foyer ne contacte jamais ÉcoleDirecte.', screens: ['ecole'] },
 ];
 
 /** L'écran à son drapeau de module, ou undefined pour un écran toujours présent. */
 export const SCREEN_MODULE: Record<string, ModuleFlag | undefined> = {
-  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', equipements: 'modEquipements',
+  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', entretien: 'modEntretien', equipements: 'modEquipements',
 };

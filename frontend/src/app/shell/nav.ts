@@ -46,8 +46,9 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Le foyer',
     items: [
-      { id: 'lieux', label: 'Lieux de vacances', icon: 'map-pin' },
+      { id: 'entretien', label: 'Entretien', icon: 'outils' },
       { id: 'equipements', label: 'Équipements', icon: 'home' },
+      { id: 'lieux', label: 'Lieux de vacances', icon: 'map-pin' },
       { id: 'contacts', label: 'Contacts', icon: 'contacts' },
       { id: 'fidelite', label: 'Cartes de fidélité', icon: 'card' },
       { id: 'employe', label: 'Employé à domicile', icon: 'users' },

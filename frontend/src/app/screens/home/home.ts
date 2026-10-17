@@ -11,6 +11,7 @@ import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
+import { gesteGroup } from '../../core/entretien';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
 type Ahead =
@@ -866,6 +867,15 @@ export class HomeScreen {
       case 'contacts': return n(d.contacts.length, 'contact', 'contacts', 'Aucun contact');
       case 'fidelite': return n(d.cards.length, 'carte', 'cartes', 'Aucune carte');
       case 'lieux': return n((d.places || []).length, 'lieu', 'lieux', 'Aucun lieu');
+      case 'entretien': {
+        // Les gestes jamais notés ne comptent pas : ils ne sont pas en retard.
+        const g = this.store.gestes().filter((t) => !t.done);
+        if (!g.length) return 'Aucun geste';
+        const today = this.store.todayStr(); const h = this.store.setting('entretienHorizonJours');
+        const retard = g.filter((t) => gesteGroup(t, today, h) === 'retard').length;
+        const bientot = g.filter((t) => gesteGroup(t, today, h) === 'bientot').length;
+        return retard ? n(retard, 'geste en retard', 'gestes en retard', '') : bientot ? n(bientot, 'geste à venir', 'gestes à venir', '') : 'Tout est à jour';
+      }
       case 'ecole': {
         // Un échec se dit avant tout le reste : des devoirs d'hier présentés comme ceux de demain seraient pires que rien.
         const sl = this.ecole.syncLine();

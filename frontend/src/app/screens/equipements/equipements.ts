@@ -211,5 +211,5 @@ export class EquipementsScreen {
   open(it: EqpItem): void { this.store.openItem('equipment', String(it.id)); }
   starterRooms(): void { this.store.addRooms(STARTER_ROOM_NAMES); this.store.toast('Pièces créées : renommez-les ou supprimez-les depuis le menu ⋯'); }
   rename(id: string, name: string): void { const n = name.trim(); if (n) this.store.renameRoom(id, n); }
-  addRoom(): void { const n = this.newRoom().trim(); if (!n) return; this.store.addRoom(n); this.newRoom.set(''); }
+  addRoom(): void { if (this.store.ensureRoom(this.newRoom())) this.newRoom.set(''); }
 }

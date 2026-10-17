@@ -9,6 +9,8 @@ import { REMIND_LABELS, dueLabel, subProgress, subtasksOf } from '../../core/tas
 import { recLabel } from '../../core/recurrence';
 import { whoBadges } from '../../core/schedule';
 import { ItemCtx } from '../../core/items';
+import { stockLabel } from '../../core/entretien';
+import { parisDay } from '../../core/task-ops';
 
 /**
  * La fiche d'une tâche, en lecture : pour qui, pour quand, à quel rythme, la
@@ -52,6 +54,22 @@ import { ItemCtx } from '../../core/items';
       <div class="txt"><div class="main">{{ listName() }}</div>
         @if (t.cat || t.edId) { <div class="sub">@if (t.edId) { <span class="ed-tag">ÉcoleDirecte</span> } {{ t.cat }}</div> }</div>
     </div>
+    @if (t.maintenance; as m) {
+      <!-- Geste d'entretien : ce qui se règle dans l'écran Entretien, montré ici en lecture. -->
+      @if (store.roomName(m.roomId); as r) {
+        <div class="row">
+          <span class="ic"><f-icon name="home" [size]="18" color="#7A9B76" [width]="2.2" /></span>
+          <div class="txt"><div class="main">{{ r }}</div>@if (paused()) { <div class="sub">{{ paused() }}</div> }</div>
+        </div>
+      }
+      @if (m.stock) {
+        <div class="row">
+          <span class="ic"><f-icon name="panier" [size]="18" color="#7A9B76" [width]="2.2" /></span>
+          <div class="txt"><div class="main">{{ stock() }}</div><div class="sub">{{ m.stock.article }} · {{ m.stock.use }} par geste, racheter à partir de {{ m.stock.threshold }}</div></div>
+        </div>
+      }
+      @if (m.howto) { <div class="note">{{ m.howto }}</div> }
+    }
     @if (t.note) {
       <div class="note">{{ t.note }}</div>
     }
@@ -84,10 +102,10 @@ import { ItemCtx } from '../../core/items';
       </div>
     }
     @if (t.history?.length) {
-      <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus. -->
+      <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus (toutes pour un geste d'entretien : c'est son historique). -->
       <div class="field-label">Réalisations · {{ t.history!.length }}</div>
       @for (h of lastDone(); track h.at) {
-        <div class="hist-line">{{ store.fmtNumDate(h.at.slice(0, 10)) }}{{ h.by ? ' par ' + store.memberName(h.by) : '' }}@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
+        <div class="hist-line">{{ store.fmtNumDate(day(h.at)) }}{{ h.by ? ' par ' + store.memberName(h.by) : (geste() ? ' par le foyer' : '') }}@if (h.used) { <span class="hist-due"> · {{ h.used }} pris dans le stock</span> }@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
       }
     }
     <f-stamp [fem]="true" [createdBy]="store.memberName(t.by || '')" [createdAt]="t.at"
@@ -143,7 +161,12 @@ export class TaskView {
   private readonly list = computed(() => this.store.d().taskLists.find((l) => l.id === this.item().listId));
   readonly listName = computed(() => this.list()?.name || 'Liste supprimée');
   readonly listColor = computed(() => this.list()?.color || 'var(--primary)');
-  readonly lastDone = computed(() => (this.item().history || []).slice(-5).reverse());
+  readonly geste = computed(() => this.list()?.kind === 'entretien');
+  readonly lastDone = computed(() => (this.item().history || []).slice(this.geste() ? 0 : -5).reverse());
+  readonly stock = computed(() => { const s = this.item().maintenance?.stock; return s ? stockLabel(s, (d) => this.store.fmtNumDate(d)) : ''; });
+  readonly paused = computed(() => { const p = this.item().maintenance?.pausedUntil; return p && p > this.store.todayStr() ? 'En pause jusqu’au ' + this.store.fmtNumDate(p) : ''; });
+  /** Le jour d'une réalisation, à Paris : une coche à 0 h 30 est du jour même, pas de la veille en UTC. */
+  readonly day = parisDay;
   readonly doneText = computed(() => {
     const t = this.item();
     const qui = t.doneBy ? ' par ' + this.store.memberName(t.doneBy) : '';

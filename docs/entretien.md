@@ -7,10 +7,42 @@ il a été fait et par qui, quand il revient, et ce qu'il reste en stock.
 
 Cadrage et choix : `docs/entretien-etat-des-lieux.md`.
 
-> État : la **PR 1** (serveur et socle) est livrée : modèle, règles de la coche,
-> stock, catalogue, réglages, module activable. L'écran Entretien (PR 2), puis
-> les courses, la tuile d'accueil et les outils d'assistant (PR 3) suivent. En
-> attendant, la liste « Entretien » se voit et se coche dans Tâches.
+> État : le socle (PR 1) et l'écran Entretien (PR 2) sont livrés. Suivent
+> (PR 3) : « J'en ai racheté » et l'ajout aux courses, la tuile d'accueil, les
+> outils d'assistant.
+
+## L'écran
+
+Menu « Le foyer » → **Entretien**. Par défaut, les gestes par date :
+
+| Groupe | Ce qui y est |
+|---|---|
+| En retard | Échéance (plus sa souplesse) dépassée. |
+| Dans les N jours | À faire d'ici l'horizon du réglage `entretienHorizonJours` (14 par défaut). |
+| Plus tard | Au-delà, et les gestes en pause. |
+| Pas encore noté | Jamais faits : pas de date, jamais en retard. |
+| Archivés | Repliés en bas, avec « Réactiver ». |
+
+Le segment **Par pièce** range les mêmes gestes par pièce (« Sans pièce » en
+dernier). Chaque ligne dit le geste, son détail, la pièce, la fréquence en
+clair (« toutes les 4 semaines »), « Fait le … par … » ou « Pas encore noté »,
+la prochaine date ou la pause, le stock, et porte **Fait aujourd'hui** : un
+tap, annulable quelques secondes (le bouton devient « ✓ Fait aujourd'hui »).
+Le menu « … » propose **Fait un autre jour** (date, et qui : un membre ou « le
+foyer »), **Modifier**, **Mettre en pause** jusqu'à une date (ou **Reprendre
+maintenant**), **Archiver**, et la fiche avec l'historique complet.
+
+**Nouveau geste** ouvre le catalogue (recherche, rangé par famille) ou une
+fiche libre. Depuis le catalogue, tout est prérempli, pièce comprise (créée si
+elle n'existe pas) : choisir, puis « Créer le geste ». On y règle la
+fréquence (semaines, mois, années, ou date fixe avec souplesse), la pièce, le
+détail, le stock, qui s'en charge, le rappel, et « Dernière fois » quand on la
+connaît (le geste part alors de cette date au lieu de rester « Pas encore
+noté »). La quantité d'un stock existant ne se modifie pas dans la fiche.
+
+Dans **Tâches**, la liste Entretien a son onglet ; la fiche d'un geste y montre
+la pièce, le stock, le détail et toutes ses réalisations, avec « Ouvrir dans
+Entretien ».
 
 ## Le principe : pas un moteur de plus
 
@@ -41,9 +73,11 @@ maintenance?: {
 ```
 
 Refusés hors de la liste Entretien. Validés dans `backend/src/tasks/ops.ts`
-(les tâches ne passent pas par la validation du document). Une pièce inconnue
-tombe sans faire échouer le geste ; une quantité ou une date mal formée est
-refusée et nommée.
+(les tâches ne passent pas par la validation du document). La pièce n'est pas
+vérifiée contre `rooms` : une pièce créée avec le geste part par
+l'enregistrement du document, qui peut arriver après lui (hors ligne) ; une
+pièce qui n'arrive jamais est retirée à l'enregistrement suivant du document.
+Une quantité ou une date mal formée est refusée et nommée.
 
 `use` est ce qu'un geste consomme (un test des quatre détecteurs prend quatre
 piles). `countedAt` est le jour du dernier changement connu de la quantité :
@@ -53,8 +87,9 @@ c'est ce que l'écran affiche en « Stock au … ».
 
 `rooms: { id, name, position }[]` dans le document, hors de tout module : le
 module Équipements y range aussi ses appareils, et c'est depuis son écran
-(menu ⋯, « Gérer les pièces ») qu'on les renomme, réordonne ou supprime. Une pièce supprimée fait
-passer ses gestes « Sans pièce », elle ne les supprime pas. Un téléphone resté
+(menu ⋯, « Gérer les pièces ») qu'on les renomme, réordonne ou supprime.
+Une pièce supprimée fait passer ses gestes « Sans pièce », elle ne les
+supprime pas. Un téléphone resté
 sur une version antérieure, qui ne connaît pas `rooms`, ne les efface pas en
 enregistrant.
 
@@ -146,8 +181,9 @@ s'applique seul : rien ne casse, mais vos ajouts n'apparaissent pas.
 
 | Clé | Portée | Défaut | Effet |
 |---|---|---|---|
-| `modEntretien` | foyer | activé | Module activable. Éteint : liste cachée dans Tâches, rappels des gestes tus, catalogue fermé. Les gestes et leur historique sont conservés. |
+| `modEntretien` | foyer | activé | Module activable. Éteint : écran, tuile et section de réglages disparaissent, liste cachée dans Tâches, rappels des gestes tus, catalogue fermé. Les gestes et leur historique sont conservés. |
 | `entretienRappel` | personnel | activé | Recevoir les rappels des gestes d'entretien, indépendamment des rappels de ses autres tâches. |
+| `entretienHorizonJours` | foyer | 14 (7 à 90) | L'horizon du groupe « Dans les N jours » de l'écran. |
 
 Registre complet : `docs/parametres.md`. La remise à zéro du module
 (`POST /api/modules/entretien/reset`, confirmation « SUPPRIMER ») efface les
