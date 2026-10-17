@@ -1,210 +1,185 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind, FinPeriod, FinReading, FinSaving } from '../../core/finances.api';
+import { FinAsset, FinContract, FinSaving } from '../../core/finances.api';
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { CAT_ICONS } from '../../core/constants';
-import { FinAttachments } from './attachments';
+import { deadlineLabel } from '../../core/deadlines';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
-import { MemberPickerComponent } from '../../shared/member-picker';
 import { CheckComponent } from '../../shared/check';
+import { FinAttachments } from './attachments';
+import { FinContractSheet } from './contract-sheet';
+import { FinRange } from './charts/range';
+import { ASSET_KINDS, CONTRACT_KINDS, periodWord } from './contract-labels';
 
-const ASSET_KINDS: { id: FinAsset['kind']; label: string; icon: string }[] = [
-  { id: 'immobilier', label: 'Bien immobilier', icon: 'maison' },
-  { id: 'vehicule', label: 'Véhicule', icon: 'voiture' },
-  { id: 'autre', label: 'Autre', icon: 'facture' },
-];
-
-const CONTRACT_KINDS: { id: FinContractKind; label: string }[] = [
-  { id: 'assurance', label: 'Assurance' },
-  { id: 'energie', label: 'Énergie' },
-  { id: 'telecom', label: 'Téléphonie et internet' },
-  { id: 'abonnement', label: 'Abonnement' },
-  { id: 'credit', label: 'Crédit' },
-  { id: 'sante', label: 'Santé' },
-  { id: 'autre', label: 'Autre' },
-];
-
-const PERIODICITIES: { id: FinContract['periodicity']; label: string }[] = [
-  { id: 'mensuelle', label: 'Mensuelle' },
-  { id: 'trimestrielle', label: 'Trimestrielle' },
-  { id: 'semestrielle', label: 'Semestrielle' },
-  { id: 'annuelle', label: 'Annuelle' },
-  { id: 'ponctuelle', label: 'Ponctuelle' },
-];
-
-const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
-  preavis: 'Dernier jour pour résilier',
-  renouvellement: 'Reconduction tacite',
-  fin: 'Fin du contrat',
-};
-
+/**
+ * Contrats : les biens et leurs contrats (fourchette annoncée face au dernier
+ * prélèvement), les échéances des six prochains mois et les pistes
+ * d'économies. Sur ordinateur, « Contrats et biens » montre les trois ; sur
+ * téléphone, chaque sous-onglet montre le sien.
+ */
 @Component({
   selector: 'fin-contracts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, MemberPickerComponent, CheckComponent, FinAttachments],
+  imports: [NgTemplateOutlet, FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent, FinAttachments, FinContractSheet, FinRange],
   template: `
-    <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
-    @if (soonDeadlines().length) {
-      <div class="panel">
-        <div class="panel-title">Échéances des six prochains mois</div>
-        <div class="panel-sub">
-          Un contrat tacitement reconduit et manqué d'un jour coûte une période de plus.
-          Ces dates apparaissent aussi dans le calendrier partagé et dans le flux ICS.
-        </div>
-        <div class="deads">
-          @for (d of soonDeadlines(); track d.contractId + d.kind) {
-            <div class="dead" [class.urgent]="d.kind === 'preavis' && d.daysAway >= 0 && d.daysAway <= 30"
-                 [class.past]="d.daysAway < 0" (click)="store.editContract(d.contractId)">
-              <div class="dead-when">
-                <div class="dead-date">{{ foyer.fmtNumDate(d.date) }}</div>
-                <div class="dead-in">{{ relative(d.daysAway) }}</div>
-              </div>
-              <div class="dead-body">
-                <div class="dead-title">{{ DEADLINE_LABEL[d.kind] }}</div>
-                <div class="dead-sub">{{ d.contractName }}@if (d.provider) { · {{ d.provider }} }</div>
-              </div>
-              @if (d.daysAway >= 0) {
-                <button class="dead-task" (click)="makeTask($event, d)" title="Ajouter cette échéance à mes tâches">
-                  <f-icon name="check" [size]="14" color="var(--ink2)" [width]="2.6" /> Tâche
-                </button>
-              }
-              @if (d.kind === 'preavis') {
-                <f-icon name="urgent" [size]="17" [color]="d.daysAway < 0 ? 'var(--ink3)' : '#C2503A'" [width]="2.2" />
-              }
-            </div>
-          }
-        </div>
-      </div>
-    }
-
-    <div class="bar">
-      <div class="hint">Un contrat explique des opérations : rattachez-les pour comparer ce que vous payez à ce qui était annoncé.</div>
-      <div class="spacer"></div>
-      <button class="btn btn-soft" (click)="store.newAsset()"><f-icon name="plus" [size]="16" color="var(--ink2)" [width]="2.6" /> Bien</button>
-      <button class="btn btn-primary" (click)="store.newContract(null)"><f-icon name="plus" [size]="16" color="#fff" [width]="2.6" /> Contrat</button>
+    @let u = store.ui();
+    <div class="subtabs" role="tablist" aria-label="Contrats">
+      <button role="tab" [attr.aria-selected]="u.contratsTab === 'contrats'" [class.on]="u.contratsTab === 'contrats'" (click)="store.patch({ contratsTab: 'contrats' })">Contrats et biens</button>
+      <button role="tab" [attr.aria-selected]="u.contratsTab === 'echeances'" [class.on]="u.contratsTab === 'echeances'" (click)="store.patch({ contratsTab: 'echeances' })">Échéances · {{ upcoming() }}</button>
+      <button role="tab" [attr.aria-selected]="u.contratsTab === 'economies'" [class.on]="u.contratsTab === 'economies'" (click)="store.patch({ contratsTab: 'economies' })">Économies · {{ fmtInt(store.savingsTotals().pending) }} €/an</button>
     </div>
 
-    <!-- BIENS, chacun avec ses contrats -->
-    @for (a of store.assets(); track a.id) {
-      <div class="panel asset">
-        <div class="asset-head">
-          <div class="asset-chip"><f-icon [path]="CAT_ICONS[iconOf(a.kind)]" [size]="18" color="var(--ink2)" [width]="2" /></div>
-          <div class="asset-id">
-            <div class="asset-name">{{ a.name }}@if (a.status === 'vendu') { <span class="tag">vendu</span> }</div>
-            <div class="asset-meta">{{ kindLabel(a.kind) }}@if (a.address) { · {{ a.address }} }@if (a.acquiredOn) { · acquis le {{ foyer.fmtNumDate(a.acquiredOn) }} }</div>
-          </div>
-          <button class="icon-btn sm" (click)="store.editAsset(a.id)" aria-label="Modifier le bien"><f-icon name="edit" [size]="14" color="var(--ink2)" /></button>
-          <button class="icon-btn sm" (click)="store.patch({ asDelId: a.id })" aria-label="Supprimer le bien"><f-icon name="trash" [size]="14" color="var(--primary)" /></button>
-        </div>
-        <div class="clist">
-          @for (c of store.contractsOfAsset(a.id); track c.id) {
-            <div class="contract" (click)="store.editContract(c.id)">
-              <div class="c-body">
-                <div class="c-name">{{ c.name }}@if (c.status === 'resilie') { <span class="tag">résilié</span> }</div>
-                <div class="c-meta">{{ contractMeta(c) }}</div>
-              </div>
-              @if (store.piecesOf(c.id); as n) { <span class="tag">{{ n }} pièce{{ n > 1 ? 's' : '' }}</span> }
-              <div class="c-cost">{{ costLabel(c) }}</div>
-            </div>
-          } @empty {
-            <div class="none">Aucun contrat rattaché à ce bien.</div>
-          }
-        </div>
-        <button class="addsub" (click)="store.newContract(a.id)"><f-icon name="plus" [size]="13" color="var(--primary)" [width]="2.8" /> Contrat sur ce bien</button>
-      </div>
-    }
-
-    <!-- CONTRATS SANS BIEN -->
-    <div class="panel">
-      <div class="panel-title">Contrats sans bien rattaché</div>
-      <div class="clist">
-        @for (c of store.looseContracts(); track c.id) {
-          <div class="contract" (click)="store.editContract(c.id)">
-            <div class="c-body">
-              <div class="c-name">{{ c.name }}@if (c.status === 'resilie') { <span class="tag">résilié</span> }</div>
-              <div class="c-meta">{{ contractMeta(c) }}</div>
-            </div>
-            @if (store.piecesOf(c.id); as n) { <span class="tag">{{ n }} pièce{{ n > 1 ? 's' : '' }}</span> }
-            <div class="c-cost">{{ costLabel(c) }}</div>
-          </div>
-        } @empty {
-          <div class="none">
-            @if (store.contracts().length) {
-              Tous vos contrats sont rattachés à un bien.
-            } @else {
-              Aucun contrat pour l'instant. Commencez par ceux qui se reconduisent tout seuls : assurances, énergie, téléphonie.
-            }
-          </div>
-        }
-      </div>
-    </div>
-
-    <!-- PISTES D'ÉCONOMIES -->
-    <div class="panel">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title">Pistes d'économies</div>
-          <div class="panel-sub">Ce qu'il reste à faire pour payer moins, avec le gain annuel estimé</div>
-        </div>
-        <button class="btn btn-soft" (click)="store.newSaving(null)"><f-icon name="plus" [size]="16" color="var(--ink2)" [width]="2.6" /> Piste</button>
-      </div>
-
-      @if (store.savingsTotals(); as t) {
-        @if (t.count) {
-          <div class="totals">
-            <div>
-              <div class="overline">À aller chercher</div>
-              <div class="t-val f-display">{{ fmtInt(t.pending) }} € <span class="t-unit">par an</span></div>
-              <div class="t-sub">{{ t.openCount }} piste{{ t.openCount > 1 ? 's' : '' }} ouverte{{ t.openCount > 1 ? 's' : '' }}</div>
-            </div>
-            <div>
-              <div class="overline">Déjà obtenu</div>
-              <div class="t-val f-display" style="color:#5F9A55">{{ fmtInt(t.done) }} € <span class="t-unit">par an</span></div>
-              <div class="t-sub">estimation, le coût réel des contrats fait foi</div>
-            </div>
+    @switch (u.contratsTab) {
+      @case ('contrats') {
+        @if (foyer.narrow()) {
+          <ng-container [ngTemplateOutlet]="assetsPanel" />
+        } @else {
+          <div class="cols">
+            <div class="col-l"><ng-container [ngTemplateOutlet]="deadlinesPanel" /><ng-container [ngTemplateOutlet]="savingsPanel" /></div>
+            <div class="col-r"><ng-container [ngTemplateOutlet]="assetsPanel" /></div>
           </div>
         }
       }
+      @case ('echeances') { <ng-container [ngTemplateOutlet]="deadlinesPanel" /> }
+      @case ('economies') { <ng-container [ngTemplateOutlet]="savingsPanel" /> }
+    }
 
-      <div class="clist">
-        @for (s of store.savings(); track s.id) {
-          <div class="saving" [class.done]="s.status === 'faite'" [class.dropped]="s.status === 'abandonnee'">
-            <button class="s-check-btn"
-                    [attr.aria-label]="s.status === 'faite' ? 'Rouvrir la piste' : 'Marquer comme faite'"
-                    (click)="store.setSavingStatus(s.id, s.status === 'faite' ? 'idee' : 'faite')">
-              <f-check [checked]="s.status === 'faite'" />
+    <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
+    <ng-template #deadlinesPanel>
+      <section class="panel">
+        <div class="panel-title">Échéances des six prochains mois</div>
+        <div class="panel-sub">Un contrat tacitement reconduit et manqué d'un jour coûte une période de plus. Ces dates sont aussi dans le calendrier partagé et le flux ICS.</div>
+        @for (d of soonDeadlines(); track d.contractId + d.kind + d.date) {
+          @let urgent = d.kind === 'preavis' && d.daysAway >= 0 && d.daysAway < 30;
+          <div class="dead" [class.past]="d.daysAway < 0">
+            <button type="button" class="dead-main" (click)="store.editContract(d.contractId)">
+              <span class="dd" [class.crit]="urgent"><b>{{ dayNum(d.date) }}</b><small>{{ monthShort(d.date) }}</small></span>
+              <span class="dead-body">
+                <span class="dead-title" [class.crit]="urgent">@if (urgent) {<span aria-hidden="true">⚠ </span>}{{ deadlineLabel(d.kind) }}</span>
+                <span class="dead-sub">{{ d.contractName }}@if (d.provider) { · {{ d.provider }} } · {{ relative(d.daysAway) }}</span>
+              </span>
             </button>
-            <div class="s-body" (click)="store.editSaving(s.id)">
-              <div class="s-title">
-                {{ s.title }}
-                @if (s.status === 'en-cours') { <span class="tag">en cours</span> }
-                @if (s.status === 'abandonnee') { <span class="tag">abandonnée</span> }
-              </div>
-              <div class="s-meta">{{ savingMeta(s) }}</div>
-            </div>
-            @if (s.status !== 'faite' && s.status !== 'abandonnee') {
-              @if (store.savingTask(s)) {
-                <span class="tag">tâche créée</span>
-              } @else {
-                <button class="dead-task" (click)="store.taskFromSaving(s.id)" title="Ajouter cette piste à mes tâches">
-                  <f-icon name="check" [size]="14" color="var(--ink2)" [width]="2.6" /> Tâche
-                </button>
-              }
+            @if (d.daysAway >= 0) {
+              <button class="dead-task" (click)="store.taskFromDeadline(d)" [attr.aria-label]="'Ajouter une tâche : ' + deadlineLabel(d.kind) + ', ' + d.contractName">+ Tâche</button>
             }
-            <div class="s-gain">{{ fmtInt(s.annualGain) }} €<span class="s-unit">/an</span></div>
           </div>
         } @empty {
-          <div class="none">
-            Aucune piste. Le coût réel d'un contrat, quand il dépasse la fourchette annoncée, est
-            souvent le meilleur endroit où en trouver une.
+          <div class="none">Aucune échéance dans les six prochains mois. Renseignez la date de reconduction et le préavis de vos contrats pour les voir ici.</div>
+        }
+      </section>
+    </ng-template>
+
+    <!-- PISTES D'ÉCONOMIES -->
+    <ng-template #savingsPanel>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Pistes d'économies</div>
+          <button class="soft-btn" (click)="store.newSaving(null)">+ Piste</button>
+        </div>
+        @if (store.savingsTotals(); as t) {
+          @if (t.count) {
+            <div class="totals">
+              <span>À aller chercher <b>{{ fmtInt(t.pending) }} €/an</b> · {{ t.openCount }} piste{{ t.openCount > 1 ? 's' : '' }}</span>
+              <span>Déjà obtenu <b class="good">{{ fmtInt(t.done) }} €/an</b></span>
+            </div>
+          }
+        }
+        <div class="clist">
+          @for (s of store.savings(); track s.id) {
+            <div class="saving" [class.done]="s.status === 'faite'" [class.dropped]="s.status === 'abandonnee'">
+              <button class="s-check-btn" [attr.aria-label]="s.status === 'faite' ? 'Rouvrir la piste' : 'Marquer comme faite'"
+                      (click)="store.setSavingStatus(s.id, s.status === 'faite' ? 'idee' : 'faite')">
+                <f-check [checked]="s.status === 'faite'" />
+              </button>
+              <button type="button" class="s-body" (click)="store.editSaving(s.id)">
+                <span class="s-title">
+                  {{ s.title }}
+                  @if (s.status === 'en-cours') { <span class="tag">en cours</span> }
+                  @if (s.status === 'abandonnee') { <span class="tag">abandonnée</span> }
+                </span>
+                <span class="s-meta">{{ savingMeta(s) }}</span>
+              </button>
+              @if (s.status !== 'faite' && s.status !== 'abandonnee') {
+                @if (store.savingTask(s)) {
+                  <span class="tag">tâche créée</span>
+                } @else {
+                  <button class="dead-task" (click)="store.taskFromSaving(s.id)" title="Ajouter cette piste à mes tâches">+ Tâche</button>
+                }
+              }
+              <div class="s-gain">+{{ fmtInt(s.annualGain) }} €<span class="s-unit">/an</span></div>
+            </div>
+          } @empty {
+            <div class="none">Aucune piste. Un contrat dont le coût réel dépasse la fourchette annoncée est souvent le meilleur endroit où en trouver une.</div>
+          }
+        </div>
+      </section>
+    </ng-template>
+
+    <!-- BIENS ET CONTRATS -->
+    <ng-template #assetsPanel>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">Biens et contrats</div>
+          <span class="head-acts">
+            <button class="soft-btn" (click)="store.newAsset()">+ Bien</button>
+            <button class="soft-btn" (click)="store.newContract(null)">+ Contrat</button>
+          </span>
+        </div>
+        <div class="legend">
+          <span class="lg"><span class="sw band"></span>Fourchette annoncée</span>
+          <span class="lg"><span class="sw mark"></span>Dernier prélèvement</span>
+          <span class="lg"><span class="sw mark off"></span>Hors fourchette</span>
+        </div>
+        @for (a of store.assets(); track a.id) {
+          <div class="block">
+            <div class="asset-head">
+              <span class="asset-chip"><f-icon [path]="CAT_ICONS[iconOf(a.kind)]" [size]="17" color="var(--ink2)" [width]="2" /></span>
+              <span class="asset-id">
+                <b>{{ a.name }}</b>@if (a.status === 'vendu') { <span class="tag">vendu</span> }
+                <small>{{ kindLabel(a.kind) }}@if (a.address) { · {{ a.address }} }@if (a.acquiredOn) { · acquis le {{ foyer.fmtNumDate(a.acquiredOn) }} }</small>
+              </span>
+              <button class="icon-btn sm" (click)="store.editAsset(a.id)" [attr.aria-label]="'Modifier le bien ' + a.name"><f-icon name="edit" [size]="14" color="var(--ink2)" /></button>
+              <button class="icon-btn sm" (click)="store.patch({ asDelId: a.id })" [attr.aria-label]="'Supprimer le bien ' + a.name"><f-icon name="trash" [size]="14" color="var(--primary)" /></button>
+            </div>
+            @for (c of store.contractsOfAsset(a.id); track c.id) {
+              <ng-container [ngTemplateOutlet]="contractRow" [ngTemplateOutletContext]="{ $implicit: c }" />
+            } @empty {
+              <div class="none">Aucun contrat rattaché à ce bien.</div>
+            }
+            <button class="addsub" (click)="store.newContract(a.id)">+ Contrat sur ce bien</button>
           </div>
         }
+        <div class="block">
+          <div class="asset-head"><span class="asset-id"><b>Sans bien rattaché</b></span></div>
+          @for (c of store.looseContracts(); track c.id) {
+            <ng-container [ngTemplateOutlet]="contractRow" [ngTemplateOutletContext]="{ $implicit: c }" />
+          } @empty {
+            <div class="none">
+              @if (store.contracts().length) { Tous vos contrats sont rattachés à un bien. }
+              @else { Aucun contrat pour l'instant. Commencez par ceux qui se reconduisent tout seuls : assurances, énergie, téléphonie. }
+            </div>
+          }
+        </div>
+      </section>
+    </ng-template>
+
+    <ng-template #contractRow let-c>
+      @let cost = store.costOf(c.id);
+      <!-- Toute la ligne ouvre la fiche ; au clavier, c'est le nom (la fourchette garde son propre focus). -->
+      <div class="contract" [class.ended]="c.status === 'resilie'" (click)="store.editContract(c.id)">
+        <button type="button" class="c-body" (click)="$event.stopPropagation(); store.editContract(c.id)">
+          <b>{{ c.name }}{{ c.provider ? ' · ' + c.provider : '' }}</b>
+          <small>{{ contractMeta(c) }}</small>
+        </button>
+        <fin-range class="c-range" [min]="c.amountMin" [max]="c.amountMax" [last]="cost?.lastAmount ?? null" [off]="!!cost?.offRange" />
+        <span class="c-cost" [class.off]="cost?.offRange">@if (cost?.offRange) {<span aria-hidden="true">⚠ </span>}{{ costLabel(c) }}</span>
       </div>
-    </div>
+    </ng-template>
 
     <!-- FORMULAIRE DE PISTE -->
     @if (store.ui().saForm) {
@@ -293,6 +268,10 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
         </div>
         <div class="field-label">Notes</div>
         <input class="input" [ngModel]="store.ui().asNotes" (ngModelChange)="store.patch({ asNotes: $event })" placeholder="Facultatif" />
+        @if (store.ui().asId; as aid) {
+          <div class="field-label">Pièces jointes</div>
+          <fin-attachments owner="asset" [ownerId]="aid" empty="Aucune pièce : acte, carte grise, diagnostic…" />
+        }
         <div class="modal-acts">
           @if (store.ui().asId) {
             <button class="btn btn-danger" (click)="store.patch({ asDelId: store.ui().asId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
@@ -304,224 +283,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
       </f-modal>
     }
 
-    <!-- FORMULAIRE DE CONTRAT -->
-    @if (store.ui().coForm) {
-      <f-modal [title]="store.ui().coId ? 'Modifier le contrat' : 'Nouveau contrat'" [maxWidth]="600" (close)="store.patch({ coForm: false })">
-        <div class="frow">
-          <div class="fgrow">
-            <div class="field-label">Nom</div>
-            <input class="input" [ngModel]="store.ui().coName" (ngModelChange)="store.patch({ coName: $event })" placeholder="Ex : Assurance véhicule" />
-          </div>
-          <div class="fgrow">
-            <div class="field-label">Fournisseur</div>
-            <input class="input" [ngModel]="store.ui().coProvider" (ngModelChange)="store.patch({ coProvider: $event })" placeholder="Ex : AXA" />
-          </div>
-        </div>
-        <div class="frow">
-          <div class="fgrow">
-            <div class="field-label">Type</div>
-            <select class="input" [ngModel]="store.ui().coKind" (ngModelChange)="store.patch({ coKind: $event })">
-              @for (k of contractKinds; track k.id) { <option [ngValue]="k.id">{{ k.label }}</option> }
-            </select>
-          </div>
-          <div class="fgrow">
-            <div class="field-label">Bien concerné</div>
-            <select class="input" [ngModel]="store.ui().coAsset" (ngModelChange)="store.patch({ coAsset: $event })">
-              <option [ngValue]="null">Aucun</option>
-              @for (a of store.assets(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
-            </select>
-          </div>
-        </div>
-
-        <div class="sec-label">Ce qu'il coûte</div>
-        <div class="frow">
-          <div class="fgrow">
-            <div class="field-label">Montant attendu, de</div>
-            <input class="input" [ngModel]="store.ui().coMin" (ngModelChange)="store.patch({ coMin: $event })" placeholder="75,00" inputmode="decimal" />
-          </div>
-          <div class="fgrow">
-            <div class="field-label">à</div>
-            <input class="input" [ngModel]="store.ui().coMax" (ngModelChange)="store.patch({ coMax: $event })" placeholder="85,00" inputmode="decimal" />
-          </div>
-          <div class="fgrow">
-            <div class="field-label">Périodicité</div>
-            <select class="input" [ngModel]="store.ui().coPeriodicity" (ngModelChange)="store.patch({ coPeriodicity: $event })">
-              @for (p of periodicities; track p.id) { <option [ngValue]="p.id">{{ p.label }}</option> }
-            </select>
-          </div>
-        </div>
-        <div class="hint sm">Une fourchette plutôt qu'un montant : les cotisations bougent, et c'est le dépassement de la fourchette qui mérite un signalement.</div>
-
-        <div class="sec-label">Dates</div>
-        <div class="frow">
-          <div class="fgrow">
-            <div class="field-label">Reconduction tacite le</div>
-            <input class="input" type="date" [ngModel]="store.ui().coRenewal" (ngModelChange)="store.patch({ coRenewal: $event })" />
-          </div>
-          <div class="fnarrow">
-            <div class="field-label">Préavis (jours)</div>
-            <input class="input" [ngModel]="store.ui().coNotice" (ngModelChange)="store.patch({ coNotice: $event })" placeholder="60" inputmode="numeric" />
-          </div>
-          <div class="fgrow">
-            <div class="field-label">Fin du contrat</div>
-            <input class="input" type="date" [ngModel]="store.ui().coEnds" (ngModelChange)="store.patch({ coEnds: $event })" />
-          </div>
-        </div>
-        @if (noticeDate(); as nd) {
-          <div class="hint sm">Dernier jour pour résilier : <strong>{{ nd }}</strong>. Cette date apparaîtra dans les échéances.</div>
-        }
-
-        <div class="sec-label">Rattachements</div>
-        <div class="frow">
-          <div class="fgrow">
-            <div class="field-label">Compte prélevé</div>
-            <select class="input" [ngModel]="store.ui().coAccount" (ngModelChange)="store.patch({ coAccount: $event })">
-              <option [ngValue]="null">Aucun</option>
-              @for (a of store.activeLedgerAccounts(); track a.id) { <option [ngValue]="a.id">{{ a.name }}</option> }
-            </select>
-          </div>
-          <div class="fgrow">
-            <div class="field-label">Catégorie</div>
-            <select class="input" [ngModel]="store.ui().coCategory" (ngModelChange)="store.patch({ coCategory: $event })">
-              <option [ngValue]="null">Aucune</option>
-              @for (c of store.rootCategories(); track c.id) {
-                <option [ngValue]="c.id">{{ c.name }}</option>
-                @for (s of store.childrenOf(c.id); track s.id) { <option [ngValue]="s.id">&nbsp;&nbsp;{{ c.name }} · {{ s.name }}</option> }
-              }
-            </select>
-          </div>
-        </div>
-        <div class="field-label">Personnes concernées</div>
-        <f-member-picker [members]="members()" [selected]="store.ui().coMembers" (toggle)="store.toggleMember('coMembers', $event)" />
-        <div class="hint sm">Une mutuelle peut couvrir toute la famille. Aucune sélectionnée veut dire « le foyer ».</div>
-
-        <div class="sec-label">Références</div>
-        @for (r of store.ui().coRefs; track $index; let i = $index) {
-          <div class="refrow">
-            <input class="input" [ngModel]="r.key" (ngModelChange)="store.patchRef(i, { key: $event })" placeholder="N° de police" />
-            <input class="input" [ngModel]="r.value" (ngModelChange)="store.patchRef(i, { value: $event })" placeholder="123-456-789" />
-            <button class="icon-btn" aria-label="Retirer la référence" (click)="store.removeRef(i)"><f-icon name="x" [size]="14" color="var(--ink3)" [width]="2.6" /></button>
-          </div>
-        }
-        <button class="addsub" (click)="store.addRef()"><f-icon name="plus" [size]="13" color="var(--primary)" [width]="2.8" /> Référence</button>
-
-        <div class="frow">
-          <div class="fgrow">
-            <div class="field-label">Statut</div>
-            <select class="input" [ngModel]="store.ui().coStatus" (ngModelChange)="store.patch({ coStatus: $event })">
-              <option [ngValue]="'actif'">Actif</option>
-              <option [ngValue]="'resilie'">Résilié</option>
-            </select>
-          </div>
-          <div class="fgrow">
-            <div class="field-label">Notes</div>
-            <input class="input" [ngModel]="store.ui().coNotes" (ngModelChange)="store.patch({ coNotes: $event })" placeholder="Facultatif" />
-          </div>
-        </div>
-
-        @if (store.ui().coId; as cid) {
-          @if (store.ui().coKind === 'energie') {
-            <div class="sec-label">Relevés de compteur</div>
-            @if (store.energy(); as e) {
-              @if (e.latest; as l) {
-                <div class="energy-head">
-                  <div>
-                    <div class="e-big">{{ round(l.kwhPerDay) }} kWh<span class="e-unit"> par jour</span></div>
-                    <div class="e-sub">du {{ foyer.fmtNumDate(l.from) }} au {{ foyer.fmtNumDate(l.to) }}, soit {{ l.days }} jours</div>
-                  </div>
-                  @if (e.trend !== null) {
-                    <div class="e-trend" [class.up]="e.trend > 0" [class.down]="e.trend < 0">
-                      {{ e.trend > 0 ? '+' : '' }}{{ round(e.trend) }} %
-                      <span class="e-trend-sub">par rapport à l'an dernier</span>
-                    </div>
-                  }
-                </div>
-              }
-            }
-            <div class="readings">
-              @for (r of store.readings(); track r.id) {
-                @let p = store.periodOf(r.id);
-                <div class="reading">
-                  <span class="r-date">{{ foyer.fmtNumDate(r.date) }}</span>
-                  <span class="r-index">{{ indexLabel(r) }}</span>
-                  <span class="r-use" [class.gap]="!!p?.gap">{{ periodLabel(p) }}</span>
-                  <button class="icon-btn sm" aria-label="Supprimer le relevé" (click)="store.deleteReading(r.id, cid)">
-                    <f-icon name="trash" [size]="13" color="var(--primary)" />
-                  </button>
-                </div>
-              } @empty {
-                <div class="none">Aucun relevé. Notez l'index du compteur de temps en temps : deux relevés suffisent à savoir si la consommation dérive.</div>
-              }
-            </div>
-            <div class="rerow">
-              <div class="refield">
-                <div class="field-label">Date du relevé</div>
-                <input class="input" type="date" [ngModel]="store.ui().reDate" (ngModelChange)="store.patch({ reDate: $event })" />
-              </div>
-              <div class="refield">
-                <div class="field-label">Index</div>
-                <input class="input" [ngModel]="store.ui().reIndex" (ngModelChange)="store.patch({ reIndex: $event })" placeholder="17100" inputmode="decimal" />
-              </div>
-              <div class="refield">
-                <div class="field-label">Heures pleines</div>
-                <input class="input" [ngModel]="store.ui().reIndexHp" (ngModelChange)="store.patch({ reIndexHp: $event })" placeholder="facultatif" inputmode="decimal" />
-              </div>
-              <div class="refield">
-                <div class="field-label">Heures creuses</div>
-                <input class="input" [ngModel]="store.ui().reIndexHc" (ngModelChange)="store.patch({ reIndexHc: $event })" placeholder="facultatif" inputmode="decimal" />
-              </div>
-              <div class="refield">
-                <div class="field-label">Montant €</div>
-                <input class="input" [ngModel]="store.ui().reCost" (ngModelChange)="store.patch({ reCost: $event })" placeholder="facultatif" inputmode="decimal" />
-              </div>
-              <button class="btn btn-soft readd" [disabled]="store.ui().busy" (click)="store.saveReading(cid)">Ajouter</button>
-            </div>
-            <div class="hint sm">Un index simple suffit. Les heures pleines et creuses ne servent qu'aux compteurs qui les distinguent, et le montant qu'à calculer le prix du kWh.</div>
-          }
-
-          <div class="sec-label">Pièces jointes</div>
-          <fin-attachments owner="contract" [ownerId]="cid" empty="Aucune pièce. Rangez ici l'échéancier, l'attestation, le dernier avis." />
-
-          <div class="sec-label">Rattachement automatique</div>
-          <button class="mkrule" (click)="store.ruleFromContract(cid)">
-            <f-icon name="bolt" [size]="15" color="var(--primary)" [width]="2.4" /> Créer une règle pour ce contrat
-          </button>
-          <div class="hint sm">
-            La règle part du fournisseur et de la fourchette de montant : c'est ce qui distingue deux
-            contrats du même assureur. Vous pourrez la tester avant de l'enregistrer.
-          </div>
-
-          @if (store.costOf(cid); as cost) {
-            <div class="cost-box" [class.off]="cost.offRange">
-              <div class="cost-line">
-                <strong>{{ cost.count }} opération{{ cost.count > 1 ? 's' : '' }}</strong> rattachée{{ cost.count > 1 ? 's' : '' }} sur douze mois,
-                <strong>{{ fmtInt(cost.total) }} €</strong> au total.
-              </div>
-              @if (cost.lastAmount !== null) {
-                <div class="cost-line">
-                  Dernier prélèvement : {{ fmt(cost.lastAmount) }} € le {{ foyer.fmtNumDate(cost.lastDate || '') }}.
-                  @if (cost.offRange) { <span class="off-txt">Hors de la fourchette annoncée.</span> }
-                </div>
-              }
-              <button class="linkbtn" (click)="store.openContractOperations(cid)">Voir ces opérations</button>
-            </div>
-          } @else {
-            <div class="cost-box">
-              <div class="cost-line">Aucune opération rattachée. Rattachez-les depuis une opération, ou créez une règle « rattacher au contrat ».</div>
-            </div>
-          }
-        }
-
-        <div class="modal-acts">
-          @if (store.ui().coId) {
-            <button class="btn btn-danger" (click)="store.patch({ coDelId: store.ui().coId })"><f-icon name="trash" [size]="16" color="#fff" /> Supprimer</button>
-          }
-          <div class="spacer"></div>
-          <button class="btn btn-soft" (click)="store.patch({ coForm: false })">Annuler</button>
-          <button class="btn btn-primary" [disabled]="store.ui().busy" (click)="store.saveContract()">Enregistrer</button>
-        </div>
-      </f-modal>
-    }
+    @if (u.coForm) { <fin-contract-sheet /> }
 
     @if (store.ui().asDelId) {
       <f-confirm title="Supprimer ce bien ?" (cancel)="store.patch({ asDelId: null })" (confirm)="store.confirmAssetDel()">
@@ -536,38 +298,59 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     }
   `,
   styles: [`
-    .panel { background: var(--surface); border-radius: 18px; padding: 18px; margin-bottom: 14px; box-shadow: var(--sh-card); }
-    .panel-title { font-size: 15px; font-weight: 800; color: var(--ink); }
-    .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
+    .subtabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 18px; overflow-x: auto; }
+    .subtabs button { border: none; background: none; font-family: inherit; font-size: 14.5px; font-weight: 800; color: var(--ink3); padding: 6px 0 10px; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+    .subtabs button.on { color: var(--ink); border-color: var(--primary); }
+    .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 16px; align-items: start; }
+    .panel { background: var(--surface); border-radius: var(--r-card-lg); padding: 20px 22px; margin-bottom: 16px; box-shadow: var(--sh-card); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .panel-title { font-size: 16px; font-weight: 800; color: var(--ink); }
+    .panel-sub { font-size: 12.5px; font-weight: 700; color: var(--ink3); margin: 4px 0 8px; line-height: 1.45; }
+    .head-acts { display: flex; gap: 6px; }
+    .soft-btn { border: none; background: var(--soft2); color: var(--ink2); font-family: inherit; font-size: 12.5px; font-weight: 800; border-radius: 10px; padding: 7px 12px; cursor: pointer; }
+    .soft-btn:hover { color: var(--ink); }
 
-    .deads { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
-    .dead { display: flex; align-items: center; gap: 13px; border-radius: 13px; padding: 9px 11px; background: var(--soft); cursor: pointer; }
-    .dead:hover { background: var(--soft2); }
-    .dead.urgent { background: #FCE9E3; }
-    :host-context(.dark) .dead.urgent { background: #3C2E2F; }
-    .dead.past { opacity: .6; }
-    .dead-when { flex: none; width: 96px; }
-    .dead-date { font-size: 13px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-    .dead-in { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
-    .dead-body { flex: 1; min-width: 0; }
+    .dead { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); padding: 10px 0; }
+    .dead.past { opacity: .55; }
+    .dead-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; border: none; background: none; text-align: left; font-family: inherit; cursor: pointer; padding: 0; }
+    .dd { flex: none; width: 48px; display: flex; flex-direction: column; align-items: center; }
+    .dd b { font-family: var(--font-display); font-size: 22px; color: var(--ink); line-height: 1; }
+    .dd small { font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--ink3); margin-top: 3px; }
+    .dd.crit b, .dead-title.crit { color: var(--status-crit); }
+    .dead-body { display: flex; flex-direction: column; min-width: 0; }
+    .dead-title { font-size: 14px; font-weight: 800; color: var(--ink); }
+    .dead-sub { font-size: 12.5px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .totals { display: flex; gap: 8px 24px; flex-wrap: wrap; font-size: 13.5px; font-weight: 700; color: var(--ink2); margin: 10px 0; }
+    .totals b { color: var(--ink); }
+    .totals b.good { color: var(--status-good); }
+    .clist { display: flex; flex-direction: column; gap: 6px; }
+
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 12px; }
+    .lg { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .sw.band { width: 13px; height: 10px; border-radius: 3px; background: var(--chart-pos); opacity: .35; }
+    .sw.mark { width: 3px; height: 13px; border-radius: 1px; background: var(--ink); }
+    .sw.mark.off { background: var(--status-crit); }
+    .block { border: 1.5px solid var(--line); border-radius: 18px; padding: 12px 16px; margin-bottom: 12px; }
+    .asset-head { display: flex; align-items: center; gap: 10px; padding: 4px 0 6px; }
+    .asset-chip { width: 32px; height: 32px; border-radius: 10px; background: var(--soft2); display: grid; place-items: center; flex: none; }
+    .asset-id { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .asset-id b { font-size: 15.5px; font-weight: 800; color: var(--ink); }
+    .asset-id small { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .contract { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 180px) 90px; align-items: center; gap: 14px; border-top: 1px solid var(--line); padding: 10px 0; cursor: pointer; color: var(--ink); }
+    .contract:hover .c-body b { color: var(--primary); }
+    .contract.ended { opacity: .55; }
+    .c-body { display: flex; flex-direction: column; min-width: 0; border: none; background: none; padding: 0; text-align: left; font-family: inherit; color: inherit; cursor: pointer; }
+    .c-body b { font-size: 14px; font-weight: 800; }
+    .c-body small { font-size: 12px; font-weight: 700; color: var(--ink2); }
+    .c-cost { text-align: right; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .c-cost.off { color: var(--status-crit); }
+    @media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } .contract { grid-template-columns: minmax(0, 1fr) 82px; } .c-range { grid-column: 1 / -1; grid-row: 2; } }
+    .addsub { border: none; background: none; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; padding: 6px 0 0; }
     .dead-task { flex: none; display: inline-flex; align-items: center; gap: 5px; border: none; border-radius: 10px; padding: 6px 11px; background: var(--surface); font-family: inherit; font-size: 12px; font-weight: 800; color: var(--ink2); cursor: pointer; }
     .dead-task:hover { color: var(--primary); }
-    .dead-title { font-size: 13.5px; font-weight: 800; color: var(--ink); }
-    .dead-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-    .bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-    .spacer { flex: 1; }
-    .hint { font-size: 12.5px; font-weight: 700; color: var(--ink3); flex: 1; min-width: 220px; line-height: 1.5; }
     .hint.sm { margin-top: 8px; flex: none; }
-
-    .asset-head { display: flex; align-items: center; gap: 12px; }
-    .asset-chip { width: 38px; height: 38px; flex: none; border-radius: 12px; background: var(--soft2); display: flex; align-items: center; justify-content: center; }
-    .asset-id { flex: 1; min-width: 0; }
-    .asset-name { font-size: 15px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; }
-    .asset-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tag { background: var(--soft2); border-radius: 20px; padding: 1px 8px; font-size: 10.5px; font-weight: 800; color: var(--ink2); }
-
-    .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
     .totals { display: flex; gap: 32px; flex-wrap: wrap; margin-top: 14px; }
     .t-val { font-size: 22px; font-weight: 700; color: var(--ink); margin-top: 3px; }
     .t-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
@@ -576,22 +359,12 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .saving.done, .saving.dropped { opacity: .6; }
     .saving.done .s-title { text-decoration: line-through; }
     .s-check-btn { flex: none; border: none; background: none; padding: 0; cursor: pointer; display: inline-flex; }
-    .s-body { flex: 1; min-width: 0; cursor: pointer; }
+    .s-body { flex: 1; min-width: 0; cursor: pointer; display: flex; flex-direction: column; border: none; background: none; padding: 0; text-align: left; font-family: inherit; }
     .s-title { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
     .s-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .s-gain { flex: none; font-size: 14px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
     .s-unit { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
-    .clist { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
-    .contract { display: flex; align-items: center; gap: 12px; border-radius: 13px; padding: 9px 11px; background: var(--soft); cursor: pointer; }
-    .contract:hover { background: var(--soft2); }
-    .c-body { flex: 1; min-width: 0; }
-    .c-name { font-size: 13.5px; font-weight: 800; color: var(--ink); display: flex; align-items: center; gap: 7px; }
-    .c-meta { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .c-cost { flex: none; font-size: 12.5px; font-weight: 800; color: var(--ink2); font-variant-numeric: tabular-nums; text-align: right; }
     .none { font-size: 13px; font-weight: 700; color: var(--ink3); padding: 10px 0; line-height: 1.5; }
-    .addsub { margin-top: 10px; background: none; border: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; font-family: inherit; padding: 4px 0; }
-    .icon-btn.sm { width: 30px; height: 30px; flex: none; border: none; border-radius: 9px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-
     .frow { display: flex; gap: 12px; }
     .fgrow { flex: 1; min-width: 0; }
     .fnarrow { width: 120px; flex: none; }
@@ -599,39 +372,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .field-label { margin-top: 14px; }
     .frow .field-label { margin-top: 0; }
     .frow + .frow .field-label, .frow + .hint + .frow .field-label { margin-top: 14px; }
-    .sec-label { margin-top: 20px; margin-bottom: 9px; font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--ink3); }
-    .refrow { display: flex; gap: 8px; margin-bottom: 8px; }
-    .refrow .input { flex: 1; min-width: 0; }
-    .icon-btn { width: 38px; height: 38px; flex: none; border: none; border-radius: 11px; background: var(--soft2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-
-    .energy-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; background: var(--soft); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
-    .e-big { font-size: 20px; font-weight: 800; color: var(--ink); }
-    .e-unit { font-size: 13px; font-weight: 700; color: var(--ink3); }
-    .e-sub { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 2px; }
-    .e-trend { font-size: 16px; font-weight: 800; text-align: right; }
-    .e-trend.up { color: #C2503A; }
-    .e-trend.down { color: #5F9A55; }
-    .e-trend-sub { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink3); }
-    .readings { display: flex; flex-direction: column; gap: 6px; }
-    .reading { display: flex; align-items: center; gap: 10px; background: var(--soft); border-radius: 11px; padding: 7px 10px; font-size: 12.5px; font-weight: 700; }
-    .r-date { flex: none; width: 82px; color: var(--ink); font-weight: 800; font-variant-numeric: tabular-nums; }
-    .r-index { flex: none; width: 74px; color: var(--ink3); font-variant-numeric: tabular-nums; text-align: right; }
-    .rerow { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px; }
-    .refield { flex: 1 1 110px; min-width: 0; }
     .refield .field-label { margin-top: 0; }
-    .readd { flex: none; height: 42px; }
-    .r-use { flex: 1; min-width: 0; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .r-use.gap { font-style: italic; color: var(--ink3); }
-    .mkrule { display: inline-flex; align-items: center; gap: 7px; border: none; border-radius: 11px; padding: 9px 14px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
-    .cost-box { margin-top: 18px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
-    .cost-box.off { background: #FDF0DA; }
-    :host-context(.dark) .cost-box.off { background: #39362E; }
-    .cost-line { font-size: 12.5px; font-weight: 700; color: var(--ink2); line-height: 1.6; }
-    .cost-box.off .cost-line { color: #7A5C12; }
-    :host-context(.dark) .cost-box.off .cost-line { color: #E8C88A; }
-    .off-txt { font-weight: 800; }
-    .linkbtn { margin-top: 8px; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
-
     .modal-acts { display: flex; gap: 12px; margin-top: 22px; align-items: center; flex-wrap: wrap; }
     .modal-acts .spacer { flex: 1; }
     .modal-acts .grow { flex: 1; }
@@ -641,31 +382,19 @@ export class FinancesContractsTab {
   store = inject(FinancesStore);
   foyer = inject(FoyerStore);
   assetKinds = ASSET_KINDS;
-  contractKinds = CONTRACT_KINDS;
-  periodicities = PERIODICITIES;
   CAT_ICONS = CAT_ICONS;
-  DEADLINE_LABEL = DEADLINE_LABEL;
+  deadlineLabel = deadlineLabel;
   fmt = fmtEuros;
   fmtInt = fmtEurosInt;
 
-  /** Household members, for the « qui porte ce contrat » selector. */
-  members = computed(() => this.foyer.data()?.members ?? []);
-
   /**
    * Le serveur renvoie plus d'un an d'échéances, pour que le calendrier et le
-   * flux ICS ne perdent jamais une reconduction annuelle. Ce panneau, lui, garde
-   * sa fenêtre de six mois : au-delà, il n'y a rien à faire aujourd'hui.
+   * flux ICS ne perdent jamais une reconduction annuelle. Cette liste garde sa
+   * fenêtre de six mois : au-delà, il n'y a rien à faire aujourd'hui.
    */
-  soonDeadlines = computed(() => this.store.deadlines().filter((d) => d.daysAway <= 185));
-  /**
-   * Noms des personnes encore présentes dans le foyer. Un membre supprimé laisse
-   * son identifiant sur le contrat : l'ignorer vaut mieux qu'afficher un vide
-   * entre deux virgules.
-   */
-  memberNames(ids: string[]): string {
-    const known = this.members();
-    return ids.map((id) => known.find((m) => m.id === id)?.name).filter(Boolean).join(', ');
-  }
+  readonly soonDeadlines = computed(() => this.store.deadlines().filter((d) => d.daysAway <= 185));
+  readonly upcoming = computed(() => this.soonDeadlines().filter((d) => d.daysAway >= 0).length);
+  private readonly members = computed(() => this.foyer.data()?.members ?? []);
 
   constructor() { void this.store.loadContracts(); }
 
@@ -678,38 +407,37 @@ export class FinancesContractsTab {
     if (days > 0) return days === 1 ? 'demain' : `dans ${days} jours`;
     return days === -1 ? 'hier' : `il y a ${-days} jours`;
   }
+  dayNum(iso: string): string { return String(Number(iso.slice(8, 10))); }
+  monthShort(iso: string): string {
+    const [y, m] = iso.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('fr-FR', { month: 'short', timeZone: 'UTC' });
+  }
 
+  /** Type · périodicité · personnes · reconduction ou préavis · pièces · résilié. */
   contractMeta(c: FinContract): string {
-    const bits: string[] = [CONTRACT_KINDS.find((k) => k.id === c.kind)?.label || ''];
-    if (c.provider) bits.push(c.provider);
+    const bits: string[] = [CONTRACT_KINDS.find((k) => k.id === c.kind)?.label || '', c.periodicity];
     if (c.accountId) bits.push(this.store.accountName(c.accountId));
-    const names = this.memberNames(c.memberIds);
+    const names = c.memberIds.map((id) => this.members().find((m) => m.id === id)?.name).filter(Boolean).join(', ');
     if (names) bits.push(names);
-    if (c.renewalOn) bits.push(`reconduit le ${this.foyer.fmtNumDate(c.renewalOn)}`);
+    const notice = this.store.deadlines().find((d) => d.contractId === c.id && d.kind === 'preavis' && d.daysAway >= 0);
+    if (notice) bits.push(`préavis le ${this.foyer.fmtNumDate(notice.date)}`);
+    else if (c.renewalOn) bits.push(`reconduit le ${this.foyer.fmtNumDate(c.renewalOn)}`);
+    if (c.endsOn) bits.push(`fin le ${this.foyer.fmtNumDate(c.endsOn)}`);
+    const n = this.store.piecesOf(c.id);
+    if (n) bits.push(`${n} pièce${n > 1 ? 's' : ''}`);
+    if (c.status === 'resilie') bits.push('résilié');
     return bits.filter(Boolean).join(' · ');
   }
 
-  /** Expected amount, or the real one when operations back it up. */
+  /** Le dernier prélèvement quand il y en a un, sinon le montant annoncé. */
   costLabel(c: FinContract): string {
     const cost = this.store.costOf(c.id);
     if (cost?.lastAmount != null) return `${fmtEuros(cost.lastAmount)} €`;
-    if (c.amountMin !== null && c.amountMax !== null && c.amountMin !== c.amountMax) {
-      return `${fmtEurosInt(c.amountMin)} à ${fmtEurosInt(c.amountMax)} €`;
-    }
+    if (c.amountMin !== null && c.amountMax !== null && c.amountMin !== c.amountMax) return `${fmtEurosInt(c.amountMin)} à ${fmtEurosInt(c.amountMax)} €`;
     const one = c.amountMin ?? c.amountMax;
-    return one !== null ? `${fmtEuros(one)} €` : '';
+    return one !== null ? `${fmtEuros(one)} €${c.periodicity !== 'ponctuelle' ? ' / ' + periodWord(c.periodicity) : ''}` : '';
   }
 
-  /**
-   * Copy a deadline into the tasks. The row itself opens the contract, so the
-   * click must not bubble up to it.
-   */
-  makeTask(event: Event, d: FinDeadline): void {
-    event.stopPropagation();
-    this.store.taskFromDeadline(d);
-  }
-
-  /** Une valeur absente reste vide : un signe de remplacement ne dit rien de plus. */
   /** Contrat concerné, échéance visée, détail : ce qui aide à décider. */
   savingMeta(s: FinSaving): string {
     const bits: string[] = [];
@@ -718,43 +446,4 @@ export class FinancesContractsTab {
     if (s.description) bits.push(s.description);
     return bits.join(' · ');
   }
-
-  round(n: number | null): string {
-    return n === null ? '' : n.toLocaleString('fr-FR', { maximumFractionDigits: 1 });
-  }
-
-  /** What the meter showed, in the form it was entered. */
-  indexLabel(r: FinReading): string {
-    if (r.indexTotal !== null) return this.round(r.indexTotal);
-    if (r.indexHp !== null || r.indexHc !== null) return `${this.round(r.indexHp)} / ${this.round(r.indexHc)}`;
-    return r.kwh !== null ? `${this.round(r.kwh)} kWh` : '';
-  }
-
-  /**
-   * What the period consumed, or why it could not be measured. Saying « compteur
-   * remplacé » vaut mieux qu'afficher une consommation négative.
-   */
-  periodLabel(p: FinPeriod | undefined): string {
-    if (!p) return '';
-    switch (p.gap) {
-      case 'premier': return 'premier relevé, rien à comparer';
-      case 'index-recule': return 'index inférieur au précédent, compteur remplacé ?';
-      case 'meme-jour': return 'même jour que le relevé précédent';
-      case 'inconnu': return 'consommation non calculable';
-      default: break;
-    }
-    const bits = [`${this.round(p.kwh)} kWh en ${p.days} j`, `${this.round(p.kwhPerDay)} kWh/j`];
-    if (p.costPerKwh !== null) bits.push(`${this.round(p.costPerKwh)} c/kWh`);
-    return bits.join(' · ');
-  }
-
-  /** Live preview of the notice deadline while the form is being filled. */
-  noticeDate = computed(() => {
-    const u = this.store.ui();
-    const days = parseInt(u.coNotice || '0', 10);
-    if (!u.coRenewal || !days) return '';
-    const d = new Date(u.coRenewal + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() - days);
-    return this.foyer.fmtNumDate(d.toISOString().slice(0, 10));
-  });
 }

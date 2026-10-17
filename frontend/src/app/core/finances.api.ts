@@ -268,6 +268,9 @@ export class FinancesApi {
   createReading(p: FinReadingPayload): Promise<{ reading: FinReading }> {
     return this.api.post('finances/readings', p);
   }
+  updateReading(id: number, p: FinReadingPayload): Promise<{ reading: FinReading }> {
+    return this.api.put(`finances/readings/${id}`, p);
+  }
   deleteReading(id: number): Promise<{ readings: FinReading[]; periods: FinPeriod[] }> {
     return this.api.del(`finances/readings/${id}`);
   }
