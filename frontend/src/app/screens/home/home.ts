@@ -9,7 +9,6 @@ import { ReorderDirective } from '../../shared/reorder';
 import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
-import { reorder } from '../../core/tasks';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 
@@ -329,24 +328,19 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                 }
               </div>
             } @else {
-              <!-- Mode édition : glisser par la poignée (une colonne pour un geste fiable),
-                   puis Sauvegarder. L'ordre ne change qu'au clic sur Sauvegarder. -->
-              <div class="hint mb-s">Glissez un raccourci par sa poignée pour le ranger, puis Sauvegarder. Propre à cet appareil.</div>
-              <div class="mods editing" [fReorder]="draftIds()" [autoscroll]="true" (reordered)="draftOrder.set($event)">
-                @for (m of draftMods(); track m.id; let i = $index, last = $last) {
-                  <div class="mod edit" [attr.data-rid]="m.id">
-                    <button class="grip" data-grip [attr.aria-label]="'Déplacer ' + m.label">
-                      <f-icon name="grip" [size]="18" color="var(--ink3)" [width]="3" />
-                    </button>
-                    <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="19" [color]="m.color" [width]="2.1" /></span>
-                    <span class="order-name">{{ m.label }}</span>
-                    <button class="icon-btn sm" [disabled]="i === 0" (click)="nudgeDraft(m.id, -1)" aria-label="Monter">
-                      <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
-                    </button>
-                    <button class="icon-btn sm" [disabled]="last" (click)="nudgeDraft(m.id, 1)" aria-label="Descendre">
-                      <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" class="down" />
-                    </button>
-                  </div>
+              <!-- Mode édition : même grille, mêmes tuiles (ni la largeur ni la hauteur
+                   ne bougent), mais chaque tuile se glisse pour se ranger. L'ordre ne
+                   change qu'au clic sur Sauvegarder. Les tuiles ne naviguent plus et
+                   servent elles-mêmes de poignée (flèches clavier en secours). -->
+              <div class="mods editing" [fReorder]="draftIds()" [grid]="true" [autoscroll]="true" (reordered)="draftOrder.set($event)">
+                @for (m of draftMods(); track m.id) {
+                  <button type="button" class="mod" [attr.data-rid]="m.id" data-grip [attr.aria-label]="'Déplacer ' + m.label">
+                    <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="23" [color]="m.color" [width]="2.1" /></span>
+                    <span class="mod-b">
+                      <span class="mod-l">{{ m.label }}</span>
+                      <span class="mod-s">{{ m.sub }}</span>
+                    </span>
+                  </button>
                 }
               </div>
             }
@@ -526,7 +520,9 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
        pour que les points restent centrés quelle que soit la largeur de l'action.
        Les marges verticales (reprises des points) collent la ligne au carrousel
        au-dessus et laissent l'écart homogène de 12px vers la grille en dessous. */
-    .carousel-foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 6px; margin-bottom: -8px; }
+    /* min-height fixe (la hauteur d'un point) : masquer les points en édition ne
+       fait pas remonter la grille de 2px. */
+    .carousel-foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 24px; margin-top: 6px; margin-bottom: -8px; }
     .foot-side { min-width: 0; }
     .foot-act { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
     /* En réorganisation, les points disparaissent (le défilement est verrouillé) et
@@ -535,21 +531,15 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .carousel.editing .track { pointer-events: none; opacity: .5; }
     .org-link { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); background: none; border: none; cursor: pointer; padding: 2px; }
     .org-link.save { color: var(--sage); }
-    .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
-    .hint.mb-s { margin-bottom: 12px; }
-    /* Tuiles en mode édition : une colonne (geste de glisser fiable), poignée à
-       gauche, flèches de secours à droite. */
-    .mods.editing { display: flex; flex-direction: column; gap: 8px; }
-    .mod.edit { gap: 10px; padding: 9px 12px; cursor: default; }
-    .mod.edit:active { background: var(--surface); }
-    .mod.edit .mod-ic { width: 34px; height: 34px; border-radius: 11px; }
-    .order-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 800; color: var(--ink); }
-    .mod.edit .icon-btn[disabled] { opacity: .3; }
-    .mod.edit .grip { flex: none; border: none; background: transparent; cursor: grab; padding: 4px; margin: -4px 0 -4px -4px; border-radius: 7px; touch-action: none; display: flex; align-items: center; }
-    .mod.edit .grip:active { cursor: grabbing; background: var(--soft2); }
-    .mod.edit .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
-    .up { transform: rotate(90deg); }
-    .down { transform: rotate(90deg); }
+    /* Mode édition : exactement la même grille et les mêmes tuiles (largeur et
+       hauteur inchangées). Chaque tuile sert de poignée (on la glisse pour la
+       ranger), ne navigue plus, et un liseré pointillé la signale déplaçable. La
+       tuile tirée (classe .dragging posée par fReorder) se décolle ; les autres
+       glissent en douceur vers leur nouvelle case. */
+    .mods.editing .mod { cursor: grab; touch-action: none; border-style: dashed; border-color: var(--line2); transition: transform .18s ease; }
+    .mods.editing .mod:active { cursor: grabbing; }
+    .mods.editing .mod:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
+    .mods.editing .mod.dragging { border-style: solid; box-shadow: var(--sh-modal); transition: none; }
   `],
 })
 export class HomeScreen {
@@ -686,13 +676,6 @@ export class HomeScreen {
   startEditMods(): void { this.draftOrder.set(this.modules().map((m) => m.id)); this.editMods.set(true); }
   cancelEditMods(): void { this.editMods.set(false); }
   saveEditMods(): void { this.reorderMods(this.draftOrder()); this.editMods.set(false); }
-  /** Flèches de secours (accessibilité) : décale un raccourci d'un cran dans la copie. */
-  nudgeDraft(id: string, dir: -1 | 1): void {
-    const ids = this.draftOrder();
-    const i = ids.indexOf(id); const j = i + dir;
-    if (i < 0 || j < 0 || j >= ids.length) return;
-    this.draftOrder.set(reorder(ids, i, j));
-  }
 
   /**
    * Les 4 prochaines échéances de l'agenda, aujourd'hui compris et jusqu'à deux

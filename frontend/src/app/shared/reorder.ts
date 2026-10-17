@@ -39,10 +39,19 @@ export class ReorderDirective {
    * inutile pour les sous-tâches, d'où le défaut désactivé.
    */
   readonly autoscroll = input(false);
+  /**
+   * Grille à deux dimensions (la grille de raccourcis de l'accueil mobile) plutôt
+   * qu'une simple colonne. La cible n'est plus « combien de milieux déjà passés »
+   * mais la case dont le centre est le plus proche du doigt, et les autres tuiles
+   * se décalent vers la case qu'elles occuperaient dans le nouvel ordre.
+   */
+  readonly grid = input(false);
 
   private from = -1;
   private to = -1;
+  private startX = 0;
   private startY = 0;
+  private lastX = 0;
   private rows: HTMLElement[] = [];
   private rects: DOMRect[] = [];
   private step = 0;
@@ -90,7 +99,9 @@ export class ReorderDirective {
     this.step = this.rects[from].height + (this.rects.length > 1 ? Math.max(0, this.rects[1].top - this.rects[0].bottom) : 0);
     this.from = from;
     this.to = from;
+    this.startX = e.clientX;
     this.startY = e.clientY;
+    this.lastX = e.clientX;
     this.lastY = e.clientY;
     this.grip = grip;
     this.scroller = this.autoscroll() ? this.findScroller() : null;
@@ -99,11 +110,13 @@ export class ReorderDirective {
     rows[from].style.position = 'relative';
     rows[from].style.zIndex = '2';
     rows[from].style.opacity = '.9';
+    rows[from].classList.add('dragging');
   }
 
   @HostListener('pointermove', ['$event'])
   onMove(e: PointerEvent): void {
     if (this.from < 0) return;
+    this.lastX = e.clientX;
     this.lastY = e.clientY;
     this.layout();
     // Près d'un bord de la zone défilante, on enclenche un défilement continu.
@@ -118,6 +131,7 @@ export class ReorderDirective {
    */
   private layout(): void {
     const scrollDelta = this.scroller ? this.scroller.scrollTop - this.startScroll : 0;
+    if (this.grid()) { this.layoutGrid(scrollDelta); return; }
     const dy = this.lastY - this.startY;
 
     // La place visée se lit sous le doigt, pas au centre de la ligne tirée. On
@@ -138,6 +152,40 @@ export class ReorderDirective {
       const shift = to > this.from && i > this.from && i <= to ? -this.step
         : to < this.from && i >= to && i < this.from ? this.step : 0;
       this.rows[i].style.transform = shift ? `translateY(${shift}px)` : '';
+    }
+  }
+
+  /**
+   * Même idée sur deux dimensions : la tuile tirée suit le doigt, la case visée
+   * est celle dont le centre (corrigé du défilement) est le plus proche du doigt,
+   * et les autres tuiles glissent vers la case qu'elles prendraient dans l'ordre
+   * projeté. Les rects, figés au départ, sont les positions des cases.
+   */
+  private layoutGrid(scrollDelta: number): void {
+    const dx = this.lastX - this.startX;
+    const dy = this.lastY - this.startY;
+
+    let to = this.from;
+    let best = Infinity;
+    for (let i = 0; i < this.rects.length; i++) {
+      const r = this.rects[i];
+      const ddx = this.lastX - (r.left + r.width / 2);
+      const ddy = this.lastY - (r.top - scrollDelta + r.height / 2);
+      const d = ddx * ddx + ddy * ddy;
+      if (d < best) { best = d; to = i; }
+    }
+    this.to = to;
+
+    // Ordre projeté des cases (indices d'origine), la tuile tirée déplacée de from à to.
+    const order = reorder(this.rects.map((_, i) => i), this.from, to);
+    const posOf = new Map<number, number>();
+    order.forEach((orig, p) => posOf.set(orig, p));
+    for (let i = 0; i < this.rows.length; i++) {
+      if (i === this.from) { this.rows[i].style.transform = `translate(${dx}px, ${dy + scrollDelta}px)`; continue; }
+      const p = posOf.get(i) ?? i;
+      const tx = this.rects[p].left - this.rects[i].left;
+      const ty = this.rects[p].top - this.rects[i].top;
+      this.rows[i].style.transform = tx || ty ? `translate(${tx}px, ${ty}px)` : '';
     }
   }
 
@@ -179,7 +227,7 @@ export class ReorderDirective {
     const { from, to } = this;
     this.stopAuto();
     this.grip?.releasePointerCapture(e.pointerId);
-    for (const r of this.rows) { r.style.transform = ''; r.style.position = ''; r.style.zIndex = ''; r.style.opacity = ''; }
+    for (const r of this.rows) { r.style.transform = ''; r.style.position = ''; r.style.zIndex = ''; r.style.opacity = ''; r.classList.remove('dragging'); }
     this.from = -1;
     this.rows = [];
     this.grip = null;
