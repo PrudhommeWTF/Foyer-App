@@ -15,7 +15,7 @@
 // tester sur les cas tordus (rejeu, ordre inversé, liste supprimée sous les pieds).
 
 import { endKey, keyForMove, startKey } from './ordering';
-import { nextOccurrence } from './recurrence';
+import { isSeasonDay, nextOccurrence } from './recurrence';
 
 /**
  * Comment une tâche revient. Deux modes, et c'est le choix de fond du module :
@@ -33,6 +33,8 @@ export interface TaskRec {
   base: 'due' | 'done';
   grace?: number;
   until?: string | null;
+  /** La saison, bornes comprises en MM-JJ : la série ne tombe que de `from` à `to` (voir recurrence.ts). */
+  season?: { from: string; to: string } | null;
 }
 /** Le réglage de rappel d'une tâche. Aucun par défaut ; voir notify/reminders.ts pour l'heure qui en découle. */
 export type Remind = 'at' | '1h' | 'eve' | 'morning';
@@ -69,7 +71,7 @@ export interface Maintenance {
   /** Le détail du geste : « l'indicateur du couvercle le rappelle ». */
   howto?: string;
   stock?: MaintenanceStock;
-  /** En pause jusqu'à ce jour (hivernage) : l'échéance y est posée, le geste revient seul. */
+  /** En pause jusqu'à ce jour (absence, panne ; une saison annuelle passe par rec.season) : l'échéance y est posée, le geste revient seul. */
   pausedUntil?: string;
   /** Le geste type du catalogue dont celui-ci est une copie. */
   catalogId?: string;
@@ -283,6 +285,11 @@ function readRec(v: unknown): { rec: TaskRec | null } | { reason: string } {
   if (typeof o['until'] === 'string' && o['until']) {
     if (!ISO_DAY.test(o['until'])) return { reason: 'Fin de récurrence illisible : ' + o['until'] };
     rec.until = o['until'];
+  }
+  if (o['season'] !== undefined && o['season'] !== null) {
+    const se = o['season'] as Record<string, unknown>;
+    if (!se || typeof se !== 'object' || !isSeasonDay(se['from']) || !isSeasonDay(se['to'])) return { reason: 'Saison illisible : attendu { from: "MM-JJ", to: "MM-JJ" }.' };
+    rec.season = { from: se['from'], to: se['to'] };
   }
   return { rec };
 }

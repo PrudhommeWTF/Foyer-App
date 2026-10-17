@@ -27,6 +27,11 @@
 //     avec deux jours de retard, la suivante tombe le dimanche d'après, pas le
 //     samedi. Les jours de la semaine n'ont pas de sens ici : la cadence part
 //     du geste.
+//
+// Et une option, la **saison** (`season`, de MM-JJ à MM-JJ) : la série ne tombe
+// que pendant cette partie de l'année. Le pH de la piscine chaque semaine, de
+// mai à septembre : l'occurrence qui tomberait en octobre saute au 1er mai
+// suivant. Une saison peut passer le 31 décembre (de novembre à mars).
 
 /** La règle d'une série, telle que la portent les tâches (RecRule des deux côtés). */
 export interface RecRule {
@@ -36,7 +41,10 @@ export interface RecRule {
   base: 'due' | 'done';
   grace?: number;
   until?: string | null;
+  season?: Season | null;
 }
+/** Une partie de l'année, bornes comprises, en MM-JJ : `{ from: '05-01', to: '09-30' }`. */
+export interface Season { from: string; to: string; }
 /** Ce que le calendrier lit d'une tâche pour savoir si elle tombe un jour donné. */
 export interface RecTask { due: string | null; rec?: RecRule | null; }
 
@@ -66,6 +74,40 @@ export function addMonthsClamped(iso: string, n: number): string {
   return `${ny}-${pad2(nm)}-${pad2(Math.min(d, daysInMonth(ny, nm)))}`;
 }
 
+/** Une borne de saison bien formée : MM-JJ d'un jour qui existe (le 29 février compris). */
+export const isSeasonDay = (md: unknown): md is string => typeof md === 'string' && /^\d{2}-\d{2}$/.test(md)
+  && +md.slice(0, 2) >= 1 && +md.slice(0, 2) <= 12 && +md.slice(3) >= 1 && +md.slice(3) <= daysInMonth(2024, +md.slice(0, 2));
+
+/** Le jour est-il dans la saison ? Sans saison, toujours. Une saison qui passe le 31 décembre se lit à cheval. */
+export function inSeason(season: Season | null | undefined, iso: string): boolean {
+  if (!season) return true;
+  const md = iso.slice(5, 10);
+  return season.from <= season.to ? md >= season.from && md <= season.to : md >= season.from || md <= season.to;
+}
+
+/** Le jour lui-même s'il est dans la saison, sinon le prochain début de saison (le 29 février tombe le 28 les autres années). */
+export function seasonStart(season: Season | null | undefined, iso: string): string {
+  if (!season || inSeason(season, iso)) return iso;
+  const at = (y: number): string => { const m = +season.from.slice(0, 2); return `${y}-${pad2(m)}-${pad2(Math.min(+season.from.slice(3), daysInMonth(y, m)))}`; };
+  const here = at(year(iso));
+  return here > iso ? here : at(year(iso) + 1);
+}
+
+/**
+ * La fenêtre annuelle en cours ou à venir d'une saison, comme une échéance et
+ * une souplesse : ramoner entre le 1er septembre et le 31 octobre, c'est une
+ * échéance au 1er septembre et 60 jours de souplesse, sur une règle annuelle à
+ * date fixe. Dans la fenêtre, c'est celle qui court (le geste n'est pas encore
+ * en retard) ; après, la suivante.
+ */
+export function seasonWindow(s: Season, today: string): { due: string; grace: number } {
+  const at = (y: number, md: string): string => { const m = +md.slice(0, 2); return `${y}-${md.slice(0, 2)}-${pad2(Math.min(+md.slice(3), daysInMonth(y, m)))}`; };
+  const y = year(today);
+  const due = !inSeason(s, today) ? seasonStart(s, today) : at(y, s.from) <= today ? at(y, s.from) : at(y - 1, s.from);
+  const end = at(year(due), s.to) >= due ? at(year(due), s.to) : at(year(due) + 1, s.to);
+  return { due, grace: Math.min(365, daysBetween(due, end)) };
+}
+
 /** La règle tombe-t-elle ce jour-là, la série étant ancrée sur `origin` ? */
 function matches(rec: RecRule, origin: string, day: string): boolean {
   const every = Math.max(1, rec.every || 1);
@@ -90,7 +132,7 @@ function matches(rec: RecRule, origin: string, day: string): boolean {
 /** La première date de la règle strictement après `after`, ou null au-delà de l'horizon. */
 function firstMatchAfter(rec: RecRule, origin: string, after: string): string | null {
   let day = addDaysIso(after, 1);
-  for (let i = 0; i < HORIZON_DAYS; i++, day = addDaysIso(day, 1)) if (matches(rec, origin, day)) return day;
+  for (let i = 0; i < HORIZON_DAYS; i++, day = addDaysIso(day, 1)) if (inSeason(rec.season, day) && matches(rec, origin, day)) return day;
   return null;
 }
 
@@ -111,7 +153,7 @@ function stepFrom(iso: string, rec: RecRule): string {
  */
 export function nextOccurrence(rec: RecRule, due: string, doneOn: string): string | null {
   const next = rec.base === 'done'
-    ? stepFrom(doneOn, rec)
+    ? seasonStart(rec.season, stepFrom(doneOn, rec))
     : firstMatchAfter(rec, due, due > doneOn ? due : doneOn);
   if (!next) return null;
   if (rec.until && next > rec.until) return null;
@@ -148,7 +190,8 @@ function stepBack(iso: string, rec: RecRule): string {
 export function occurrenceProgress(rec: RecRule, due: string, today: string): number {
   if (today >= due) return 1;
   const start = stepBack(due, rec);
-  if (today <= start) return 0;
+  // Hors saison, rien ne court : la barre reste vide jusqu'à la reprise.
+  if (today <= start || !inSeason(rec.season, start)) return 0;
   const total = daysBetween(start, due);
   return total <= 0 ? 1 : Math.max(0, Math.min(1, daysBetween(start, today) / total));
 }
@@ -170,7 +213,7 @@ export function taskOccursOn(task: RecTask, date: string): boolean {
   if (date < task.due) return false;
   if (task.rec.until && date > task.rec.until) return false;
   if (task.rec.base === 'done') return date === task.due;
-  return matches(task.rec, task.due, date);
+  return inSeason(task.rec.season, date) && matches(task.rec, task.due, date);
 }
 
 export const DOW_SHORT = ['', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
@@ -182,12 +225,26 @@ const EVERY_LABELS: Record<RecRule['freq'], (n: number) => string> = {
   yearly: (n) => `Tous les ${n} ans`,
 };
 
+const MONTHS = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const dayLabel = (md: string): string => { const d = +md.slice(3); return `${d === 1 ? '1er' : d} ${MONTHS[+md.slice(0, 2)]}`; };
+/** Une saison en mois entiers : du 1er au dernier jour (le 29 février compte pour la fin de février). */
+const wholeMonths = (s: Season): boolean => s.from.endsWith('-01') && +s.to.slice(3) === daysInMonth(2024, +s.to.slice(0, 2));
+
+/** « de mai à septembre », « d'octobre à mars », « du 15 avril au 30 septembre ». */
+export function seasonLabel(s: Season): string {
+  if (!wholeMonths(s)) return `du ${dayLabel(s.from)} au ${dayLabel(s.to)}`;
+  const a = MONTHS[+s.from.slice(0, 2)]; const b = MONTHS[+s.to.slice(0, 2)];
+  if (a === b) return `en ${a}`;
+  return `${/^[aeiouy]/.test(a) ? "d'" : 'de '}${a} à ${b}`;
+}
+
 /** « Toutes les 2 semaines (lun., jeu.) », « Chaque semaine après la réalisation, souplesse 3 j ». */
 export function recLabel(rec: RecRule, fmt?: (iso: string) => string): string {
   const n = Math.max(1, rec.every || 1);
   let s = n === 1 ? FREQ_LABELS[rec.freq] : EVERY_LABELS[rec.freq](n);
   if (rec.freq === 'weekly' && rec.base === 'due' && rec.days?.length) s += ' (' + rec.days.map((d) => DOW_SHORT[d]).join(', ') + ')';
   if (rec.base === 'done') s += ' après la réalisation';
+  if (rec.season) s += ', ' + seasonLabel(rec.season);
   if (rec.grace) s += `, souplesse ${rec.grace} j`;
   if (rec.until && fmt) s += `, jusqu'au ${fmt(rec.until)}`;
   return s;

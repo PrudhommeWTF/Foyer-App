@@ -23,3 +23,28 @@ export function parseFrequence(v: string): { freq: 'daily' | 'weekly' | 'monthly
   const adj: Record<string, 'daily' | 'weekly' | 'monthly' | 'yearly'> = { quotidien: 'daily', quotidienne: 'daily', hebdomadaire: 'weekly', mensuel: 'monthly', mensuelle: 'monthly', annuel: 'yearly', annuelle: 'yearly' };
   return adj[s] ? { freq: adj[s], every: 1 } : null;
 }
+
+const MOIS = ['janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin', 'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre'];
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+/** Le dernier jour d'un mois, le 29 février compris : une saison « jusqu'à février » couvre aussi les années bissextiles. */
+const lastDay = (m: number): number => new Date(Date.UTC(2024, m, 0)).getUTCDate();
+
+/**
+ * Une saison dite en français, vers ses bornes MM-JJ. Null sur ce qu'on ne sait
+ * pas lire. « de mai à septembre », « d'octobre à mars », « du 15 avril au
+ * 30 septembre », « en octobre », « mai-septembre ».
+ */
+export function parseSaison(v: string): { from: string; to: string } | null {
+  const s = norm(v).replace(/[’']/g, ' ').replace(/\b1er\b/g, '1');
+  const month = (w: string): number => MOIS.indexOf(w) + 1;
+  const bound = (day: string | undefined, w: string, end: boolean): string | null => {
+    const m = month(w); if (!m) return null;
+    const d = day ? +day : end ? lastDay(m) : 1;
+    return d >= 1 && d <= lastDay(m) ? `${pad2(m)}-${pad2(d)}` : null;
+  };
+  let m = /^(?:du |de |d )?(?:(\d{1,2}) )?(\p{L}+)\s*(?:au|a|jusqu au|-)\s*(?:(\d{1,2}) )?(\p{L}+)$/u.exec(s);
+  if (m) { const from = bound(m[1], m[2], false); const to = bound(m[3], m[4], true); return from && to ? { from, to } : null; }
+  m = /^(?:en )?(\p{L}+)$/u.exec(s);
+  if (m) { const from = bound(undefined, m[1], false); const to = bound(undefined, m[1], true); return from && to ? { from, to } : null; }
+  return null;
+}

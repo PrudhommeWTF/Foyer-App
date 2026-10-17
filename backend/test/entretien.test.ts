@@ -38,6 +38,29 @@ describe('Entretien', () => {
     assert.equal(brita.article.unite, 'cartouche');
   });
 
+  it('le catalogue porte des saisons (piscine) et des fenêtres (ramonage) ; une saison mal formée est écartée', async () => {
+    const r = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, M());
+    const by = (id: string) => r.json.gestes.find((g: { id: string }) => g.id === id);
+    assert.deepEqual(by('piscine-ph').rec.season, { from: '05-01', to: '09-30' });
+    assert.deepEqual(by('ramonage').rec, { freq: 'yearly', every: 1, base: 'due', season: { from: '09-01', to: '10-31' } });
+    const file = path.join(ctx.dir, 'entretien-catalogue.json');
+    fs.writeFileSync(file, JSON.stringify({ gestes: [{ id: 'serre', titre: 'Serre : aérer', rec: { freq: 'weekly', every: 1, base: 'done', season: { from: '13-01', to: '09-30' } } }] }));
+    const r2 = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, M());
+    assert.ok(!r2.json.gestes.some((g: { id: string }) => g.id === 'serre'), 'écartée');
+    fs.unlinkSync(file);
+  });
+
+  it('un geste de saison noté en fin de saison revient à la reprise, calculé par le serveur', async () => {
+    const add = await ops([{ op: 'add', opId: 's-add', id: 'gs', listId: 'entretien', text: 'Piscine : pH', who: [], due: '2026-09-27',
+      rec: { freq: 'weekly', every: 1, base: 'done', season: { from: '05-01', to: '09-30' } } }]);
+    assert.deepEqual(add.json.applied, ['s-add'], JSON.stringify(add.json));
+    await ops([{ op: 'done', opId: 's-d1', id: 'gs', occ: '2026-09-27', at: '2026-09-28T08:00:00Z' }]);
+    assert.equal((await geste('gs'))?.['due'], '2027-05-01', 'le 5 octobre serait hors saison');
+    const bad = await ops([{ op: 'add', opId: 's-bad', id: 'gx', listId: 'entretien', text: 'X', who: [], due: null, rec: { freq: 'weekly', every: 1, base: 'done', season: { from: '05-01' } } }]);
+    assert.match(JSON.stringify(bad.json.skipped), /Saison illisible/);
+    await ops([{ op: 'remove', opId: 's-rm', id: 'gs' }]);
+  });
+
   it('une surcharge dans le dossier des données s’applique sans redémarrer, et une surcharge illisible ne casse rien', async () => {
     const file = path.join(ctx.dir, 'entretien-catalogue.json');
     fs.writeFileSync(file, JSON.stringify({

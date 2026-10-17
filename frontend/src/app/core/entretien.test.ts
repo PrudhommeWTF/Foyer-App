@@ -74,7 +74,7 @@ const CATALOGUE: Catalogue = {
 
 test('créer depuis le catalogue : fréquence, stock et catalogue préremplis', () => {
   const d = { ...draftFromCatalogue(CATALOGUE.gestes[0], TODAY, 'p1'), stock: { ...draftFromCatalogue(CATALOGUE.gestes[0], TODAY, 'p1').stock!, qty: 4 } };
-  const op = createOp(d, 'g9');
+  const op = createOp(d, 'g9', TODAY);
   const [g] = applyTaskOp([], { ...op, opId: 'x', at: '2026-10-17T08:00:00Z', by: 'me' } as TaskOp);
   assert.equal(g.listId, 'entretien');
   assert.equal(g.due, null, 'pas encore noté');
@@ -86,7 +86,7 @@ test('créer depuis le catalogue : fréquence, stock et catalogue préremplis', 
 });
 
 test('date fixe : la chaudière part de la date choisie, avec sa souplesse', () => {
-  const op = createOp({ ...draftFromCatalogue(CATALOGUE.gestes[1], TODAY, null), fixedDate: '2026-10-15' }, 'g8');
+  const op = createOp({ ...draftFromCatalogue(CATALOGUE.gestes[1], TODAY, null), fixedDate: '2026-10-15' }, 'g8', TODAY);
   assert.equal(op.op === 'add' && op.due, '2026-10-15');
   assert.deepEqual(op.op === 'add' && op.rec, { freq: 'yearly', every: 1, base: 'due', grace: 30 });
 });
@@ -113,10 +113,48 @@ test('noté par un assistant : l’historique le dit', () => {
 });
 
 test('l’appareil rattaché suit le geste : création, relecture, modification', () => {
-  const op = createOp({ ...draftFromCatalogue(null, TODAY, null), text: 'Chaudière', equipmentId: 7 }, 'g7');
+  const op = createOp({ ...draftFromCatalogue(null, TODAY, null), text: 'Chaudière', equipmentId: 7 }, 'g7', TODAY);
   assert.equal(op.op === 'add' && op.maintenance?.equipmentId, 7);
   const t = geste({ maintenance: { equipmentId: 7 } });
   assert.equal(draftOf(t).equipmentId, 7);
   const [e] = editOps(t, { ...draftOf(t), equipmentId: null });
   assert.equal(e.op === 'edit' && e.maintenance?.equipmentId, null, 'retirer l’appareil s’écrit null');
+});
+
+// ---- saisons et fenêtres ----
+
+const PISCINE = { id: 'piscine-ph', titre: 'Piscine : pH', famille: 'Piscine', rec: { freq: 'weekly' as const, every: 1, base: 'done' as const, season: { from: '05-01', to: '09-30' } } };
+const RAMONAGE = { id: 'ramonage', titre: 'Ramonage', famille: 'Chauffage et air', rec: { freq: 'yearly' as const, every: 1, base: 'due' as const, season: { from: '09-01', to: '10-31' } } };
+
+test('saison : un geste créé hors saison attend la reprise, dite « Reprend le »', () => {
+  const op = createOp(draftFromCatalogue(PISCINE, TODAY, null), 'g6', TODAY);
+  assert.equal(op.op === 'add' && op.due, '2027-05-01');
+  assert.deepEqual(op.op === 'add' && op.rec, { freq: 'weekly', every: 1, base: 'done', season: { from: '05-01', to: '09-30' } });
+  const g = geste({ due: '2027-05-01', rec: PISCINE.rec });
+  assert.equal(nextLabel(g, TODAY, fmt), 'Reprend le 01/05/2027');
+  assert.equal(gesteGroup(g, TODAY, 14), 'plustard');
+  assert.equal(freqLabel(PISCINE.rec), 'chaque semaine, de mai à septembre');
+  // En saison, sans dernière fois : pas de fausse date.
+  assert.equal((createOp(draftFromCatalogue(PISCINE, '2026-06-10', null), 'g5', '2026-06-10') as { due: string | null }).due, null);
+});
+
+test('saison ajoutée à un geste existant : une échéance hors saison passe à la reprise', () => {
+  const t = geste({ due: '2026-11-07', rec: { freq: 'weekly', every: 1, base: 'done' } });
+  const [e] = editOps(t, { ...draftOf(t), season: { from: '05-01', to: '09-30' } });
+  assert.equal(e.op === 'edit' && e.due, '2027-05-01');
+  assert.equal(draftOf(geste({ rec: PISCINE.rec })).season?.to, '09-30', 'relue telle quelle');
+});
+
+test('fenêtre : le ramonage du catalogue devient une date fixe et sa souplesse', () => {
+  const d = draftFromCatalogue(RAMONAGE, TODAY, null);
+  assert.equal(d.fixed, true);
+  assert.equal(d.fixedDate, '2026-09-01', 'le 17 octobre, la fenêtre de cette année court encore');
+  assert.equal(d.grace, 60);
+  assert.equal(d.season, null, 'une fenêtre n’est pas une saison de répétition');
+  assert.equal(draftFromCatalogue(RAMONAGE, '2026-11-02', null).fixedDate, '2027-09-01', 'passée, la suivante');
+  const g = geste({ due: '2026-09-01', rec: { freq: 'yearly', every: 1, base: 'due', grace: 60 } });
+  assert.equal(nextLabel(g, TODAY, fmt), 'À faire d’ici le 31/10/2026');
+  assert.equal(nextLabel(g, '2026-08-20', fmt), 'Entre le 01/09/2026 et le 31/10/2026');
+  assert.equal(gesteGroup(g, TODAY, 14), 'bientot', 'dans la fenêtre : pas en retard');
+  assert.equal(gesteGroup(g, '2026-11-01', 14), 'retard');
 });

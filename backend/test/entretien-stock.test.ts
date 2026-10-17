@@ -6,7 +6,7 @@ import { after, before, describe, it } from 'node:test';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { Contexte, appel, arreter, demarrer } from './securite-helpers';
-import { parseFrequence } from '../src/entretien/frequence';
+import { parseFrequence, parseSaison } from '../src/entretien/frequence';
 
 describe('Entretien : fréquence dite en français', () => {
   it('lit les tournures courantes, refuse le reste', () => {
@@ -20,6 +20,18 @@ describe('Entretien : fréquence dite en français', () => {
     assert.deepEqual(parseFrequence('tous les 10 jours'), { freq: 'daily', every: 10 });
     assert.equal(parseFrequence('de temps en temps'), null);
     assert.equal(parseFrequence('tous les 0 mois'), null);
+  });
+
+  it('lit une saison dite en français', () => {
+    assert.deepEqual(parseSaison('de mai à septembre'), { from: '05-01', to: '09-30' });
+    assert.deepEqual(parseSaison('d’octobre à mars'), { from: '10-01', to: '03-31' });
+    assert.deepEqual(parseSaison('du 15 avril au 30 septembre'), { from: '04-15', to: '09-30' });
+    assert.deepEqual(parseSaison('du 1er décembre au 15 janvier'), { from: '12-01', to: '01-15' });
+    assert.deepEqual(parseSaison('en octobre'), { from: '10-01', to: '10-31' });
+    assert.deepEqual(parseSaison('Mai-Septembre'), { from: '05-01', to: '09-30' });
+    assert.deepEqual(parseSaison('de décembre à février'), { from: '12-01', to: '02-29' });
+    assert.equal(parseSaison('l’été'), null);
+    assert.equal(parseSaison('du 31 avril au 30 mai'), null);
   });
 });
 
@@ -112,6 +124,16 @@ describe('Entretien : stock et courses, assistant', () => {
     assert.match(text(await c.callTool({ name: 'entretien_stock', arguments: { id: g.id, qte: 6 } })), /: 9 pile/);
     assert.match(text(await c.callTool({ name: 'entretien_pause', arguments: { id: g.id, jusqu_au: '2099-04-15' } })), /en pause jusqu’au 15\/04\/2099/);
     assert.match(text(await c.callTool({ name: 'entretien_creer', arguments: { titre: 'X', frequence: 'parfois' } })), /Fréquence illisible/);
+
+    // Saison et fenêtre, dites en français. Le jour des tests compte : on lit la date rendue plutôt qu'une date figée.
+    const pis = text(await c.callTool({ name: 'entretien_creer', arguments: { titre: 'Piscine : pH', frequence: 'chaque semaine', saison: 'de mai à septembre' } }));
+    assert.match(pis, /chaque semaine après la réalisation, de mai à septembre/);
+    const ram = text(await c.callTool({ name: 'entretien_creer', arguments: { titre: 'Ramonage', frequence: '1 fois par an', saison: 'de septembre à octobre' } }));
+    assert.match(ram, /À faire entre le 01\/09\/\d{4} et le 31\/10\/\d{4}\./);
+    const r = (await etat()).tasks.find((t: { text: string }) => t.text === 'Ramonage');
+    assert.deepEqual([r.rec.base, r.rec.grace, r.due.slice(5)], ['due', 60, '09-01']);
+    assert.match(text(await c.callTool({ name: 'entretien_liste', arguments: { quand: 'tous' } })), /Ramonage.*(à faire entre le|en retard)/);
+    assert.match(text(await c.callTool({ name: 'entretien_creer', arguments: { titre: 'Y', frequence: 'chaque semaine', saison: 'l’été' } })), /Saison illisible/);
 
     // Module éteint : les outils disparaissent.
     await appel(ctx.base, 'PATCH', '/settings', { changes: { modEntretien: false } }, A());

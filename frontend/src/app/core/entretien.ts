@@ -7,7 +7,7 @@
 // français.
 import { addDaysIso } from './helpers';
 import { MaintenanceStock, Remind, TaskItem, TaskRec } from './models';
-import { windowEnd } from './recurrence';
+import { Season, inSeason, seasonLabel, seasonStart, seasonWindow, windowEnd } from './recurrence';
 import { TaskOpDraft, parisDay } from './task-ops';
 
 /** L'identifiant fixe de la liste des gestes (voir backend entretien/list.ts). */
@@ -52,7 +52,7 @@ export function freqLabel(rec: TaskRec): string {
   const n = Math.max(1, rec.every || 1);
   const one: Record<TaskRec['freq'], string> = { daily: 'chaque jour', weekly: 'chaque semaine', monthly: 'chaque mois', yearly: rec.base === 'due' ? 'chaque année' : '1 fois par an' };
   const many: Record<TaskRec['freq'], string> = { daily: `tous les ${n} jours`, weekly: `toutes les ${n} semaines`, monthly: `tous les ${n} mois`, yearly: `tous les ${n} ans` };
-  return (n === 1 ? one[rec.freq] : many[rec.freq]) + (rec.base === 'due' ? ', à date fixe' : '');
+  return (n === 1 ? one[rec.freq] : many[rec.freq]) + (rec.base === 'due' ? ', à date fixe' : '') + (rec.season ? ', ' + seasonLabel(rec.season) : '');
 }
 
 /** La dernière réalisation, dite : « Fait le 30/09/2026 par Nolwenn », « … par le foyer ». Vide si jamais faite. */
@@ -73,11 +73,21 @@ export function stockLabel(s: MaintenanceStock, fmt: (iso: string) => string): s
 /** Le stock est-il au seuil ou en dessous ? C'est le moment de racheter. */
 export const stockLow = (s: MaintenanceStock | undefined): boolean => !!s && s.qty <= s.threshold;
 
-/** La date qui vient, dite : « Le 28/10/2026 », ou la pause. Vide pour un geste jamais noté ou archivé. */
+/**
+ * La date qui vient, dite : « Le 28/10/2026 », la pause, la reprise d'un geste
+ * de saison (« Reprend le 01/05/2027 »), ou la fenêtre d'un geste à date fixe
+ * qui a une souplesse (« Entre le 01/09/2026 et le 31/10/2026 », puis « À faire
+ * d'ici le 31/10/2026 » une fois ouverte). Vide pour un geste jamais noté ou archivé.
+ */
 export function nextLabel(t: TaskItem, today: string, fmt: (iso: string) => string): string {
   if (t.done || !t.due) return '';
   const p = t.maintenance?.pausedUntil;
   if (p && p > today) return `En pause jusqu’au ${fmt(p)}`;
+  if (t.rec?.season && !inSeason(t.rec.season, today) && t.due > today) return `Reprend le ${fmt(t.due)}`;
+  if (t.rec?.base === 'due' && t.rec.grace) {
+    const end = windowEnd(t.due, t.rec);
+    return t.due <= today ? `À faire d’ici le ${fmt(end)}` : `Entre le ${fmt(t.due)} et le ${fmt(end)}`;
+  }
   return `Le ${fmt(t.due)}`;
 }
 
@@ -97,6 +107,8 @@ export interface GesteDraft {
   /** La date fixe (prochaine occurrence), AAAA-MM-JJ. */
   fixedDate: string;
   grace: number;
+  /** La saison d'un geste répété (pas à date fixe) : la piscine, de mai à septembre. */
+  season: Season | null;
   who: string[];
   remind: Remind | null;
   stock: { qty: number; unit: string; use: number; threshold: number; article: string } | null;
@@ -109,18 +121,20 @@ export interface GesteDraft {
 
 /** La règle de récurrence d'un brouillon. */
 export function draftRec(d: GesteDraft): TaskRec {
-  return { freq: d.fixed ? 'yearly' : d.freq, every: Math.max(1, Math.min(99, Math.round(d.every) || 1)), base: d.fixed ? 'due' : 'done', ...(d.grace > 0 ? { grace: d.grace } : {}) };
+  return { freq: d.fixed ? 'yearly' : d.freq, every: Math.max(1, Math.min(99, Math.round(d.every) || 1)), base: d.fixed ? 'due' : 'done', ...(d.grace > 0 ? { grace: d.grace } : {}), ...(!d.fixed && d.season ? { season: d.season } : {}) };
 }
 
 /**
  * L'opération qui crée un geste. Une dernière fois connue (`lastDone`) n'y est
  * pas : le store la note ensuite comme une réalisation datée, dont le serveur
- * déduit la prochaine date comme pour toute autre.
+ * déduit la prochaine date comme pour toute autre. Un geste de saison créé hors
+ * saison, sans dernière fois, attend la reprise plutôt que « Pas encore noté ».
  */
-export function createOp(d: GesteDraft, id: string): TaskOpDraft {
+export function createOp(d: GesteDraft, id: string, today: string): TaskOpDraft {
   const rec = draftRec(d);
+  const due = d.fixed ? d.fixedDate : rec.season && !d.lastDone && !inSeason(rec.season, today) ? seasonStart(rec.season, today) : null;
   return {
-    op: 'add', id, listId: ENTRETIEN_LIST_ID, text: d.text.trim(), who: d.who, due: d.fixed ? d.fixedDate : null,
+    op: 'add', id, listId: ENTRETIEN_LIST_ID, text: d.text.trim(), who: d.who, due,
     rec, remind: d.remind, note: '',
     maintenance: {
       ...(d.roomId ? { roomId: d.roomId } : {}),
@@ -139,7 +153,7 @@ export function draftOf(t: TaskItem): GesteDraft {
   return {
     text: t.text, howto: m.howto || '', roomId: m.roomId || null,
     freq: r.freq === 'daily' ? 'weekly' : r.freq, every: r.freq === 'daily' ? Math.max(1, Math.round(r.every / 7)) : r.every,
-    fixed: r.base === 'due', fixedDate: t.due || '', grace: r.grace || 0,
+    fixed: r.base === 'due', fixedDate: t.due || '', grace: r.grace || 0, season: r.season ?? null,
     who: [...t.who], remind: t.remind ?? null,
     stock: m.stock ? { qty: m.stock.qty, unit: m.stock.unit, use: m.stock.use, threshold: m.stock.threshold, article: m.stock.article } : null,
     lastDone: null, catalogId: m.catalogId || null, equipmentId: m.equipmentId ?? null,
@@ -149,14 +163,16 @@ export function draftOf(t: TaskItem): GesteDraft {
 /**
  * Les opérations qui modifient un geste : la fiche (intitulé, cadence, pièce,
  * détail, stock hors quantité). Une date fixe déplacée est une nouvelle
- * échéance ; passer d'une cadence à l'autre garde l'échéance courante.
+ * échéance ; passer d'une cadence à l'autre garde l'échéance courante, sauf
+ * si elle tombe hors de la saison choisie : elle passe alors à la reprise.
  */
 export function editOps(t: TaskItem, d: GesteDraft): TaskOpDraft[] {
   const rec = draftRec(d);
-  const fixedMoved = d.fixed && !!d.fixedDate && d.fixedDate !== t.due;
+  const due = d.fixed ? (d.fixedDate && d.fixedDate !== t.due ? d.fixedDate : null)
+    : rec.season && t.due && !inSeason(rec.season, t.due) ? seasonStart(rec.season, t.due) : null;
   return [{
     op: 'edit', id: t.id, text: d.text.trim(), who: d.who, rec, remind: d.remind,
-    ...(fixedMoved ? { due: d.fixedDate } : {}),
+    ...(due ? { due } : {}),
     maintenance: {
       roomId: d.roomId, howto: d.howto.trim() || null, equipmentId: d.equipmentId,
       // Sans stock avant, la quantité saisie est le stock de départ ; avec, le serveur ne la réécrit pas.
@@ -168,18 +184,25 @@ export function editOps(t: TaskItem, d: GesteDraft): TaskOpDraft[] {
 /** Une ligne du catalogue (GET /api/entretien/catalogue). */
 export interface CatalogueEntry {
   id: string; titre: string; howto?: string; famille: string; piece?: string;
-  rec: { freq: TaskRec['freq']; every: number; base: 'due' | 'done'; grace?: number };
+  /** `season` : la saison d'un geste répété, ou la fenêtre annuelle d'un geste à date fixe. */
+  rec: { freq: TaskRec['freq']; every: number; base: 'due' | 'done'; grace?: number; season?: Season };
   article?: { nom: string; unite: string; use: number; seuil: number };
 }
 export interface Catalogue { pieces: string[]; gestes: CatalogueEntry[]; }
 
-/** Un brouillon vide, ou prérempli depuis une ligne du catalogue. La pièce est résolue par l'appelant. */
+/**
+ * Un brouillon vide, ou prérempli depuis une ligne du catalogue. La pièce est
+ * résolue par l'appelant. Une saison sur un geste à date fixe est sa fenêtre :
+ * elle devient la prochaine échéance et sa souplesse.
+ */
 export function draftFromCatalogue(e: CatalogueEntry | null, today: string, roomId: string | null): GesteDraft {
   const fixed = !!e && e.rec.base === 'due';
+  const win = fixed && e.rec.season ? seasonWindow(e.rec.season, today) : null;
   return {
     text: e?.titre || '', howto: e?.howto || '', roomId,
     freq: !e || e.rec.freq === 'daily' ? (e ? 'weekly' : 'monthly') : e.rec.freq, every: e ? (e.rec.freq === 'daily' ? 1 : e.rec.every) : 1,
-    fixed, fixedDate: fixed ? today : '', grace: e?.rec.grace || 0,
+    fixed, fixedDate: win ? win.due : fixed ? today : '', grace: win ? win.grace : e?.rec.grace || 0,
+    season: !fixed && e?.rec.season ? e.rec.season : null,
     who: [], remind: 'morning',
     stock: e?.article ? { qty: 0, unit: e.article.unite, use: e.article.use, threshold: e.article.seuil, article: e.article.nom } : null,
     lastDone: null, catalogId: e?.id || null, equipmentId: null,

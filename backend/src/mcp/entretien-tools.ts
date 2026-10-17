@@ -10,12 +10,12 @@ import { db, getHousehold, saveHousehold } from '../db';
 import type { HouseholdState, Room, TaskItem } from '../models';
 import { applyTaskOps } from '../tasks/repo';
 import { parisDay } from '../tasks/ops';
-import { recLabel, windowEnd } from '../tasks/recurrence';
+import { inSeason, recLabel, seasonWindow, windowEnd } from '../tasks/recurrence';
 import { effectiveSetting } from '../settings/repo';
 import { listItems as eqpItems } from '../equipements/repo';
 import { ENTRETIEN_LIST_ID } from '../entretien/list';
 import type { McpCtx } from './tools';
-import { parseFrequence } from '../entretien/frequence';
+import { parseFrequence, parseSaison } from '../entretien/frequence';
 
 const state = (): HouseholdState => getHousehold().state as HouseholdState;
 const norm = (s: string): string => (s || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -58,6 +58,8 @@ function line(s: HouseholdState, t: TaskItem, day: string): string {
   parts.push(h ? `fait le ${fr(parisDay(h.at))} par ${memberName(s, h.by)}${h.via ? ' (via un assistant)' : ''}` : 'pas encore noté');
   if (t.done) parts.push('archivé');
   else if (m.pausedUntil && m.pausedUntil > day) parts.push(`en pause jusqu’au ${fr(m.pausedUntil)}`);
+  else if (t.due && t.rec?.season && !inSeason(t.rec.season, day) && t.due > day) parts.push(`hors saison, reprend le ${fr(t.due)}`);
+  else if (t.due && t.rec?.base === 'due' && t.rec.grace) parts.push(`à faire entre le ${fr(t.due)} et le ${fr(windowEnd(t.due, t.rec))}${windowEnd(t.due, t.rec) < day ? ' (en retard)' : ''}`);
   else if (t.due) parts.push(`prochaine fois le ${fr(t.due)}${windowEnd(t.due, t.rec) < day ? ' (en retard)' : ''}`);
   if (m.stock) parts.push(`stock : ${m.stock.qty}${m.stock.unit ? ' ' + m.stock.unit : ''}${m.stock.qty <= m.stock.threshold ? ' (bas, racheter : ' + m.stock.article + ')' : ''}`);
   return '- ' + parts.join(' · ');
@@ -107,11 +109,17 @@ export function entretienFait(ctx: McpCtx, a: { id: string; date?: string; par?:
     + (st ? ` Stock : ${st.qty}${st.unit ? ' ' + st.unit : ''}${st.qty <= st.threshold ? ` (bas : « ${st.article} » est à racheter)` : ''}.` : '');
 }
 
-export function entretienCreer(ctx: McpCtx, a: { titre: string; frequence: string; piece?: string; equipement?: string; stock?: { qte?: number; unite?: string; article?: string; seuil?: number } }): string {
+export function entretienCreer(ctx: McpCtx, a: { titre: string; frequence: string; saison?: string; piece?: string; equipement?: string; stock?: { qte?: number; unite?: string; article?: string; seuil?: number } }): string {
   const titre = (a.titre || '').trim();
   if (!titre) return 'Donnez le geste (« Carafe filtrante : changer la cartouche »).';
   const f = parseFrequence(a.frequence || '');
   if (!f) return `Fréquence illisible : « ${a.frequence} ». Exemples : « toutes les 4 semaines », « tous les 6 mois », « 1 fois par an ».`;
+  const season = a.saison?.trim() ? parseSaison(a.saison) : null;
+  if (a.saison?.trim() && !season) return `Saison illisible : « ${a.saison} ». Exemples : « de mai à septembre », « du 15 avril au 30 septembre », « en octobre ».`;
+  // Une fois par an (ou tous les N ans) dans une saison, c'est une fenêtre : une date fixe, avec sa souplesse.
+  const win = season && f.freq === 'yearly' ? seasonWindow(season, today()) : null;
+  const rec = win ? { ...f, base: 'due' as const, grace: win.grace } : { ...f, base: 'done' as const, ...(season ? { season } : {}) };
+  const due = win ? win.due : season && !inSeason(season, today()) ? seasonWindow(season, today()).due : null;
   let equipmentId: number | null = null;
   if (a.equipement?.trim()) {
     if (!eqpOn()) return 'Le module Équipements est désactivé : pas d’équipement à rattacher.';
@@ -138,12 +146,15 @@ export function entretienCreer(ctx: McpCtx, a: { titre: string; frequence: strin
     : null;
   const id = genId('t');
   const r = applyTaskOps([{
-    op: 'add', opId: genId('op'), id, listId: ENTRETIEN_LIST_ID, text: titre, who: [], due: null,
-    rec: { ...f, base: 'done' }, remind: 'morning', by: ctx.memberId, via: ctx.via,
+    op: 'add', opId: genId('op'), id, listId: ENTRETIEN_LIST_ID, text: titre, who: [], due,
+    rec, remind: 'morning', by: ctx.memberId, via: ctx.via,
     maintenance: { ...(roomId ? { roomId } : {}), ...(equipmentId ? { equipmentId } : {}), ...(st ? { stock: st } : {}) },
   }]);
   if (r.skipped.length) return r.skipped[0].reason;
-  return `Geste créé : « ${titre} » [${id}], ${recLabel({ ...f, base: 'done' }).toLowerCase()}. Il reste « pas encore noté » (sans date ni rappel) jusqu’à la première fois : entretien_fait le note.`;
+  const head = `Geste créé : « ${titre} » [${id}], ${recLabel(rec).toLowerCase()}.`;
+  if (win) return `${head} À faire entre le ${fr(win.due)} et le ${fr(windowEnd(win.due, rec))}.`;
+  if (due) return `${head} Hors saison aujourd’hui : il reprend le ${fr(due)}.`;
+  return `${head} Il reste « pas encore noté » (sans date ni rappel) jusqu’à la première fois : entretien_fait le note.`;
 }
 
 export function entretienStock(ctx: McpCtx, a: { id: string; qte: number; mode?: string; date?: string }): string {

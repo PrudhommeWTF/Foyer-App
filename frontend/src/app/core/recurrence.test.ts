@@ -4,7 +4,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskRec } from './models';
-import { addMonthsClamped, nextOccurrence, occurrenceProgress, recLabel, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
+import { addMonthsClamped, inSeason, isSeasonDay, nextOccurrence, occurrenceProgress, recLabel, seasonLabel, seasonStart, seasonWindow, skipOccurrence, taskOccursOn, windowEnd } from './recurrence';
 
 const rec = (over: Partial<TaskRec> = {}): TaskRec => ({ freq: 'weekly', every: 1, base: 'due', ...over });
 
@@ -156,4 +156,55 @@ test('le mode « après la réalisation » ne se projette pas : seule l’éché
   const t = task({ rec: rec({ base: 'done' }) });
   assert.equal(taskOccursOn(t, '2026-09-08'), true);
   assert.equal(taskOccursOn(t, '2026-09-15'), false);
+});
+
+// ---- saisons ------------------------------------------------------------------------
+
+test('saison : la piscine chaque semaine de mai à septembre saute l’hiver', () => {
+  const r = rec({ base: 'done', season: { from: '05-01', to: '09-30' } });
+  assert.equal(nextOccurrence(r, '2026-09-20', '2026-09-20'), '2026-09-27', 'en saison, la cadence ordinaire');
+  assert.equal(nextOccurrence(r, '2026-09-27', '2026-09-27'), '2027-05-01', 'le 4 octobre serait hors saison : reprise au 1er mai');
+  assert.equal(skipOccurrence(r, '2026-09-27', '2026-09-27'), '2027-05-01');
+  assert.match(recLabel(r), /de mai à septembre/);
+});
+
+test('saison à cheval sur le 31 décembre, et à date fixe', () => {
+  const hiver = { from: '11-01', to: '03-31' };
+  assert.equal(inSeason(hiver, '2027-01-15'), true);
+  assert.equal(inSeason(hiver, '2026-06-15'), false);
+  assert.equal(seasonStart(hiver, '2026-06-15'), '2026-11-01');
+  assert.equal(seasonStart(hiver, '2027-02-01'), '2027-02-01', 'déjà dedans');
+  // Chaque lundi, en hiver seulement : le dernier lundi de mars, puis le premier lundi de novembre.
+  const r = rec({ days: [1], season: hiver });
+  assert.equal(nextOccurrence(r, '2027-03-29', '2027-03-29'), '2027-11-01');
+  assert.equal(taskOccursOn({ due: '2027-03-29', rec: r }, '2027-04-05'), false, 'hors saison, rien au calendrier');
+  assert.equal(taskOccursOn({ due: '2027-03-29', rec: r }, '2027-11-08'), true);
+  assert.equal(recLabel(r).includes("de novembre à mars"), true);
+});
+
+test('saison : bornes et libellés', () => {
+  assert.equal(isSeasonDay('02-29'), true);
+  assert.equal(isSeasonDay('02-30'), false);
+  assert.equal(isSeasonDay('13-01'), false);
+  assert.equal(seasonLabel({ from: '04-01', to: '10-31' }), "d'avril à octobre");
+  assert.equal(seasonLabel({ from: '10-01', to: '10-31' }), 'en octobre');
+  assert.equal(seasonLabel({ from: '04-15', to: '09-30' }), 'du 15 avril au 30 septembre');
+  assert.equal(seasonLabel({ from: '12-01', to: '02-29' }), 'de décembre à février');
+  assert.equal(seasonStart({ from: '02-29', to: '03-31' }, '2026-06-01'), '2027-02-28', 'le 29 février tombe le 28 les autres années');
+});
+
+test('fenêtre : une échéance et une souplesse tirées de la saison', () => {
+  const s = { from: '09-01', to: '10-31' };
+  assert.deepEqual(seasonWindow(s, '2026-10-17'), { due: '2026-09-01', grace: 60 });
+  assert.deepEqual(seasonWindow(s, '2026-11-01'), { due: '2027-09-01', grace: 60 });
+  assert.deepEqual(seasonWindow(s, '2026-03-01'), { due: '2026-09-01', grace: 60 });
+  assert.deepEqual(seasonWindow({ from: '12-15', to: '01-15' }, '2027-01-10'), { due: '2026-12-15', grace: 31 }, 'à cheval, celle qui court');
+  // Faite dans la fenêtre : la suivante, l'an prochain au début de la fenêtre.
+  assert.equal(nextOccurrence(rec({ freq: 'yearly', grace: 60 }), '2026-09-01', '2026-10-17'), '2027-09-01');
+});
+
+test('la barre reste vide hors saison, jusqu’à la reprise', () => {
+  const r = rec({ base: 'done', season: { from: '05-01', to: '09-30' } });
+  assert.equal(occurrenceProgress(r, '2027-05-01', '2027-01-10'), 0);
+  assert.ok(occurrenceProgress(r, '2027-05-08', '2027-05-05') > 0.5);
 });

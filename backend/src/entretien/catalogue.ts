@@ -14,8 +14,10 @@
 import fs from 'fs';
 import path from 'path';
 import { log } from '../log';
+import { isSeasonDay } from '../tasks/recurrence';
 
-export interface CatalogueRec { freq: 'daily' | 'weekly' | 'monthly' | 'yearly'; every: number; base: 'due' | 'done'; grace?: number; }
+/** `season` (MM-JJ à MM-JJ) : la saison d'un geste répété, ou la fenêtre annuelle d'un geste à date fixe (le formulaire en fait l'échéance et la souplesse). */
+export interface CatalogueRec { freq: 'daily' | 'weekly' | 'monthly' | 'yearly'; every: number; base: 'due' | 'done'; grace?: number; season?: { from: string; to: string }; }
 export interface CatalogueArticle { nom: string; unite: string; use: number; seuil: number; }
 export interface CatalogueEntry {
   id: string; titre: string; howto?: string;
@@ -54,6 +56,11 @@ export function readEntry(raw: unknown): { entry: CatalogueEntry } | { reason: s
     const g = int(r['grace'], 1, 365);
     if (g === null) return { reason: `« ${id} » : souplesse (grace) entre 1 et 365 jours` };
     rec.grace = g;
+  }
+  if (r['season'] !== undefined) {
+    const se = (r['season'] ?? {}) as Record<string, unknown>;
+    if (!isSeasonDay(se['from']) || !isSeasonDay(se['to'])) return { reason: `« ${id} » : saison illisible (season { from: "MM-JJ", to: "MM-JJ" })` };
+    rec.season = { from: se['from'], to: se['to'] };
   }
   const entry: CatalogueEntry = { id, titre, famille: text(o['famille'], 40) || 'Maison', rec };
   const howto = text(o['howto'], 2000); if (howto) entry.howto = howto;

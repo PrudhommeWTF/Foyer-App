@@ -6,7 +6,7 @@ import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { CatalogueEntry, GesteDraft, catalogueByFamily, draftFromCatalogue, draftOf, freqLabel, draftRec, stockLabel } from '../../core/entretien';
 import { REMIND_LABELS } from '../../core/tasks';
-import { normText } from '../../core/helpers';
+import { addDaysIso, normText } from '../../core/helpers';
 import { Remind } from '../../core/models';
 import { EquipementsStore } from '../../core/equipements.store';
 
@@ -62,9 +62,25 @@ import { EquipementsStore } from '../../core/equipements.store';
         <div class="hint">{{ v.fixed ? 'À date fixe : la visite de la chaudière, chaque octobre.' : 'À partir du jour où le geste est fait : trois jours de retard ne se traînent pas.' }} ({{ resume() }})</div>
         @if (v.fixed) {
           <div class="two">
-            <label class="lab">Prochaine fois<input class="input" type="date" [ngModel]="v.fixedDate" (ngModelChange)="set({ fixedDate: $event })" /></label>
-            <label class="lab">Souplesse (jours)<input class="input" type="number" min="0" max="365" inputmode="numeric" [ngModel]="v.grace" (ngModelChange)="set({ grace: +$event || 0 })" /></label>
+            <label class="lab">À partir du<input class="input" type="date" [ngModel]="v.fixedDate" (ngModelChange)="set({ fixedDate: $event })" /></label>
+            <label class="lab">Au plus tard le<input class="input" type="date" [min]="v.fixedDate" [ngModel]="finFenetre()" (ngModelChange)="setFin($event)" /></label>
           </div>
+          <div class="hint">{{ v.grace ? 'Une fenêtre : le geste se fait entre ces deux dates, et n’est en retard qu’après la seconde.' : 'Sans date limite, le geste est en retard dès le lendemain.' }}</div>
+        } @else {
+          <label class="check"><input type="checkbox" [ngModel]="!!v.season" (ngModelChange)="set({ season: $event ? { from: '05-01', to: '09-30' } : null })" /> Seulement une partie de l’année</label>
+          @if (v.season; as se) {
+            <div class="every saison">
+              <span>De</span>
+              <select class="input" aria-label="Premier mois" [ngModel]="+se.from.slice(0, 2)" (ngModelChange)="setSaison(+$event, +se.to.slice(0, 2))">
+                @for (m of mois; track $index) { <option [value]="$index + 1">{{ m }}</option> }
+              </select>
+              <span>à</span>
+              <select class="input" aria-label="Dernier mois" [ngModel]="+se.to.slice(0, 2)" (ngModelChange)="setSaison(+se.from.slice(0, 2), +$event)">
+                @for (m of mois; track $index) { <option [value]="$index + 1">{{ m }}</option> }
+              </select>
+            </div>
+            <div class="hint">Hors saison, le geste ne revient pas et ne rappelle rien : il reprend au début de la saison suivante.</div>
+          }
         }
 
         <div class="field-label">Pièce</div>
@@ -154,8 +170,11 @@ import { EquipementsStore } from '../../core/equipements.store';
     .seg.wrap { flex-wrap: wrap; }
     .every { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; font-weight: 800; color: var(--ink2); }
     .num { width: 82px; text-align: center; }
+    .saison { margin: 0 0 4px; }
+    .saison select { flex: 1; }
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-    .lab { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; color: var(--ink2); }
+    .lab { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 800; color: var(--ink2); min-width: 0; }
+    .lab .input { min-width: 0; width: 100%; box-sizing: border-box; }
     .ro { padding: 13px 0; font-size: 13.5px; font-weight: 700; color: var(--ink); }
     .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
     .chip-o { border: 2px solid var(--line); background: var(--surface); border-radius: 11px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; }
@@ -178,6 +197,7 @@ export class GesteForm implements OnInit {
   readonly close = output<void>();
   readonly REMIND_LABELS = REMIND_LABELS;
   readonly reminds: Remind[] = ['morning', 'eve', 'at'];
+  readonly mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
   readonly choix = signal(false);
   readonly q = signal('');
@@ -220,6 +240,18 @@ export class GesteForm implements OnInit {
     const id = v ? +v : null;
     const room = id ? this.eqp.find(id)?.roomId ?? null : null;
     this.set({ equipmentId: id, ...(room && !this.f().roomId && !this.roomNew().trim() ? { roomId: room } : {}) });
+  }
+  /** La fin de fenêtre d'un geste à date fixe : sa date plus la souplesse. */
+  readonly finFenetre = computed(() => { const v = this.f(); return v.fixedDate && v.grace ? addDaysIso(v.fixedDate, v.grace) : ''; });
+  setFin(iso: string): void {
+    const v = this.f();
+    const g = iso && v.fixedDate ? Math.round((Date.parse(iso) - Date.parse(v.fixedDate)) / 86400000) : 0;
+    this.set({ grace: Math.max(0, Math.min(365, g)) });
+  }
+  /** Une saison en mois entiers : du 1er du premier mois au dernier jour du second (le 29 février compte). */
+  setSaison(a: number, b: number): void {
+    const p = (n: number): string => String(n).padStart(2, '0');
+    this.set({ season: { from: `${p(a)}-01`, to: `${p(b)}-${p(new Date(Date.UTC(2024, b, 0)).getUTCDate())}` } });
   }
   toggleWho(id: string): void { const w = this.f().who; this.set({ who: w.includes(id) ? w.filter((x) => x !== id) : [...w, id] }); }
 
