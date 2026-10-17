@@ -47,12 +47,14 @@ const MOD_COLOR: Record<string, string> = {
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */
-const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances' | 'entretien'; label: string }[] = [
+// Les Finances ne figurent pas dans le carrousel mobile : on peut montrer
+// l'accueil à quelqu'un d'étranger au foyer sans exposer de montants. Elles
+// restent sur le bandeau du bureau et gardent leur tuile de module.
+const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; label: string }[] = [
   { key: 'activity', label: 'Activité' },
   { key: 'agenda', label: 'Agenda' },
   { key: 'tasks', label: 'Tâches' },
   { key: 'meals', label: 'Repas' },
-  { key: 'finances', label: 'Finances' },
   { key: 'entretien', label: 'Entretien' },
 ];
 
@@ -95,7 +97,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances' | 'e
       <div class="card feed">
         <div class="feed-head">
           <f-icon name="bolt" [size]="17" color="#E56B4E" [width]="2.2" />
-          <span>Activité récente</span>
+          <span>Activités récentes</span>
         </div>
         @for (a of activity(); track $index) {
           <div class="act">
@@ -259,6 +261,16 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances' | 'e
             <span class="m-dish" [class.none]="!m.label">{{ m.label || 'À planifier' }}</span>
           </div>
         }
+        @if (tomorrowMeals().length) {
+          <div class="meal-next">Demain</div>
+          @for (m of tomorrowMeals(); track m.key) {
+            <div class="rc-row meal" (click)="store.openMeal(tomorrowStr(), m.key)">
+              <span class="m-dot" [style.background]="m.dot"></span>
+              <span class="m-slot">{{ m.short }}</span>
+              <span class="m-dish">{{ m.label }}</span>
+            </div>
+          }
+        }
       </div>
     </ng-template>
 
@@ -316,7 +328,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances' | 'e
                     @case ('agenda') { <ng-container [ngTemplateOutlet]="agendaCard" /> }
                     @case ('tasks') { <ng-container [ngTemplateOutlet]="tasksCard" /> }
                     @case ('meals') { <ng-container [ngTemplateOutlet]="mealsCard" /> }
-                    @case ('finances') { <ng-container [ngTemplateOutlet]="finCard" /> }
                     @case ('entretien') { <ng-container [ngTemplateOutlet]="entretienCard" /> }
                   }
                 </div>
@@ -482,6 +493,9 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances' | 'e
     .m-slot { flex: none; width: 46px; font-size: 12px; font-weight: 800; color: var(--ink2); }
     .m-dish { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .m-dish.none { color: var(--ink3); font-weight: 700; font-style: italic; }
+    /* Aperçu « Demain » : garnit le volet avec les repas déjà prévus du lendemain. */
+    .meal-next { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 10px; font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .03em; }
+    .meal-next + .rc-row { border-top: none; }
 
     /* finances */
     .en-sum { font-size: 13px; font-weight: 800; color: var(--ink2); margin-bottom: 4px; }
@@ -647,15 +661,14 @@ export class HomeScreen {
 
   readonly hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
 
-  // Sur petit écran, quatre lignes suffisent (le carousel est court) ; sur grand
-  // écran le fil prend toute la colonne, il en montre douze.
-  readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 4 : 12) : []; });
+  // Le carrousel prend la hauteur de son plus grand volet : on remplit donc les
+  // volets plutôt que de laisser du vide. Six lignes sur mobile, douze sur le fil
+  // pleine colonne du bureau.
+  readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 6 : 12) : []; });
 
   /** Les sections du carousel mobile. */
-  // Les finances ne tournent pas pour un enfant (fin() vaut null) ni module désactivé.
   readonly slides = computed(() => SLIDES.filter((s) =>
-    (s.key !== 'meals' || this.store.modRepas()) && (s.key !== 'finances' || (this.store.modFinances() && this.fin() !== null))
-    && (s.key !== 'entretien' || this.entretien().show)));
+    (s.key !== 'meals' || this.store.modRepas()) && (s.key !== 'entretien' || this.entretien().show)));
 
   /**
    * La carte Entretien : en retard et à venir (horizon du réglage), trois
@@ -795,7 +808,7 @@ export class HomeScreen {
     return groups;
   });
 
-  /** Les 4 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
+  /** Les 6 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
   readonly latestTasks = computed(() => {
     const d = this.store.data();
     if (!d) return [];
@@ -804,16 +817,23 @@ export class HomeScreen {
       .filter((t) => lists.has(t.listId))
       .slice()
       .sort((a, b) => (b.at || '').localeCompare(a.at || ''))
-      .slice(0, 4)
+      .slice(0, 6)
       .map((t) => ({ t, list: lists.get(t.listId)!.name, color: lists.get(t.listId)!.color }));
   });
 
-  /** Les créneaux de repas du jour et leurs plats. */
-  readonly todayMeals = computed(() => {
+  /** Le lendemain, pour l'aperçu des repas. */
+  readonly tomorrowStr = computed(() => this.store.addDays(this.store.todayStr(), 1));
+
+  /** Les créneaux de repas d'un jour donné et leurs plats. */
+  private mealsOf(day: string): { key: string; short: string; dot: string; label: string | null }[] {
     const d = this.store.data();
-    const today = this.store.todayStr();
-    return this.store.mealSlots().map((s) => ({ key: s.key, short: s.short, dot: s.dot, label: this.store.mealLabel(d?.meals[today + '-' + s.key]) }));
-  });
+    return this.store.mealSlots().map((s) => ({ key: s.key, short: s.short, dot: s.dot, label: this.store.mealLabel(d?.meals[day + '-' + s.key]) }));
+  }
+  /** Les créneaux de repas du jour (tous, « À planifier » compris). */
+  readonly todayMeals = computed(() => this.mealsOf(this.store.todayStr()));
+  // Les repas de demain déjà prévus, en bonus pour garnir le volet (les créneaux
+  // encore vides sont tus : inutile de répéter trois « À planifier » pour demain).
+  readonly tomorrowMeals = computed(() => this.mealsOf(this.tomorrowStr()).filter((m) => m.label));
 
   /** Le sommaire des finances : caché pour un enfant, sinon quatre lignes du mois. */
   readonly fin = computed<FinState | null>(() => {
