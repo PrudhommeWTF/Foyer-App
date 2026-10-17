@@ -73,16 +73,16 @@ Légende : `[x]` fait et vérifié ; `[~]` fait en partie (la PR qui l'a commenc
 
 | ✓ | Fonction | Aujourd'hui | Demain | Statut |
 |---|---|---|---|---|
-| [~] | Échéances 6 mois : préavis, reconduction, fin ; urgence < 30 j ; Tâche | Contrats | Contrats › Échéances + Aperçu (Aperçu : PR 1) | Amélioré |
-| [ ] | Biens : immobilier / véhicule / autre, vendu, adresse, dates, notes | Contrats | Contrats | Conservé |
-| [ ] | Contrat : tous les champs, références, personnes, statut | Contrats | Fiche du contrat | Conservé |
-| [ ] | Coût réel 12 mois, hors fourchette, voir ces opérations | Contrats | Jauge fourchette / dernier prélèvement | Amélioré |
-| [ ] | Pièces jointes (PDF, images, 20 Mo, doublons) | Contrats | Fiche du contrat | Conservé |
-| [ ] | Créer une règle pour ce contrat | Contrats | Fiche du contrat | Conservé |
-| [ ] | Relevés de compteur : index, HP/HC, conso par période, comparaison à un an | Contrats (énergie) | Fiche : graphique kWh/jour | Amélioré |
-| [ ] | Modifier un relevé | Serveur seulement | Fiche du contrat | Enfin affiché |
+| [x] | Échéances 6 mois : préavis, reconduction, fin ; urgence < 30 j ; Tâche | Contrats | Contrats › Échéances + Aperçu | Amélioré |
+| [x] | Biens : immobilier / véhicule / autre, vendu, adresse, dates, notes | Contrats | Contrats | Conservé |
+| [x] | Contrat : tous les champs, références, personnes, statut | Contrats | Fiche du contrat | Conservé |
+| [x] | Coût réel 12 mois, hors fourchette, voir ces opérations | Contrats | Jauge fourchette / dernier prélèvement | Amélioré |
+| [x] | Pièces jointes (PDF, images, 20 Mo, doublons) | Contrats | Fiche du contrat | Conservé |
+| [x] | Créer une règle pour ce contrat | Contrats | Fiche du contrat | Conservé |
+| [x] | Relevés de compteur : index, HP/HC, conso par période, comparaison à un an | Contrats (énergie) | Fiche : graphique kWh/jour | Amélioré |
+| [x] | Modifier un relevé | Serveur seulement | Fiche du contrat | Enfin affiché |
 | [x] | Relevés en retard | Serveur seulement (/home) | Aperçu « À surveiller » + notification | Enfin affiché |
-| [ ] | Pistes d'économies : totaux, statuts, Tâche, gain annuel | Contrats | Contrats › Économies | Conservé |
+| [x] | Pistes d'économies : totaux, statuts, Tâche, gain annuel | Contrats | Contrats › Économies | Conservé |
 
 ## Règles (PR 3)
 

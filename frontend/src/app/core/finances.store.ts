@@ -25,10 +25,13 @@ import { cap, pad2 } from './helpers';
 /** Les six espaces du module. Organiser regroupe ce qui range : catégories, règles, import. */
 export type FinTab = 'apercu' | 'operations' | 'tendances' | 'comptes' | 'contrats' | 'organiser';
 export type FinOrgTab = 'categories' | 'regles' | 'import';
+/** Contrats : la liste des biens et contrats, les échéances, les pistes d'économies. */
+export type FinContratsTab = 'contrats' | 'echeances' | 'economies';
 
 export interface FinancesUi {
   tab: FinTab;
   orgTab: FinOrgTab;
+  contratsTab: FinContratsTab;
   /** Le panneau « ⋯ » du téléphone (Comptes, Contrats, Organiser). */
   menuOpen: boolean;
   month: string;
@@ -86,6 +89,8 @@ export interface FinancesUi {
   coRenewal: string; coNotice: string; coEnds: string;
   coStatus: FinContractStatus; coNotes: string; coRefs: FinContractRef[];
   coDelId: number | null;
+  /** La fiche d'un contrat s'ouvre en lecture ; « Modifier » passe au formulaire. */
+  coEdit: boolean;
 
   // rule editor
   ruleForm: boolean; ruleId: number | null;
@@ -99,6 +104,8 @@ export interface FinancesUi {
   // meter reading form
   reDate: string; reIndex: string; reIndexHp: string; reIndexHc: string;
   reKwh: string; reCost: string; reDelId: number | null;
+  /** Le relevé en cours de modification, ou null pour en ajouter un. */
+  reEditId: number | null;
 
   /** Fichier de sauvegarde déposé, en attente de confirmation. */
   restorePending: unknown | null;
@@ -113,7 +120,7 @@ export interface FinancesUi {
 
 function initialUi(month: string): FinancesUi {
   return {
-    tab: 'apercu', orgTab: 'categories', menuOpen: false, month,
+    tab: 'apercu', orgTab: 'categories', contratsTab: 'contrats', menuOpen: false, month,
     fltQuery: '', fltAccount: null, fltCategory: null, fltUncategorised: false, fltUncleared: false, fltTag: '', fltContract: null, page: 0,
     txForm: false, txId: null, txLabel: '', txAmount: '', txSign: 'out', txDate: '',
     txAccount: null, txCategory: null, txContract: null, txNotes: '', txCleared: false, txDelId: null, txTransfer: false, txSuggest: null,
@@ -130,10 +137,10 @@ function initialUi(month: string): FinancesUi {
     coForm: false, coId: null, coName: '', coProvider: '', coKind: 'assurance',
     coAsset: null, coAccount: null, coCategory: null, coMembers: [],
     coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
-    coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null,
+    coStatus: 'actif', coNotes: '', coRefs: [], coDelId: null, coEdit: false,
     saForm: false, saId: null, saTitle: '', saDesc: '', saGain: '', saStatus: 'idee',
     saContract: null, saDate: '', saDelId: null,
-    reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '', reDelId: null,
+    reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '', reDelId: null, reEditId: null,
     restorePending: null, restoreName: '',
     ruleForm: false, ruleId: null, ruleName: '', ruleEnabled: true, ruleMatch: 'all', ruleStop: false,
     ruleConditions: [], ruleActions: [], ruleDelId: null, ruleError: '', ruleBusy: false,
@@ -1516,6 +1523,8 @@ export class FinancesStore {
       asForm: true, asId: a.id, asName: a.name, asKind: a.kind, asStatus: a.status,
       asAddress: a.address, asAcquired: a.acquiredOn || '', asSold: a.soldOn || '', asNotes: a.notes,
     });
+    this.attachments.set([]);
+    void this.loadAttachments('asset', a.id);
   }
 
   async saveAsset(): Promise<void> {
@@ -1558,7 +1567,7 @@ export class FinancesStore {
       coForm: true, coId: null, coName: '', coProvider: '', coKind: 'assurance',
       coAsset: assetId, coAccount: null, coCategory: null, coMembers: [],
       coMin: '', coMax: '', coPeriodicity: 'mensuelle', coRenewal: '', coNotice: '', coEnds: '',
-      coStatus: 'actif', coNotes: '', coRefs: [],
+      coStatus: 'actif', coNotes: '', coRefs: [], coEdit: true,
     });
     // A piece needs something to hang on: nothing to show before the first save.
     this.attachments.set([]);
@@ -1574,7 +1583,8 @@ export class FinancesStore {
       coMax: c.amountMax !== null ? fmtEuros(c.amountMax) : '',
       coPeriodicity: c.periodicity, coRenewal: c.renewalOn || '',
       coNotice: c.noticeDays ? String(c.noticeDays) : '', coEnds: c.endsOn || '',
-      coStatus: c.status, coNotes: c.notes, coRefs: c.refs.map((r) => ({ ...r })),
+      coStatus: c.status, coNotes: c.notes, coRefs: c.refs.map((r) => ({ ...r })), coEdit: false,
+      reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '', reEditId: null,
     });
     void this.loadAttachments('contract', c.id);
     if (c.kind === 'energie') void this.loadReadings(c.id);
@@ -1609,7 +1619,8 @@ export class FinancesStore {
     try {
       if (u.coId) await this.api.updateContract(u.coId, payload);
       else await this.api.createContract(payload);
-      this.patch({ coForm: false, coId: null, busy: false });
+      // Un contrat modifié revient à sa fiche ; un nouveau referme le panneau.
+      this.patch(u.coId ? { coEdit: false, busy: false } : { coForm: false, coId: null, busy: false });
       await Promise.all([this.loadContracts(), this.reloadTransactions()]);
       this.foyer.toast(u.coId ? 'Contrat modifié' : 'Contrat ajouté');
     } catch (e) {
@@ -1790,21 +1801,33 @@ export class FinancesStore {
     return this.periods().find((p) => p.readingId === readingId);
   }
 
+  /** Charge un relevé dans le formulaire, pour le corriger. */
+  editReading(r: FinReading): void {
+    const num = (v: number | null): string => (v === null ? '' : String(v).replace('.', ','));
+    this.patch({
+      reEditId: r.id, reDate: r.date, reIndex: num(r.indexTotal), reIndexHp: num(r.indexHp), reIndexHc: num(r.indexHc),
+      reKwh: num(r.kwh), reCost: r.cost === null ? '' : fmtEuros(r.cost),
+    });
+  }
+  cancelReadingEdit(): void { this.patch({ reEditId: null, reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '' }); }
+
   async saveReading(contractId: number): Promise<void> {
     const u = this.ui();
     if (u.busy) return;
     if (!u.reDate) { this.foyer.toast('Choisissez la date du relevé'); return; }
     this.patch({ busy: true });
+    const payload = {
+      contractId, date: u.reDate,
+      indexTotal: u.reIndex.trim(), indexHp: u.reIndexHp.trim(), indexHc: u.reIndexHc.trim(),
+      kwh: u.reKwh.trim(), kwhHp: '', kwhHc: '',
+      cost: u.reCost.trim(), notes: '',
+    };
     try {
-      await this.api.createReading({
-        contractId, date: u.reDate,
-        indexTotal: u.reIndex.trim(), indexHp: u.reIndexHp.trim(), indexHc: u.reIndexHc.trim(),
-        kwh: u.reKwh.trim(), kwhHp: '', kwhHc: '',
-        cost: u.reCost.trim(), notes: '',
-      });
-      this.patch({ busy: false, reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '' });
+      if (u.reEditId) await this.api.updateReading(u.reEditId, payload);
+      else await this.api.createReading(payload);
+      this.patch({ busy: false, reEditId: null, reDate: '', reIndex: '', reIndexHp: '', reIndexHc: '', reKwh: '', reCost: '' });
       await Promise.all([this.loadReadings(contractId), this.loadHome(this.currentMonth())]);
-      this.foyer.toast('Relevé enregistré');
+      this.foyer.toast(u.reEditId ? 'Relevé modifié' : 'Relevé enregistré');
     } catch (e) {
       this.patch({ busy: false });
       this.foyer.toast((e as Error).message);
