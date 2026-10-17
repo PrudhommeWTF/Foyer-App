@@ -14,7 +14,7 @@ on:
     tags: ['v*']
 
 # Lecture seule partout ; seul le job de publication reçoit contents: write, et
-# seuls les deux jobs de l'image reçoivent packages: write.
+# seuls les jobs de l'image (par architecture) et de l'index reçoivent packages: write.
 permissions:
   contents: read
 
@@ -169,18 +169,29 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # Image construite par architecture sur son runner natif (comme les archives),
+  # puis réunie en un index multi-architecture par le job « manifest ». Plus de
+  # QEMU : son émulation arm64 de « npm ci » se figeait (« illegal instruction »)
+  # et bloquait la release jusqu'au délai du job. Chaque image part par empreinte,
+  # sans étiquette ; les étiquettes ne sont posées qu'une fois tout réussi.
   image:
-    name: Image Docker
+    name: Image ${{ matrix.arch }}
     needs: [tag, checks]
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
     outputs:
       name: ${{ steps.name.outputs.name }}
-      digest: ${{ steps.push.outputs.digest }}
-      tags: ${{ steps.meta.outputs.tags }}
     steps:
       - uses: actions/checkout@v5
 
@@ -188,57 +199,41 @@ jobs:
         id: name
         run: echo "name=ghcr.io/${IMAGE_OWNER,,}/foyer-app" >> "$GITHUB_OUTPUT"
 
-      # Étiquettes : 1.4.0, 1.4, 1 et latest pour une stable ; 1.4.0-rc.1 et next
-      # pour une préversion, jamais latest (ni la mineure, ni la majeure : un
-      # « docker pull …:1.4 » ne doit pas tomber sur une préversion).
-      - name: Étiquettes et labels OCI
+      # Juste les labels OCI (l'image part par empreinte, sans étiquette) :
+      # metadata-action y ajoute source, revision, created… lus par l'essai.
+      - name: Labels OCI
         id: meta
         uses: docker/metadata-action@v6
-        env:
-          # Annotations aussi au niveau de l'index multi-architecture : c'est là
-          # que la page du package GHCR lit sa description.
-          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
         with:
           images: ${{ steps.name.outputs.name }}
-          flavor: latest=false
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.tag.outputs.prerelease != 'true' }}
-            type=semver,pattern={{major}},enable=${{ needs.tag.outputs.prerelease != 'true' }}
-            type=raw,value=latest,enable=${{ needs.tag.outputs.prerelease != 'true' }}
-            type=raw,value=next,enable=${{ needs.tag.outputs.prerelease == 'true' }}
+          # Sert juste à caler le label org.opencontainers.image.version sur la
+          # version du tag (sans « v ») ; l'image part par empreinte, pas par nom.
+          tags: type=semver,pattern={{version}}
           labels: |
             org.opencontainers.image.title=Foyer
             org.opencontainers.image.description=Foyer, application de gestion familiale auto-hébergée (agenda, tâches, courses, repas, finances).
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ needs.tag.outputs.version }}
-          annotations: |
-            org.opencontainers.image.title=Foyer
-            org.opencontainers.image.description=Foyer, application de gestion familiale auto-hébergée (agenda, tâches, courses, repas, finances).
-            org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ needs.tag.outputs.version }}
 
-      - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
 
-      # D'abord amd64 seul, chargé dans le démon local pour l'essai de fumée.
-      # Le cache GitHub Actions (même portée que le push ci-dessous) évite de
-      # tout recompiler, en particulier better-sqlite3 en arm64 sous QEMU.
-      - name: Build amd64 pour l'essai
+      # Construction native (pas d'émulation), chargée dans le démon local pour
+      # l'essai de fumée sur l'architecture du runner. Cache propre à l'archi.
+      - name: Build pour l'essai
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
           load: true
           push: false
           tags: foyer-app:smoke
           labels: ${{ steps.meta.outputs.labels }}
           build-args: FOYER_VERSION=${{ needs.tag.outputs.version }}
-          cache-from: type=gha,scope=image
-          cache-to: type=gha,scope=image,mode=max
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,scope=image-${{ matrix.arch }},mode=max
 
       - name: Essai de fumée de l'image
-        run: scripts/release/smoke-image.sh foyer-app:smoke "${{ needs.tag.outputs.version }}" linux/amd64
+        run: scripts/release/smoke-image.sh foyer-app:smoke "${{ needs.tag.outputs.version }}" linux/${{ matrix.arch }}
 
       - name: Connexion à GHCR
         uses: docker/login-action@v4
@@ -248,40 +243,79 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Poussée par empreinte seulement, sans étiquette : si une autre étape du
-      # workflow échoue, rien n'est visible sous 1.4.0 ni latest (il reste une
-      # version non étiquetée dans le package, voir docs/RELEASES.md). L'amd64
-      # sort du cache de l'étape d'essai : c'est la même image.
-      - name: Build multi-architecture et poussée par empreinte
+      # workflow échoue, rien n'est visible sous 1.4.0 ni latest (il reste des
+      # images non étiquetées dans le package, voir docs/RELEASES.md). Même build
+      # que l'essai, servi du cache.
+      - name: Poussée par empreinte
         id: push
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
-          annotations: ${{ steps.meta.outputs.annotations }}
           build-args: FOYER_VERSION=${{ needs.tag.outputs.version }}
           outputs: type=image,name=${{ steps.name.outputs.name }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=image
-          cache-to: type=gha,scope=image,mode=max
+          cache-from: type=gha,scope=image-${{ matrix.arch }}
+          cache-to: type=gha,scope=image-${{ matrix.arch }},mode=max
 
-      - name: Contrôle de l'index poussé
-        env:
-          REF: ${{ steps.name.outputs.name }}@${{ steps.push.outputs.digest }}
+      # L'empreinte de chaque architecture voyage en artefact (son nom = son
+      # empreinte) jusqu'au job « manifest ».
+      - name: Export de l'empreinte
         run: |
-          docker buildx imagetools inspect "$REF"
-          platforms="$(docker buildx imagetools inspect "$REF" --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}')"
-          for p in linux/amd64 linux/arm64; do
-            [[ " $platforms " == *" $p "* ]] || { echo "::error::plateforme $p absente de l'index ($platforms)"; exit 1; }
-          done
+          mkdir -p /tmp/digests
+          digest="${{ steps.push.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
 
-  image-tags:
-    name: Étiquettes de l'image
+      - uses: actions/upload-artifact@v6
+        with:
+          name: image-digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 7
+
+  manifest:
+    name: Index multi-architecture
     needs: [tag, build, image]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       packages: write
+    outputs:
+      name: ${{ needs.image.outputs.name }}
+      digest: ${{ steps.index.outputs.digest }}
     steps:
+      - name: Empreintes des architectures
+        uses: actions/download-artifact@v7
+        with:
+          path: /tmp/digests
+          pattern: image-digest-*
+          merge-multiple: true
+
+      # Étiquettes : 1.4.0, 1.4, 1 et latest pour une stable ; 1.4.0-rc.1 et next
+      # pour une préversion, jamais latest (ni la mineure, ni la majeure : un
+      # « docker pull …:1.4 » ne doit pas tomber sur une préversion).
+      - name: Étiquettes et annotations OCI
+        id: meta
+        uses: docker/metadata-action@v6
+        env:
+          # Annotations au niveau de l'index : c'est là que la page du package
+          # GHCR lit sa description.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ needs.image.outputs.name }}
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.tag.outputs.prerelease != 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.tag.outputs.prerelease != 'true' }}
+            type=raw,value=latest,enable=${{ needs.tag.outputs.prerelease != 'true' }}
+            type=raw,value=next,enable=${{ needs.tag.outputs.prerelease == 'true' }}
+          annotations: |
+            org.opencontainers.image.title=Foyer
+            org.opencontainers.image.description=Foyer, application de gestion familiale auto-hébergée (agenda, tâches, courses, repas, finances).
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.version=${{ needs.tag.outputs.version }}
+
       - uses: docker/setup-buildx-action@v4
 
       - name: Connexion à GHCR
@@ -291,27 +325,44 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Les étiquettes pointent sur l'index déjà poussé et essayé : aucun
-      # rebuild, la même empreinte sous chaque nom.
-      - name: Pose des étiquettes
+      # L'index étiqueté est assemblé depuis les empreintes par architecture, sans
+      # reconstruire. Gardé pour la fin (ce job dépend aussi des archives) : rien
+      # n'apparaît sous un nom tant que tout n'a pas réussi.
+      - name: Création et contrôle de l'index
+        id: index
+        working-directory: /tmp/digests
         env:
-          REF: ${{ needs.image.outputs.name }}@${{ needs.image.outputs.digest }}
-          TAGS: ${{ needs.image.outputs.tags }}
+          NAME: ${{ needs.image.outputs.name }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+          ANNOTATIONS: ${{ steps.meta.outputs.annotations }}
         run: |
-          args=()
-          while read -r t; do [[ -n "$t" ]] && args+=(-t "$t"); done <<< "$TAGS"
-          (( ${#args[@]} )) || { echo "::error::aucune étiquette calculée"; exit 1; }
-          docker buildx imagetools create "${args[@]}" "$REF"
+          tags=(); while read -r t; do [[ -n "$t" ]] && tags+=(-t "$t"); done <<< "$TAGS"
+          (( ${#tags[@]} )) || { echo "::error::aucune étiquette calculée"; exit 1; }
+          ann=(); while read -r a; do [[ -n "$a" ]] && ann+=(--annotation "$a"); done <<< "$ANNOTATIONS"
+          srcs=(); for d in *; do [[ -e "$d" ]] && srcs+=("${NAME}@sha256:${d}"); done
+          (( ${#srcs[@]} >= 2 )) || { echo "::error::moins de deux empreintes d'architecture ($(ls -A))"; exit 1; }
+          docker buildx imagetools create "${tags[@]}" "${ann[@]}" "${srcs[@]}"
+
+          # Empreinte de l'index (pour les notes de release), relue depuis la
+          # première étiquette ; puis contrôle des plateformes et des étiquettes.
+          first="$(printf '%s\n' "$TAGS" | head -n1)"
+          digest="$(docker buildx imagetools inspect "$first" --format '{{.Manifest.Digest}}')"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          ref="${NAME}@${digest}"
+          platforms="$(docker buildx imagetools inspect "$ref" --format '{{range .Manifest.Manifests}}{{.Platform.OS}}/{{.Platform.Architecture}} {{end}}')"
+          for p in linux/amd64 linux/arm64; do
+            [[ " $platforms " == *" $p "* ]] || { echo "::error::plateforme $p absente de l'index ($platforms)"; exit 1; }
+          done
           while read -r t; do
             [[ -n "$t" ]] || continue
             got="$(docker buildx imagetools inspect "$t" --format '{{.Manifest.Digest}}')"
-            [[ "$got" == "${{ needs.image.outputs.digest }}" ]] || { echo "::error::$t pointe sur $got"; exit 1; }
+            [[ "$got" == "$digest" ]] || { echo "::error::$t pointe sur $got"; exit 1; }
             echo "$t -> $got"
           done <<< "$TAGS"
 
   publish:
     name: Publication
-    needs: [tag, build, image, image-tags]
+    needs: [tag, build, manifest]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -345,8 +396,8 @@ jobs:
           TAG: ${{ github.ref_name }}
           VERSION: ${{ needs.tag.outputs.version }}
           PRERELEASE: ${{ needs.tag.outputs.prerelease }}
-          IMAGE: ${{ needs.image.outputs.name }}
-          DIGEST: ${{ needs.image.outputs.digest }}
+          IMAGE: ${{ needs.manifest.outputs.name }}
+          DIGEST: ${{ needs.manifest.outputs.digest }}
         run: |
           if [ "$PRERELEASE" = true ]; then
             flags=(--prerelease --latest=false)
