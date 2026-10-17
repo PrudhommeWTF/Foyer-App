@@ -23,6 +23,7 @@ import { log } from '../log';
 import { effectiveSetting } from '../settings/repo';
 import * as t from './tools';
 import * as ed from './ecole-tools';
+import * as eq from './equipements-tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
 type Args = Record<string, unknown>;
@@ -522,6 +523,46 @@ const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: {} },
     run: (ctx) => ed.ecoleEtat(ctx),
   },
+  // ---- Équipements : lecture pour tous (filtre enfant), écriture adultes ----
+  {
+    name: 'equipements_liste',
+    description: 'Les appareils de la maison avec leur [id], marque et modèle, pièce et état de la garantie à la date du jour (« Sous garantie jusqu’au … », « Hors garantie depuis le … », « Garantie inconnue »). Filtres : `piece` (nom), `garantie` (sous_garantie, expire_bientot, hors_garantie, inconnue), `categorie`, `recherche` (désignation, marque, modèle, numéro de série).',
+    inputSchema: { type: 'object', properties: { piece: S.string(60), garantie: { type: 'string', enum: ['sous_garantie', 'expire_bientot', 'hors_garantie', 'inconnue'] }, categorie: { type: 'string', enum: ['electromenager', 'multimedia', 'chauffage_clim', 'securite', 'jardin_piscine', 'informatique', 'mobilier', 'autre'] }, recherche: S.string(120) } },
+    run: (ctx, a) => eq.equipementsListe(ctx, { piece: str(a.piece), garantie: str(a.garantie), categorie: str(a.categorie), recherche: str(a.recherche) }),
+  },
+  {
+    name: 'equipement_detail',
+    description: 'La fiche complète d’un appareil (par `id`, ou `nom` s’il est unique) : garantie expliquée, numéro de série, achat, pièces jointes présentes, historique des pannes et réparations. Pour un compte enfant, ni numéro de série ni montant. Les fichiers ne se téléchargent pas par ici.',
+    inputSchema: { type: 'object', properties: { id: { type: 'number' }, nom: S.string(120) } },
+    run: (ctx, a) => eq.equipementDetail(ctx, { id: num(a.id), nom: str(a.nom) }),
+  },
+  {
+    name: 'equipement_pieces',
+    description: 'Les pièces de la maison (liste partagée avec Entretien) et le nombre d’appareils dans chacune : les noms acceptés par `piece`.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => eq.equipementPieces(),
+  },
+  {
+    name: 'equipement_creer',
+    adultes: true, write: true,
+    description: 'Crée la fiche d’un appareil. Seul `nom` est requis ; `piece` est le nom d’une pièce existante (voir equipement_pieces). `achete_le` AAAA-MM-JJ, `prix` en euros, `garantie_mois` la durée constructeur (sinon la règle du foyer : 24 mois pour du neuf). La photo et la facture se joignent depuis l’application.',
+    inputSchema: { type: 'object', properties: { nom: S.string(120), piece: S.string(60), marque: S.string(80), modele: S.string(80), serie: S.string(80), achete_le: S.date, prix: { type: 'number' }, garantie_mois: { type: 'number' } }, required: ['nom'] },
+    run: (ctx, a) => eq.equipementCreer(ctx, { nom: str(a.nom), piece: str(a.piece), marque: str(a.marque), modele: str(a.modele), serie: str(a.serie), achete_le: str(a.achete_le), prix: num(a.prix), garantie_mois: num(a.garantie_mois) }),
+  },
+  {
+    name: 'equipement_modifier',
+    adultes: true, write: true,
+    description: 'Modifie une fiche (par `id`, ou `nom` s’il est unique). Seuls les champs donnés changent ; une chaîne vide efface une date ou une pièce. `garantie_fin` : date de fin d’une extension (AAAA-MM-JJ). `statut` : en_service, en_panne, remplace, donne_vendu, jete.',
+    inputSchema: { type: 'object', properties: { id: { type: 'number' }, nom: S.string(120), piece: S.string(60), marque: S.string(80), modele: S.string(80), serie: S.string(80), achete_le: S.date, prix: { type: 'number' }, garantie_mois: { type: 'number' }, garantie_fin: S.date, statut: { type: 'string', enum: ['en_service', 'en_panne', 'remplace', 'donne_vendu', 'jete'] }, notes: S.string(2000) } },
+    run: (ctx, a) => eq.equipementModifier(ctx, { id: num(a.id), nom: str(a.nom), piece: str(a.piece), marque: str(a.marque), modele: str(a.modele), serie: str(a.serie), achete_le: str(a.achete_le), prix: num(a.prix), garantie_mois: num(a.garantie_mois), garantie_fin: str(a.garantie_fin), statut: str(a.statut), notes: str(a.notes) }),
+  },
+  {
+    name: 'equipement_evenement',
+    adultes: true, write: true,
+    description: 'Note un événement dans l’historique d’un appareil (par `id`, ou `nom` s’il est unique) : `type` panne, sav, reparation, remplacement, achat ou note ; `texte` ce qui s’est passé ; `cout` en euros ; `date` (défaut : aujourd’hui). Une panne passe la fiche « en panne », une réparation la remet « en service ». Pour « le lave-vaisselle fuit depuis ce matin ».',
+    inputSchema: { type: 'object', properties: { id: { type: 'number' }, nom: S.string(120), type: { type: 'string', enum: ['panne', 'sav', 'reparation', 'remplacement', 'achat', 'note'] }, texte: S.string(1000), cout: { type: 'number' }, date: S.date }, required: ['type'] },
+    run: (ctx, a) => eq.equipementEvenement(ctx, { id: num(a.id), nom: str(a.nom), type: str(a.type), texte: str(a.texte), cout: num(a.cout), date: str(a.date) }),
+  },
 ];
 
 /** Construit un serveur MCP lié à un membre et à une portée. Reconstruit à chaque requête (transport sans état). */
@@ -533,11 +574,12 @@ function buildServer(ctx: t.McpCtx): Server {
   // Un module désactivé retire ses outils, comme un jeton enfant retire les
   // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
   // menage_* de « Employé à domicile », ecole_* de « École » (éteint par
-  // défaut). Les autres domaines n'ont pas d'outils.
+  // défaut), equipement* d'« Équipements ». Les autres domaines n'ont pas d'outils.
   const toolModuleOff = (name: string): boolean =>
     (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
     || (effectiveSetting('modEmploye') === false && name.startsWith('menage'))
-    || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'));
+    || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'))
+    || (effectiveSetting('modEquipements') === false && name.startsWith('equipement'));
   const visible = (): ToolDef[] => TOOLS.filter((tool) =>
     (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 

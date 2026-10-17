@@ -105,6 +105,8 @@ export class EquipementsApi {
     return this.api.upload(`equipements/items/${itemId}/attachments?kind=${kind}&filename=${encodeURIComponent(file.name)}`, file);
   }
   removeAttachment(id: number): Promise<{ item: EqpDetail }> { return this.api.del(`equipements/attachments/${id}`); }
+  /** L'export pour l'assurance (adultes) : la liste en CSV ou PDF, ou le zip avec les factures. */
+  insurance(format: 'csv' | 'pdf' | 'zip'): Promise<Blob> { return this.api.download('equipements/export/assurance.' + format); }
   /** Adresse d'une pièce jointe : le cookie de session l'authentifie, une balise <img> ou un lien suffit. */
   attachmentUrl(id: number, download = false): string { return this.api.absolute(`equipements/attachments/${id}${download ? '?download=1' : ''}`); }
 }

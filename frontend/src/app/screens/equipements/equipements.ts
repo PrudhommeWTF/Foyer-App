@@ -53,6 +53,14 @@ import { WarrantyState } from '../../core/warranty';
               @if (eqp.canEdit()) {
                 <button class="menu-item" (click)="menu.set(false); roomsOpen.set(true)"><f-icon name="home" [size]="16" color="var(--ink2)" [width]="2.2" /> Gérer les pièces</button>
               }
+              @if (eqp.canEdit()) {
+                <div class="menu-sep"></div>
+                <div class="menu-lbl">Pour l’assurance</div>
+                <button class="menu-item" (click)="menu.set(false); eqp.exportInsurance('pdf')"><f-icon name="documents" [size]="16" color="var(--ink2)" [width]="2.2" /> Liste en PDF</button>
+                <button class="menu-item" (click)="menu.set(false); eqp.exportInsurance('csv')"><f-icon name="export" [size]="16" color="var(--ink2)" [width]="2.2" /> Liste en tableur (CSV)</button>
+                <button class="menu-item" (click)="menu.set(false); eqp.exportInsurance('zip')"><f-icon name="download" [size]="16" color="var(--ink2)" [width]="2.2" /> Liste et factures (zip)</button>
+                <div class="menu-sep"></div>
+              }
               <button class="menu-item" (click)="menu.set(false); eqp.toggleArchived()"><f-icon name="folder" [size]="16" color="var(--ink2)" [width]="2.2" /> {{ eqp.showArchived() ? 'Masquer les fiches archivées' : 'Voir les fiches archivées' }}</button>
             </div>
           }
@@ -155,6 +163,8 @@ import { WarrantyState } from '../../core/warranty';
     .menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 41; min-width: 250px; background: var(--surface); border-radius: 14px; padding: 6px; box-shadow: 0 18px 44px -16px rgba(90,60,40,.55); border: 1px solid var(--line); display: flex; flex-direction: column; }
     .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; color: var(--ink); text-align: left; padding: 11px 12px; border-radius: 10px; }
     .menu-item:hover { background: var(--soft); }
+    .menu-sep { height: 1px; background: var(--line); margin: 5px 6px; }
+    .menu-lbl { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; padding: 6px 12px 2px; }
     .card.note { padding: 16px 18px; border-radius: 16px; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; margin-bottom: 18px; }
     .note-act { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
     .small { font-size: 12px; font-weight: 600; color: var(--ink3); margin-top: 8px; }

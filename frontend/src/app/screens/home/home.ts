@@ -12,6 +12,8 @@ import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 import { gesteGroup } from '../../core/entretien';
+import { EquipementsStore } from '../../core/equipements.store';
+import { homeLine } from '../../core/equipements';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
 type Ahead =
@@ -40,7 +42,7 @@ function loadHomeMods(): string[] {
 const MOD_COLOR: Record<string, string> = {
   calendar: '#E56B4E', courses: '#7A9B76', taches: '#9B6FA8',
   repas: '#4E93B8', recettes: '#E56B4E', finances: '#7A9B76',
-  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8', ecole: '#3D6FA8',
+  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8', ecole: '#3D6FA8', equipements: '#7A9B76',
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */
@@ -550,6 +552,7 @@ export class HomeScreen {
   admin = inject(AdminStore);
   private fins = inject(FinancesStore);
   ecole = inject(EcoleStore);
+  private eqp = inject(EquipementsStore);
   readonly subject = subjectLabel;
 
   private readonly track = viewChild<ElementRef<HTMLElement>>('track');
@@ -867,6 +870,8 @@ export class HomeScreen {
       case 'contacts': return n(d.contacts.length, 'contact', 'contacts', 'Aucun contact');
       case 'fidelite': return n(d.cards.length, 'carte', 'cartes', 'Aucune carte');
       case 'lieux': return n((d.places || []).length, 'lieu', 'lieux', 'Aucun lieu');
+      // Ce qui demande d'agir d'abord (panne, garantie qui expire), sinon le compte.
+      case 'equipements': return this.eqp.boot() ? homeLine(this.eqp.items(), this.eqp.rules().alertDays) : '';
       case 'entretien': {
         // Les gestes jamais notés ne comptent pas : ils ne sont pas en retard.
         const g = this.store.gestes().filter((t) => !t.done);

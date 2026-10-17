@@ -1,8 +1,9 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { AttachmentKind, EqpBootstrap, EqpDetail, EqpFields, EqpItem, EquipementsApi, EventKind, categoryOf } from './equipements.api';
 import { FoyerStore, SearchHit } from './foyer.store';
-import { eqpMatches } from './equipements';
+import { eqpMatches, warrantyDayExtras } from './equipements';
 import { isImageFile, resizePhoto } from './image-resize';
+import { downloadBlob } from './download';
 
 /**
  * État de l'écran Équipements. Le module vit dans ses tables : tout passe par
@@ -33,6 +34,8 @@ export class EquipementsStore {
   readonly assets = computed(() => this.boot()?.assets ?? []);
 
   constructor() {
+    // Repère d'agenda : le dernier jour couvert de chaque garantie en cours.
+    effect(() => this.foyer.setExternalDayExtras('equipements', warrantyDayExtras(this.items())));
     // Module actif et quelqu'un de connecté : on charge, pour la recherche
     // globale comme pour l'écran. Éteint ou déconnecté : on oublie tout.
     effect(() => {
@@ -91,6 +94,14 @@ export class EquipementsStore {
     return r;
   }
   attachmentUrl(id: number, download = false): string { return this.api.attachmentUrl(id, download); }
+
+  /** Télécharge l'export pour l'assurance. */
+  async exportInsurance(format: 'csv' | 'pdf' | 'zip'): Promise<void> {
+    this.busy.set(true);
+    try { downloadBlob(await this.api.insurance(format), `equipements-assurance-${this.foyer.todayStr()}.${format}`); }
+    catch (e) { this.foyer.toast((e as Error).message || 'L’export a échoué.'); }
+    finally { this.busy.set(false); }
+  }
 
   /** Les fiches qui répondent à la recherche globale. */
   searchHits(q: string): SearchHit[] {

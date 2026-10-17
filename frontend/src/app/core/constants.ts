@@ -203,6 +203,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
   echeance: { color: '#C6492F', label: 'Échéance de contrat' },
   cesu: { color: '#7A8B4A', label: 'Déclaration CESU' },
   ecole: { color: '#3D6FA8', label: 'Interrogation' },
+  garantie: { color: '#A0590D', label: 'Fin de garantie' },
 };
 
 /**

@@ -7,7 +7,7 @@
 import type { TaskItem } from '../tasks/ops';
 import { ENTRETIEN_LIST_ID } from '../entretien/list';
 import { PushPayload, SendReport, notify, recordMissed } from './push';
-import { EmpMonthState, PrepList, PrepMember, QuietHours, ReminderHit, cesuDue, dueReminders, parisWall, preparationDue, previousMonth } from './reminders';
+import { EmpMonthState, PrepList, PrepMember, QuietHours, ReminderHit, WarrantyWatch, cesuDue, dueReminders, parisWall, preparationDue, previousMonth, warrantyDue } from './reminders';
 
 export interface SchedulerDeps {
   tasks: () => TaskItem[];
@@ -31,8 +31,13 @@ export interface SchedulerDeps {
    * le service.
    */
   rules: () => { paused: boolean; quiet: QuietHours };
-  /** Ce membre veut-il ce genre de rappel sur son téléphone ? `entretien` : les gestes de la liste Entretien. */
-  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien') => boolean;
+  /** Ce membre veut-il ce genre de rappel sur son téléphone ? `entretien` : les gestes de la liste Entretien ; `garantie` : les fins de garantie. */
+  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie') => boolean;
+  /**
+   * Les garanties d'équipement en cours, calculées à la date du jour, et le seuil
+   * d'alerte (eqpGarantieAlerteJours). Vide quand le module Équipements est éteint.
+   */
+  garanties: () => { items: WarrantyWatch[]; alertDays: number };
   /** Le module Entretien est-il actif ? Éteint, ses gestes ne rappellent plus (ils restent dans la base). */
   entretienOn: () => boolean;
   log: (line: string) => void;
@@ -44,6 +49,8 @@ const prepPayloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, taskId: h.taskId, tag: 'prep-' + h.taskId });
 const cesuPayloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, taskId: h.taskId, tag: 'cesu-' + h.taskId });
+const warrantyPayloadOf = (h: ReminderHit, url: string): PushPayload =>
+  ({ kind: 'reminder', title: h.title, body: h.body, url, tag: h.taskId });
 
 /** Ce qu'un envoi a atteint, par membre, pour le journal (vide quand tout a été ignoré). */
 const reached = (r: SendReport): string => r.members.filter((m) => m.status !== 'skipped')
@@ -92,6 +99,14 @@ export async function tick(deps: SchedulerDeps, nowWall = parisWall()): Promise<
     if (!pour.length) continue;
     const parts = reached(await notify(h.key, pour, cesuPayloadOf(h, deps.url())));
     if (parts) deps.log(`Notifications : rappel CESU « ${h.body} » → ${parts}`);
+  }
+  // Fin de garantie proche (module Équipements), une fois par fiche et par date de fin.
+  const { items, alertDays } = deps.garanties();
+  for (const h of warrantyDue(items, deps.adults(), nowWall, alertDays)) {
+    const pour = h.memberIds.filter((m) => deps.wants(m, 'garantie'));
+    if (!pour.length) continue;
+    const parts = reached(await notify(h.key, pour, warrantyPayloadOf(h, deps.url())));
+    if (parts) deps.log(`Notifications : fin de garantie « ${h.body} » → ${parts}`);
   }
 }
 
