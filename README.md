@@ -19,6 +19,8 @@ fidélité et emplois du temps, dans une seule application chaleureuse que vous 
 
 Angular 21 · Node/Express · SQLite · Docker ou LXC Proxmox
 
+**[Découvrir Foyer en images →](https://prudhommewtf.github.io/Foyer-App/)**
+
 </div>
 
 ---
