@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Foyer · La maison, ensemble</title>
+  <meta name="description" content="Foyer réunit l'agenda, les courses, les tâches, les repas, les recettes et les finances de la famille dans une seule application, installée chez vous. Libre, auto-hébergée, en français.">
+  <meta name="theme-color" content="#E56B4E" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#15191E" media="(prefers-color-scheme: dark)">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Foyer · La maison, ensemble">
+  <meta property="og:description" content="Toute la vie du foyer au même endroit, chez vous. Application familiale libre et auto-hébergée.">
+  <meta property="og:image" content="https://prudhommewtf.github.io/Foyer-App/assets/img/og-image.png">
+  <meta property="og:locale" content="fr_FR">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="assets/img/foyer-mark.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+  <link rel="preload" href="assets/fonts/bricolage-grotesque-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/nunito-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/site.css">
+  <script>
+    /* Thème choisi sur ce site, avant le premier rendu (pas de flash). */
+    try { var t = localStorage.getItem('foyer-site-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <a class="skip" href="#contenu">Aller au contenu</a>
+
+  <header class="nav" id="haut">
+    <div class="wrap nav-in">
+      <a class="brand" href="#haut" aria-label="Foyer, retour en haut">
+        <img src="assets/img/foyer-mark.svg" width="36" height="36" alt="">
+        <span class="brand-name">Foyer</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#fonctionnalites">Fonctionnalités</a>
+        <a href="#apercu">Aperçu</a>
+        <a href="#vie-privee">Vie privée</a>
+        <a href="#installer">Installer</a>
+      </nav>
+      <div class="nav-actions">
+        <button class="theme-btn" type="button" aria-label="Changer de thème" title="Thème clair ou sombre">
+          <svg class="i-sun" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="i-moon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg>
+        </button>
+        <a class="btn btn-ghost-strong" href="https://github.com/PrudhommeWTF/Foyer-App">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" class="gh"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7 3.6 3.6 0 0 1 .1-2.7s.8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.4 4.7-4.6 5 .4.3.7.9.7 1.8V21c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="contenu">
+
+    <!-- ===================== Hero ===================== -->
+    <section class="hero">
+      <div class="wrap hero-in">
+        <div class="hero-text">
+          <p class="kicker">Application familiale libre et auto-hébergée</p>
+          <h1>Toute la vie du foyer, au même endroit. <span class="accent">Chez vous.</span></h1>
+          <p class="script">la maison, ensemble</p>
+          <p class="lead">Agenda partagé, courses, tâches, repas, recettes, finances et emplois du temps, dans une seule application chaleureuse que vous installez sur votre serveur. Sans compte chez personne, sans publicité, sans abonnement.</p>
+          <div class="cta">
+            <a class="btn btn-primary" href="#installer">Installer en 3 minutes</a>
+            <a class="btn btn-soft" href="https://github.com/PrudhommeWTF/Foyer-App">Voir le code sur GitHub</a>
+          </div>
+          <ul class="facts" aria-label="En bref">
+            <li>Licence MIT</li>
+            <li>Docker ou LXC Proxmox</li>
+            <li>Fonctionne hors ligne</li>
+            <li>100 % en français</li>
+          </ul>
+        </div>
+        <div class="hero-visual" aria-hidden="false">
+          <figure class="frame frame-desktop">
+            <div class="frame-bar"><span></span><span></span><span></span></div>
+            <img data-shot="bureau-accueil" src="assets/screens/bureau-accueil-light.webp" width="1600" height="1000" alt="L'accueil de Foyer sur ordinateur : activité récente de la famille, prochains évènements, dernières tâches et repas du jour.">
+          </figure>
+          <figure class="frame frame-phone">
+            <img data-shot="mobile-accueil" src="assets/screens/mobile-accueil-light.webp" width="720" height="1226" alt="L'accueil de Foyer sur téléphone : « Bonjour Claire », activité récente et tuiles des modules.">
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Pourquoi ===================== -->
+    <section class="section" id="pourquoi" aria-labelledby="t-pourquoi">
+      <div class="wrap">
+        <p class="overline">Pourquoi Foyer</p>
+        <h2 id="t-pourquoi">Cinq applications qui ne se parlent pas, c'est fini.</h2>
+        <p class="section-lead">Un agenda partagé chez un géant de la publicité, une liste de courses griffonnée, des rappels dans un groupe de discussion. Foyer remet tout au même endroit, sur une machine qui vous appartient.</p>
+        <div class="pillars">
+          <article class="pillar">
+            <span class="pi" style="--c: var(--primary)"><svg viewBox="0 0 24 24"><path d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+            <h3>Vos données restent chez vous</h3>
+            <p>Pas de cloud, pas de pistage, pas d'abonnement. Un seul conteneur et une base SQLite dans un volume que vous sauvegardez comme vous voulez.</p>
+          </article>
+          <article class="pillar">
+            <span class="pi" style="--c: var(--blue)"><svg viewBox="0 0 24 24"><path d="M3 5h18v16H3zM3 9h18M8 3v4M16 3v4"/></svg></span>
+            <h3>Pensé pour une famille française</h3>
+            <p>Euro, semaine qui commence le lundi, jours fériés et vacances scolaires de votre académie, CESU, ÉcoleDirecte. Tout est déjà à la bonne place.</p>
+          </article>
+          <article class="pillar">
+            <span class="pi" style="--c: var(--sage)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4"/></svg></span>
+            <h3>Les modules se parlent</h3>
+            <p>Le menu de la semaine remplit la liste de courses, une échéance de contrat devient une tâche puis un rappel. On saisit une fois, ça circule.</p>
+          </article>
+          <article class="pillar">
+            <span class="pi" style="--c: var(--honey)"><svg viewBox="0 0 24 24"><path d="M2 8.8a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16.2a5 5 0 0 1 6 0M12 20h.01M3 3l18 18"/></svg></span>
+            <h3>Même sans réseau</h3>
+            <p>L'application s'ouvre hors ligne, montre le foyer tel qu'il était, accepte vos coches et les envoie au retour du réseau.</p>
+          </article>
+          <article class="pillar">
+            <span class="pi" style="--c: var(--violet)"><svg viewBox="0 0 24 24"><path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8"/></svg></span>
+            <h3>À plusieurs, sans se marcher dessus</h3>
+            <p>Deux téléphones cochent la même liste en même temps sans que l'un écrase l'autre. Chaque membre a sa couleur, ses accès, son profil.</p>
+          </article>
+          <article class="pillar">
+            <span class="pi" style="--c: var(--pink)"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></span>
+            <h3>Belle à regarder</h3>
+            <p>Thème clair ou sombre, palette terracotta et sauge, du grand écran au téléphone. Installable comme une application, avec rappels sur l'écran verrouillé.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Aperçu ===================== -->
+    <section class="section section-tint" id="apercu" aria-labelledby="t-apercu">
+      <div class="wrap">
+        <div class="section-head">
+          <div>
+            <p class="overline">Aperçu</p>
+            <h2 id="t-apercu">L'interface, écran par écran</h2>
+          </div>
+          <div class="seg" role="group" aria-label="Thème des captures">
+            <button type="button" data-scheme="light" aria-pressed="true">Clair</button>
+            <button type="button" data-scheme="dark" aria-pressed="false">Sombre</button>
+          </div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="Écrans de Foyer">
+          <button role="tab" id="tab-accueil" aria-controls="panel" aria-selected="true" data-shot="bureau-accueil" data-caption="L'accueil, mur de la famille : ce qui a changé récemment, les prochains rendez-vous, les tâches et les repas du jour.">Accueil</button>
+          <button role="tab" id="tab-calendrier" aria-controls="panel" aria-selected="false" data-shot="bureau-calendrier" data-caption="Le calendrier partagé : vues 3 jours, semaine et mois, couleur par membre, jours fériés, vacances scolaires et anniversaires. Partage en lecture seule vers Google Agenda ou Apple Calendrier.">Calendrier</button>
+          <button role="tab" id="tab-courses" aria-controls="panel" aria-selected="false" data-shot="bureau-courses" data-caption="Les courses, rangées par rayon dans l'ordre de votre magasin, générées depuis le menu de la semaine, cochées à plusieurs sans conflit.">Courses</button>
+          <button role="tab" id="tab-repas" aria-controls="panel" aria-selected="false" data-shot="bureau-repas" data-caption="Le planning des repas : déjeuner et dîner sur la semaine, plusieurs plats par créneau, couverts calculés d'après l'emploi du temps.">Repas</button>
+          <button role="tab" id="tab-recettes" aria-controls="panel" aria-selected="false" data-shot="bureau-recettes" data-caption="Le carnet de recettes : photos, ingrédients, étapes, notes de la famille, et import depuis l'adresse d'une page de recette.">Recettes</button>
+          <button role="tab" id="tab-edt" aria-controls="panel" aria-selected="false" data-shot="bureau-emploi-du-temps" data-caption="L'emploi du temps de la semaine type : école, travail, sport. Il compte les couverts du dîner et peut publier un créneau à l'agenda.">Emploi du temps</button>
+        </div>
+        <div id="panel" role="tabpanel" aria-labelledby="tab-accueil" class="panel">
+          <figure class="frame frame-wide">
+            <div class="frame-bar"><span></span><span></span><span></span></div>
+            <img id="panel-img" data-shot="bureau-accueil" src="assets/screens/bureau-accueil-light.webp" width="1600" height="1000" alt="">
+          </figure>
+          <p class="caption" id="panel-caption">L'accueil, mur de la famille : ce qui a changé récemment, les prochains rendez-vous, les tâches et les repas du jour.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Mobile ===================== -->
+    <section class="section" id="mobile" aria-labelledby="t-mobile">
+      <div class="wrap mobile-in">
+        <div class="mobile-text">
+          <p class="overline">Sur le téléphone</p>
+          <h2 id="t-mobile">Dans la poche de chacun</h2>
+          <p class="section-lead">Foyer s'installe sur l'écran d'accueil comme une vraie application. Le panneau de chaque élément monte du bas, à portée du pouce.</p>
+          <ul class="ticks">
+            <li><b>Rappels sur le téléphone</b> pour les tâches, réglés tâche par tâche.</li>
+            <li><b>Coche hors ligne</b> au supermarché, rejouée au retour du réseau.</li>
+            <li><b>Cartes de fidélité</b> scannées par la caméra et réaffichées en caisse.</li>
+            <li><b>Des comptes enfants</b> aux droits adaptés : pas de finances, pas de réglages.</li>
+          </ul>
+        </div>
+        <div class="phones">
+          <figure class="frame frame-phone"><img data-shot="mobile-courses" src="assets/screens/mobile-courses-light.webp" width="720" height="1226" alt="La liste de courses sur téléphone, rangée par rayon." loading="lazy"></figure>
+          <figure class="frame frame-phone"><img data-shot="mobile-repas" src="assets/screens/mobile-repas-light.webp" width="720" height="1226" alt="Le planning des repas sur téléphone, trois jours à la fois." loading="lazy"></figure>
+          <figure class="frame frame-phone"><img data-shot="mobile-taches" src="assets/screens/mobile-taches-dark.webp" data-fixed width="720" height="1226" alt="Les tâches du foyer sur téléphone, en thème sombre." loading="lazy"></figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Modules ===================== -->
+    <section class="section section-tint" id="fonctionnalites" aria-labelledby="t-modules">
+      <div class="wrap">
+        <p class="overline">Fonctionnalités</p>
+        <h2 id="t-modules">Tout ce qu'une maison a à organiser</h2>
+        <p class="section-lead">Activez seulement ce qui vous sert : un administrateur peut couper un module, sans jamais perdre ses données.</p>
+        <div class="modules">
+          <article class="mod"><span class="mi" style="--c:#E56B4E"><svg viewBox="0 0 24 24"><path d="M3 5h18v16H3zM3 9h18M8 3v4M16 3v4"/></svg></span><div><h3>Calendrier</h3><p>Récurrences, une seule occurrence modifiable, fériés, vacances scolaires, anniversaires. Flux ICS en lecture seule.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#7A9B76"><svg viewBox="0 0 24 24"><path d="M4 5h15l-1.6 9H6.5zM6.5 14 5 5 3 4M8 19a1.6 1.6 0 1 0 0 .01M17 19a1.6 1.6 0 1 0 0 .01"/></svg></span><div><h3>Courses</h3><p>Multi-listes, rayons dans l'ordre de votre magasin, génération depuis les repas, coche à plusieurs et hors ligne.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#9B6FA8"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6l1 1 1.5-2M4 12l1 1 1.5-2M4 18l1 1 1.5-2"/></svg></span><div><h3>Tâches</h3><p>Affectation, récurrence, sous-tâches, modèles, vue « À moi » et rappels sur le téléphone.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#4E93B8"><svg viewBox="0 0 24 24"><path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10M17 21V3c-2 0-3 3-3 7h3"/></svg></span><div><h3>Repas</h3><p>Déjeuner et dîner sur 3 ou 7 jours, plusieurs plats, couverts, glisser-déposer, recopie d'une semaine.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#E56B4E"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM9 8h6M9 12h6"/></svg></span><div><h3>Recettes</h3><p>Carnet avec photos, import depuis Marmiton, 750g ou un blog, recherche « courgette 20min végétarien ».</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#7A9B76"><svg viewBox="0 0 24 24"><path d="M3 7h18v12H3zM3 11h18M16 15h2"/></svg></span><div><h3>Finances</h3><p>Comptes, catégories, budgets, import de relevés (CSV, OFX, CAMT, xlsx), contrats et échéances de résiliation.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#4E93B8"><svg viewBox="0 0 24 24"><path d="M3 4h18v16H3zM3 9h18M9 9v11"/></svg></span><div><h3>Emploi du temps</h3><p>La semaine type du foyer, une semaine sur deux, périodes scolaires. Compte les couverts, publie à l'agenda.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#3D6FA8"><svg viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5zM6 11v5c0 1.6 2.7 3 6 3s6-1.4 6-3v-5M22 9v6"/></svg></span><div><h3>École</h3><p>Devoirs, notes et emploi du temps des enfants depuis ÉcoleDirecte. Désactivé par défaut, identifiants chiffrés.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#C77DA5"><svg viewBox="0 0 24 24"><path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/></svg></span><div><h3>Contraintes alimentaires</h3><p>Allergènes et aliments refusés par membre ; les recettes disent à qui elles ne conviennent pas.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#9B6FA8"><svg viewBox="0 0 24 24"><path d="M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M19 8v6M22 11h-6"/></svg></span><div><h3>Employé à domicile</h3><p>Les heures de ménage déclarées au CESU, avec les chiffres exacts à recopier en fin de mois. Réservé aux adultes.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#F0B24B"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3zM7 10v4M10 10v4M13 10v4M16 10v4"/></svg></span><div><h3>Cartes de fidélité</h3><p>Scannées une fois par la caméra, réaffichées en grand à la caisse, partagées par toute la famille.</p></div></article>
+          <article class="mod"><span class="mi" style="--c:#4E93B8"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4"/></svg></span><div><h3>Lieux et contacts</h3><p>L'inventaire de la maison de vacances, et le carnet des contacts utiles : urgences, santé, école.</p></div></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Les modules se parlent ===================== -->
+    <section class="section" id="ensemble" aria-labelledby="t-ensemble">
+      <div class="wrap">
+        <p class="overline">On saisit une fois, ça circule</p>
+        <h2 id="t-ensemble">Les modules travaillent ensemble</h2>
+        <ol class="flows">
+          <li class="flow">
+            <span class="chip" style="--c:#4E93B8">Repas</span><span class="arrow" aria-hidden="true">→</span><span class="chip" style="--c:#7A9B76">Courses</span>
+            <p>Le menu de la semaine remplit la liste de courses, quantités mises à l'échelle des couverts, avec un rapport avant d'écrire.</p>
+          </li>
+          <li class="flow">
+            <span class="chip" style="--c:#7A9B76">Contrat</span><span class="arrow" aria-hidden="true">→</span><span class="chip" style="--c:#9B6FA8">Tâche</span><span class="arrow" aria-hidden="true">→</span><span class="chip" style="--c:#E56B4E">Rappel</span>
+            <p>Une échéance de résiliation devient une tâche, puis une notification sur le téléphone le moment venu.</p>
+          </li>
+          <li class="flow">
+            <span class="chip" style="--c:#4E93B8">Emploi du temps</span><span class="arrow" aria-hidden="true">→</span><span class="chip" style="--c:#4E93B8">Couverts</span>
+            <p>Qui est à la maison ce soir ? L'emploi du temps le sait, et le planning des repas compte les couverts tout seul.</p>
+          </li>
+          <li class="flow">
+            <span class="chip" style="--c:#3D6FA8">École</span><span class="arrow" aria-hidden="true">→</span><span class="chip" style="--c:#E56B4E">Agenda</span>
+            <p>Les interrogations arrivent à l'agenda, les devoirs dans une liste « Devoirs de… », et le rappel du soir suit.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===================== Vie privée & technique ===================== -->
+    <section class="section section-dark" id="vie-privee" aria-labelledby="t-privee">
+      <div class="wrap privacy">
+        <div>
+          <p class="overline">Vie privée</p>
+          <h2 id="t-privee">Votre famille n'est pas un produit</h2>
+          <p class="section-lead">Foyer tourne sur votre serveur, votre NAS ou un conteneur Proxmox. Aucune donnée ne part chez un tiers : même les polices sont servies par l'application.</p>
+          <ul class="ticks">
+            <li>Mots de passe <b>bcrypt</b>, second facteur <b>TOTP</b> en option, sessions en cookie <b>HttpOnly</b>.</li>
+            <li>Comptes ouverts par un administrateur, jamais d'inscription publique.</li>
+            <li>Les seules requêtes sortantes sont des options que vous activez : rappels push, import de recette, logos de cartes, ÉcoleDirecte.</li>
+            <li>Un assistant (Claude, ChatGPT, client MCP) peut agir en votre nom avec un <b>jeton à vos droits</b>, révocable.</li>
+          </ul>
+        </div>
+        <dl class="stack">
+          <div><dt>Interface</dt><dd>Angular 21, PWA, hors ligne</dd></div>
+          <div><dt>Serveur</dt><dd>Node.js, Express, TypeScript</dd></div>
+          <div><dt>Données</dt><dd>SQLite, un seul fichier à sauvegarder</dd></div>
+          <div><dt>Déploiement</dt><dd>Docker (amd64, arm64) ou LXC Proxmox</dd></div>
+          <div><dt>Licence</dt><dd>MIT</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    <!-- ===================== Installer ===================== -->
+    <section class="section" id="installer" aria-labelledby="t-installer">
+      <div class="wrap">
+        <p class="overline">Installer</p>
+        <h2 id="t-installer">En trois minutes avec Docker</h2>
+        <p class="section-lead">Au premier démarrage, un assistant crée votre foyer, votre compte administrateur et les membres de la famille.</p>
+        <div class="install">
+          <div class="code">
+            <div class="code-head"><span>Terminal</span><button type="button" class="copy" data-copy="#code-docker">Copier</button></div>
+<pre id="code-docker"><code>mkdir foyer && cd foyer
+curl -fsSLO https://raw.githubusercontent.com/PrudhommeWTF/Foyer-App/main/docker-compose.yml
+echo "FOYER_JWT_SECRET=$(openssl rand -hex 32)" >> .env
+docker compose pull
+docker compose up -d</code></pre>
+          </div>
+          <ol class="steps">
+            <li><b>Lancez</b> les commandes ci-contre : elles récupèrent l'image publiée, sans clone ni compilation.</li>
+            <li><b>Ouvrez</b> <code>http://localhost:8099</code> et suivez l'assistant.</li>
+            <li><b>Mettez un reverse-proxy</b> devant pour y accéder depuis le téléphone, en HTTPS.</li>
+          </ol>
+        </div>
+        <div class="alt">
+          <details>
+            <summary>Sans Docker Compose, un seul conteneur</summary>
+<pre><code>docker run -d --name foyer -p 127.0.0.1:8099:8099 -v foyer-data:/data \
+  -e FOYER_JWT_SECRET="$(openssl rand -hex 32)" \
+  ghcr.io/prudhommewtf/foyer-app:latest</code></pre>
+          </details>
+          <details>
+            <summary>Conteneur LXC sur Proxmox, sans Docker</summary>
+<pre><code>git clone https://github.com/PrudhommeWTF/Foyer-App.git
+cd Foyer-App
+bash deploy/lxc/proxmox-create.sh   # depuis l'hôte Proxmox, en root</code></pre>
+            <p>Mise à jour en un bouton depuis l'application, ou <code>bash deploy/lxc/update.sh</code>.</p>
+          </details>
+        </div>
+        <p class="more">Variables d'environnement, reverse-proxy, sauvegarde et restauration : tout est dans le <a href="https://github.com/PrudhommeWTF/Foyer-App#readme">README du dépôt</a>.</p>
+      </div>
+    </section>
+
+    <!-- ===================== Appel final ===================== -->
+    <section class="final">
+      <div class="wrap final-in">
+        <img src="assets/img/foyer-mark.svg" width="64" height="64" alt="">
+        <h2>La maison, ensemble.</h2>
+        <p>Libre, gratuit, et chez vous.</p>
+        <div class="cta">
+          <a class="btn btn-light" href="#installer">Installer Foyer</a>
+          <a class="btn btn-outline-light" href="https://github.com/PrudhommeWTF/Foyer-App">Étoiler le projet sur GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-in">
+      <p><b>Foyer</b> · Logiciel libre sous licence MIT · © 2026 PrudhommeWTF</p>
+      <p><a href="https://github.com/PrudhommeWTF/Foyer-App">Code source</a> · <a href="https://github.com/PrudhommeWTF/Foyer-App/issues">Signaler un problème</a> · <a href="https://github.com/PrudhommeWTF/Foyer-App/releases">Versions</a></p>
+      <p class="fine">Les captures montrent une famille fictive. Ce site ne dépose aucun cookie et ne charge rien depuis un autre domaine.</p>
+    </div>
+  </footer>
+
+  <script src="assets/js/site.js" defer></script>
+</body>
+</html>
