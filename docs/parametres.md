@@ -195,12 +195,14 @@ Les congés payés, le rappel de déclaration au CESU et la durée proposée à 
 
 ### Entretien
 
-Jusqu’où l’écran Entretien regarde devant lui. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.
+Jusqu’où l’écran Entretien regarde devant lui, et si un consommable passé sous son seuil part seul aux courses. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
+| `entretienCoursesAuto` | Ajouter seul l’article aux courses quand le stock est bas | Foyer | oui / non | désactivé | — | Entretien | — |
 | `entretienHorizonJours` | Gestes à venir, sur combien de jours | Foyer | entier | `14` | de 7 à 90 | Entretien | — |
 
+- **Ajouter seul l’article aux courses quand le stock est bas** (`entretienCoursesAuto`) : Quand le stock d’un geste passe sous son seuil, son article part dans la liste de courses principale, une fois par passage et sans doublon. Désactivé, un bouton « Ajouter aux courses » le propose sur la ligne du geste et sur l’accueil.
 - **Gestes à venir, sur combien de jours** (`entretienHorizonJours`) : Un geste prévu dans ce délai apparaît dans le groupe « Dans les N jours » de l’écran Entretien ; au-delà, dans « Plus tard ».
 
 ### Équipements

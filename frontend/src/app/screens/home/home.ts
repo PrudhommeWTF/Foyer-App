@@ -11,7 +11,8 @@ import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
-import { gesteGroup } from '../../core/entretien';
+import { gesteGroup, nextLabel, stockLow } from '../../core/entretien';
+import { lastDoneDay } from '../../core/task-ops';
 import { EquipementsStore } from '../../core/equipements.store';
 import { homeLine } from '../../core/equipements';
 
@@ -46,12 +47,13 @@ const MOD_COLOR: Record<string, string> = {
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */
-const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances'; label: string }[] = [
+const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances' | 'entretien'; label: string }[] = [
   { key: 'activity', label: 'Activité' },
   { key: 'agenda', label: 'Agenda' },
   { key: 'tasks', label: 'Tâches' },
   { key: 'meals', label: 'Repas' },
   { key: 'finances', label: 'Finances' },
+  { key: 'entretien', label: 'Entretien' },
 ];
 
 /**
@@ -222,6 +224,31 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances'; lab
       </div>
     </ng-template>
 
+    <!-- Entretien : n'apparaît que s'il y a quelque chose à dire (un geste en
+         retard ou proche, un stock bas). Jamais de « 0 » : tout à jour, rien.
+         Les gestes jamais notés n'y comptent pas, ils ne sont pas en retard. -->
+    <ng-template #entretienCard>
+      @let e = entretien();
+      <div class="card rc">
+        <div class="rc-head"><span>Entretien</span><button class="rc-link" (click)="store.go('entretien')">Gestes</button></div>
+        @if (e.resume) { <div class="en-sum">{{ e.resume }}</div> }
+        @for (g of e.rows; track g.id) {
+          <div class="rc-row en-row">
+            <button class="en-name" (click)="store.openItem('task', g.id)"><span [class.late]="g.late">{{ g.text }}</span><small>{{ g.when }}</small></button>
+            @if (g.doneToday) { <span class="en-ok"><f-icon name="check" [size]="12" color="var(--sage)" [width]="3" /> Fait</span> }
+            @else { <button class="en-fait" (click)="store.toggleTask(g.id)">Fait aujourd'hui</button> }
+          </div>
+        }
+        @for (l of e.lows; track l.id) {
+          <div class="rc-row en-row">
+            <span class="en-low">Stock bas : {{ l.article }}</span>
+            @if (l.onList) { <span class="en-ok">Dans les courses</span> }
+            @else { <button class="en-add" (click)="store.gesteToShopping(l.id)">Ajouter aux courses</button> }
+          </div>
+        }
+      </div>
+    </ng-template>
+
     <ng-template #mealsCard>
       <div class="card rc">
         <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
@@ -290,6 +317,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances'; lab
                     @case ('tasks') { <ng-container [ngTemplateOutlet]="tasksCard" /> }
                     @case ('meals') { <ng-container [ngTemplateOutlet]="mealsCard" /> }
                     @case ('finances') { <ng-container [ngTemplateOutlet]="finCard" /> }
+                    @case ('entretien') { <ng-container [ngTemplateOutlet]="entretienCard" /> }
                   }
                 </div>
               }
@@ -361,6 +389,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances'; lab
             @if (store.modRepas()) { <ng-container [ngTemplateOutlet]="mealsCard" /> }
             @if (store.modFinances() && fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
             @if (store.modEcole() && ecole.vue()) { <ng-container [ngTemplateOutlet]="ecoleCard" /> }
+            @if (entretien().show) { <ng-container [ngTemplateOutlet]="entretienCard" /> }
           </div>
         </div>
       }
@@ -455,6 +484,16 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances'; lab
     .m-dish.none { color: var(--ink3); font-weight: 700; font-style: italic; }
 
     /* finances */
+    .en-sum { font-size: 13px; font-weight: 800; color: var(--ink2); margin-bottom: 4px; }
+    .en-row { gap: 10px; }
+    .en-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; border: none; background: none; padding: 0; text-align: left; font: inherit; font-size: 13.5px; font-weight: 800; color: var(--ink); cursor: pointer; }
+    .en-name .late { color: #C6492F; }
+    .en-name small { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .en-fait, .en-add { flex: none; border: none; border-radius: 10px; padding: 8px 11px; min-height: 36px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .en-fait { background: var(--sage); color: #fff; }
+    .en-add { background: #FDF0DA; color: #9A6A12; }
+    .en-low { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: #9A6A12; }
+    .en-ok { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--sage); }
     .fin-month { font-size: 11.5px; font-weight: 800; color: var(--ink3); text-transform: capitalize; margin-bottom: 2px; }
     .fin-line { cursor: default; }
     .f-label { flex: 1; font-size: 13px; font-weight: 700; color: var(--ink2); }
@@ -615,7 +654,32 @@ export class HomeScreen {
   /** Les sections du carousel mobile. */
   // Les finances ne tournent pas pour un enfant (fin() vaut null) ni module désactivé.
   readonly slides = computed(() => SLIDES.filter((s) =>
-    (s.key !== 'meals' || this.store.modRepas()) && (s.key !== 'finances' || (this.store.modFinances() && this.fin() !== null))));
+    (s.key !== 'meals' || this.store.modRepas()) && (s.key !== 'finances' || (this.store.modFinances() && this.fin() !== null))
+    && (s.key !== 'entretien' || this.entretien().show)));
+
+  /**
+   * La carte Entretien : en retard et à venir (horizon du réglage), trois
+   * gestes au plus avec « Fait aujourd'hui », et les stocks bas. `show` faux
+   * quand tout est à jour : la carte disparaît plutôt que d'afficher des zéros.
+   */
+  readonly entretien = computed(() => {
+    const empty = { show: false, resume: '', rows: [] as { id: string; text: string; when: string; late: boolean; doneToday: boolean }[], lows: [] as { id: string; article: string; onList: boolean }[] };
+    if (!this.store.modEntretien()) return empty;
+    const today = this.store.todayStr(); const h = this.store.setting('entretienHorizonJours');
+    const actifs = this.store.gestes().filter((t) => !t.done);
+    const retard = actifs.filter((t) => gesteGroup(t, today, h) === 'retard');
+    const bientot = actifs.filter((t) => gesteGroup(t, today, h) === 'bientot');
+    const byDue = (a: TaskItem, b: TaskItem) => (a.due || '').localeCompare(b.due || '');
+    const rows = [...retard.sort(byDue), ...bientot.sort(byDue)].slice(0, 3).map((t) => ({
+      id: t.id, text: t.text, late: gesteGroup(t, today, h) === 'retard', doneToday: lastDoneDay(t) === today,
+      when: nextLabel(t, today, (d) => this.store.fmtNumDate(d)),
+    }));
+    const lows = actifs.filter((t) => stockLow(t.maintenance?.stock))
+      .map((t) => ({ id: t.id, article: t.maintenance!.stock!.article, onList: this.store.onShoppingList(t.maintenance!.stock!.article) }));
+    const parts = [retard.length ? `${retard.length} en retard` : '', bientot.length ? `${bientot.length} dans les ${h} jours` : ''].filter(Boolean);
+    const show = rows.length > 0 || lows.length > 0;
+    return show ? { show, resume: parts.length ? 'Entretien : ' + parts.join(', ') : '', rows, lows } : empty;
+  });
 
   /**
    * Les modules ouverts à ce compte, tels que la navigation les groupe. Comme

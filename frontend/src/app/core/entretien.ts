@@ -59,11 +59,11 @@ export function freqLabel(rec: TaskRec): string {
 export function lastDoneLabel(t: TaskItem, fmt: (iso: string) => string, name: (id: string) => string): string {
   const h = t.history?.length ? t.history[t.history.length - 1] : null;
   if (!h) return '';
-  return `Fait le ${fmt(parisDay(h.at))} par ${h.by ? name(h.by) || 'un membre parti' : 'le foyer'}`;
+  return `Fait le ${fmt(parisDay(h.at))} par ${h.by ? name(h.by) || 'un membre parti' : 'le foyer'}${h.via ? ' (via un assistant)' : ''}`;
 }
 
 /** Une unité au pluriel, simplement : « cartouches », « piles », mais « jeux » ou « bandelettes ». */
-const plural = (unit: string, qty: number): string => (qty > 1 && unit && !/[sxz]$/.test(unit) ? unit + (/(eu|au)$/.test(unit) ? 'x' : 's') : unit);
+export const plural = (unit: string, qty: number): string => (qty > 1 && unit && !/[sxz]$/.test(unit) ? unit + (/(eu|au)$/.test(unit) ? 'x' : 's') : unit);
 
 /** « Stock au 17/10/2026 : 4 cartouches ». */
 export function stockLabel(s: MaintenanceStock, fmt: (iso: string) => string): string {
@@ -103,6 +103,8 @@ export interface GesteDraft {
   /** Dernière fois que le geste a été fait, si on le sait : il part alors de cette date. */
   lastDone: string | null;
   catalogId: string | null;
+  /** L'appareil concerné (module Équipements), ou null. */
+  equipmentId: number | null;
 }
 
 /** La règle de récurrence d'un brouillon. */
@@ -124,6 +126,7 @@ export function createOp(d: GesteDraft, id: string): TaskOpDraft {
       ...(d.roomId ? { roomId: d.roomId } : {}),
       ...(d.howto.trim() ? { howto: d.howto.trim() } : {}),
       ...(d.catalogId ? { catalogId: d.catalogId } : {}),
+      ...(d.equipmentId ? { equipmentId: d.equipmentId } : {}),
       ...(d.stock && d.stock.article.trim() ? { stock: { ...d.stock, article: d.stock.article.trim() } } : {}),
     },
   };
@@ -139,7 +142,7 @@ export function draftOf(t: TaskItem): GesteDraft {
     fixed: r.base === 'due', fixedDate: t.due || '', grace: r.grace || 0,
     who: [...t.who], remind: t.remind ?? null,
     stock: m.stock ? { qty: m.stock.qty, unit: m.stock.unit, use: m.stock.use, threshold: m.stock.threshold, article: m.stock.article } : null,
-    lastDone: null, catalogId: m.catalogId || null,
+    lastDone: null, catalogId: m.catalogId || null, equipmentId: m.equipmentId ?? null,
   };
 }
 
@@ -155,7 +158,7 @@ export function editOps(t: TaskItem, d: GesteDraft): TaskOpDraft[] {
     op: 'edit', id: t.id, text: d.text.trim(), who: d.who, rec, remind: d.remind,
     ...(fixedMoved ? { due: d.fixedDate } : {}),
     maintenance: {
-      roomId: d.roomId, howto: d.howto.trim() || null,
+      roomId: d.roomId, howto: d.howto.trim() || null, equipmentId: d.equipmentId,
       // Sans stock avant, la quantité saisie est le stock de départ ; avec, le serveur ne la réécrit pas.
       stock: d.stock && d.stock.article.trim() ? { ...d.stock, article: d.stock.article.trim() } : null,
     },
@@ -179,7 +182,7 @@ export function draftFromCatalogue(e: CatalogueEntry | null, today: string, room
     fixed, fixedDate: fixed ? today : '', grace: e?.rec.grace || 0,
     who: [], remind: 'morning',
     stock: e?.article ? { qty: 0, unit: e.article.unite, use: e.article.use, threshold: e.article.seuil, article: e.article.nom } : null,
-    lastDone: null, catalogId: e?.id || null,
+    lastDone: null, catalogId: e?.id || null, equipmentId: null,
   };
 }
 

@@ -8,6 +8,7 @@ import { TaskItem } from '../../core/models';
 import { GROUP_ORDER, GesteGroup, freqLabel, gesteGroup, groupLabel, lastDoneLabel, nextLabel, stockLabel, stockLow } from '../../core/entretien';
 import { lastDoneDay } from '../../core/task-ops';
 import { GesteForm } from './geste-form';
+import { EquipementsStore } from '../../core/equipements.store';
 
 /** Une section de l'écran : un groupe de dates, ou une pièce. */
 interface Section { key: string; title: string; gestes: TaskItem[]; late?: boolean; }
@@ -36,6 +37,7 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
         <div class="seg tri" role="group" aria-label="Ranger les gestes">
           <button type="button" [class.active]="tri() === 'date'" (click)="tri.set('date')">Par date</button>
           <button type="button" [class.active]="tri() === 'piece'" (click)="tri.set('piece')">Par pièce</button>
+          @if (store.modEquipements()) { <button type="button" [class.active]="tri() === 'equipement'" (click)="tri.set('equipement')">Par équipement</button> }
         </div>
       }
 
@@ -74,10 +76,23 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
             @if (store.roomName(t.maintenance?.roomId); as r) { <span class="room"><f-icon name="home" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ r }}</span> }
             @if (t.rec) { <span>{{ freq(t) }}</span> }
           </span>
+          @if (eqpName(t); as e) {
+            <span class="eqp" role="link" (click)="$event.stopPropagation(); store.openItem('equipment', '' + t.maintenance?.equipmentId)">{{ e }}</span>
+          }
           <span class="g-last" [class.never]="!t.history?.length">{{ last(t) || 'Pas encore noté' }}</span>
           @if (next(t); as n) { <span class="g-next" [class.late]="isLate(t)">{{ n }}</span> }
           @if (t.maintenance?.stock; as st) { <span class="g-stock" [class.low]="low(st)">{{ stock(st) }}</span> }
         </button>
+        @if (t.maintenance?.stock; as st) {
+          <!-- Le stock : racheter se note ici ; sous le seuil, l'article part aux courses d'un tap. -->
+          <div class="g-stock-act">
+            <button class="mini" (click)="ouvrirStock(t.id)">J'en ai racheté</button>
+            @if (low(st) && !t.done) {
+              @if (store.onShoppingList(st.article)) { <span class="mini ok"><f-icon name="check" [size]="12" color="var(--sage)" [width]="3" /> Dans les courses</span> }
+              @else { <button class="mini warn" (click)="store.gesteToShopping(t.id)">Ajouter aux courses</button> }
+            }
+          </div>
+        }
         <div class="g-act">
           @if (t.done) {
             <button class="fait soft" (click)="store.archiveGeste(t.id, false)">Réactiver</button>
@@ -106,6 +121,17 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
             </label>
             <div class="f-act"><button class="btn btn-soft" (click)="menuMode.set('')">Retour</button>
               <button class="btn btn-primary" [disabled]="!jour()" (click)="noterJour(t)">Noter</button></div>
+          }
+          @case ('stock') {
+            <div class="seg wrap">
+              <button type="button" [class.active]="stockMode() === 'ajout'" (click)="stockMode.set('ajout')">J'en ai racheté</button>
+              <button type="button" [class.active]="stockMode() === 'compte'" (click)="stockMode.set('compte')">J'ai compté</button>
+            </div>
+            <label class="lab sp">{{ stockMode() === 'ajout' ? 'Combien en plus' : 'Combien il en reste' }}
+              <input class="input" type="number" min="0" inputmode="numeric" [ngModel]="qte()" (ngModelChange)="qte.set(+$event || 0)" /></label>
+            <label class="lab">Le<input class="input" type="date" [max]="store.todayStr()" [ngModel]="jour()" (ngModelChange)="jour.set($event)" /></label>
+            <div class="f-act"><button class="btn btn-soft" (click)="fermerMenu()">Annuler</button>
+              <button class="btn btn-primary" [disabled]="!jour() || (stockMode() === 'ajout' && qte() < 1)" (click)="store.restockGeste(t.id, qte(), stockMode(), jour()); fermerMenu()">Enregistrer</button></div>
           }
           @case ('pause') {
             <p class="q">Le geste disparaît des échéances jusqu'à cette date, puis revient tout seul, rappel compris.</p>
@@ -157,6 +183,12 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     .g-next.late { color: #C6492F; }
     .g-stock { font-size: 12px; font-weight: 700; color: var(--ink2); }
     .g-stock.low { color: #9A6A12; }
+    .eqp { align-self: flex-start; font-size: 12px; font-weight: 800; color: #4E93B8; background: #E5F0F4; border-radius: 7px; padding: 2px 8px; cursor: pointer; }
+    .g-stock-act { display: flex; flex-wrap: wrap; gap: 6px; }
+    .mini { display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 10px; padding: 8px 11px; min-height: 36px; font: inherit; font-size: 12.5px; font-weight: 800; background: var(--soft); color: var(--ink2); cursor: pointer; }
+    .mini.warn { background: #FDF0DA; color: #9A6A12; }
+    .mini.ok { background: #EDF2EB; color: var(--sage); cursor: default; }
+    .lab.sp { margin-top: 14px; }
     .g-act { display: flex; align-items: center; gap: 8px; }
     /* Le geste : grand, à un tap, tenu au pouce sur téléphone. */
     .fait { flex: 1; justify-content: center; border: none; border-radius: 12px; padding: 11px 13px; min-height: 44px; font: inherit; font-size: 13px; font-weight: 800; background: var(--sage); color: #fff; cursor: pointer; white-space: nowrap; }
@@ -180,11 +212,14 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
 })
 export class EntretienScreen {
   readonly store = inject(FoyerStore);
-  readonly tri = signal<'date' | 'piece'>('date');
+  private readonly eqp = inject(EquipementsStore);
+  readonly tri = signal<'date' | 'piece' | 'equipement'>('date');
   readonly voirArchives = signal(false);
   readonly form = signal<{ id: string | null } | null>(null);
   readonly menuId = signal<string | null>(null);
-  readonly menuMode = signal<'' | 'jour' | 'pause'>('');
+  readonly menuMode = signal<'' | 'jour' | 'pause' | 'stock'>('');
+  readonly stockMode = signal<'ajout' | 'compte'>('ajout');
+  readonly qte = signal(1);
   readonly jour = signal('');
   readonly par = signal('');
   readonly groupLabel = (g: GesteGroup) => groupLabel(g, this.horizon());
@@ -200,6 +235,12 @@ export class EntretienScreen {
       return GROUP_ORDER.filter((g) => g !== 'archive')
         .map((g) => ({ key: g, title: groupLabel(g, h), gestes: this.actifs().filter((t) => gesteGroup(t, today, h) === g), late: g === 'retard' }))
         .filter((s) => s.gestes.length);
+    }
+    if (this.tri() === 'equipement') {
+      const by = new Map<string, TaskItem[]>();
+      for (const t of this.actifs()) { const k = this.eqpName(t) || 'Sans équipement'; by.set(k, [...(by.get(k) || []), t]); }
+      return [...by.entries()].sort(([a], [b]) => (a === 'Sans équipement' ? 1 : b === 'Sans équipement' ? -1 : a.localeCompare(b, 'fr')))
+        .map(([k, g]) => ({ key: 'e-' + k, title: k, gestes: g }));
     }
     const rooms = this.store.rooms();
     const known = new Set(rooms.map((r) => r.id));
@@ -221,6 +262,12 @@ export class EntretienScreen {
 
   ouvrirForm(id: string | null): void { this.form.set({ id }); }
   ouvrirMenu(id: string): void { this.menuMode.set(''); this.menuId.set(id); }
+  ouvrirStock(id: string): void { this.stockMode.set('ajout'); this.qte.set(1); this.jour.set(this.store.todayStr()); this.menuId.set(id); this.menuMode.set('stock'); }
+  /** Le nom de l'appareil rattaché, si le module Équipements est allumé et la fiche connue. */
+  eqpName(t: TaskItem): string {
+    const id = t.maintenance?.equipmentId;
+    return id && this.store.modEquipements() ? this.eqp.find(id)?.name || '' : '';
+  }
   fermerMenu(): void { this.menuId.set(null); this.menuMode.set(''); }
   noterJour(t: TaskItem): void { this.store.gesteFaitLe(t.id, this.jour(), this.par() || null); this.fermerMenu(); }
 }

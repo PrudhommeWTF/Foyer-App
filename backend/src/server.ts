@@ -24,6 +24,7 @@ import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup
 import { preserveEntretienList, preserveRooms } from './entretien/list';
 import { moduleCounts as entCounts, resetModule as entReset } from './entretien/repo';
 import { entretienRouter } from './entretien/routes';
+import { gesteToShopping } from './entretien/courses';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
@@ -32,7 +33,7 @@ import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
 import { preserveShopping, shopItemsOf } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
-import { onAssigned, preserveTasks, taskItemsOf } from './tasks/repo';
+import { onAssigned, onStockAlerts, preserveTasks, taskItemsOf } from './tasks/repo';
 import { placesRouter } from './places/routes';
 import { placeItemsOf, placesOf, preservePlaces } from './places/repo';
 import { pushRouter } from './notify/routes';
@@ -414,7 +415,20 @@ api.use('/ecole', auth, apiTokenLimiter, denyToken, requireMember, requireModule
 
 // Module « Entretien » : ses gestes sont des tâches (voir /tasks) ; ici, le
 // catalogue des gestes proposés, ouvert à tout membre.
-api.use('/entretien', auth, ...tokenGate, requireMember, requireModule('modEntretien'), entretienRouter(DATA_DIR));
+api.use('/entretien', auth, ...tokenGate, requireMember, requireModule('modEntretien'), entretienRouter(DATA_DIR, (req) => currentMember(req as AuthedRequest)?.id ?? null));
+
+// Un consommable passé sous son seuil part seul aux courses, une fois par
+// passage, si le foyer l'a voulu. Hors transaction des tâches : un échec ici
+// ne défait pas le geste noté, il est seulement écrit au journal.
+onStockAlerts((ids, meta) => {
+  if (effectiveSetting('modEntretien') === false || effectiveSetting('entretienCoursesAuto') !== true) return;
+  for (const id of ids) {
+    try {
+      const out = gesteToShopping(id, meta);
+      if (out.kind === 'ajoute') log.info(`Entretien : « ${out.article} » ajouté seul à « ${out.liste} » (stock sous le seuil).`);
+    } catch (e) { log.attention(`Entretien : ajout aux courses impossible pour le geste ${id} : ${(e as Error).message}`); }
+  }
+});
 // Module « Équipements » : tout membre lit, les adultes écrivent ; un enfant lit
 // sans numéro de série ni montant, et n'ouvre ni facture ni plaque (filtre dans
 // le routeur). Pas de jeton d'API : l'assistant passe par le serveur MCP.

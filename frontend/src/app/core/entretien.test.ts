@@ -106,3 +106,17 @@ test('catalogue : rangé par famille, recherche sans accents', () => {
   assert.deepEqual(catalogueByFamily(CATALOGUE, 'chaudiere').flatMap((f) => f.gestes.map((g) => g.id)), ['chaudiere-entretien']);
   assert.deepEqual(catalogueByFamily(CATALOGUE, 'cartouche').flatMap((f) => f.gestes.map((g) => g.id)), ['carafe-filtrante']);
 });
+
+test('noté par un assistant : l’historique le dit', () => {
+  const g = geste({ history: [{ at: '2026-10-17T08:00:00Z', by: 'n', due: null, via: 'Claude iPhone' }] });
+  assert.equal(lastDoneLabel(g, fmt, () => 'Nolwenn'), 'Fait le 17/10/2026 par Nolwenn (via un assistant)');
+});
+
+test('l’appareil rattaché suit le geste : création, relecture, modification', () => {
+  const op = createOp({ ...draftFromCatalogue(null, TODAY, null), text: 'Chaudière', equipmentId: 7 }, 'g7');
+  assert.equal(op.op === 'add' && op.maintenance?.equipmentId, 7);
+  const t = geste({ maintenance: { equipmentId: 7 } });
+  assert.equal(draftOf(t).equipmentId, 7);
+  const [e] = editOps(t, { ...draftOf(t), equipmentId: null });
+  assert.equal(e.op === 'edit' && e.maintenance?.equipmentId, null, 'retirer l’appareil s’écrit null');
+});

@@ -14,6 +14,15 @@ export type AssignHook = (memberId: string, task: TaskItem, opId: string) => voi
 let assignHook: AssignHook | null = null;
 export function onAssigned(fn: AssignHook | null): void { assignHook = fn; }
 
+/**
+ * Appelé après un lot, hors transaction, avec les gestes d'entretien dont le
+ * stock vient de passer sous son seuil, et l'auteur du lot. Le serveur y branche
+ * l'ajout automatique aux courses (réglage entretienCoursesAuto).
+ */
+export type StockAlertHook = (taskIds: string[], meta: { by: string | null; via: string | null }) => void;
+let stockAlertHook: StockAlertHook | null = null;
+export function onStockAlerts(fn: StockAlertHook | null): void { stockAlertHook = fn; }
+
 /** Au-delà, le journal des opérations est élagué : c'est une mémoire courte contre les rejeux, pas un historique. */
 const OPS_JOURNAL_MAX = 2000;
 
@@ -92,6 +101,10 @@ export function applyTaskOps(ops: unknown, opts: { trusted?: boolean } = {}): Ap
     return { ...result, version: nextVersion };
   })();
   for (const a of assigned) assignHook?.(a.memberId, a.task, a.opId);
+  if (outcome.stockAlerts.length && stockAlertHook) {
+    const first = (Array.isArray(ops) ? ops[0] : null) as { by?: unknown; via?: unknown } | null;
+    stockAlertHook(outcome.stockAlerts, { by: typeof first?.by === 'string' ? first.by : null, via: typeof first?.via === 'string' ? first.via : null });
+  }
   return outcome;
 }
 
