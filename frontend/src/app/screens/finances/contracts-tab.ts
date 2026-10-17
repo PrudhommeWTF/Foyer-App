@@ -564,7 +564,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .dead { display: flex; align-items: center; gap: 13px; border-radius: 13px; padding: 9px 11px; background: var(--soft); cursor: pointer; }
     .dead:hover { background: var(--soft2); }
     .dead.urgent { background: #FCE9E3; }
-    :host-context(.dark) .dead.urgent { background: #3A2622; }
+    :host-context(.dark) .dead.urgent { background: #3C2E2F; }
     .dead.past { opacity: .6; }
     .dead-when { flex: none; width: 96px; }
     .dead-date { font-size: 13px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -652,7 +652,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .mkrule { display: inline-flex; align-items: center; gap: 7px; border: none; border-radius: 11px; padding: 9px 14px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
     .cost-box { margin-top: 18px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
     .cost-box.off { background: #FDF0DA; }
-    :host-context(.dark) .cost-box.off { background: #3A3123; }
+    :host-context(.dark) .cost-box.off { background: #39362E; }
     .cost-line { font-size: 12.5px; font-weight: 700; color: var(--ink2); line-height: 1.6; }
     .cost-box.off .cost-line { color: #7A5C12; }
     :host-context(.dark) .cost-box.off .cost-line { color: #E8C88A; }

@@ -12,7 +12,7 @@ export type ThemeChoice = 'systeme' | 'clair' | 'sombre';
 
 /** Les couleurs de `<meta name="theme-color">` (barre d'état iPhone, chrome PWA). */
 export const THEME_COLOR_LIGHT = '#E56B4E';
-export const THEME_COLOR_DARK = '#201A17';
+export const THEME_COLOR_DARK = '#15191E';
 
 /**
  * Faut-il le thème sombre ? « sombre » toujours, « clair » jamais, « systeme »

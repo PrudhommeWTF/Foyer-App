@@ -259,7 +259,7 @@ const PAD_T = 10;
     .ro-v { font-variant-numeric: tabular-nums; }
     .ro-b { color: var(--ink2); font-variant-numeric: tabular-nums; }
     .ro-warn { background: #FDF0DA; color: #7A5C12; border-radius: 20px; padding: 1px 9px; font-size: 11px; }
-    :host-context(.dark) .ro-warn { background: #3A3123; color: #E8C88A; }
+    :host-context(.dark) .ro-warn { background: #39362E; color: #E8C88A; }
 
     .chart { width: 100%; height: auto; display: block; }
     .grid { stroke: var(--line); stroke-width: 1; }

@@ -23,8 +23,8 @@ import { IconComponent } from '../core/icon';
     :host { display: block; }
     .alert { display: flex; align-items: flex-start; gap: 12px; border-radius: 16px; padding: 14px 16px; font-size: 13.5px; font-weight: 700; background: #FDF0DA; color: #7A5C12; }
     .alert.err { background: #FCE9E3; color: #8C3B26; align-items: center; }
-    :host-context(.dark) .alert { background: #3A3123; color: #E8C88A; }
-    :host-context(.dark) .alert.err { background: #3A2622; color: #F0A98B; }
+    :host-context(.dark) .alert { background: #39362E; color: #E8C88A; }
+    :host-context(.dark) .alert.err { background: #3C2E2F; color: #F0A98B; }
     .body { flex: 1; min-width: 0; }
   `],
 })
