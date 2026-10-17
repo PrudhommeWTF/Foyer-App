@@ -21,6 +21,7 @@ import { RecettesScreen } from '../screens/recettes/recettes';
 import { PlanningScreen } from '../screens/planning/planning';
 import { SettingsScreen } from '../screens/settings/settings';
 import { LieuxScreen } from '../screens/lieux/lieux';
+import { EntretienScreen } from '../screens/entretien/entretien';
 import { EcoleScreen } from '../screens/ecole/ecole';
 import { EcoleStore } from '../core/ecole.store';
 
@@ -32,7 +33,7 @@ import { EcoleStore } from '../core/ecole.store';
     SidebarComponent, TopbarComponent, NotificationsComponent,
     MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal, ItemSheetComponent,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
-    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen,
+    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen, EntretienScreen,
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
@@ -61,6 +62,7 @@ import { EcoleStore } from '../core/ecole.store';
             @case ('courses') { <screen-courses /> }
             @case ('taches') { <screen-taches /> }
             @case ('lieux') { <screen-lieux /> }
+            @case ('entretien') { <screen-entretien /> }
             @case ('contacts') { <screen-contacts /> }
             @case ('fidelite') { <screen-fidelite /> }
             @case ('finances') { <screen-finances /> }

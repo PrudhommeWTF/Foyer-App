@@ -1,0 +1,108 @@
+// L'écran Entretien range et dit les gestes ; ces tests fixent ce qui se voit :
+// un geste jamais noté n'est jamais en retard, l'horizon est celui du réglage,
+// la fréquence et le stock se lisent en français.
+import { strict as assert } from 'node:assert';
+import { test } from 'node:test';
+import { TaskItem } from './models';
+import { applyTaskOp, TaskOp } from './task-ops';
+import { Catalogue, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, stockLabel, stockLow } from './entretien';
+
+const TODAY = '2026-10-17';
+const fmt = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+const geste = (over: Partial<TaskItem> = {}): TaskItem => ({
+  id: 'g1', listId: 'entretien', text: 'Carafe Brita', who: [], due: null, done: false,
+  rec: { freq: 'weekly', every: 4, base: 'done' }, ...over,
+});
+
+test('groupes : jamais noté n’est jamais en retard, l’horizon suit le réglage', () => {
+  assert.equal(gesteGroup(geste(), TODAY, 14), 'jamais');
+  assert.equal(gesteGroup(geste({ due: '2026-10-10' }), TODAY, 14), 'retard');
+  assert.equal(gesteGroup(geste({ due: TODAY }), TODAY, 14), 'bientot', 'le jour même n’est pas en retard');
+  assert.equal(gesteGroup(geste({ due: '2026-10-31' }), TODAY, 14), 'bientot');
+  assert.equal(gesteGroup(geste({ due: '2026-11-01' }), TODAY, 14), 'plustard');
+  assert.equal(gesteGroup(geste({ due: '2026-11-01' }), TODAY, 30), 'bientot');
+  assert.equal(gesteGroup(geste({ due: '2026-10-10', rec: { freq: 'yearly', every: 1, base: 'due', grace: 30 } }), TODAY, 14), 'bientot', 'dans la souplesse : pas encore en retard');
+  assert.equal(gesteGroup(geste({ done: true, due: '2026-10-10' }), TODAY, 14), 'archive');
+  assert.equal(groupLabel('bientot', 14), 'Dans les 14 jours');
+});
+
+test('fréquence en clair', () => {
+  assert.equal(freqLabel({ freq: 'weekly', every: 4, base: 'done' }), 'toutes les 4 semaines');
+  assert.equal(freqLabel({ freq: 'monthly', every: 6, base: 'done' }), 'tous les 6 mois');
+  assert.equal(freqLabel({ freq: 'yearly', every: 1, base: 'done' }), '1 fois par an');
+  assert.equal(freqLabel({ freq: 'yearly', every: 1, base: 'due' }), 'chaque année, à date fixe');
+  assert.equal(freqLabel({ freq: 'yearly', every: 5, base: 'done' }), 'tous les 5 ans');
+  assert.equal(freqLabel({ freq: 'weekly', every: 1, base: 'done' }), 'chaque semaine');
+});
+
+test('dernière fois, prochaine date, pause', () => {
+  const name = (id: string) => (id === 'n' ? 'Nolwenn' : '');
+  assert.equal(lastDoneLabel(geste(), fmt, name), '');
+  assert.equal(lastDoneLabel(geste({ history: [{ at: '2026-09-30T08:00:00Z', by: 'n', due: null }] }), fmt, name), 'Fait le 30/09/2026 par Nolwenn');
+  assert.equal(lastDoneLabel(geste({ history: [{ at: middayOf('2026-08-12'), by: null, due: null }] }), fmt, name), 'Fait le 12/08/2026 par le foyer');
+  // 23 h 30 UTC le 30/09, c'est le 1er octobre à Paris.
+  assert.equal(lastDoneLabel(geste({ history: [{ at: '2026-09-30T23:30:00Z', by: 'n', due: null }] }), fmt, name), 'Fait le 01/10/2026 par Nolwenn');
+  assert.equal(nextLabel(geste({ due: '2026-10-28' }), TODAY, fmt), 'Le 28/10/2026');
+  assert.equal(nextLabel(geste({ due: '2027-04-15', maintenance: { pausedUntil: '2027-04-15' } }), TODAY, fmt), 'En pause jusqu’au 15/04/2027');
+  assert.equal(nextLabel(geste(), TODAY, fmt), '', 'jamais noté : pas de fausse date');
+});
+
+test('midi à Paris tombe le bon jour, été comme hiver', () => {
+  for (const d of ['2026-07-14', '2026-12-25', '2026-10-25', '2027-03-28']) {
+    const t = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(middayOf(d)));
+    assert.equal(t, d);
+  }
+});
+
+test('stock en clair, et le seuil', () => {
+  const s = { qty: 4, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche', countedAt: '2026-10-17' };
+  assert.equal(stockLabel(s, fmt), 'Stock au 17/10/2026 : 4 cartouches');
+  assert.equal(stockLabel({ ...s, qty: 1 }, fmt), 'Stock au 17/10/2026 : 1 cartouche');
+  assert.equal(stockLabel({ ...s, qty: 2, unit: 'jeu' }, fmt), 'Stock au 17/10/2026 : 2 jeux');
+  assert.equal(stockLow(s), false);
+  assert.equal(stockLow({ ...s, qty: 1 }), true);
+});
+
+const CATALOGUE: Catalogue = {
+  pieces: ['Cuisine'],
+  gestes: [
+    { id: 'carafe-filtrante', titre: 'Carafe filtrante : changer la cartouche', famille: 'Eau', piece: 'Cuisine', rec: { freq: 'weekly', every: 4, base: 'done' },
+      article: { nom: 'Cartouche pour carafe filtrante', unite: 'cartouche', use: 1, seuil: 1 } },
+    { id: 'chaudiere-entretien', titre: 'Chaudière : entretien annuel', famille: 'Chauffage et air', rec: { freq: 'yearly', every: 1, base: 'due', grace: 30 } },
+  ],
+};
+
+test('créer depuis le catalogue : fréquence, stock et catalogue préremplis', () => {
+  const d = { ...draftFromCatalogue(CATALOGUE.gestes[0], TODAY, 'p1'), stock: { ...draftFromCatalogue(CATALOGUE.gestes[0], TODAY, 'p1').stock!, qty: 4 } };
+  const op = createOp(d, 'g9');
+  const [g] = applyTaskOp([], { ...op, opId: 'x', at: '2026-10-17T08:00:00Z', by: 'me' } as TaskOp);
+  assert.equal(g.listId, 'entretien');
+  assert.equal(g.due, null, 'pas encore noté');
+  assert.deepEqual(g.rec, { freq: 'weekly', every: 4, base: 'done' });
+  assert.equal(g.remind, 'morning', 'le rappel du matin, gardé jusqu’à la première fois');
+  assert.equal(g.maintenance?.roomId, 'p1');
+  assert.equal(g.maintenance?.catalogId, 'carafe-filtrante');
+  assert.deepEqual(g.maintenance?.stock, { qty: 4, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche pour carafe filtrante', countedAt: '2026-10-17' });
+});
+
+test('date fixe : la chaudière part de la date choisie, avec sa souplesse', () => {
+  const op = createOp({ ...draftFromCatalogue(CATALOGUE.gestes[1], TODAY, null), fixedDate: '2026-10-15' }, 'g8');
+  assert.equal(op.op === 'add' && op.due, '2026-10-15');
+  assert.deepEqual(op.op === 'add' && op.rec, { freq: 'yearly', every: 1, base: 'due', grace: 30 });
+});
+
+test('modifier : la fiche relue donne le même geste, et une date fixe déplacée devient l’échéance', () => {
+  const t = geste({ due: '2026-11-14', maintenance: { roomId: 'p1', howto: 'Indicateur', stock: { qty: 3, unit: 'cartouche', use: 1, threshold: 1, article: 'C', countedAt: TODAY } } });
+  const [same] = editOps(t, draftOf(t));
+  assert.equal(same.op === 'edit' && same.due, undefined, 'rien de déplacé');
+  assert.deepEqual(same.op === 'edit' && same.rec, t.rec);
+  const fixe = geste({ due: '2026-10-15', rec: { freq: 'yearly', every: 1, base: 'due' } });
+  const [moved] = editOps(fixe, { ...draftOf(fixe), fixedDate: '2026-10-20' });
+  assert.equal(moved.op === 'edit' && moved.due, '2026-10-20');
+});
+
+test('catalogue : rangé par famille, recherche sans accents', () => {
+  assert.deepEqual(catalogueByFamily(CATALOGUE, '').map((f) => f.famille), ['Eau', 'Chauffage et air']);
+  assert.deepEqual(catalogueByFamily(CATALOGUE, 'chaudiere').flatMap((f) => f.gestes.map((g) => g.id)), ['chaudiere-entretien']);
+  assert.deepEqual(catalogueByFamily(CATALOGUE, 'cartouche').flatMap((f) => f.gestes.map((g) => g.id)), ['carafe-filtrante']);
+});

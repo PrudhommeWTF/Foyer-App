@@ -102,7 +102,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 - **Finances** (`modFinances`) : Les comptes, opérations, budgets et contrats. Désactivé, l’écran, la tuile d’accueil, les notifications, les repères d’agenda et l’accès API disparaissent ; les données relationnelles du module sont conservées.
 - **Employé à domicile** (`modEmploye`) : Le suivi des heures et la déclaration CESU. Désactivé, l’écran, les repères d’agenda, les rappels, l’accès API et les outils d’assistant disparaissent ; les employés et présences sont conservés.
 - **École (ÉcoleDirecte)** (`modEcole`) : Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.
-- **Entretien de la maison** (`modEntretien`) : Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, la liste Entretien se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.
+- **Entretien de la maison** (`modEntretien`) : Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran Entretien disparaît, sa liste se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.
 - **Équipements** (`modEquipements`) : Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.
 
 ## Les modules
@@ -190,6 +190,16 @@ Les congés payés, le rappel de déclaration au CESU et la durée proposée à 
 - **Congés payés inclus dans le taux** (`empCongesInclus`) : Les congés payés sont inclus dans le taux (majoration de 10 % comprise), comme le propose le CESU par défaut. Le récapitulatif l’indique en toutes lettres.
 - **Jour du rappel de déclaration** (`empRappelJour`) : Jour du mois où Foyer rappelle de déclarer le mois précédent au CESU s’il est encore ouvert. La date limite du CESU n’est pas codée en dur : c’est ce rappel qui est réglable.
 - **Durée proposée par défaut (minutes)** (`empDureeHabituelle`) : Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.
+
+### Entretien
+
+Jusqu’où l’écran Entretien regarde devant lui. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `entretienHorizonJours` | Gestes à venir, sur combien de jours | Foyer | entier | `14` | de 7 à 90 | Entretien | — |
+
+- **Gestes à venir, sur combien de jours** (`entretienHorizonJours`) : Un geste prévu dans ce délai apparaît dans le groupe « Dans les N jours » de l’écran Entretien ; au-delà, dans « Plus tard ».
 
 ### Équipements
 

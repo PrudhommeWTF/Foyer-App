@@ -145,6 +145,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
   { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
+  { id: 'entretien', group: 'modules', label: 'Entretien', desc: 'Jusqu’où l’écran Entretien regarde devant lui. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.' },
   { id: 'equipements', group: 'modules', label: 'Équipements', desc: 'Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.' },
   { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
@@ -275,7 +276,7 @@ export const REGISTRY = [
     type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
     custom: true,
     label: 'Entretien de la maison',
-    desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, la liste Entretien se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.',
+    desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran Entretien disparaît, sa liste se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.',
     default: true,
   },
   {
@@ -518,6 +519,13 @@ export const REGISTRY = [
     label: 'Congés payés inclus dans le taux',
     desc: 'Les congés payés sont inclus dans le taux (majoration de 10 % comprise), comme le propose le CESU par défaut. Le récapitulatif l’indique en toutes lettres.',
     default: true,
+  },
+  {
+    key: 'entretienHorizonJours',
+    type: 'int', scope: 'foyer', section: 'entretien', module: 'Entretien',
+    label: 'Gestes à venir, sur combien de jours',
+    desc: 'Un geste prévu dans ce délai apparaît dans le groupe « Dans les N jours » de l’écran Entretien ; au-delà, dans « Plus tard ».',
+    default: 14, min: 7, max: 90,
   },
   {
     key: 'empRappelJour',
