@@ -1,7 +1,8 @@
-// Fichiers rattachés aux entités du document d'état : les photos de recettes.
-// Mêmes octets, même déduplication et même balayage que les pièces jointes du
+// Fichiers rattachés aux entités du document d'état (les photos de recettes) et
+// aux fiches du module Équipements. Mêmes octets, même déduplication et même balayage que les pièces jointes du
 // module Finances, table distincte parce que le propriétaire est désigné par un
 // identifiant texte.
+import crypto from 'crypto';
 import type { Database } from 'better-sqlite3';
 import { DetectedType, blobPath, registerHolder, releaseBlob, writeBlob } from './blobs';
 
@@ -23,10 +24,17 @@ export function initFiles(db: Database): void {
  * subsiste dans le type pour que la migration 5 (qui a sorti les pièces jointes
  * de l'ancien module hors du document d'état) compile, et pour que les fichiers
  * déjà sur le disque gardent un genre valide. `OWNER_KINDS` ne liste que ce
- * qu'on accepte encore d'écrire.
+ * qu'on accepte encore d'écrire **par la route générique** `/api/files`.
+ *
+ * `equipment` est un genre **gardé** : ses fichiers (factures, plaques
+ * signalétiques) ne passent que par les routes du module Équipements, qui
+ * vérifient à chaque requête que le module est actif et que le membre a le
+ * droit de voir cette pièce (un enfant ne voit ni facture ni plaque). La route
+ * générique, qui sert tout fichier à tout membre, les ignore.
  */
-export type OwnerKind = 'recipe' | 'shop' | 'document';
+export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment';
 export const OWNER_KINDS: OwnerKind[] = ['recipe', 'shop'];
+export const GUARDED_KINDS: OwnerKind[] = ['equipment'];
 
 export interface StoredFile {
   id: number;
@@ -60,6 +68,19 @@ export function store(ownerKind: OwnerKind, ownerId: string, name: string, buf: 
   return { file: get(Number(info.lastInsertRowid))!, deduplicated };
 }
 
+/**
+ * Comme `store`, mais une ligne existante du même genre portant les mêmes octets
+ * est reprise au lieu d'en créer une seconde : la facture d'une cuisine
+ * complète, jointe à six fiches, reste un seul fichier connu une seule fois.
+ */
+export function storeOnce(ownerKind: OwnerKind, ownerId: string, name: string, buf: Buffer, type: DetectedType): StoreResult {
+  const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+  const r = database.prepare('SELECT * FROM hh_attachments WHERE owner_kind = ? AND sha256 = ? ORDER BY id LIMIT 1')
+    .get(ownerKind, sha256) as Row | undefined;
+  if (r && blobPath(r.rel_path)) return { file: toFile(r), deduplicated: true };
+  return store(ownerKind, ownerId, name, buf, type);
+}
+
 export function get(id: number): StoredFile | null {
   const r = database.prepare('SELECT * FROM hh_attachments WHERE id = ?').get(id) as Row | undefined;
   return r ? toFile(r) : null;
@@ -84,7 +105,7 @@ export function remove(id: number): boolean {
 }
 
 /**
- * Fichiers qu'aucune entité du document ne cite plus, par exemple la photo
+ * Fichiers qu'aucune entité du document ni aucune fiche d'équipement ne cite plus, par exemple la photo
  * remplacée d'une recette. Le ménage se fait au démarrage plutôt qu'à chaque
  * enregistrement : une recette peut être sauvegardée vingt fois pendant qu'on
  * la modifie, et se tromper de sens ici effacerait la photo qu'on vient de poser.

@@ -8,6 +8,8 @@ import { migrateEmployes } from './employes/schema';
 import { initEmployesRepo } from './employes/repo';
 import { migrateEcole } from './ecole/schema';
 import { initEcoleRepo } from './ecole/repo';
+import { migrateEquipements } from './equipements/schema';
+import { initEquipementsRepo, referencedFileIds as eqpFileIds } from './equipements/repo';
 import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
 import { migrateHousehold, setStateVersion, stateVersion } from './storage/schema';
 import * as files from './storage/files';
@@ -155,6 +157,10 @@ files.initFiles(db);
 initShopping(db);
 initTasks(db);
 initPlaces(db);
+// Après les fichiers du foyer : les pièces jointes d'équipement sont des lignes
+// de hh_attachments, et le ménage ci-dessous doit les voir avant de balayer.
+migrateEquipements(db);
+initEquipementsRepo(db);
 migrateHouseholdDocument();
 
 // Fichiers qu'aucune entité du document ne cite plus (recette supprimée, photo
@@ -237,11 +243,11 @@ function migrateHouseholdDocument(): void {
 }
 
 /**
- * Retire les fichiers que le document ne désigne plus. Ne fait rien tant qu'un
- * foyer n'a pas été créé : sur une base vierge, « rien n'est référencé » veut
+ * Retire les fichiers que ni le document ni une fiche d'équipement ne désignent
+ * plus. Ne fait rien tant qu'un foyer n'a pas été créé : sur une base vierge, « rien n'est référencé » veut
  * dire « rien n'est encore écrit », surtout pas « tout est à effacer ».
  */
-function pruneUnreferencedFiles(): void {
+export function pruneUnreferencedFiles(): void {
   const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
   if (!row) return;
   try {
@@ -250,6 +256,9 @@ function pruneUnreferencedFiles(): void {
     for (const r of doc.recipes || []) if (typeof r.photoId === 'number') referenced.add(r.photoId);
     for (const f of doc.files || []) if (typeof f.fileId === 'number') referenced.add(f.fileId);
     for (const it of doc.shop || []) if (typeof it.photoId === 'number') referenced.add(it.photoId);
+    // Les factures et plaques des équipements vivent hors du document : sans
+    // cette ligne, elles seraient toutes effacées au premier redémarrage.
+    for (const id of eqpFileIds()) referenced.add(id);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
       log.info(`Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);

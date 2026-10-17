@@ -34,6 +34,7 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   fidelite: { icon: 'card', tint: '#E5F0F4', color: '#4E93B8' },
   finances: { icon: 'budget', tint: '#EDF2EB', color: '#5F9E6E' },
   ecole: { icon: 'ecole', tint: '#E5F0F4', color: '#4E93B8' },
+  equipements: { icon: 'home', tint: '#EDF2EB', color: '#7A9B76' },
   modules: { icon: 'settings', tint: '#F2ECF5', color: '#9B6FA8' },
   acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
   serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },
@@ -684,7 +685,7 @@ export class SettingsScreen {
 
   /** La section de réglages d'un module éteint disparaît, comme le module lui-même. */
   private readonly MODULE_SECTION: Record<string, ModuleFlag> = {
-    repas: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole',
+    repas: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', equipements: 'modEquipements',
   };
 
   /** Les sections du registre qui ont quelque chose à montrer, dans son ordre. */

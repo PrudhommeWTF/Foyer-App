@@ -40,10 +40,15 @@ const ACCEPTS: Record<AcceptedKind, { ok: (t: DetectedType | null) => boolean; r
 /** La limite que le foyer s'est fixée, en octets. */
 export type UploadLimit = () => number;
 
-/** L'identifiant de fichier de l'URL, ou null (400 déjà répondu) : même garde pour GET et DELETE. */
+/** L'identifiant de fichier de l'URL, ou null (400 ou 404 déjà répondu) : même garde pour GET et DELETE. */
 function fileId(req: Request, res: Response): number | null {
   const id = parseInt(String(req.params['id'] ?? ''), 10);
   if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: 'Identifiant de fichier invalide.' }); return null; }
+  // Un fichier d'un genre gardé (une facture d'équipement) n'existe pas pour
+  // cette route : seul son module sait qui a le droit de le voir. Répondre 404
+  // plutôt que 403 ne dit même pas qu'il existe.
+  const known = files.get(id);
+  if (known && files.GUARDED_KINDS.includes(known.ownerKind)) { res.status(404).json({ error: 'Fichier introuvable.' }); return null; }
   return id;
 }
 

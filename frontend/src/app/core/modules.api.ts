@@ -9,6 +9,7 @@ export interface ModuleCounts {
   employe: { employes: number; presences: number };
   ecole: { comptes: number; eleves: number };
   entretien: { gestes: number; realisations: number };
+  equipements: { fiches: number; pieces: number };
 }
 
 @Injectable({ providedIn: 'root' })

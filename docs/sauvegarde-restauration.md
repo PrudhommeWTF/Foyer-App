@@ -17,8 +17,8 @@ Docker) :
 
 | Chemin | Contenu |
 |---|---|
-| `foyer.db` | La base : comptes, document du foyer, finances, journaux d'opérations |
-| `pieces/` | Les octets des pièces jointes et des documents, nommés par empreinte |
+| `foyer.db` | La base : comptes, document du foyer, finances, employé, équipements, journaux d'opérations |
+| `pieces/` | Les octets des pièces jointes (Finances, photos de recettes, factures et plaques des équipements), nommés par empreinte |
 | `sauvegardes/` | Les instantanés faits depuis l'application |
 | `backups/` | Les copies d'avant migration du document d'état |
 | `regles-accueil.json` | Les règles de contexte de l'accueil, si vous en avez posé |
