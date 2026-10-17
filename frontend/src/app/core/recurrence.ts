@@ -165,6 +165,27 @@ export function skipOccurrence(rec: RecRule, due: string, today: string): string
   return nextOccurrence(rec, due, rec.base === 'done' ? (due > today ? due : today) : due);
 }
 
+/**
+ * Combien de fois une série revient en moyenne par an : ce qui chiffre un
+ * coût annuel prévu. Par la cadence quand elle suffit (toutes les 4 semaines :
+ * 13 ; tous les 2 ans : 0,5) ; sinon, avec une saison ou plusieurs jours de la
+ * semaine, en déroulant la règle sur quatre ans à partir de `from` (la piscine
+ * chaque semaine de mai à septembre revient 22 fois, pas 52). En mode « après
+ * la réalisation », chaque occurrence est supposée faite le jour même.
+ */
+export function occurrencesPerYear(rec: RecRule, from: string): number {
+  const n = Math.max(1, rec.every || 1);
+  // Sans saison ni jours choisis, la cadence suffit : « toutes les 4 semaines », 13 fois.
+  if (!rec.season && !(rec.freq === 'weekly' && rec.base === 'due' && (rec.days?.length || 0) > 1)) {
+    return { daily: 365, weekly: 52, monthly: 12, yearly: 1 }[rec.freq] / n;
+  }
+  const end = addDaysIso(from, 4 * 365 + 1);
+  let count = 0;
+  let due: string | null = rec.base === 'due' ? (inSeason(rec.season, from) && matches(rec, from, from) ? from : firstMatchAfter(rec, from, from)) : seasonStart(rec.season, from);
+  while (due && due < end && count < 4 * 366) { count++; due = nextOccurrence({ ...rec, until: null }, due, due); }
+  return count / 4;
+}
+
 /** Dernier jour où une occurrence n'est pas encore en retard : l'échéance, plus la tolérance. */
 export function windowEnd(due: string, rec: RecRule | null | undefined): string {
   return rec?.grace ? addDaysIso(due, rec.grace) : due;

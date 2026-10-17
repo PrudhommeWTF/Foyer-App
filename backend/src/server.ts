@@ -24,6 +24,8 @@ import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup
 import { preserveEntretienList, preserveRooms } from './entretien/list';
 import { moduleCounts as entCounts, resetModule as entReset } from './entretien/repo';
 import { entretienRouter } from './entretien/routes';
+import { costsRouter } from './entretien/costs-routes';
+import { recordSpend } from './entretien/costs';
 import { gesteToShopping } from './entretien/courses';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
@@ -33,7 +35,7 @@ import { shoppingRouter } from './shopping/routes';
 import { recipesRouter } from './recipes/routes';
 import { preserveShopping, shopItemsOf } from './shopping/repo';
 import { tasksRouter } from './tasks/routes';
-import { onAssigned, onStockAlerts, preserveTasks, taskItemsOf } from './tasks/repo';
+import { onAssigned, onStockAlerts, onTaskCommit, preserveTasks, taskItemsOf } from './tasks/repo';
 import { placesRouter } from './places/routes';
 import { placeItemsOf, placesOf, preservePlaces } from './places/repo';
 import { pushRouter } from './notify/routes';
@@ -415,11 +417,16 @@ api.use('/ecole', auth, apiTokenLimiter, denyToken, requireMember, requireModule
 
 // Module « Entretien » : ses gestes sont des tâches (voir /tasks) ; ici, le
 // catalogue des gestes proposés, ouvert à tout membre.
+// Ce que coûtent les gestes : des montants, donc adultes seulement, comme Finances.
+api.use('/entretien/couts', auth, apiTokenLimiter, denyToken, requireAdulte, requireModule('modEntretien'), costsRouter((req) => currentMember(req as AuthedRequest)?.id ?? null));
 api.use('/entretien', auth, ...tokenGate, requireMember, requireModule('modEntretien'), entretienRouter(DATA_DIR, (req) => currentMember(req as AuthedRequest)?.id ?? null));
 
 // Un consommable passé sous son seuil part seul aux courses, une fois par
 // passage, si le foyer l'a voulu. Hors transaction des tâches : un échec ici
 // ne défait pas le geste noté, il est seulement écrit au journal.
+// Le coût d'une réalisation s'inscrit avec elle, dans la transaction du lot ;
+// une remise à zéro du module (des suppressions de gestes) efface les montants.
+onTaskCommit(recordSpend);
 onStockAlerts((ids, meta) => {
   if (effectiveSetting('modEntretien') === false || effectiveSetting('entretienCoursesAuto') !== true) return;
   for (const id of ids) {

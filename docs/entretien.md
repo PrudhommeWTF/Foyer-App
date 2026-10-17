@@ -8,8 +8,8 @@ il a été fait et par qui, quand il revient, et ce qu'il reste en stock.
 Cadrage et choix : `docs/entretien-etat-des-lieux.md`.
 
 > État : livré en trois tranches (socle, écran, puis stock et courses, accueil,
-> équipements et assistant). Restent pour plus tard : gestes saisonniers à
-> fenêtre, coût d'un geste et total annuel avec Finances.
+> équipements et assistant), puis les gestes saisonniers et à fenêtre, et le
+> coût des gestes avec leur total annuel dans Finances.
 
 ## L'écran
 
@@ -250,6 +250,45 @@ passent par les mêmes opérations que l'écran, donc les mêmes règles (une
 réalisation par jour, date suivante calculée par le serveur, stock). Un geste
 noté par l'assistant garde la trace dans son historique (« via un assistant »).
 
+## Ce que coûte l'entretien
+
+Pour les **adultes** seulement : un enfant ne voit aucun montant, ni à l'écran,
+ni par l'API (`/api/entretien/couts` lui répond 403). Il peut toujours noter un
+geste, et son montant est compté quand même.
+
+**Dans la fiche d'un geste**, « Coût » : un montant **à chaque fois** (la
+cartouche à 15,90 €, le ramonage à 70 €), ou, quand Finances est allumé, **le
+contrat qui le couvre** (l'entretien annuel de la chaudière). La fiche annonce
+aussitôt la prévision (« Environ 207 € par an, 13 fois »).
+
+| Ce qui se voit | Où |
+|---|---|
+| « ≈ 207 €/an » ou « sous contrat » sur la ligne | Écran Entretien |
+| « Environ X € par an prévus, Y € dépensés sur 12 mois », et le lien vers Finances | En tête de l'écran Entretien, dès qu'un geste est chiffré |
+| Le coût, le montant à chaque fois, le dépensé sur 12 mois | Fiche du geste (Tâches) |
+| « Entretien · environ X € par an » | Fiche d'un équipement |
+| Le bilan : prévu sur un an, dépensé sur 12 mois, par geste, par pièce, et les contrats rattachés | Finances → Contrats → **Entretien** |
+
+**Comment c'est compté.**
+
+- **Le réel** : chaque réalisation est notée **au prix du moment**, dans la même
+  transaction que la coche (`ent_spend`). Changer le prix ensuite ne réécrit pas
+  le passé ; rouvrir un geste retire son montant ; supprimer un geste emporte
+  les siens. « Dépensé sur 12 mois » est leur somme sur douze mois glissants,
+  gestes archivés compris.
+- **La prévision** : le montant × le nombre de passages par an, déduit de la
+  récurrence (`occurrencesPerYear` du moteur partagé) : toutes les 4 semaines,
+  13 fois ; tous les 2 ans, 0,5 ; la piscine chaque semaine de mai à septembre,
+  environ 22 fois.
+- **Un contrat** qui couvre des gestes compte **une seule fois**, à son coût
+  réel sur douze mois (les opérations rattachées au contrat dans Finances), dans
+  le réel comme dans la prévision. Le geste n'a alors pas de montant propre :
+  il serait compté deux fois. Sans opération rattachée, le contrat compte 0 €.
+
+**Limites connues.** Un coût saisi pour un geste déjà fait ne chiffre pas ses
+réalisations passées : le réel commence au premier geste fait après. Les outils
+de l'assistant ne disent pas les montants (ils servent aussi les enfants).
+
 ## Réglages
 
 | Clé | Portée | Défaut | Effet |
@@ -265,11 +304,27 @@ gestes et leur historique ; la liste et les pièces restent.
 
 ## Sauvegarde et retour arrière
 
-Aucune table nouvelle : tout est dans le document du foyer, donc dans la
-sauvegarde habituelle (`docs/sauvegarde-restauration.md`). La migration 14 est
-additive et rejouable ; le serveur dépose une copie du document d'avant
-migration dans `backups/`. Le fichier de surcharge du catalogue est dans le
-dossier des données, il part avec lui.
+Les gestes sont dans le document du foyer ; leurs coûts dans deux tables du
+même fichier de base, `ent_costs` (le coût prévu de chaque geste) et `ent_spend`
+(le montant de chaque réalisation), schéma versionné par `ent_meta`
+(`backend/src/entretien/schema.ts`). Tout part donc dans la sauvegarde
+habituelle (`docs/sauvegarde-restauration.md`). Les migrations sont additives et
+rejouables ; le serveur dépose une copie du document d'avant migration dans
+`backups/`. Le fichier de surcharge du catalogue est dans le dossier des
+données, il part avec lui.
+
+Avant la mise à jour qui crée les tables de coûts, un instantané suffit :
+
+```bash
+# LXC
+sqlite3 /var/lib/foyer/foyer.db "VACUUM INTO '/root/foyer-avant-couts.db'"
+# Docker (l'image n'a pas sqlite3 : la copie passe par le module SQLite de l'application)
+docker exec foyer node -e "require('better-sqlite3')('/data/foyer.db',{readonly:true}).backup('/data/foyer-avant-couts.db').then(()=>console.log('sauvegarde faite'))"
+```
+
+Revenir en arrière : arrêter le service, remettre ce fichier à la place de
+`foyer.db`, réinstaller la version précédente. Une version antérieure ignore
+simplement les tables `ent_*`.
 
 Revenir à une version antérieure à Entretien demande de restaurer la sauvegarde
 d'avant la mise à jour : une ancienne version ne connaît pas la liste de type

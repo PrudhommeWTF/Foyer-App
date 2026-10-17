@@ -12,6 +12,8 @@ import { WARRANTY_TONE, fmtCents } from '../../core/equipements';
 import { frDate } from '../../core/warranty';
 import { TaskItem } from '../../core/models';
 import { nextLabel } from '../../core/entretien';
+import { EntretienApi } from '../../core/entretien.api';
+import { fmtEurosInt } from '../../core/finances.store';
 import { lastDoneDay } from '../../core/task-ops';
 
 /**
@@ -90,7 +92,7 @@ import { lastDoneDay } from '../../core/task-ops';
 
     @if (gestes().length) {
       <!-- Les gestes d'entretien de l'appareil (module Entretien) : la prochaine fois, et le geste d'un tap. -->
-      <div class="overline">Entretien</div>
+      <div class="overline">Entretien@if (coutEntretien(); as c) { <span class="ov-cost"> · environ {{ c }} € par an</span> }</div>
       <ul class="gestes">
         @for (g of gestes(); track g.id) {
           <li>
@@ -161,6 +163,7 @@ import { lastDoneDay } from '../../core/task-ops';
     .when { flex: none; width: 82px; font-weight: 800; color: var(--ink3); }
     .what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .what b { color: var(--ink); }
+    .ov-cost { text-transform: none; letter-spacing: 0; font-weight: 700; }
     .gestes { list-style: none; margin: 0 0 6px; padding: 0; }
     .gestes li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
     .gestes li:first-child { border-top: none; }
@@ -173,6 +176,14 @@ import { lastDoneDay } from '../../core/task-ops';
 export class EquipmentView {
   readonly eqp = inject(EquipementsStore);
   readonly foyer = inject(FoyerStore);
+  private readonly entApi = inject(EntretienApi);
+  /** Le coût annuel prévu de ses gestes chiffrés : adultes seulement, comme les autres montants de la fiche. */
+  readonly coutEntretien = computed(() => {
+    if (this.foyer.isChild() || !this.gestes().length) return '';
+    this.entApi.assurer();
+    const n = this.gestes().reduce((s, g) => s + (g.done ? 0 : this.entApi.cout(g.id)?.forecast ?? 0), 0);
+    return n ? fmtEurosInt(n) : '';
+  });
   readonly item = input.required<EqpItem>();
   readonly ctx = input<ItemCtx | undefined>(undefined);
   readonly eventKinds = EVENT_KINDS;

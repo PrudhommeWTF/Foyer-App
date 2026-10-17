@@ -13,6 +13,7 @@ import { CheckComponent } from '../../shared/check';
 import { FinAttachments } from './attachments';
 import { FinContractSheet } from './contract-sheet';
 import { FinRange } from './charts/range';
+import { FinEntretienPanel } from './entretien-panel';
 import { ASSET_KINDS, CONTRACT_KINDS, periodWord } from './contract-labels';
 
 /**
@@ -25,13 +26,16 @@ import { ASSET_KINDS, CONTRACT_KINDS, periodWord } from './contract-labels';
   selector: 'fin-contracts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent, FinAttachments, FinContractSheet, FinRange],
+  imports: [NgTemplateOutlet, FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent, FinAttachments, FinContractSheet, FinRange, FinEntretienPanel],
   template: `
     @let u = store.ui();
     <div class="subtabs" role="tablist" aria-label="Contrats">
       <button role="tab" [attr.aria-selected]="u.contratsTab === 'contrats'" [class.on]="u.contratsTab === 'contrats'" (click)="store.patch({ contratsTab: 'contrats' })">Contrats et biens</button>
       <button role="tab" [attr.aria-selected]="u.contratsTab === 'echeances'" [class.on]="u.contratsTab === 'echeances'" (click)="store.patch({ contratsTab: 'echeances' })">Échéances · {{ upcoming() }}</button>
       <button role="tab" [attr.aria-selected]="u.contratsTab === 'economies'" [class.on]="u.contratsTab === 'economies'" (click)="store.patch({ contratsTab: 'economies' })">Économies · {{ fmtInt(store.savingsTotals().pending) }} €/an</button>
+      @if (foyer.modEntretien()) {
+        <button role="tab" [attr.aria-selected]="u.contratsTab === 'entretien'" [class.on]="u.contratsTab === 'entretien'" (click)="store.patch({ contratsTab: 'entretien' })">Entretien</button>
+      }
     </div>
 
     @switch (u.contratsTab) {
@@ -40,13 +44,14 @@ import { ASSET_KINDS, CONTRACT_KINDS, periodWord } from './contract-labels';
           <ng-container [ngTemplateOutlet]="assetsPanel" />
         } @else {
           <div class="cols">
-            <div class="col-l"><ng-container [ngTemplateOutlet]="deadlinesPanel" /><ng-container [ngTemplateOutlet]="savingsPanel" /></div>
+            <div class="col-l"><ng-container [ngTemplateOutlet]="deadlinesPanel" /><ng-container [ngTemplateOutlet]="savingsPanel" />@if (foyer.modEntretien()) { <fin-entretien-panel /> }</div>
             <div class="col-r"><ng-container [ngTemplateOutlet]="assetsPanel" /></div>
           </div>
         }
       }
       @case ('echeances') { <ng-container [ngTemplateOutlet]="deadlinesPanel" /> }
       @case ('economies') { <ng-container [ngTemplateOutlet]="savingsPanel" /> }
+      @case ('entretien') { @if (foyer.modEntretien()) { <fin-entretien-panel /> } @else { <ng-container [ngTemplateOutlet]="assetsPanel" /> } }
     }
 
     <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
