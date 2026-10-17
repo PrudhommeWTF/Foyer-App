@@ -200,8 +200,6 @@ export interface OpsContext {
   memberIds: Set<string>;
   /** Listes de courses existantes, pour le lien. */
   shopListIds: Set<string>;
-  /** Pièces existantes (socle Maison). Une pièce inconnue est retirée du geste, sans faire échouer l'opération. */
-  roomIds?: Set<string>;
   /** Vrai quand cette opération a déjà été appliquée (rejeu après coupure réseau). */
   alreadyApplied: (opId: string) => boolean;
   /**
@@ -349,18 +347,22 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
 
 /**
  * Lit les champs d'entretien d'une opération. Null : tout retirer. Ce qui n'a
- * pas de sens (pièce disparue, identifiant de catalogue mal formé) tombe sans
+ * pas de sens (identifiant de pièce ou de catalogue mal formé) tombe sans
  * faire échouer le geste ; ce qui serait une erreur de saisie (date, quantité)
  * est refusé et nommé.
  */
-function readMaintenance(v: unknown, ctx: OpsContext): { patch: MaintenancePatch | null } | { reason: string } {
+function readMaintenance(v: unknown): { patch: MaintenancePatch | null } | { reason: string } {
   if (v === null || v === '') return { patch: null };
   if (typeof v !== 'object' || Array.isArray(v)) return { reason: 'Détails d’entretien illisibles.' };
   const o = v as Record<string, unknown>;
   const p: MaintenancePatch = {};
+  // Une pièce n'est pas vérifiée contre `rooms` : une pièce créée en même
+  // temps que le geste part par l'enregistrement du document, qui peut
+  // arriver après lui (hors ligne, ou simplement plus lent). Une pièce qui
+  // n'arrive jamais est retirée par la réconciliation du document (reconcile).
   if (o['roomId'] !== undefined) {
     const id = trimmed(o['roomId'], 80);
-    p.roomId = id && ctx.roomIds?.has(id) ? id : null;
+    p.roomId = /^[\w-]+$/.test(id) ? id : null;
   }
   if (o['howto'] !== undefined) p.howto = trimmed(o['howto'], HOWTO_MAX) || null;
   if (o['catalogId'] !== undefined) {
@@ -576,7 +578,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (intoDevoirs(f.listId, null, ctx)) { skipped.push({ opId, reason: DEVOIRS_REFUS }); break; }
         let maintenance: Maintenance | undefined;
         if (o['maintenance'] !== undefined) {
-          const m = readMaintenance(o['maintenance'], ctx);
+          const m = readMaintenance(o['maintenance']);
           if ('reason' in m) { skipped.push({ opId, reason: m.reason }); break; }
           if (m.patch && !isEntretien(f.listId, ctx)) { skipped.push({ opId, reason: MAINT_REFUS }); break; }
           maintenance = mergeMaintenance(undefined, m.patch, parisDay(at));
@@ -614,7 +616,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (intoDevoirs(read.fields.listId, out[idx].listId, ctx)) { skipped.push({ opId, reason: DEVOIRS_REFUS }); break; }
         let maintenance = out[idx].maintenance;
         if (o['maintenance'] !== undefined) {
-          const m = readMaintenance(o['maintenance'], ctx);
+          const m = readMaintenance(o['maintenance']);
           if ('reason' in m) { skipped.push({ opId, reason: m.reason }); break; }
           if (m.patch && !isEntretien(read.fields.listId ?? out[idx].listId, ctx)) { skipped.push({ opId, reason: MAINT_REFUS }); break; }
           maintenance = mergeMaintenance(out[idx].maintenance, m.patch, parisDay(at));
