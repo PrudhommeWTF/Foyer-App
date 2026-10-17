@@ -32,11 +32,12 @@ const MOD_COLOR: Record<string, string> = {
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */
-const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[] = [
+const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'finances'; label: string }[] = [
   { key: 'activity', label: 'Activité' },
   { key: 'agenda', label: 'Agenda' },
   { key: 'tasks', label: 'Tâches' },
   { key: 'meals', label: 'Repas' },
+  { key: 'finances', label: 'Finances' },
 ];
 
 /**
@@ -274,6 +275,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
                     @case ('agenda') { <ng-container [ngTemplateOutlet]="agendaCard" /> }
                     @case ('tasks') { <ng-container [ngTemplateOutlet]="tasksCard" /> }
                     @case ('meals') { <ng-container [ngTemplateOutlet]="mealsCard" /> }
+                    @case ('finances') { <ng-container [ngTemplateOutlet]="finCard" /> }
                   }
                 </div>
               }
@@ -530,7 +532,9 @@ export class HomeScreen {
   readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 4 : 12) : []; });
 
   /** Les sections du carousel mobile. */
-  readonly slides = computed(() => SLIDES.filter((s) => s.key !== 'meals' || this.store.modRepas()));
+  // Les finances ne tournent pas pour un enfant (fin() vaut null) ni module désactivé.
+  readonly slides = computed(() => SLIDES.filter((s) =>
+    (s.key !== 'meals' || this.store.modRepas()) && (s.key !== 'finances' || (this.store.modFinances() && this.fin() !== null))));
 
   /**
    * Les modules ouverts à ce compte, tels que la navigation les groupe. Comme
@@ -647,7 +651,9 @@ export class HomeScreen {
     if (!home.accounts) return { kind: 'empty' };
     const s = home.summary;
     const sign = (c: number): 'pos' | 'neg' | 'ink' => (c > 0 ? 'pos' : c < 0 ? 'neg' : 'ink');
+    const rest = this.fins.homeRemaining();
     const lines: FinLine[] = [
+      ...(rest !== null ? [{ label: 'Reste pour finir le mois', value: fmtEuros(rest), tone: sign(rest) }] : []),
       { label: 'Revenus', value: fmtEuros(s.income), tone: 'pos' },
       { label: 'Dépenses', value: fmtEuros(s.expense), tone: 'neg' },
       { label: 'Solde du mois', value: fmtEuros(s.balance), tone: sign(s.balance) },

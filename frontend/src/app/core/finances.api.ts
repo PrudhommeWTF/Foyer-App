@@ -54,6 +54,19 @@ export interface FinLoanView {
 export interface FinCategory {
   id: number; parentId: number | null; name: string; monthlyBudget: number;
   color: string; icon: string; position: number;
+  /** Charge fixe : payée, pas pilotée, donc hors enveloppes. */
+  fixed: boolean;
+}
+
+/** Les dépenses d'un mois jour par jour (centimes), et les trois mois d'avant au même jour. */
+export interface FinFlow {
+  month: string; days: number;
+  /** Jour de référence : aujourd'hui pour le mois en cours, sinon le dernier. */
+  day: number;
+  daily: { day: number; categoryId: number | null; spent: number }[];
+  previous: { month: string; categoryId: number | null; spentToDay: number }[];
+  /** Ce que chaque contrat a débité dans le mois. */
+  contracts: { contractId: number; amount: number; date: string }[];
 }
 
 export interface FinTransaction {
@@ -104,11 +117,15 @@ export interface FinHome {
   currentBalance: number | null;
   /** Les comptes courants eux-mêmes, pour saisir une dépense sans quitter l'accueil. */
   currentAccounts: { id: number; name: string }[];
+  /** Les entrées des charges fixes du mois (voir finances-plan.ts). */
+  plan: { categories: FinCategory[]; contracts: FinContract[]; costs: Record<number, FinContractCost>; paid: FinFlow['contracts'] };
   energy: { contracts: number; due: FinReadingDue[] };
 }
 
 export interface FinBootstrap {
   accounts: FinAccount[]; categories: FinCategory[]; balances: Record<number, number>;
+  /** Solde de chaque compte (hors crédit) à la fin des six derniers mois, du plus ancien au plus récent. */
+  history: Record<number, number[]>;
   ignoredOps: Record<number, number>;
   loans: Record<number, FinLoanView>;
   coverage: FinCoverage[]; months: string[]; aliases: FinAlias[];
@@ -122,7 +139,7 @@ export interface AccountPayload {
 }
 
 export interface CategoryPayload {
-  parentId: number | null; name: string; monthlyBudget: string; color: string; icon: string;
+  parentId: number | null; name: string; monthlyBudget: string; color: string; icon: string; fixed?: boolean;
 }
 
 export interface TxPayload {
@@ -207,6 +224,9 @@ export class FinancesApi {
     return this.api.del(`finances/transactions/${id}`);
   }
 
+  flow(month: string): Promise<{ flow: FinFlow }> {
+    return this.api.request('finances/flow?month=' + encodeURIComponent(month));
+  }
   summary(month: string): Promise<{ summary: FinMonthSummary }> {
     return this.api.request('finances/summary?month=' + encodeURIComponent(month));
   }

@@ -35,6 +35,7 @@ describe('migrations du module Finances', () => {
     for (const c of ['loan_principal', 'loan_rate_bp', 'loan_payment', 'loan_insurance', 'loan_first_on']) {
       db.exec(`ALTER TABLE fin_accounts DROP COLUMN ${c}`);
     }
+    db.exec('ALTER TABLE fin_categories DROP COLUMN fixed');
     db.exec("ALTER TABLE fin_accounts ADD COLUMN member_id TEXT");
     db.exec("ALTER TABLE fin_contracts ADD COLUMN member_id TEXT");
     db.prepare("INSERT INTO fin_accounts (name, kind, member_id, position) VALUES ('Compte', 'courant', 'm1', 0)").run();

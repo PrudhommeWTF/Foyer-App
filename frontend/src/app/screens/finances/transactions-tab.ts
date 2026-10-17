@@ -70,7 +70,7 @@ import { CAT_ICONS } from '../../core/constants';
         <div class="tx-empty">
           @if (!store.activeLedgerAccounts().length) {
             <div class="empty-title">Aucun compte pour l'instant</div>
-            <div class="empty-txt">Créez vos comptes dans l'onglet « Comptes », puis saisissez ou importez vos opérations.</div>
+            <div class="empty-txt">Créez vos comptes dans l'espace « Comptes », puis saisissez ou importez vos opérations (Organiser › Import).</div>
           } @else if (store.hasFilters()) {
             <div class="empty-title">Aucune opération ne correspond</div>
             <div class="empty-txt">Élargissez la recherche ou effacez les filtres.</div>

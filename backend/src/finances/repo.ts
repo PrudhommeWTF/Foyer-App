@@ -13,9 +13,9 @@ import { initEnergy } from './energy';
 import { initSavings } from './savings';
 import { initRulesRepo, tagsFor } from './rules-repo';
 import { initSuggestRepo } from './suggest-repo';
-import { centsToDecimal, monthRange, normaliseLabel } from './money';
+import { centsToDecimal, monthRange, normaliseLabel, shiftMonth } from './money';
 import {
-  Account, AccountCoverage, Category, CategorySummary, LoanTerms, MonthSummary, Transaction, TxKind,
+  Account, AccountCoverage, Category, CategorySummary, LoanTerms, MonthFlow, MonthSummary, Transaction, TxKind,
 } from './types';
 
 let database: Database;
@@ -77,10 +77,10 @@ const accountMembers = (): Map<number, string[]> => readMembers(database, 'fin_a
 const writeAccountMembers = (accountId: number, memberIds: string[]): void =>
   writeMembers(database, 'fin_account_members', 'account_id', accountId, memberIds);
 
-interface CategoryRow { id: number; parent_id: number | null; name: string; monthly_budget: number; color: string; icon: string; position: number; }
+interface CategoryRow { id: number; parent_id: number | null; name: string; monthly_budget: number; color: string; icon: string; position: number; fixed: number; }
 const toCategory = (r: CategoryRow): Category => ({
   id: r.id, parentId: r.parent_id, name: r.name, monthlyBudget: r.monthly_budget,
-  color: r.color, icon: r.icon, position: r.position,
+  color: r.color, icon: r.icon, position: r.position, fixed: !!r.fixed,
 });
 
 interface TxRow {
@@ -175,6 +175,29 @@ export function accountBalances(): Record<number, number> {
 }
 
 /**
+ * Le solde de chaque compte à la fin des six derniers mois (le dernier arrêté à
+ * aujourd'hui), du plus ancien au plus récent : la petite courbe des comptes.
+ * Même règle que le solde : rien avant la date d'ouverture. Un crédit n'a pas
+ * de registre, il n'y est pas.
+ */
+export function balanceHistory(today = new Date().toISOString().slice(0, 10)): Record<number, number[]> {
+  const stmt = database.prepare(`
+    SELECT a.id AS id, a.opening_balance + COALESCE(SUM(t.amount), 0) AS balance
+    FROM fin_accounts a
+    LEFT JOIN fin_transactions t
+      ON t.account_id = a.id AND t.date <= ? AND (a.opening_date IS NULL OR t.date > a.opening_date)
+    WHERE a.kind <> 'credit'
+    GROUP BY a.id
+  `);
+  const out: Record<number, number[]> = {};
+  for (let k = 5; k >= 0; k--) {
+    const { to } = monthRange(shiftMonth(today.slice(0, 7), -k));
+    for (const r of stmt.all(k ? to : today) as { id: number; balance: number }[]) (out[r.id] ??= []).push(r.balance);
+  }
+  return out;
+}
+
+/**
  * Opérations qu'une date d'ouverture écarte du solde, par compte. Elles restent
  * dans l'historique et dans le bilan : seul le solde les ignore, puisque le
  * solde saisi est censé les contenir déjà. Sans ce compteur, de l'argent
@@ -232,20 +255,21 @@ export function getCategory(id: number): Category | null {
   return r ? toCategory(r) : null;
 }
 
-export interface CategoryInput { parentId: number | null; name: string; monthlyBudget: number; color: string; icon: string; }
+/** `fixed` absent (un client qui ne le connaît pas) laisse la valeur en place. */
+export interface CategoryInput { parentId: number | null; name: string; monthlyBudget: number; color: string; icon: string; fixed?: boolean; }
 
 export function createCategory(input: CategoryInput): Category {
   const pos = (database.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM fin_categories').get() as { p: number }).p;
   const info = database.prepare(
-    'INSERT INTO fin_categories (parent_id, name, monthly_budget, color, icon, position) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(input.parentId, input.name, input.monthlyBudget, input.color, input.icon, pos);
+    'INSERT INTO fin_categories (parent_id, name, monthly_budget, color, icon, position, fixed) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(input.parentId, input.name, input.monthlyBudget, input.color, input.icon, pos, input.fixed ? 1 : 0);
   return getCategory(Number(info.lastInsertRowid))!;
 }
 
 export function updateCategory(id: number, input: CategoryInput): Category | null {
   const info = database.prepare(
-    'UPDATE fin_categories SET parent_id = ?, name = ?, monthly_budget = ?, color = ?, icon = ? WHERE id = ?',
-  ).run(input.parentId, input.name, input.monthlyBudget, input.color, input.icon, id);
+    'UPDATE fin_categories SET parent_id = ?, name = ?, monthly_budget = ?, color = ?, icon = ?, fixed = COALESCE(?, fixed) WHERE id = ?',
+  ).run(input.parentId, input.name, input.monthlyBudget, input.color, input.icon, input.fixed === undefined ? null : input.fixed ? 1 : 0, id);
   return info.changes ? getCategory(id) : null;
 }
 
@@ -426,6 +450,38 @@ export function monthSummary(month: string, today = new Date().toISOString().sli
     missing,
     incomplete: missing.length > 0,
   };
+}
+
+/**
+ * Daily spending of a month, with the same exclusions as the summary (internal
+ * transfers out, expenses only), and the three months before cut at the same day.
+ */
+export function monthFlow(month: string, today = new Date().toISOString().slice(0, 10)): MonthFlow {
+  const { from, to } = monthRange(month);
+  const days = Number(to.slice(8));
+  const day = today.slice(0, 7) === month ? Number(today.slice(8, 10)) : days;
+  // Root category, unless the category itself is a fixed charge.
+  const CAT = 'CASE WHEN t.category_id IS NULL THEN NULL WHEN c.fixed = 1 OR c.parent_id IS NULL THEN c.id ELSE c.parent_id END';
+  const SPENT = `FROM fin_transactions t LEFT JOIN fin_categories c ON c.id = t.category_id
+    WHERE t.date >= ? AND t.date <= ? AND t.kind <> 'virement' AND t.amount < 0`;
+  const daily = database.prepare(`
+    SELECT CAST(substr(t.date, 9, 2) AS INTEGER) AS day, ${CAT} AS categoryId, SUM(-t.amount) AS spent
+    ${SPENT} GROUP BY day, categoryId ORDER BY day
+  `).all(from, to) as MonthFlow['daily'];
+  const previous: MonthFlow['previous'] = [];
+  for (let k = 1; k <= 3; k++) {
+    const m = shiftMonth(month, -k);
+    const r = monthRange(m);
+    const end = `${m}-${String(Math.min(day, Number(r.to.slice(8)))).padStart(2, '0')}`;
+    const rows = database.prepare(`SELECT ${CAT} AS categoryId, SUM(-t.amount) AS spentToDay ${SPENT} GROUP BY categoryId`)
+      .all(r.from, end) as { categoryId: number | null; spentToDay: number }[];
+    for (const row of rows) previous.push({ month: m, ...row });
+  }
+  const contracts = database.prepare(`
+    SELECT contract_id AS contractId, SUM(-amount) AS amount, MAX(date) AS date FROM fin_transactions
+    WHERE contract_id IS NOT NULL AND date >= ? AND date <= ? GROUP BY contract_id
+  `).all(from, to) as MonthFlow['contracts'];
+  return { month, days, day, daily, previous, contracts };
 }
 
 /** Months that hold at least one operation, most recent first. */

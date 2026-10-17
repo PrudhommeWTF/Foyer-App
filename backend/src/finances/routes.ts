@@ -132,6 +132,7 @@ function categoryInput(body: Record<string, unknown>): repo.CategoryInput {
     monthlyBudget: body['monthlyBudget'] === undefined || body['monthlyBudget'] === '' ? 0 : Math.abs(amountCents(body['monthlyBudget'], 'budget mensuel')),
     color: str(body['color'], 'couleur', { max: 20, required: false }) || '#7A9B76',
     icon: str(body['icon'], 'icône', { max: 40, required: false }) || 'facture',
+    fixed: body['fixed'] === undefined ? undefined : !!body['fixed'],
   };
 }
 
@@ -221,6 +222,7 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
       accounts: repo.listAccounts(),
       categories: repo.listCategories(),
       balances: repo.accountBalances(),
+      history: repo.balanceHistory(),
       ignoredOps: repo.opsBeforeOpening(),
       loans: loanViews(),
       coverage: repo.accountCoverage(),
@@ -266,6 +268,14 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
         currentBalance: courants.length ? courants.reduce((a, c) => a + (balances[c.id] ?? 0), 0) : null,
         // De quoi saisir une dépense en espèces sans charger tout le module.
         currentAccounts: courants.map((c) => ({ id: c.id, name: c.name })),
+        // De quoi calculer « reste pour finir le mois » côté client (charges
+        // fixes attendues, voir finances-plan.ts) sans charger tout le module.
+        plan: {
+          categories: repo.listCategories().filter((c) => c.fixed),
+          contracts: all.filter((c) => c.status === 'actif'),
+          costs: Object.fromEntries(contracts.contractCosts(today)),
+          paid: repo.monthFlow(month, today).contracts,
+        },
         energy: {
           contracts: all.filter((c) => c.kind === 'energie').length,
           due: energy.readingsDue(all, energy.lastReadingDates(), today, Number(effectiveSetting('readingDueDays'))),
@@ -453,6 +463,12 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
     const month = String(req.query['month'] || '').trim();
     if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
     res.json({ summary: monthSummary(month) });
+  }));
+
+  r.get('/flow', handler((req, res) => {
+    const month = String(req.query['month'] || '').trim();
+    if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
+    res.json({ flow: repo.monthFlow(month) });
   }));
 
   // ---- export ----

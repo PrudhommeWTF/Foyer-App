@@ -407,7 +407,11 @@ export interface SchedSlot {
    */
   sync?: boolean;
 }
-export interface Notif { id: string; title: string; desc: string; time: string; read: boolean; kind: string; }
+export interface Notif {
+  id: string; title: string; desc: string; time: string; read: boolean; kind: string;
+  /** Ouvre l'élément précis (un contrat…) au lieu du seul écran du `kind`. */
+  open?: () => void;
+}
 /**
  * Le repli d'identité du document : le membre qui compte quand la session ne dit
  * pas qui elle est.

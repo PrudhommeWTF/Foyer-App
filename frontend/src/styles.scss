@@ -35,6 +35,19 @@
   --tint-honey: #FDF0DA;
   --tint-violet: #F2ECF5;
 
+  /* Finances charts: blue/terracotta passed the palette check (colour blindness,
+     contrast, chroma) in both themes. A status colour always comes with a word or an icon. */
+  --chart-pos: #2A7DB8;
+  --chart-neg: #E05A3A;
+  --chart-seq: #E05A3A;
+  --chart-seq-track: #F7DDD5;
+  --chart-pace: #8A7E74;
+  --status-crit: #B4442C;
+  --status-crit-bg: #FCE9E3;
+  --status-warn: #7A5C12;
+  --status-warn-bg: #FDF0DA;
+  --status-good: #44703F;
+
   /* Radii */
   --r-chip: 12px;
   --r-input: 13px;
@@ -66,6 +79,16 @@
   --ink3: #848E9B;
   --line: #2A3038;
   --line2: #39414B;
+  --chart-pos: #4A9BD1;
+  --chart-neg: #E5694B;
+  --chart-seq: #E5694B;
+  --chart-seq-track: #3E2F30;
+  --chart-pace: #848E9B;
+  --status-crit: #F0A98B;
+  --status-crit-bg: #3C2E2F;
+  --status-warn: #E8C88A;
+  --status-warn-bg: #39362E;
+  --status-good: #8DC08A;
   /* Tints: 16% of the accent over --surface, so pills stay dark in the dark theme. */
   --tint-primary: #3E2F30;
   --tint-sage: #2D3636;

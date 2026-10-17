@@ -9,7 +9,7 @@ import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
 /** Money is stored as signed integer cents: no floating-point drift on 6000 rows. */
-export const FIN_SCHEMA_VERSION = 5;
+export const FIN_SCHEMA_VERSION = 6;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -318,7 +318,28 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    label: 'catégories : charges fixes',
+    up: (db) => {
+      // Une charge fixe (loyer, prêt, assurance) se paie, elle ne se pilote pas :
+      // sa catégorie sort des enveloppes. On part des contrats déjà saisis.
+      db.exec('ALTER TABLE fin_categories ADD COLUMN fixed INTEGER NOT NULL DEFAULT 0');
+      db.exec(MARK_FIXED_SQL);
+    },
+  },
 ];
+
+/**
+ * Marque comme charges fixes les catégories portées par un contrat actif et
+ * récurrent. Rejoué après la restauration d'une sauvegarde antérieure à la
+ * migration 6, qui n'a pas la colonne.
+ */
+export const MARK_FIXED_SQL = `
+  UPDATE fin_categories SET fixed = 1 WHERE id IN (
+    SELECT category_id FROM fin_contracts
+    WHERE category_id IS NOT NULL AND status = 'actif' AND periodicity <> 'ponctuelle'
+  )`;
 
 /**
  * Bring the finances schema up to date. Idempotent, each migration in its own

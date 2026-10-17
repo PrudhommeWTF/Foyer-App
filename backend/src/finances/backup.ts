@@ -8,7 +8,7 @@
 // La restauration écrase. Elle est donc transactionnelle, refuse ce qu'elle ne
 // comprend pas, et exige une confirmation explicite dans la requête.
 import type { Database } from 'better-sqlite3';
-import { FIN_SCHEMA_VERSION } from './schema';
+import { FIN_SCHEMA_VERSION, MARK_FIXED_SQL } from './schema';
 import { log } from '../log';
 
 let database: Database;
@@ -123,6 +123,9 @@ export function restoreModule(backup: unknown): RestoreReport {
       );
       for (const row of rows) stmt.run(...columns.map((c) => row[c] ?? null));
     }
+    // Une sauvegarde d'avant les charges fixes : la migration 6 les aurait
+    // déduites des contrats, la restauration fait de même.
+    if (b.schemaVersion! < 6) database.exec(MARK_FIXED_SQL);
   })();
 
   const after = counts();
