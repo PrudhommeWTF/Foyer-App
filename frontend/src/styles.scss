@@ -28,6 +28,13 @@
   --line: #EFE3D2;
   --line2: #E0D4C5;
 
+  /* Category tints: the light pill behind an accent (constants.ts tint()). */
+  --tint-primary: #FCE9E3;
+  --tint-sage: #EDF2EB;
+  --tint-blue: #E5F0F4;
+  --tint-honey: #FDF0DA;
+  --tint-violet: #F2ECF5;
+
   /* Radii */
   --r-chip: 12px;
   --r-input: 13px;
@@ -49,15 +56,22 @@
 }
 
 :root.dark {
-  --bg: #201A17;
-  --surface: #2C2521;
-  --soft: #332B26;
-  --soft2: #3B322C;
-  --ink: #F3E9DD;
-  --ink2: #B7A99B;
-  --ink3: #867868;
-  --line: #3C332D;
-  --line2: #4A3F37;
+  /* Ardoise: cool slate neutrals. Brand and accent colours are unchanged. */
+  --bg: #15191E;
+  --surface: #1E232A;
+  --soft: #252B33;
+  --soft2: #2C333C;
+  --ink: #ECEFF3;
+  --ink2: #AAB3BF;
+  --ink3: #848E9B;
+  --line: #2A3038;
+  --line2: #39414B;
+  /* Tints: 16% of the accent over --surface, so pills stay dark in the dark theme. */
+  --tint-primary: #3E2F30;
+  --tint-sage: #2D3636;
+  --tint-blue: #263541;
+  --tint-honey: #403A2F;
+  --tint-violet: #322F3E;
   --sh-card: 0 12px 28px -20px rgba(0, 0, 0, .55);
   --sh-modal: 0 40px 80px -20px rgba(0, 0, 0, .7);
 }
@@ -204,6 +218,7 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
   padding: 14px 20px; border-radius: var(--r-chip); box-shadow: 0 20px 40px -16px rgba(0, 0, 0, .5);
   animation: ftoastL .3s ease;
 }
+:root.dark .toast { background: #3A4350; }
 @media (max-width: 860px) {
   .toast.over-sheet { top: max(12px, env(safe-area-inset-top)); bottom: auto; left: 16px; right: 16px; }
 }

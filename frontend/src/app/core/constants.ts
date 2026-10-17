@@ -165,9 +165,13 @@ export const isFallbackAisleName = (name: string | undefined): boolean => !!name
 export const RECIPE_PALETTE = ['#7A9B76', '#F0B24B', '#E56B4E', '#9B6FA8'];
 export const CAT_PALETTE = ['#7A9B76', '#E56B4E', '#4E93B8', '#F0B24B', '#9B6FA8', '#6E9E5F'];
 
-/** Light category tints keyed by accent colour. */
+/**
+ * Category tint keyed by accent colour: a CSS variable, so the pill follows the
+ * theme (light pastel in light, a dark wash of the accent in dark). Values live
+ * in styles.scss (`--tint-*`). Unknown colours fall back to `--soft2`.
+ */
 export function tint(c: string): string {
-  return ({ '#E56B4E': '#FCE9E3', '#7A9B76': '#EDF2EB', '#4E93B8': '#E5F0F4', '#F0B24B': '#FDF0DA', '#9B6FA8': '#F2ECF5' } as Record<string, string>)[c] || '#F5EEE2';
+  return ({ '#E56B4E': 'var(--tint-primary)', '#7A9B76': 'var(--tint-sage)', '#4E93B8': 'var(--tint-blue)', '#F0B24B': 'var(--tint-honey)', '#9B6FA8': 'var(--tint-violet)' } as Record<string, string>)[c] || 'var(--soft2)';
 }
 
 /** Gradient for a given accent colour (recipe/meal cards). */

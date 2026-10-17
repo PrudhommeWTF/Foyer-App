@@ -25,7 +25,7 @@
       var dark = t === 'sombre' || (t !== 'clair' && matchMedia('(prefers-color-scheme: dark)').matches);
       if (dark) document.documentElement.classList.add('dark');
       var m = document.querySelector('meta[name="theme-color"]');
-      if (m) m.setAttribute('content', dark ? '#201A17' : '#E56B4E');
+      if (m) m.setAttribute('content', dark ? '#15191E' : '#E56B4E');
     } catch (e) { /* mode privé ou pas de localStorage : le store posera le thème */ }
   </script>
 </head>

@@ -51,7 +51,7 @@ Pied de sidebar : ligne profil (avatar + nom + rôle, ouvre le profil), bouton b
 `--bg:#FBF4EA` · `--surface:#ffffff` · `--soft:#FBF4EA` · `--soft2:#F5EEE2` · `--ink:#3A302A` · `--ink2:#8A7E74` · `--ink3:#B7ABA0` · `--line:#EFE3D2` · `--line2:#E0D4C5`
 
 **Thème sombre :**
-`--bg:#201A17` · `--surface:#2C2521` · `--soft:#332B26` · `--soft2:#3B322C` · `--ink:#F3E9DD` · `--ink2:#B7A99B` · `--ink3:#867868` · `--line:#3C332D` · `--line2:#4A3F37`
+`--bg:#15191E` · `--surface:#1E232A` · `--soft:#252B33` · `--soft2:#2C333C` · `--ink:#ECEFF3` · `--ink2:#AAB3BF` · `--ink3:#848E9B` · `--line:#2A3038` · `--line2:#39414B` (palette « Ardoise », gris bleuté ; remplace le brun d'origine)
 
 `--ink` = texte principal, `--ink2` = secondaire, `--ink3` = tertiaire/désactivé, `--line` = bordures douces, `--line2` = bordures marquées, `--surface` = cartes, `--soft`/`--soft2` = fonds d'input et puces.
 Le thème s'applique en écrivant les variables sur `document.documentElement` (dans le codebase cible : classe `.dark` sur `<html>` ou provider de thème).
@@ -192,7 +192,7 @@ Dans le codebase cible : découper par domaine (un slice/reducer/hook par foncti
 ```
 colors.brand      = { primary:#E56B4E, primaryDark:#D9553A, sage:#7A9B76, blue:#4E93B8, honey:#F0B24B, violet:#9B6FA8, pink:#C77DA5 }
 colors.light      = { bg:#FBF4EA, surface:#ffffff, soft:#FBF4EA, soft2:#F5EEE2, ink:#3A302A, ink2:#8A7E74, ink3:#B7ABA0, line:#EFE3D2, line2:#E0D4C5 }
-colors.dark       = { bg:#201A17, surface:#2C2521, soft:#332B26, soft2:#3B322C, ink:#F3E9DD, ink2:#B7A99B, ink3:#867868, line:#3C332D, line2:#4A3F37 }
+colors.dark       = { bg:#15191E, surface:#1E232A, soft:#252B33, soft2:#2C333C, ink:#ECEFF3, ink2:#AAB3BF, ink3:#848E9B, line:#2A3038, line2:#39414B }
 radius            = { chip:12, input:13, card:20, cardLg:22, modal:24 }
 font.display      = 'Bricolage Grotesque'
 font.body         = 'Nunito'
