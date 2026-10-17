@@ -7,7 +7,7 @@ import { Mutation, asConflict, rebase } from './state-sync';
 
 const doc = (): HouseholdState => ({
   familyName: 'Foyer', members: [], events: [], aisles: [], articles: [],
-  shopLists: [], shop: [], taskLists: [], taskTemplates: [], tasks: [
+  shopLists: [], shop: [], taskLists: [], taskTemplates: [], rooms: [], tasks: [
     { id: 't1', text: 'Sortir le verre', who: ['me'], due: null, done: false, listId: 'l1' },
   ],
   places: [], placeItems: [],

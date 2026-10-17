@@ -191,6 +191,7 @@ describe('planificateur', () => {
     employes: () => [],
     rappelJour: () => 3,
     url: () => '',
+    entretienOn: () => true,
     // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
     // ses rappels. Les tests qui éprouvent ces règles les posent eux-mêmes.
     rules: () => ({ paused: false, quiet: { from: '', to: '' } }),
@@ -209,6 +210,21 @@ describe('planificateur', () => {
     assert.ok(recentSends().some((s) => s.status === 'missed'));
     await tick(deps(tasks, log), '2026-09-05T18:01');
     assert.equal(sent.length, 3, 'rien de plus au passage suivant');
+  });
+
+  it('gestes d’entretien : selon « rappels d’entretien » de chacun, tus quand le module est éteint, jamais sans date', async () => {
+    addDevice('m1', sub('a'), ''); addDevice('me', sub('b'), '');
+    const log: string[] = [];
+    const geste = task({ id: 'g', listId: 'entretien', who: [], time: null, remind: 'morning', due: '2026-09-05' });
+    // m1 a coupé les rappels d'entretien, pas ceux de ses tâches : seul « me » reçoit le geste.
+    const wants = (m: string, kind: string) => !(m === 'm1' && kind === 'entretien');
+    await tick(deps([geste, task({ id: 't', who: ['m1'], time: '09:00' })], log, { wants }), '2026-09-05T09:00');
+    assert.deepEqual(sent.map((s) => s.endpoint.slice(-1)).sort(), ['a', 'b'], 'la tâche de m1 lui arrive, le geste à me seul');
+    sent.length = 0;
+    await tick(deps([{ ...geste, id: 'g2' }], log, { entretienOn: () => false }), '2026-09-05T09:00');
+    assert.equal(sent.length, 0, 'module éteint : le geste ne rappelle pas');
+    await tick(deps([{ ...geste, id: 'g3', due: null }], log), '2026-09-05T09:00');
+    assert.equal(sent.length, 0, 'jamais noté : pas de date, pas de rappel');
   });
 
   it('une tâche faite entre-temps n’est plus rappelée ; reportée, elle l’est à nouveau', async () => {

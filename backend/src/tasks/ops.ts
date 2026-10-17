@@ -15,6 +15,7 @@
 // tester sur les cas tordus (rejeu, ordre inversé, liste supprimée sous les pieds).
 
 import { endKey, keyForMove, startKey } from './ordering';
+import { nextOccurrence } from './recurrence';
 
 /**
  * Comment une tâche revient. Deux modes, et c'est le choix de fond du module :
@@ -36,8 +37,40 @@ export interface TaskRec {
 /** Le réglage de rappel d'une tâche. Aucun par défaut ; voir notify/reminders.ts pour l'heure qui en découle. */
 export type Remind = 'at' | '1h' | 'eve' | 'morning';
 export const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
-/** Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle soldait. */
-export interface TaskDone { at: string; by: string | null; due: string | null; }
+/**
+ * Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle
+ * soldait. `used` : ce qu'un geste d'entretien a pris dans son stock, pour que
+ * l'annulation le rende.
+ */
+export interface TaskDone { at: string; by: string | null; due: string | null; used?: number; }
+
+/**
+ * Le consommable d'un geste d'entretien : la cartouche de la carafe, le filtre
+ * de la hotte, les piles des détecteurs. `use` est ce qu'un geste consomme (un
+ * test des quatre détecteurs prend quatre piles), `countedAt` le jour du
+ * dernier changement connu de la quantité, pour afficher « Stock au … ».
+ */
+export interface MaintenanceStock { qty: number; unit: string; use: number; threshold: number; article: string; countedAt: string; }
+/**
+ * Ce qu'une tâche de la liste Entretien porte en plus (voir docs/entretien.md).
+ * Lu seulement par Entretien : pour le reste de l'application, c'est une tâche.
+ */
+export interface Maintenance {
+  /** Pièce du socle Maison (`rooms`). */
+  roomId?: string;
+  /** Le détail du geste : « l'indicateur du couvercle le rappelle ». */
+  howto?: string;
+  stock?: MaintenanceStock;
+  /** En pause jusqu'à ce jour (hivernage) : l'échéance y est posée, le geste revient seul. */
+  pausedUntil?: string;
+  /** Le geste type du catalogue dont celui-ci est une copie. */
+  catalogId?: string;
+}
+/** Une modification des champs d'entretien : une clé absente n'est pas touchée, une clé à null est retirée. */
+export interface MaintenancePatch {
+  roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null;
+  stock?: (Omit<MaintenanceStock, 'countedAt'> & { countedAt?: string }) | null;
+}
 
 export interface TaskItem {
   id: string;
@@ -108,6 +141,8 @@ export interface TaskItem {
    * passe en fin de liste. Le tri se fait sur (ord, id), jamais sur `ord` seul.
    */
   ord?: string;
+  /** Geste d'entretien : pièce, détail, stock, pause. Seulement dans la liste Entretien. */
+  maintenance?: Maintenance;
 }
 
 /** Les champs qu'une modification peut viser. `who` est remplacé, jamais fusionné. */
@@ -120,8 +155,8 @@ export interface TaskFields {
 interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
 export type TaskOp =
   /** `done` et compagnie sont acceptés à l'ajout : c'est ce qui permet d'annuler une suppression. `position` crée en tête ou en fin ; `ord` restitue une clé connue (annulation d'une suppression). */
-  | (Base & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null; position?: 'debut' | 'fin' })
-  | (Base & TaskFields & { op: 'edit'; id: string })
+  | (Base & TaskFields & { op: 'add'; id: string; listId: string; text: string; done?: boolean; doneAt?: string | null; doneBy?: string | null; position?: 'debut' | 'fin'; maintenance?: MaintenancePatch | null })
+  | (Base & TaskFields & { op: 'edit'; id: string; maintenance?: MaintenancePatch | null })
   /**
    * Range une tâche dans sa liste, par rapport à une autre : « avant » ou
    * « après » une tâche de référence, ou aux extrémités (« début » / « fin »).
@@ -137,6 +172,13 @@ export type TaskOp =
    * occurrence : elle est sans objet, et surtout pas une seconde avance.
    */
   | (Base & { op: 'done'; id: string; occ?: string; next?: string | null })
+  /**
+   * Le stock d'un geste d'entretien, dit comme une intention : `add` (« j'en ai
+   * racheté 6 ») ou `set` (« j'en compte 4 »), jamais les deux. Une quantité
+   * absolue calculée sur un téléphone écraserait le geste noté au même moment
+   * sur l'autre ; `add` se compose avec lui. `on` : le jour du comptage.
+   */
+  | (Base & { op: 'stock'; id: string; add?: number; set?: number; on?: string })
   /** Passer une occurrence sans la faire : la série avance, sans ligne d'historique. */
   | (Base & { op: 'skip'; id: string; occ: string; next: string | null })
   /** Sur une série, `occ` est l'échéance à rétablir : celle de la dernière réalisation. */
@@ -158,6 +200,8 @@ export interface OpsContext {
   memberIds: Set<string>;
   /** Listes de courses existantes, pour le lien. */
   shopListIds: Set<string>;
+  /** Pièces existantes (socle Maison). Une pièce inconnue est retirée du geste, sans faire échouer l'opération. */
+  roomIds?: Set<string>;
   /** Vrai quand cette opération a déjà été appliquée (rejeu après coupure réseau). */
   alreadyApplied: (opId: string) => boolean;
   /**
@@ -195,6 +239,17 @@ const NOTE_MAX = 2000;
 const CAT_MAX = 40;
 const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
 const HISTORY_MAX = 200;
+const HOWTO_MAX = 2000;
+const STOCK_MAX = 9999;
+
+const PARIS_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
+/** Le jour, heure de Paris, d'un instant ISO : c'est le jour où le foyer dit avoir fait le geste. */
+export function parisDay(iso: string): string {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? iso.slice(0, 10) : PARIS_DAY.format(new Date(t));
+}
+const frDay = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
 /** Lit une règle de récurrence. Null pour « aucune », une raison si elle est illisible. */
 function readRec(v: unknown): { rec: TaskRec | null } | { reason: string } {
@@ -293,6 +348,81 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
 }
 
 /**
+ * Lit les champs d'entretien d'une opération. Null : tout retirer. Ce qui n'a
+ * pas de sens (pièce disparue, identifiant de catalogue mal formé) tombe sans
+ * faire échouer le geste ; ce qui serait une erreur de saisie (date, quantité)
+ * est refusé et nommé.
+ */
+function readMaintenance(v: unknown, ctx: OpsContext): { patch: MaintenancePatch | null } | { reason: string } {
+  if (v === null || v === '') return { patch: null };
+  if (typeof v !== 'object' || Array.isArray(v)) return { reason: 'Détails d’entretien illisibles.' };
+  const o = v as Record<string, unknown>;
+  const p: MaintenancePatch = {};
+  if (o['roomId'] !== undefined) {
+    const id = trimmed(o['roomId'], 80);
+    p.roomId = id && ctx.roomIds?.has(id) ? id : null;
+  }
+  if (o['howto'] !== undefined) p.howto = trimmed(o['howto'], HOWTO_MAX) || null;
+  if (o['catalogId'] !== undefined) {
+    const id = trimmed(o['catalogId'], 80);
+    p.catalogId = /^[a-z0-9-]+$/.test(id) ? id : null;
+  }
+  if (o['pausedUntil'] !== undefined) {
+    if (o['pausedUntil'] === null || o['pausedUntil'] === '') p.pausedUntil = null;
+    else if (ISO_DAY.test(str(o['pausedUntil']))) p.pausedUntil = str(o['pausedUntil']);
+    else return { reason: 'Date de reprise illisible : ' + str(o['pausedUntil']) };
+  }
+  if (o['stock'] !== undefined) {
+    const st = o['stock'];
+    if (st === null || st === '') p.stock = null;
+    else if (typeof st !== 'object' || Array.isArray(st)) return { reason: 'Stock illisible.' };
+    else {
+      const so = st as Record<string, unknown>;
+      const article = trimmed(so['article'], 120);
+      if (!article) return { reason: 'Un stock dit ce qu’il compte : l’article est vide.' };
+      for (const [k, min, max] of [['qty', 0, STOCK_MAX], ['use', 1, 99], ['threshold', 0, STOCK_MAX]] as const) {
+        if (so[k] !== undefined && !isInt(so[k], min, max)) return { reason: `Stock : « ${k} » doit être un nombre entier entre ${min} et ${max}.` };
+      }
+      if (so['countedAt'] !== undefined && so['countedAt'] !== null && !ISO_DAY.test(str(so['countedAt']))) return { reason: 'Date de comptage illisible : ' + str(so['countedAt']) };
+      p.stock = {
+        article, unit: trimmed(so['unit'], 30),
+        qty: isInt(so['qty'], 0, STOCK_MAX) ? so['qty'] : 0,
+        use: isInt(so['use'], 1, 99) ? so['use'] : 1,
+        threshold: isInt(so['threshold'], 0, STOCK_MAX) ? so['threshold'] : 0,
+        ...(ISO_DAY.test(str(so['countedAt'])) ? { countedAt: str(so['countedAt']) } : {}),
+      };
+    }
+  }
+  return { patch: p };
+}
+
+/**
+ * Pose une modification des champs d'entretien sur ceux d'une tâche. La
+ * quantité d'un stock **déjà là** n'est jamais réécrite ici : elle ne bouge
+ * que par un geste fait ou par l'opération `stock`, qui disent une intention.
+ * Sinon un formulaire ouvert sur un téléphone remettrait la quantité d'avant
+ * le geste noté entre-temps par l'autre.
+ */
+function mergeMaintenance(cur: Maintenance | undefined, patch: MaintenancePatch | null, day: string): Maintenance | undefined {
+  if (patch === null) return undefined;
+  const next: Maintenance = { ...(cur || {}) };
+  for (const k of ['roomId', 'howto', 'pausedUntil', 'catalogId'] as const) {
+    if (patch[k] === undefined) continue;
+    if (patch[k] === null) delete next[k]; else next[k] = patch[k] as string;
+  }
+  if (patch.stock === null) delete next.stock;
+  else if (patch.stock) {
+    const { countedAt, ...conf } = patch.stock;
+    next.stock = cur?.stock ? { ...conf, qty: cur.stock.qty, countedAt: cur.stock.countedAt } : { ...conf, countedAt: countedAt || day };
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
+/** Les champs d'entretien ne valent que dans la liste Entretien, seule à les lire. */
+const MAINT_REFUS = 'Les détails d’entretien (pièce, stock, pause) ne valent que dans la liste Entretien.';
+const isEntretien = (listId: string, ctx: OpsContext): boolean => ctx.listKind(listId) === 'entretien';
+
+/**
  * Une liste « Devoirs de … » n'accueille que ce qu'ÉcoleDirecte y projette :
  * ni ajout ni déplacement vers elle depuis un téléphone ou un assistant.
  */
@@ -313,13 +443,17 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (next.contractId === null || next.contractId === undefined) delete next.contractId;
   if (next.edId === null || next.edId === undefined) delete next.edId;
   if (next.parentId === null || next.parentId === undefined) delete next.parentId;
+  if (!next.maintenance) delete next.maintenance;
   // Une sous-tâche est un détail du parent : la date, la récurrence et le rappel
   // sont l'affaire de celui-ci. Les poser ici ferait sonner un rappel pour une
   // ligne que l'écran ne montre jamais seule.
   if (next.parentId) { next.due = null; delete next.time; delete next.rec; delete next.remind; }
   if (next.time === null || next.time === undefined) delete next.time;
   if (!next.rec) { delete next.rec; }
-  if (!next.remind || !next.due) delete next.remind;
+  // Une série garde son rappel sans échéance : un geste d'entretien jamais
+  // noté n'a pas encore de date, et le rappel choisi part dès la première
+  // réalisation (fireAt, lui, ne sonne jamais sans date).
+  if (!next.remind || (!next.due && !next.rec)) delete next.remind;
   return next;
 }
 
@@ -345,7 +479,7 @@ function readHistory(v: unknown): TaskDone[] {
   if (!Array.isArray(v)) return [];
   return v
     .filter((h): h is Record<string, unknown> => !!h && typeof h === 'object')
-    .map((h) => ({ at: trimmed(h['at'], 40), by: trimmed(h['by'], 80) || null, due: ISO_DAY.test(str(h['due'])) ? str(h['due']) : null }))
+    .map((h): TaskDone => ({ at: trimmed(h['at'], 40), by: trimmed(h['by'], 80) || null, due: ISO_DAY.test(str(h['due'])) ? str(h['due']) : null, ...(isInt(h['used'], 1, STOCK_MAX) ? { used: h['used'] } : {}) }))
     .filter((h) => !!h.at)
     .slice(-HISTORY_MAX);
 }
@@ -355,6 +489,47 @@ function readNext(v: unknown): { next: string | null } | { reason: string } {
   if (v === null || v === undefined || v === '') return { next: null };
   if (ISO_DAY.test(str(v))) return { next: str(v) };
   return { reason: 'Échéance suivante illisible : ' + str(v) };
+}
+
+/**
+ * Noter un geste d'entretien fait : la coche d'une tâche de la liste Entretien.
+ *
+ * C'est la même opération `done` que partout, cochée depuis Entretien, depuis
+ * Tâches ou par un assistant, avec trois règles de plus :
+ *
+ *   - **Une fois par jour.** Deux téléphones à jour qui notent le même geste le
+ *     même jour (heure de Paris) font une seule réalisation : la seconde est
+ *     acquittée sans effet, ni ligne d'historique ni stock repris. Le cas du
+ *     téléphone périmé, lui, est déjà couvert par `occ`.
+ *   - **La date suivante est calculée ici**, par le moteur partagé, à partir du
+ *     jour du geste : un geste noté par un assistant n'a personne pour la
+ *     calculer, et un geste noté en retard ne traîne pas ce retard.
+ *   - **Le stock est repris dans la même opération**, donc dans la même
+ *     transaction et le même rejeu : un geste fait est un consommable en moins,
+ *     jamais deux.
+ *
+ * Rend la tâche après coup, `task: null` quand le geste est sans objet, ou la
+ * raison d'un refus.
+ */
+function maintain(t: TaskItem, occ: string, at: string, by: string | null): { task: TaskItem | null } | { reason: string } {
+  // Un autre appareil a déjà soldé cette occurrence : sans objet.
+  if (occ !== (t.due || '')) return { task: null };
+  const day = parisDay(at);
+  const last = t.history?.length ? t.history[t.history.length - 1] : null;
+  const lastDay = last ? parisDay(last.at) : '';
+  if (lastDay === day) return { task: null };
+  if (lastDay > day) return { reason: `Une réalisation plus récente est déjà notée, le ${frDay(lastDay)}.` };
+  const next = nextOccurrence(t.rec!, t.due || day, day);
+  const st = t.maintenance?.stock;
+  const used = st ? Math.min(st.use, st.qty) : 0;
+  const history = [...(t.history || []), { at, by, due: t.due, ...(used ? { used } : {}) }].slice(-HISTORY_MAX);
+  // Fait pendant une pause : la pause est finie, le geste a eu lieu.
+  const { pausedUntil: _p, ...rest } = t.maintenance || {};
+  void _p;
+  const m: Maintenance = { ...rest, ...(st && used ? { stock: { ...st, qty: st.qty - used, countedAt: day } } : {}) };
+  const base: TaskItem = { ...t, history };
+  if (Object.keys(m).length) base.maintenance = m; else delete base.maintenance;
+  return { task: next ? { ...base, due: next } : { ...base, done: true, doneAt: at, doneBy: by } };
 }
 
 /**
@@ -399,6 +574,13 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (!f.text) { skipped.push({ opId, reason: 'Tâche sans intitulé.' }); break; }
         if (!f.listId) { skipped.push({ opId, reason: 'La liste visée n’existe plus.' }); break; }
         if (intoDevoirs(f.listId, null, ctx)) { skipped.push({ opId, reason: DEVOIRS_REFUS }); break; }
+        let maintenance: Maintenance | undefined;
+        if (o['maintenance'] !== undefined) {
+          const m = readMaintenance(o['maintenance'], ctx);
+          if ('reason' in m) { skipped.push({ opId, reason: m.reason }); break; }
+          if (m.patch && !isEntretien(f.listId, ctx)) { skipped.push({ opId, reason: MAINT_REFUS }); break; }
+          maintenance = mergeMaintenance(undefined, m.patch, parisDay(at));
+        }
         const done = o['done'] === true;
         const history = readHistory(o['history']);
         const via = trimmed(o['via'], 80) || null;
@@ -407,6 +589,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
           ...(via ? { via } : {}),
           ...(done ? { doneAt: trimmed(o['doneAt'], 40) || at, doneBy: trimmed(o['doneBy'], 80) || by } : {}),
           ...(history.length ? { history } : {}),
+          ...(maintenance ? { maintenance } : {}),
         };
         // Le parent est décidé avant de poser les champs : c'est lui qui dit si
         // la date et le rappel ont un sens, et une seule passe évite qu'un ordre
@@ -429,6 +612,13 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         const read = readFields(o, ctx);
         if ('reason' in read) { skipped.push({ opId, reason: read.reason }); break; }
         if (intoDevoirs(read.fields.listId, out[idx].listId, ctx)) { skipped.push({ opId, reason: DEVOIRS_REFUS }); break; }
+        let maintenance = out[idx].maintenance;
+        if (o['maintenance'] !== undefined) {
+          const m = readMaintenance(o['maintenance'], ctx);
+          if ('reason' in m) { skipped.push({ opId, reason: m.reason }); break; }
+          if (m.patch && !isEntretien(read.fields.listId ?? out[idx].listId, ctx)) { skipped.push({ opId, reason: MAINT_REFUS }); break; }
+          maintenance = mergeMaintenance(out[idx].maintenance, m.patch, parisDay(at));
+        }
         // Le parent est validé contre la liste d'arrivée (déplacer une tâche et
         // la ranger sous un parent d'une autre liste ne veut rien dire), et posé
         // dans la même passe que les autres champs : sans quoi une sous-tâche
@@ -436,9 +626,9 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         const cible: TaskItem = { ...out[idx], listId: read.fields.listId ?? out[idx].listId };
         const p = o['parentId'] !== undefined ? readParent(o['parentId'], out, cible) : { parentId: out[idx].parentId ?? null };
         if ('reason' in p) { skipped.push({ opId, reason: p.reason }); break; }
-        const next = assign(out[idx], { ...read.fields, parentId: p.parentId });
+        const next = assign({ ...out[idx], maintenance }, { ...read.fields, parentId: p.parentId });
         // Toute retouche estampille « modifié », sauf un simple réordonnancement (clé d'ordre seule).
-        const changed = [...Object.keys(read.fields), ...(o['parentId'] !== undefined ? ['parentId'] : [])];
+        const changed = [...Object.keys(read.fields), ...(o['parentId'] !== undefined ? ['parentId'] : []), ...(o['maintenance'] !== undefined ? ['maintenance'] : [])];
         out[idx] = changed.some((k) => k !== 'ord') ? { ...next, upBy: by, upAt: at } : next;
         applied.push(opId);
         break;
@@ -458,6 +648,12 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
       case 'done': {
         if (idx < 0) { applied.push(opId); break; }
         const t = out[idx];
+        if (t.rec && !t.done && isEntretien(t.listId, ctx)) {
+          const r = maintain(t, trimmed(o['occ'], 40), at, by);
+          if ('reason' in r) skipped.push({ opId, reason: r.reason });
+          else { if (r.task) out[idx] = r.task; applied.push(opId); }
+          break;
+        }
         if (t.rec && !t.done) {
           // Une série : la coche solde l'occurrence courante et fait avancer
           // l'échéance. Une coche pour une autre occurrence est sans objet.
@@ -485,14 +681,36 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         applied.push(opId);
         break;
       }
+      case 'stock': {
+        if (idx < 0) { applied.push(opId); break; }
+        const t = out[idx];
+        const st = t.maintenance?.stock;
+        if (!st) { skipped.push({ opId, reason: 'Ce geste n’a pas de stock à compter.' }); break; }
+        let qty: number;
+        if (o['set'] !== undefined && o['add'] === undefined && isInt(o['set'], 0, STOCK_MAX)) qty = o['set'];
+        else if (o['add'] !== undefined && o['set'] === undefined && isInt(o['add'], -STOCK_MAX, STOCK_MAX)) qty = Math.max(0, Math.min(STOCK_MAX, st.qty + o['add']));
+        else { skipped.push({ opId, reason: 'Quantité de stock illisible : un nombre entier, ajouté (« add ») ou compté (« set »).' }); break; }
+        if (o['on'] !== undefined && o['on'] !== null && o['on'] !== '' && !ISO_DAY.test(str(o['on']))) { skipped.push({ opId, reason: 'Date de comptage illisible : ' + str(o['on']) }); break; }
+        const on = ISO_DAY.test(str(o['on'])) ? str(o['on']) : parisDay(at);
+        out[idx] = { ...t, maintenance: { ...t.maintenance, stock: { ...st, qty, countedAt: on } }, upBy: by, upAt: at };
+        applied.push(opId);
+        break;
+      }
       case 'reopen': {
         if (idx < 0) { applied.push(opId); break; }
         const t = out[idx];
         const occ = trimmed(o['occ'], 40);
         const last = t.rec && t.history?.length ? t.history[t.history.length - 1] : null;
-        if (last && occ && (last.due || '') === occ) {
-          // Défaire la dernière coche d'une série : l'échéance qu'elle soldait revient.
-          out[idx] = { ...t, done: false, doneAt: null, doneBy: null, due: last.due, history: t.history!.slice(0, -1) };
+        // `occ` vide est une vraie valeur : la première réalisation d'un geste
+        // d'entretien jamais noté soldait une échéance vide, et c'est elle que
+        // l'annulation rétablit.
+        if (last && o['occ'] !== undefined && o['occ'] !== null && (last.due || '') === occ) {
+          // Défaire la dernière coche d'une série : l'échéance qu'elle soldait revient,
+          // et le stock repris par un geste d'entretien avec elle.
+          const back: TaskItem = { ...t, done: false, doneAt: null, doneBy: null, due: last.due, history: t.history!.slice(0, -1) };
+          const st = t.maintenance?.stock;
+          if (st && last.used) back.maintenance = { ...t.maintenance, stock: { ...st, qty: Math.min(STOCK_MAX, st.qty + last.used) } };
+          out[idx] = back;
         } else if (t.done) {
           out[idx] = { ...t, done: false, doneAt: null, doneBy: null };
         }
@@ -551,7 +769,7 @@ export interface ReconcileReport {
  * l'enregistrement du document complet, dans lequel les tâches ne voyagent
  * plus : il faut donc appliquer ici les conséquences.
  */
-export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>): ReconcileReport {
+export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Set<string>, shopListIds: Set<string>, roomIds?: Set<string>): ReconcileReport {
   const kept = items.filter((t) => listIds.has(t.listId));
   const byId = new Map(kept.map((t) => [t.id, t]));
   let unassigned = 0;
@@ -562,6 +780,14 @@ export function reconcile(items: TaskItem[], listIds: Set<string>, memberIds: Se
     const who = (t.who || []).filter((m) => memberIds.has(m));
     if (who.length !== (t.who || []).length) { unassigned++; next = { ...next, who }; }
     if (t.shopListId && !shopListIds.has(t.shopListId)) { unlinked++; next = { ...next }; delete next.shopListId; }
+    // Une pièce supprimée : le geste passe « Sans pièce », il ne disparaît pas.
+    if (roomIds && t.maintenance?.roomId && !roomIds.has(t.maintenance.roomId)) {
+      unlinked++;
+      const { roomId: _r, ...m } = t.maintenance;
+      void _r;
+      next = { ...next };
+      if (Object.keys(m).length) next.maintenance = m; else delete next.maintenance;
+    }
     // Un parent parti avec sa liste laisserait une sous-tâche invisible : elle
     // remonte au premier niveau, où elle se voit et se traite.
     const parent = t.parentId ? byId.get(t.parentId) : null;

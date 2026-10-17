@@ -201,3 +201,58 @@ test('une tâche sans date : heure et rappel ne comptent pas', () => {
   assert.equal(taskDraftChanges(t as never, draft), false);
   assert.deepEqual(draftFields(draft), { text: 'Pain', listId: 'l1', who: [], due: null, time: null, cat: '', note: '', rec: null, remind: null });
 });
+
+// ---- Entretien : ce que l'écran montre tout de suite doit être ce que le serveur fera ----
+
+const kindOf = (id: string) => (id === 'entretien' ? 'entretien' as const : 'taches' as const);
+const brita = (over: Partial<TaskItem> = {}): TaskItem => ({
+  id: 'g1', listId: 'entretien', text: 'Carafe Brita', who: [], due: null, done: false,
+  rec: { freq: 'weekly', every: 4, base: 'done' },
+  maintenance: { stock: { qty: 4, unit: 'cartouche', use: 1, threshold: 1, article: 'Cartouche', countedAt: '2026-10-01' } },
+  ...over,
+});
+const LE_17 = '2026-10-17T08:00:00.000Z';
+const fait = (o: Partial<TaskOp> = {}): TaskOp => ({ opId: 'x', op: 'done', id: 'g1', occ: '', by: 'thomas', at: LE_17, ...o }) as TaskOp;
+
+test('entretien : « Fait aujourd’hui » montre tout de suite la date suivante et le stock, comme le serveur', () => {
+  const [g] = applyTaskOp([brita()], fait(), kindOf);
+  assert.equal(g.due, '2026-11-14');
+  assert.equal(g.maintenance?.stock?.qty, 3);
+  assert.deepEqual(g.history, [{ at: LE_17, by: 'thomas', due: null, used: 1 }]);
+});
+
+test('entretien : le second tap du jour ne change rien, et l’annulation rend « Pas encore noté » et la cartouche', () => {
+  const une = applyTaskOp([brita()], fait(), kindOf);
+  const deux = applyTaskOp(une, fait({ occ: '2026-11-14', by: 'nolwenn' } as Partial<TaskOp>), kindOf);
+  assert.deepEqual(deux, une);
+  const retour = inverseOf({ op: 'done', id: 'g1', occ: '' }, brita())!;
+  assert.deepEqual(retour, { op: 'reopen', id: 'g1', occ: '' });
+  const [g] = applyTaskOp(une, op(retour), kindOf);
+  assert.equal(g.due, null);
+  assert.equal(g.maintenance?.stock?.qty, 4);
+});
+
+test('entretien : annuler un comptage remet la quantité et la date d’avant', () => {
+  const avant = brita();
+  const [g] = applyTaskOp([avant], op({ op: 'stock', id: 'g1', add: 6, on: '2026-10-20' }), kindOf);
+  assert.equal(g.maintenance?.stock?.qty, 10);
+  const retour = inverseOf({ op: 'stock', id: 'g1', add: 6 }, avant)!;
+  const [r] = applyTaskOp([g], op(retour), kindOf);
+  assert.equal(r.maintenance?.stock?.qty, 4);
+  assert.equal(r.maintenance?.stock?.countedAt, '2026-10-01');
+});
+
+test('entretien : annuler une retouche de la fiche retire ce qu’elle avait ajouté', () => {
+  const avant = brita();
+  const edit: TaskOpDraft = { op: 'edit', id: 'g1', maintenance: { roomId: 'p1', howto: 'Indicateur du couvercle' } };
+  const [g] = applyTaskOp([avant], op(edit), kindOf);
+  assert.equal(g.maintenance?.roomId, 'p1');
+  const [r] = applyTaskOp([g], op(inverseOf(edit, avant)!), kindOf);
+  assert.deepEqual(r.maintenance, avant.maintenance);
+});
+
+test('entretien : la règle ne s’applique qu’à la liste Entretien', () => {
+  const t = task({ rec: { freq: 'daily', every: 1, base: 'done' }, due: TODAY });
+  const [r] = applyTaskOp([t], op({ op: 'done', id: 't1', occ: TODAY, next: addDaysIso(TODAY, 1) }), kindOf);
+  assert.equal(r.due, addDaysIso(TODAY, 1), 'une tâche ordinaire prend la date envoyée, comme avant');
+});

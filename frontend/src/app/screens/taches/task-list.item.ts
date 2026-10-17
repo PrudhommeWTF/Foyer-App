@@ -1,6 +1,7 @@
 // La liste de tâches, telle qu'elle se déclare à la fiche d'élément. Une liste
 // de devoirs (ÉcoleDirecte) se lit sans se modifier ni se supprimer : elle
-// suit son élève. Supprimer une liste se confirme (elle emporte ses tâches),
+// suit son élève. La liste Entretien non plus : elle appartient à son module,
+// et le serveur rétablirait son nom et son type. Supprimer une liste se confirme (elle emporte ses tâches),
 // en proposant d'archiver plutôt.
 import type { FoyerStore } from '../../core/foyer.store';
 import { ITEM_KINDS, ItemAction, ItemKind } from '../../core/items';
@@ -14,11 +15,11 @@ export const TASK_LIST_ITEM: ItemKind<TaskList, FoyerStore> = {
   title: (l) => l.name,
   view: TaskListView,
   form: TaskListForm,
-  canEdit: (l) => l.kind !== 'devoirs',
-  canRemove: (l) => l.kind !== 'devoirs',
+  canEdit: (l) => l.kind !== 'devoirs' && l.kind !== 'entretien',
+  canRemove: (l) => l.kind !== 'devoirs' && l.kind !== 'entretien',
   remove: (s, l, _ctx, scope) => s.delTaskList(l.id, scope),
   actions: (s, l) => {
-    if (l.kind === 'devoirs') return [];
+    if (l.kind === 'devoirs' || l.kind === 'entretien') return [];
     const a: ItemAction[] = [{ label: l.archived ? 'Restaurer' : 'Archiver', icon: l.archived ? 'refresh' : 'folder', run: () => s.archiveTaskList(l.id, !l.archived) }];
     a.push({ label: 'En modèle', icon: 'copy', run: () => s.saveListAsTemplate(l.id) });
     return a;

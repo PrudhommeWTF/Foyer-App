@@ -195,7 +195,7 @@ interface TaskRec {
 }
 // sur la tâche :
 rec?: TaskRec | null;
-history?: { at: string; by: string | null; due: string | null }[];
+history?: { at: string; by: string | null; due: string | null; used?: number }[];
 ```
 
 **Une tâche récurrente est une série, pas une tâche par occurrence.** Elle
@@ -203,7 +203,16 @@ porte son échéance **courante** ; la cocher inscrit une ligne dans `history`
 (quand, par qui, quelle échéance) et avance `due` à l'occurrence suivante. Rien
 ne s'accumule, rien n'est à purger, et l'historique est borné à 200 lignes.
 Une série a toujours une échéance : la saisie en pose une (aujourd'hui) si
-aucune n'est donnée.
+aucune n'est donnée. Seule exception, un geste de la liste Entretien jamais
+noté : son échéance est vide (« Pas encore noté »), et la première coche la
+pose (voir plus bas et `docs/entretien.md`).
+
+Le moteur (`recurrence.ts`) existe en **deux copies identiques**, frontend
+(`core/recurrence.ts`) et backend (`tasks/recurrence.ts`) : le navigateur
+calcule l'occurrence suivante d'une coche, le serveur s'en sert là où personne
+ne la lui envoie (gestes d'entretien). La CI échoue à la moindre différence
+(`backend/test/recurrence-copy.test.ts`) ; on modifie le fichier du frontend,
+puis on le recopie.
 
 ### Les deux modes
 
@@ -277,9 +286,10 @@ eux est un document sans série.
 |---|---|---|
 | `add` | `id`, `listId`, `text`, et au choix `note`, `cat`, `who`, `due`, `time`, `shopListId`, `contractId`, `parentId`, `pos`, `rec`, `remind`, `done`, `doneAt`, `doneBy`, `history` | Crée la tâche. Une tâche déjà là sous cet `id` : acquittée, sans doublon. `done` et `history` à l'ajout servent à annuler une suppression. |
 | `edit` | `id` et les champs à changer | Ne touche que les champs nommés. `who` est remplacé, jamais fusionné. `rec: null` retire la règle. |
-| `done` | `id`, et sur une série `occ`, `next` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). Sur une série : ligne d'historique et échéance avancée à `next` (null : la série s'arrête, la tâche est faite). |
+| `done` | `id`, et sur une série `occ`, `next` | Faite. Déjà faite : acquittée, et c'est la première coche qui reste (`doneBy`). Sur une série : ligne d'historique et échéance avancée à `next` (null : la série s'arrête, la tâche est faite). Dans la liste Entretien : une fois par jour, `next` calculé par le serveur, stock repris (voir plus bas). |
+| `stock` | `id`, `add` **ou** `set`, `on` | Geste d'entretien seulement : « j'en ai racheté 6 » (`add`) ou « j'en compte 4 » (`set`), daté de `on` (aujourd'hui par défaut). Refusée sans stock sur le geste. |
 | `skip` | `id`, `occ`, `next` | Passe l'occurrence courante d'une série sans trace. |
-| `reopen` | `id`, et sur une série `occ` | Rouverte. Sur une série : rétablit l'occurrence soldée. |
+| `reopen` | `id`, et sur une série `occ` | Rouverte. Sur une série : rétablit l'occurrence soldée, y compris une échéance vide (`occ: ''`, première réalisation d'un geste d'entretien), et rend le stock qu'elle avait pris. |
 | `remove` | `id` | Supprimée. |
 | `reset` | `id` (une liste) | **Liste de préparation uniquement.** Efface `done`/`doneAt`/`doneBy` sur toutes ses affaires et pose `lastResetAt` sur la liste, dans la même transaction. Refusée si la liste n'est pas de type `preparation` ou n'existe plus. |
 
@@ -627,6 +637,24 @@ réapparaître ou bouger toute seule.
   remet la sienne), et aucune tâche n'y entre depuis un téléphone ou un
   assistant (opération écartée avec la raison). Elle compte dans « Toutes » et
   dans les rappels comme une liste « tâches ». Voir `docs/ecole.md`.
+
+### Entretien : la liste des gestes
+
+- Une seule liste `kind: 'entretien'`, d'identifiant fixe `entretien`,
+  partagée, créée par la migration 14 et à l'onboarding. Elle ne se renomme, ne
+  se supprime ni ne s'archive (`PUT /state` la remet, comme une liste de
+  devoirs), et ne compte pas dans « Aujourd'hui » : comme les corvées, elle a
+  son onglet, et l'accueil la montre par sa tuile Entretien.
+- Ses tâches portent en plus `maintenance` (pièce, détail, stock, pause). La
+  coche y suit trois règles de plus : **une réalisation par jour** (heure de
+  Paris ; la seconde est acquittée sans effet), **date suivante calculée par le
+  serveur** depuis le jour du geste, **stock repris dans la même opération**.
+  Une réalisation datée d'avant la dernière notée est refusée. Cocher un geste
+  dans Tâches est exactement « Fait aujourd'hui ».
+- Un rappel réglé reste posé sur une série sans échéance, et sonne dès la
+  première réalisation. Les rappels des gestes suivent le réglage personnel
+  `entretienRappel`, et se taisent quand le module est éteint ; la liste se
+  cache alors dans Tâches, ses gestes restent en base. Voir `docs/entretien.md`.
 
 ### Finances : le contrat en un tap
 

@@ -7,8 +7,8 @@ import { ModalComponent } from '../../shared/modal';
 
 /**
  * Panneau d'administration des modules : activer ou désactiver « Repas et
- * cuisine », « Cartes de fidélité », « Finances », « Employé à domicile » et
- * « École ».
+ * cuisine », « Cartes de fidélité », « Finances », « Employé à domicile »,
+ * « Entretien de la maison » et « École ».
  * Désactiver masque le module partout et ferme ses accès, sans supprimer ses
  * données. Réactiver propose de reprendre les données ou de repartir à zéro
  * (effacement définitif, confirmé par saisie). Réservé aux administrateurs.
@@ -132,6 +132,7 @@ export class SettingsModulesComponent {
     if (id === 'fidelite') { const n = c.fidelite.cards; return n ? `${n} carte${n > 1 ? 's' : ''}` : ''; }
     if (id === 'finances') { const n = c.finances.transactions; return n ? `${n} opération${n > 1 ? 's' : ''}` : ''; }
     if (id === 'ecole') { const n = c.ecole.comptes, e = c.ecole.eleves; return n ? `${n} compte${n > 1 ? 's' : ''} ÉcoleDirecte, ${e} élève${e > 1 ? 's' : ''}` : ''; }
+    if (id === 'entretien') { const n = c.entretien.gestes, r = c.entretien.realisations; return n ? `${n} geste${n > 1 ? 's' : ''}, ${r} réalisation${r > 1 ? 's' : ''} notée${r > 1 ? 's' : ''}` : ''; }
     if (id === 'employe') { const n = c.employe.employes, p = c.employe.presences; return n || p ? `${n} employé${n > 1 ? 's' : ''}, ${p} présence${p > 1 ? 's' : ''}` : ''; }
     return '';
   }

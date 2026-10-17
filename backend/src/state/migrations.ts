@@ -23,7 +23,7 @@ import { DetectedType, GENERIC_TYPE, detectType } from '../storage/blobs';
 import type { OwnerKind } from '../storage/files';
 
 /** Version cible du document. À incrémenter en ajoutant une migration. */
-export const STATE_VERSION = 13;
+export const STATE_VERSION = 14;
 
 /** Le document est manipulé sans typage : ces migrations voient l'ancienne forme. */
 type Doc = Record<string, any>;
@@ -566,12 +566,34 @@ export const STATE_MIGRATIONS: StateMigration[] = [
       ctx.log(`Tâches : ${ordered.length} clé(s) d'ordre réunifiée(s) en une suite globale (tri possible dans « Toutes » et « À moi »).`);
     },
   },
+  {
+    version: 14,
+    label: 'entretien : liste des gestes d’entretien et pièces de la maison',
+    up: (doc, ctx) => {
+      // Le module Entretien range ses gestes dans une liste de tâches à lui,
+      // unique et partagée, d'identifiant fixe (voir entretien/list.ts), et les
+      // pièces de la maison dans un socle commun `rooms`. Additive : rien n'est
+      // touché dans les listes ni les tâches existantes. Rejouable : une liste
+      // déjà là (ou une pièce déjà posée) n'est pas recréée.
+      // Un document sans listes n'est pas un foyer (avant l'onboarding) : rien à y poser.
+      const lists = doc['taskLists'];
+      if (!Array.isArray(lists)) return;
+      if (!Array.isArray(doc['rooms'])) doc['rooms'] = [];
+      if (lists.some((l: any) => l?.id === 'entretien')) return;
+      const position = lists.reduce((m: number, l: any) => Math.max(m, typeof l?.position === 'number' ? l.position + 1 : 0), 0);
+      lists.push({ id: 'entretien', name: 'Entretien', color: '#7A9B76', icon: 'outils', kind: 'entretien', scope: 'shared', position });
+      ctx.log('Entretien : liste « Entretien » créée (vide).');
+    },
+  },
 ];
 
 /** Les clés que la migration 10 fait passer du foyer au membre. */
 const PERSONNELLES = ['dark', 'prefNotifs'];
 
-const LIST_KINDS = ['taches', 'corvees', 'checklist'];
+// Tous les types de liste connus aujourd'hui, et pas seulement ceux de la
+// migration 9 : rejouée sur un document récent (restauration), elle ramenait à
+// « taches » les listes de préparation, de devoirs et d'entretien.
+const LIST_KINDS = ['taches', 'corvees', 'checklist', 'preparation', 'devoirs', 'entretien'];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /** Les puces d'échéance du formulaire d'avant, posées par défaut sur chaque tâche. */
 const DEFAULT_CHIPS = new Set(['aujourdhui', 'demain', 'cette semaine']);

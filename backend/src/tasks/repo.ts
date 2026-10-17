@@ -50,6 +50,7 @@ export function applyTaskOps(ops: unknown, opts: { trusted?: boolean } = {}): Ap
       listKind: (id) => taskLists().find((l) => l['id'] === id)?.['kind'] as string | undefined,
       memberIds: idsOf(doc, 'members'),
       shopListIds: idsOf(doc, 'shopLists'),
+      roomIds: idsOf(doc, 'rooms'),
       alreadyApplied: (opId) => !!journal.get(opId),
       trusted: opts.trusted === true,
     });
@@ -108,7 +109,7 @@ export function preserveTasks(incoming: Record<string, any>, current?: Record<st
   // Comme preserveShopping : réutiliser le document déjà lu par l'appelant plutôt
   // que de le reparser.
   const doc = current ?? readDoc().doc;
-  const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'));
+  const res = reconcile(items(doc), idsOf(incoming, 'taskLists'), idsOf(incoming, 'members'), idsOf(incoming, 'shopLists'), idsOf(incoming, 'rooms'));
   incoming['tasks'] = res.items;
   return { dropped: res.dropped, unassigned: res.unassigned, unlinked: res.unlinked, orphaned: res.orphaned };
 }
