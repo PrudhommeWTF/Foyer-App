@@ -1,8 +1,8 @@
 // Module « Équipements », de bout en bout HTTP : pièces de départ, fiches,
 // garantie calculée à la lecture, recherche et filtres, pièces jointes (formats,
 // taille, déduplication), filtre enfant côté serveur, historique et statut,
-// remplacement, pièces de la maison, module éteint, remise à zéro, sauvegarde et
-// restauration, et le ménage des fichiers au démarrage.
+// remplacement, pièces de la maison (socle commun du document), module éteint,
+// remise à zéro, sauvegarde et restauration, et le ménage des fichiers au démarrage.
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { Contexte, Reponse, appel, arreter, demarrer } from './securite-helpers';
@@ -30,20 +30,19 @@ describe('Équipements : HTTP', () => {
     return { status: res.status, json: await res.json() };
   };
   const telecharger = (chemin: string, jeton: string) => fetch(ctx.base + chemin, { headers: { authorization: 'Bearer ' + jeton } });
-  const piece = async (nom: string): Promise<number> => (await get('/rooms', A())).json.rooms.find((r: { name: string }) => r.name === nom).id;
+  const etat = async () => (await appel(ctx.base, 'GET', '/state', undefined, A())).json;
+  const piece = async (nom: string): Promise<string> => (await etat()).state.rooms.find((r: { name: string }) => r.name === nom).id;
 
   let lave = 0; let ampli = 0;
 
-  it('les pièces de départ existent, dans l’ordre', async () => {
-    const r = await get('/rooms', M());
-    assert.equal(r.status, 200, JSON.stringify(r.json));
-    const noms = r.json.rooms.map((x: { name: string }) => x.name);
+  it('les pièces de départ sont celles du foyer (socle commun), dans l’ordre', async () => {
+    const noms = (await etat()).state.rooms.map((x: { name: string }) => x.name);
     assert.deepEqual(noms.slice(0, 4), ['Cuisine', 'Salon', 'Salle de bain', 'Chambre 1']);
     assert.equal(noms.length, 10);
   });
 
   it('création rapide : désignation, pièce, photo de la plaque', async () => {
-    const cr = await post('/items', { name: 'Lave-vaisselle', room_id: await piece('Cuisine') });
+    const cr = await post('/items', { name: 'Lave-vaisselle', room: await piece('Cuisine') });
     assert.equal(cr.status, 201, JSON.stringify(cr.json));
     lave = cr.json.item.id;
     assert.equal(cr.json.item.roomName, 'Cuisine');
@@ -75,7 +74,7 @@ describe('Équipements : HTTP', () => {
   });
 
   it('recherche par modèle, filtres pièce et garantie', async () => {
-    const cr = await post('/items', { name: 'Ampli', room_id: await piece('Salon'), brand: 'Onkyo', model: 'TX-SR444', purchased_on: '2017-11-07', category: 'multimedia' });
+    const cr = await post('/items', { name: 'Ampli', room: await piece('Salon'), brand: 'Onkyo', model: 'TX-SR444', purchased_on: '2017-11-07', category: 'multimedia' });
     ampli = cr.json.item.id;
     let r = await get('/items?q=TX-SR444', M());
     assert.deepEqual(r.json.items.map((i: { id: number }) => i.id), [ampli]);
@@ -134,11 +133,10 @@ describe('Équipements : HTTP', () => {
     assert.equal((await put(`/items/${lave}`, { name: 'X' }, E())).status, 403);
     assert.equal((await post(`/items/${lave}/events`, { kind: 'panne' }, E())).status, 403);
     assert.equal((await joindre(lave, 'photo', png(10, 10), 'x.png', E())).status, 403);
-    assert.equal((await post('/rooms', { name: 'X' }, E())).status, 403);
   });
 
   it('facture groupée : un seul fichier pour plusieurs fiches, retiré quand plus personne ne le cite', async () => {
-    const four = (await post('/items', { name: 'Four', room_id: await piece('Cuisine') })).json.item.id;
+    const four = (await post('/items', { name: 'Four', room: await piece('Cuisine') })).json.item.id;
     const a1 = await joindre(lave, 'facture', PDF2, 'cuisine complète.pdf');
     const a2 = await joindre(four, 'facture', PDF2, 'cuisine complète.pdf');
     assert.equal(a2.json.deduplicated, true);
@@ -174,7 +172,7 @@ describe('Équipements : HTTP', () => {
   });
 
   it('remplacer : l’ancienne fiche reste, grisée, et pointe vers la nouvelle', async () => {
-    const neuf = (await post('/items', { name: 'Ampli neuf', room_id: await piece('Salon'), brand: 'Yamaha' })).json.item.id;
+    const neuf = (await post('/items', { name: 'Ampli neuf', room: await piece('Salon'), brand: 'Yamaha' })).json.item.id;
     const r = await post(`/items/${ampli}/replace`, { by: neuf, day: '2026-10-17' });
     assert.equal(r.status, 200, JSON.stringify(r.json));
     assert.equal(r.json.item.status, 'remplace');
@@ -190,19 +188,14 @@ describe('Équipements : HTTP', () => {
     assert.equal((await get(`/items/${ampli}`, M())).status, 200);
   });
 
-  it('pièces : renommer, réordonner, archiver seulement une pièce vide', async () => {
-    const ch = await piece('Chambre 1');
-    const r = await put(`/rooms/${ch}`, { name: 'Chambre de Nolan' });
-    assert.equal(r.json.room.name, 'Chambre de Nolan');
-    const cuisine = await piece('Cuisine');
-    const refus = await post(`/rooms/${cuisine}/archive`, {});
-    assert.equal(refus.status, 400); assert.match(refus.json.error, /déplacez-les/);
-    const ok = await post(`/rooms/${ch}/archive`, {});
-    assert.ok(!ok.json.rooms.some((x: { id: number }) => x.id === ch));
-    const ord = await put('/rooms-order', { ids: [await piece('Garage'), cuisine] });
-    assert.deepEqual(ord.json.rooms.slice(0, 2).map((x: { name: string }) => x.name), ['Garage', 'Cuisine']);
-    assert.equal((await post('/rooms', { name: 'Grenier', icon: 'bidon' })).status, 400);
-    assert.equal((await post('/rooms', { name: 'Grenier', icon: 'autre' })).status, 201);
+  it('pièces : renommées dans le document, le nom suit sur les fiches ; une pièce archivée ou inconnue est refusée', async () => {
+    const { state, version } = await etat();
+    const rooms = state.rooms.map((r: { name: string }) => (r.name === 'Cuisine' ? { ...r, name: 'Cuisine ouverte' } : r.name === 'Chambre 1' ? { ...r, archived: true } : r));
+    assert.equal((await appel(ctx.base, 'PUT', '/state', { state: { ...state, rooms }, version }, A())).status, 200);
+    assert.equal((await get(`/items/${lave}`, M())).json.item.roomName, 'Cuisine ouverte');
+    assert.equal((await post('/items', { name: 'Lampe', room: 'p-chambre-1' })).status, 400, 'archivée : plus proposée');
+    assert.equal((await post('/items', { name: 'Lampe', room: 'p-inconnue' })).status, 400);
+    assert.equal((await get('/items?room=p-cuisine', M())).json.items.length >= 2, true, 'filtre par pièce');
   });
 
   it('sauvegarde puis restauration du module, fichiers compris', async () => {
@@ -220,7 +213,7 @@ describe('Équipements : HTTP', () => {
     for (const a of d.attachmentList) assert.equal((await telecharger(`/equipements/attachments/${a.id}`, A())).status, 200, 'fichier retrouvé après restauration');
   });
 
-  it('module éteint : 403 partout ; remise à zéro : fiches effacées, pièces de départ reposées', async () => {
+  it('module éteint : 403 partout ; remise à zéro : fiches effacées, pièces du foyer intactes', async () => {
     await appel(ctx.base, 'PATCH', '/settings', { changes: { modEquipements: false } }, A());
     assert.equal((await get('/bootstrap', A())).status, 403);
     assert.equal((await get('/items', M())).status, 403);
@@ -232,7 +225,8 @@ describe('Équipements : HTTP', () => {
     const boot = await get('/bootstrap', A());
     assert.equal(boot.status, 200);
     assert.equal(boot.json.items.length, 0);
-    assert.equal(boot.json.rooms.length, 10, 'pièces de départ reposées');
-    assert.equal(boot.json.rooms[3].name, 'Chambre 1');
+    const rooms = (await etat()).state.rooms;
+    assert.equal(rooms.length, 10, 'les pièces appartiennent au foyer : la remise à zéro d’Équipements n’y touche pas');
+    assert.equal(rooms[0].name, 'Cuisine ouverte');
   });
 });

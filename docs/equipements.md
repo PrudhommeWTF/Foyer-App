@@ -62,7 +62,11 @@ Les mois courts sont respectés : un achat le 31/01 avec 1 mois de garantie fini
 
 ## Les pièces de la maison
 
-Une donnée du foyer, pas du code : table `eqp_rooms`. Dix pièces sont posées à la création du module et à chaque remise à zéro : Cuisine, Salon, Salle de bain, Chambre 1, Chambre 2, Bureau, Buanderie, Garage, Cave, Extérieur. On les renomme, réordonne et archive. Une pièce qui contient encore des appareils ne s'archive pas : il faut d'abord les déplacer.
+Une seule liste pour tout le foyer, partagée avec Entretien : le socle commun `rooms` du document (`{ id, name, position, icon?, archived? }`, voir `backend/src/rooms.ts` et `docs/entretien.md`). Dix pièces naissent avec le foyer : Cuisine, Salon, Salle de bain, Chambre 1, Chambre 2, Bureau, Buanderie, Garage, Cave, Extérieur. On les renomme, réordonne et archive avec le document (`PUT /api/state`), comme les listes de tâches ; elles restent là quels que soient les modules allumés, et une remise à zéro d'Équipements n'y touche pas.
+
+Une fiche pointe sa pièce par l'identifiant texte (`room`, par exemple `p-garage`). Une pièce archivée n'est plus proposée à une nouvelle fiche (400), mais les fiches qui y sont rangées gardent son nom. Une pièce supprimée du document laisse ses fiches sans pièce.
+
+**Migration 2** (schéma `eqp_meta` = 2) : les pièces de `eqp_rooms` ont été reprises dans le document, chacune retrouvant une pièce de même nom quand elle existait déjà (casse et accents ignorés), et chaque fiche rattachée par la colonne `room`. La table `eqp_rooms` et la colonne `room_id` restent en base sans plus être lues, pour qu'une version antérieure restaurée y retrouve ses données. Une sauvegarde du module d'avant cette migration se restaure, mais ses fiches reviennent sans pièce (le journal le dit) : rangez-les de nouveau.
 
 ## Ce qui n'est jamais supprimé
 
@@ -87,10 +91,10 @@ Tout est sous `/api/equipements`, derrière la session (cookie ou `Authorization
 
 | Méthode | Chemin | Qui | Rôle |
 |---|---|---|---|
-| GET | `/bootstrap` | membre | pièces, fiches, règles de garantie, biens immobiliers (s'il y en a plusieurs dans Finances) |
+| GET | `/bootstrap` | membre | fiches, règles de garantie, biens immobiliers (s'il y en a plusieurs dans Finances). Les pièces sont dans le document (`GET /api/state`, `rooms`). |
 | GET | `/items?q=&room=&garantie=&categorie=&statut=&archived=1` | membre | liste filtrée |
 | GET | `/items/:id` | membre | fiche complète : pièces jointes, historique, remplacements |
-| POST | `/items` | adulte | créer (seul `name` est requis) |
+| POST | `/items` | adulte | créer (seul `name` est requis ; la pièce : `room`, identifiant du document) |
 | PUT | `/items/:id` | adulte | modifier (champs présents seulement) |
 | POST | `/items/:id/archive`, `/items/:id/unarchive` | adulte | archiver, désarchiver |
 | POST | `/items/:id/replace` `{ by, day? }` | adulte | marquer remplacé par une autre fiche |
@@ -99,9 +103,6 @@ Tout est sous `/api/equipements`, derrière la session (cookie ou `Authorization
 | POST | `/items/:id/attachments?kind=&filename=&label=` | adulte | joindre un fichier (corps brut) |
 | GET | `/attachments/:id[?download=1]` | membre (enfant : notice et photo) | ouvrir |
 | PUT, DELETE | `/attachments/:id` | adulte | requalifier, retirer |
-| GET, POST | `/rooms` | membre, adulte | lister, créer |
-| PUT | `/rooms/:id`, `/rooms-order { ids }` | adulte | renommer, réordonner |
-| POST | `/rooms/:id/archive`, `/rooms/:id/unarchive` | adulte | archiver (pièce vide), désarchiver |
 | GET | `/export.json` | administrateur | sauvegarde du module |
 | POST | `/restore { backup, confirm: "REMPLACER" }` | administrateur | restauration du module |
 
@@ -147,8 +148,13 @@ docker start foyer
 journalctl -u foyer -b | grep 'Équipements'
 # [foyer] Équipements : migration 1 appliquée (tables du module Équipements et pièces de départ).
 
-sqlite3 /var/lib/foyer/foyer.db "SELECT value FROM eqp_meta WHERE key = 'schema_version';"   # 1
-sqlite3 /var/lib/foyer/foyer.db "SELECT position, name FROM eqp_rooms ORDER BY position;"
+# [foyer] Équipements : migration 2 appliquée (pièces reprises dans le socle commun du document).
+
+sqlite3 /var/lib/foyer/foyer.db "SELECT value FROM eqp_meta WHERE key = 'schema_version';"   # 2
+# Les pièces du foyer, dans le document :
+sqlite3 /var/lib/foyer/foyer.db "SELECT json_extract(j.value, '$.name') FROM household, json_each(household.state, '$.rooms') j;"
+# Les fiches et leur pièce :
+sqlite3 /var/lib/foyer/foyer.db "SELECT name, room FROM eqp_items ORDER BY id;"
 ```
 
 ### Sauvegarde

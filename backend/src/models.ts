@@ -106,10 +106,11 @@ export type { TaskItem } from './tasks/ops';
 export type { Place, PlaceItem, PlaceItemState } from './places/ops';
 /**
  * Une pièce de la maison (« Cuisine », « Garage », « Jardin »). Socle commun,
- * hors de tout module : Entretien y range ses gestes, et Équipements y rangera
- * ses appareils. Écrite par l'enregistrement du document, comme les listes.
+ * hors de tout module : Entretien y range ses gestes, Équipements ses appareils
+ * (voir rooms.ts). Écrite par l'enregistrement du document, comme les listes.
+ * Archivée, elle n'est plus proposée, mais ce qui y est rangé le reste.
  */
-export interface Room { id: string; name: string; position: number; }
+export interface Room { id: string; name: string; position: number; icon?: string; archived?: boolean; }
 export interface Contact { id: string; name: string; role: string; phone: string; email: string; cat: string; color: string; urgent: boolean; birthday?: string | null; }
 /**
  * Une carte de fidélité : un code partagé par tout le foyer, réaffiché à l'écran

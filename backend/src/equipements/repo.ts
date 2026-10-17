@@ -1,12 +1,12 @@
 // Accès aux données du module « Équipements ». Écritures granulaires, une fiche
 // à la fois : deux téléphones qui complètent deux fiches n'ont rien à fusionner.
-// Rien n'est supprimé, ni une fiche (statut daté puis archivage), ni une pièce
-// de la maison (archivage), ni un événement d'historique (archivage). Seuls les
+// Rien n'est supprimé, ni une fiche (statut daté puis archivage), ni un
+// événement d'historique (archivage). Les pièces de la maison ne sont pas ici :
+// c'est le socle commun du document (voir rooms.ts). Seuls les
 // rattachements de fichiers se retirent pour de bon : une photo ratée n'a pas à
 // rester, et le fichier quitte le disque quand plus rien ne le cite.
 import type { Database } from 'better-sqlite3';
 import { initBackup } from './backup';
-import { Invalid } from './http';
 import { Condition } from './warranty';
 
 let database: Database;
@@ -17,7 +17,6 @@ export function initEquipementsRepo(db: Database): void {
 
 // Les listes fermées. Stockées en texte libre (pas de contrainte SQL) : ajouter
 // une valeur ne demande aucune migration. Les routes refusent l'inconnu.
-export const ROOM_ICONS = ['cuisine', 'salon', 'bain', 'chambre', 'bureau', 'buanderie', 'garage', 'cave', 'exterieur', 'autre'] as const;
 export const CATEGORIES = ['electromenager', 'multimedia', 'chauffage_clim', 'securite', 'jardin_piscine', 'informatique', 'mobilier', 'autre'] as const;
 export type Category = typeof CATEGORIES[number];
 export const STATUSES = ['en_service', 'en_panne', 'remplace', 'donne_vendu', 'jete'] as const;
@@ -27,9 +26,9 @@ export type AttachmentKind = typeof ATTACHMENT_KINDS[number];
 export const EVENT_KINDS = ['achat', 'panne', 'reparation', 'sav', 'remplacement', 'note'] as const;
 export type EventKind = typeof EVENT_KINDS[number];
 
-export interface Room { id: number; name: string; icon: string; position: number; archivedAt: string | null; items: number; }
 export interface Item {
-  id: number; roomId: number | null; assetId: number | null; name: string; category: Category;
+  /** Pièce du socle commun (`rooms` du document), ou null. */
+  id: number; roomId: string | null; assetId: number | null; name: string; category: Category;
   brand: string; model: string; serial: string; purchasedOn: string | null; purchasePrice: number | null;
   vendor: string; condition: Condition; warrantyMonths: number | null; warrantyUntil: string | null;
   warrantyNote: string; notes: string; status: Status; statusOn: string | null; replacedBy: number | null;
@@ -49,12 +48,8 @@ type R = Record<string, unknown>;
 const str = (v: unknown): string => (v as string) ?? '';
 const nul = <T>(v: unknown): T | null => (v === undefined || v === null ? null : v as T);
 
-const roomOf = (r: R): Room => ({
-  id: r['id'] as number, name: str(r['name']), icon: str(r['icon']), position: r['position'] as number,
-  archivedAt: nul(r['archived_at']), items: (r['items'] as number) ?? 0,
-});
 const itemOf = (r: R): Item => ({
-  id: r['id'] as number, roomId: nul(r['room_id']), assetId: nul(r['asset_id']), name: str(r['name']),
+  id: r['id'] as number, roomId: nul(r['room']), assetId: nul(r['asset_id']), name: str(r['name']),
   category: r['category'] as Category, brand: str(r['brand']), model: str(r['model']), serial: str(r['serial']),
   purchasedOn: nul(r['purchased_on']), purchasePrice: nul(r['purchase_price']), vendor: str(r['vendor']),
   condition: r['condition'] as Condition, warrantyMonths: nul(r['warranty_months']), warrantyUntil: nul(r['warranty_until']),
@@ -71,47 +66,6 @@ const eventOf = (r: R): EventRow => ({
   id: r['id'] as number, itemId: r['item_id'] as number, at: str(r['at']), kind: r['kind'] as EventKind, text: str(r['text']),
   cost: nul(r['cost']), createdBy: nul(r['created_by']), createdVia: nul(r['created_via']), createdAt: str(r['created_at']),
 });
-
-// ---- Pièces ---------------------------------------------------------------
-
-export function listRooms(includeArchived = false): Room[] {
-  return (database.prepare(`
-    SELECT r.*, (SELECT COUNT(*) FROM eqp_items i WHERE i.room_id = r.id AND i.archived_at IS NULL) AS items
-    FROM eqp_rooms r ${includeArchived ? '' : 'WHERE r.archived_at IS NULL'} ORDER BY r.position, r.id
-  `).all() as R[]).map(roomOf);
-}
-export const getRoom = (id: number): Room | null => listRooms(true).find((r) => r.id === id) ?? null;
-
-export function createRoom(name: string, icon: string): Room {
-  const pos = (database.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM eqp_rooms').get() as { p: number }).p;
-  const info = database.prepare('INSERT INTO eqp_rooms (name, icon, position) VALUES (?, ?, ?)').run(name, icon, pos);
-  return getRoom(Number(info.lastInsertRowid))!;
-}
-export function editRoom(id: number, patch: { name?: string; icon?: string }): Room | null {
-  const cur = getRoom(id); if (!cur) return null;
-  database.prepare('UPDATE eqp_rooms SET name = ?, icon = ? WHERE id = ?').run(patch.name ?? cur.name, patch.icon ?? cur.icon, id);
-  return getRoom(id);
-}
-/** Nouvel ordre : les identifiants donnés passent en tête, dans cet ordre ; les autres suivent. */
-export function reorderRooms(ids: number[]): Room[] {
-  const all = listRooms(true).map((r) => r.id);
-  const order = [...ids.filter((id) => all.includes(id)), ...all.filter((id) => !ids.includes(id))];
-  const upd = database.prepare('UPDATE eqp_rooms SET position = ? WHERE id = ?');
-  database.transaction(() => order.forEach((id, i) => upd.run(i, id)))();
-  return listRooms();
-}
-/** Une pièce qui contient encore des appareils ne s'archive pas : ils perdraient leur place sans le dire. */
-export function archiveRoom(id: number): Room {
-  const r = getRoom(id);
-  if (!r) throw new Invalid('Pièce introuvable.');
-  if (r.items) throw new Invalid(`La pièce « ${r.name} » contient encore ${r.items} équipement${r.items > 1 ? 's' : ''} : déplacez-les d’abord.`);
-  database.prepare("UPDATE eqp_rooms SET archived_at = datetime('now') WHERE id = ?").run(id);
-  return getRoom(id)!;
-}
-export function unarchiveRoom(id: number): Room | null {
-  database.prepare('UPDATE eqp_rooms SET archived_at = NULL WHERE id = ?').run(id);
-  return getRoom(id);
-}
 
 // ---- Fiches ---------------------------------------------------------------
 
@@ -130,12 +84,12 @@ export function replacedItems(id: number): { id: number; name: string }[] {
 
 /** Les champs modifiables d'une fiche, en noms de colonnes. */
 export interface ItemFields {
-  room_id?: number | null; asset_id?: number | null; name?: string; category?: Category;
+  room?: string | null; asset_id?: number | null; name?: string; category?: Category;
   brand?: string; model?: string; serial?: string; purchased_on?: string | null; purchase_price?: number | null;
   vendor?: string; condition?: Condition; warranty_months?: number | null; warranty_until?: string | null;
   warranty_note?: string; notes?: string; status?: Status; status_on?: string | null;
 }
-const COLUMNS: (keyof ItemFields)[] = ['room_id', 'asset_id', 'name', 'category', 'brand', 'model', 'serial', 'purchased_on',
+const COLUMNS: (keyof ItemFields)[] = ['room', 'asset_id', 'name', 'category', 'brand', 'model', 'serial', 'purchased_on',
   'purchase_price', 'vendor', 'condition', 'warranty_months', 'warranty_until', 'warranty_note', 'notes', 'status', 'status_on'];
 
 export function createItem(f: ItemFields & { name: string }, by: string | null, via: string | null): Item {

@@ -1,6 +1,5 @@
 {
-  "_lisezmoi": "Catalogue des gestes d’entretien proposés à la création d’un geste (« Choisir dans la liste »). Pour l’adapter sans toucher à l’application, copiez ce fichier dans le dossier des données (FOYER_DATA_DIR) sous le même nom et ne gardez que ce qui change : une entrée de même « id » remplace celle-ci, une entrée nouvelle s’ajoute, { \"id\": \"…\", \"retire\": true } la masque, et « pieces », s’il est présent, remplace la liste des pièces. Voir docs/entretien.md.",
-  "pieces": ["Cuisine", "Salon", "Salle de bain", "Buanderie", "Chambres", "Entrée", "Cave", "Garage", "Grenier", "Extérieur"],
+  "_lisezmoi": "Catalogue des gestes d’entretien proposés à la création d’un geste (« Choisir dans la liste »). Pour l’adapter sans toucher à l’application, copiez ce fichier dans le dossier des données (FOYER_DATA_DIR) sous le même nom et ne gardez que ce qui change : une entrée de même « id » remplace celle-ci, une entrée nouvelle s’ajoute, { \"id\": \"…\", \"retire\": true } la masque. La pièce suggérée (« piece ») est retrouvée par son nom parmi les pièces du foyer, ou créée. Voir docs/entretien.md.",
   "gestes": [
     { "id": "carafe-filtrante", "titre": "Carafe filtrante : changer la cartouche", "famille": "Eau", "piece": "Cuisine",
       "howto": "Une cartouche filtre de 100 à 150 litres, soit à peu près quatre semaines pour une famille. L’indicateur du couvercle le rappelle.",

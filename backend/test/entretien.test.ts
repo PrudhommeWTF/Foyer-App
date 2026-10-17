@@ -20,19 +20,19 @@ describe('Entretien', () => {
   const ops = (list: unknown[], jeton = M()) => appel(ctx.base, 'POST', '/tasks/ops', { ops: list }, jeton);
   const geste = async (id: string) => ((await etat()).state.tasks as { id: string }[]).find((t) => t.id === id) as Record<string, any> | undefined;
 
-  it('un foyer neuf a sa liste Entretien, partagée, et un socle de pièces vide', async () => {
+  it('un foyer neuf a sa liste Entretien, partagée, et les pièces de départ', async () => {
     const { state } = await etat();
     const l = state.taskLists.find((x: { kind: string }) => x.kind === 'entretien');
     assert.equal(l?.id, 'entretien');
     assert.equal(l?.scope, 'shared');
-    assert.deepEqual(state.rooms, []);
+    assert.equal(state.rooms.length, 10);
+    assert.deepEqual(state.rooms[0], { id: 'p-cuisine', name: 'Cuisine', icon: 'cuisine', position: 0 });
   });
 
-  it('le catalogue livré propose une trentaine de gestes et des pièces, à tout membre', async () => {
+  it('le catalogue livré propose une trentaine de gestes, à tout membre', async () => {
     const r = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, E());
     assert.equal(r.status, 200);
     assert.ok(r.json.gestes.length >= 30, `${r.json.gestes.length} gestes`);
-    assert.ok(r.json.pieces.includes('Cuisine'));
     const brita = r.json.gestes.find((g: { id: string }) => g.id === 'carafe-filtrante');
     assert.deepEqual(brita.rec, { freq: 'weekly', every: 4, base: 'done' });
     assert.equal(brita.article.unite, 'cartouche');
@@ -41,7 +41,6 @@ describe('Entretien', () => {
   it('une surcharge dans le dossier des données s’applique sans redémarrer, et une surcharge illisible ne casse rien', async () => {
     const file = path.join(ctx.dir, 'entretien-catalogue.json');
     fs.writeFileSync(file, JSON.stringify({
-      pieces: ['Cuisine', 'Atelier'],
       gestes: [
         { id: 'carafe-filtrante', retire: true },
         { id: 'aquarium', titre: 'Aquarium : changer un quart de l’eau', famille: 'Maison', rec: { freq: 'weekly', every: 2, base: 'done' } },
@@ -49,7 +48,6 @@ describe('Entretien', () => {
       ],
     }));
     let r = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, M());
-    assert.deepEqual(r.json.pieces, ['Cuisine', 'Atelier']);
     assert.ok(!r.json.gestes.some((g: { id: string }) => g.id === 'carafe-filtrante'), 'retiré');
     assert.ok(r.json.gestes.some((g: { id: string }) => g.id === 'aquarium'), 'ajouté');
     assert.ok(r.json.gestes.some((g: { id: string }) => g.id === 'ramonage'), 'le reste du catalogue livré demeure');
@@ -90,7 +88,7 @@ describe('Entretien', () => {
     const { rooms: _r, ...ancien } = s.state; void _r;
     assert.equal((await appel(ctx.base, 'PUT', '/state', { state: { ...ancien, taskLists: ancien.taskLists.map((l: { id: string; kind: string }) => (l.id === 'l1' ? { ...l, kind: 'entretien' } : l)) }, version: s.version }, A())).status, 200);
     s = await etat();
-    assert.deepEqual(s.state.rooms, [{ id: 'p1', name: 'Cuisine', position: 0 }]);
+    assert.deepEqual(s.state.rooms, [{ id: 'p1', name: 'Cuisine', icon: 'autre', position: 0 }], 'gardées, et remises en forme (icône par défaut)');
     assert.equal(s.state.taskLists.filter((l: { kind: string }) => l.kind === 'entretien').length, 1, 'une seule liste Entretien');
   });
 

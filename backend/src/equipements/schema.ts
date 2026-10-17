@@ -9,38 +9,54 @@
 // `eqp_meta.schema_version` retient la dernière. On ne modifie jamais une
 // migration livrée, on en ajoute une.
 //
-// Rien n'est supprimé : une fiche change de statut (daté) puis s'archive ; une
-// pièce de la maison s'archive. L'état de la garantie n'est **jamais** stocké :
+// Rien n'est supprimé : une fiche change de statut (daté) puis s'archive.
+// Les pièces de la maison ne sont plus ici depuis la migration 2 : c'est le
+// socle commun du document (`rooms`, voir rooms.ts), partagé avec Entretien. L'état de la garantie n'est **jamais** stocké :
 // il se calcule à la lecture (voir warranty.ts). Les montants sont en centimes.
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
+import { ROOM_ICONS, STARTER_ROOMS, roomKey } from '../rooms';
 
-export const EQP_SCHEMA_VERSION = 1;
+export const EQP_SCHEMA_VERSION = 2;
 
 /**
- * Les pièces proposées à la création du module. Ce sont des données, pas du
- * code : on les renomme, les réordonne ou les archive depuis l'écran. Elles sont
- * recréées par une remise à zéro du module.
+ * Migration 2 : les pièces d'Équipements rejoignent le socle commun du
+ * document. Chaque pièce de `eqp_rooms` (archivées comprises) devient une pièce
+ * de `rooms`, ou retrouve celle qui porte déjà son nom (casse et accents
+ * ignorés) ; chaque fiche est rattachée par la nouvelle colonne `room`.
+ *
+ * `eqp_rooms` et `eqp_items.room_id` restent en place sans plus être lus : une
+ * version antérieure de Foyer, restaurée avec cette base, y retrouve ses
+ * données. Une migration ultérieure pourra les retirer.
+ *
+ * Sans foyer (installation neuve, avant l'onboarding), il n'y a ni fiche ni
+ * document : rien à reprendre, les pièces de départ naissent avec le foyer.
  */
-export const STARTER_ROOMS: readonly { name: string; icon: string }[] = [
-  { name: 'Cuisine', icon: 'cuisine' },
-  { name: 'Salon', icon: 'salon' },
-  { name: 'Salle de bain', icon: 'bain' },
-  { name: 'Chambre 1', icon: 'chambre' },
-  { name: 'Chambre 2', icon: 'chambre' },
-  { name: 'Bureau', icon: 'bureau' },
-  { name: 'Buanderie', icon: 'buanderie' },
-  { name: 'Garage', icon: 'garage' },
-  { name: 'Cave', icon: 'cave' },
-  { name: 'Extérieur', icon: 'exterieur' },
-];
-
-export function seedRooms(db: Database): void {
-  const ins = db.prepare('INSERT INTO eqp_rooms (name, icon, position) VALUES (?, ?, ?)');
-  STARTER_ROOMS.forEach((r, i) => ins.run(r.name, r.icon, i));
+function moveRoomsToDocument(db: Database): void {
+  db.exec('ALTER TABLE eqp_items ADD COLUMN room TEXT');
+  db.exec('CREATE INDEX eqp_items_room_ref ON eqp_items(room)');
+  const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
+  if (!row) return;
+  const doc = JSON.parse(row.state) as Record<string, any>;
+  const rooms: Record<string, any>[] = Array.isArray(doc['rooms']) ? doc['rooms'] : (doc['rooms'] = []);
+  const eqp = db.prepare('SELECT id, name, icon, position, archived_at FROM eqp_rooms ORDER BY position, id').all() as
+    { id: number; name: string; icon: string; position: number; archived_at: string | null }[];
+  const starter = new Map(STARTER_ROOMS().map((r) => [roomKey(r.name), r.id]));
+  const setRoom = db.prepare('UPDATE eqp_items SET room = ? WHERE room_id = ?');
+  for (const r of eqp) {
+    let target = rooms.find((x) => roomKey(String(x?.['name'] ?? '')) === roomKey(r.name));
+    if (!target) {
+      // Une pièce de départ garde l'identifiant fixe qu'un foyer neuf lui donne.
+      const id = starter.get(roomKey(r.name)) && !rooms.some((x) => x?.['id'] === starter.get(roomKey(r.name))) ? starter.get(roomKey(r.name))! : `p-eqp-${r.id}`;
+      target = { id, name: r.name, icon: (ROOM_ICONS as readonly string[]).includes(r.icon) ? r.icon : 'autre', position: rooms.length, ...(r.archived_at ? { archived: true } : {}) };
+      rooms.push(target);
+    }
+    setRoom.run(target['id'], r.id);
+  }
+  db.prepare("UPDATE household SET state = ?, version = version + 1, updated_at = datetime('now') WHERE id = 1").run(JSON.stringify(doc));
 }
 
-const MIGRATIONS: Migration[] = [
+export const EQP_MIGRATIONS: Migration[] = [
   {
     version: 1,
     label: 'tables du module Équipements et pièces de départ',
@@ -125,8 +141,16 @@ const MIGRATIONS: Migration[] = [
         );
         CREATE INDEX eqp_events_item ON eqp_events(item_id, at);
       `);
-      seedRooms(db);
+      // Les pièces de départ de la première version : la migration 2 les reprend
+      // dans le document (rooms.ts). Gardées ici telles qu'elles ont été livrées.
+      const ins = db.prepare('INSERT INTO eqp_rooms (name, icon, position) VALUES (?, ?, ?)');
+      STARTER_ROOMS().forEach((r, i) => ins.run(r.name, r.icon, i));
     },
+  },
+  {
+    version: 2,
+    label: 'pièces reprises dans le socle commun du document',
+    up: moveRoomsToDocument,
   },
 ];
 
@@ -135,6 +159,6 @@ export function migrateEquipements(db: Database): number {
     metaTable: 'eqp_meta',
     label: 'Équipements',
     restoreHint: 'Restaurez votre sauvegarde si nécessaire (voir docs/equipements.md) et signalez l’erreur.',
-    migrations: MIGRATIONS,
+    migrations: EQP_MIGRATIONS,
   });
 }

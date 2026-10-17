@@ -5,8 +5,8 @@
 // (backend/config/entretien-catalogue.json), et un foyer l'adapte par un
 // fichier du même nom dans FOYER_DATA_DIR, **fusionné** par identifiant :
 // une entrée de même `id` remplace, une nouvelle s'ajoute, `"retire": true`
-// masque, et `pieces` remplace la liste des pièces proposées. Le fichier de
-// surcharge est relu dès qu'il change, sans redémarrer le service.
+// masque. Le fichier de surcharge est relu dès qu'il change, sans redémarrer
+// le service.
 //
 // Une entrée mal formée est écartée et nommée au journal, les autres restent ;
 // un fichier illisible laisse le catalogue livré. Le catalogue est une aide à
@@ -21,13 +21,13 @@ export interface CatalogueEntry {
   id: string; titre: string; howto?: string;
   /** Regroupe la liste de choix : « Cuisine », « Eau », « Sécurité »… */
   famille: string;
-  /** La pièce suggérée, par son nom. */
+  /** La pièce suggérée, par son nom : retrouvée parmi les pièces du foyer, ou créée. */
   piece?: string;
   rec: CatalogueRec;
   /** Le consommable éventuel : ce qui entre dans la liste de courses. */
   article?: CatalogueArticle;
 }
-export interface Catalogue { pieces: string[]; gestes: CatalogueEntry[]; }
+export interface Catalogue { gestes: CatalogueEntry[]; }
 
 export const CATALOGUE_FILE = 'entretien-catalogue.json';
 const SHIPPED = path.join(__dirname, '..', '..', 'config', CATALOGUE_FILE);
@@ -94,9 +94,7 @@ export function mergeCatalogue(shipped: Record<string, unknown>, override: Recor
   };
   take(shipped['gestes'], 'catalogue livré');
   if (override) take(override['gestes'], 'surcharge');
-  const piecesOf = (v: unknown): string[] => [...new Set((Array.isArray(v) ? v : []).map((p) => text(p, 60)).filter(Boolean))];
-  const pieces = override && Array.isArray(override['pieces']) ? piecesOf(override['pieces']) : piecesOf(shipped['pieces']);
-  return { pieces, gestes: [...byId.values()] };
+  return { gestes: [...byId.values()] };
 }
 
 let cache: { key: string; value: Catalogue } | null = null;

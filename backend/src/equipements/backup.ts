@@ -9,7 +9,7 @@
 // restauration les reconnaît sur le disque par leur empreinte, quel que soit
 // l'identifiant qu'ils avaient ailleurs, et dit combien manquent.
 import type { Database } from 'better-sqlite3';
-import { EQP_SCHEMA_VERSION, seedRooms } from './schema';
+import { EQP_SCHEMA_VERSION } from './schema';
 import * as files from '../storage/files';
 import { blobPath, relPathFor, releaseBlob } from '../storage/blobs';
 import { log } from '../log';
@@ -17,8 +17,13 @@ import { log } from '../log';
 let database: Database;
 export function initBackup(db: Database): void { database = db; }
 
-/** Tables du module, dans l'ordre des dépendances. */
-const TABLES = ['eqp_rooms', 'eqp_items', 'eqp_attachments', 'eqp_events'] as const;
+/**
+ * Tables du module, dans l'ordre des dépendances. Les pièces n'en sont plus
+ * (schéma 2) : elles sont au document, partagées avec Entretien, et partent
+ * avec la sauvegarde du foyer. `eqp_rooms`, gardée pour un retour arrière,
+ * n'est ni exportée ni effacée.
+ */
+const TABLES = ['eqp_items', 'eqp_attachments', 'eqp_events'] as const;
 
 interface FileEntry { id: number; name: string; mime: string; size: number; sha256: string; ext: string; }
 
@@ -60,6 +65,8 @@ export interface RestoreReport {
   ignoredColumns: { table: string; columns: string[] }[];
   /** Fichiers cités par la sauvegarde mais absents de `pieces/` : à restaurer depuis l'archive complète. */
   missingFiles: string[];
+  /** Fiches d'une sauvegarde d'avant les pièces communes (schéma 1) : restaurées sans leur pièce. */
+  withoutRoom: number;
 }
 
 const counts = (): Record<string, number> => {
@@ -134,6 +141,13 @@ export function restoreModule(backup: unknown): RestoreReport {
   })();
 
   for (const p of previous) releaseBlob(p.rel_path, p.sha256);
+  // Une sauvegarde du schéma 1 rattachait les fiches à `eqp_rooms` par un
+  // numéro : ce rattachement ne vaut plus rien, la fiche revient sans pièce, et
+  // on le dit plutôt que de deviner la pièce d'après un nom peut-être renommé.
+  const withoutRoom = b.schemaVersion < 2 ? ((b.tables!['eqp_items'] || []) as Record<string, unknown>[]).filter((r) => r['room_id'] != null).length : 0;
+  if (withoutRoom) {
+    log.attention(`Restauration (équipements) : ${withoutRoom} fiche(s) restaurée(s) sans pièce : la sauvegarde date d'avant les pièces communes. Rangez-les de nouveau depuis l'écran.`);
+  }
   const after = counts();
   if (ignoredColumns.length) {
     log.attention('Restauration (équipements) : colonnes ignorées, absentes du schéma actuel : '
@@ -143,15 +157,16 @@ export function restoreModule(backup: unknown): RestoreReport {
     log.attention(`Restauration (équipements) : ${missingFiles.length} fichier(s) absent(s) du répertoire « pieces ». `
       + `Restaurez-le depuis l’archive complète. Exemple : ${missingFiles[0]}`);
   }
-  return { before, after, ignoredColumns, missingFiles };
+  return { before, after, ignoredColumns, missingFiles, withoutRoom };
 }
 
 /** Le nombre de lignes par table : pour dire ce qu'un « repartir à zéro » effacerait. */
 export function moduleCounts(): Record<string, number> { return counts(); }
 
 /**
- * Efface toutes les données du module (tables eqp_*, et les fichiers qui ne
- * servaient qu'à lui), puis repose les pièces de départ. Rend le décompte d'avant.
+ * Efface toutes les données du module (fiches, pièces jointes, historique, et
+ * les fichiers qui ne servaient qu'à lui). Les pièces de la maison restent :
+ * elles appartiennent au foyer, Entretien s'en sert aussi. Rend le décompte d'avant.
  */
 export function resetModule(): Record<string, number> {
   const before = counts();
@@ -159,7 +174,6 @@ export function resetModule(): Record<string, number> {
     database.pragma('defer_foreign_keys = ON');
     for (const t of [...TABLES].reverse()) database.prepare(`DELETE FROM ${t}`).run();
     dropModuleFiles();
-    seedRooms(database);
   })();
   return before;
 }

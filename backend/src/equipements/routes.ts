@@ -22,6 +22,8 @@ import { imageSize } from '../storage/image-size';
 import * as files from '../storage/files';
 import { log } from '../log';
 import { matches } from './search';
+import { readDoc } from '../state/doc';
+import { roomsById } from '../rooms';
 
 type Guard = (req: Request, res: Response, next: NextFunction) => void;
 
@@ -90,10 +92,11 @@ const optMonths = (v: unknown): number | null => {
   if (!Number.isInteger(n) || n < 0 || n > 240) fail('Durée de garantie invalide : un nombre entier de mois, de 0 à 240.');
   return n;
 };
-const roomRef = (v: unknown): number | null => {
+/** Une pièce du socle commun (le document), non archivée. */
+const roomRef = (v: unknown): string | null => {
   if (empty(v)) return null;
-  const r = repo.getRoom(id(v, 'room_id'));
-  if (!r || r.archivedAt) fail('Pièce introuvable.');
+  const r = roomsById(readDoc().doc).get(String(v));
+  if (!r || r.archived) fail('Pièce introuvable.');
   return r!.id;
 };
 const assetRef = (v: unknown): number | null => {
@@ -108,7 +111,7 @@ function itemFields(b: Record<string, unknown>): repo.ItemFields {
   const f: repo.ItemFields = {};
   const has = (k: string): boolean => b[k] !== undefined;
   if (has('name')) f.name = text(b['name'], 'name', 120, true);
-  if (has('room_id')) f.room_id = roomRef(b['room_id']);
+  if (has('room')) f.room = roomRef(b['room']);
   if (has('asset_id')) f.asset_id = assetRef(b['asset_id']);
   if (has('category')) f.category = oneOf(b['category'], repo.CATEGORIES, 'category');
   if (has('brand')) f.brand = text(b['brand'], 'brand', 80);
@@ -136,7 +139,7 @@ export interface ItemView extends Omit<repo.Item, 'serial' | 'purchasePrice' | '
 }
 
 /** Ce qu'un membre voit d'une fiche. Un enfant : ni série, ni prix, ni vendeur, ni bien, ni décompte de factures et plaques. */
-export function view(it: repo.Item, child: boolean, ctx: { rooms: Map<number, string>; counts: Map<number, Partial<Record<repo.AttachmentKind, number>>>; names: Map<number, string>; t: string; r: WarrantyRules }): ItemView {
+export function view(it: repo.Item, child: boolean, ctx: { rooms: Map<string, string>; counts: Map<number, Partial<Record<repo.AttachmentKind, number>>>; names: Map<number, string>; t: string; r: WarrantyRules }): ItemView {
   const counts = { ...(ctx.counts.get(it.id) ?? {}) };
   if (child) for (const k of Object.keys(counts) as repo.AttachmentKind[]) if (!CHILD_KINDS.includes(k)) delete counts[k];
   return {
@@ -155,7 +158,7 @@ export function view(it: repo.Item, child: boolean, ctx: { rooms: Map<number, st
 function viewContext() {
   const all = repo.listItems(true);
   return {
-    rooms: new Map(repo.listRooms(true).map((r) => [r.id, r.name])),
+    rooms: new Map([...roomsById(readDoc().doc).values()].map((r) => [r.id, r.name])),
     counts: repo.attachmentCounts(),
     names: new Map(all.map((i) => [i.id, i.name])),
     t: today(), r: rules(),
@@ -165,7 +168,7 @@ function viewContext() {
 const WARRANTY_STATES: readonly WarrantyState[] = ['sous_garantie', 'expire_bientot', 'hors_garantie', 'inconnue'];
 
 /** Les fiches filtrées, triées par nom. Les filtres sont ceux de l'écran et de l'assistant. */
-export function listViews(q: { recherche?: string; piece?: number; garantie?: WarrantyState; categorie?: repo.Category; statut?: repo.Status; archives?: boolean }, child: boolean): ItemView[] {
+export function listViews(q: { recherche?: string; piece?: string; garantie?: WarrantyState; categorie?: repo.Category; statut?: repo.Status; archives?: boolean }, child: boolean): ItemView[] {
   const ctx = viewContext();
   return repo.listItems(!!q.archives)
     .filter((it) => q.piece === undefined || it.roomId === q.piece)
@@ -199,7 +202,6 @@ export function equipementsRouter(requireAdmin: Guard): Router {
       today: today(),
       rules: rules(),
       canEdit: !child,
-      rooms: repo.listRooms(),
       items: listViews({}, child),
       // Le champ « bien » n'existe que s'il y a plusieurs biens immobiliers, et
       // que Finances est actif : sinon, la question ne se pose pas.
@@ -211,7 +213,7 @@ export function equipementsRouter(requireAdmin: Guard): Router {
     const q = req.query;
     const items = listViews({
       recherche: q['q'] ? String(q['q']).slice(0, 120) : undefined,
-      piece: q['room'] ? id(q['room'], 'room') : undefined,
+      piece: q['room'] ? String(q['room']).slice(0, 80) : undefined,
       garantie: q['garantie'] ? oneOf(q['garantie'], WARRANTY_STATES, 'garantie') : undefined,
       categorie: q['categorie'] ? oneOf(q['categorie'], repo.CATEGORIES, 'categorie') : undefined,
       statut: q['statut'] ? oneOf(q['statut'], repo.STATUSES, 'statut') : undefined,
@@ -359,38 +361,6 @@ export function equipementsRouter(requireAdmin: Guard): Router {
     if (gone.orphan) files.remove(gone.fileId);
     log.info(`Équipements : ${a.kind} « ${a.name} » retirée par ${who(req)}.`);
     res.json({ item: detailView(a.itemId, false) });
-  }));
-
-  // ---- pièces de la maison ----
-  r.get('/rooms', handler((req, res) => { res.json({ rooms: repo.listRooms(req.query['archived'] === '1') }); }));
-
-  r.post('/rooms', adulte, handler((req, res) => {
-    const b = req.body as Record<string, unknown>;
-    const room = repo.createRoom(text(b['name'], 'name', 60, true), b['icon'] ? oneOf(b['icon'], repo.ROOM_ICONS, 'icon') : 'autre');
-    res.status(201).json({ room, rooms: repo.listRooms() });
-  }));
-  r.put('/rooms/:id', adulte, handler((req, res) => {
-    const b = req.body as Record<string, unknown>;
-    const room = repo.editRoom(id(req.params['id'], 'id'), {
-      name: b['name'] !== undefined ? text(b['name'], 'name', 60, true) : undefined,
-      icon: b['icon'] !== undefined ? oneOf(b['icon'], repo.ROOM_ICONS, 'icon') : undefined,
-    });
-    if (!room) { res.status(404).json({ error: 'Pièce introuvable.' }); return; }
-    res.json({ room, rooms: repo.listRooms() });
-  }));
-  r.put('/rooms-order', adulte, handler((req, res) => {
-    const ids = (req.body as Record<string, unknown>)['ids'];
-    if (!Array.isArray(ids)) fail('Ordre invalide : attendu « ids », la liste des pièces dans l’ordre voulu.');
-    res.json({ rooms: repo.reorderRooms((ids as unknown[]).map((v) => id(v, 'ids'))) });
-  }));
-  r.post('/rooms/:id/archive', adulte, handler((req, res) => {
-    const room = repo.archiveRoom(id(req.params['id'], 'id'));
-    log.info(`Équipements : pièce « ${room.name} » archivée par ${who(req)}.`);
-    res.json({ rooms: repo.listRooms() });
-  }));
-  r.post('/rooms/:id/unarchive', adulte, handler((req, res) => {
-    if (!repo.unarchiveRoom(id(req.params['id'], 'id'))) { res.status(404).json({ error: 'Pièce introuvable.' }); return; }
-    res.json({ rooms: repo.listRooms() });
   }));
 
   // ---- sauvegarde / restauration du module (administrateur) ----

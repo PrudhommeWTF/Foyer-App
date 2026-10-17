@@ -51,11 +51,14 @@ c'est ce que l'écran affiche en « Stock au … ».
 
 ### Les pièces (socle Maison)
 
-`rooms: { id, name, position }[]` dans le document, hors de tout module : le
-futur module Équipements y rangera aussi ses appareils. Une pièce supprimée fait
-passer ses gestes « Sans pièce », elle ne les supprime pas. Un téléphone resté
-sur une version antérieure, qui ne connaît pas `rooms`, ne les efface pas en
-enregistrant.
+`rooms: { id, name, position, icon?, archived? }[]` dans le document, hors de
+tout module, partagé avec Équipements (voir `docs/equipements.md`) : une seule
+liste de pièces pour le foyer. Dix pièces de départ naissent avec le foyer
+(Cuisine, Salon, Salle de bain, Chambre 1 et 2, Bureau, Buanderie, Garage, Cave,
+Extérieur). Une pièce supprimée fait passer ses gestes « Sans pièce », elle ne
+les supprime pas ; archivée, elle n'est plus proposée mais ce qui y est rangé y
+reste. Un téléphone resté sur une version antérieure, qui ne connaît pas
+`rooms`, ne les efface pas en enregistrant.
 
 ## « Fait aujourd'hui »
 
@@ -99,20 +102,20 @@ geste choisi est une copie modifiable. Livré dans
 
 Chaque entrée : `id`, `titre`, `howto`, `famille` (regroupe la liste de choix),
 `piece` (suggérée), `rec` (`freq`, `every`, `base`, `grace`), et `article`
-éventuel (`nom`, `unite`, `use`, `seuil`). `pieces` : les pièces proposées au
-premier usage.
+éventuel (`nom`, `unite`, `use`, `seuil`). La pièce suggérée est retrouvée par
+son nom parmi les pièces du foyer (casse et accents ignorés), ou créée avec le
+geste.
 
 ### L'adapter à votre foyer
 
 Créez un fichier **du même nom dans le dossier des données**, avec seulement ce
 qui change. Il est fusionné avec le catalogue livré par identifiant : une
-entrée de même `id` remplace, une nouvelle s'ajoute, `"retire": true` masque,
-et `pieces`, s'il est présent, remplace la liste des pièces. Il est relu dès
+entrée de même `id` remplace, une nouvelle s'ajoute, `"retire": true` masque.
+Il est relu dès
 qu'il change, sans redémarrer, et une mise à jour de Foyer ne l'écrase pas.
 
 ```json
 {
-  "pieces": ["Cuisine", "Salle de bain", "Buanderie", "Atelier", "Jardin"],
   "gestes": [
     { "id": "piscine-ph", "retire": true },
     { "id": "carafe-filtrante", "titre": "Carafe Brita : changer la cartouche", "famille": "Eau", "piece": "Cuisine",

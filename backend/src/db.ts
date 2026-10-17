@@ -157,11 +157,13 @@ files.initFiles(db);
 initShopping(db);
 initTasks(db);
 initPlaces(db);
+migrateHouseholdDocument();
 // Après les fichiers du foyer : les pièces jointes d'équipement sont des lignes
 // de hh_attachments, et le ménage ci-dessous doit les voir avant de balayer.
+// Après le document aussi : la migration 2 d'Équipements y reprend ses pièces,
+// dans le socle `rooms` que la migration 14 du document a posé.
 migrateEquipements(db);
 initEquipementsRepo(db);
-migrateHouseholdDocument();
 
 // Fichiers qu'aucune entité du document ne cite plus (recette supprimée, photo
 // remplacée, formulaire abandonné). Le ménage se fait ici plutôt qu'à chaque

@@ -21,7 +21,8 @@ import { ecoleRouter } from './ecole/routes';
 import { setEcoleDeps, startEcoleScheduler } from './ecole/service';
 import { preserveDevoirsLists } from './ecole/sync';
 import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup';
-import { preserveEntretienList, preserveRooms } from './entretien/list';
+import { preserveEntretienList } from './entretien/list';
+import { preserveRooms } from './rooms';
 import { moduleCounts as entCounts, resetModule as entReset } from './entretien/repo';
 import { entretienRouter } from './entretien/routes';
 import { equipementsRouter } from './equipements/routes';
@@ -335,7 +336,7 @@ api.put('/state', auth, ...tokenGate, requireMember, jsonDoc, (req: AuthedReques
 
   // La liste Entretien et les pièces de la maison, même raison : remises avant
   // le rapprochement des tâches, sans quoi un client qui les omet emporterait
-  // les gestes avec la liste, ou la pièce de chacun. Voir entretien/list.ts.
+  // les gestes avec la liste, ou la pièce de chacun. Voir entretien/list.ts et rooms.ts.
   preserveRooms(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>);
   if (preserveEntretienList(state as unknown as Record<string, unknown>, avant as unknown as Record<string, unknown>)) {
     log.info('Tâches : liste « Entretien » remise en place : elle appartient au module Entretien.');

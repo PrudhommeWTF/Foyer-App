@@ -6,6 +6,7 @@ import { HouseholdState } from './models';
 import { FALLBACK_AISLE_NAME } from './shopping/ops';
 import { householdDefaults, memberDefaults } from './settings/registry';
 import { entretienList } from './entretien/list';
+import { STARTER_ROOMS } from './rooms';
 
 /**
  * Rayons de départ. Leur `position` donne l'ordre de parcours du magasin, que
@@ -70,7 +71,7 @@ function scaffold(): Pick<HouseholdState,
     tasks: [],
     places: [],
     placeItems: [],
-    rooms: [],
+    rooms: STARTER_ROOMS(),
     contacts: [],
     cards: [],
     meals: {},

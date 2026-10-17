@@ -47,13 +47,3 @@ export function preserveEntretienList(incoming: Doc, current: Doc): number {
   }
   return fixed;
 }
-
-/**
- * Les pièces (socle Maison) d'un document reçu. Un client d'une version
- * antérieure, encore en cache sur un téléphone, ne connaît pas `rooms` et
- * l'enverrait absent : on garde alors celles du serveur, plutôt que de les
- * effacer avec le rangement de chaque geste.
- */
-export function preserveRooms(incoming: Doc, current: Doc): void {
-  if (!Array.isArray(incoming['rooms'])) incoming['rooms'] = Array.isArray(current['rooms']) ? current['rooms'] : [];
-}

@@ -225,8 +225,11 @@ export interface MaintenancePatch {
   roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null;
   stock?: (Omit<MaintenanceStock, 'countedAt'> & { countedAt?: string }) | null;
 }
-/** Une pièce de la maison, socle commun (Entretien y range ses gestes). */
-export interface Room { id: string; name: string; position: number; }
+/**
+ * Une pièce de la maison, socle commun partagé par Entretien et Équipements.
+ * Archivée, elle n'est plus proposée, mais ce qui y est rangé le reste.
+ */
+export interface Room { id: string; name: string; position: number; icon?: string; archived?: boolean; }
 /**
  * Une tâche. Elle ne voyage plus dans l'enregistrement du document : chaque
  * geste est une opération ciblée (voir task-ops.ts), ce qui rend impossible
