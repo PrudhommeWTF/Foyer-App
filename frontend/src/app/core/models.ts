@@ -212,18 +212,22 @@ export type Remind = 'at' | '1h' | 'eve' | 'morning';
  * Une réalisation passée d'une série : quand, par qui, et l'échéance qu'elle
  * soldait. `used` : ce qu'un geste d'entretien a pris dans son stock.
  */
-export interface TaskDone { at: string; by: string | null; due: string | null; used?: number; }
+export interface TaskDone { at: string; by: string | null; due: string | null; used?: number; via?: string; }
 /**
  * Le consommable d'un geste d'entretien (cartouche, filtre, piles) : `use` par
  * geste fait, `countedAt` le jour du dernier changement connu de la quantité.
  */
-export interface MaintenanceStock { qty: number; unit: string; use: number; threshold: number; article: string; countedAt: string; }
+export interface MaintenanceStock {
+  qty: number; unit: string; use: number; threshold: number; article: string; countedAt: string;
+  /** Posé par le serveur au passage sous le seuil (une alerte par passage). */
+  alerted?: boolean;
+}
 /** Ce qu'une tâche de la liste Entretien porte en plus. Voir backend tasks/ops.ts. */
-export interface Maintenance { roomId?: string; howto?: string; stock?: MaintenanceStock; pausedUntil?: string; catalogId?: string; }
+export interface Maintenance { roomId?: string; howto?: string; stock?: MaintenanceStock; pausedUntil?: string; catalogId?: string; equipmentId?: number; }
 /** Une modification des champs d'entretien : une clé absente n'est pas touchée, une clé à null est retirée. */
 export interface MaintenancePatch {
-  roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null;
-  stock?: (Omit<MaintenanceStock, 'countedAt'> & { countedAt?: string }) | null;
+  roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null; equipmentId?: number | null;
+  stock?: (Omit<MaintenanceStock, 'countedAt' | 'alerted'> & { countedAt?: string }) | null;
 }
 /** Une pièce de la maison, socle commun (Entretien y range ses gestes). */
 export interface Room { id: string; name: string; position: number; }

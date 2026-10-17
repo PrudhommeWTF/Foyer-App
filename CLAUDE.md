@@ -32,7 +32,7 @@ backend/src/  # server.ts (Express + routes), db.ts (SQLite), models.ts, seed.ts
               # finances/ et employes/ : modules relationnels hors document (schema.ts versionné, repo.ts, routes.ts, backup.ts) ; employes réservé aux adultes
               # ecole/ : module ÉcoleDirecte, tables ed_* ; client/ est le SEUL code qui parle à ÉcoleDirecte (sans dépendance au reste de Foyer) ; service.ts l'appelle et écrit les tables ; routes, écrans, planificateur ne lisent que les tables
               # notify/ : rappels Web Push (reminders.ts pur, push.ts clés + appareils + journal, scheduler.ts, routes.ts)
-              # mcp/ : serveur MCP pour les assistants (tools.ts, ecole-tools.ts) ; un outil `write` n'est offert qu'à un jeton write, un outil `adultes` masqué et refusé à un jeton enfant ; les outils ecole_* filtrent par élève (un enfant ne voit que lui)
+              # mcp/ : serveur MCP pour les assistants (tools.ts, ecole-tools.ts, entretien-tools.ts) ; un outil `write` n'est offert qu'à un jeton write, un outil `adultes` masqué et refusé à un jeton enfant ; les outils ecole_* filtrent par élève (un enfant ne voit que lui)
 deploy/lxc/   # install.sh, proxmox-create.sh, self-update.sh, update.sh, uninstall.sh
 docs/         # maquette de design de référence
 ```

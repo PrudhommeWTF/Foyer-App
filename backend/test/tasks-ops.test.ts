@@ -620,3 +620,20 @@ test('une pièce supprimée : le geste passe « Sans pièce », il ne disparaît
   assert.equal(rep.items[0].maintenance?.stock?.qty, 4, 'le reste de la fiche est intact');
   assert.equal(rep.unlinked, 1);
 });
+
+test('entretien : relever le seuil au-dessus du stock vaut un passage sous le seuil, signalé une fois', () => {
+  const g = brita({ maintenance: { stock: { qty: 2, unit: 'cartouche', use: 1, threshold: 1, article: 'C', countedAt: '2026-10-01' } } });
+  const r1 = applyOps([g], [op({ op: 'edit', id: 'g1', maintenance: { stock: { qty: 2, unit: 'cartouche', use: 1, threshold: 3, article: 'C' } } })], entCtx());
+  assert.deepEqual(r1.stockAlerts, ['g1']);
+  assert.equal(r1.items[0].maintenance?.stock?.alerted, true);
+  const r2 = applyOps(r1.items, [op({ op: 'edit', id: 'g1', maintenance: { howto: 'x' } })], entCtx());
+  assert.deepEqual(r2.stockAlerts, [], 'une retouche qui ne touche pas au stock ne réalerte pas');
+  assert.equal(r2.items[0].maintenance?.stock?.alerted, true, 'et garde l’alerte posée');
+});
+
+test('entretien : l’équipement rattaché est un identifiant entier, retiré par null', () => {
+  const r = applyOps([brita()], [op({ op: 'edit', id: 'g1', maintenance: { equipmentId: 12 } })], entCtx());
+  assert.equal(r.items[0].maintenance?.equipmentId, 12);
+  assert.equal(applyOps(r.items, [op({ op: 'edit', id: 'g1', maintenance: { equipmentId: 'chaudière' } })], entCtx()).skipped.length, 1);
+  assert.equal(applyOps(r.items, [op({ op: 'edit', id: 'g1', maintenance: { equipmentId: null } })], entCtx()).items[0].maintenance?.equipmentId, undefined);
+});

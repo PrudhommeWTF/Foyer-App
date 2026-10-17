@@ -7,9 +7,9 @@ il a été fait et par qui, quand il revient, et ce qu'il reste en stock.
 
 Cadrage et choix : `docs/entretien-etat-des-lieux.md`.
 
-> État : le socle (PR 1) et l'écran Entretien (PR 2) sont livrés. Suivent
-> (PR 3) : « J'en ai racheté » et l'ajout aux courses, la tuile d'accueil, les
-> outils d'assistant.
+> État : livré en trois tranches (socle, écran, puis stock et courses, accueil,
+> équipements et assistant). Restent pour plus tard : gestes saisonniers à
+> fenêtre, coût d'un geste et total annuel avec Finances.
 
 ## L'écran
 
@@ -177,13 +177,62 @@ catalogue (surcharge) : … »), les autres restent. Un fichier qui n'est pas du
 JSON valide est ignoré en entier, avec un message, et le catalogue livré
 s'applique seul : rien ne casse, mais vos ajouts n'apparaissent pas.
 
+## Le stock et les courses
+
+Sur la ligne d'un geste qui consomme quelque chose : **J'en ai racheté**
+(« 6 de plus ») ou **J'ai compté** (« il en reste 4 »), daté, annulable. Le
+stock baisse tout seul à chaque geste fait.
+
+Au seuil ou en dessous, la ligne propose **Ajouter aux courses** : l'article
+part dans la liste principale (la première), sans doublon (un article déjà « à
+prendre » du même nom n'est pas ajouté de nouveau), et dans un vrai rayon :
+celui où le foyer l'a déjà rangé (mémoire des courses), sinon le rayon de type
+« entretien », sinon le repli. Le bouton devient « Dans les courses ».
+
+Avec le réglage `entretienCoursesAuto`, l'article part **seul** au passage sous
+le seuil : une fois par passage (`stock.alerted`, posé par le serveur au
+passage et levé quand le stock remonte au-dessus du seuil), pas à chaque geste
+fait sous le seuil. L'ajout se fait hors de la transaction du geste : s'il
+échoue, le geste reste noté et le journal le dit (« Entretien : ajout aux
+courses impossible… »). Le chemin est le même que l'outil d'assistant
+`courses_ajouter` (`backend/src/shopping/add.ts`).
+
+## L'accueil
+
+Une carte « Entretien » (bandeau sur ordinateur, carrousel sur téléphone)
+n'apparaît que s'il y a quelque chose à dire : « Entretien : 1 en retard, 2
+dans les 14 jours », trois gestes au plus avec **Fait aujourd'hui**, et les
+stocks bas avec **Ajouter aux courses**. Tout à jour : pas de carte, jamais de
+zéro. Les gestes jamais notés n'y comptent pas.
+
+## Avec Équipements
+
+Un geste peut être rattaché à un appareil (`maintenance.equipmentId`), au choix
+dans sa fiche quand le module Équipements est allumé (l'appareil range aussi le
+geste dans sa pièce si aucune n'est choisie). La ligne porte alors le nom de
+l'appareil, qui ouvre sa fiche (notice, numéro de série) ; le segment **Par
+équipement** range les gestes par appareil. La fiche d'un appareil montre ses
+gestes avec leur prochaine date et **Fait aujourd'hui**. Quand un appareil passe
+« remplacé », « donné ou vendu » ou « jeté », Foyer propose d'archiver ses
+gestes en cours (jamais d'office, une annulation pour tous).
+
+## L'assistant
+
+Cinq outils (voir `docs/assistants.md`), ouverts à tout membre, l'écriture à un
+jeton `write`, et retirés quand le module est éteint : `entretien_liste`,
+`entretien_fait`, `entretien_creer`, `entretien_stock`, `entretien_pause`. Ils
+passent par les mêmes opérations que l'écran, donc les mêmes règles (une
+réalisation par jour, date suivante calculée par le serveur, stock). Un geste
+noté par l'assistant garde la trace dans son historique (« via un assistant »).
+
 ## Réglages
 
 | Clé | Portée | Défaut | Effet |
 |---|---|---|---|
 | `modEntretien` | foyer | activé | Module activable. Éteint : écran, tuile et section de réglages disparaissent, liste cachée dans Tâches, rappels des gestes tus, catalogue fermé. Les gestes et leur historique sont conservés. |
 | `entretienRappel` | personnel | activé | Recevoir les rappels des gestes d'entretien, indépendamment des rappels de ses autres tâches. |
-| `entretienHorizonJours` | foyer | 14 (7 à 90) | L'horizon du groupe « Dans les N jours » de l'écran. |
+| `entretienHorizonJours` | foyer | 14 (7 à 90) | L'horizon du groupe « Dans les N jours » de l'écran et de la carte d'accueil. |
+| `entretienCoursesAuto` | foyer | désactivé | L'article d'un geste part seul aux courses au passage sous le seuil, une fois par passage. Désactivé, un bouton le propose. |
 
 Registre complet : `docs/parametres.md`. La remise à zéro du module
 (`POST /api/modules/entretien/reset`, confirmation « SUPPRIMER ») efface les

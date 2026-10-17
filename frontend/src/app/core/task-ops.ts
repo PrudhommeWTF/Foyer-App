@@ -90,10 +90,13 @@ function mergeMaintenance(cur: Maintenance | undefined, patch: MaintenancePatch 
     if (patch[k] === undefined) continue;
     if (patch[k] === null) delete next[k]; else next[k] = patch[k] as string;
   }
+  if (patch.equipmentId === null) delete next.equipmentId; else if (patch.equipmentId !== undefined) next.equipmentId = patch.equipmentId;
   if (patch.stock === null) delete next.stock;
   else if (patch.stock) {
     const { countedAt, ...conf } = patch.stock;
-    next.stock = cur?.stock ? { ...conf, qty: cur.stock.qty, countedAt: cur.stock.countedAt } : { ...conf, countedAt: countedAt || day };
+    next.stock = cur?.stock
+      ? { ...conf, qty: cur.stock.qty, countedAt: cur.stock.countedAt, ...(cur.stock.alerted ? { alerted: true } : {}) }
+      : { ...conf, countedAt: countedAt || day };
   }
   return Object.keys(next).length ? next : undefined;
 }

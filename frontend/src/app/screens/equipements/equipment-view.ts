@@ -10,6 +10,9 @@ import {
 } from '../../core/equipements.api';
 import { WARRANTY_TONE, fmtCents } from '../../core/equipements';
 import { frDate } from '../../core/warranty';
+import { TaskItem } from '../../core/models';
+import { nextLabel } from '../../core/entretien';
+import { lastDoneDay } from '../../core/task-ops';
 
 /**
  * La fiche d'un équipement, en lecture : ce qu'il faut au SAV d'un coup d'œil
@@ -85,6 +88,20 @@ import { frDate } from '../../core/warranty';
       @if (sending()) { <div class="small">Envoi en cours…</div> }
     }
 
+    @if (gestes().length) {
+      <!-- Les gestes d'entretien de l'appareil (module Entretien) : la prochaine fois, et le geste d'un tap. -->
+      <div class="overline">Entretien</div>
+      <ul class="gestes">
+        @for (g of gestes(); track g.id) {
+          <li>
+            <button class="g-name" (click)="foyer.openItem('task', g.id, undefined, true)">{{ g.text }}<span>{{ gesteNext(g) }}</span></button>
+            @if (doneToday(g)) { <span class="g-ok"><f-icon name="check" [size]="12" color="var(--sage)" [width]="3" /> Fait</span> }
+            @else if (!g.done) { <button class="g-fait" (click)="foyer.toggleTask(g.id)">Fait aujourd'hui</button> }
+          </li>
+        }
+      </ul>
+    }
+
     <div class="overline">Historique</div>
     @if (eqp.canEdit()) {
       <div class="evt-form">
@@ -144,11 +161,18 @@ import { frDate } from '../../core/warranty';
     .when { flex: none; width: 82px; font-weight: 800; color: var(--ink3); }
     .what { flex: 1; min-width: 0; overflow-wrap: anywhere; }
     .what b { color: var(--ink); }
+    .gestes { list-style: none; margin: 0 0 6px; padding: 0; }
+    .gestes li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+    .gestes li:first-child { border-top: none; }
+    .g-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; border: none; background: none; padding: 0; text-align: left; font: inherit; font-size: 13.5px; font-weight: 800; color: var(--ink); cursor: pointer; }
+    .g-name span { font-size: 12px; font-weight: 700; color: var(--ink3); }
+    .g-fait { flex: none; border: none; border-radius: 10px; padding: 8px 11px; min-height: 36px; font: inherit; font-size: 12.5px; font-weight: 800; background: var(--sage); color: #fff; cursor: pointer; }
+    .g-ok { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 800; color: var(--sage); }
   `],
 })
 export class EquipmentView {
   readonly eqp = inject(EquipementsStore);
-  private foyer = inject(FoyerStore);
+  readonly foyer = inject(FoyerStore);
   readonly item = input.required<EqpItem>();
   readonly ctx = input<ItemCtx | undefined>(undefined);
   readonly eventKinds = EVENT_KINDS;
@@ -164,6 +188,10 @@ export class EquipmentView {
   readonly cat = computed(() => categoryOf(this.item().category));
   readonly condition = computed(() => CONDITIONS.find((c) => c.id === this.item().condition)?.label ?? '');
   readonly sending = signal(false);
+  /** Ses gestes d'entretien, quand le module Entretien est allumé. */
+  readonly gestes = computed(() => (this.foyer.modEntretien() ? this.foyer.gestesOf(this.item().id) : []));
+  gesteNext(t: TaskItem): string { return t.done ? 'Archivé' : nextLabel(t, this.foyer.todayStr(), frDate) || (t.history?.length ? '' : 'Pas encore noté'); }
+  doneToday(t: TaskItem): boolean { return lastDoneDay(t) === this.foyer.todayStr(); }
 
   readonly evKind = signal<EventKind>('panne');
   readonly evAt = signal(this.foyer.todayStr());

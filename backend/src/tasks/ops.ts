@@ -42,7 +42,7 @@ export const REMINDS: Remind[] = ['at', '1h', 'eve', 'morning'];
  * soldait. `used` : ce qu'un geste d'entretien a pris dans son stock, pour que
  * l'annulation le rende.
  */
-export interface TaskDone { at: string; by: string | null; due: string | null; used?: number; }
+export interface TaskDone { at: string; by: string | null; due: string | null; used?: number; via?: string; }
 
 /**
  * Le consommable d'un geste d'entretien : la cartouche de la carafe, le filtre
@@ -50,7 +50,15 @@ export interface TaskDone { at: string; by: string | null; due: string | null; u
  * test des quatre détecteurs prend quatre piles), `countedAt` le jour du
  * dernier changement connu de la quantité, pour afficher « Stock au … ».
  */
-export interface MaintenanceStock { qty: number; unit: string; use: number; threshold: number; article: string; countedAt: string; }
+export interface MaintenanceStock {
+  qty: number; unit: string; use: number; threshold: number; article: string; countedAt: string;
+  /**
+   * Posé par le serveur au passage sous le seuil, retiré quand le stock remonte
+   * au-dessus : c'est ce qui fait qu'un article ne part aux courses qu'une fois
+   * par passage, pas à chaque geste fait sous le seuil.
+   */
+  alerted?: boolean;
+}
 /**
  * Ce qu'une tâche de la liste Entretien porte en plus (voir docs/entretien.md).
  * Lu seulement par Entretien : pour le reste de l'application, c'est une tâche.
@@ -65,11 +73,13 @@ export interface Maintenance {
   pausedUntil?: string;
   /** Le geste type du catalogue dont celui-ci est une copie. */
   catalogId?: string;
+  /** L'appareil du module Équipements concerné (eqp_items.id). */
+  equipmentId?: number;
 }
 /** Une modification des champs d'entretien : une clé absente n'est pas touchée, une clé à null est retirée. */
 export interface MaintenancePatch {
-  roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null;
-  stock?: (Omit<MaintenanceStock, 'countedAt'> & { countedAt?: string }) | null;
+  roomId?: string | null; howto?: string | null; pausedUntil?: string | null; catalogId?: string | null; equipmentId?: number | null;
+  stock?: (Omit<MaintenanceStock, 'countedAt' | 'alerted'> & { countedAt?: string }) | null;
 }
 
 export interface TaskItem {
@@ -225,6 +235,12 @@ export interface ApplyResult {
    * `lastResetAt` sur la liste (qui vit dans le document, hors des tâches).
    */
   listResets: { listId: string; at: string }[];
+  /**
+   * Gestes d'entretien dont le stock vient de passer sous son seuil dans ce
+   * lot : l'appelant peut en mettre l'article aux courses (réglage
+   * entretienCoursesAuto). Une fois par passage, grâce à `stock.alerted`.
+   */
+  stockAlerts: string[];
 }
 
 export const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -365,6 +381,12 @@ function readMaintenance(v: unknown): { patch: MaintenancePatch | null } | { rea
     p.roomId = /^[\w-]+$/.test(id) ? id : null;
   }
   if (o['howto'] !== undefined) p.howto = trimmed(o['howto'], HOWTO_MAX) || null;
+  if (o['equipmentId'] !== undefined) {
+    const v = o['equipmentId'];
+    if (v === null || v === '') p.equipmentId = null;
+    else if (isInt(v, 1, Number.MAX_SAFE_INTEGER)) p.equipmentId = v;
+    else return { reason: 'Équipement illisible : ' + str(v) };
+  }
   if (o['catalogId'] !== undefined) {
     const id = trimmed(o['catalogId'], 80);
     p.catalogId = /^[a-z0-9-]+$/.test(id) ? id : null;
@@ -412,10 +434,13 @@ function mergeMaintenance(cur: Maintenance | undefined, patch: MaintenancePatch 
     if (patch[k] === undefined) continue;
     if (patch[k] === null) delete next[k]; else next[k] = patch[k] as string;
   }
+  if (patch.equipmentId === null) delete next.equipmentId; else if (patch.equipmentId !== undefined) next.equipmentId = patch.equipmentId;
   if (patch.stock === null) delete next.stock;
   else if (patch.stock) {
     const { countedAt, ...conf } = patch.stock;
-    next.stock = cur?.stock ? { ...conf, qty: cur.stock.qty, countedAt: cur.stock.countedAt } : { ...conf, countedAt: countedAt || day };
+    next.stock = cur?.stock
+      ? { ...conf, qty: cur.stock.qty, countedAt: cur.stock.countedAt, ...(cur.stock.alerted ? { alerted: true } : {}) }
+      : { ...conf, countedAt: countedAt || day };
   }
   return Object.keys(next).length ? next : undefined;
 }
@@ -481,7 +506,7 @@ function readHistory(v: unknown): TaskDone[] {
   if (!Array.isArray(v)) return [];
   return v
     .filter((h): h is Record<string, unknown> => !!h && typeof h === 'object')
-    .map((h): TaskDone => ({ at: trimmed(h['at'], 40), by: trimmed(h['by'], 80) || null, due: ISO_DAY.test(str(h['due'])) ? str(h['due']) : null, ...(isInt(h['used'], 1, STOCK_MAX) ? { used: h['used'] } : {}) }))
+    .map((h): TaskDone => ({ at: trimmed(h['at'], 40), by: trimmed(h['by'], 80) || null, due: ISO_DAY.test(str(h['due'])) ? str(h['due']) : null, ...(isInt(h['used'], 1, STOCK_MAX) ? { used: h['used'] } : {}), ...(trimmed(h['via'], 80) ? { via: trimmed(h['via'], 80) } : {}) }))
     .filter((h) => !!h.at)
     .slice(-HISTORY_MAX);
 }
@@ -513,7 +538,7 @@ function readNext(v: unknown): { next: string | null } | { reason: string } {
  * Rend la tâche après coup, `task: null` quand le geste est sans objet, ou la
  * raison d'un refus.
  */
-function maintain(t: TaskItem, occ: string, at: string, by: string | null): { task: TaskItem | null } | { reason: string } {
+function maintain(t: TaskItem, occ: string, at: string, by: string | null, via: string | null): { task: TaskItem | null } | { reason: string } {
   // Un autre appareil a déjà soldé cette occurrence : sans objet.
   if (occ !== (t.due || '')) return { task: null };
   const day = parisDay(at);
@@ -524,7 +549,8 @@ function maintain(t: TaskItem, occ: string, at: string, by: string | null): { ta
   const next = nextOccurrence(t.rec!, t.due || day, day);
   const st = t.maintenance?.stock;
   const used = st ? Math.min(st.use, st.qty) : 0;
-  const history = [...(t.history || []), { at, by, due: t.due, ...(used ? { used } : {}) }].slice(-HISTORY_MAX);
+  // `via` : noté par un assistant (« Claude iPhone »), pour que l'historique le dise.
+  const history = [...(t.history || []), { at, by, due: t.due, ...(used ? { used } : {}), ...(via ? { via } : {}) }].slice(-HISTORY_MAX);
   // Fait pendant une pause : la pause est finie, le geste a eu lieu.
   const { pausedUntil: _p, ...rest } = t.maintenance || {};
   void _p;
@@ -547,7 +573,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
   const listResets: { listId: string; at: string }[] = [];
   const seen = new Set<string>();
 
-  if (!Array.isArray(ops)) return { items: out, applied, skipped: [{ opId: '', reason: 'Lot d’opérations illisible.' }], listResets };
+  if (!Array.isArray(ops)) return { items: out, applied, skipped: [{ opId: '', reason: 'Lot d’opérations illisible.' }], listResets, stockAlerts: [] };
 
   for (const raw of ops) {
     const o = (raw ?? {}) as Record<string, unknown>;
@@ -651,7 +677,7 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
         if (idx < 0) { applied.push(opId); break; }
         const t = out[idx];
         if (t.rec && !t.done && isEntretien(t.listId, ctx)) {
-          const r = maintain(t, trimmed(o['occ'], 40), at, by);
+          const r = maintain(t, trimmed(o['occ'], 40), at, by, trimmed(o['via'], 80) || null);
           if ('reason' in r) skipped.push({ opId, reason: r.reason });
           else { if (r.task) out[idx] = r.task; applied.push(opId); }
           break;
@@ -750,7 +776,22 @@ export function applyOps(items: TaskItem[], ops: unknown, ctx: OpsContext): Appl
     }
   }
 
-  return { items: out, applied, skipped, listResets };
+  // Le passage sous le seuil se constate après le lot, sur les seuls stocks qui
+  // ont bougé (quantité ou seuil) : un stock déjà bas qu'aucune opération ne
+  // touche ne déclenche rien. Remonté au-dessus, il pourra alerter de nouveau.
+  const stockAlerts: string[] = [];
+  const before = new Map(items.map((t) => [t.id, t.maintenance?.stock]));
+  for (let i = 0; i < out.length; i++) {
+    const t = out[i];
+    const st = t.maintenance?.stock;
+    if (!st || !isEntretien(t.listId, ctx)) continue;
+    const b = before.get(t.id);
+    if (b && b.qty === st.qty && b.threshold === st.threshold) continue;
+    const low = st.qty <= st.threshold;
+    if (low && !st.alerted) { out[i] = { ...t, maintenance: { ...t.maintenance, stock: { ...st, alerted: true } } }; stockAlerts.push(t.id); }
+    else if (!low && st.alerted) { const { alerted: _a, ...rest } = st; void _a; out[i] = { ...t, maintenance: { ...t.maintenance, stock: rest } }; }
+  }
+  return { items: out, applied, skipped, listResets, stockAlerts };
 }
 
 export interface ReconcileReport {

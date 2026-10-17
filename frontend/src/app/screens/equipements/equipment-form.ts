@@ -167,6 +167,11 @@ export class EquipmentForm implements ItemForm, OnInit {
       if (by) delete patch.status;
       if (Object.keys(patch).length) await this.eqp.update(it.id, patch);
       if (by) await this.eqp.replace(it.id, by);
+      // Plus en service : ses gestes d'entretien n'ont plus d'objet, on propose de les archiver.
+      const gone = by ? 'remplace' : v.status;
+      if (gone !== this.initial.status && (gone === 'remplace' || gone === 'jete' || gone === 'donne_vendu') && this.foyer.modEntretien()) {
+        this.foyer.proposeArchiveGestesOf(it.id, v.name.trim());
+      }
       return { kind: 'done' };
     } catch (e) {
       this.foyer.toast((e as Error).message || 'L’enregistrement a échoué.');

@@ -62,6 +62,20 @@ présente jamais des devoirs d'avant-hier comme ceux de demain. Les identifiants
 ÉcoleDirecte, le réglage des comptes et la question de sécurité ne sont pas
 accessibles par l'assistant.
 
+Un dixième domaine, **Entretien de la maison** (cartouche de la carafe,
+détecteurs de fumée, chaudière), est ouvert à tout membre et disparaît avec son
+module. Ses outils passent par les mêmes opérations que l'écran : une seule
+réalisation par jour, prochaine date calculée par le serveur à partir du jour
+du geste, stock repris d'un coup, et l'historique garde « via un assistant ».
+
+| Outil | Ce qu'il fait |
+|---|---|
+| `entretien_liste` | Les gestes d'entretien de la maison d'ici 7 jours (défaut, retards compris), en retard, ou tous, filtrables par pièce ou appareil : `[id]`, fréquence, dernière fois et par qui, prochaine date, stock |
+| `entretien_fait` (écriture) | Note un geste fait aujourd'hui (ou à une date), par le membre du jeton, un autre membre ou « le foyer ». Une seule réalisation par jour ; la prochaine date part du jour du geste ; le stock baisse |
+| `entretien_creer` (écriture) | Crée un geste : intitulé, fréquence en français (« tous les 6 mois »), pièce (créée au besoin), appareil, consommable. Il reste « pas encore noté » jusqu'à la première fois |
+| `entretien_stock` (écriture) | « J'en ai racheté 6 » (ajout) ou « il en reste 4 » (comptage), daté |
+| `entretien_pause` (écriture) | Met un geste en pause jusqu'à une date (hivernage) ; il revient seul |
+
 Écriture (jeton `write` seulement), par domaine :
 
 - **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise). Ces outils visent toujours la série entière ; les occurrences qu'une série saute (modifiées ou supprimées seules dans l'app) n'apparaissent pas dans `agenda`.
@@ -205,6 +219,10 @@ un assistant ».
 - « À quelle heure Nolan sort jeudi ? »
 - « Quelles sont les dernières notes de Léo en maths ? »
 - « J'ai fini mes exercices de maths, coche-les. » (jeton de l'enfant)
+- « J'ai testé l'alarme ce matin. » (module Entretien : noté par vous, via l'assistant)
+- « Qu'est-ce qu'il y a à faire dans la maison cette semaine ? »
+- « J'ai racheté 6 cartouches Brita. »
+- « Mets le pH de la piscine en pause jusqu'au 15 avril. »
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
 réglage, terminer une tâche récurrente, ou supprimer quelque chose. Le suivi de

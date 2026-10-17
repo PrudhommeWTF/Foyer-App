@@ -3,7 +3,7 @@ import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayl
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf, lastDoneDay } from './task-ops';
-import { ENTRETIEN_LIST_ID, GesteDraft, createOp, editOps, middayOf } from './entretien';
+import { ENTRETIEN_LIST_ID, GesteDraft, createOp, editOps, middayOf, plural } from './entretien';
 import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { downloadBlob } from './download';
@@ -1879,6 +1879,42 @@ export class FoyerStore {
     this.taskOpWithUndo({ op: 'edit', id, due: until || today, maintenance: { pausedUntil: until } },
       until ? 'En pause jusqu’au ' + this.fmtNumDate(until) : 'Geste repris');
   }
+  /** « J'en ai racheté 6 » (ajout) ou « il en reste 4 » (comptage), daté. Annulable : la quantité et la date d'avant reviennent. */
+  restockGeste(id: string, qty: number, mode: 'ajout' | 'compte', on: string): void {
+    const t = this.task(id); const st = t?.maintenance?.stock; if (!st) return;
+    const op: TaskOpDraft = mode === 'ajout' ? { op: 'stock', id, add: qty, on } : { op: 'stock', id, set: qty, on };
+    const after = mode === 'ajout' ? Math.max(0, st.qty + qty) : qty;
+    this.taskOpWithUndo(op, `Stock : ${after}${st.unit ? ' ' + plural(st.unit, after) : ''}`);
+  }
+  /** Le consommable d'un geste vers la liste de courses principale, sans doublon, rangé au bon rayon (côté serveur). */
+  async gesteToShopping(id: string): Promise<void> {
+    try {
+      const r = await this.api.post<{ kind: 'ajoute' | 'deja'; article: string; liste: string }>('entretien/gestes/' + encodeURIComponent(id) + '/courses');
+      this.toast(r.kind === 'ajoute' ? `« ${r.article} » ajouté à « ${r.liste} »` : `« ${r.article} » est déjà dans « ${r.liste} »`);
+      void this.pollLive();
+    } catch (e) { this.toast((e as Error).message); }
+  }
+  /** Un article est-il déjà « à prendre » dans la liste principale ? (casse et accents ignorés.) */
+  onShoppingList(name: string): boolean {
+    const d = this._data(); const list = d?.shopLists[0]; if (!d || !list) return false;
+    return d.shop.some((i) => i.listId === list.id && i.state === 'a-prendre' && normText(i.name) === normText(name));
+  }
+  /**
+   * Un appareil remplacé, donné ou jeté : ses gestes d'entretien en cours n'ont
+   * plus d'objet. On le propose (jamais d'office), une seule annulation pour tous.
+   */
+  proposeArchiveGestesOf(equipmentId: number, name: string): void {
+    const g = this.gestesOf(equipmentId).filter((t) => !t.done);
+    if (!g.length) return;
+    this.toastAction(`« ${name} » n’est plus en service. Archiver ${g.length > 1 ? 'ses ' + g.length + ' gestes' : 'son geste'} d’entretien ?`, 'Archiver', () => {
+      const back = g.map((t): TaskOpDraft[] => [{ op: 'reopen', id: t.id }, { op: 'edit', id: t.id, due: t.due }]).flat();
+      this.pushTaskOps(g.map((t): TaskOpDraft => ({ op: 'skip', id: t.id, occ: t.due || '', next: null })));
+      this.toastWithUndo(g.length > 1 ? g.length + ' gestes archivés' : 'Geste archivé', () => this.pushTaskOps(back));
+    });
+  }
+  /** Les gestes rattachés à un appareil du module Équipements. */
+  gestesOf(equipmentId: number): TaskItem[] { return this.gestes().filter((t) => t.maintenance?.equipmentId === equipmentId); }
+
   /** Archiver : la série s'arrête sans réalisation, son historique reste. Réactiver : elle repart d'aujourd'hui. */
   archiveGeste(id: string, archive: boolean): void {
     const t = this.task(id); if (!t) return;

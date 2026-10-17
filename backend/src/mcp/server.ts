@@ -23,6 +23,7 @@ import { log } from '../log';
 import { effectiveSetting } from '../settings/repo';
 import * as t from './tools';
 import * as ed from './ecole-tools';
+import * as en from './entretien-tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
 type Args = Record<string, unknown>;
@@ -484,6 +485,48 @@ const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { mois: S.string(7) }, required: ['mois'] },
     run: (ctx, a) => t.menageMoisSansPresence(ctx, str(a.mois) || ''),
   },
+  // ---- Entretien de la maison : des tâches de la liste Entretien, mêmes opérations que l'écran ----
+  {
+    name: 'entretien_liste',
+    description: 'Les gestes d’entretien de la maison (cartouche de la carafe, détecteurs de fumée, chaudière…), avec leur [id], la pièce, la fréquence, la dernière fois et par qui, la prochaine date (en retard ou non) et le stock. `quand` : semaine (défaut : d’ici 7 jours, retards compris), retard, ou tous. Filtres : `piece`, `equipement` (noms). Un geste jamais noté n’a pas de date et n’est jamais en retard.',
+    inputSchema: { type: 'object', properties: { quand: { type: 'string', enum: ['semaine', 'retard', 'tous'] }, piece: S.string(60), equipement: S.string(120) } },
+    run: (ctx, a) => en.entretienListe(ctx, { quand: str(a.quand), piece: str(a.piece), equipement: str(a.equipement) }),
+  },
+  {
+    name: 'entretien_fait',
+    write: true,
+    description: 'Note un geste d’entretien fait (« j’ai testé l’alarme ce matin »). `id` : [id] ou intitulé du geste. `date` AAAA-MM-JJ (défaut aujourd’hui). `par` : prénom d’un membre, ou « le foyer » (défaut : le membre du jeton). La prochaine date part du jour du geste ; le stock éventuel baisse ; une seule réalisation par jour.',
+    inputSchema: { type: 'object', properties: { id: S.string(300), date: S.date, par: S.string(80) }, required: ['id'] },
+    run: (ctx, a) => en.entretienFait(ctx, { id: str(a.id) || '', date: str(a.date), par: str(a.par) }),
+  },
+  {
+    name: 'entretien_creer',
+    write: true,
+    description: 'Crée un geste d’entretien qui revient à partir du jour où il est fait. `frequence` en français : « toutes les 4 semaines », « tous les 6 mois », « 1 fois par an », « tous les 5 ans ». `piece` : nom (créée si elle n’existe pas). `equipement` : nom d’un appareil du module Équipements. `stock` : { article, qte, unite, seuil } pour un consommable. Le geste reste « pas encore noté » jusqu’à entretien_fait.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        titre: S.string(300), frequence: S.string(60), piece: S.string(60), equipement: S.string(120),
+        stock: { type: 'object', properties: { article: S.string(120), qte: { type: 'integer', minimum: 0 }, unite: S.string(30), seuil: { type: 'integer', minimum: 0 } } },
+      },
+      required: ['titre', 'frequence'],
+    },
+    run: (ctx, a) => en.entretienCreer(ctx, { titre: str(a.titre) || '', frequence: str(a.frequence) || '', piece: str(a.piece), equipement: str(a.equipement), stock: (a.stock && typeof a.stock === 'object' ? a.stock : undefined) as never }),
+  },
+  {
+    name: 'entretien_stock',
+    write: true,
+    description: 'Corrige le stock d’un geste : `mode` « ajout » (défaut, « j’en ai racheté 6 » : qte 6) ou « compte » (« il en reste 4 » : qte 4). `date` du comptage, AAAA-MM-JJ (défaut aujourd’hui).',
+    inputSchema: { type: 'object', properties: { id: S.string(300), qte: { type: 'integer' }, mode: { type: 'string', enum: ['ajout', 'compte'] }, date: S.date }, required: ['id', 'qte'] },
+    run: (ctx, a) => en.entretienStock(ctx, { id: str(a.id) || '', qte: num(a.qte) as number, mode: str(a.mode), date: str(a.date) }),
+  },
+  {
+    name: 'entretien_pause',
+    write: true,
+    description: 'Met un geste en pause jusqu’à une date (hivernage de la piscine) : il disparaît des échéances et revient seul ce jour-là. `jusqu_au` AAAA-MM-JJ.',
+    inputSchema: { type: 'object', properties: { id: S.string(300), jusqu_au: S.date }, required: ['id', 'jusqu_au'] },
+    run: (ctx, a) => en.entretienPause(ctx, { id: str(a.id) || '', jusqu_au: str(a.jusqu_au) || '' }),
+  },
   // ---- École (ÉcoleDirecte) : un enfant ne voit que lui, filtre fait dans chaque outil ----
   {
     name: 'ecole_devoirs',
@@ -533,11 +576,13 @@ function buildServer(ctx: t.McpCtx): Server {
   // Un module désactivé retire ses outils, comme un jeton enfant retire les
   // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
   // menage_* de « Employé à domicile », ecole_* de « École » (éteint par
-  // défaut). Les autres domaines n'ont pas d'outils.
+  // défaut), entretien_* d'« Entretien de la maison ». Les autres domaines
+  // n'ont pas d'outils.
   const toolModuleOff = (name: string): boolean =>
     (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
     || (effectiveSetting('modEmploye') === false && name.startsWith('menage'))
-    || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'));
+    || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'))
+    || (effectiveSetting('modEntretien') === false && name.startsWith('entretien'));
   const visible = (): ToolDef[] => TOOLS.filter((tool) =>
     (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 

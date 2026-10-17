@@ -8,6 +8,7 @@ import { CatalogueEntry, GesteDraft, catalogueByFamily, draftFromCatalogue, draf
 import { REMIND_LABELS } from '../../core/tasks';
 import { normText } from '../../core/helpers';
 import { Remind } from '../../core/models';
+import { EquipementsStore } from '../../core/equipements.store';
 
 /**
  * Créer ou modifier un geste d'entretien. À la création, on choisit d'abord
@@ -75,6 +76,14 @@ import { Remind } from '../../core/models';
         </div>
         <input class="input" [class.mb]="!roomNew().trim()" placeholder="Ou une nouvelle pièce : Garage, Jardin…" aria-label="Nouvelle pièce" [ngModel]="roomNew()" (ngModelChange)="roomNew.set($event); set({ roomId: null })" />
         @if (roomNew().trim()) { <div class="hint">La pièce « {{ roomNew().trim() }} » sera créée avec le geste.</div> }
+
+        @if (store.modEquipements() && eqp.items().length) {
+          <div class="field-label">Équipement <span class="opt">(facultatif)</span></div>
+          <select class="input mb" [ngModel]="v.equipmentId ?? ''" (ngModelChange)="choisirEqp($event)" aria-label="Équipement">
+            <option value="">Aucun</option>
+            @for (e of eqp.items(); track e.id) { <option [value]="e.id">{{ e.name }}{{ e.roomName ? ' (' + e.roomName + ')' : '' }}</option> }
+          </select>
+        }
 
         <div class="field-label">Détail <span class="opt">(facultatif)</span></div>
         <textarea class="input mb" rows="2" placeholder="Ce qu'il faut savoir pour le faire" [ngModel]="v.howto" (ngModelChange)="set({ howto: $event })"></textarea>
@@ -163,6 +172,7 @@ import { Remind } from '../../core/models';
 export class GesteForm implements OnInit {
   readonly store = inject(FoyerStore);
   readonly api = inject(EntretienApi);
+  readonly eqp = inject(EquipementsStore);
   /** Le geste à modifier ; null pour en créer un. */
   readonly id = input<string | null>(null);
   readonly close = output<void>();
@@ -205,6 +215,12 @@ export class GesteForm implements OnInit {
   set(p: Partial<GesteDraft>): void { this.f.update((f) => ({ ...f, ...p })); }
   setStock(p: Partial<NonNullable<GesteDraft['stock']>>): void { this.f.update((f) => (f.stock ? { ...f, stock: { ...f.stock, ...p } } : f)); }
   toggleStock(on: boolean): void { this.set({ stock: on ? { qty: 0, unit: '', use: 1, threshold: 1, article: '' } : null }); }
+  /** Un appareil choisi range aussi le geste dans sa pièce, quand aucune n'est encore choisie. */
+  choisirEqp(v: string): void {
+    const id = v ? +v : null;
+    const room = id ? this.eqp.find(id)?.roomId ?? null : null;
+    this.set({ equipmentId: id, ...(room && !this.f().roomId && !this.roomNew().trim() ? { roomId: room } : {}) });
+  }
   toggleWho(id: string): void { const w = this.f().who; this.set({ who: w.includes(id) ? w.filter((x) => x !== id) : [...w, id] }); }
 
   valider(): void {

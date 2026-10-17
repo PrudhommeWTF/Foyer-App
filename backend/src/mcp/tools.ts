@@ -11,6 +11,7 @@
 import { getHousehold, db, saveHousehold } from '../db';
 import { HouseholdState, EventItem, Recipe, SchedSlot, MealValue, MealItem, ShopList, TaskList, ListKind, Place, Aisle } from '../models';
 import { applyShoppingOps, preserveShopping } from '../shopping/repo';
+import { AddLine, addShopItems } from '../shopping/add';
 import { applyTaskOps, preserveTasks } from '../tasks/repo';
 import { applyPlaceOps } from '../places/repo';
 import { TaskItem } from '../tasks/ops';
@@ -420,29 +421,28 @@ export function coursesAjouter(ctx: McpCtx, articles: { nom: string; qte?: strin
   const s = state();
   const list = resolveShopList(s, listName);
   if (!list) return listName ? `Liste « ${listName} » inconnue.` : 'Aucune liste de courses où ajouter.';
-  const existing = new Set((s.shop || []).filter((i) => i.listId === list.id && i.state === 'a-prendre').map((i) => norm(i.name)));
-  const at = new Date().toISOString();
-  const ops: unknown[] = [];
-  const ajoutes: string[] = [];
-  const deja: string[] = [];
   // Échecs de rayon regroupés par texte saisi : un article mal rangé ne se perd
   // pas, mais la réponse nomme chaque rayon non reconnu et les articles touchés.
   const rayonFails = new Map<string, { fail: RayonFail; noms: string[] }>();
+  const lines: AddLine[] = [];
+  const qte = new Map<string, string>();
   for (const a of articles) {
     const nom = (a.nom || '').trim();
     if (!nom) continue;
-    if (existing.has(norm(nom))) { deja.push(nom); continue; }
-    existing.add(norm(nom));
     const { aisle, fail } = resolveRayon(s, a.rayon);
     if (!aisle) return 'Aucun rayon disponible pour ranger l’article.';
     if (fail) {
       const key = (a.rayon || '').trim();
       (rayonFails.get(key) ?? rayonFails.set(key, { fail, noms: [] }).get(key)!).noms.push(nom);
     }
-    ops.push({ op: 'add', opId: genId('op'), id: genId('it'), name: nom, qty: (a.qte || '').trim(), aisleId: aisle.id, listId: list.id, by: ctx.memberId, via: ctx.via, at });
-    ajoutes.push(nom + (a.qte ? ' (' + a.qte + ')' : ''));
+    lines.push({ name: nom, qty: a.qte, aisleId: aisle.id });
+    if (a.qte) qte.set(nom, a.qte);
   }
-  if (ops.length) applyShoppingOps(ops);
+  // Sans doublon, par le même chemin que l'entretien (shopping/add.ts).
+  const { added, already: deja } = addShopItems(s, list, lines, { by: ctx.memberId, via: ctx.via });
+  const ajoutes = added.map((nom) => nom + (qte.get(nom) ? ' (' + qte.get(nom) + ')' : ''));
+  // Un article déjà présent n'a pas été rangé : son rayon non reconnu n'est pas à signaler.
+  for (const [k, v] of rayonFails) { v.noms = v.noms.filter((n) => added.includes(n)); if (!v.noms.length) rayonFails.delete(k); }
   const parts: string[] = [];
   parts.push(ajoutes.length ? `Ajouté à « ${list.name} » : ${ajoutes.join(', ')}.` : 'Rien ajouté.');
   if (deja.length) parts.push(`Déjà présent (non ajouté) : ${deja.join(', ')}.`);
