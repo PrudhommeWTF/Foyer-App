@@ -42,6 +42,8 @@ export interface Category {
   color: string;
   icon: string;
   position: number;
+  /** Charge fixe (loyer, prêt, assurance) : payée, pas pilotée, donc hors enveloppes. */
+  fixed: boolean;
 }
 
 export interface Transaction {
@@ -91,6 +93,23 @@ export interface MonthSummary {
   /** Active accounts whose data does not reach the end of this month. */
   missing: { accountId: number; name: string; coveredThrough: string | null }[];
   incomplete: boolean;
+}
+
+/**
+ * Le fil des dépenses d'un mois, jour par jour, pour le rythme des enveloppes.
+ * Catégories ramenées à leur racine, sauf une sous-catégorie fixe qui garde la
+ * sienne : une charge fixe ne doit pas peser dans l'enveloppe de sa parente.
+ */
+export interface MonthFlow {
+  month: string;
+  days: number;
+  /** Jour de référence : aujourd'hui pour le mois en cours, sinon le dernier. */
+  day: number;
+  daily: { day: number; categoryId: number | null; spent: number }[];
+  /** Les trois mois précédents, arrêtés au même jour. */
+  previous: { month: string; categoryId: number | null; spentToDay: number }[];
+  /** Ce que les contrats ont débité ce mois : une charge fixe payée. */
+  contracts: { contractId: number; amount: number; date: string }[];
 }
 
 export const ACCOUNT_KINDS: AccountKind[] = ['courant', 'pro', 'epargne', 'credit'];

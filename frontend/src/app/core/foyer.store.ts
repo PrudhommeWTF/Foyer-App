@@ -3246,6 +3246,8 @@ export class FoyerStore {
   markAllRead(): void { this.saveRead(this.notifications().map((n) => n.id)); }
   openNotif(id: string, screen?: string): void {
     this.saveRead([id]);
+    const target = this.notifications().find((n) => n.id === id)?.open;
+    if (target) { this.patch({ notifOpen: false }); target(); return; }
     // « ev-<événement>-<jour> », « task-<tâche>-<échéance> » : l'élément a sa fiche, ouverte sur place.
     const el = /^(ev|task)-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(id);
     if (el) {

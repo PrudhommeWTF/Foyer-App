@@ -4,6 +4,7 @@ import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store'
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
+import { CheckComponent } from '../../shared/check';
 import { ConfirmComponent } from '../../shared/confirm';
 import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
 
@@ -11,7 +12,7 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
   selector: 'fin-categories-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, CheckComponent],
   template: `
     <div class="bar">
       <div class="hint">Le budget mensuel de référence sert de repère : il ne bloque rien, il situe le réel. Les dépenses d'une sous-catégorie remontent sur sa parente.</div>
@@ -27,7 +28,7 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
               <div class="chip" [style.background]="foyer.tint(c.color)"><f-icon [path]="CAT_ICONS[c.icon] || CAT_ICONS['facture']" [size]="18" [color]="c.color" [width]="2" /></div>
               <div>
                 <div class="name">{{ c.name }}</div>
-                <div class="budget">{{ c.monthlyBudget > 0 ? fmtInt(c.monthlyBudget) + ' € par mois' : 'sans budget de référence' }}</div>
+                <div class="budget">{{ c.fixed ? 'charge fixe · ' : '' }}{{ c.monthlyBudget > 0 ? fmtInt(c.monthlyBudget) + ' € par mois' : 'sans budget de référence' }}</div>
               </div>
             </div>
             <div class="acts">
@@ -75,6 +76,10 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
             <input class="input" [ngModel]="store.ui().catBudget" (ngModelChange)="store.patch({ catBudget: $event })" placeholder="300" inputmode="decimal" />
           </div>
         </div>
+        <label class="check" (click)="store.patch({ catFixed: !store.ui().catFixed })">
+          <f-check [checked]="store.ui().catFixed" />
+          <span>Charge fixe (loyer, prêt, assurance, abonnement) : suivie dans « Charges fixes » d'après ses contrats, hors enveloppes</span>
+        </label>
         <div class="field-label">Couleur</div>
         <div class="swatch-row">
           @for (col of CAT_PALETTE; track col) {
@@ -115,6 +120,7 @@ import { CAT_ICONS, CAT_PALETTE } from '../../core/constants';
     .idz { display: flex; align-items: center; gap: 11px; min-width: 0; }
     .chip { width: 34px; height: 34px; flex: none; border-radius: 11px; display: flex; align-items: center; justify-content: center; }
     .name { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .check { display: flex; align-items: flex-start; gap: 10px; margin-top: 16px; font-size: 13px; font-weight: 700; color: var(--ink2); cursor: pointer; }
     .budget { font-size: 12px; font-weight: 700; color: var(--ink3); margin-top: 1px; }
     .acts { display: flex; gap: 5px; flex: none; }
 
