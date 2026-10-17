@@ -3,7 +3,7 @@ import { FinDeadline } from '../../core/finances.api';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import {
-  Envelope, daysLeft, envelopes, fixedCharges, paceSeries, paceStatus, proposeBudgets, remainingToFinish,
+  daysLeft, fixedCharges, paceSeries, paceStatus, proposeBudgets, remainingToFinish,
 } from '../../core/finances-plan';
 import { CAT_ICONS, tint } from '../../core/constants';
 import { IconComponent } from '../../core/icon';
@@ -82,7 +82,8 @@ type Watch =
         @if (envs().length) {
           <div class="envs" (scroll)="onScroll($event)">
             @for (e of envs(); track e.categoryId) {
-              <fin-envelope [env]="e" [pace]="paceFraction()" [current]="current()" />
+              <fin-envelope [env]="e" [pace]="paceFraction()" [current]="current()"
+                            (click)="store.openEnvelope(e.categoryId)" (keydown.enter)="store.openEnvelope(e.categoryId)" (keydown.space)="$event.preventDefault(); store.openEnvelope(e.categoryId)" />
             }
           </div>
           @if (foyer.narrow() && envs().length > 1) {
@@ -328,7 +329,7 @@ export class FinancesApercu {
   readonly monthShort = computed(() => shortMonth(this.store.ui().month));
   readonly monthWord = computed(() => this.store.monthLabel().split(' ')[0]);
 
-  readonly envs = computed<Envelope[]>(() => { const f = this.flow(); return f ? envelopes(this.store.categories(), f) : []; });
+  readonly envs = this.store.envelopes;
   readonly envBudget = computed(() => this.envs().reduce((a, e) => a + e.budget, 0));
   readonly envLeft = computed(() => this.envs().reduce((a, e) => a + Math.max(0, e.left), 0));
   readonly paceFraction = computed(() => { const f = this.flow(); return f ? f.day / f.days : 0; });

@@ -7,7 +7,7 @@ import type { Database } from 'better-sqlite3';
 import { MonthSummary } from './types';
 import { monthRange, shiftMonth } from './money';
 import { gapsOver } from './import-repo';
-import { listCategories, monthSummary } from './repo';
+import { listCategories, monthSummary, movesNet } from './repo';
 
 let database: Database;
 export function initDashboard(db: Database): void { database = db; }
@@ -114,10 +114,12 @@ function yearCategories(from: string, to: string, months: number): YearCategory[
     GROUP BY COALESCE(c.parent_id, c.id)
   `).all(from, to) as { catId: number; spent: number }[];
   const spentBy = new Map(spentRows.map((r) => [r.catId, r.spent]));
+  // Les transferts entre enveloppes déplacent du budget : le cumul en tient compte.
+  const net = movesNet(from.slice(0, 7), to.slice(0, 7));
 
   const out: YearCategory[] = listCategories().filter((c) => c.parentId === null).map((c) => ({
     categoryId: c.id, name: c.name, color: c.color, icon: c.icon,
-    spent: spentBy.get(c.id) || 0, budget: c.monthlyBudget * months,
+    spent: spentBy.get(c.id) || 0, budget: c.monthlyBudget * months + (net.get(c.id) ?? 0),
   }));
 
   const uncategorised = (database.prepare(`

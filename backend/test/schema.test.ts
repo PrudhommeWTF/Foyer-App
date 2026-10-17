@@ -36,6 +36,7 @@ describe('migrations du module Finances', () => {
       db.exec(`ALTER TABLE fin_accounts DROP COLUMN ${c}`);
     }
     db.exec('ALTER TABLE fin_categories DROP COLUMN fixed');
+    db.exec('DROP TABLE fin_budget_moves');
     db.exec("ALTER TABLE fin_accounts ADD COLUMN member_id TEXT");
     db.exec("ALTER TABLE fin_contracts ADD COLUMN member_id TEXT");
     db.prepare("INSERT INTO fin_accounts (name, kind, member_id, position) VALUES ('Compte', 'courant', 'm1', 0)").run();

@@ -6,7 +6,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { FinCategory, FinContract, FinFlow, FinMonthSummary } from './finances.api';
-import { compareToAverage, envelopes, fixedCharges, paceSeries, paceStatus, proposeBudgets, remainingToFinish } from './finances-plan';
+import { afterSpend, compareToAverage, envelopes, fixedCharges, monthBudget, paceSeries, paceStatus, proposeBudgets, remainingToFinish } from './finances-plan';
 
 const cat = (id: number, over: Partial<FinCategory> = {}): FinCategory =>
   ({ id, parentId: null, name: 'C' + id, monthlyBudget: 0, color: '#000', icon: 'facture', position: id, fixed: false, ...over });
@@ -15,7 +15,7 @@ const contract = (id: number, over: Partial<FinContract> = {}): FinContract => (
   memberIds: [], amountMin: null, amountMax: null, periodicity: 'mensuelle', renewalOn: null, noticeDays: 0,
   endsOn: null, status: 'actif', notes: '', refs: [], ...over,
 });
-const flow = (over: Partial<FinFlow> = {}): FinFlow => ({ month: '2026-10', days: 31, day: 17, daily: [], previous: [], contracts: [], ...over });
+const flow = (over: Partial<FinFlow> = {}): FinFlow => ({ month: '2026-10', days: 31, day: 17, daily: [], previous: [], contracts: [], moves: [], ...over });
 const cost = (contractId: number, lastDate: string, lastAmount: number) => ({ contractId, count: 1, total: lastAmount, lastDate, lastAmount, offRange: false });
 
 const FIXED = [cat(1, { fixed: true }), cat(2)];
@@ -115,4 +115,23 @@ test('comparaison à la moyenne : au même jour, sur les seuls mois qui ont des 
     ],
   });
   assert.deepEqual(compareToAverage(f), [{ categoryId: 1, spent: 53100, average: 47000 }, { categoryId: 2, spent: 0, average: 2000 }]);
+});
+
+test('transferts : le budget du mois bouge, et l’enveloppe renflouée n’est plus dépassée', () => {
+  const move = (id: number, from: number, to: number, amount: number) => ({ id, month: '2026-10', fromCategoryId: from, toCategoryId: to, amount, createdAt: '' });
+  const moves = [move(1, 1, 2, 5000), move(2, 3, 2, 1000)];
+  assert.equal(monthBudget({ id: 2, monthlyBudget: 20000 }, moves), 26000);
+  assert.equal(monthBudget({ id: 1, monthlyBudget: 90000 }, moves), 85000);
+  const cats = [cat(1, { monthlyBudget: 90000 }), cat(2, { monthlyBudget: 20000 })];
+  const f = flow({ daily: [{ day: 13, categoryId: 2, spent: 24130 }], moves: [move(1, 1, 2, 5000)] });
+  const achats = envelopes(cats, f).find((e) => e.categoryId === 2)!;
+  assert.equal(achats.budget, 25000);
+  assert.equal(achats.left, 870);
+  assert.equal(paceStatus(envelopes(cats, f), f) === 'crit', false);
+});
+
+test('après cette dépense : le reste et le nouveau rythme par jour', () => {
+  const alim = envelopes([cat(1, { monthlyBudget: 90000 })], flow({ daily: [{ day: 3, categoryId: 1, spent: 53100 }] }))[0];
+  assert.deepEqual(afterSpend(alim, -6430, 14), { left: 30470, perDay: Math.floor(30470 / 14), before: Math.floor(36900 / 14) });
+  assert.equal(afterSpend(alim, 40000, 14).perDay, 0, 'un dépassement ne donne pas de rythme négatif');
 });

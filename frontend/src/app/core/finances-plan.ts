@@ -65,21 +65,39 @@ export interface Envelope {
 /** Jours restants après aujourd'hui (au moins un, pour diviser). */
 export const daysLeft = (f: Pick<FinFlow, 'days' | 'day'>): number => Math.max(1, f.days - f.day);
 
-/** Enveloppe : catégorie racine, avec un budget, qui n'est pas une charge fixe. */
+/** Budget du mois d'une catégorie : la référence, plus les transferts entrants, moins les sortants. */
+export function monthBudget(c: Pick<FinCategory, 'id' | 'monthlyBudget'>, moves: FinFlow['moves']): number {
+  return moves.reduce((a, m) => a + (m.toCategoryId === c.id ? m.amount : 0) - (m.fromCategoryId === c.id ? m.amount : 0), c.monthlyBudget);
+}
+
+/**
+ * Enveloppe : catégorie racine, avec un budget de référence, qui n'est pas une
+ * charge fixe. Son budget du mois tient compte des transferts.
+ */
 export function envelopes(categories: FinCategory[], flow: FinFlow): Envelope[] {
   const left = daysLeft(flow);
   return categories
     .filter((c) => c.parentId === null && c.monthlyBudget > 0 && !c.fixed)
     .map((c) => {
+      const budget = monthBudget(c, flow.moves);
       const spent = flow.daily.reduce((a, d) => a + (d.categoryId === c.id ? d.spent : 0), 0);
-      const rest = c.monthlyBudget - spent;
+      const rest = budget - spent;
       return {
         categoryId: c.id, name: c.name, color: c.color, icon: c.icon,
-        budget: c.monthlyBudget, spent, left: rest, perDay: Math.max(0, Math.floor(rest / left)),
-        tension: rest / c.monthlyBudget - left / flow.days,
+        budget, spent, left: rest, perDay: Math.max(0, Math.floor(rest / left)),
+        tension: budget > 0 ? rest / budget - left / flow.days : -1,
       };
     })
     .sort((a, b) => a.tension - b.tension);
+}
+
+/**
+ * Ce qu'une dépense laisserait dans son enveloppe : le reste, et ce qu'il
+ * représente par jour d'ici la fin du mois, à comparer au rythme d'avant.
+ */
+export function afterSpend(e: Envelope, cents: number, days: number): { left: number; perDay: number; before: number } {
+  const left = e.left - Math.abs(cents);
+  return { left, perDay: Math.max(0, Math.floor(left / days)), before: e.perDay };
 }
 
 /** Dépense cumulée des enveloppes, jour par jour, du jour 0 au jour de référence. */

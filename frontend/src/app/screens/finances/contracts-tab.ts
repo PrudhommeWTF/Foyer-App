@@ -4,8 +4,8 @@ import { FinAsset, FinContract, FinContractKind, FinDeadline, FinDeadlineKind, F
 import { FinancesStore, fmtEuros, fmtEurosInt } from '../../core/finances.store';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-import { CAT_ICONS, FILE_TYPE_COLORS } from '../../core/constants';
-import { fmtBytes } from '../../core/helpers';
+import { CAT_ICONS } from '../../core/constants';
+import { FinAttachments } from './attachments';
 import { ModalComponent } from '../../shared/modal';
 import { ConfirmComponent } from '../../shared/confirm';
 import { MemberPickerComponent } from '../../shared/member-picker';
@@ -45,7 +45,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
   selector: 'fin-contracts-tab',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, MemberPickerComponent, CheckComponent],
+  imports: [FormsModule, IconComponent, ModalComponent, ConfirmComponent, MemberPickerComponent, CheckComponent, FinAttachments],
   template: `
     <!-- ÉCHÉANCES : ce qui coûte de l'argent si on l'oublie -->
     @if (soonDeadlines().length) {
@@ -480,27 +480,7 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
           }
 
           <div class="sec-label">Pièces jointes</div>
-          <div class="pieces">
-            @for (a of store.attachments(); track a.id) {
-              <div class="piece">
-                <f-icon name="documents" [size]="15" [color]="pieceColor(a.mime)" [width]="2" />
-                <button class="p-name" (click)="store.openAttachment(a)">{{ a.name }}</button>
-                <span class="p-size">{{ size(a.size) }}</span>
-                <button class="icon-btn sm" aria-label="Supprimer la pièce" (click)="store.deleteAttachment(a.id)">
-                  <f-icon name="trash" [size]="13" color="var(--primary)" />
-                </button>
-              </div>
-            } @empty {
-              <div class="none">Aucune pièce. Rangez ici l'échéancier, l'attestation, le dernier avis.</div>
-            }
-          </div>
-          <label class="uploader">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.heic" hidden
-                   (change)="pick($event, cid)" [disabled]="store.ui().busy" />
-            <f-icon name="upload" [size]="15" color="var(--primary)" [width]="2.4" />
-            <span>{{ store.ui().busy ? 'Envoi…' : 'Ajouter une pièce' }}</span>
-          </label>
-          <div class="hint sm">PDF, JPEG, PNG, WEBP, GIF ou HEIC, 20 Mo au plus. Le type est reconnu au contenu, pas à l'extension.</div>
+          <fin-attachments owner="contract" [ownerId]="cid" empty="Aucune pièce. Rangez ici l'échéancier, l'attestation, le dernier avis." />
 
           <div class="sec-label">Rattachement automatique</div>
           <button class="mkrule" (click)="store.ruleFromContract(cid)">
@@ -642,13 +622,6 @@ const DEADLINE_LABEL: Record<FinDeadlineKind, string> = {
     .readd { flex: none; height: 42px; }
     .r-use { flex: 1; min-width: 0; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .r-use.gap { font-style: italic; color: var(--ink3); }
-    .pieces { display: flex; flex-direction: column; gap: 6px; }
-    .piece { display: flex; align-items: center; gap: 9px; background: var(--soft); border-radius: 11px; padding: 7px 10px; }
-    .p-name { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .p-name:hover { color: var(--primary); }
-    .p-size { flex: none; font-size: 11.5px; font-weight: 700; color: var(--ink3); font-variant-numeric: tabular-nums; }
-    .uploader { display: inline-flex; align-items: center; gap: 7px; margin-top: 10px; border-radius: 11px; padding: 8px 13px; background: var(--soft2); font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
-    .uploader:has(input:disabled) { opacity: .5; cursor: default; }
     .mkrule { display: inline-flex; align-items: center; gap: 7px; border: none; border-radius: 11px; padding: 9px 14px; background: var(--soft2); font-family: inherit; font-size: 12.5px; font-weight: 800; color: var(--primary); cursor: pointer; }
     .cost-box { margin-top: 18px; background: var(--soft); border-radius: 14px; padding: 12px 14px; }
     .cost-box.off { background: #FDF0DA; }
@@ -773,22 +746,6 @@ export class FinancesContractsTab {
     const bits = [`${this.round(p.kwh)} kWh en ${p.days} j`, `${this.round(p.kwhPerDay)} kWh/j`];
     if (p.costPerKwh !== null) bits.push(`${this.round(p.costPerKwh)} c/kWh`);
     return bits.join(' · ');
-  }
-
-  /** Same colour code as the Documents screen: terracotta for PDF, green for images. */
-  pieceColor(mime: string): string {
-    return FILE_TYPE_COLORS[mime === 'application/pdf' ? 'PDF' : 'IMG'];
-  }
-
-  /** Human size: an invoice is « 340 Ko », not 348160 octets. */
-  size(bytes: number): string { return fmtBytes(bytes); }
-
-  /** Send the picked file, then clear the input so the same file can be re-sent. */
-  pick(event: Event, contractId: number): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (file) void this.store.uploadAttachment('contract', contractId, file);
-    input.value = '';
   }
 
   /** Live preview of the notice deadline while the form is being filled. */

@@ -412,6 +412,7 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
       accountId: q['accountId'] ? id(q['accountId'], 'compte') : undefined,
       categoryId: q['categoryId'] ? id(q['categoryId'], 'catégorie') : undefined,
       uncategorised: q['uncategorised'] === '1',
+      uncleared: q['uncleared'] === '1',
       contractId: q['contractId'] ? id(q['contractId'], 'contrat') : undefined,
       tag: q['tag'] ? String(q['tag']).slice(0, 60) : undefined,
       q: q['q'] ? String(q['q']).slice(0, 100) : undefined,
@@ -463,6 +464,32 @@ export function financesRouter(requireAdmin: AdminGuard): Router {
     const month = String(req.query['month'] || '').trim();
     if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
     res.json({ summary: monthSummary(month) });
+  }));
+
+  /**
+   * Transfert de budget entre deux enveloppes, pour un mois. Une enveloppe est
+   * une catégorie racine qui n'est pas une charge fixe : une charge fixe se
+   * paie, elle ne se renfloue pas.
+   */
+  r.post('/budget-moves', handler((req, res) => {
+    const body = req.body || {};
+    const month = String(body['month'] ?? '').trim();
+    if (!isMonth(month)) fail('Mois invalide : attendu AAAA-MM.');
+    const from = repo.getCategory(id(body['fromCategoryId'], 'enveloppe de départ')) ?? fail('Enveloppe de départ introuvable.');
+    const to = repo.getCategory(id(body['toCategoryId'], 'enveloppe d’arrivée')) ?? fail('Enveloppe d’arrivée introuvable.');
+    if (from.id === to.id) fail('Choisissez deux enveloppes différentes.');
+    for (const c of [from, to]) {
+      if (c.parentId !== null) fail(`« ${c.name} » est une sous-catégorie : les transferts se font entre enveloppes.`);
+      if (c.fixed) fail(`« ${c.name} » est une charge fixe : elle n’a pas d’enveloppe à renflouer.`);
+    }
+    const amount = Math.abs(amountCents(body['amount'], 'montant'));
+    if (!amount) fail('Le montant du transfert doit être positif.');
+    res.status(201).json({ move: repo.createBudgetMove(month, from.id, to.id, amount), moves: repo.listBudgetMoves(month) });
+  }));
+
+  r.delete('/budget-moves/:id', handler((req, res) => {
+    if (!repo.deleteBudgetMove(id(req.params['id'], 'transfert'))) { res.status(404).json({ error: 'Transfert introuvable.' }); return; }
+    res.json({ ok: true });
   }));
 
   r.get('/flow', handler((req, res) => {
