@@ -5,9 +5,12 @@ import { AdminStore } from '../../core/admin.store';
 import { FinancesStore, fmtEuros } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
+import { ModalComponent } from '../../shared/modal';
+import { ReorderDirective } from '../../shared/reorder';
 import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
+import { reorder } from '../../core/tasks';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 
@@ -23,6 +26,16 @@ type FinState =
 
 /** Une tuile de module de la grille mobile. */
 interface Mod { id: string; label: string; icon: string; color: string; sub: string; }
+
+// L'ordre des raccourcis de l'accueil mobile est une préférence d'affichage
+// propre à l'appareil (comme l'écran courant ou « masquer les cochés ») : chacun
+// met en tête, sur son téléphone, les modules qu'il ouvre le plus. Rangé dans
+// localStorage, pas dans le document. Les modules non listés (nouveaux ou
+// réactivés) reviennent à la suite, dans l'ordre par défaut.
+const HOME_MODS_KEY = 'foyer.homeMods';
+function loadHomeMods(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(HOME_MODS_KEY) || '[]'); return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []; } catch { return []; }
+}
 
 /** La couleur d'accent de chaque module, pour colorer son icône dans la grille. */
 const MOD_COLOR: Record<string, string> = {
@@ -59,7 +72,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
   selector: 'screen-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, NgTemplateOutlet],
+  imports: [IconComponent, AvatarComponent, NgTemplateOutlet, ModalComponent, ReorderDirective],
   template: `
     <!-- Invitation à activer les rappels, au premier lancement installé. -->
     <ng-template #pushCard>
@@ -286,18 +299,54 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
             </div>
           </div>
 
-          <div class="mods">
-            @for (m of modules(); track m.id) {
-              <button class="mod" (click)="store.go(m.id)">
-                <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="23" [color]="m.color" [width]="2.1" /></span>
-                <span class="mod-b">
-                  <span class="mod-l">{{ m.label }}</span>
-                  <span class="mod-s">{{ m.sub }}</span>
-                </span>
-              </button>
+          <div class="mods-wrap">
+            @if (modules().length > 1) {
+              <div class="mods-head">
+                <button class="org-link" (click)="modOrderOpen.set(true)" aria-label="Organiser les raccourcis">
+                  <f-icon name="grip" [size]="14" color="var(--ink2)" [width]="2.4" /> Organiser
+                </button>
+              </div>
             }
+            <div class="mods">
+              @for (m of modules(); track m.id) {
+                <button class="mod" (click)="store.go(m.id)">
+                  <span class="mod-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="23" [color]="m.color" [width]="2.1" /></span>
+                  <span class="mod-b">
+                    <span class="mod-l">{{ m.label }}</span>
+                    <span class="mod-s">{{ m.sub }}</span>
+                  </span>
+                </button>
+              }
+            </div>
           </div>
         </div>
+
+        <!-- Organiser les raccourcis : glisser-déposer, propre à cet appareil. -->
+        @if (modOrderOpen()) {
+          <f-modal title="Organiser les raccourcis" [maxWidth]="440" [tall]="true" (close)="modOrderOpen.set(false)">
+            <div class="hint mb">Glissez un module par sa poignée pour le ranger. L'accueil met vos préférés en tête. Propre à cet appareil.</div>
+            <div class="order-list" [fReorder]="modIds()" [autoscroll]="true" (reordered)="reorderMods($event)">
+              @for (m of modules(); track m.id; let i = $index, last = $last) {
+                <div class="order-row" [attr.data-rid]="m.id">
+                  <button class="grip" data-grip (click)="$event.stopPropagation()" [attr.aria-label]="'Déplacer ' + m.label">
+                    <f-icon name="grip" [size]="18" color="var(--ink3)" [width]="3" />
+                  </button>
+                  <span class="mod-ic sm" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="17" [color]="m.color" [width]="2.1" /></span>
+                  <span class="order-name">{{ m.label }}</span>
+                  <button class="icon-btn sm" [disabled]="i === 0" (click)="nudgeMod(m.id, -1)" aria-label="Monter">
+                    <f-icon name="chevronLeft" [size]="16" color="var(--ink2)" [width]="2.4" class="up" />
+                  </button>
+                  <button class="icon-btn sm" [disabled]="last" (click)="nudgeMod(m.id, 1)" aria-label="Descendre">
+                    <f-icon name="chevronRight" [size]="16" color="var(--ink2)" [width]="2.4" class="down" />
+                  </button>
+                </div>
+              }
+            </div>
+            <div class="modal-actions" style="margin-top:18px">
+              <button class="btn btn-primary grow" (click)="modOrderOpen.set(false)">Terminé</button>
+            </div>
+          </f-modal>
+        }
       } @else {
         <!-- ===== desktop : fil + bandeau ===== -->
         <div class="home-wrap">
@@ -467,6 +516,24 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals'; label: string }[
     .mod-b { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
     .mod-l { font-size: 13.5px; font-weight: 800; color: var(--ink); line-height: 1.2; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
     .mod-s { font-size: 11px; font-weight: 700; color: var(--ink3); line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+    .mods-wrap { display: flex; flex-direction: column; }
+    .mods-head { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+    .org-link { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink2); background: none; border: none; cursor: pointer; padding: 2px; }
+    /* Modale « Organiser les raccourcis » : même dispositif que l'ordre des rayons. */
+    .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .hint.mb { margin-bottom: 20px; }
+    .order-list { display: flex; flex-direction: column; gap: 8px; }
+    .order-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: var(--soft); }
+    .order-name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .order-row .icon-btn[disabled] { opacity: .3; }
+    .order-row .grip { flex: none; border: none; background: transparent; cursor: grab; padding: 4px; margin: -4px 0 -4px -4px; border-radius: 7px; touch-action: none; display: flex; align-items: center; }
+    .order-row .grip:active { cursor: grabbing; background: var(--soft2); }
+    .order-row .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
+    .order-row .mod-ic.sm { width: 32px; height: 32px; border-radius: 10px; }
+    .up { transform: rotate(90deg); }
+    .down { transform: rotate(90deg); }
+    .modal-actions { display: flex; gap: 12px; align-items: center; }
+    .modal-actions .grow { flex: 1; }
   `],
 })
 export class HomeScreen {
@@ -481,8 +548,12 @@ export class HomeScreen {
   readonly active = signal(0);
   /** Measured height of each carousel slide, kept current by a ResizeObserver. */
   private readonly slideH = signal<number[]>([]);
-  /** The track is as tall as the slide shown (null until measured: natural height). */
-  readonly trackH = computed(() => this.slideH()[this.active()] || null);
+  /**
+   * Hauteur du carrousel : celle du volet le plus haut, pas du volet affiché, pour
+   * que la grille de raccourcis en dessous ne monte ni ne descende au défilement.
+   * `null` tant que rien n'est mesuré (hauteur naturelle).
+   */
+  readonly trackH = computed(() => { const h = Math.max(0, ...this.slideH()); return h > 0 ? h : null; });
   readonly avSize = computed(() => (this.store.narrow() ? 26 : 36));
   readonly tlAvSize = computed(() => (this.store.narrow() ? 22 : 28));
   /** Several people on one entry: each avatar covers a third of the previous one. */
@@ -563,6 +634,11 @@ export class HomeScreen {
   }
   openPrep(id: string): void { this.store.go('taches'); this.store.patch({ activeList: id }); }
 
+  /** L'ordre choisi des raccourcis sur cet appareil (localStorage), réactif. */
+  readonly homeModOrder = signal<string[]>(loadHomeMods());
+  /** Modale « Organiser les raccourcis » ouverte. */
+  readonly modOrderOpen = signal(false);
+
   readonly modules = computed<Mod[]>(() => {
     const d = this.store.data();
     if (!d) return [];
@@ -570,8 +646,28 @@ export class HomeScreen {
       id: it.id, label: it.label, icon: it.icon, color: MOD_COLOR[it.id] || '#E56B4E', sub: this.moduleSub(it.id),
     }));
     if (!this.store.isChild()) mods.push({ id: 'settings', label: 'Paramètres', icon: 'gear', color: '#8A7E74', sub: 'Réglages et compte' });
-    return mods;
+    // Ordre choisi par l'utilisateur en tête, puis les modules non classés (nouveaux
+    // ou réactivés) à la suite dans l'ordre par défaut. Les désactivés ont déjà sauté.
+    const rank = new Map(this.homeModOrder().map((id, i) => [id, i] as const));
+    const ranked = mods.filter((m) => rank.has(m.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+    const rest = mods.filter((m) => !rank.has(m.id));
+    return [...ranked, ...rest];
   });
+  /** Les identifiants des raccourcis dans l'ordre affiché, pour fReorder. */
+  readonly modIds = computed<string[]>(() => this.modules().map((m) => m.id));
+
+  /** Enregistre le nouvel ordre des raccourcis (glisser-déposer) sur cet appareil. */
+  reorderMods(ids: string[]): void {
+    this.homeModOrder.set(ids);
+    try { localStorage.setItem(HOME_MODS_KEY, JSON.stringify(ids)); } catch { /* privé : vaut pour la session */ }
+  }
+  /** Flèches de secours (accessibilité) : décale un raccourci d'un cran. */
+  nudgeMod(id: string, dir: -1 | 1): void {
+    const ids = this.modIds();
+    const i = ids.indexOf(id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    this.reorderMods(reorder(ids, i, j));
+  }
 
   /**
    * Les 4 prochaines échéances de l'agenda, aujourd'hui compris et jusqu'à deux
