@@ -21,6 +21,8 @@ import { ecoleRouter } from './ecole/routes';
 import { setEcoleDeps, startEcoleScheduler } from './ecole/service';
 import { preserveDevoirsLists } from './ecole/sync';
 import { moduleCounts as edCounts, resetModule as edReset } from './ecole/backup';
+import { equipementsRouter } from './equipements/routes';
+import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
 import { filesRouter } from './storage/routes';
 import { shoppingRouter } from './shopping/routes';
@@ -381,7 +383,7 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
 // Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un
 // enfant sur un module adulte. Le masquage dans l'interface n'est pas la barrière,
 // c'en est le reflet ; la barrière est ici, côté serveur.
-const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole') => (_req: Request, res: Response, next: NextFunction): void => {
+const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEquipements') => (_req: Request, res: Response, next: NextFunction): void => {
   if (effectiveSetting(flag) === false) { res.status(403).json({ error: 'Ce module est désactivé.' }); return; }
   next();
 };
@@ -399,14 +401,19 @@ setEcoleDeps({ members: () => (getHousehold().state as HouseholdState).members.m
 api.use('/ecole', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modEcole'), ecoleRouter(requireAdmin,
   () => (getHousehold().state as HouseholdState).members.map((m) => m.id)));
 
+// Module « Équipements » : tout membre lit, les adultes écrivent ; un enfant lit
+// sans numéro de série ni montant, et n'ouvre ni facture ni plaque (filtre dans
+// le routeur). Pas de jeton d'API : l'assistant passe par le serveur MCP.
+api.use('/equipements', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modEquipements'), equipementsRouter(requireAdmin));
+
 // ---- Modules activables (activer / désactiver, remise à zéro) ----
 // L'activation elle-même est un réglage foyer (modRepas, modFidelite, modFinances,
-// modEmploye), écrit par /api/settings sous contrôle d'administrateur. Ici : le
+// modEmploye, modEcole, modEquipements), écrit par /api/settings sous contrôle d'administrateur. Ici : le
 // décompte de ce qu'un module contient (pour la confirmation), et la remise à
 // zéro d'un module (à la réactivation « repartir sans les données »).
 api.get('/modules', auth, ...tokenGate, requireMember, (_req: Request, res: Response) => {
   const doc = getHousehold().state as HouseholdState;
-  const fc = finCounts(); const ec = empCounts(); const dc = edCounts();
+  const fc = finCounts(); const ec = empCounts(); const dc = edCounts(); const qc = eqpCounts();
   res.json({
     counts: {
       repas: { recipes: (doc.recipes || []).length, meals: Object.keys(doc.meals || {}).length },
@@ -414,6 +421,7 @@ api.get('/modules', auth, ...tokenGate, requireMember, (_req: Request, res: Resp
       finances: { transactions: fc['fin_transactions'] || 0, comptes: fc['fin_accounts'] || 0 },
       employe: { employes: ec['emp_employees'] || 0, presences: ec['emp_shifts'] || 0 },
       ecole: { comptes: dc['ed_accounts'] || 0, eleves: dc['ed_students'] || 0 },
+      equipements: { fiches: qc['eqp_items'] || 0, pieces: qc['eqp_attachments'] || 0 },
     },
   });
 });
@@ -436,6 +444,8 @@ api.post('/modules/:mod/reset', auth, ...tokenGate, requireMember, requireAdmin,
     empReset();
   } else if (mod === 'ecole') {
     edReset();
+  } else if (mod === 'equipements') {
+    eqpReset();
   } else {
     res.status(404).json({ error: 'Module inconnu.' });
     return;

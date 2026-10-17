@@ -145,6 +145,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'fidelite', group: 'modules', label: 'Cartes de fidélité', desc: 'Comment la liste des cartes se range : les plus présentées en tête, ou tout par nom.' },
   { id: 'finances', group: 'modules', label: 'Finances', desc: 'La catégorisation suggérée des opérations, et quand un compteur d’énergie réclame un relevé.' },
   { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
+  { id: 'equipements', group: 'modules', label: 'Équipements', desc: 'Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.' },
   { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -268,6 +269,14 @@ export const REGISTRY = [
     label: 'École (ÉcoleDirecte)',
     desc: 'Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.',
     default: false,
+  },
+  {
+    key: 'modEquipements',
+    type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
+    custom: true,
+    label: 'Équipements',
+    desc: 'Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.',
+    default: true,
   },
   {
     key: 'prefNotifs',
@@ -508,6 +517,22 @@ export const REGISTRY = [
     label: 'Durée proposée par défaut (minutes)',
     desc: 'Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.',
     default: 180, min: 15, max: 720,
+  },
+
+  // ---- équipements -----------------------------------------------------------
+  {
+    key: 'eqpGarantieDefautMois',
+    type: 'int', scope: 'foyer', section: 'equipements', module: 'Équipements',
+    label: 'Durée de garantie par défaut (mois)',
+    desc: 'Durée de garantie appliquée quand la fiche d’un appareil acheté neuf n’en précise pas (garantie légale de conformité : 24 mois pour un bien neuf). À 0, un appareil sans durée saisie reste en garantie inconnue. Une occasion achetée à un professionnel suit 12 mois, une occasion entre particuliers n’a pas de garantie légale.',
+    default: 24, min: 0, max: 120,
+  },
+  {
+    key: 'eqpGarantieAlerteJours',
+    type: 'int', scope: 'foyer', section: 'equipements', module: 'Équipements',
+    label: 'Alerte avant la fin d’une garantie (jours)',
+    desc: 'Nombre de jours avant la fin d’une garantie à partir duquel Foyer la signale : la pastille de l’appareil passe à l’orange « Garantie expire le … ».',
+    default: 60, min: 7, max: 180,
   },
 
   // ---- école (ÉcoleDirecte) -----------------------------------------------

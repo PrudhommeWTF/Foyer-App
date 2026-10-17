@@ -92,12 +92,14 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 | `modFinances` | Finances | Foyer | oui / non | activé | — | Foyer | — |
 | `modEmploye` | Employé à domicile | Foyer | oui / non | activé | — | Foyer | — |
 | `modEcole` | École (ÉcoleDirecte) | Foyer | oui / non | désactivé | — | Foyer | — |
+| `modEquipements` | Équipements | Foyer | oui / non | activé | — | Foyer | — |
 
 - **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
 - **Cartes de fidélité** (`modFidelite`) : Les cartes de fidélité du foyer. Désactivé, l’écran et son entrée de menu disparaissent ; les cartes enregistrées sont conservées.
 - **Finances** (`modFinances`) : Les comptes, opérations, budgets et contrats. Désactivé, l’écran, la tuile d’accueil, les notifications, les repères d’agenda et l’accès API disparaissent ; les données relationnelles du module sont conservées.
 - **Employé à domicile** (`modEmploye`) : Le suivi des heures et la déclaration CESU. Désactivé, l’écran, les repères d’agenda, les rappels, l’accès API et les outils d’assistant disparaissent ; les employés et présences sont conservés.
 - **École (ÉcoleDirecte)** (`modEcole`) : Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.
+- **Équipements** (`modEquipements`) : Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.
 
 ## Les modules
 
@@ -184,6 +186,18 @@ Les congés payés, le rappel de déclaration au CESU et la durée proposée à 
 - **Congés payés inclus dans le taux** (`empCongesInclus`) : Les congés payés sont inclus dans le taux (majoration de 10 % comprise), comme le propose le CESU par défaut. Le récapitulatif l’indique en toutes lettres.
 - **Jour du rappel de déclaration** (`empRappelJour`) : Jour du mois où Foyer rappelle de déclarer le mois précédent au CESU s’il est encore ouvert. La date limite du CESU n’est pas codée en dur : c’est ce rappel qui est réglable.
 - **Durée proposée par défaut (minutes)** (`empDureeHabituelle`) : Durée proposée d’avance à la saisie d’une présence, en minutes (180 = 3 h). Le bouton « Elle est venue aujourd’hui » crée une présence de cette durée.
+
+### Équipements
+
+Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `eqpGarantieDefautMois` | Durée de garantie par défaut (mois) | Foyer | entier | `24` | de 0 à 120 | Équipements | — |
+| `eqpGarantieAlerteJours` | Alerte avant la fin d’une garantie (jours) | Foyer | entier | `60` | de 7 à 180 | Équipements | — |
+
+- **Durée de garantie par défaut (mois)** (`eqpGarantieDefautMois`) : Durée de garantie appliquée quand la fiche d’un appareil acheté neuf n’en précise pas (garantie légale de conformité : 24 mois pour un bien neuf). À 0, un appareil sans durée saisie reste en garantie inconnue. Une occasion achetée à un professionnel suit 12 mois, une occasion entre particuliers n’a pas de garantie légale.
+- **Alerte avant la fin d’une garantie (jours)** (`eqpGarantieAlerteJours`) : Nombre de jours avant la fin d’une garantie à partir duquel Foyer la signale : la pastille de l’appareil passe à l’orange « Garantie expire le … ».
 
 ### École
 

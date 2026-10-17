@@ -1144,17 +1144,18 @@ export class FoyerStore {
 
   // ---- navigation -------------------------------------------------------
   // ---- modules activables ----------------------------------------------
-  // Un module éteint (réglage foyer à false) disparaît partout. Ces cinq
+  // Un module éteint (réglage foyer à false) disparaît partout. Ces six
   // lectures littérales sont aussi ce qui atteste au registre qu'un drapeau sert.
   readonly modRepas = computed(() => this.setting('modRepas') !== false);
   readonly modFidelite = computed(() => this.setting('modFidelite') !== false);
   readonly modFinances = computed(() => this.setting('modFinances') !== false);
   readonly modEmploye = computed(() => this.setting('modEmploye') !== false);
+  readonly modEquipements = computed(() => this.setting('modEquipements') !== false);
   // École est le seul module éteint par défaut : il faut l'avoir allumé.
   readonly modEcole = computed(() => this.setting('modEcole') === true);
   moduleOn(flag: ModuleFlag): boolean {
     return flag === 'modRepas' ? this.modRepas() : flag === 'modFidelite' ? this.modFidelite() : flag === 'modFinances' ? this.modFinances()
-      : flag === 'modEcole' ? this.modEcole() : this.modEmploye();
+      : flag === 'modEcole' ? this.modEcole() : flag === 'modEquipements' ? this.modEquipements() : this.modEmploye();
   }
   /** Un écran est-il accessible ? (module actif, ou écran hors module.) */
   screenEnabled(screen: string): boolean {
