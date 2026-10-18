@@ -519,15 +519,15 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .home-m { display: flex; flex-direction: column; gap: 12px; }
     .fscroll-x { -webkit-overflow-scrolling: touch; scrollbar-width: none; }
     .fscroll-x::-webkit-scrollbar { display: none; }
-    .track { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; align-items: flex-start; transition: height .2s ease; }
+    .track { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; align-items: stretch; transition: height .2s ease; }
     /* min-width: 0 est vital : sans lui, un volet au contenu long (une tâche au
        titre à rallonge) déborde de 100% (min-width: auto = min-content d'un item
        flex), la largeur du volet devient indéfinie, l'ellipsis intérieure ne
        s'applique plus, et le carousel se désaligne. Bridé à 100%, le contenu est
        tronqué proprement à l'intérieur. */
-    /* Each slide keeps its own height (align-items: flex-start on the track) and
-       the track takes the height of the one shown: a short « Repas » no longer
-       reserves the room of the long « Activité ». */
+    /* La piste prend la hauteur du plus grand volet (trackH) et chaque volet s'y
+       étire (align-items: stretch) : la carte d'un volet court (« Repas ») remplit
+       la même hauteur que le plus grand, sans vide entre son bas et les points. */
     .slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; display: flex; box-sizing: border-box; }
     .slide > .card { flex: 1; min-width: 0; }
     /* One dot per slide. The button is a 24px touch target, the dot is drawn inside. */
