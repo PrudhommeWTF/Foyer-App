@@ -47,7 +47,8 @@ Quand le module École est actif, les cours des élèves associés s'ajoutent à
 vue : une **source en plus**, jamais fusionnée avec les créneaux du document.
 Ils ne sont pas dans `sched` (rien n'est écrit), leurs identifiants commencent
 par `ed:`, l'écran les montre étiquetés « ÉcoleDirecte », en lecture seule (ni
-édition, ni glisser-déposer), un cours annulé barré.
+édition, ni glisser-déposer), un cours annulé en aplat pâle hachuré et titre
+barré, un cours modifié marqué « modifié » à côté de l'heure.
 
 La présence (`presence.ts`) et les couverts lisent `store.schedAll()`, qui
 réunit les deux sources : un cours compte comme un créneau « hors du foyer »,
@@ -334,8 +335,8 @@ le dit (« Modifié pour ce jour seulement »).
 
 - **Modifier** passe la même fiche en formulaire ; la note « Ouvert sur le … »
   rappelle l'occurrence visée par la portée.
-- **Ajouter**, un trou « libre » ou le menu + ouvrent la fiche en création, au
-  jour choisi, avec les membres du filtre et l'heure qui suit le dernier créneau.
+- **Ajouter** (le « + » de l'en-tête du jour), un creux survolé ou le menu +
+  ouvrent la fiche en création, au jour choisi, avec les membres du filtre.
 - Un **cours importé d'ÉcoleDirecte** s'ouvre aussi, en lecture seule : ni
   Modifier ni Supprimer, et « Voir dans École » quand le module est actif.
 - Le déplacement par glisser-déposer (souris) reste sur l'écran.
@@ -379,44 +380,42 @@ et celui d'Apple Calendar comme de Google Agenda.
 ## Densité d'affichage
 
 **Vue jour sur téléphone, vue semaine sur tablette et grand écran**, au seuil
-`narrow` existant (860 px). Et dans les deux cas, **des listes triées par heure,
-pas une grille horaire proportionnelle.**
+`narrow` existant (860 px). Dans les deux cas, **une grille horaire** : la
+hauteur vaut la durée, la journée et ses creux se lisent d'un coup d'oeil.
 
-Une grille où la hauteur vaut la durée demande treize à quatorze heures de
-hauteur pour rester lisible, impose un défilement permanent, et gère les
-chevauchements en rétrécissant les colonnes. Avec quatre membres et trois
-créneaux à 18h, on obtient des bandes de trois millimètres de large : c'est
-précisément le cas le plus fréquent du foyer.
+Ce qui la garde lisible avec quatre membres :
 
-Une liste absorbe les chevauchements sans rien faire : deux créneaux à 18h sont
-deux lignes, toutes deux lisibles. **Ce qu'on y perd, et c'est assumé :** le sens
-visuel de la durée et des trous de la journée.
+- **La plage d'heures se resserre** sur la semaine affichée : de l'heure pleine
+  qui précède le premier créneau à celle qui suit le dernier, bornée à 6 h – 22 h,
+  7 h – 19 h quand la semaine est vide. 46 px par heure sur la semaine, 54 px sur
+  le jour seul du téléphone. Un créneau hors de la plage reste visible, ramené au
+  bord.
+- **Les chevauchements se partagent par grappe** (`core/day-layout.ts`, partagé
+  avec le Calendrier) : des créneaux qui se recouvrent de proche en proche se
+  partagent la largeur, un créneau seul dans sa grappe la prend tout entière.
+- **Un créneau trop étroit** (moins de 64 px de large et plus de 100 px de haut)
+  écrit son titre debout ; trop court, il le tronque. Le texte complet, l'heure,
+  le type et la période (« période scolaire », « dehors », dates de validité)
+  sont au survol et dans la fiche, plus sur la carte.
+- **Les créneaux de toute la journée** (00:00 → 23:59, « Congés ») montent dans
+  un bandeau au-dessus de la grille au lieu de l'occuper.
+- Un créneau sans heure de fin est dessiné sur **30 minutes**.
 
-L'ordre est stable à heure égale (fin la plus tôt, puis intitulé) : sans cela,
-deux enfants qui partent à 7h50 changeraient de place d'un rendu à l'autre.
+Un trait orange marque l'heure qu'il est dans la colonne d'aujourd'hui.
 
 ## Saisie
 
-### Les trous de la journée, et où l'on tape pour créer
+### Les creux de la journée, et où l'on tape pour créer
 
-La vue en listes absorbe les chevauchements mais fait perdre le sens des **temps
-libres** : on ne voit plus d'un coup d'oeil qu'il y a deux heures entre deux
-créneaux. C'était le coût assumé du choix de densité, et il est en partie rendu.
+Au survol d'une heure libre de la grille, un fantôme en pointillés d'une heure,
+calé sur l'heure pleine, propose « + 11:00 » : **cliquer crée un créneau qui
+démarre à cette heure**, jour et heure déjà remplis. Il ne s'affiche ni sur une
+heure occupée ni pendant un glisser.
 
-Entre deux créneaux séparés d'au moins **trente minutes**, une ligne discrète dit
-« 12:00 – 14:00 libre ». Elle sert deux choses à la fois : elle montre le trou, et
-**taper dessus crée un créneau qui démarre à cette heure**, jour et heure déjà
-remplis. C'est la réponse, dans une vue en listes, au « taper directement sur une
-case horaire » d'un calendrier en grille.
-
-Le seuil de trente minutes n'est pas décoratif : cinq minutes entre deux cours ne
-sont pas du temps libre, et les afficher noierait les vrais trous. Un créneau
-sans heure de fin compte comme un **instant** : le car de 7h50 n'occupe pas la
-matinée sous prétexte qu'on n'a pas dit quand il arrive.
-
-« + Ajouter », en bas de chaque journée, propose l'heure qui suit le dernier
-créneau (la fin la plus tardive, pas celle du dernier commencé), ou 8h sur une
-journée vide.
+Le survol n'existant ni au clavier ni au doigt, le « + » de l'en-tête de chaque
+jour reste l'entrée toujours atteignable : il propose l'heure qui suit le
+dernier créneau (la fin la plus tardive, pas celle du dernier commencé), ou 8h
+sur une journée vide.
 
 ### Déplacer un créneau
 
