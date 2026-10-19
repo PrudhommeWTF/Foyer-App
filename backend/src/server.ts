@@ -31,6 +31,7 @@ import { revisionsRouter } from './revisions/routes';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
+import { setRevisionsToolsDeps } from './mcp/revisions-tools';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
@@ -450,6 +451,8 @@ api.use('/equipements', auth, apiTokenLimiter, denyToken, requireMember, require
 // sessions, un adulte lit tout et règle les programmes (gardes dans le routeur).
 // Pas de jeton d'accès : l'assistant passe par le serveur MCP. Le barème et les
 // matières viennent de config/revisions/, surchargeables dans le dossier de données.
+// Les outils d'assistant revisions_* lisent le même barème et les mêmes matières.
+setRevisionsToolsDeps({ bareme: (ex) => bareme(DATA_DIR, ex), matieres: () => matieres(DATA_DIR) });
 api.use('/revisions', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modRevisions'),
   revisionsRouter((ex) => bareme(DATA_DIR, ex), () => matieres(DATA_DIR)));
 

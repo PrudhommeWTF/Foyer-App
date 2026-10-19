@@ -25,6 +25,7 @@ import * as t from './tools';
 import * as ed from './ecole-tools';
 import * as en from './entretien-tools';
 import * as eq from './equipements-tools';
+import * as rv from './revisions-tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
 type Args = Record<string, unknown>;
@@ -606,6 +607,42 @@ const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { id: { type: 'number' }, nom: S.string(120), type: { type: 'string', enum: ['panne', 'sav', 'reparation', 'remplacement', 'achat', 'note'] }, texte: S.string(1000), cout: { type: 'number' }, date: S.date }, required: ['type'] },
     run: (ctx, a) => eq.equipementEvenement(ctx, { id: num(a.id), nom: str(a.nom), type: str(a.type), texte: str(a.texte), cout: num(a.cout), date: str(a.date) }),
   },
+  {
+    name: 'revisions_exercices',
+    description: 'Les exercices du module Révisions (les tables, pour commencer), leur matière, et les paramètres qu’un programme peut régler, avec leurs bornes et leurs valeurs par défaut. À lire avant revisions_programme_definir.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => rv.revisionsExercices(),
+  },
+  {
+    name: 'revisions_progression',
+    description: 'Où en est un enfant (ou chaque enfant, sans `enfant`) dans ses révisions : programme, temps par réponse, items acquis, en cours ou pas encore vus, ce qui reste fragile (« 7 × 8 »), réussite par groupe sur 4 semaines. `exercice` : identifiant (voir revisions_exercices). Un compte enfant ne lit que lui.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), exercice: S.string(40) } },
+    run: (ctx, a) => rv.revisionsProgression(ctx, { enfant: str(a.enfant), exercice: str(a.exercice) }),
+  },
+  {
+    name: 'revisions_sessions',
+    description: 'Les sessions de révisions d’un enfant depuis `depuis` (AAAA-MM-JJ, défaut : 7 derniers jours) : date, exercice, mode, réglages, bonnes, lentes, fausses. Un compte enfant ne lit que les siennes.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), depuis: S.date } },
+    run: (ctx, a) => rv.revisionsSessions(ctx, { enfant: str(a.enfant), depuis: str(a.depuis) }),
+  },
+  {
+    name: 'revisions_bilan',
+    adultes: true,
+    description: 'Le bilan des révisions d’un enfant (ou de chaque enfant) sur une période : `periode` semaine (défaut, du lundi à aujourd’hui), semaine-derniere, mois ou mois-dernier. Par matière puis par exercice : sessions, part de réponses justes comparée à la période précédente, réussite par groupe, ce qui reste fragile.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), periode: { type: 'string', enum: ['semaine', 'semaine-derniere', 'mois', 'mois-dernier'] } } },
+    run: (ctx, a) => rv.revisionsBilan(ctx, { enfant: str(a.enfant), periode: str(a.periode) }),
+  },
+  {
+    name: 'revisions_programme_definir',
+    adultes: true, write: true,
+    description: 'Règle le programme d’un enfant pour un exercice : `params` (les paramètres de l’exercice, voir revisions_exercices ; ceux qui manquent gardent la valeur du programme en cours), `questions` (5 à 100), `objectif_jour` (sessions par jour, 0 à 10), `secondes` (temps par réponse, null pour le barème selon l’âge). `retirer: true` retire le programme sans rien effacer. Pour « la maîtresse veut les tables de 2 à 5 pour Gaëtan ».',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), exercice: S.string(40), params: { type: 'object' }, questions: { type: 'number' }, objectif_jour: { type: 'number' }, secondes: { type: ['number', 'null'] }, retirer: { type: 'boolean' } }, required: ['enfant'] },
+    run: (ctx, a) => rv.revisionsProgrammeDefinir(ctx, {
+      enfant: str(a.enfant), exercice: str(a.exercice), questions: num(a.questions), objectif_jour: num(a.objectif_jour), retirer: bool(a.retirer),
+      params: a.params && typeof a.params === 'object' && !Array.isArray(a.params) ? a.params as Record<string, unknown> : undefined,
+      secondes: a.secondes === null ? null : num(a.secondes),
+    }),
+  },
 ];
 
 /** Construit un serveur MCP lié à un membre et à une portée. Reconstruit à chaque requête (transport sans état). */
@@ -617,14 +654,16 @@ function buildServer(ctx: t.McpCtx): Server {
   // Un module désactivé retire ses outils, comme un jeton enfant retire les
   // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
   // menage_* de « Employé à domicile », ecole_* de « École » (éteint par
-  // défaut), entretien_* d'« Entretien de la maison », equipement* d'« Équipements ».
+  // défaut), entretien_* d'« Entretien de la maison », equipement* d'« Équipements »,
+  // revisions_* de « Révisions ».
   // Les autres domaines n'ont pas d'outils.
   const toolModuleOff = (name: string): boolean =>
     (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
     || (effectiveSetting('modEmploye') === false && name.startsWith('menage'))
     || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'))
     || (effectiveSetting('modEntretien') === false && name.startsWith('entretien'))
-    || (effectiveSetting('modEquipements') === false && name.startsWith('equipement'));
+    || (effectiveSetting('modEquipements') === false && name.startsWith('equipement'))
+    || (effectiveSetting('modRevisions') === false && name.startsWith('revisions'));
   const visible = (): ToolDef[] => TOOLS.filter((tool) =>
     (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 
