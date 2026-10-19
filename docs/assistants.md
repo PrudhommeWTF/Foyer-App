@@ -140,6 +140,26 @@ rien : les outils d'écriture lui sont invisibles et refusés. **Aucun fichier n
 sort par l'assistant** : il dit qu'une facture est jointe, elle s'ouvre dans
 l'application. Module éteint : les six outils disparaissent.
 
+### Révisions
+
+Quand le module **Révisions** est actif (il l'est par défaut), cinq outils
+lisent le suivi des enfants et règlent leur programme. Ils ne connaissent
+aucun exercice en particulier : `revisions_exercices` dit à l'assistant quels
+exercices existent et quels paramètres il peut régler.
+
+| Outil | Ce qu'il fait |
+|---|---|
+| `revisions_exercices` | Les exercices (les tables, pour commencer), leur matière, et les paramètres d'un programme avec leurs bornes et leurs défauts |
+| `revisions_progression` | Où en est un enfant (ou chacun, sans `enfant`) : programme, temps par réponse, items acquis, en cours ou pas encore vus, ce qui reste fragile, réussite par groupe sur 4 semaines. `exercice` facultatif |
+| `revisions_sessions` | Les sessions depuis `depuis` (défaut : 7 jours) : date, exercice, mode, réglages, bonnes, lentes, fausses |
+| `revisions_bilan` (adultes) | Le bilan d'une période (`semaine`, `semaine-derniere`, `mois`, `mois-dernier`) : par matière puis par exercice, réussite comparée à la période précédente, ce qui reste fragile |
+| `revisions_programme_definir` (écriture, adultes) | Règle le programme d'un enfant : `params` de l'exercice (ceux qui manquent gardent la valeur en cours), `questions`, `objectif_jour`, `secondes` (ou `null` pour le barème selon l'âge) ; `retirer: true` le retire sans rien effacer |
+
+**Un enfant ne voit que lui** : sa progression et ses sessions, ni bilan ni
+réglage ; demander ceux de son frère est refusé. Le PDF « Pour la maîtresse »
+ne sort pas par l'assistant : il se télécharge depuis l'écran. Module éteint :
+les cinq outils disparaissent.
+
 ## Brancher chaque client
 
 Remplacez `foyer.exemple.fr` par l'adresse de votre instance et `foyer_…` par
@@ -247,6 +267,10 @@ un assistant ».
 - « Le lave-vaisselle est-il encore sous garantie ? Donne-moi son numéro de série. »
 - « Quelles garanties se terminent bientôt ? »
 - « Ajoute l'ampli Onkyo TX-SR444 au salon, acheté le 7 novembre 2017. » (adulte)
+- « Où en est Raphaël dans ses tables ? Qu'est-ce qui coince ? » (module Révisions)
+- « La maîtresse veut les tables de 2 à 5 pour Gaëtan, 15 questions, deux fois par jour. » (adulte)
+- « Fais-moi le bilan de la semaine de Raphaël. » (adulte)
+- « Qu'est-ce que j'ai révisé cette semaine ? » (jeton de l'enfant)
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
 réglage, terminer une tâche récurrente, ou supprimer quelque chose. Le suivi de

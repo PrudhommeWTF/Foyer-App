@@ -2,7 +2,7 @@
 
 Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Le premier exercice est **Tables** (multiplication et addition) ; d'autres suivront (la dictée de mots est prévue), sans toucher au socle.
 
-> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` arrivent dans la tranche suivante ; la dictée après.
+> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` sont décrits dans `docs/assistants.md`. La dictée arrive ensuite.
 
 ## Le module
 
@@ -152,7 +152,7 @@ Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions
 | le programme d'un enfant | lire le sien | régler, retirer |
 | enregistrer une session au nom d'un autre | refusé | refusé |
 
-Un jeton d'accès (assistant, script) n'entre pas dans le module : l'assistant passera par ses outils MCP `revisions_*`.
+Un jeton d'accès (assistant, script) n'entre pas dans l'API du module : l'assistant passe par ses outils MCP `revisions_*` (`docs/assistants.md`), avec les mêmes règles : un enfant ne voit que lui, le bilan et le réglage d'un programme sont réservés aux adultes, le réglage à un jeton d'écriture, chaque réglage est journalisé avec le nom du jeton.
 
 ## API
 
