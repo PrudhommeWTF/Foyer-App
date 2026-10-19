@@ -214,7 +214,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
  * visent qu'un écran de cette liste ; un test vérifie que la navigation n'en
  * oublie aucun.
  */
-export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'entretien', 'contacts', 'fidelite', 'finances', 'employe', 'equipements', 'ecole', 'repas', 'recettes', 'planning', 'settings'] as const;
+export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'entretien', 'contacts', 'fidelite', 'finances', 'employe', 'equipements', 'ecole', 'repas', 'recettes', 'planning', 'revisions', 'settings'] as const;
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
@@ -222,7 +222,7 @@ export const SCREEN_TITLES: Record<string, string> = {
   entretien: 'Entretien de la maison',
   contacts: 'Contacts importants', fidelite: 'Cartes de fidélité', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
-  ecole: 'École', equipements: 'Équipements',
+  ecole: 'École', equipements: 'Équipements', revisions: 'Révisions',
 };
 
 /**

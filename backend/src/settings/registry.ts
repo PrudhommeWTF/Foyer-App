@@ -147,6 +147,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
   { id: 'entretien', group: 'modules', label: 'Entretien', desc: 'Jusqu’où l’écran Entretien regarde devant lui, et si un consommable passé sous son seuil part seul aux courses. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.' },
   { id: 'equipements', group: 'modules', label: 'Équipements', desc: 'Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.' },
+  { id: 'revisions', group: 'modules', label: 'Révisions', desc: 'La lecture à voix haute des exercices, sur cet appareil.' },
   { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -541,6 +542,13 @@ export const REGISTRY = [
     label: 'Ajouter seul l’article aux courses quand le stock est bas',
     desc: 'Quand le stock d’un geste passe sous son seuil, son article part dans la liste de courses principale, une fois par passage et sans doublon. Désactivé, un bouton « Ajouter aux courses » le propose sur la ligne du geste et sur l’accueil.',
     default: false,
+  },
+  {
+    key: 'revisionsVoix',
+    type: 'bool', scope: 'appareil', section: 'revisions', module: 'Révisions',
+    label: 'Lire à voix haute en mode Apprendre',
+    desc: 'En mode Apprendre, chaque ligne est lue à voix haute, quand cet appareil a une voix française. Rien ne part sur Internet : c’est la voix de l’appareil.',
+    default: true,
   },
   {
     key: 'entretienHorizonJours',

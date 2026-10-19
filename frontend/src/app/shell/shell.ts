@@ -26,6 +26,7 @@ import { LieuxScreen } from '../screens/lieux/lieux';
 import { EntretienScreen } from '../screens/entretien/entretien';
 import { EcoleScreen } from '../screens/ecole/ecole';
 import { EquipementsScreen } from '../screens/equipements/equipements';
+import { RevisionsScreen } from '../screens/revisions/revisions';
 import { EcoleStore } from '../core/ecole.store';
 
 @Component({
@@ -36,7 +37,7 @@ import { EcoleStore } from '../core/ecole.store';
     SidebarComponent, TopbarComponent, NotificationsComponent,
     MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal, ItemSheetComponent, AccountSheetComponent, SwitchBannerComponent,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
-    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen, EntretienScreen, EquipementsScreen,
+    FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen, EntretienScreen, EquipementsScreen, RevisionsScreen,
   ],
   template: `
     <div class="shell" [class.narrow]="store.narrow()">
@@ -74,6 +75,7 @@ import { EcoleStore } from '../core/ecole.store';
             @case ('employe') { <screen-employe /> }
             @case ('ecole') { <screen-ecole /> }
             @case ('equipements') { <screen-equipements /> }
+            @case ('revisions') { <screen-revisions /> }
             @case ('repas') { <screen-repas /> }
             @case ('recettes') { <screen-recettes /> }
             @case ('planning') { <screen-planning /> }
