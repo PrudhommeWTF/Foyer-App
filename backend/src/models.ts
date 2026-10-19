@@ -134,6 +134,9 @@ export interface MealValue {
   pax?: number | null;
   /** Membres exceptionnellement absents de ce créneau (voir frontend presence.ts). */
   away?: string[];
+  /** Qui a prévu ce créneau et quand, pour le fil d'activité. Posés à l'enregistrement. */
+  at?: string;
+  by?: string | null;
 }
 // `photoId` désigne une ligne de hh_attachments : les octets ne sont plus dans
 // le document, qui repartait en entier à chaque enregistrement.
@@ -154,6 +157,9 @@ export interface Recipe {
   tags?: string[];
   rating?: number | null;
   ingr: string[]; steps: string[];
+  /** Qui a ajouté la recette au carnet et quand, pour le fil d'activité. Posés à la création. */
+  at?: string;
+  by?: string | null;
 }
 /**
  * Un créneau de la semaine type. `who` porte **plusieurs** membres : la messe du

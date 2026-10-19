@@ -3,10 +3,14 @@
 // Il ne se dérive que des mutations réellement horodatées et attribuées :
 // tâches (création via `at`/`by`, achèvement via `doneAt`/`doneBy` ou l'historique
 // d'une tâche récurrente), articles de courses (`at`/`by`, l'état donnant le
-// verbe), et événements de l'agenda (création via `at`/`by`, modification via
-// `upAt`/`upBy`). Un événement sans auteur ni date (importé de longue date, ou
-// dérivé d'un repas) n'y figure pas : on reflète le geste, on ne l'invente pas.
-// Contacts et recettes n'ont ni date de changement ni auteur, même raison.
+// verbe), événements de l'agenda (création via `at`/`by`, modification via
+// `upAt`/`upBy`), repas planifiés (`at`/`by` posés à l'enregistrement) et recettes
+// (`at`/`by` posés à l'ajout au carnet). Un geste sans auteur ni date (un repas
+// d'une ancienne version, un événement importé de longue date) n'y figure pas :
+// on reflète le geste, on ne l'invente pas. Contacts, cartes de fidélité, lieux
+// et les modules hors document (Finances, Employé, Équipements) n'y sont pas
+// encore : ils n'ont pas de date de changement attribuée (ou vivent hors du
+// document que ce fil parcourt).
 import { HouseholdState } from './models';
 
 export interface ActivityEntry {
@@ -27,8 +31,8 @@ export interface ActivityEntry {
   /** Couleur de cette liste, comme accent. */
   color: string;
   /** Type d'item, pour ouvrir le bon écran au clic sur le nom. */
-  kind: 'task' | 'event' | 'shop';
-  /** Cible du lien : l'identifiant de la tâche ou de l'événement, la liste pour un article. */
+  kind: 'task' | 'event' | 'shop' | 'meal' | 'recipe';
+  /** Cible du lien : l'identifiant de la tâche, de l'événement ou de la recette, la liste pour un article, la clé du créneau pour un repas. */
   ref: string;
 }
 
@@ -40,6 +44,13 @@ const SHOP_VERB: Record<string, string> = {
 };
 
 const ED = 'ÉcoleDirecte';
+
+// Verbe par moment du repas : un lien sur le nom du plat ouvre le créneau.
+const MEAL_VERB: Record<string, string> = {
+  matin: 'a prévu le petit-déjeuner',
+  midi: 'a prévu le déjeuner',
+  soir: 'a prévu le dîner',
+};
 
 /**
  * Le professeur d'un devoir, tiré de la note que la synchronisation écrit
@@ -88,6 +99,18 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
   for (const ev of state.events || []) {
     if (ev.at) out.push({ at: ev.at, by: ev.by ?? null, verb: 'a programmé l’évènement', what: ev.title, where: 'Agenda', color: '#E56B4E', kind: 'event', ref: ev.id });
     if (ev.upAt) out.push({ at: ev.upAt, by: ev.upBy ?? null, verb: 'a modifié l’évènement', what: ev.title, where: 'Agenda', color: '#E56B4E', kind: 'event', ref: ev.id });
+  }
+  // Repas planifiés : le moment donne le verbe, le plat (texte libre ou recette)
+  // nomme le geste, la clé du créneau ouvre la fiche au clic.
+  const recName = new Map((state.recipes || []).map((r) => [r.id, r.name] as const));
+  for (const [key, v] of Object.entries(state.meals || {})) {
+    if (!v?.at) continue;
+    const dish = (v.items || []).map((it) => it.text || recName.get(it.rid || '') || '').filter(Boolean).join(', ');
+    out.push({ at: v.at, by: v.by ?? null, verb: MEAL_VERB[key.slice(11)] || 'a prévu le repas', what: dish || 'un repas', where: 'Repas', color: '#4E93B8', kind: 'meal', ref: key });
+  }
+  // Recettes ajoutées au carnet.
+  for (const r of state.recipes || []) {
+    if (r.at) out.push({ at: r.at, by: r.by ?? null, verb: 'a ajouté la recette', what: r.name, where: 'Recettes', color: r.color || '#E56B4E', kind: 'recipe', ref: r.id });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }

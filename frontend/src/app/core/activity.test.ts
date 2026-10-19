@@ -111,6 +111,27 @@ describe('recentActivity', () => {
     const s = state({ events: [event({ id: 'e1', title: 'Dîner', mealKey: '2026-09-10-soir' })] });
     assert.equal(recentActivity(s, 12).length, 0);
   });
+
+  it('inclut les repas planifiés (verbe selon le moment, plat libre ou recette) et les recettes ajoutées', () => {
+    const s = state({
+      recipes: [{ id: 'r1', name: 'Tartiflette', level: 'moyen', color: '#E56B4E', ingr: [], steps: [], at: '2026-09-05T09:00:00.000Z', by: 'm1' }],
+      meals: {
+        '2026-09-06-midi': { items: [{ text: 'Salade' }], at: '2026-09-06T10:00:00.000Z', by: 'm2' },
+        '2026-09-06-soir': { items: [{ rid: 'r1' }], at: '2026-09-07T11:00:00.000Z', by: 'm1' },
+        '2026-09-08-matin': { items: [{ text: 'Tartines' }] }, // sans at : jamais enregistré par un geste, ignoré
+      },
+    });
+    const feed = recentActivity(s, 12);
+    assert.deepEqual(feed.map((e) => e.at), [
+      '2026-09-07T11:00:00.000Z', '2026-09-06T10:00:00.000Z', '2026-09-05T09:00:00.000Z',
+    ]);
+    // Le dîner référence la recette r1 : son nom est résolu, le lien ouvre le créneau.
+    assert.deepEqual([feed[0].verb, feed[0].what, feed[0].where, feed[0].kind, feed[0].ref],
+      ['a prévu le dîner', 'Tartiflette', 'Repas', 'meal', '2026-09-06-soir']);
+    assert.deepEqual([feed[1].verb, feed[1].what, feed[1].kind], ['a prévu le déjeuner', 'Salade', 'meal']);
+    assert.deepEqual([feed[2].verb, feed[2].what, feed[2].where, feed[2].kind, feed[2].ref],
+      ['a ajouté la recette', 'Tartiflette', 'Recettes', 'recipe', 'r1']);
+  });
 });
 
 describe('relTime', () => {
