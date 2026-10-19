@@ -8,7 +8,7 @@ import express, { Response, Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { ApiTokenRow, countActiveApiTokens, createApiToken, getApiTokenById, getUserById, getUserByMemberId, listApiTokensForUser, revokeApiToken, revokeRefreshForAccessToken } from '../db';
 import { log } from '../log';
-import { AuthedRequest, auth, denyToken, motDePasseBon, requireAdmin, requireMember, route } from './session';
+import { AuthedRequest, auth, denySwitched, denyToken, motDePasseBon, requireAdmin, requireMember, route } from './session';
 import { genererJeton, hashJeton, prefixeJeton } from './tokens';
 
 const jsonSmall = express.json({ limit: '256kb' });
@@ -36,11 +36,11 @@ export function tokensRouter(): Router {
   const r = express.Router();
 
   // ---- Ses propres jetons ----
-  r.get('/me/tokens', auth, requireMember, (req: AuthedRequest, res: Response) => {
+  r.get('/me/tokens', auth, denySwitched, requireMember, (req: AuthedRequest, res: Response) => {
     res.json({ tokens: listApiTokensForUser(req.user!.id).map(vue) });
   });
 
-  r.post('/me/tokens', creationLimiter, auth, requireMember, denyToken, jsonSmall, route(async (req, res) => {
+  r.post('/me/tokens', creationLimiter, auth, denySwitched, requireMember, denyToken, jsonSmall, route(async (req, res) => {
     const user = getUserById(req.user!.id);
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     const name = String(req.body?.name || '').trim();
@@ -60,7 +60,7 @@ export function tokensRouter(): Router {
     res.status(201).json({ token: secret, ...vue(row) });
   }));
 
-  r.delete('/me/tokens/:id', auth, requireMember, (req: AuthedRequest, res: Response) => {
+  r.delete('/me/tokens/:id', auth, denySwitched, requireMember, (req: AuthedRequest, res: Response) => {
     const id = parseInt(req.params.id, 10);
     const t = Number.isInteger(id) ? getApiTokenById(id) : undefined;
     if (!t || t.user_id !== req.user!.id) { res.status(404).json({ error: 'Jeton introuvable' }); return; }

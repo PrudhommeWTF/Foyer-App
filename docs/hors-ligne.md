@@ -18,6 +18,10 @@ pourquoi le cache ne fige pas la version installée.
 - **Cocher, ajouter, reporter, réordonner** continuent de marcher sur les
   courses et les tâches : chaque geste est une opération mise en file dans le
   navigateur, rejouée au retour du réseau (voir [`taches.md`](taches.md)).
+  La file est **rangée sous le membre** qui l'a remplie : si quelqu'un d'autre
+  se connecte ensuite sur l'appareil (ou si un parent ouvre la session d'un
+  enfant), elle attend son propriétaire au lieu de partir sous la mauvaise
+  session (voir [`portail-enfant.md`](portail-enfant.md)).
 - Les autres écrans (agenda, repas, contacts, documents) se lisent et
   **s'éditent** : leurs modifications partent par l'enregistrement du document,
   qui réessaie tout seul jusqu'à passer.
@@ -115,9 +119,11 @@ const lire = () => new Promise((ok) => {
 });
 (await lire()).at;
 
-// Ce qui attend de partir
-JSON.parse(localStorage.getItem('foyer.taskQueue') || '[]').length;
-JSON.parse(localStorage.getItem('foyer.shopQueue') || '[]').length;
+// Ce qui attend de partir, file par file et membre par membre
+// (« foyer.taskQueue.m1 » : la file de tâches du membre m1)
+Object.keys(localStorage).filter((k) => /^foyer\.(task|shop|place)Queue/.test(k))
+  .map((k) => [k, JSON.parse(localStorage.getItem(k) || '[]').length]);
+localStorage.getItem('foyer.queueOwner');   // le membre dont les files sont chargées
 
 // Les données sont-elles à l'abri d'une éviction ?
 await navigator.storage.persisted();

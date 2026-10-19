@@ -7,6 +7,7 @@ import { ENTRETIEN_LIST_ID, GesteDraft, createOp, editOps, middayOf, plural } fr
 import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { downloadBlob } from './download';
+import { KeyStore, adoptQueue, readOwner, readQueue, writeOwner, writeQueue } from './op-queues';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
 import { nextOccurrence, skipOccurrence } from './recurrence';
 import { buildArticleIndex, resolveArticleKey } from './ingredients';
@@ -93,18 +94,18 @@ function loadDevicePrefs(): Record<string, string> {
 
 
 /**
- * File des opérations de courses pas encore acquittées par le serveur.
+ * Files des opérations de courses, tâches et lieux pas encore acquittées par le
+ * serveur.
  *
- * Elle est persistée dans le navigateur, et c'est tout l'intérêt : les coches
+ * Elles sont persistées dans le navigateur, et c'est tout l'intérêt : les coches
  * faites dans un magasin sans réseau survivent à un onglet recyclé par iOS. Sans
- * cela, elles ne vivaient qu'en mémoire et disparaissaient sans un mot.
+ * cela, elles ne vivaient qu'en mémoire et disparaissaient sans un mot. Chaque
+ * file est rangée sous le membre qui l'a remplie (voir op-queues.ts).
  */
 const SHOP_QUEUE_KEY = 'foyer.shopQueue';
 const TASK_QUEUE_KEY = 'foyer.taskQueue';
 const PLACE_QUEUE_KEY = 'foyer.placeQueue';
-function loadQueue<T>(key: string): T[] {
-  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
-}
+const keyStore = (): KeyStore | null => { try { return localStorage; } catch { return null; } };
 
 /** Durée d'un toast simple, et celle d'un toast qui propose de revenir en arrière. */
 const TOAST_MS = 2600;
@@ -269,9 +270,11 @@ export class FoyerStore {
   /** Version du document connue du sondage ; sert au sondage différentiel. */
   private liveVersion = 0;
   /** Opérations en attente d'acquittement, persistées (voir SHOP_QUEUE_KEY, TASK_QUEUE_KEY). */
-  private shopQueue = signal<ShopOp[]>(loadQueue<ShopOp>(SHOP_QUEUE_KEY));
-  private taskQueue = signal<TaskOp[]>(loadQueue<TaskOp>(TASK_QUEUE_KEY));
-  private placeQueue = signal<PlaceOp[]>(loadQueue<PlaceOp>(PLACE_QUEUE_KEY));
+  /** Le membre dont les files sont chargées : le dernier connu de l'appareil, puis celui de la session. */
+  private queueOwner = readOwner(keyStore());
+  private shopQueue = signal<ShopOp[]>(readQueue<ShopOp>(keyStore(), SHOP_QUEUE_KEY, this.queueOwner));
+  private taskQueue = signal<TaskOp[]>(readQueue<TaskOp>(keyStore(), TASK_QUEUE_KEY, this.queueOwner));
+  private placeQueue = signal<PlaceOp[]>(readQueue<PlaceOp>(keyStore(), PLACE_QUEUE_KEY, this.queueOwner));
   /** Nombre de gestes pas encore partis. Affiché : sans cela le doute est total. */
   readonly shopPending = computed(() => this.shopQueue().length);
   readonly taskPending = computed(() => this.taskQueue().length);
@@ -508,10 +511,15 @@ export class FoyerStore {
   }
 
   async loadState(): Promise<void> {
+    // Qui est la session, demandé en même temps que le document : il faut le
+    // savoir avant de rejouer les files, pour ne rejouer que les siennes.
+    const mePromise = this.api.me().catch(() => null);
     const { state, version } = await this.api.getState();
     this._data.set(this.normalise(state));
     this.docVersion = version;
     this.docStaleAt.set('');
+    const me = await mePromise;
+    if (me?.memberId) this.adoptQueueOwner(me.memberId);
     // Ce qui n'est pas encore parti n'a pas été vu du serveur : le rejouer
     // par-dessus son document évite qu'une coche faite hors ligne clignote.
     this.replayQueues();
@@ -522,11 +530,10 @@ export class FoyerStore {
     this.docError.set('');
     void this.persistDoc();
     this.patch({ famNameField: state.familyName });
-    try {
-      const me = await this.api.me();
-      // Passé la moitié de sa vie, le serveur repose le cookie de session tout
-      // seul : une session active ne se termine jamais par une déconnexion
-      // surprise, et rien n'est à ranger côté client.
+    // Passé la moitié de sa vie, le serveur repose le cookie de session tout
+    // seul : une session active ne se termine jamais par une déconnexion
+    // surprise, et rien n'est à ranger côté client.
+    if (me) try {
       this.myEmail.set(me.email);
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
@@ -816,13 +823,39 @@ export class FoyerStore {
     for (const op of this.placeQueue()) this.applyPlaceLocally(op);
   }
 
+  /**
+   * Les files de ce membre deviennent celles de l'appareil ; celles d'un autre
+   * dorment sous son nom (voir op-queues.ts). Appelé dès que le serveur dit qui
+   * est la session.
+   */
+  private adoptQueueOwner(id: string): void {
+    const s = keyStore();
+    this.queueOwner = id;
+    writeOwner(s, id);
+    this.shopQueue.set(adoptQueue<ShopOp>(s, SHOP_QUEUE_KEY, id));
+    this.taskQueue.set(adoptQueue<TaskOp>(s, TASK_QUEUE_KEY, id));
+    this.placeQueue.set(adoptQueue<PlaceOp>(s, PLACE_QUEUE_KEY, id));
+  }
+
+  /**
+   * Un envoi de file a échoué. Hors ligne, rien à faire : la file repartira.
+   * Un 409 dit que la file n'est pas celle de la session (l'appareil a changé de
+   * mains depuis le dernier démarrage) : on recharge, ce qui range chaque file
+   * sous son membre et rejoue la bonne.
+   */
+  private flushFailed(e: unknown): void {
+    if (e instanceof ApiError && e.status === 409) { if (!this.ownerReload) { this.ownerReload = true; void this.loadState().finally(() => { this.ownerReload = false; }); } return; }
+    this.syncOffline.set(true);
+  }
+  private ownerReload = false;
+
   private async flushQueues(): Promise<void> {
     await Promise.all([this.flushShopQueue(), this.flushTaskQueue(), this.flushPlaceQueue()]);
   }
 
   private saveShopQueue(q: ShopOp[]): void {
     this.shopQueue.set(q);
-    try { localStorage.setItem(SHOP_QUEUE_KEY, JSON.stringify(q)); } catch { /* quota : la file reste en mémoire */ }
+    writeQueue(keyStore(), SHOP_QUEUE_KEY, this.queueOwner, q);
   }
 
   /**
@@ -888,7 +921,7 @@ export class FoyerStore {
     if (!batch.length) return;
     this.shopFlushing = true;
     try {
-      const res = await this.api.shoppingOps(batch);
+      const res = await this.api.shoppingOps(batch, this.queueOwner);
       this.syncOffline.set(false);
       // Retenues comme écartées, les opérations quittent la file : une
       // opération définitivement refusée qu'on rejouerait tournerait sans fin.
@@ -900,8 +933,8 @@ export class FoyerStore {
         // est exactement ce qui fait abandonner l'outil.
         this.toast(res.skipped.length === 1 ? res.skipped[0].reason : res.skipped.length + ' modifications refusées');
       }
-    } catch {
-      this.syncOffline.set(true);
+    } catch (e) {
+      this.flushFailed(e);
     } finally {
       this.shopFlushing = false;
     }
@@ -944,7 +977,7 @@ export class FoyerStore {
   // ---- lieux : mêmes rouages que les courses, sur deux collections ---------
   private savePlaceQueue(q: PlaceOp[]): void {
     this.placeQueue.set(q);
-    try { localStorage.setItem(PLACE_QUEUE_KEY, JSON.stringify(q)); } catch { /* quota : la file reste en mémoire */ }
+    writeQueue(keyStore(), PLACE_QUEUE_KEY, this.queueOwner, q);
   }
 
   /** Application locale naïve : la coche s'affiche au doigt levé, le serveur écrase ensuite. */
@@ -1014,14 +1047,14 @@ export class FoyerStore {
     if (!batch.length) return;
     this.placeFlushing = true;
     try {
-      const res = await this.api.placesOps(batch);
+      const res = await this.api.placesOps(batch, this.queueOwner);
       this.syncOffline.set(false);
       const settled = new Set([...res.applied, ...res.skipped.map((k) => k.opId)]);
       this.savePlaceQueue(this.placeQueue().filter((o) => !settled.has(o.opId)));
       this.adoptPlaces(res.places, res.items);
       if (res.skipped.length) this.toast(res.skipped.length === 1 ? res.skipped[0].reason : res.skipped.length + ' modifications refusées');
-    } catch {
-      this.syncOffline.set(true);
+    } catch (e) {
+      this.flushFailed(e);
     } finally {
       this.placeFlushing = false;
     }
@@ -1755,7 +1788,7 @@ export class FoyerStore {
 
   private saveTaskQueue(q: TaskOp[]): void {
     this.taskQueue.set(q);
-    try { localStorage.setItem(TASK_QUEUE_KEY, JSON.stringify(q)); } catch { /* quota : la file reste en mémoire */ }
+    writeQueue(keyStore(), TASK_QUEUE_KEY, this.queueOwner, q);
   }
 
   private applyTaskLocally(op: TaskOp): void {
@@ -1793,7 +1826,7 @@ export class FoyerStore {
     if (!batch.length) return;
     this.taskFlushing = true;
     try {
-      const res = await this.api.taskOps(batch);
+      const res = await this.api.taskOps(batch, this.queueOwner);
       this.syncOffline.set(false);
       const settled = new Set([...res.applied, ...res.skipped.map((k) => k.opId)]);
       this.saveTaskQueue(this.taskQueue().filter((o) => !settled.has(o.opId)));
@@ -1803,8 +1836,8 @@ export class FoyerStore {
         // ferait douter de toutes les autres.
         this.toast(res.skipped.length === 1 ? 'Refusé : ' + res.skipped[0].reason : res.skipped.length + ' modifications de tâches refusées');
       }
-    } catch {
-      this.syncOffline.set(true);
+    } catch (e) {
+      this.flushFailed(e);
     } finally {
       this.taskFlushing = false;
     }

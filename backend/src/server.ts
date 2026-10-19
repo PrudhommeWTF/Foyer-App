@@ -51,8 +51,9 @@ import { setting } from './settings/registry';
 import { LogLevel, log, setLogLevelSource } from './log';
 import { currentVersion } from './system/version';
 import { systemRouter } from './system/routes';
-import { AuthedRequest, apiTokenLimiter, auth, currentMember, denyToken, denyTokenSystem, denyTokenWrite, motDePasseBon, requireAdmin, requireAdulte, requireMember, requireScope, route } from './auth/session';
+import { AuthedRequest, apiTokenLimiter, auth, currentMember, denySwitched, denyToken, denyTokenSystem, denyTokenWrite, motDePasseBon, requireAdmin, requireAdulte, requireMember, requireScope, route } from './auth/session';
 import { authRouter } from './auth/routes';
+import { switchRouter } from './auth/switch-routes';
 import { tokensRouter } from './auth/tokens-routes';
 import { mcpRouter } from './mcp/server';
 import { mcpChallenge, oauthAuthMiddleware, oauthLimiter } from './oauth/server';
@@ -212,6 +213,7 @@ api.get('/health', (_req, res) => res.json({ ok: true }));
 // Onboarding, connexion (un ou deux temps), déconnexion, le compte courant et ses
 // identifiants, l'enrôlement du second facteur, et la gestion des accès des membres.
 api.use(authRouter());
+api.use(switchRouter());
 
 // Jetons d'accès par membre (voir auth/tokens-routes.ts) : lister, créer, révoquer.
 api.use(tokensRouter());
@@ -529,6 +531,11 @@ api.use('/places', auth, ...tokenGate, requireMember, placesRouter());
 // quand c'était une adresse locale, d'où l'intérêt de pouvoir la poser sans
 // éditer un fichier sur le serveur.
 const appUrl = (): string => String(effectiveSetting('publicUrl') || '');
+// La session d'un enfant ouverte par un parent ne s'abonne pas : un navigateur
+// n'a qu'un abonnement, et le rattacher à l'enfant le retirerait au parent
+// (voir docs/portail-enfant.md). Le réabonnement automatique du service worker
+// bute sur le même refus.
+api.post('/push/subscribe', auth, denySwitched);
 api.use('/push', auth, apiTokenLimiter, denyToken, requireMember, pushRouter((req) => currentMember(req as AuthedRequest)?.id ?? null, appUrl));
 
 // La seule sortie réseau du module Cuisine : l'import d'une recette depuis une

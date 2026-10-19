@@ -1,6 +1,6 @@
 # Portail enfant et module « Tables » : état des lieux
 
-État du code au 19/10/2026 (`main` = `ba07119`). Document à valider avant toute PR.
+État du code au 19/10/2026 (`main` = `ba07119`). Validé le 19/10/2026 : forme du jeton, trois verrous de la file hors ligne, pas de push en session d'enfant, exemption de la déconnexion après inactivité, menu enfant restreint, seuil d'acquisition au niveau 3. Ce qui a été construit est décrit dans `docs/portail-enfant.md` (et `docs/tables.md` à venir).
 
 ## A1. La session basculée
 
@@ -46,7 +46,7 @@ Ce que je propose, trois verrous :
 
 1. **Vider avant de basculer, dans les deux sens.** Le client envoie `pending` et les trois files (et la file Tables, B) ; s'il reste quoi que ce soit, la bascule est **refusée** : « Des changements n'ont pas encore été envoyés. Réessayez quand l'appareil est en ligne. » La bascule et le retour demandent le réseau de toute façon.
 2. **Files rangées par propriétaire** : `foyer.taskQueue.<memberId>`, etc. Une file qui aurait survécu (onglet tué au mauvais moment) dort sous sa clé et ne repart que quand ce membre est de nouveau la session. L'ancienne clé sans suffixe est reprise une fois au premier démarrage.
-3. **Contrôle serveur** : chaque opération porte `by: <memberId>` ; le serveur refuse (409, gardée en file) une opération dont `by` n'est pas le membre de la session. Défense en profondeur, peu coûteuse.
+3. **Contrôle serveur** : chaque lot porte `as: <memberId>` (son propriétaire) ; le serveur refuse en bloc (409, gardé en file) un lot dont `as` n'est pas le membre de la session. Défense en profondeur, peu coûteuse. (Prévu d'abord sur le champ `by` de chaque opération : abandonné à la construction, `by` désigne légitimement un autre membre dans « Fait un autre jour par … » d'Entretien.)
 
 Après une bascule réussie : document gardé effacé, puis **rechargement complet de la page**. C'est la seule façon sûre de ne rien laisser en mémoire (store Finances, URL de photos, état d'administration) : un enfant qui fouille ne trouve rien.
 
