@@ -1,0 +1,19 @@
+{
+  "_aide": "Barème du module Tables. « ages » : le temps accordé par réponse et le seuil sous lequel une bonne réponse est « rapide », en secondes, par âge (une ligne vaut jusqu'à son âge « jusqua » inclus ; avant la première, la première s'applique). « adulte » vaut au-delà de la dernière ligne, « sansAge » pour un membre sans date de naissance. « maitrise » : l'espacement des révisions en jours par niveau (niveau 0 à 5), la descente d'une réponse fausse, et ce qu'il faut pour qu'une opération soit « acquise ». Pour adapter, copiez ce fichier sous le même nom dans le dossier de données (FOYER_DATA_DIR) et ne gardez que ce qui change : il est relu sans redémarrer.",
+  "ages": [
+    { "jusqua": 6, "accorde": 10, "rapide": 5 },
+    { "jusqua": 7, "accorde": 9, "rapide": 4.5 },
+    { "jusqua": 8, "accorde": 8, "rapide": 4 },
+    { "jusqua": 9, "accorde": 7, "rapide": 3.5 },
+    { "jusqua": 10, "accorde": 6, "rapide": 3 },
+    { "jusqua": 14, "accorde": 5, "rapide": 2.5 }
+  ],
+  "adulte": { "accorde": 4, "rapide": 2 },
+  "sansAge": { "accorde": 8, "rapide": 4 },
+  "maitrise": {
+    "espacementJours": [0, 1, 3, 7, 14, 30],
+    "descenteSiFaux": 2,
+    "niveauAcquis": 3,
+    "bonnesMin": 3
+  }
+}

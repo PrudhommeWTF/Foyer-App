@@ -12,6 +12,7 @@
     "test": "node scripts/check-tests.js && tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.test.json",
     "ecole:sonde": "node dist/ecole/sonde.js",
+    "tables:recalcul": "node dist/tables/recalcul.js",
     "docs:settings": "tsx scripts/settings-doc.ts > ../docs/parametres.md"
   },
   "dependencies": {

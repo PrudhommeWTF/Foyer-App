@@ -118,6 +118,8 @@ export const ICONS: Record<string, string> = {
   // Poignée de glisser-déposer : six points (bouts ronds), l'affordance
   // universelle du « tirer pour réordonner ». Rendue avec un trait épais.
   grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  // Une grille de 3 × 3 : les tables (la grille de maîtrise).
+  grille: 'M4 4h16v16H4zM4 9.33h16M4 14.67h16M9.33 4v16M14.67 4v16',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];
