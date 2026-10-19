@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
-import { ExerciseOverview, ExerciseStats, ItemHistory, ProgramFields, RevisionsApi, RevisionsConfig } from '../../core/revisions/api';
+import { Bilan, ExerciseOverview, ExerciseStats, ItemHistory, ProgramFields, RevisionsApi, RevisionsConfig } from '../../core/revisions/api';
+import { downloadBlob } from '../../core/download';
 import { ExerciseDef } from '../../core/revisions/exercises/contract';
 import { EXERCISES } from '../../core/revisions/exercises';
-import { MasteryItem, STATUS_LABEL, activityDays, fragile, programGroups } from '../../core/revisions/revisions';
+import { MasteryItem, PERIODS, PeriodPreset, STATUS_LABEL, activityDays, fragile, parisDay, periodOf, programGroups } from '../../core/revisions/revisions';
 import { AvatarComponent } from '../../shared/avatar';
 import { GridComponent } from './grid';
 import { HistoryComponent } from './history';
@@ -104,6 +105,35 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
           </div>
         </div>
 
+        <div class="card bilan">
+          <div class="h">Bilan de {{ kidName() }}</div>
+          <div class="seg per" role="radiogroup" aria-label="Période du bilan">
+            @for (pp of periods; track pp.id) {
+              <button type="button" role="radio" [attr.aria-checked]="per() === pp.id" [class.on]="per() === pp.id" (click)="setPeriod(pp.id)">{{ pp.label }}</button>
+            }
+          </div>
+          @if (bilan(); as b) {
+            <p class="b-l">{{ b.label }}</p>
+            @if (!b.matieres.length) { <p class="hint">Pas de session de révisions sur cette période.</p> }
+            @for (mt of b.matieres; track mt.id) {
+              @for (e of mt.exercises; track e.id) {
+                <div class="b-ex">
+                  <div class="b-t">{{ mt.label }} · {{ e.label }} : {{ e.summary }}</div>
+                  @if (e.totals.sessions) {
+                    <div class="b-n">{{ plural(e.totals.sessions, 'session', 'sessions') }}, {{ plural(e.totals.questions, 'question', 'questions') }}, <b>{{ e.totals.pct }} % justes</b>@if (e.prev) { ({{ e.prev.pct }} % la période précédente)}</div>
+                  } @else { <div class="b-n">Pas de session sur cette période.</div> }
+                  @if (e.fragiles.length) { <div class="b-f">Encore fragiles : {{ fragileList(e.fragiles) }}</div> }
+                </div>
+              }
+            }
+            <div class="b-b">
+              <button class="btn btn-primary" (click)="download('pdf')" [disabled]="busy()">Pour la maîtresse (PDF)</button>
+              <button class="btn btn-soft" (click)="download('csv')" [disabled]="busy()">Les sessions (CSV)</button>
+            </div>
+            <p class="hint">Le PDF tient sur une page par enfant : sessions, réussite par groupe comparée à la période précédente, ce qui reste fragile. Il ne contient rien sur les autres membres du foyer.</p>
+          } @else { <p class="hint">Chargement du bilan…</p> }
+        </div>
+
         @if (def.view === 'grille' && def.grid) {
           <div class="card">
             <div class="h">Grille de {{ kidName() }}</div>
@@ -152,6 +182,15 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
     .tl-v { font-weight: 700; color: var(--ink2); } .muted { color: var(--ink3); grid-column: 2 / 4; }
     .frag { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 2px; border: none; border-top: 1px solid var(--line); background: transparent; font-family: inherit; font-size: 15px; font-weight: 800; color: var(--ink); cursor: pointer; text-align: left; }
     .frag span { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .bilan { margin-bottom: 16px; }
+    .per { max-width: 620px; flex-wrap: wrap; }
+    .b-l { margin: 12px 0 4px; font-size: 14px; font-weight: 800; color: var(--ink2); }
+    .b-ex { padding: 10px 0; border-top: 1px solid var(--line); }
+    .b-ex:first-of-type { border-top: none; }
+    .b-t { font-size: 14.5px; font-weight: 800; color: var(--ink); }
+    .b-n, .b-f { margin-top: 3px; font-size: 13.5px; font-weight: 600; color: var(--ink2); }
+    .b-b { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .b-b .btn { min-height: 46px; }
     .aide { margin-top: 14px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.5; }
     .aide summary { cursor: pointer; font-weight: 800; color: var(--ink); }
     @media (max-width: 420px) { .tline { grid-template-columns: 92px 1fr; } .tl-v { grid-column: 1 / 3; font-size: 12.5px; } }
@@ -161,6 +200,8 @@ export class SuiviComponent {
   private foyer = inject(FoyerStore);
   private api = inject(RevisionsApi);
 
+  /** L'enfant à montrer d'abord, quand on arrive d'une notification. */
+  readonly kid = input<string | null>(null);
   readonly kids = this.foyer.children;
   readonly exercises = computed(() => EXERCISES.filter((d) => SUPPORTED_INPUTS.has(d.input)));
   readonly sel = signal<string | null>(null);
@@ -173,9 +214,16 @@ export class SuiviComponent {
   readonly err = signal('');
   readonly history = signal<ItemHistory | null>(null);
   readonly f = signal<ProgramFields>({ params: {}, questions: 20, secondsAllowed: null, fastSeconds: null, dailyGoal: 1 });
+  readonly periods = PERIODS;
+  readonly per = signal<PeriodPreset>('semaine');
+  readonly bilan = signal<Bilan | null>(null);
 
   constructor() {
-    effect(() => { const k = this.kids(); if (k.length && !untracked(() => this.sel())) untracked(() => this.select(k[0].id, this.ex().id)); });
+    effect(() => {
+      const k = this.kids(), asked = this.kid();
+      const want = asked && k.some((x) => x.id === asked) ? asked : !untracked(() => this.sel()) && k.length ? k[0].id : null;
+      if (want && want !== untracked(() => this.sel())) untracked(() => this.select(want, this.ex().id));
+    });
     // Le formulaire repart du programme enregistré (ou des réglages en vigueur) quand l'enfant ou l'exercice change, ou quand le serveur répond.
     effect(() => {
       const ov = this.view()?.ov;
@@ -191,9 +239,36 @@ export class SuiviComponent {
 
   select(member: string, exId: string): void {
     const def = this.exercises().find((d) => d.id === exId) ?? this.exercises()[0];
+    if (member !== this.sel()) this.bilan.set(null);
     this.sel.set(member); this.ex.set(def); this.err.set('');
     void this.reload(member, def.id);
+    void this.loadBilan();
   }
+
+  setPeriod(p: PeriodPreset): void { this.per.set(p); this.bilan.set(null); void this.loadBilan(); }
+  private range() { return periodOf(this.per(), parisDay(new Date().toISOString())); }
+
+  private async loadBilan(): Promise<void> {
+    const id = this.sel(); if (!id) return;
+    const { from, to } = this.range();
+    try { const b = await this.api.bilan(id, from, to); if (this.sel() === id) this.bilan.set(b); }
+    catch (e) { this.err.set((e as Error).message); }
+  }
+
+  async download(kind: 'pdf' | 'csv'): Promise<void> {
+    const id = this.sel(); if (!id) return;
+    const { from, to } = this.range();
+    this.busy.set(true);
+    try {
+      const blob = kind === 'pdf' ? await this.api.bilanPdf(id, from, to) : await this.api.sessionsCsv(id, from, to);
+      const who = this.kidName().normalize('NFD').replace(/[^\w-]+/g, '') || id;
+      downloadBlob(blob, kind === 'pdf' ? `revisions-${who}-${from}-${to}.pdf` : `revisions-sessions-${who}-${from}-${to}.csv`);
+    } catch (e) { this.foyer.toast((e as Error).message || 'Le téléchargement a échoué.'); }
+    finally { this.busy.set(false); }
+  }
+
+  plural(k: number, one: string, many: string): string { return `${k} ${k > 1 ? many : one}`; }
+  fragileList(f: { label: string }[]): string { return f.map((x) => x.label).join(', '); }
 
   private async reload(member: string, exId: string): Promise<void> {
     try {

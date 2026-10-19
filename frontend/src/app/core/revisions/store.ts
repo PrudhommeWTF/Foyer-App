@@ -37,6 +37,10 @@ export class RevisionsStore {
   /** Vrai quand ce qu'on montre vient de la copie locale, faute de réseau. */
   readonly offline = signal(false);
   readonly loaded = signal(false);
+  /** Pour un adulte : les sessions comptées du jour de chaque enfant, pour la tuile d'accueil. */
+  readonly kidsToday = signal<Record<string, number>>({});
+  /** L'enfant dont le suivi est demandé (toucher la notification du bilan du dimanche) ; l'écran le consomme. */
+  readonly follow = signal<string | null>(null);
   private owner: string | null = null;
   private flushing = false;
 
@@ -51,12 +55,36 @@ export class RevisionsStore {
         if (me !== this.owner) { this.owner = me; this.loaded.set(false); this.queue.set(readQueue<SessionPayload>(keyStore(), QUEUE_KEY, me)); }
         void this.load();
         void this.flush();
+        void this.loadKidsToday();
       });
     });
     window.addEventListener('online', () => void this.flush());
+    // Le bilan du dimanche touché : « #suivi=<enfant> » quand l'app était fermée,
+    // un message du service worker quand elle était ouverte (voir sw.js).
+    const asked = /^#suivi=(.+)$/.exec(location.hash);
+    if (asked) { history.replaceState(history.state, '', location.pathname + location.search); this.openFollow(decodeURIComponent(asked[1])); }
+    navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => {
+      const m = e.data as { type?: string; member?: string } | null;
+      if (m?.type === 'foyer-revisions' && m.member) this.openFollow(m.member);
+    });
   }
 
-  private reset(): void { this.owner = null; this.queue.set([]); this.overviews.set({}); this.recent.set([]); this.loaded.set(false); }
+  /** Ouvre le suivi d'un enfant (notification du dimanche, carte de l'accueil). */
+  openFollow(member: string): void { this.follow.set(member); this.foyer.go('revisions'); }
+
+  /** Les sessions du jour des enfants, pour un adulte : ce que dit la tuile d'accueil. */
+  async loadKidsToday(): Promise<void> {
+    const kids = this.foyer.children(); if (!kids.length) return;
+    const since = new Date(Date.now() - 36 * 3600_000).toISOString(), today = parisDay(new Date().toISOString());
+    const out: Record<string, number> = {};
+    await Promise.all(kids.map(async (k) => {
+      try { out[k.id] = (await this.api.sessions(k.id, since)).sessions.filter((x) => x.mode !== 'apprendre' && parisDay(x.startedAt) === today).length; }
+      catch { /* sans réseau, la tuile se tait pour cet enfant */ }
+    }));
+    this.kidsToday.set(out);
+  }
+
+  private reset(): void { this.owner = null; this.queue.set([]); this.overviews.set({}); this.recent.set([]); this.kidsToday.set({}); this.loaded.set(false); }
 
   /** Tous les exercices du registre, et la liste des matières ; la copie locale prend le relais sans réseau. */
   async load(): Promise<void> {

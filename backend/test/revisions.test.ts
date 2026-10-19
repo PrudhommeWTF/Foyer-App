@@ -241,6 +241,56 @@ describe('le programme d’un enfant', () => {
   });
 });
 
+describe('le bilan d’un enfant', () => {
+  const brut = async (chemin: string, jeton: string) => {
+    const r = await fetch(ctx.base + chemin, { headers: { authorization: 'Bearer ' + jeton } });
+    return { status: r.status, type: r.headers.get('content-type') ?? '', disposition: r.headers.get('content-disposition') ?? '', body: Buffer.from(await r.arrayBuffer()) };
+  };
+  const periode = '?from=2026-10-12&to=2026-10-18';
+
+  it('se lit par un adulte, pour un enfant, par matière puis par exercice', async () => {
+    const r = await appel(ctx.base, 'GET', `/revisions/members/${lena}/bilan${periode}`, undefined, ctx.jetons.membre);
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.label, 'Semaine du lundi 12 au dimanche 18 octobre 2026');
+    assert.equal(r.json.matieres[0].label, 'Mathématiques');
+    const e = r.json.matieres[0].exercises[0];
+    assert.equal(e.id, 'tables');
+    assert.ok(e.totals.sessions > 0 && e.groups.length > 0);
+  });
+
+  it('un enfant ne le lit pas, un adulte n’en a pas, une période absurde est refusée', async () => {
+    assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${lena}/bilan`, undefined, ctx.jetons.enfant)).status, 403);
+    assert.equal((await brut(`/revisions/members/${lena}/bilan.pdf`, ctx.jetons.enfant)).status, 403);
+    assert.equal((await brut(`/revisions/members/${lena}/sessions.csv`, ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${thomas}/bilan`, undefined, ctx.jetons.admin)).status, 400);
+    assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${lena}/bilan?from=2026-10-18&to=2026-10-12`, undefined, ctx.jetons.admin)).status, 400);
+    assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${lena}/bilan?from=12/10/2026`, undefined, ctx.jetons.admin)).status, 400);
+    assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${lena}/bilan?from=2024-01-01&to=2026-10-18`, undefined, ctx.jetons.admin)).status, 400);
+  });
+
+  it('en PDF pour la maîtresse : le nom de l’enfant, et celui d’aucun autre membre', async () => {
+    const r = await brut(`/revisions/members/${lena}/bilan.pdf${periode}`, ctx.jetons.membre);
+    assert.equal(r.status, 200);
+    assert.equal(r.type, 'application/pdf');
+    assert.match(r.disposition, /revisions-Lena-2026-10-12-2026-10-18\.pdf/);
+    const txt = r.body.toString('latin1');
+    assert.match(txt, /^%PDF/);
+    assert.match(txt, /Révisions de Lena/);
+    for (const autre of ['Camille', 'Thomas', 'Noé']) assert.doesNotMatch(txt, new RegExp(autre), autre);
+  });
+
+  it('les sessions en CSV', async () => {
+    const r = await brut(`/revisions/members/${lena}/sessions.csv${periode}`, ctx.jetons.admin);
+    assert.equal(r.status, 200);
+    assert.match(r.type, /^text\/csv/);
+    const texte = r.body.toString('utf-8');
+    assert.ok(texte.startsWith('\ufeffDate;Heure;Exercice'), 'BOM et en-tête');
+    const lignes = texte.trim().split('\r\n');
+    assert.ok(lignes.length > 1);
+    assert.ok(lignes.slice(1).every((l) => l.split(';')[2] === 'Tables'));
+  });
+});
+
 describe('la session d’un enfant ouverte par un parent', () => {
   it('s’enregistre au nom de l’enfant, avec le parent qui l’a ouverte', async () => {
     const login = await fetch(ctx.base + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'membre@example.fr', password: 'MotDePasseSolide2' }) });

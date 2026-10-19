@@ -189,18 +189,22 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification.data || {};
   const url = data.url || self.registration.scope;
   // Un rappel de tâche (« task-<id> ») ouvre la fiche de la tâche, une fin de
-  // garantie (« eqp-<id> ») celle de l'équipement : dans l'app déjà ouverte par
-  // un message, sinon par l'adresse que l'app lit au démarrage.
+  // garantie (« eqp-<id> ») celle de l'équipement, un bilan des révisions
+  // (« rev-<membre> ») le suivi de l'enfant : dans l'app déjà ouverte par un
+  // message, sinon par l'adresse que l'app lit au démarrage.
   const tag = typeof data.tag === 'string' ? data.tag : '';
   const fiche = tag.startsWith('task-') ? { kind: 'task', id: tag.slice(5) }
     : tag.startsWith('eqp-') ? { kind: 'equipment', id: tag.slice(4) } : null;
+  const suivi = tag.startsWith('rev-') ? tag.slice(4) : null;
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     for (const client of list) {
       if ('focus' in client) {
         if (fiche) client.postMessage({ type: 'foyer-fiche', kind: fiche.kind, id: fiche.id });
+        if (suivi) client.postMessage({ type: 'foyer-revisions', member: suivi });
         return client.focus();
       }
     }
-    return self.clients.openWindow(fiche ? url.split('#')[0] + '#fiche=' + fiche.kind + ':' + encodeURIComponent(fiche.id) : url);
+    return self.clients.openWindow(fiche ? url.split('#')[0] + '#fiche=' + fiche.kind + ':' + encodeURIComponent(fiche.id)
+      : suivi ? url.split('#')[0] + '#suivi=' + encodeURIComponent(suivi) : url);
   }));
 });

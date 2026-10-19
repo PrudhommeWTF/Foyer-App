@@ -16,6 +16,8 @@ import { gesteGroup, nextLabel, stockLow } from '../../core/entretien';
 import { lastDoneDay } from '../../core/task-ops';
 import { EquipementsStore } from '../../core/equipements.store';
 import { homeLine } from '../../core/equipements';
+import { RevisionsStore } from '../../core/revisions/store';
+import { dayLine, kidsLine } from '../../core/revisions/revisions';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
 type Ahead =
@@ -257,6 +259,20 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
       </div>
     </ng-template>
 
+    <!-- Révisions, pour un adulte : où en est chaque enfant aujourd'hui, sans
+         jamais reprocher un zéro ; une ligne ouvre son suivi. -->
+    <ng-template #revisionsCard>
+      <div class="card rc">
+        <div class="rc-head"><span>Révisions</span><button class="rc-link" (click)="store.go('revisions')">Suivi</button></div>
+        @for (k of revKids(); track k.id) {
+          <button class="rc-row rev-row" (click)="revisions.openFollow(k.id)">
+            <f-icon name="grille" [size]="14" color="#E56B4E" [width]="2.2" />
+            <span class="rev-line">{{ k.line }}</span>
+          </button>
+        }
+      </div>
+    </ng-template>
+
     <ng-template #mealsCard>
       <div class="card rc">
         <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
@@ -335,6 +351,8 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
               <button class="kid-mod" (click)="store.go(m.id)">
                 <span class="km-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="34" [color]="m.color" [width]="2.1" /></span>
                 <span class="km-l">{{ kidLabel(m) }}</span>
+                <!-- L'objectif de l'entraînement du jour, sans jamais reprocher un zéro. -->
+                @if (m.id === 'revisions' && m.sub) { <span class="km-s">{{ m.sub }}</span> }
               </button>
             }
           </div>
@@ -440,6 +458,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
             @if (store.modFinances() && fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
             @if (store.modEcole() && ecole.vue()) { <ng-container [ngTemplateOutlet]="ecoleCard" /> }
             @if (entretien().show) { <ng-container [ngTemplateOutlet]="entretienCard" /> }
+            @if (store.modRevisions() && revKids().length) { <ng-container [ngTemplateOutlet]="revisionsCard" /> }
           </div>
         </div>
       }
@@ -451,6 +470,9 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
 
     /* ===== accueil d'un enfant : des cibles faites pour un doigt de huit ans ===== */
     .kid { display: flex; flex-direction: column; gap: 18px; }
+    .rev-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; }
+    .rev-line { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .km-s { margin-top: -6px; font-size: 12.5px; font-weight: 700; color: var(--ink2); text-align: center; }
     .kid-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
     .kid-mod { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 132px; padding: 18px 12px; border: none; border-radius: 22px; background: var(--surface); box-shadow: var(--sh-float); cursor: pointer; font-family: inherit; }
     .km-ic { width: 64px; height: 64px; border-radius: 20px; display: flex; align-items: center; justify-content: center; }
@@ -654,6 +676,13 @@ export class HomeScreen {
   admin = inject(AdminStore);
   private fins = inject(FinancesStore);
   ecole = inject(EcoleStore);
+  readonly revisions = inject(RevisionsStore);
+  /** Les enfants dont on connaît la journée de révisions (rien sans réseau). */
+  readonly revKids = computed(() => {
+    const today = this.revisions.kidsToday();
+    return this.store.children().filter((k) => today[k.id] !== undefined)
+      .map((k) => ({ id: k.id, line: kidsLine([{ name: k.name, sessions: today[k.id] }]) }));
+  });
   private eqp = inject(EquipementsStore);
   readonly subject = subjectLabel;
 
@@ -1036,6 +1065,16 @@ export class HomeScreen {
         const sl = this.ecole.syncLine();
         if (sl && !sl.ok) return sl.text;
         return this.ecole.tomorrowShort() || 'Aucun élève associé';
+      }
+      case 'revisions': {
+        // Un enfant : l'objectif de son entraînement du jour ; un adulte : les sessions du jour de chaque enfant.
+        if (this.store.isChild()) {
+          const progs = Object.values(this.revisions.overviews()).map((o) => o.program).filter((p) => !!p);
+          this.revisions.recent(); this.revisions.queue();
+          return (progs.length && dayLine(progs.map((p) => ({ done: this.revisions.doneToday(p.exerciseId), goal: p.dailyGoal })))) || 'Mon entraînement du jour';
+        }
+        const today = this.revisions.kidsToday();
+        return kidsLine(this.store.children().map((k) => ({ name: k.name, sessions: today[k.id] }))) || 'Des exercices pour réviser';
       }
       default: return '';
     }

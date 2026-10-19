@@ -147,7 +147,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
   { id: 'entretien', group: 'modules', label: 'Entretien', desc: 'Jusqu’où l’écran Entretien regarde devant lui, et si un consommable passé sous son seuil part seul aux courses. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.' },
   { id: 'equipements', group: 'modules', label: 'Équipements', desc: 'Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.' },
-  { id: 'revisions', group: 'modules', label: 'Révisions', desc: 'La lecture à voix haute des exercices, sur cet appareil.' },
+  { id: 'revisions', group: 'modules', label: 'Révisions', desc: 'L’heure du bilan du dimanche, et la lecture à voix haute des exercices sur cet appareil.' },
   { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -359,6 +359,13 @@ export const REGISTRY = [
     default: true,
   },
   {
+    key: 'revisionsBilanHebdo',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Révisions',
+    label: 'Sur le téléphone : bilan des révisions du dimanche',
+    desc: 'Le dimanche soir, le bilan de la semaine de chaque enfant (« Raphaël cette semaine : 5 sessions, les tables de 6 à 9, 92 % de réussite, 7 × 8 encore fragile »), une seule notification par enfant et par semaine. Toucher la notification ouvre son suivi. Réservé aux adultes : un compte enfant n’en reçoit jamais.',
+    default: true,
+  },
+  {
     key: 'notifEvents',
     type: 'bool', scope: 'personnel', section: 'notifications', module: 'Agenda',
     label: 'Dans la cloche : agenda du jour et de demain',
@@ -542,6 +549,13 @@ export const REGISTRY = [
     label: 'Ajouter seul l’article aux courses quand le stock est bas',
     desc: 'Quand le stock d’un geste passe sous son seuil, son article part dans la liste de courses principale, une fois par passage et sans doublon. Désactivé, un bouton « Ajouter aux courses » le propose sur la ligne du geste et sur l’accueil.',
     default: false,
+  },
+  {
+    key: 'revisionsBilanHeure',
+    type: 'time', scope: 'foyer', section: 'revisions', module: 'Révisions',
+    label: 'Heure du bilan du dimanche',
+    desc: 'Le dimanche, à partir de cette heure, chaque adulte qui l’a demandé reçoit le bilan de la semaine de chaque enfant (lundi à dimanche).',
+    default: '18:30',
   },
   {
     key: 'revisionsVoix',

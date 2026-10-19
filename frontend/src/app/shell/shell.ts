@@ -28,6 +28,7 @@ import { EcoleScreen } from '../screens/ecole/ecole';
 import { EquipementsScreen } from '../screens/equipements/equipements';
 import { RevisionsScreen } from '../screens/revisions/revisions';
 import { EcoleStore } from '../core/ecole.store';
+import { RevisionsStore } from '../core/revisions/store';
 
 @Component({
   selector: 'app-shell',
@@ -115,6 +116,9 @@ export class ShellComponent implements AfterViewInit, OnDestroy {
   // Le module École alimente l'emploi du temps, la présence aux repas, l'accueil
   // et l'agenda : il se charge dès la connexion, pas à l'ouverture de son écran.
   readonly ecole = inject(EcoleStore);
+  // Révisions : la tuile d'accueil compte les sessions du jour, et le bilan du
+  // dimanche touché ouvre le suivi d'un enfant, avant toute visite de l'écran.
+  readonly revisions = inject(RevisionsStore);
   private ro?: ResizeObserver;
 
   ngAfterViewInit(): void {

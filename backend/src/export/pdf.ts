@@ -1,8 +1,10 @@
-// Un PDF de tableau, sans dépendance : de quoi imprimer ou envoyer une liste
-// (l'inventaire des équipements pour l'assurance) et l'ouvrir partout, iPhone
-// compris.
+// Des PDF sans dépendance, de quoi imprimer ou envoyer et ouvrir partout,
+// iPhone compris : un tableau en paysage (l'inventaire des équipements pour
+// l'assurance, `tablePdf`), ou un document en portrait fait de titres, de
+// paragraphes et de tableaux (le bilan des Révisions pour la maîtresse,
+// `documentPdf`).
 //
-// Le minimum du format, écrit à la main : des pages A4 en paysage, les polices
+// Le minimum du format, écrit à la main : des pages A4, les polices
 // standard Helvetica et Helvetica-Bold (présentes dans tout lecteur PDF, rien à
 // embarquer), l'encodage WinAnsi, qui couvre le français (accents, ç, œ, «, »)
 // et le signe euro. Un caractère hors de cet encodage devient « ? » plutôt que
@@ -92,15 +94,19 @@ export function tablePdf(t: PdfTable): Buffer {
     return ops.join('\n');
   });
 
-  // Objets : 1 catalogue, 2 pages, 3-4 polices, puis par page son objet et son contenu.
+  return assemble(contents, PAGE_W, PAGE_H);
+}
+
+/** Le fichier : 1 catalogue, 2 pages, 3-4 polices, puis par page son objet et son contenu. */
+function assemble(contents: string[], pageW: number, pageH: number): Buffer {
   const objs: string[] = [];
-  const kids = pages.map((_, i) => `${5 + 2 * i} 0 R`).join(' ');
+  const kids = contents.map((_, i) => `${5 + 2 * i} 0 R`).join(' ');
   objs[1] = '<< /Type /Catalog /Pages 2 0 R >>';
-  objs[2] = `<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`;
+  objs[2] = `<< /Type /Pages /Kids [${kids}] /Count ${contents.length} >>`;
   objs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
   objs[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
   contents.forEach((c, i) => {
-    objs[5 + 2 * i] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6 + 2 * i} 0 R >>`;
+    objs[5 + 2 * i] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6 + 2 * i} 0 R >>`;
     objs[6 + 2 * i] = `<< /Length ${Buffer.byteLength(c, 'latin1')} >>\nstream\n${c}\nendstream`;
   });
 
@@ -115,4 +121,84 @@ export function tablePdf(t: PdfTable): Buffer {
   for (let i = 1; i < objs.length; i++) body += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
   body += `trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(body, 'latin1');
+}
+
+/** Un bloc de document : un titre de section, un sous-titre, un paragraphe, un tableau. */
+export type DocBlock =
+  | { h2: string } | { h3: string } | { p: string; muted?: boolean }
+  | { table: { columns: PdfColumn[]; rows: string[][] } };
+export interface PdfDocument { title: string; subtitle?: string; blocks: DocBlock[]; footer?: string; }
+
+const DOC_W = 595, DOC_H = 842;
+
+/** Coupe un paragraphe en lignes qui tiennent dans `max` points. */
+export function wrap(s: string, max: number, size: number, bold = false): string[] {
+  const lines: string[] = [];
+  let cur = '';
+  for (const w of s.split(/\s+/).filter(Boolean)) {
+    const next = cur ? cur + ' ' + w : w;
+    if (textWidth(next, size, bold) <= max || !cur) cur = next; else { lines.push(cur); cur = w; }
+  }
+  if (cur) lines.push(cur);
+  return lines.map((l) => fit(l, max, size, bold));
+}
+
+/**
+ * Un document A4 en portrait : le titre, puis les blocs dans l'ordre, une
+ * nouvelle page quand la place manque (un titre ne reste jamais seul en bas de
+ * page). Chaque page porte le pied et son numéro.
+ */
+export function documentPdf(d: PdfDocument): Buffer {
+  const usable = DOC_W - 2 * MARGIN;
+  const pages: string[][] = [[]];
+  let ops = pages[0];
+  let y = DOC_H - MARGIN - 16;
+  const text = (x: number, yy: number, s: string, size: number, bold = false, grey = false) =>
+    ops.push(`BT ${grey ? '0.4 g ' : ''}/${bold ? 'F2' : 'F1'} ${size} Tf ${x.toFixed(2)} ${yy.toFixed(2)} Td ${pdfString(s)} Tj ET${grey ? ' 0 g' : ''}`);
+  const room = (h: number): void => { if (y - h < MARGIN + 10) { ops = []; pages.push(ops); y = DOC_H - MARGIN - 6; } };
+
+  text(MARGIN, y, fit(d.title, usable, 17, true), 17, true);
+  y -= 18;
+  if (d.subtitle) { text(MARGIN, y, fit(d.subtitle, usable, 10), 10, false, true); y -= 14; }
+  y -= 8;
+  for (const b of d.blocks) {
+    if ('h2' in b) { room(48); y -= 10; text(MARGIN, y, fit(b.h2, usable, 13, true), 13, true); ops.push(`0.6 w ${MARGIN} ${(y - 5).toFixed(2)} m ${DOC_W - MARGIN} ${(y - 5).toFixed(2)} l S`); y -= 20; }
+    else if ('h3' in b) { room(40); y -= 4; text(MARGIN, y, fit(b.h3, usable, 11, true), 11, true); y -= 15; }
+    else if ('p' in b) {
+      for (const line of wrap(b.p, usable, 10)) { room(14); text(MARGIN, y, line, 10, false, !!b.muted); y -= 13; }
+      y -= 3;
+    } else {
+      const { columns, rows } = b.table;
+      room(ROW_H * Math.min(3, rows.length + 1) + 6);
+      const head = (): void => {
+        let x = MARGIN;
+        for (const c of columns) {
+          const s = fit(c.title, c.width - 6, HEAD, true);
+          text(c.align === 'right' ? x + c.width - 6 - textWidth(s, HEAD, true) : x, y, s, HEAD, true);
+          x += c.width;
+        }
+        ops.push(`0.6 w ${MARGIN} ${(y - 5).toFixed(2)} m ${MARGIN + columns.reduce((t, c) => t + c.width, 0)} ${(y - 5).toFixed(2)} l S`);
+        y -= ROW_H + 2;
+      };
+      head();
+      rows.forEach((row, ri) => {
+        if (y - ROW_H < MARGIN + 10) { room(DOC_H); head(); }
+        if (ri % 2 === 1) ops.push(`0.95 g ${MARGIN} ${(y - 4).toFixed(2)} ${columns.reduce((t, c) => t + c.width, 0)} ${ROW_H} re f 0 g`);
+        let x = MARGIN;
+        columns.forEach((c, ci) => {
+          const s = fit(row[ci] ?? '', c.width - 6, SIZE);
+          text(c.align === 'right' ? x + c.width - 6 - textWidth(s, SIZE) : x, y, s, SIZE);
+          x += c.width;
+        });
+        y -= ROW_H;
+      });
+      y -= 8;
+    }
+  }
+  const contents = pages.map((p, pi) => {
+    ops = p;
+    text(MARGIN, MARGIN - 12, (d.footer ? d.footer + '   ' : '') + `Page ${pi + 1} / ${pages.length}`, 8, false, true);
+    return p.join('\n');
+  });
+  return assemble(contents, DOC_W, DOC_H);
 }

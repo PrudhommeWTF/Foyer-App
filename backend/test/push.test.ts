@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 import { migrateHousehold } from '../src/storage/schema';
 import { addDevice, detailOf, initPush, isPushEndpointAllowed, isSubscription, listDevices, notify, publicKey, recentSends, removeDevice, setSender } from '../src/notify/push';
 import { SchedulerDeps, tick } from '../src/notify/scheduler';
+import { Bilan, weeklyHits } from '../src/revisions/bilan';
 import { applyTaskOps, initTasks, onAssigned } from '../src/tasks/repo';
 import { TaskItem } from '../src/tasks/ops';
 
@@ -193,6 +194,7 @@ describe('planificateur', () => {
     url: () => '',
     entretienOn: () => true,
     garanties: () => ({ items: [], alertDays: 60 }),
+    revisionsWeekly: () => [],
     // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
     // ses rappels. Les tests qui éprouvent ces règles les posent eux-mêmes.
     rules: () => ({ paused: false, quiet: { from: '', to: '' } }),
@@ -246,6 +248,33 @@ describe('planificateur', () => {
     assert.equal(sent.length, 2, 'garantie prolongée : la nouvelle fin prévient à nouveau');
     await tick(deps([], log, { garanties: garanties([{ id: 8, name: 'Four', until: '2026-12-31', daysLeft: 80 }, { id: 9, name: 'TV', until: '2026-10-01', daysLeft: -5 }]), wants }), '2026-10-12T09:00');
     assert.equal(sent.length, 2, 'ni au-delà du seuil, ni une garantie déjà finie');
+  });
+
+  it('bilan des révisions : le dimanche à l’heure dite, une fois par enfant et par semaine, aux adultes qui le veulent', async () => {
+    addDevice('m1', sub('a'), ''); addDevice('me', sub('b'), '');
+    const log: string[] = [];
+    const bilan = (sessions: number) => (kid: { id: string; name: string }, from: string, to: string): Bilan => ({
+      member: kid, from, to, label: '', prev: null,
+      totals: { sessions, questions: sessions * 10, good: sessions * 9, slow: 0, wrong: sessions, pct: 90 },
+      matieres: sessions ? [{ id: 'maths', label: 'Mathématiques', exercises: [{ id: 'tables', label: 'Tables', summary: 'Les tables de 6 à 9, multiplication',
+        totals: { sessions, questions: sessions * 10, good: sessions * 9, slow: 0, wrong: sessions, pct: 90 }, prev: null, groups: [],
+        fragiles: [{ label: '7 × 8', status: 'en-cours' }] }] }] : [],
+    });
+    const weekly = (sessions: number) => (wall: string) => weeklyHits([{ id: 'k1', name: 'Raphaël' }, { id: 'k2', name: 'Gaëtan' }], ['me', 'm1'], wall, '18:30',
+      (k, f, t) => bilan(k.id === 'k1' ? sessions : 0)(k, f, t));
+    const wants = (m: string, kind: string) => !(m === 'm1' && kind === 'revisions');
+    await tick(deps([], log, { revisionsWeekly: weekly(5), wants }), '2026-10-18T18:29');
+    assert.equal(sent.length, 0, 'pas avant l’heure');
+    await tick(deps([], log, { revisionsWeekly: weekly(5), wants }), '2026-10-18T18:30');
+    assert.deepEqual(sent.map((s) => s.endpoint.slice(-1)), ['b'], 'm1 a coupé le bilan ; Gaëtan, sans programme ni session, n’a pas de bilan');
+    assert.equal(sent[0].title, 'Révisions de Raphaël');
+    assert.ok(log.some((l) => l.includes('« Raphaël cette semaine : 5 sessions, les tables de 6 à 9, multiplication, 90 % de réussite, 7 × 8 encore fragile. »')), log.join('\n'));
+    await tick(deps([], log, { revisionsWeekly: weekly(6), wants }), '2026-10-18T21:00');
+    assert.equal(sent.length, 1, 'une seule fois par semaine');
+    await tick(deps([], log, { revisionsWeekly: weekly(5), wants }), '2026-10-19T18:30');
+    assert.equal(sent.length, 1, 'le lundi : rien');
+    await tick(deps([], log, { revisionsWeekly: weekly(2), wants }), '2026-10-25T19:00');
+    assert.equal(sent.length, 2, 'la semaine suivante, à nouveau');
   });
 
   it('une tâche faite entre-temps n’est plus rappelée ; reportée, elle l’est à nouveau', async () => {
