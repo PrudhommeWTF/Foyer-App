@@ -47,6 +47,11 @@ const MOD_COLOR: Record<string, string> = {
   planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8', ecole: '#3D6FA8', equipements: '#7A9B76',
 };
 
+/** Les tuiles de l'accueil d'un enfant, à la première personne. */
+const KID_LABEL: Record<string, string> = {
+  calendar: 'Le calendrier', taches: 'Mes tâches', planning: 'Mon emploi du temps', ecole: 'Mes devoirs',
+};
+
 /** Les sections du carousel mobile, dans l'ordre. */
 // Les Finances ne figurent pas dans le carrousel mobile : on peut montrer
 // l'accueil à quelqu'un d'étranger au foyer sans exposer de montants. Elles
@@ -317,6 +322,39 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
             @if (reloading()) { Chargement... } @else { Réessayer }
           </button>
         </div>
+      } @else if (store.isChild()) {
+        <!--
+          ===== enfant : ses écrans en grandes tuiles, puis ce qui le concerne =====
+          Le même accueil, filtré : pas de fil d'activité (il raconte les gestes
+          des parents), ses tâches à lui, ses devoirs, l'agenda. Une carte sans
+          rien à dire ne s'affiche pas.
+        -->
+        <div class="kid">
+          <div class="kid-mods">
+            @for (m of modules(); track m.id) {
+              <button class="kid-mod" (click)="store.go(m.id)">
+                <span class="km-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="34" [color]="m.color" [width]="2.1" /></span>
+                <span class="km-l">{{ kidLabel(m) }}</span>
+              </button>
+            }
+          </div>
+          <div class="kid-cards">
+            @if (myTasks().length) {
+              <div class="card rc">
+                <div class="rc-head"><span>Mes tâches</span><button class="rc-link" (click)="store.go('taches')">Toutes</button></div>
+                @for (t of myTasks(); track t.t.id) {
+                  <div class="rc-row task kid-row" (click)="store.openItem('task', t.t.id)">
+                    <span class="t-dot" [style.background]="t.color"></span>
+                    <span class="t-text">{{ t.t.text }}</span>
+                    <span class="t-list">{{ t.list }}</span>
+                  </div>
+                }
+              </div>
+            }
+            @if (store.modEcole() && ecole.vue()) { <ng-container [ngTemplateOutlet]="ecoleCard" /> }
+            @if (agendaGroups().length) { <ng-container [ngTemplateOutlet]="agendaCard" /> }
+          </div>
+        </div>
       } @else if (store.narrow()) {
         <!-- ===== mobile : carousel + grille de modules ===== -->
         <div class="home-m">
@@ -410,6 +448,16 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
   styles: [`
     .hello { font-size: 40px; color: var(--primary); line-height: .9; font-weight: 700; }
     .home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+
+    /* ===== accueil d'un enfant : des cibles faites pour un doigt de huit ans ===== */
+    .kid { display: flex; flex-direction: column; gap: 18px; }
+    .kid-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+    .kid-mod { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 132px; padding: 18px 12px; border: none; border-radius: 22px; background: var(--surface); box-shadow: var(--sh-float); cursor: pointer; font-family: inherit; }
+    .km-ic { width: 64px; height: 64px; border-radius: 20px; display: flex; align-items: center; justify-content: center; }
+    .km-l { font-size: 17px; font-weight: 800; color: var(--ink); text-align: center; line-height: 1.2; }
+    .kid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+    .kid-row { min-height: 44px; font-size: 15px; }
+    @media (max-width: 520px) { .kid-mods { grid-template-columns: 1fr 1fr; } .kid-cards { grid-template-columns: 1fr; } }
 
     /* ===== aucun document chargé ===== */
     .no-doc { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 44px 24px; max-width: 460px; margin: 0 auto; }
@@ -810,6 +858,21 @@ export class HomeScreen {
   });
 
   /** Les 6 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
+  /** Les tâches d'un enfant, à lui, pas encore faites, les plus proches d'abord. */
+  readonly myTasks = computed(() => {
+    const d = this.store.data(); const me = this.store.me()?.id;
+    if (!d || !me) return [];
+    const lists = new Map(this.store.visibleTaskLists().map((l) => [l.id, l]));
+    return (d.tasks || [])
+      .filter((t) => !t.done && lists.has(t.listId) && (t.who || []).includes(me))
+      .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
+      .slice(0, 6)
+      .map((t) => ({ t, list: lists.get(t.listId)!.name, color: lists.get(t.listId)!.color }));
+  });
+
+  /** Le nom des tuiles d'un enfant : ses écrans à lui, dits comme il les dirait. */
+  kidLabel(m: Mod): string { return KID_LABEL[m.id] || m.label; }
+
   readonly latestTasks = computed(() => {
     const d = this.store.data();
     if (!d) return [];

@@ -10,6 +10,15 @@ import { SettingDecl, SettingSection } from './settings/registry';
  * répond pas », et donc ce qui évite de déconnecter quelqu'un parce que le
  * backend redémarre.
  */
+/** Le retour depuis la session d'un enfant : fini (`from`, l'écran d'où le parent était parti), ou le code attendu. */
+export type SwitchBackResult = { totpRequired: true; challenge: string } | { totpRequired?: undefined; from: string | null };
+
+/** Une ligne du journal des sessions d'enfant. */
+export interface SwitchEntry {
+  id: number; by: string | null; byName: string; device: string; startedAt: string;
+  endedAt: string | null; endReason: 'retour' | 'deconnexion' | 'fermee' | null; endedBy: string | null; open: boolean;
+}
+
 export class ApiError extends Error {
   /** Corps JSON de la réponse, quand il y en a un. Un 409 y porte le document du serveur. */
   constructor(message: string, readonly status: number, readonly body?: unknown) {
@@ -367,8 +376,30 @@ export class ApiService {
   me(): Promise<{
     email: string; name: string; memberId: string | null; admin: boolean; enfant: boolean; token?: string;
     totp: boolean; totpRecoveryLeft: number | null;
+    /** Session d'un enfant ouverte par un parent : qui l'a ouverte, et quand. Null sinon. */
+    via: string | null; viaName: string | null; switchedAt: string | null;
   }> {
     return this.request('me');
+  }
+
+  // ---- portail enfant (voir docs/portail-enfant.md) ----
+  /** Ouvre la session d'un enfant : le serveur remplace le cookie du parent. `tactile` dit « iPad » au journal. */
+  switchTo(memberId: string, from: string, tactile: boolean): Promise<{ memberId: string; name: string }> {
+    return this.post(`auth/switch/${encodeURIComponent(memberId)}`, { from, tactile });
+  }
+  /** Revenir au parent : son mot de passe, puis son code s'il a un second facteur. */
+  switchBack(password: string): Promise<SwitchBackResult> {
+    return this.post('auth/switch/back', { password });
+  }
+  switchBackTotp(challenge: string, code: string): Promise<SwitchBackResult> {
+    return this.post('auth/switch/back/totp', { challenge, code });
+  }
+  /** Les dernières sessions ouvertes pour cet enfant (adultes seulement). */
+  memberSwitches(memberId: string): Promise<{ switches: SwitchEntry[] }> {
+    return this.request(`members/${encodeURIComponent(memberId)}/switches`);
+  }
+  closeSwitch(memberId: string, sid: number): Promise<{ ok: boolean }> {
+    return this.post(`members/${encodeURIComponent(memberId)}/switches/${sid}/close`);
   }
 
   memberAccounts(): Promise<{ accounts: { memberId: string; email: string; totp: boolean }[] }> {
