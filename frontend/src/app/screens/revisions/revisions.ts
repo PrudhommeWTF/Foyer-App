@@ -10,6 +10,7 @@ import { GridComponent } from './grid';
 import { HistoryComponent } from './history';
 import { ParamsFormComponent } from './params-form';
 import { RunPlan, RunResult, RunnerComponent, SUPPORTED_INPUTS, frenchVoice } from './runner';
+import { SuiviComponent } from './suivi';
 
 /** Le nombre de questions d'une session sans programme (un adulte, ou un enfant à qui rien n'est encore réglé). */
 const FREE_QUESTIONS = 20;
@@ -32,9 +33,18 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
   selector: 'screen-revisions',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ModalComponent, GridComponent, RunnerComponent, HistoryComponent, ParamsFormComponent],
+  imports: [IconComponent, ModalComponent, GridComponent, RunnerComponent, HistoryComponent, ParamsFormComponent, SuiviComponent],
   template: `
     <div class="screen-enter">
+      @if (store.foyer.children().length) {
+        <div class="tabs" role="tablist">
+          <button role="tab" [attr.aria-selected]="tab() === 'moi'" [class.on]="tab() === 'moi'" (click)="tab.set('moi')">M’entraîner</button>
+          <button role="tab" [attr.aria-selected]="tab() === 'suivi'" [class.on]="tab() === 'suivi'" (click)="tab.set('suivi')">Suivi des enfants</button>
+        </div>
+      }
+      @if (tab() === 'suivi' && store.foyer.children().length) {
+        <rev-suivi />
+      } @else {
       @if (store.queue().length; as n) {
         <div class="note">{{ n > 1 ? n + ' sessions attendent le réseau : elles partiront toutes seules.' : 'Une session attend le réseau : elle partira toute seule.' }}</div>
       }
@@ -77,6 +87,7 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
             }
           }
         }
+      }
       }
     </div>
 
@@ -140,6 +151,9 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
     @if (history(); as h) { <rev-history [data]="h" (close)="history.set(null)" /> }
   `,
   styles: [`
+    .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+    .tabs button { border: none; background: var(--soft2); color: var(--ink2); border-radius: 12px; padding: 10px 16px; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; min-height: 44px; }
+    .tabs button.on { background: var(--ink); color: var(--bg); }
     .note { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: #FDF0DA; color: #8A5A07; font-size: 13px; font-weight: 700; }
     .empty { padding: 24px; text-align: center; font-weight: 700; color: var(--ink2); }
     .big { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; min-height: 120px; padding: 20px 22px; margin-bottom: 8px; border: none; border-radius: 22px;
@@ -182,6 +196,8 @@ export class RevisionsScreen implements OnDestroy {
   readonly store = inject(RevisionsStore);
   readonly modeLabels = MODE_LABELS;
 
+  /** Pour un adulte qui a des enfants : s'entraîner soi-même, ou les suivre. */
+  readonly tab = signal<'moi' | 'suivi'>('moi');
   readonly chooser = signal<Chooser | null>(null);
   /** La série en cours : les sessions à enchaîner, et où on en est. */
   private readonly chain = signal<{ plans: RunPlan[]; i: number } | null>(null);
@@ -239,7 +255,10 @@ export class RevisionsScreen implements OnDestroy {
   }
   /** Les items soulignés dans la grille d'un exercice. */
   hl(ex: string): ReadonlySet<string> { return this.changed()[ex] ?? NONE; }
-  toWork(ex: string) { return fragile(this.store.overviews()[ex]?.mastery ?? []); }
+  toWork(ex: string) {
+    const ov = this.store.overviews()[ex]; const def = EXERCISES.find((d) => d.id === ex);
+    return ov && def ? fragile(ov.mastery, 6, def.universe(ov.params)) : [];
+  }
   modesOf(def: ExerciseDef): Mode[] { return MODES.filter((m) => m !== 'apprendre' || !!def.learn); }
 
   /**

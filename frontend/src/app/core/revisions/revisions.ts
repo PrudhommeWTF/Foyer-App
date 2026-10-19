@@ -78,9 +78,14 @@ export function summaryLine(def: ExerciseDef, p: Params, r: { good: number; slow
   return `Tu as révisé ${lowerFirst(def.summary(p))} : ${n(r.good, 'bonne', 'bonnes')}, ${n(r.slow, 'lente', 'lentes')}, ${n(r.wrong, 'fausse', 'fausses')}.`;
 }
 
-/** Ce qu'il faut encore travailler, par ordre d'urgence : le plus bas niveau, puis le plus d'erreurs. */
-export function fragile(items: readonly MasteryItem[], limit = 6): MasteryItem[] {
-  return items.filter((c) => c.status !== 'acquise' && (c.wrong > 0 || c.lastResult !== 'bon'))
+/**
+ * Ce qu'il faut encore travailler, par ordre d'urgence : le plus bas niveau,
+ * puis le plus d'erreurs. Limité à l'univers des paramètres en vigueur quand
+ * il est donné : un item d'un ancien programme ne se mêle pas au nouveau.
+ */
+export function fragile(items: readonly MasteryItem[], limit = 6, universe?: readonly string[]): MasteryItem[] {
+  const within = universe && new Set(universe);
+  return items.filter((c) => (!within || within.has(c.key)) && c.status !== 'acquise' && (c.wrong > 0 || c.lastResult !== 'bon'))
     .sort((x, y) => x.level - y.level || y.wrong - x.wrong || x.key.localeCompare(y.key))
     .slice(0, limit);
 }
@@ -107,6 +112,30 @@ export function dayLine(goals: readonly { done: number; goal: number }[]): strin
   const met = set.filter((g) => g.done >= g.goal).length;
   if (met === set.length) return 'Objectif du jour atteint';
   return met ? `${met} exercice${met > 1 ? 's' : ''} sur ${set.length} fait${met > 1 ? 's' : ''} aujourd’hui` : 'Pas encore aujourd’hui';
+}
+
+/**
+ * Les groupes du suivi d'un programme, dans l'ordre de l'univers, avec ceux
+ * qui n'ont encore aucune réponse : « pas encore vu » se dit, il ne disparaît pas.
+ */
+export function programGroups(def: ExerciseDef, p: Params, seen: readonly { group: string; questions: number; correct: number; fast: number }[]) {
+  const by = new Map(seen.map((g) => [g.group, g] as const));
+  const names: string[] = [];
+  for (const k of def.universe(p)) for (const g of def.groups(k, p)) if (!names.includes(g)) names.push(g);
+  names.sort((x, y) => x.localeCompare(y, 'fr', { numeric: true }));
+  return names.map((group) => {
+    const g = by.get(group);
+    return { group, questions: g?.questions ?? 0, pct: g?.questions ? Math.round((g.correct / g.questions) * 100) : 0, fastPct: g?.questions ? Math.round((g.fast / g.questions) * 100) : 0 };
+  });
+}
+
+/** Les `n` derniers jours (heure de Paris), aujourd'hui en dernier, avec leurs sessions. */
+export function activityDays(days: readonly { day: string; sessions: number }[], now: Date, n = 28): { day: string; sessions: number }[] {
+  const by = new Map(days.map((d) => [d.day, d.sessions] as const));
+  return Array.from({ length: n }, (_, i) => {
+    const day = parisDay(new Date(now.getTime() - (n - 1 - i) * 86400_000).toISOString());
+    return { day, sessions: by.get(day) ?? 0 };
+  });
 }
 
 /** Un identifiant de session, même servi en http sur le réseau local (où crypto.randomUUID manque). */

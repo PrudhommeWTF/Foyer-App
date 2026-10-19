@@ -6,7 +6,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { ExerciseDef, readParams } from './exercises/contract';
 import { TABLES, TablesQuestion } from './exercises/tables';
-import { MasteryItem, classify, dayLine, drawQuestions, fragile, goalLine, sessionUuid, summaryLine } from './revisions';
+import { MasteryItem, activityDays, classify, dayLine, drawQuestions, fragile, goalLine, programGroups, sessionUuid, summaryLine } from './revisions';
 
 /** Un hasard reproductible : le même tirage à chaque passage. */
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -87,6 +87,25 @@ test('les items fragiles : le plus bas niveau d’abord, jamais un acquis', () =
     item('mult:3x3', NOW, { level: 2, wrong: 0, lastResult: 'bon', status: 'en-cours' }),
   ]);
   assert.deepEqual(f.map((c) => c.key), ['mult:7x8', 'mult:6x9']);
+  assert.deepEqual(fragile([item('mult:7x8', NOW, { wrong: 1, status: 'en-cours' }), item('mult:2x3', NOW, { wrong: 1, status: 'en-cours' })], 6, ['mult:2x3']).map((c) => c.key),
+    ['mult:2x3'], 'hors du programme en vigueur : pas montré');
+});
+
+test('le suivi montre tous les groupes du programme, même ceux pas encore vus, dans l’ordre des nombres', () => {
+  const p = readParams(TABLES, { tables: [8, 11], max: 12 });
+  const g = programGroups(TABLES, p, [{ group: 'Table de 9', questions: 4, correct: 3, fast: 2 }]);
+  assert.deepEqual(g.map((x) => x.group), ['Table de 8', 'Table de 9', 'Table de 10', 'Table de 11']);
+  assert.deepEqual(g[1], { group: 'Table de 9', questions: 4, pct: 75, fastPct: 50 });
+  assert.equal(g[0].questions, 0);
+});
+
+test('vingt-huit jours d’activité, aujourd’hui en dernier, à l’heure de Paris', () => {
+  const now = new Date('2026-10-19T22:30:00.000Z'); // 00 h 30 le 20 à Paris
+  const d = activityDays([{ day: '2026-10-20', sessions: 2 }, { day: '2026-09-22', sessions: 9 }], now);
+  assert.equal(d.length, 28);
+  assert.deepEqual(d[27], { day: '2026-10-20', sessions: 2 });
+  assert.equal(d[0].day, '2026-09-23');
+  assert.ok(d.every((x) => x.day !== '2026-09-22'), 'hors des quatre semaines');
 });
 
 test('un identifiant de session est un uuid v4, même sans crypto.randomUUID', () => {
