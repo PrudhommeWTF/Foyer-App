@@ -164,7 +164,7 @@ import { WarrantyState } from '../../core/warranty';
     .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: none; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; color: var(--ink); text-align: left; padding: 11px 12px; border-radius: 10px; }
     .menu-item:hover { background: var(--soft); }
     .menu-sep { height: 1px; background: var(--line); margin: 5px 6px; }
-    .menu-lbl { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; padding: 6px 12px 2px; }
+    .menu-lbl { font-size: 12.5px; font-weight: 800; color: var(--ink3); padding: 6px 12px 2px; }
     .card.note { padding: 16px 18px; border-radius: 16px; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; margin-bottom: 18px; }
     .note-act { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
     .small { font-size: 12px; font-weight: 600; color: var(--ink3); margin-top: 8px; }
@@ -172,7 +172,7 @@ import { WarrantyState } from '../../core/warranty';
     .e-t { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
     .card.empty p { max-width: 460px; margin: 0 auto 16px; }
     .group { margin-bottom: 22px; }
-    .g-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
+    .g-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: var(--ink2); margin-bottom: 10px; }
     .g-n { font-size: 11.5px; background: var(--soft2); color: var(--ink3); border-radius: 10px; padding: 2px 8px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
     :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }

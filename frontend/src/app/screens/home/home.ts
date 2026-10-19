@@ -495,7 +495,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .m-dish { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .m-dish.none { color: var(--ink3); font-weight: 700; font-style: italic; }
     /* Aperçu « Demain » : garnit le volet avec les repas déjà prévus du lendemain. */
-    .meal-next { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 10px; font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .03em; }
+    .meal-next { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 10px; font-size: 12.5px; font-weight: 800; color: var(--ink3); }
     .meal-next + .rc-row { border-top: none; }
 
     /* finances */

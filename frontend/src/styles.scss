@@ -209,11 +209,8 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
 }
 .seg > button.active { background: var(--primary); color: #fff; }
 
-/* Section overline */
-.overline {
-  font-size: 11px; font-weight: 800; color: var(--ink3);
-  text-transform: uppercase; letter-spacing: .08em;
-}
+/* Section overline: a quiet heading in normal case (no capitals, no tracking). */
+.overline { font-size: 12.5px; font-weight: 800; color: var(--ink2); }
 
 /* Screen headers */
 .screen-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; flex-wrap: wrap; }

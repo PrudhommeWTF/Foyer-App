@@ -245,16 +245,16 @@ const GRID_MIN = 760;
     /* Un jour passé reste consultable, mais cesse de tirer l'œil. */
     .day.past { opacity: .55; }
     .day-head { display: flex; align-items: baseline; gap: 7px; padding: 2px 2px 6px; }
-    .day-dow { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; }
+    .day-dow { font-size: 13.5px; font-weight: 800; color: var(--ink3); }
     .day-num { font-size: 20px; font-weight: 700; color: var(--ink); }
     .day-month { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
     .day.today .day-dow, .day.today .day-num, .day.today .day-month { color: #D9930F; }
-    .day-today { margin-left: auto; font-size: 11px; font-weight: 800; color: #D9930F; text-transform: uppercase; letter-spacing: .04em; }
+    .day-today { margin-left: auto; font-size: 12.5px; font-weight: 800; color: #D9930F; }
 
     /* La ligne fait 52 px : elle se vise au pouce, comme une ligne de courses. */
     .srow { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 9px 2px; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
     .srow + .srow { border-top: 1px solid var(--line); }
-    .srow-slot { font-size: 10.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; width: 38px; flex: none; }
+    .srow-slot { font-size: 12px; font-weight: 800; color: var(--ink3); width: 38px; flex: none; }
     .srow-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
     .srow-name { font-size: 14.5px; font-weight: 800; color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
     .srow-name ~ .srow-name { font-size: 13.5px; font-weight: 700; color: var(--ink2); }
@@ -269,13 +269,13 @@ const GRID_MIN = 760;
     .corner { }
     .dhead { text-align: center; padding: 6px 0; border-radius: 12px; }
     .dhead.today { background: var(--honey); }
-    .dow { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; }
+    .dow { font-size: 13.5px; font-weight: 800; color: var(--ink3); }
     .dhead.today .dow { color: #D9930F; }
     .dnum { font-size: 22px; font-weight: 700; color: var(--ink); }
     .dhead.today .dnum { color: #D9930F; }
 
     .rlabel { display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
-    .rlabel-txt { font-size: 11px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .03em; writing-mode: vertical-rl; transform: rotate(180deg); }
+    .rlabel-txt { font-size: 12.5px; font-weight: 800; color: var(--ink2); writing-mode: vertical-rl; transform: rotate(180deg); }
 
     .cell { background: var(--soft); border-radius: 16px; padding: 12px 11px; min-height: 96px; cursor: pointer; border: 2px solid transparent; display: flex; flex-direction: column; transition: transform .12s ease; }
     .cell:hover { transform: translateY(-2px); }
@@ -283,7 +283,7 @@ const GRID_MIN = 760;
     .cell.today { border-color: var(--honey); }
     .cell-top { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
     .dot { width: 8px; height: 8px; border-radius: 3px; flex: none; }
-    .cell-slot { font-size: 9.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; }
+    .cell-slot { font-size: 11px; font-weight: 800; color: var(--ink3); }
     .cell-name { font-weight: 800; font-size: 13px; color: var(--ink); line-height: 1.25; }
     .cell-name + .cell-name { margin-top: 3px; font-weight: 700; color: var(--ink2); }
     .cell-tag { margin-top: 6px; font-size: 10px; font-weight: 800; }

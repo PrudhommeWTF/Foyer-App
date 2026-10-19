@@ -188,57 +188,57 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
       <!-- La liste, par rayon. Un article coché reste dans son rayon, en bas,
            grisé et barré : il n'est pas déplacé dans un panier. -->
       @for (g of groups(); track g.aisle.id) {
-        <div class="cat" [style.border-left]="'4px solid ' + g.aisle.color">
-          <div class="cat-head">
-            <button class="cat-name-btn" (click)="store.toggleAisleCollapse(g.aisle.id)" [attr.aria-expanded]="!store.aisleCollapsed(g.aisle.id)">
-              <f-icon [name]="store.aisleCollapsed(g.aisle.id) ? 'chevronRight' : 'chevronDown'" [size]="15" color="var(--ink3)" [width]="2.4" />
-              <span class="dot" [style.background]="g.aisle.color"></span>
-              <span class="cat-label">{{ g.aisle.name }}</span>
+        <section class="reg-sec">
+          <div class="reg-head">
+            <button class="reg-fold" (click)="store.toggleAisleCollapse(g.aisle.id)" [attr.aria-expanded]="!store.aisleCollapsed(g.aisle.id)">
+              <f-icon [name]="store.aisleCollapsed(g.aisle.id) ? 'chevronRight' : 'chevronDown'" [size]="15" color="var(--ink2)" [width]="2.4" />
+              <span class="reg-sq" [style.background]="g.aisle.color"></span>
+              <span class="reg-title">{{ g.aisle.name }}</span>
+              @if (g.toTake.length) { <span class="reg-n">{{ g.toTake.length }} à prendre</span> }
             </button>
-            <span class="cat-counts">
-              @if (g.toTake.length) { <span class="cat-n">{{ g.toTake.length }} à prendre</span> }
-            </span>
           </div>
           @if (!store.aisleCollapsed(g.aisle.id)) {
-            @for (it of g.toTake; track it.id) {
-              <div class="row" [class.unavail]="it.state === 'indisponible'">
-                <button class="tick" [class.unavail]="it.state === 'indisponible'" (click)="store.toggleShop(it.id)"
-                        [attr.aria-label]="'Cocher ' + it.name">
-                  @if (it.state === 'indisponible') { <f-icon name="x" [size]="15" color="#C6492F" [width]="3" /> }
-                </button>
-                <button class="row-body" (click)="store.openItem('shop', it.id)">
-                  @if (store.photoUrl(it.photoId); as ph) { <span class="s-thumb" [style.background-image]="'url(' + ph + ')'"></span> }
-                  <span class="s-name">{{ it.name }}</span>
-                  @if (it.state === 'indisponible') { <span class="s-flag">introuvable</span> }
-                  @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
-                </button>
-                @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
-              </div>
-              <!-- Rayon « À trier » : un tap range l'article et apprend son rayon. -->
-              @if (isTriage(g.aisle)) {
-                <div class="tri-chips">
-                  @for (a of otherAisles(); track a.id) {
-                    <button class="tri-chip" (click)="store.rangeShopItem(it.id, a.id)">
-                      <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
+            <div class="reg-box">
+              @for (it of g.toTake; track it.id) {
+                <div>
+                  <div class="reg-row it" [class.unavail]="it.state === 'indisponible'">
+                    <button class="ck0" [class.x]="it.state === 'indisponible'" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Cocher ' + it.name">
+                      @if (it.state === 'indisponible') { <f-icon name="x" [size]="12" color="var(--status-crit)" [width]="3" /> }
                     </button>
+                    <button class="row-body" (click)="store.openItem('shop', it.id)">
+                      @if (store.photoUrl(it.photoId); as ph) { <span class="s-thumb" [style.background-image]="'url(' + ph + ')'"></span> }
+                      <span class="s-name">{{ it.name }}@if (it.state === 'indisponible') { <span class="s-flag">introuvable</span> }</span>
+                      @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+                    </button>
+                    @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
+                  </div>
+                  <!-- Rayon « À trier » : un tap range l'article et apprend son rayon. -->
+                  @if (isTriage(g.aisle)) {
+                    <div class="tri-chips">
+                      @for (a of otherAisles(); track a.id) {
+                        <button class="tri-chip" (click)="store.rangeShopItem(it.id, a.id)">
+                          <span class="s-dot" [style.background]="a.color"></span>{{ a.name }}
+                        </button>
+                      }
+                    </div>
                   }
                 </div>
               }
-            }
-            @for (it of g.checked; track it.id) {
-              <div class="row done">
-                <button class="tick on" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Décocher ' + it.name">
-                  <f-icon name="check" [size]="14" color="#fff" [width]="3.4" />
-                </button>
-                <button class="row-body" (click)="store.openItem('shop', it.id)">
-                  <span class="s-name done">{{ it.name }}</span>
-                  @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
-                </button>
-                @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
-              </div>
-            }
+              @for (it of g.checked; track it.id) {
+                <div class="reg-row it done">
+                  <button class="ck0 on" (click)="store.toggleShop(it.id)" [attr.aria-label]="'Décocher ' + it.name">
+                    <f-icon name="check" [size]="13" color="#fff" [width]="3.4" />
+                  </button>
+                  <button class="row-body" (click)="store.openItem('shop', it.id)">
+                    <span class="s-name done">{{ it.name }}</span>
+                    @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+                  </button>
+                  @if (whoColor(it); as c) { <span class="who" [style.background]="c" [title]="whoName(it)"></span> }
+                </div>
+              }
+            </div>
           }
-        </div>
+        </section>
       } @empty {
         <div class="empty">Ajoutez un premier article.</div>
       }
@@ -329,38 +329,32 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
 
     .all-done { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 13px; background: var(--soft2); color: var(--ink2); font-size: 13.5px; font-weight: 800; margin-bottom: 14px; }
 
-    .cat { background: var(--surface); border-radius: var(--r-card); padding: 12px 14px 6px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); margin-bottom: 14px; }
-    .cat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-    .cat-name-btn { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; border: none; background: transparent; padding: 4px 0; cursor: pointer; font-family: var(--font-display); font-size: 13.5px; font-weight: 700; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; text-align: left; }
-    .cat-name-btn .dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-    .cat-label { min-width: 0; overflow-wrap: anywhere; }
-    .cat-counts { display: flex; align-items: center; gap: 4px; flex: none; }
-    .cat-n { font-size: 12px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
 
     /* La ligne fait 52 px : la coche et le corps sont deux cibles distinctes,
        assez larges pour être visées d'une main dans un magasin. */
-    .row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
-    .row + .row { border-top: 1px solid var(--line); }
-    .row.done { opacity: .7; }
+    /* Un article : une ligne registre. La case ronde reste neutre ; la couleur du rayon est sur son carré. */
+    .reg-row.it { cursor: default; gap: 14px; padding-top: 0; padding-bottom: 0; }
+    .reg-row.it:hover { background: var(--surface); }
+    .ck0 { position: relative; width: 24px; height: 24px; flex: none; border-radius: 50%; border: 2px solid var(--line2); background: none; display: grid; place-items: center; cursor: pointer; padding: 0; }
+    .ck0::before { content: ''; position: absolute; inset: -9px; }
+    .ck0.on { background: var(--sage); border-color: var(--sage); }
+    .ck0.x { border-color: color-mix(in srgb, var(--status-crit) 50%, transparent); }
+    .ck0:focus-visible { outline: 2px solid var(--ink3); outline-offset: 3px; }
     /* Étiquette « introuvable » dans la ligne, discrète, non cochée. */
-    .s-flag { flex: none; font-size: 11px; font-weight: 800; color: #C6492F; background: #FCE9E3; border-radius: 6px; padding: 1px 7px; }
+    .s-flag { margin-left: 8px; font-size: 12.5px; font-weight: 800; color: var(--status-crit); }
     /* Puces de rangement sous un article « À trier » : une seule rangée qui
        défile à l'horizontale, pour ne pas pousser la liste hors de vue quand le
        foyer a beaucoup de rayons. Indentée sous le libellé. */
-    .tri-chips { display: flex; flex-wrap: nowrap; gap: 6px; padding: 0 0 10px 42px; margin-top: -2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .tri-chips { display: flex; flex-wrap: nowrap; gap: 6px; padding: 0 16px 10px 54px; margin-top: -2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
     .tri-chips::-webkit-scrollbar { display: none; }
     .tri-chip { display: inline-flex; align-items: center; gap: 5px; flex: none; white-space: nowrap; border: none; background: var(--soft2); color: var(--ink2); border-radius: 9px; padding: 6px 10px; font-size: 12.5px; font-weight: 800; cursor: pointer; font-family: inherit; }
-    .tick { width: 30px; height: 30px; flex: none; border-radius: 9px; border: 2px solid var(--line2); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
-    .tick.on { background: var(--sage); border-color: var(--sage); }
-    .tick.unavail { border-color: #E9B4A6; background: #FCE9E3; }
     .row-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 14px 0; text-align: left; cursor: pointer; font: inherit; }
     .s-name { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
     .s-name.done { color: var(--ink3); text-decoration: line-through; }
-    .row.unavail .s-name { color: #C6492F; }
-    .s-qty { font-size: 13px; font-weight: 800; color: var(--ink3); flex: none; }
+    .s-qty { font-size: 13px; font-weight: 800; color: var(--ink2); flex: none; }
     /* Vignette du produit dans la liste. */
-    .s-thumb { flex: none; width: 30px; height: 30px; border-radius: 8px; background-size: cover; background-position: center; box-shadow: 0 2px 6px -3px rgba(90,60,40,.6); }
-    .who { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .s-thumb { flex: none; width: 30px; height: 30px; border-radius: 8px; background-size: cover; background-position: center; }
+    .who { width: 8px; height: 8px; border-radius: 50%; flex: none; }
     .empty { color: var(--ink2); font-weight: 700; font-size: 14px; padding: 24px 0; }
 
     /* Bouton « Générer », en tête à droite de « Nouvelle liste » : une pastille
@@ -385,7 +379,7 @@ interface ShopGroup { aisle: Aisle; toTake: ShopItem[]; checked: ShopItem[]; }
     .order-row .grip:focus-visible { outline: 2px solid var(--ink3); outline-offset: 1px; }
     .order-row.locked { background: var(--soft2); margin-bottom: 8px; }
     .order-row.locked .grip-ph { flex: none; width: 26px; display: flex; align-items: center; justify-content: center; }
-    .order-fixed { font-size: 11.5px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; }
+    .order-fixed { font-size: 12px; font-weight: 800; color: var(--ink3); }
     .up { transform: rotate(90deg); }
     .down { transform: rotate(90deg); }
     .hint { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }

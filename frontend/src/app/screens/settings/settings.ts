@@ -524,13 +524,13 @@ const GESTES = new Set(['compte', 'membres']);
     .upd-modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
     .sep { border: none; border-top: 2px solid var(--line); margin: 22px 0 0; }
     .device-group { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
-    .dg-head { font-size: 13px; font-weight: 800; color: var(--ink); text-transform: uppercase; letter-spacing: .04em; }
+    .dg-head { font-size: 13px; font-weight: 800; color: var(--ink); }
     .dg-desc { font-size: 12.5px; font-weight: 600; color: var(--ink2); margin: 2px 0 10px; }
     .groupe { margin: 18px 0 2px; }
     .gl { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: var(--ink); }
     .gd { font-size: 12px; font-weight: 700; color: var(--ink3); line-height: 1.45; }
     .side .sep { margin: 12px 0 4px; }
-    .gt { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; padding: 6px 13px 4px; }
+    .gt { font-size: 12.5px; font-weight: 800; color: var(--ink3); padding: 6px 13px 4px; }
     .find { display: flex; align-items: center; gap: 9px; background: var(--surface); border: 2px solid var(--line); border-radius: var(--r-input); padding: 0 13px; margin-bottom: 20px; }
     .find .input { border: none; background: none; padding: 13px 0; flex: 1; min-width: 0; }
     .find .input:focus { border: none; outline: none; }
@@ -564,7 +564,7 @@ const GESTES = new Set(['compte', 'membres']);
     .reset-sec { margin-top: 12px; border: none; background: none; padding: 0; cursor: pointer; font-size: 12px; font-weight: 800; color: var(--primary); }
 
     .extra { margin-top: 4px; }
-    .extra-t { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; margin: 22px 0 10px; }
+    .extra-t { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin: 22px 0 10px; }
     .content > .fields + .extra-t, .content > .fields + .extra { margin-top: 22px; }
 
     .log { display: flex; flex-direction: column; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -642,7 +642,7 @@ const GESTES = new Set(['compte', 'membres']);
     .push-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; }
     .push-acts { display: flex; gap: 8px; margin-top: 10px; }
     .push-acts .grow { flex: 1; }
-    .push-sub { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
+    .push-sub { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin: 14px 0 6px; }
     .push-dev { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
     .push-dev-body { flex: 1; min-width: 0; }
     .push-dev-ua { font-size: 13px; font-weight: 800; color: var(--ink); }
