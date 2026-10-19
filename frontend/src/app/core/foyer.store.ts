@@ -463,7 +463,7 @@ export class FoyerStore {
       await this.loadState();
       this.needsSetup.set(false);
       this.authed.set(true);
-      this.toast('Votre foyer est créé 🎉');
+      this.toast('Votre foyer est créé.');
       return true;
     } catch (e) {
       this.authError.set((e as Error).message);

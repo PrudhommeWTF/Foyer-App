@@ -3,7 +3,7 @@
 // hors navigateur.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { addDaysIso, addHourHHMM, contactIni, dstr, isoWeek, keptIni, monthIndex, monthStart, occursOn, weekDates } from './helpers';
+import { addDaysIso, addHourHHMM, fmtShortDay, contactIni, dstr, isoWeek, keptIni, monthIndex, monthStart, occursOn, weekDates } from './helpers';
 import { EventItem } from './models';
 
 const iso = (offset: number, anchor: string): string[] => weekDates(offset, anchor).map(dstr);
@@ -129,4 +129,10 @@ test('addHourHHMM ajoute une heure, borne à 23:59, ignore une entrée mal form�
 test('addDaysIso traverse un changement de mois et d’année', () => {
   assert.equal(addDaysIso('2026-09-30', 1), '2026-10-01');
   assert.equal(addDaysIso('2026-12-31', 1), '2027-01-01');
+});
+
+test('fmtShortDay : jour et mois abrégé, l’année seulement si elle diffère', () => {
+  assert.equal(fmtShortDay('2026-10-01', '2026-10-17'), '1 oct.');
+  assert.equal(fmtShortDay('2026-09-30', '2026-10-17'), '30 sept.');
+  assert.equal(fmtShortDay('2025-11-02', '2026-10-17'), '2 nov. 2025');
 });

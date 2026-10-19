@@ -281,7 +281,7 @@ const INTRO = [
     .ravatars > *:first-child { margin-left: 0; }
     .foot { display: flex; align-items: center; gap: 14px; padding: 20px 40px; border-top: 1px solid var(--line); background: var(--surface); }
     .foot .btn { padding: 14px 22px; }
-    .next { padding: 14px 26px; box-shadow: 0 12px 26px -14px rgba(229,107,78,.9); }
+    .next { padding: 14px 26px; box-shadow: var(--sh-primary); }
     .skip { border: none; background: none; padding: 14px 18px; font-size: 14px; font-weight: 800; color: var(--ink2); cursor: pointer; }
 
     @media (max-width: 860px) {

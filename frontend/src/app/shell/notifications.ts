@@ -49,7 +49,7 @@ const KIND_MAP: Record<string, { icon: string; color: string; screen: string }> 
             </div>
           </div>
         } @empty {
-          <div class="empty">Rien de neuf pour le moment 🎉</div>
+          <div class="empty">Rien de neuf pour le moment.</div>
         }
       </div>
     </div>

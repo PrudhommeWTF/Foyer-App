@@ -106,6 +106,14 @@ export function fmtNumericDate(iso: string): string {
   return y && m && d ? `${d}/${m}/${y}` : iso || '';
 }
 
+const SHORT_MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+/** « 1 oct. », or « 2 nov. 2025 » when the year differs from `today`'s. */
+export function fmtShortDay(iso: string, today: string): string {
+  const [y, m, d] = (iso || '').split('-').map(Number);
+  if (!y || !m || !d) return iso || '';
+  return `${d} ${SHORT_MONTHS[m - 1]}` + (String(y) === today.slice(0, 4) ? '' : ` ${y}`);
+}
+
 /** Lowercase + strip accents, for accent/case-insensitive search matching. */
 export function normText(s: string): string {
   // Strip combining diacritical marks (U+0300–U+036F) after NFD decomposition.

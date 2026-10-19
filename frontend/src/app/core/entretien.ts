@@ -70,6 +70,12 @@ export function stockLabel(s: MaintenanceStock, fmt: (iso: string) => string): s
   return `Stock au ${fmt(s.countedAt)} : ${s.qty}${s.unit ? ' ' + plural(s.unit, s.qty) : ''}`;
 }
 
+/** Ce qui reste, dit sur la ligne : « Encore 1 cartouche », « Plus de cartouche », « Stock épuisé ». */
+export function stockLeftLabel(s: MaintenanceStock): string {
+  if (s.qty <= 0) return s.unit ? `Plus de ${s.unit}` : 'Stock épuisé';
+  return `Encore ${s.qty}${s.unit ? ' ' + plural(s.unit, s.qty) : ' en stock'}`;
+}
+
 /** Le stock est-il au seuil ou en dessous ? C'est le moment de racheter. */
 export const stockLow = (s: MaintenanceStock | undefined): boolean => !!s && s.qty <= s.threshold;
 
