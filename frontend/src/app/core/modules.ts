@@ -6,7 +6,7 @@
 // Un module éteint est un drapeau de réglage foyer à `false`. Activés par défaut,
 // sauf École : il contacte un service extérieur, on ne l'allume qu'exprès.
 
-export type ModuleFlag = 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements';
+export type ModuleFlag = 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modTables';
 
 export interface ModuleDef {
   flag: ModuleFlag;
@@ -26,10 +26,11 @@ export const MODULES: ModuleDef[] = [
   { flag: 'modEmploye', id: 'employe', label: 'Employé à domicile', desc: 'Le suivi des heures et la déclaration CESU.', screens: ['employe'] },
   { flag: 'modEntretien', id: 'entretien', label: 'Entretien de la maison', desc: 'Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran, la liste Entretien dans Tâches et ses rappels disparaissent ; les gestes sont conservés.', screens: ['entretien'] },
   { flag: 'modEquipements', id: 'equipements', label: 'Équipements', desc: 'Les fiches des appareils de la maison : facture, plaque, numéro de série et garantie.', screens: ['equipements'] },
+  { flag: 'modTables', id: 'tables', label: 'Tables (calcul mental)', desc: 'L’entraînement aux tables de multiplication et d’addition, et le suivi de chaque enfant. Réactivé, il retrouve l’historique tel quel.', screens: ['tables'] },
   { flag: 'modEcole', id: 'ecole', label: 'École (ÉcoleDirecte)', desc: 'Les devoirs et l’emploi du temps des enfants, rapatriés d’ÉcoleDirecte. Désactivé, Foyer ne contacte jamais ÉcoleDirecte.', screens: ['ecole'] },
 ];
 
 /** L'écran à son drapeau de module, ou undefined pour un écran toujours présent. */
 export const SCREEN_MODULE: Record<string, ModuleFlag | undefined> = {
-  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', entretien: 'modEntretien', equipements: 'modEquipements',
+  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', entretien: 'modEntretien', equipements: 'modEquipements', tables: 'modTables',
 };
