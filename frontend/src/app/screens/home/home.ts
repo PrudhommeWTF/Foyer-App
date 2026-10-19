@@ -44,12 +44,12 @@ function loadHomeMods(): string[] {
 const MOD_COLOR: Record<string, string> = {
   calendar: '#E56B4E', courses: '#7A9B76', taches: '#9B6FA8',
   repas: '#4E93B8', recettes: '#E56B4E', finances: '#7A9B76',
-  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8', ecole: '#3D6FA8', equipements: '#7A9B76',
+  planning: '#4E93B8', contacts: '#9B6FA8', fidelite: '#F0B24B', lieux: '#4E93B8', ecole: '#3D6FA8', equipements: '#7A9B76', revisions: '#E56B4E',
 };
 
 /** Les tuiles de l'accueil d'un enfant, à la première personne. */
 const KID_LABEL: Record<string, string> = {
-  calendar: 'Le calendrier', taches: 'Mes tâches', planning: 'Mon emploi du temps', ecole: 'Mes devoirs',
+  calendar: 'Le calendrier', taches: 'Mes tâches', planning: 'Mon emploi du temps', ecole: 'Mes devoirs', revisions: 'Mes révisions',
 };
 
 /** Les sections du carousel mobile, dans l'ordre. */

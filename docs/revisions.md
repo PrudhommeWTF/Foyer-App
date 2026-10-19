@@ -2,7 +2,7 @@
 
 Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Le premier exercice est **Tables** (multiplication et addition) ; d'autres suivront (la dictée de mots est prévue), sans toucher au socle.
 
-> État : le socle serveur est en place (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul). L'écran de l'enfant (« Mon entraînement du jour ») et le Suivi arrivent dans la tranche suivante ; le bilan hebdomadaire, le PDF pour l'enseignant et les outils d'assistant `revisions_*` ensuite ; la dictée après.
+> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place. Le suivi des enfants par un parent, avec le réglage de leur programme, le bilan hebdomadaire, le PDF pour l'enseignant et les outils d'assistant `revisions_*` arrivent dans la tranche suivante ; la dictée après. D'ici là, un programme se règle par l'API (`PUT …/program`, voir plus bas).
 
 ## Le module
 
@@ -24,7 +24,7 @@ Le socle (sessions, réponses, maîtrise, programmes, suivi, réception hors lig
 | `check` | la correction, la même sur l'appareil et sur le serveur |
 | `learn`, `spoken`, `grid`, `summary` | le mode Apprendre (absent : pas de mode Apprendre), ce que lit la voix, la forme de la grille, le programme en une ligne |
 
-Le dossier `exercises/` est **pur** (aucune dépendance hors de lui) : il vivra en deux copies identiques, ici et dans l'application (où l'exercice tourne hors ligne), vérifiées par un test, comme le moteur de récurrence. La copie de l'application arrive avec l'écran.
+Le dossier `exercises/` est **pur** (aucune dépendance hors de lui) : il vit en deux copies identiques, `backend/src/revisions/exercises/` et `frontend/src/app/core/revisions/exercises/` (où l'exercice tourne hors ligne), vérifiées octet pour octet par `backend/test/revisions-copy.test.ts`, comme le moteur de récurrence. Modifier l'une, puis copier : `cp backend/src/revisions/exercises/*.ts frontend/src/app/core/revisions/exercises/`.
 
 ### Ajouter un exercice
 
@@ -116,6 +116,18 @@ Exemple de surcharge (`/var/lib/foyer/revisions/bareme.json`), pour exiger un ni
 ```
 
 Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions/matieres.json`, surchargeables de la même façon.
+
+## L'écran
+
+Écran **Révisions** (menu Organisation ; pour un enfant, la tuile « Mes révisions » de son accueil et son menu). Le même écran sert l'enfant et l'adulte qui s'entraîne pour lui-même ; rien n'y est écrit pour un exercice en particulier.
+
+- **Mon entraînement du jour** enchaîne, en mode S'entraîner, les exercices dont l'enfant a un programme, chacun avec ses paramètres et son nombre de questions ; entre deux exercices, « Continuer » ou « J'arrête là ». Sans aucun programme (un adulte, ou un enfant à qui rien n'est encore réglé), il enchaîne tous les exercices à leurs réglages par défaut, 20 questions chacun. L'objectif du jour s'affiche sans jamais reprocher un zéro (« Pas encore aujourd'hui », « Objectif du jour atteint ») ; toute session comptée du jour sur l'exercice compte.
+- **Une carte par exercice**, rangée par matière (ordre de `matieres.json`) : « S'entraîner » (le programme, ou les défauts), « Je choisis » (le mode, et les paramètres dans un **formulaire engendré** depuis leur déclaration : une liste pour un entier, oui ou non, un choix, « de … à … »), la grille de maîtrise (un exercice de vue `grille`) et les items à retravailler. Toucher une case ou un item ouvre son historique.
+- **Le runner**, plein écran : l'énoncé et la correction viennent de la définition. La saisie `pave` est le pavé maison (jamais le clavier du système) ; le clavier physique marche aussi. Un exercice d'une saisie que l'écran ne sait pas encore afficher n'est pas proposé (`SUPPORTED_INPUTS` dans `screens/revisions/runner.ts`) ; la vue `liste` et la saisie `clavier` arriveront avec la dictée.
+- **Le bilan** : bonnes, lentes, fausses, ce qui est à revoir, la grille avec les cases qui viennent de changer. Pas de points ni de classement.
+- **La voix** (mode Apprendre, exercice qui déclare `spoken`) : la synthèse vocale de l'appareil, jamais un service en ligne. Réglage d'appareil `revisionsVoix` (Paramètres → Révisions) ; sans voix française, pas de bouton « Écouter ».
+
+**Hors ligne.** L'exercice tourne entièrement dans le navigateur. La session part en un seul envoi à la fin ; sans réseau, elle attend dans `foyer.revisionsQueue.<membre>` (rangée par membre, comme les autres files, voir `docs/portail-enfant.md`) et repart seule au retour du réseau, une seule fois grâce à son uuid. Un refus définitif (400) la retire en le disant ; un 403 (module éteint, autre membre) ou une panne du serveur la garde. La dernière vue connue (programmes, maîtrise, temps accordé) est copiée dans `foyer.revisions.<membre>` pour s'entraîner sans réseau. Une session d'enfant restée en file quand le parent reprend l'appareil dort sous le nom de l'enfant et part à sa prochaine session.
 
 ## Qui a le droit de quoi
 

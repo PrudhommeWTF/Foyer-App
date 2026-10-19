@@ -14,8 +14,8 @@ Le soir, un parent ouvre Foyer sur l'iPad, choisit « Ouvrir la session de Rapha
 
 Ceci vaut pour toute session d'enfant, ouverte par un parent ou avec ses propres identifiants.
 
-- **Menu** : Accueil, Calendrier, Tâches, Emploi du temps, École (si le module est activé). Les autres écrans (Courses, Repas, Recettes, Contacts, Cartes de fidélité, Équipements, Lieux, Entretien) n'y figurent plus. C'est un menu d'enfant, pas un droit : le serveur ne refuse que les écrans d'adultes (Finances, Employé, Paramètres). Le menu « + » ne propose qu'un événement, une tâche ou un créneau.
-- **Accueil** : de grandes tuiles (« Le calendrier », « Mes tâches », « Mon emploi du temps », « Mes devoirs »), puis ses tâches à faire, ses devoirs et les prochains événements. Pas de fil d'activité (il raconte les gestes des parents), et une carte sans rien à dire ne s'affiche pas.
+- **Menu** : Accueil, Calendrier, Tâches, Emploi du temps, École et Révisions (chacun si son module est activé). Les autres écrans (Courses, Repas, Recettes, Contacts, Cartes de fidélité, Équipements, Lieux, Entretien) n'y figurent plus. C'est un menu d'enfant, pas un droit : le serveur ne refuse que les écrans d'adultes (Finances, Employé, Paramètres). Le menu « + » ne propose qu'un événement, une tâche ou un créneau.
+- **Accueil** : de grandes tuiles (« Le calendrier », « Mes tâches », « Mon emploi du temps », « Mes devoirs », « Mes révisions »), puis ses tâches à faire, ses devoirs et les prochains événements. Pas de fil d'activité (il raconte les gestes des parents), et une carte sans rien à dire ne s'affiche pas.
 
 ## Ce qui ne change pas : les droits
 

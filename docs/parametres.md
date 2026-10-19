@@ -219,6 +219,16 @@ Les règles de garantie des appareils de la maison. Les pièces de la maison se 
 - **Durée de garantie par défaut (mois)** (`eqpGarantieDefautMois`) : Durée de garantie appliquée quand la fiche d’un appareil acheté neuf n’en précise pas (garantie légale de conformité : 24 mois pour un bien neuf). À 0, un appareil sans durée saisie reste en garantie inconnue. Une occasion achetée à un professionnel suit 12 mois, une occasion entre particuliers n’a pas de garantie légale.
 - **Alerte avant la fin d’une garantie (jours)** (`eqpGarantieAlerteJours`) : Nombre de jours avant la fin d’une garantie à partir duquel Foyer la signale : la pastille de l’appareil passe à l’orange « Garantie expire le … ».
 
+### Révisions
+
+La lecture à voix haute des exercices, sur cet appareil.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `revisionsVoix` | Lire à voix haute en mode Apprendre | Appareil | oui / non | activé | — | Révisions | — |
+
+- **Lire à voix haute en mode Apprendre** (`revisionsVoix`) : En mode Apprendre, chaque ligne est lue à voix haute, quand cet appareil a une voix française. Rien ne part sur Internet : c’est la voix de l’appareil.
+
 ### École
 
 Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.
