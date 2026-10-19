@@ -17,6 +17,7 @@ import { effectiveSetting } from '../settings/repo';
 import { hacher, verifier } from './passwords';
 import { estJeton, hashJeton } from './tokens';
 import { log } from '../log';
+import { extendSwitch, getSwitch } from './switches';
 
 /**
  * The JWT secret protects every session token — a weak or well-known value lets
@@ -65,6 +66,15 @@ export interface AuthedRequest extends Request {
    * jamais (comptes, sécurité, finances, système).
    */
   apiToken?: { id: number; name: string; scope: 'read' | 'write' };
+  /**
+   * Présent quand cette requête vient de la session d'un enfant ouverte par un
+   * parent (voir `signSwitched`). La requête est alors celle de l'enfant, et de
+   * personne d'autre : `currentMember` rend l'enfant, et `req.user.id` vaut 0,
+   * qui ne désigne aucun compte. Les routes de compte (identifiants, second
+   * facteur, jetons d'accès) n'agissent donc jamais sur celui du parent ;
+   * `denySwitched` les ferme en plus explicitement.
+   */
+  switched?: { sid: number; memberId: string; via: number; viaMemberId: string | null; at: string; remember: boolean };
 }
 
 /**
@@ -115,12 +125,17 @@ export interface OAuthRequest {
 export const signOAuthRequest = (r: OAuthRequest): string => jwt.sign(r, OAUTH_REQ_SECRET, { expiresIn: '15m' });
 export const verifyOAuthRequest = (token: string): OAuthRequest => jwt.verify(token, OAUTH_REQ_SECRET) as OAuthRequest;
 
-export const signerDefi = (u: { id: number; token_version: number }, remember: boolean): string =>
-  jwt.sign({ id: u.id, tv: u.token_version, rm: remember }, DEFI_SECRET, { expiresIn: `${DEFI_MINUTES}m` });
+/**
+ * `sb` : le défi naît du retour depuis la session d'un enfant (identifiant de la
+ * bascule). Il ne vaut alors que pour ce retour, et la connexion ordinaire le
+ * refuse.
+ */
+export const signerDefi = (u: { id: number; token_version: number }, remember: boolean, sb?: number): string =>
+  jwt.sign({ id: u.id, tv: u.token_version, rm: remember, ...(sb ? { sb } : {}) }, DEFI_SECRET, { expiresIn: `${DEFI_MINUTES}m` });
 
 /** Relit un défi de second facteur, ou lève si périmé/falsifié (le secret ne sort pas du module). */
-export const verifierDefi = (challenge: string): { id: number; tv: number; rm?: boolean } =>
-  jwt.verify(challenge, DEFI_SECRET) as { id: number; tv: number; rm?: boolean };
+export const verifierDefi = (challenge: string): { id: number; tv: number; rm?: boolean; sb?: number } =>
+  jwt.verify(challenge, DEFI_SECRET) as { id: number; tv: number; rm?: boolean; sb?: number };
 
 /**
  * Un condensat bcrypt de rien du tout, comparé quand le compte n'existe pas.
@@ -147,6 +162,46 @@ export function sign(user: { id: number; email: string; token_version: number },
   // mi-vie repose le cookie avec la même durée sans avoir à la redemander.
   const jours = Number(effectiveSetting('sessionDays')) || 30;
   return jwt.sign({ id: user.id, email: user.email, tv: user.token_version, rm: remember }, JWT_SECRET, { expiresIn: `${jours}d` });
+}
+
+/** Les claims d'une session d'enfant ouverte par un parent. */
+export interface SwitchedClaims {
+  /** Le type : un jeton basculé n'est jamais lu comme une session ordinaire, ni l'inverse. */
+  typ: 'sw';
+  /** Le membre enfant. Il n'a pas besoin de compte : c'est le membre qui fait la session. */
+  mid: string;
+  /** Le compte du parent qui a ouvert la session, et la version de son jeton à ce moment. */
+  via: number; vtv: number;
+  /** La ligne du journal des bascules : refermée, la session ne vaut plus. */
+  sid: number;
+  /** Le moment de la bascule, ISO. */
+  at: string;
+}
+
+/**
+ * Signe la session d'un enfant ouverte par un parent, pour la durée d'une
+ * session ordinaire. Rend aussi l'échéance, que le journal retient. Ce jeton ne
+ * voyage que dans le cookie : aucune réponse ne le met dans son corps, et
+ * l'en-tête `Authorization` le refuse (voir `auth`).
+ */
+export function signSwitched(c: Omit<SwitchedClaims, 'typ'>): { token: string; expiresAt: string } {
+  const jours = Number(effectiveSetting('sessionDays')) || 30;
+  const token = jwt.sign({ typ: 'sw', ...c }, JWT_SECRET, { expiresIn: `${jours}d` });
+  return { token, expiresAt: new Date(Date.now() + jours * 86400_000).toISOString() };
+}
+
+/**
+ * Le jeton basculé que porte le cookie de cette requête, s'il est authentique,
+ * qu'il vaille encore ou non. Sert à la déconnexion, qui n'exige pas de session
+ * valide mais doit refermer la ligne du journal quand il y en a une.
+ */
+export function switchedFromCookie(req: Request): SwitchedClaims | null {
+  const token = cookieToken(req);
+  if (!token) return null;
+  try {
+    const p = jwt.verify(token, JWT_SECRET) as Partial<SwitchedClaims>;
+    return p.typ === 'sw' && typeof p.sid === 'number' ? (p as SwitchedClaims) : null;
+  } catch { return null; }
 }
 
 /**
@@ -297,11 +352,20 @@ export function auth(req: AuthedRequest, res: Response, next: NextFunction): voi
     return;
   }
 
-  let payload: { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number };
+  let payload: { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number; typ?: string };
   try {
-    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number };
+    payload = jwt.verify(token, JWT_SECRET) as { id: number; email: string; tv?: number; rm?: boolean; iat?: number; exp?: number; typ?: string };
   } catch {
     res.status(401).json({ error: 'Session expirée' });
+    return;
+  }
+  if (payload.typ === 'sw') {
+    if (!cookieToken(req)) { res.status(401).json({ error: 'Session révoquée' }); return; }
+    if (!lireBasculee(req, payload as unknown as SwitchedClaims & { iat?: number; exp?: number })) {
+      res.status(401).json({ error: 'Session révoquée' });
+      return;
+    }
+    next();
     return;
   }
   // Reject tokens whose user no longer exists or whose version has been bumped
@@ -313,6 +377,49 @@ export function auth(req: AuthedRequest, res: Response, next: NextFunction): voi
   }
   req.user = { id: user.id, email: user.email, tv: user.token_version, rm: payload.rm ?? true, iat: payload.iat, exp: payload.exp };
   next();
+}
+
+/**
+ * Valide une session d'enfant ouverte par un parent et remplit la requête.
+ *
+ * Tout se revérifie à chaque requête, parce que tout peut changer entre deux :
+ * la ligne du journal doit être encore ouverte (un adulte peut la fermer à
+ * distance) ; le parent doit exister, avec la même version de jeton (changer
+ * son mot de passe ferme aussi les sessions d'enfant qu'il a ouvertes) et
+ * rester un adulte du foyer ; l'enfant doit exister et **être encore un
+ * enfant** : décocher « enfant » sur sa fiche ferme la session plutôt que d'en
+ * faire une session d'adulte.
+ */
+function lireBasculee(req: AuthedRequest, c: SwitchedClaims & { iat?: number; exp?: number }): boolean {
+  const row = typeof c.sid === 'number' ? getSwitch(c.sid) : undefined;
+  if (!row || row.ended_at || row.child_member_id !== c.mid || row.parent_user_id !== c.via) return false;
+  const parent = getUserById(c.via);
+  if (!parent || parent.token_version !== c.vtv) return false;
+  const members = (getHousehold().state as HouseholdState).members;
+  const viaMember = parent.member_id ? members.find((m) => m.id === parent.member_id) : undefined;
+  if (!viaMember || viaMember.enfant) return false;
+  const child = members.find((m) => m.id === c.mid);
+  if (!child || !child.enfant) return false;
+  req.user = { id: 0, email: `${child.name} (session ouverte par ${parent.email})`, tv: 0, rm: true, iat: c.iat, exp: c.exp };
+  req.switched = { sid: c.sid, memberId: child.id, via: parent.id, viaMemberId: viaMember.id, at: c.at, remember: !!row.remember };
+  req.member = child;
+  return true;
+}
+
+/**
+ * Renouvelle à mi-vie le jeton d'une session d'enfant, comme `/me` le fait pour
+ * une session ordinaire : mêmes claims, nouvelle échéance, et la ligne du
+ * journal suit. Rend vrai quand un cookie neuf a été posé.
+ */
+export function renewSwitched(req: AuthedRequest, res: Response): boolean {
+  const sw = req.switched;
+  if (!sw || !aRenouveler(req.user)) return false;
+  const parent = getUserById(sw.via);
+  if (!parent) return false;
+  const { token, expiresAt } = signSwitched({ mid: sw.memberId, via: sw.via, vtv: parent.token_version, sid: sw.sid, at: sw.at });
+  setSessionCookie(req, res, token, true);
+  extendSwitch(sw.sid, expiresAt);
+  return true;
 }
 
 /** The household member linked to the authenticated user (or null). Mémoïsé sur la requête. */
@@ -432,6 +539,20 @@ export function requireScope(scope: 'write'): (req: AuthedRequest, res: Response
 export function denyToken(req: AuthedRequest, res: Response, next: NextFunction): void {
   if (req.apiToken) {
     res.status(403).json({ error: 'Cette action n’est pas accessible par un jeton d’accès.' });
+    return;
+  }
+  next();
+}
+
+/**
+ * Ferme une route à la session d'un enfant ouverte par un parent : ce qui touche
+ * à un **compte** (identifiants, second facteur, jetons d'accès, abonnement aux
+ * notifications) et l'ouverture d'une autre session. La session d'un enfant n'a
+ * pas de compte à elle, et rien ne doit pouvoir y toucher celui du parent.
+ */
+export function denySwitched(req: AuthedRequest, res: Response, next: NextFunction): void {
+  if (req.switched) {
+    res.status(403).json({ error: 'Cette action n’est pas accessible depuis la session d’un enfant.' });
     return;
   }
   next();

@@ -489,16 +489,18 @@ export class ApiService {
     return this.request('live' + (since != null ? '?since=' + since : ''));
   }
 
-  shoppingOps(ops: ShopOp[]): Promise<ShoppingApplied> {
-    return this.post('shopping/ops', { ops });
+  // `as` : le membre sous la session duquel la file a été remplie. Le serveur
+  // refuse un lot qui n'est pas celui de la session (voir op-queues.ts).
+  shoppingOps(ops: ShopOp[], as: string | null): Promise<ShoppingApplied> {
+    return this.post('shopping/ops', as ? { ops, as } : { ops });
   }
 
-  taskOps(ops: TaskOp[]): Promise<TasksApplied> {
-    return this.post('tasks/ops', { ops });
+  taskOps(ops: TaskOp[], as: string | null): Promise<TasksApplied> {
+    return this.post('tasks/ops', as ? { ops, as } : { ops });
   }
 
-  placesOps(ops: PlaceOp[]): Promise<PlacesApplied> {
-    return this.post('places/ops', { ops });
+  placesOps(ops: PlaceOp[], as: string | null): Promise<PlacesApplied> {
+    return this.post('places/ops', as ? { ops, as } : { ops });
   }
 
   // ---- rappels par Web Push ----------------------------------------------

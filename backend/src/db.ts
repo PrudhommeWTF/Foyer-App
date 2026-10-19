@@ -91,6 +91,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
 `);
 
+// Le journal des sessions d'enfant ouvertes par un parent (auth/switches.ts).
+// Chaque ligne est à la fois une trace (qui, quand, sur quel appareil) et la
+// clé de la session : le jeton basculé porte son identifiant, et une ligne
+// refermée ferme la session, où qu'elle soit. Pas de clé étrangère vers users :
+// le compte d'un parent retiré ne doit pas effacer la trace de ce qu'il a fait,
+// et le jeton, lui, cesse de valoir dès que le compte manque.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS auth_switches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_user_id INTEGER NOT NULL,
+    parent_member_id TEXT,
+    child_member_id TEXT NOT NULL,
+    device TEXT NOT NULL DEFAULT '',
+    from_screen TEXT,
+    remember INTEGER NOT NULL DEFAULT 1,
+    started_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    ended_at TEXT,
+    end_reason TEXT,
+    ended_by_member_id TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_auth_switches_child ON auth_switches(child_member_id, started_at);
+`);
+
 // Un jeton d'accès émis par le flux OAuth expire (30 jours) et porte le client
 // qui l'a obtenu (« claude.ai »). Ces deux colonnes restent nulles pour les
 // jetons créés à la main, qui n'expirent pas.

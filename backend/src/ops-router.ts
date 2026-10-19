@@ -6,6 +6,7 @@
 // des opérations écartées ne divergent pas entre les deux.
 import express, { Request, Response, Router } from 'express';
 import { log } from './log';
+import { AuthedRequest, currentMember } from './auth/session';
 
 /** Un lot vient d'une file hors ligne : quelques dizaines d'opérations, jamais plus. */
 const MAX_OPS_PER_BATCH = 500;
@@ -30,6 +31,17 @@ export function opsRouter(cfg: {
     const ops = req.body?.ops;
     if (!Array.isArray(ops)) {
       res.status(400).json({ error: 'Lot d’opérations attendu dans « ops ».' });
+      return;
+    }
+    // `as` : le membre sous la session duquel la file a été remplie. Un appareil
+    // passe d'une session à l'autre (un parent ouvre celle d'un enfant, quelqu'un
+    // d'autre se connecte) : une file d'avant ne doit pas partir sous l'identité
+    // d'après. Refusée en bloc, elle reste dans le navigateur et repartira quand
+    // sa session reviendra. Sans `as` (application d'avant ce contrôle), rien ne
+    // change.
+    const as = req.body?.as;
+    if (typeof as === 'string' && as !== currentMember(req as AuthedRequest)?.id) {
+      res.status(409).json({ error: 'Ces modifications ont été faites dans une autre session : elles attendent son retour.', owner: as });
       return;
     }
     if (ops.length > MAX_OPS_PER_BATCH) {

@@ -4,54 +4,52 @@
 // la gestion des accès des membres par un administrateur.
 //
 // Dernier gros bloc sorti de server.ts. Il s'appuie sur le kit d'authentification
-// (auth/session.ts) qu'il importe directement, et porte ses propres garde-fous de
-// débit (authLimiter) et compteurs de temporisation (parCompte/parAdresse), qui
-// ne servaient qu'ici.
+// (auth/session.ts) qu'il importe directement. Les garde-fous de débit et les
+// compteurs de temporisation vivent dans auth/limits.ts, partagés avec le retour
+// depuis la session d'un enfant (auth/switch-routes.ts).
 import express, { Response, Router } from 'express';
-import rateLimit from 'express-rate-limit';
 import {
   countUsers, createUserWithMember, findUserByEmail, getUserById, getUserByMemberId,
   getHousehold, saveHousehold, listMemberAccounts, deleteUser, setPasswordHash,
   updateUserCredentials, activerTotp, desactiverTotp, setTotpPending, setTotpRecovery,
-  totpRecovery, setTotpLastStep, SecoursRange, db,
+  totpRecovery, SecoursRange, db,
 } from '../db';
 import { buildInitialState, HouseholdState } from '../seed';
 import { aRehacher, hacher, verifier } from './passwords';
 import { empreinteSecours, genererSecours, genererSecret, otpauthUri, secretLisible, verifierCode } from './totp';
-import { SEUILS_ADRESSE, SEUILS_COMPTE, Throttle, messageAttente } from './throttle';
+import { authLimiter, echec, jsonSmall, succes, temporisation, verifierSecondFacteur } from './limits';
 import { log } from '../log';
+import { closeSwitch } from './switches';
 import {
-  AuthedRequest, SESSION_COOKIE, aRenouveler, auth, currentMember, denyToken, hashLeurre, motDePasseBon,
+  AuthedRequest, SESSION_COOKIE, aRenouveler, auth, currentMember, denySwitched, denyToken, hashLeurre, motDePasseBon,
+  renewSwitched, switchedFromCookie,
   ouvrirSession, pwdMin, pwdTropCourt, requireAdmin, route, setSessionCookie, sign, signerDefi, verifierDefi,
 } from './session';
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
-const jsonSmall = express.json({ limit: '256kb' });
 
 /**
- * Le garde-fou grossier des routes d'identifiants : il borne le débit brut, pas
- * les tentatives. La vraie temporisation est dans auth/throttle.ts, par compte
- * visé et par adresse, et c'est elle qui distingue un attaquant d'une famille.
- *
- * Les requêtes **réussies ne comptent plus** : sans cela, trente connexions
- * légitimes dans le quart d'heure fermaient la porte à la trente-et-unième, et
- * un foyer de cinq personnes sur quatre appareils y arrive.
+ * `/me` depuis la session d'un enfant ouverte par un parent. C'est l'enfant, et
+ * seulement lui : pas d'adresse, pas de second facteur, aucun droit
+ * d'administration. `via` et `viaName` disent qui a ouvert la session, pour le
+ * bandeau et le bouton « Revenir à … » ; `switchedAt` dit quand.
  */
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 120,
-  skipSuccessfulRequests: true,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Trop de tentatives, réessayez dans quelques minutes.' },
-});
+function meBascule(req: AuthedRequest, res: Response): void {
+  const sw = req.switched!;
+  const m = currentMember(req)!;
+  renewSwitched(req, res);
+  const via = sw.viaMemberId ? (getHousehold().state as HouseholdState).members.find((x) => x.id === sw.viaMemberId) : undefined;
+  res.json({
+    email: '', name: m.name, memberId: m.id, admin: false, enfant: true, totp: false, totpRecoveryLeft: null,
+    via: sw.viaMemberId, viaName: via?.name ?? null, switchedAt: sw.at,
+  });
+}
 
-/**
- * Les deux compteurs de tentatives : par compte visé, et par adresse. Voir
- * auth/throttle.ts pour les seuils et la raison de leur écart.
- */
-const parCompte = new Throttle(SEUILS_COMPTE);
-const parAdresse = new Throttle(SEUILS_ADRESSE);
+/** Renvoie un refus de limits.ts tel quel, avec l'attente annoncée quand il y en a une. */
+function refuser(res: Response, r: { status: number; error: string; retryAfter?: number }): void {
+  if (r.retryAfter) res.set('Retry-After', String(r.retryAfter));
+  res.status(r.status).json({ error: r.error });
+}
 
 export function authRouter(): Router {
   const r = express.Router();
@@ -138,20 +136,15 @@ export function authRouter(): Router {
 
     // Le compte visé d'abord : c'est lui qu'un bourrage distribué garde constant
     // pendant qu'il change d'adresse.
-    const attente = Math.max(parCompte.attente(cible, now), parAdresse.attente(adresse, now));
-    if (attente > 0) {
-      log.attention(`Connexion refusée (temporisation, ${Math.ceil(attente / 1000)} s) pour ${cible} depuis ${adresse}.`);
-      res.status(429).set('Retry-After', String(Math.ceil(attente / 1000))).json({ error: messageAttente(attente) });
-      return;
-    }
+    const attendre = temporisation(cible, adresse, now, 'Connexion');
+    if (attendre) { refuser(res, attendre); return; }
 
     const user = findUserByEmail(cible);
     // Le compte inconnu paie la même vérification que le compte connu : sans cela
     // le chronomètre dit lequel des deux existe. Voir HASH_LEURRE.
     const bon = await verifier(String(password), user ? user.password_hash : await hashLeurre());
     if (!user || !bon) {
-      parCompte.echec(cible, now);
-      parAdresse.echec(adresse, now);
+      echec(cible, adresse, now);
       log.attention(`Connexion refusée pour ${cible} depuis ${adresse}.`);
       res.status(401).json({ error: 'Identifiants invalides' });
       return;
@@ -173,8 +166,7 @@ export function authRouter(): Router {
       return;
     }
 
-    parCompte.succes(cible);
-    parAdresse.succes(adresse);
+    succes(cible, adresse);
     log.info(`Connexion réussie : ${user.email} depuis ${adresse}.`);
     ouvrirSession(req, res, user, remember);
   }));
@@ -201,9 +193,12 @@ export function authRouter(): Router {
     const adresse = req.ip || 'inconnue';
     const now = Date.now();
 
-    let charge: { id: number; tv: number; rm?: boolean };
+    let charge: { id: number; tv: number; rm?: boolean; sb?: number };
     try {
       charge = verifierDefi(String(req.body?.challenge ?? ''));
+      // Un défi né du retour depuis la session d'un enfant ne sert qu'à ce retour :
+      // ici il ouvrirait la session du parent sans refermer celle de l'enfant.
+      if (charge.sb) throw new Error('défi de retour');
     } catch {
       res.status(401).json({ error: 'Cette demande de connexion a expiré. Reprenez depuis votre mot de passe.' });
       return;
@@ -216,48 +211,9 @@ export function authRouter(): Router {
       return;
     }
 
-    const cible = user.email;
-    const attente = Math.max(parCompte.attente(cible, now), parAdresse.attente(adresse, now));
-    if (attente > 0) {
-      log.attention(`Second facteur refusé (temporisation, ${Math.ceil(attente / 1000)} s) pour ${cible} depuis ${adresse}.`);
-      res.status(429).set('Retry-After', String(Math.ceil(attente / 1000))).json({ error: messageAttente(attente) });
-      return;
-    }
+    const refus = verifierSecondFacteur(user, String(req.body?.code ?? ''), adresse, now);
+    if (refus) { refuser(res, refus); return; }
 
-    const saisi = String(req.body?.code ?? '');
-    const pas = verifierCode(user.totp_secret, saisi, now);
-
-    if (pas !== null) {
-      // Un code lu par-dessus une épaule reste valable une trentaine de secondes.
-      // Le pas déjà consommé ferme cette fenêtre.
-      if (pas <= user.totp_last_step) {
-        parCompte.echec(cible, now);
-        parAdresse.echec(adresse, now);
-        log.attention(`Second facteur refusé (code déjà utilisé) pour ${cible} depuis ${adresse}.`);
-        res.status(401).json({ error: 'Ce code a déjà servi. Attendez le suivant sur votre téléphone.' });
-        return;
-      }
-      setTotpLastStep(user.id, pas);
-    } else {
-      // Pas un code du téléphone : peut-être un code de secours.
-      const secours = totpRecovery(user);
-      const empreinte = empreinteSecours(saisi);
-      const i = secours.findIndex((c) => !c.used && c.h === empreinte);
-      if (i < 0) {
-        parCompte.echec(cible, now);
-        parAdresse.echec(adresse, now);
-        log.attention(`Second facteur refusé pour ${cible} depuis ${adresse}.`);
-        res.status(401).json({ error: 'Code incorrect.' });
-        return;
-      }
-      secours[i].used = true;
-      setTotpRecovery(user.id, secours);
-      const restants = secours.filter((c) => !c.used).length;
-      log.attention(`Connexion par code de secours : ${cible} depuis ${adresse}, ${restants} code(s) restant(s).`);
-    }
-
-    parCompte.succes(cible);
-    parAdresse.succes(adresse);
     log.info(`Connexion réussie (second facteur) : ${user.email} depuis ${adresse}.`);
     const remember = charge.rm !== false;
     ouvrirSession(req, res, user, remember);
@@ -269,13 +225,20 @@ export function authRouter(): Router {
    * exigée, effacer son propre cookie ne compromettant rien ; la révocation
    * serveur, elle, passe toujours par le changement de mot de passe (token_version).
    */
-  r.post('/auth/logout', (_req, res) => {
+  r.post('/auth/logout', (req, res) => {
+    // Depuis la session d'un enfant ouverte par un parent : la ligne du journal
+    // se referme, et l'appareil revient à l'écran de connexion, pas au parent.
+    const sw = switchedFromCookie(req);
+    if (sw && closeSwitch(sw.sid, 'deconnexion', sw.mid)) {
+      log.info(`Portail enfant : déconnexion depuis la session de ${sw.mid} (bascule ${sw.sid}).`);
+    }
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     res.json({ ok: true });
   });
 
   // ---- Current user ----
   r.get('/me', auth, (req: AuthedRequest, res: Response) => {
+    if (req.switched) { meBascule(req, res); return; }
     const u = req.user ? getUserById(req.user.id) : undefined;
     if (!u) { res.status(401).json({ error: 'Non authentifié' }); return; }
     // Renouvellement à mi-vie : on repose le cookie avec la même durée que la
@@ -291,6 +254,7 @@ export function authRouter(): Router {
     const secours = totpRecovery(u).filter((c) => !c.used).length;
     res.json({
       email: u.email, name: u.name, memberId: m?.id ?? null, admin: !!m?.admin, enfant: !!m?.enfant,
+      via: null, viaName: null, switchedAt: null,
       totp: !!u.totp_secret,
       // Combien de codes de secours restent : l'écran doit pouvoir alerter avant
       // qu'il n'en reste zéro, pas après.
@@ -316,7 +280,7 @@ export function authRouter(): Router {
    * autres sessions** : c'est le but. La session en cours, elle, reçoit un jeton
    * neuf, sinon on se déconnecterait soi-même en se protégeant.
    */
-  r.put('/me/credentials', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
+  r.put('/me/credentials', authLimiter, auth, denyToken, denySwitched, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!await motDePasseBon(req, user, 'currentPassword')) {
@@ -373,7 +337,7 @@ export function authRouter(): Router {
    * l'application d'authentification fermerait le compte au prochain démarrage,
    * et il faudrait un administrateur pour le rouvrir.
    */
-  r.post('/me/totp/start', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/start', authLimiter, auth, denyToken, denySwitched, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!await motDePasseBon(req, user)) {
@@ -401,7 +365,7 @@ export function authRouter(): Router {
    * second facteur s'active. Les codes de secours ne sont montrés qu'ici, une
    * seule fois : ils ne sont pas rangés en clair.
    */
-  r.post('/me/totp/enable', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/enable', authLimiter, auth, denyToken, denySwitched, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!user.totp_pending) {
@@ -426,7 +390,7 @@ export function authRouter(): Router {
    * passe seul suffirait à qui l'a volé, ce qui reviendrait à ne pas avoir de
    * second facteur du tout.
    */
-  r.post('/me/totp/disable', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/disable', authLimiter, auth, denyToken, denySwitched, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
@@ -451,7 +415,7 @@ export function authRouter(): Router {
    * Refaire ses codes de secours, quand il n'en reste plus assez ou qu'on a perdu
    * le papier. Les anciens cessent immédiatement de valoir.
    */
-  r.post('/me/totp/recovery', authLimiter, auth, denyToken, jsonSmall, route(async (req, res) => {
+  r.post('/me/totp/recovery', authLimiter, auth, denyToken, denySwitched, jsonSmall, route(async (req, res) => {
     const user = req.user ? getUserById(req.user.id) : undefined;
     if (!user) { res.status(401).json({ error: 'Non authentifié' }); return; }
     if (!user.totp_secret) { res.status(409).json({ error: 'Le second facteur n’est pas actif sur ce compte.' }); return; }
