@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, signal, untracked } from '@angular/core';
 import { IconComponent } from '../../core/icon';
 import { ItemHistory, SessionReceipt } from '../../core/revisions/api';
 import { ExerciseDef, MODES, Mode, Params } from '../../core/revisions/exercises/contract';
@@ -43,7 +43,7 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
         </div>
       }
       @if (tab() === 'suivi' && store.foyer.children().length) {
-        <rev-suivi />
+        <rev-suivi [kid]="followed()" />
       } @else {
       @if (store.queue().length; as n) {
         <div class="note">{{ n > 1 ? n + ' sessions attendent le réseau : elles partiront toutes seules.' : 'Une session attend le réseau : elle partira toute seule.' }}</div>
@@ -198,6 +198,8 @@ export class RevisionsScreen implements OnDestroy {
 
   /** Pour un adulte qui a des enfants : s'entraîner soi-même, ou les suivre. */
   readonly tab = signal<'moi' | 'suivi'>('moi');
+  /** L'enfant dont le suivi a été demandé (notification du dimanche), passé à l'onglet. */
+  readonly followed = signal<string | null>(null);
   readonly chooser = signal<Chooser | null>(null);
   /** La série en cours : les sessions à enchaîner, et où on en est. */
   private readonly chain = signal<{ plans: RunPlan[]; i: number } | null>(null);
@@ -214,6 +216,10 @@ export class RevisionsScreen implements OnDestroy {
 
   constructor() {
     if (typeof speechSynthesis !== 'undefined') speechSynthesis.addEventListener?.('voiceschanged', this.onVoices);
+    effect(() => {
+      const kid = this.store.follow();
+      if (kid) untracked(() => { this.followed.set(kid); this.tab.set('suivi'); this.store.follow.set(null); });
+    });
   }
   ngOnDestroy(): void { if (typeof speechSynthesis !== 'undefined') speechSynthesis.removeEventListener?.('voiceschanged', this.onVoices); }
 

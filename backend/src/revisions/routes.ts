@@ -23,9 +23,11 @@ import { Result, classify, status } from './mastery';
 import { MODES, Mode, ExerciseDef, Params, defaults, readParams } from './exercises/contract';
 import { EXERCISES, exerciseById } from './exercises';
 import { Matiere, matiereLabel } from './matieres';
+import { addDays, bilanFor, mondayOf, parisDay as dayOf } from './bilan';
+import { bilanPdf, sessionsCsv } from './export';
 import {
   AnswerIn, ProgramRow, SessionRow, activeProgram, activePrograms, countedAnswers, itemHistory, masteryRows, programById,
-  recordSession, sessionsOf, setProgram, stopProgram, toMastery,
+  recordSession, sessionsBetween, sessionsOf, setProgram, stopProgram, toMastery,
 } from './repo';
 
 /** Au-delà, ce n'est plus une session d'enfant : une file hors ligne abîmée, ou autre chose. */
@@ -177,6 +179,62 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const since = req.query['since'] !== undefined ? iso(req.query['since'], 'since') : null;
     const limit = req.query['limit'] !== undefined ? int(Number(req.query['limit']), 1, 500, 'limit') : 100;
     res.json({ sessions: sessionsOf(m.id, ex, since, limit).map(sessionView) });
+  }));
+
+  /**
+   * L'enfant d'un bilan ou d'un export : réservé aux adultes (le bilan est le
+   * leur, et celui de la maîtresse), et pour un enfant seulement (un adulte
+   * s'entraîne sans bilan).
+   */
+  const childFor = (req: Request, res: Response): Member | null => {
+    const me = currentMember(req as AuthedRequest)!;
+    if (me.enfant) { res.status(403).json({ error: 'Le bilan se consulte depuis la session d’un adulte du foyer.' }); return null; }
+    const target = members().find((m) => m.id === req.params.memberId);
+    if (!target) { res.status(404).json({ error: 'Membre introuvable.' }); return null; }
+    if (!target.enfant) { res.status(400).json({ error: 'Un bilan se fait pour un enfant. Un adulte s’entraîne librement, sans bilan.' }); return null; }
+    return target;
+  };
+  /** La période demandée, en jours de Paris, fin incluse ; par défaut la semaine en cours, du lundi à aujourd'hui. */
+  const period = (req: Request): { from: string; to: string } => {
+    const today = dayOf(new Date().toISOString());
+    const day = (v: unknown, what: string): string => {
+      if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(v + 'T12:00:00Z'))) throw new Invalid(`${what} : une date AAAA-MM-JJ attendue.`);
+      return v;
+    };
+    const from = req.query['from'] !== undefined ? day(req.query['from'], 'from') : mondayOf(today);
+    const to = req.query['to'] !== undefined ? day(req.query['to'], 'to') : today;
+    if (from > to) throw new Invalid('La période commence après sa fin.');
+    if (addDays(from, 366) < to) throw new Invalid('Une période d’un an au plus.');
+    return { from, to };
+  };
+  const bilanOf = (m: Member, p: { from: string; to: string }) => bilanFor({ id: m.id, name: m.name }, p.from, p.to, getMatieres(), (ex) => getBareme(ex).maitrise);
+
+  /** Le bilan d'une période : par matière puis par exercice, comparé à la période précédente. */
+  r.get('/members/:memberId/bilan', route((req, res) => {
+    const m = childFor(req, res); if (!m) return;
+    res.json(bilanOf(m, period(req)));
+  }));
+
+  /** Le même bilan en PDF, « Pour la maîtresse » : rien d'un autre membre, pas même qui l'a demandé. */
+  r.get('/members/:memberId/bilan.pdf', route((req, res) => {
+    const m = childFor(req, res); if (!m) return;
+    const p = period(req);
+    const pdf = bilanPdf(bilanOf(m, p), dayOf(new Date().toISOString()));
+    log.info(`Révisions : ${currentMember(req as AuthedRequest)!.name} a téléchargé le bilan de ${m.name} (${p.from} au ${p.to}).`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="revisions-${m.name.normalize('NFD').replace(/[^\w-]+/g, '') || m.id}-${p.from}-${p.to}.pdf"`);
+    res.send(pdf);
+  }));
+
+  /** Les sessions d'une période en CSV, pour un tableur. */
+  r.get('/members/:memberId/sessions.csv', route((req, res) => {
+    const m = childFor(req, res); if (!m) return;
+    const p = period(req);
+    const rows = sessionsBetween(m.id, addDays(p.from, -1) + 'T00:00:00.000Z', addDays(p.to, 2) + 'T00:00:00.000Z')
+      .filter((s) => { const d = dayOf(s.started_at); return d >= p.from && d <= p.to; });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="revisions-sessions-${m.name.normalize('NFD').replace(/[^\w-]+/g, '') || m.id}-${p.from}-${p.to}.csv"`);
+    res.send(sessionsCsv(rows));
   }));
 
   /** Le programme d'un enfant pour un exercice, réglé par un adulte. L'ancien reste en base : le passé ne change pas. */

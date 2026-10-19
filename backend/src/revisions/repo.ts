@@ -195,6 +195,18 @@ export function recomputeMember(member: string, exercise: string | null, cfgOf: 
   })();
 }
 
+/** Les réponses qui comptent d'un membre entre deux instants, avec les paramètres de leur session : la matière d'un bilan. */
+export function answersBetween(member: string, since: string, until: string): { exercise_id: string; item_key: string; result: Result; asked_at: string; params_json: string }[] {
+  return database.prepare(`SELECT x.exercise_id, x.item_key, x.result, x.asked_at, s.params_json FROM rev_answers x JOIN rev_sessions s ON s.id = x.session_id
+    WHERE x.member_id = ? AND x.counts = 1 AND x.asked_at >= ? AND x.asked_at < ? ORDER BY x.asked_at`).all(member, since, until) as
+    { exercise_id: string; item_key: string; result: Result; asked_at: string; params_json: string }[];
+}
+
+/** Les sessions d'un membre entre deux instants, dans l'ordre : la matière d'un bilan et de l'export. */
+export function sessionsBetween(member: string, since: string, until: string): SessionRow[] {
+  return database.prepare('SELECT * FROM rev_sessions WHERE member_id = ? AND started_at >= ? AND started_at < ? ORDER BY started_at').all(member, since, until) as SessionRow[];
+}
+
 /** Les membres qui ont des réponses : ce que balaie `revisions:recalcul --tous`. */
 export function membersWithAnswers(): string[] {
   return (database.prepare('SELECT DISTINCT member_id FROM rev_answers').all() as { member_id: string }[]).map((r) => r.member_id);

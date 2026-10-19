@@ -138,6 +138,38 @@ export function activityDays(days: readonly { day: string; sessions: number }[],
   });
 }
 
+/** Un jour « AAAA-MM-JJ » décalé de `n` jours. */
+export function addDays(day: string, n: number): string {
+  const [y, m, d] = day.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + n));
+  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(t.getUTCDate()).padStart(2, '0')}`;
+}
+
+export type PeriodPreset = 'semaine' | 'semaine-derniere' | 'mois' | 'mois-dernier';
+export const PERIODS: { id: PeriodPreset; label: string }[] = [
+  { id: 'semaine', label: 'Cette semaine' }, { id: 'semaine-derniere', label: 'Semaine dernière' },
+  { id: 'mois', label: 'Ce mois-ci' }, { id: 'mois-dernier', label: 'Mois dernier' },
+];
+
+/** Les jours (fin incluse) d'une période proposée, vue depuis `today` : une semaine va du lundi au dimanche. */
+export function periodOf(p: PeriodPreset, today: string): { from: string; to: string } {
+  const [y, m, d] = today.split('-').map(Number);
+  const monday = addDays(today, -((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7));
+  const first = today.slice(0, 8) + '01';
+  switch (p) {
+    case 'semaine': return { from: monday, to: today };
+    case 'semaine-derniere': return { from: addDays(monday, -7), to: addDays(monday, -1) };
+    case 'mois': return { from: first, to: today };
+    case 'mois-dernier': { const last = addDays(first, -1); return { from: last.slice(0, 8) + '01', to: last }; }
+  }
+}
+
+/** La tuile d'accueil d'un adulte : « Raphaël : 2 sessions aujourd'hui, Gaëtan : pas encore aujourd'hui ». */
+export function kidsLine(kids: readonly { name: string; sessions: number | undefined }[]): string {
+  return kids.filter((k) => k.sessions !== undefined)
+    .map((k) => `${k.name} : ${k.sessions ? `${k.sessions} session${k.sessions! > 1 ? 's' : ''} aujourd’hui` : 'pas encore aujourd’hui'}`).join(', ');
+}
+
 /** Un identifiant de session, même servi en http sur le réseau local (où crypto.randomUUID manque). */
 export function sessionUuid(rnd: (b: Uint8Array) => Uint8Array = (b) => crypto.getRandomValues(b)): string {
   const b = rnd(new Uint8Array(16));

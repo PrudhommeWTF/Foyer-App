@@ -30,6 +30,7 @@ import { gesteToShopping } from './entretien/courses';
 import { revisionsRouter } from './revisions/routes';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
+import { bilanFor, weeklyHits } from './revisions/bilan';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
@@ -688,12 +689,13 @@ export function start(): void {
    * La préférence est personnelle : chacun coupe les siennes sans rien imposer
    * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
    */
-  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie'): boolean => {
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions'): boolean => {
     const state = getHousehold().state as HouseholdState;
     // Les clés sont écrites en toutes lettres : une clé calculée ne dit rien
     // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
     if (kind === 'entretien') return setting('entretienRappel', state, memberId);
     if (kind === 'garantie') return setting('eqpGarantieRappel', state, memberId);
+    if (kind === 'revisions') return setting('revisionsBilanHebdo', state, memberId);
     return kind === 'reminder'
       ? setting('pushReminders', state, memberId)
       : setting('pushAssigned', state, memberId);
@@ -738,6 +740,11 @@ export function start(): void {
     }),
     wants: memberWants,
     entretienOn: () => effectiveSetting('modEntretien') !== false,
+    revisionsWeekly: (wall) => (effectiveSetting('modRevisions') === false ? [] : weeklyHits(
+      (getHousehold().state as HouseholdState).members.filter((m) => m.enfant).map((m) => ({ id: m.id, name: m.name })),
+      (() => { const accts = new Set(listMemberAccounts().map((a) => a.memberId)); return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id); })(),
+      wall, String(effectiveSetting('revisionsBilanHeure') || '18:30'),
+      (kid, from, to) => bilanFor(kid, from, to, matieres(DATA_DIR), (ex) => bareme(DATA_DIR, ex).maitrise))),
     garanties: () => (effectiveSetting('modEquipements') === false
       ? { items: [], alertDays: 0 }
       : { items: watchedWarranties(), alertDays: eqpRules().alertDays }),

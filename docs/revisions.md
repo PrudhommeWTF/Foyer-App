@@ -2,7 +2,7 @@
 
 Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Le premier exercice est **Tables** (multiplication et addition) ; d'autres suivront (la dictée de mots est prévue), sans toucher au socle.
 
-> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille). Le bilan hebdomadaire, le PDF pour l'enseignant et les outils d'assistant `revisions_*` arrivent dans la tranche suivante ; la dictée après.
+> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` arrivent dans la tranche suivante ; la dictée après.
 
 ## Le module
 
@@ -132,6 +132,15 @@ Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions
 - **Le programme**, réglé ici : les paramètres de l'exercice dans le formulaire engendré, le nombre de questions par session, le temps par réponse (le barème selon l'âge, rappelé en clair, ou un temps fixé et son seuil « rapide »), l'objectif de sessions par jour. « Retirer le programme » le rend inactif sans rien effacer ; l'enfant s'entraîne alors aux réglages par défaut. Chaque réglage est daté et signé, et journalisé côté serveur.
 - **L'activité** sur quatre semaines (sessions par jour, heure de Paris), **la réussite par groupe** d'items du programme (pour Tables, par table ; un groupe sans réponse dit « pas encore vu »), **ce qui reste fragile** (dans le périmètre du programme en vigueur), et **la grille**, avec l'aide qui rappelle les règles d'acquisition du barème.
 
+**Le bilan d'une période** (carte « Bilan » du Suivi, adultes seulement, pour un enfant) : cette semaine (du lundi à aujourd'hui), la semaine dernière, ce mois-ci, le mois dernier. Par matière puis par exercice : le résumé du programme, sessions et questions, part de réponses justes comparée à la période précédente de même longueur, réussite par groupe (pour Tables, par table), ce qui reste fragile dans le programme en vigueur. Le mode Apprendre n'y compte pas.
+
+- **« Pour la maîtresse (PDF) »** : le même bilan sur une page A4 en portrait, « Révisions de Raphaël », la période en toutes lettres, signé « Établi par Foyer le … ». Il ne contient le nom d'aucun autre membre, pas même du parent qui l'a demandé. S'imprime depuis l'iPhone (Partager → Imprimer).
+- **« Les sessions (CSV) »** : une ligne par session (date, heure, exercice, mode, réglages, questions, bonnes, lentes, fausses, temps moyen, abandon), séparateur « ; », UTF-8 avec BOM, comme les autres exports.
+
+**Le bilan du dimanche.** Le dimanche, à partir de `revisionsBilanHeure` (18 h 30 par défaut, Paramètres → Révisions), chaque adulte qui a laissé `revisionsBilanHebdo` activé (Paramètres → Notifications) reçoit une notification par enfant qui a un programme ou une session dans la semaine : « Raphaël cette semaine : 5 sessions, les tables de 6 à 9, multiplication, 92 % de réussite, 7 × 8 et 6 × 9 encore fragiles. » Sans session, elle le dit sans reproche. Une seule par enfant et par semaine (clé `revisions-hebdo|<enfant>|<lundi>` du journal des envois), même si le service redémarre. La toucher ouvre le suivi de l'enfant. Un enfant n'en reçoit jamais.
+
+**La tuile d'accueil.** Pour un enfant, « Mes révisions » avec l'objectif du jour ; pour un adulte, « Raphaël : 2 sessions aujourd'hui, Gaëtan : pas encore aujourd'hui » (tuile sur téléphone, carte du bandeau sur tablette et ordinateur, une ligne ouvre le suivi).
+
 **Hors ligne.** L'exercice tourne entièrement dans le navigateur. La session part en un seul envoi à la fin ; sans réseau, elle attend dans `foyer.revisionsQueue.<membre>` (rangée par membre, comme les autres files, voir `docs/portail-enfant.md`) et repart seule au retour du réseau, une seule fois grâce à son uuid. Un refus définitif (400) la retire en le disant ; un 403 (module éteint, autre membre) ou une panne du serveur la garde. La dernière vue connue (programmes, maîtrise, temps accordé) est copiée dans `foyer.revisions.<membre>` pour s'entraîner sans réseau. Une session d'enfant restée en file quand le parent reprend l'appareil dort sous le nom de l'enfant et part à sa prochaine session.
 
 ## Qui a le droit de quoi
@@ -160,6 +169,9 @@ Sous `/api/revisions`, session de navigateur, membre du foyer, module activé. `
 | `GET /members/:id/sessions[?exercise=…&since=…&limit=…]` | les sessions |
 | `PUT /members/:id/exercises/:ex/program` | régler le programme d'un enfant (adultes) : `params`, `questions`, `secondsAllowed`, `fastSeconds`, `dailyGoal`. Un paramètre refusé est nommé dans l'erreur. |
 | `DELETE /members/:id/exercises/:ex/program` | retirer le programme (il reste en base, inactif) |
+| `GET /members/:id/bilan[?from=AAAA-MM-JJ&to=AAAA-MM-JJ]` | le bilan d'une période (fin incluse, un an au plus ; par défaut la semaine en cours), adultes seulement, pour un enfant |
+| `GET /members/:id/bilan.pdf[?from&to]` | le même bilan en PDF, journalisé |
+| `GET /members/:id/sessions.csv[?from&to]` | les sessions de la période en CSV |
 | `POST /sessions` | une session en un seul envoi : `id` (uuid de l'appareil), `exerciseId`, `mode`, `params` (ou `programId`, dont les paramètres s'appliquent), `startedAt`, `endedAt`, `aborted`, `fastMs` et `allowedMs` appliqués, `answers` (`question` dans la forme de l'exercice, `given` ou null, `ms`, `askedAt`). 201 à la première réception, 200 et `duplicate: true` ensuite. La réponse dit, pour chaque item touché, son état avant et après. |
 
 Chaque session reçue et chaque changement de programme sont journalisés (« Révisions : session Tables de Raphaël reçue (entrainer, Les tables de 6 à 9, multiplication) : 18 bonnes, 2 lentes, 0 fausses, 212 s. »).

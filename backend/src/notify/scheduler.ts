@@ -32,12 +32,17 @@ export interface SchedulerDeps {
    */
   rules: () => { paused: boolean; quiet: QuietHours };
   /** Ce membre veut-il ce genre de rappel sur son téléphone ? `entretien` : les gestes de la liste Entretien ; `garantie` : les fins de garantie. */
-  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie') => boolean;
+  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions') => boolean;
   /**
    * Les garanties d'équipement en cours, calculées à la date du jour, et le seuil
    * d'alerte (eqpGarantieAlerteJours). Vide quand le module Équipements est éteint.
    */
   garanties: () => { items: WarrantyWatch[]; alertDays: number };
+  /**
+   * Les bilans du dimanche du module Révisions dus à cet instant mural (voir
+   * revisions/bilan.ts, weeklyHits). Vide quand le module est éteint.
+   */
+  revisionsWeekly: (nowWall: string) => ReminderHit[];
   /** Le module Entretien est-il actif ? Éteint, ses gestes ne rappellent plus (ils restent dans la base). */
   entretienOn: () => boolean;
   log: (line: string) => void;
@@ -51,6 +56,9 @@ const cesuPayloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, taskId: h.taskId, tag: 'cesu-' + h.taskId });
 const warrantyPayloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, tag: h.taskId });
+/** Le tap sur un bilan ouvre le suivi de l'enfant (« rev-<membre> », voir sw.js). */
+const revisionsPayloadOf = (h: ReminderHit, url: string): PushPayload =>
+  ({ kind: 'reminder', title: h.title, body: h.body, url, tag: 'rev-' + h.taskId });
 
 /** Ce qu'un envoi a atteint, par membre, pour le journal (vide quand tout a été ignoré). */
 const reached = (r: SendReport): string => r.members.filter((m) => m.status !== 'skipped')
@@ -107,6 +115,13 @@ export async function tick(deps: SchedulerDeps, nowWall = parisWall()): Promise<
     if (!pour.length) continue;
     const parts = reached(await notify(h.key, pour, warrantyPayloadOf(h, deps.url())));
     if (parts) deps.log(`Notifications : fin de garantie « ${h.body} » → ${parts}`);
+  }
+  // Bilan des Révisions du dimanche, une fois par enfant et par semaine.
+  for (const h of deps.revisionsWeekly(nowWall)) {
+    const pour = h.memberIds.filter((m) => deps.wants(m, 'revisions'));
+    if (!pour.length) continue;
+    const parts = reached(await notify(h.key, pour, revisionsPayloadOf(h, deps.url())));
+    if (parts) deps.log(`Notifications : bilan des révisions « ${h.body} » → ${parts}`);
   }
 }
 

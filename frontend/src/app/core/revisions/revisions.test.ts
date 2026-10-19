@@ -6,7 +6,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { ExerciseDef, readParams } from './exercises/contract';
 import { TABLES, TablesQuestion } from './exercises/tables';
-import { MasteryItem, activityDays, classify, dayLine, drawQuestions, fragile, goalLine, programGroups, sessionUuid, summaryLine } from './revisions';
+import { MasteryItem, activityDays, classify, dayLine, drawQuestions, fragile, goalLine, kidsLine, periodOf, programGroups, sessionUuid, summaryLine } from './revisions';
 
 /** Un hasard reproductible : le même tirage à chaque passage. */
 const seeded = (seed = 7) => () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -106,6 +106,19 @@ test('vingt-huit jours d’activité, aujourd’hui en dernier, à l’heure de 
   assert.deepEqual(d[27], { day: '2026-10-20', sessions: 2 });
   assert.equal(d[0].day, '2026-09-23');
   assert.ok(d.every((x) => x.day !== '2026-09-22'), 'hors des quatre semaines');
+});
+
+test('les périodes du bilan : la semaine va du lundi, le mois du premier', () => {
+  assert.deepEqual(periodOf('semaine', '2026-10-21'), { from: '2026-10-19', to: '2026-10-21' });
+  assert.deepEqual(periodOf('semaine', '2026-10-19'), { from: '2026-10-19', to: '2026-10-19' }, 'un lundi');
+  assert.deepEqual(periodOf('semaine-derniere', '2026-10-18'), { from: '2026-10-05', to: '2026-10-11' }, 'un dimanche : la semaine d’avant');
+  assert.deepEqual(periodOf('mois', '2026-10-21'), { from: '2026-10-01', to: '2026-10-21' });
+  assert.deepEqual(periodOf('mois-dernier', '2026-03-05'), { from: '2026-02-01', to: '2026-02-28' });
+});
+
+test('la tuile d’un adulte : chaque enfant, sans reprocher un zéro', () => {
+  assert.equal(kidsLine([{ name: 'Raphaël', sessions: 2 }, { name: 'Gaëtan', sessions: 0 }, { name: 'Noé', sessions: undefined }]),
+    'Raphaël : 2 sessions aujourd’hui, Gaëtan : pas encore aujourd’hui');
 });
 
 test('un identifiant de session est un uuid v4, même sans crypto.randomUUID', () => {

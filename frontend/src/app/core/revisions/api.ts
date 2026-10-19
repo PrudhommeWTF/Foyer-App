@@ -42,6 +42,17 @@ export interface RevisionsConfig {
 }
 /** Ce qu'un adulte règle pour un enfant : les paramètres de l'exercice, et ce que le socle porte pour tous. */
 export interface ProgramFields { params: Params; questions: number; secondsAllowed: number | null; fastSeconds: number | null; dailyGoal: number; }
+/** Le bilan d'une période, tel que le serveur le calcule (backend/src/revisions/bilan.ts). */
+export interface BilanTotals { sessions: number; questions: number; good: number; slow: number; wrong: number; pct: number; }
+export interface Bilan {
+  member: { id: string; name: string }; from: string; to: string; label: string;
+  totals: BilanTotals; prev: BilanTotals | null;
+  matieres: { id: string; label: string; exercises: {
+    id: string; label: string; summary: string; totals: BilanTotals; prev: BilanTotals | null;
+    groups: { group: string; questions: number; pct: number; fastPct: number; prevPct: number | null }[];
+    fragiles: { label: string; status: Status }[];
+  }[] }[];
+}
 export interface ItemHistory {
   key: string; label: string;
   answers: { text: string; expected: string; given: string | null; ms: number; result: Result; askedAt: string; mode: Mode }[];
@@ -67,5 +78,8 @@ export class RevisionsApi {
     return this.api.put(`${m(member)}/exercises/${encodeURIComponent(ex)}/program`, p);
   }
   stopProgram(member: string, ex: string): Promise<{ ok: boolean }> { return this.api.del(`${m(member)}/exercises/${encodeURIComponent(ex)}/program`); }
+  bilan(member: string, from: string, to: string): Promise<Bilan> { return this.api.request(`${m(member)}/bilan?from=${from}&to=${to}`); }
+  bilanPdf(member: string, from: string, to: string): Promise<Blob> { return this.api.download(`${m(member)}/bilan.pdf?from=${from}&to=${to}`); }
+  sessionsCsv(member: string, from: string, to: string): Promise<Blob> { return this.api.download(`${m(member)}/sessions.csv?from=${from}&to=${to}`); }
   send(s: SessionPayload): Promise<SessionReceipt> { return this.api.post('revisions/sessions', s); }
 }

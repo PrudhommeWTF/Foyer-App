@@ -47,6 +47,7 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 | `pushAssigned` | Sur le téléphone : quand on m’affecte une tâche | Personnel | oui / non | activé | — | Tâches | — |
 | `entretienRappel` | Sur le téléphone : rappels d’entretien | Personnel | oui / non | activé | — | Entretien | — |
 | `eqpGarantieRappel` | Sur le téléphone : fins de garantie | Personnel | oui / non | activé | — | Équipements | — |
+| `revisionsBilanHebdo` | Sur le téléphone : bilan des révisions du dimanche | Personnel | oui / non | activé | — | Révisions | — |
 | `notifEvents` | Dans la cloche : agenda du jour et de demain | Personnel | oui / non | activé | — | Agenda | — |
 | `notifTasks` | Dans la cloche : tâches du jour et en retard | Personnel | oui / non | activé | — | Tâches | — |
 | `notifBirthdays` | Dans la cloche : anniversaires | Personnel | oui / non | activé | — | Contacts | — |
@@ -61,6 +62,7 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 - **Sur le téléphone : quand on m’affecte une tâche** (`pushAssigned`) : Quelqu’un du foyer vous affecte une tâche : vous êtes prévenu tout de suite, sans attendre d’ouvrir l’application.
 - **Sur le téléphone : rappels d’entretien** (`entretienRappel`) : Le rappel d’un geste d’entretien (changer la cartouche, tester l’alarme) arrive sur vos appareils abonnés. Coupé, vous ne recevez plus ceux-là, les rappels de vos autres tâches continuent. Un geste jamais noté ne rappelle pas : on ne réclame pas ce dont on ignore la dernière fois.
 - **Sur le téléphone : fins de garantie** (`eqpGarantieRappel`) : Vous prévient quand la garantie d’un équipement arrive à échéance, une seule fois par appareil, au seuil réglé dans la section Équipements (60 jours par défaut). Réservé aux adultes : un compte enfant n’en reçoit jamais.
+- **Sur le téléphone : bilan des révisions du dimanche** (`revisionsBilanHebdo`) : Le dimanche soir, le bilan de la semaine de chaque enfant (« Raphaël cette semaine : 5 sessions, les tables de 6 à 9, 92 % de réussite, 7 × 8 encore fragile »), une seule notification par enfant et par semaine. Toucher la notification ouvre son suivi. Réservé aux adultes : un compte enfant n’en reçoit jamais.
 - **Dans la cloche : agenda du jour et de demain** (`notifEvents`) : Les événements d’aujourd’hui et de demain apparaissent dans la cloche en haut de l’écran.
 - **Dans la cloche : tâches du jour et en retard** (`notifTasks`) : Les tâches datées à faire aujourd’hui et celles qui ont dépassé leur échéance apparaissent dans la cloche.
 - **Dans la cloche : anniversaires** (`notifBirthdays`) : Les anniversaires des membres et des contacts, dans les sept jours qui viennent.
@@ -221,12 +223,14 @@ Les règles de garantie des appareils de la maison. Les pièces de la maison se 
 
 ### Révisions
 
-La lecture à voix haute des exercices, sur cet appareil.
+L’heure du bilan du dimanche, et la lecture à voix haute des exercices sur cet appareil.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
+| `revisionsBilanHeure` | Heure du bilan du dimanche | Foyer | heure | `18:30` | HH:MM | Révisions | — |
 | `revisionsVoix` | Lire à voix haute en mode Apprendre | Appareil | oui / non | activé | — | Révisions | — |
 
+- **Heure du bilan du dimanche** (`revisionsBilanHeure`) : Le dimanche, à partir de cette heure, chaque adulte qui l’a demandé reçoit le bilan de la semaine de chaque enfant (lundi à dimanche).
 - **Lire à voix haute en mode Apprendre** (`revisionsVoix`) : En mode Apprendre, chaque ligne est lue à voix haute, quand cet appareil a une voix française. Rien ne part sur Internet : c’est la voix de l’appareil.
 
 ### École
