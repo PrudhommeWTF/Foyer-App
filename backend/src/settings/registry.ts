@@ -147,7 +147,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'employe', group: 'modules', label: 'Employé à domicile', desc: 'Les congés payés, le rappel de déclaration au CESU et la durée proposée à la saisie. Le taux horaire se règle par employé, sur sa fiche dans l’écran du module.' },
   { id: 'entretien', group: 'modules', label: 'Entretien', desc: 'Jusqu’où l’écran Entretien regarde devant lui, et si un consommable passé sous son seuil part seul aux courses. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.' },
   { id: 'equipements', group: 'modules', label: 'Équipements', desc: 'Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.' },
-  { id: 'tables', group: 'modules', label: 'Tables', desc: 'Jusqu’à quelle table l’entraînement va. Le programme de chaque enfant (tables travaillées, nombre de questions, temps accordé) se règle dans l’écran Tables, onglet Suivi.' },
+  { id: 'tables', group: 'modules', label: 'Tables', desc: 'Jusqu’à quelle table l’entraînement va, et la lecture à voix haute sur cet appareil. Le programme de chaque enfant (tables travaillées, nombre de questions, temps accordé) se règle dans l’écran Tables, onglet Suivi.' },
   { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
   { id: 'exploitation', group: 'machine', label: 'Exploitation', desc: 'Version, mises à jour, sauvegardes, journal du service et journal des modifications.' },
@@ -549,6 +549,13 @@ export const REGISTRY = [
     label: 'Dernière table proposée',
     desc: 'La plus grande table que l’entraînement et les programmes proposent : 10 en primaire, 12 si l’école le demande.',
     default: 10, min: 10, max: 12,
+  },
+  {
+    key: 'tablesVoix',
+    type: 'bool', scope: 'appareil', section: 'tables', module: 'Tables',
+    label: 'Lire les tables à voix haute',
+    desc: 'En mode Apprendre, chaque ligne de la table est lue à voix haute, quand cet appareil a une voix française. Rien ne part sur Internet : c’est la voix de l’appareil.',
+    default: true,
   },
   {
     key: 'entretienHorizonJours',

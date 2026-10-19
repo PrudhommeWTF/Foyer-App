@@ -221,13 +221,15 @@ Les règles de garantie des appareils de la maison. Les pièces de la maison se 
 
 ### Tables
 
-Jusqu’à quelle table l’entraînement va. Le programme de chaque enfant (tables travaillées, nombre de questions, temps accordé) se règle dans l’écran Tables, onglet Suivi.
+Jusqu’à quelle table l’entraînement va, et la lecture à voix haute sur cet appareil. Le programme de chaque enfant (tables travaillées, nombre de questions, temps accordé) se règle dans l’écran Tables, onglet Suivi.
 
 | Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
 |---|---|---|---|---|---|---|---|
 | `tablesMax` | Dernière table proposée | Foyer | entier | `10` | de 10 à 12 | Tables | — |
+| `tablesVoix` | Lire les tables à voix haute | Appareil | oui / non | activé | — | Tables | — |
 
 - **Dernière table proposée** (`tablesMax`) : La plus grande table que l’entraînement et les programmes proposent : 10 en primaire, 12 si l’école le demande.
+- **Lire les tables à voix haute** (`tablesVoix`) : En mode Apprendre, chaque ligne de la table est lue à voix haute, quand cet appareil a une voix française. Rien ne part sur Internet : c’est la voix de l’appareil.
 
 ### École
 

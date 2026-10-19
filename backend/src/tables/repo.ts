@@ -173,6 +173,33 @@ export function recomputeMember(member: string, cfg: MasteryCfg, reclassify?: (s
   })();
 }
 
+/**
+ * Ce que l'onglet Suivi résume depuis `since` : les sessions (le jour se compte
+ * côté appelant, à l'heure de Paris), et, par table, les questions qui la
+ * touchent (7 × 6 compte pour la table de 6 et pour celle de 7), justes et
+ * rapides. Le mode Apprendre n'y entre pas : l'enfant y recopie la table.
+ */
+export function statsOf(member: string, op: Operation, since: string): {
+  sessions: { started_at: string; mode: Mode; questions: number; good: number; slow: number; wrong: number }[];
+  tables: { table: number; questions: number; correct: number; fast: number }[];
+} {
+  const sessions = database.prepare(`SELECT started_at, mode, questions, good, slow, wrong FROM tab_sessions
+    WHERE member_id = ? AND started_at >= ? ORDER BY started_at`).all(member, since) as never;
+  const rows = database.prepare(`SELECT pa, pb, result FROM tab_answers WHERE member_id = ? AND operation = ? AND counts = 1 AND asked_at >= ?`)
+    .all(member, op, since) as { pa: number; pb: number; result: Result }[];
+  const by = new Map<number, { table: number; questions: number; correct: number; fast: number }>();
+  for (const r of rows) {
+    for (const t of r.pa === r.pb ? [r.pa] : [r.pa, r.pb]) {
+      const e = by.get(t) ?? { table: t, questions: 0, correct: 0, fast: 0 };
+      e.questions++;
+      if (r.result === 'bon' || r.result === 'lent') e.correct++;
+      if (r.result === 'bon') e.fast++;
+      by.set(t, e);
+    }
+  }
+  return { sessions, tables: [...by.values()].sort((x, y) => x.table - y.table) };
+}
+
 /** Les membres qui ont des réponses : ce que balaie `tables:recalcul --tous`. */
 export function membersWithAnswers(): string[] {
   return (database.prepare('SELECT DISTINCT member_id FROM tab_answers').all() as { member_id: string }[]).map((r) => r.member_id);

@@ -140,6 +140,16 @@ describe('qui lit, qui écrit', () => {
     assert.deepEqual(h.answers.map((x: { a: number; b: number }) => `${x.a}x${x.b}`), ['7x6', '6x7']);
   });
 
+  it('le résumé du suivi : sessions par jour, réussite par table, sans le mode Apprendre', async () => {
+    const st = (await appel(ctx.base, 'GET', `/tables/members/${lena}/stats?since=2026-10-01T00:00:00.000Z`, undefined, ctx.jetons.membre)).json;
+    assert.equal(st.operation, 'multiplication');
+    const parJour = new Map(st.days.map((d: { day: string; sessions: number }) => [d.day, d.sessions]));
+    assert.equal(parJour.get('2026-10-12'), 1, 'la session de 19 h (heure de Paris) du 12');
+    const t9 = st.tables.find((t: { table: number }) => t.table === 9);
+    assert.deepEqual(t9, { table: 9, questions: 2, correct: 2, fast: 1 }, '8 × 9 lent et 6 × 9 rapide ; le 9 × 9 d’Apprendre ne compte pas');
+    assert.equal((await appel(ctx.base, 'GET', `/tables/members/${NOE}/stats`, undefined, ctx.jetons.enfant)).status, 403);
+  });
+
   it('un jeton d’accès n’entre pas dans le module', async () => {
     const t = await appel(ctx.base, 'POST', '/me/tokens', { name: 'Assistant', scope: 'write', password: 'MotDePasseSolide1' }, ctx.jetons.admin);
     assert.equal((await appel(ctx.base, 'GET', '/tables/config', undefined, t.json.token)).status, 403);

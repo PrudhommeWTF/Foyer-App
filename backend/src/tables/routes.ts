@@ -18,7 +18,7 @@ import { effectiveSetting } from '../settings/repo';
 import { Bareme, timingFor } from './bareme';
 import { MODES, Mode, OPERATIONS, Operation, Result, classify, expectedOf, pairOf, status } from './mastery';
 import {
-  AnswerIn, ProgramRow, SessionRow, activeProgram, masteryRows, pairHistory, programById, recordSession, sessionsOf, setProgram, toMastery,
+  AnswerIn, ProgramRow, SessionRow, activeProgram, masteryRows, pairHistory, programById, recordSession, sessionsOf, setProgram, statsOf, toMastery,
 } from './repo';
 
 /** Au-delà, ce n'est plus une session d'enfant : une file hors ligne abîmée, ou autre chose. */
@@ -111,6 +111,25 @@ export function tablesRouter(getBareme: () => Bareme): Router {
     const since = req.query['since'] !== undefined ? iso(req.query['since'], 'since') : null;
     const limit = req.query['limit'] !== undefined ? int(Number(req.query['limit']), 1, 500, 'limit') : 100;
     res.json({ sessions: sessionsOf(m.id, since, limit).map(sessionView) });
+  }));
+
+  /**
+   * Le résumé de l'onglet Suivi depuis une date (quatre semaines par défaut) :
+   * sessions par jour à l'heure de Paris, et réussite par table.
+   */
+  r.get('/members/:memberId/stats', route((req, res) => {
+    const m = readable(req, res); if (!m) return;
+    const op = req.query['operation'] !== undefined ? operation(req.query['operation']) : activeProgram(m.id)?.operation ?? 'multiplication';
+    const since = req.query['since'] !== undefined ? iso(req.query['since'], 'since') : new Date(Date.now() - 28 * 86400_000).toISOString();
+    const st = statsOf(m.id, op, since);
+    const days = new Map<string, { day: string; sessions: number; questions: number; good: number }>();
+    for (const s of st.sessions) {
+      const day = parisDay(s.started_at);
+      const e = days.get(day) ?? { day, sessions: 0, questions: 0, good: 0 };
+      e.sessions++; e.questions += s.questions; e.good += s.good;
+      days.set(day, e);
+    }
+    res.json({ operation: op, since, days: [...days.values()], tables: st.tables });
   }));
 
   /** Le programme d'un enfant, réglé par un adulte. L'ancien reste en base : le passé ne change pas. */

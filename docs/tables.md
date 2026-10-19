@@ -2,7 +2,24 @@
 
 L'entraînement aux tables de multiplication et d'addition, avec un suivi par enfant, par opération (6 × 7 est-il su ?), par table et dans le temps. Inspiré de mestables.fr pour la simplicité côté enfant, nettement plus complet côté suivi.
 
-> État : le serveur est en place (tables, barème, modèle de maîtrise, réception des sessions, programme, recalcul). L'écran de l'enfant et l'onglet Suivi arrivent dans la tranche suivante ; le bilan hebdomadaire, le PDF pour la maîtresse et les outils d'assistant ensuite.
+> État : l'exercice, la grille et l'onglet Suivi sont en place. Le bilan hebdomadaire, le PDF pour la maîtresse, la tuile d'accueil détaillée, la tâche « Devoirs de … » et les outils d'assistant arrivent dans la tranche suivante.
+
+## À l'usage
+
+**Pour l'enfant** (dans sa session, ouverte par un parent ou avec ses identifiants) : la tuile « Mes tables » de l'accueil, puis deux taps.
+
+- **Mon entraînement du jour** : le programme réglé par un parent, d'un seul bouton, avec l'objectif du jour (« Pas encore aujourd'hui », « 1 session sur 2 faite », « Objectif du jour atteint » : jamais un zéro reproché).
+- **Je choisis** : l'opération (multiplication ou addition), les tables « de … à … », le mode.
+  - **Apprendre** : la table entière sous les yeux, une ligne mise en évidence à la fois, que l'enfant recopie au pavé. Lue à voix haute si l'appareil a une voix française et si le réglage « Lire les tables à voix haute » de cet appareil est allumé ; sans voix française, pas de bouton « Écouter » du tout. Ni chronomètre ni score.
+  - **S'entraîner** : une question à la fois, une barre de temps qui descend (une réponse après la barre est acceptée, notée « un peu lent »), correction immédiate avec la bonne réponse en cas d'erreur, enchaînement automatique. « Je ne sais pas » passe la question.
+  - **Test** : pareil, sans la bonne réponse pendant le test.
+- Le **pavé numérique** est celui de l'application, à grosses touches : le clavier du système n'apparaît jamais. Sur iPad en paysage, la question est à gauche et le pavé sous le pouce droit ; sur iPhone, l'un sous l'autre, sans défilement. Le clavier d'un Mac marche aussi (chiffres, retour arrière, Entrée).
+- **Le bilan** : « Tu as révisé les tables de 6 à 9 : 18 bonnes, 2 lentes, 0 fausse. », les opérations à revoir, et la grille avec ce qui vient de changer. « Encore une » ou « J'ai fini ». « Arrêter » en cours de route garde les réponses déjà données.
+- **La grille** : une case par opération, de 0 à la dernière table, colorée selon son état (légende écrite sous la grille). Une case touchée montre son historique.
+
+**Pour un adulte** : l'onglet « M'entraîner » (sa propre grille, sans programme) et l'onglet **Suivi des enfants** : le programme de chaque enfant (opération, tables, questions, temps selon l'âge ou fixé, objectif par jour, sens des questions), son activité sur quatre semaines, sa réussite par table du programme, ses opérations encore fragiles, sa grille, et l'aide qui écrit les seuils d'acquisition du barème.
+
+**Sans réseau** (l'iPad dans la voiture) : l'exercice tourne entièrement sur l'appareil, sur la dernière grille connue. La session terminée attend dans une file de l'appareil (« Une session attend le réseau : elle partira toute seule. »), même si l'application est fermée et rouverte, et part au retour du réseau. Son identifiant vient de l'appareil : renvoyée deux fois, elle n'est comptée qu'une fois. La file est rangée au nom de l'enfant : elle ne part jamais sous la session de quelqu'un d'autre.
 
 ## Le module
 
@@ -98,6 +115,7 @@ Sous `/api/tables`, session de navigateur, membre du foyer, module activé.
 | `GET /members/:id[?operation=…]` | programme, temps accordé (et sa source : programme, barème, sans âge), grille de l'opération avec l'état de chaque case |
 | `GET /members/:id/pairs/:operation/:a/:b` | l'historique d'une case (les deux sens), le plus récent d'abord |
 | `GET /members/:id/sessions[?since=…&limit=…]` | les sessions |
+| `GET /members/:id/stats[?operation=…&since=…]` | le résumé de l'onglet Suivi (quatre semaines par défaut) : sessions par jour à l'heure de Paris, et par table les questions qui la touchent, justes et rapides (le mode Apprendre n'y entre pas) |
 | `PUT /members/:id/program` | régler le programme d'un enfant (adultes) |
 | `POST /sessions` | une session en un seul envoi : `id` (uuid de l'appareil), `mode`, `operation`, `from`, `to`, `startedAt`, `endedAt`, `aborted`, `programId`, `fastMs` et `allowedMs` appliqués, `answers` (`a`, `b`, `given` ou null, `ms`, `askedAt`). 201 à la première réception, 200 et `duplicate: true` ensuite. La réponse dit, pour chaque couple touché, son état avant et après. |
 
