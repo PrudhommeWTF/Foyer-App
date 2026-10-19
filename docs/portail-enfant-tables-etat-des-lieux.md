@@ -1,6 +1,6 @@
 # Portail enfant et module « Tables » : état des lieux
 
-État du code au 19/10/2026 (`main` = `ba07119`). Validé le 19/10/2026 : forme du jeton, trois verrous de la file hors ligne, pas de push en session d'enfant, exemption de la déconnexion après inactivité, menu enfant restreint, seuil d'acquisition au niveau 3. Ce qui a été construit est décrit dans `docs/portail-enfant.md` (et `docs/tables.md` à venir).
+État du code au 19/10/2026 (`main` = `ba07119`). Validé le 19/10/2026 : forme du jeton, trois verrous de la file hors ligne, pas de push en session d'enfant, exemption de la déconnexion après inactivité, menu enfant restreint, seuil d'acquisition au niveau 3. Ce qui a été construit est décrit dans `docs/portail-enfant.md` et `docs/revisions.md` (le module Tables est devenu le premier exercice du module Révisions ; les noms `tab_*` et `tables:recalcul` de ce document sont devenus `rev_*` et `revisions:recalcul`).
 
 ## A1. La session basculée
 

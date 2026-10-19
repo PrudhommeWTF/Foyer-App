@@ -98,7 +98,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 | `modEcole` | École (ÉcoleDirecte) | Foyer | oui / non | désactivé | — | Foyer | — |
 | `modEntretien` | Entretien de la maison | Foyer | oui / non | activé | — | Foyer | — |
 | `modEquipements` | Équipements | Foyer | oui / non | activé | — | Foyer | — |
-| `modTables` | Tables (calcul mental) | Foyer | oui / non | activé | — | Foyer | — |
+| `modRevisions` | Révisions | Foyer | oui / non | activé | — | Foyer | — |
 
 - **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
 - **Cartes de fidélité** (`modFidelite`) : Les cartes de fidélité du foyer. Désactivé, l’écran et son entrée de menu disparaissent ; les cartes enregistrées sont conservées.
@@ -107,7 +107,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 - **École (ÉcoleDirecte)** (`modEcole`) : Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.
 - **Entretien de la maison** (`modEntretien`) : Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran Entretien disparaît, sa liste se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.
 - **Équipements** (`modEquipements`) : Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.
-- **Tables (calcul mental)** (`modTables`) : L’entraînement aux tables de multiplication et d’addition, avec le suivi de chaque enfant. Désactivé, l’écran, la tuile d’accueil, l’accès API et les outils d’assistant disparaissent ; les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles.
+- **Révisions** (`modRevisions`) : Des exercices courts pour réviser à la maison (pour commencer, les tables de multiplication et d’addition), avec le programme et le suivi de chaque enfant. Désactivé, l’écran, la tuile d’accueil, l’accès API et les outils d’assistant disparaissent ; les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles.
 
 ## Les modules
 
@@ -218,16 +218,6 @@ Les règles de garantie des appareils de la maison. Les pièces de la maison se 
 
 - **Durée de garantie par défaut (mois)** (`eqpGarantieDefautMois`) : Durée de garantie appliquée quand la fiche d’un appareil acheté neuf n’en précise pas (garantie légale de conformité : 24 mois pour un bien neuf). À 0, un appareil sans durée saisie reste en garantie inconnue. Une occasion achetée à un professionnel suit 12 mois, une occasion entre particuliers n’a pas de garantie légale.
 - **Alerte avant la fin d’une garantie (jours)** (`eqpGarantieAlerteJours`) : Nombre de jours avant la fin d’une garantie à partir duquel Foyer la signale : la pastille de l’appareil passe à l’orange « Garantie expire le … ».
-
-### Tables
-
-Jusqu’à quelle table l’entraînement va. Le programme de chaque enfant (tables travaillées, nombre de questions, temps accordé) se règle dans l’écran Tables, onglet Suivi.
-
-| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
-|---|---|---|---|---|---|---|---|
-| `tablesMax` | Dernière table proposée | Foyer | entier | `10` | de 10 à 12 | Tables | — |
-
-- **Dernière table proposée** (`tablesMax`) : La plus grande table que l’entraînement et les programmes proposent : 10 en primaire, 12 si l’école le demande.
 
 ### École
 

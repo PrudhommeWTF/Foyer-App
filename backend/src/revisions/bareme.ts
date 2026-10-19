@@ -1,11 +1,14 @@
-// Le barème du module Tables : le temps accordé par réponse et le seuil
+// Le barème du module Révisions : le temps accordé par réponse et le seuil
 // « rapide » selon l'âge, et les règles de la maîtrise. Rien en dur dans le
-// code : le barème livré est un fichier JSON (backend/config/tables-bareme.json)
-// qu'un foyer adapte par un fichier du même nom dans FOYER_DATA_DIR. La
-// surcharge remplace les clés qu'elle porte (« ages » en bloc, les champs de
-// « adulte », « sansAge » et « maitrise » un par un) et se relit dès qu'elle
-// change. Une valeur illisible est écartée et nommée au journal ; le reste
-// s'applique.
+// code : le barème livré est un fichier JSON (backend/config/revisions/bareme.json)
+// qu'un foyer adapte par un fichier au même chemin dans FOYER_DATA_DIR
+// (revisions/bareme.json). Une partie « commun » vaut pour tous les exercices,
+// et « exercices.<id> » la précise pour l'un d'eux (taper un mot prend plus
+// longtemps que répondre 42). Chaque couche remplace les clés qu'elle porte
+// (« ages » en bloc, les champs de « adulte », « sansAge » et « maitrise » un
+// par un), dans l'ordre : commun livré, exercice livré, commun du foyer,
+// exercice du foyer. La surcharge se relit dès qu'elle change. Une valeur
+// illisible est écartée et nommée au journal ; le reste s'applique.
 import fs from 'fs';
 import path from 'path';
 import { log } from '../log';
@@ -15,7 +18,8 @@ export interface Timing { accorde: number; rapide: number; }
 export interface AgeRow extends Timing { jusqua: number; }
 export interface Bareme { ages: AgeRow[]; adulte: Timing; sansAge: Timing; maitrise: MasteryCfg; }
 
-export const BAREME_FILE = 'tables-bareme.json';
+/** Le chemin du barème, relatif au dossier de configuration livré et au dossier de données. */
+export const BAREME_FILE = path.join('revisions', 'bareme.json');
 const SHIPPED = path.join(__dirname, '..', '..', 'config', BAREME_FILE);
 
 /** Le dernier recours, si même le fichier livré est illisible : les valeurs de départ documentées. */
@@ -33,7 +37,7 @@ function timing(raw: unknown, where: string, warn: (l: string) => void): Timing 
   const o = (raw ?? {}) as Record<string, unknown>;
   const accorde = num(o['accorde'], 1, 120), rapide = num(o['rapide'], 0.5, 120);
   if (accorde === null || rapide === null || rapide > accorde) {
-    warn(`Tables : ${where} écarté (accorde entre 1 et 120 s, rapide entre 0,5 s et accorde).`);
+    warn(`Révisions : ${where} écarté (accorde entre 1 et 120 s, rapide entre 0,5 s et accorde).`);
     return null;
   }
   return { accorde, rapide };
@@ -50,11 +54,11 @@ export function layer(base: Bareme, raw: Record<string, unknown>, where: string,
     for (const r of Array.isArray(raw['ages']) ? raw['ages'] : []) {
       const j = int((r as Record<string, unknown>)?.['jusqua'], 1, 120);
       const t = timing(r, `${where}, ligne d’âge ${String((r as Record<string, unknown>)?.['jusqua'] ?? '?')}`, warn);
-      if (j === null && t) warn(`Tables : ${where}, ligne d’âge sans « jusqua » entier, écartée.`);
+      if (j === null && t) warn(`Révisions : ${where}, ligne d’âge sans « jusqua » entier, écartée.`);
       if (j !== null && t) rows.push({ jusqua: j, ...t });
     }
     if (rows.length) out.ages = rows.sort((x, y) => x.jusqua - y.jusqua);
-    else warn(`Tables : ${where}, aucune ligne d’âge lisible ; les précédentes restent.`);
+    else warn(`Révisions : ${where}, aucune ligne d’âge lisible ; les précédentes restent.`);
   }
   for (const k of ['adulte', 'sansAge'] as const) {
     if (raw[k] === undefined) continue;
@@ -67,13 +71,13 @@ export function layer(base: Bareme, raw: Record<string, unknown>, where: string,
     if (esp !== undefined) {
       const ok = Array.isArray(esp) && esp.length >= 2 && esp.length <= 10 && esp.every((d, i) => int(d, 0, 365) !== null && (i === 0 || d >= esp[i - 1]));
       if (ok) out.maitrise.espacementJours = esp as number[];
-      else warn(`Tables : ${where}, « espacementJours » écarté (2 à 10 nombres de jours croissants, entre 0 et 365).`);
+      else warn(`Révisions : ${where}, « espacementJours » écarté (2 à 10 nombres de jours croissants, entre 0 et 365).`);
     }
     const top = out.maitrise.espacementJours.length - 1;
     for (const [k, min, max] of [['descenteSiFaux', 1, top], ['niveauAcquis', 1, top], ['bonnesMin', 1, 50]] as const) {
       if (m[k] === undefined) continue;
       const v = int(m[k], min, max);
-      if (v === null) warn(`Tables : ${where}, « ${k} » écarté (entier entre ${min} et ${max}).`);
+      if (v === null) warn(`Révisions : ${where}, « ${k} » écarté (entier entre ${min} et ${max}).`);
       else out.maitrise[k] = v;
     }
     out.maitrise.niveauAcquis = Math.min(out.maitrise.niveauAcquis, top);
@@ -89,27 +93,42 @@ function readJson(file: string): Record<string, unknown> | null {
   return v as Record<string, unknown>;
 }
 
-let cache: { key: string; value: Bareme } | null = null;
+const cache = new Map<string, Bareme>();
 
-/** Le barème en vigueur : le livré, puis la surcharge du foyer s'il y en a une. */
-export function bareme(dataDir: string, shippedFile = SHIPPED): Bareme {
+/** La couche d'un fichier pour un exercice : sa partie commune, puis la sienne. */
+function layers(file: Record<string, unknown>, exercise: string | undefined): [Record<string, unknown>, string][] {
+  const out: [Record<string, unknown>, string][] = [];
+  const commun = file['commun'];
+  if (commun && typeof commun === 'object') out.push([commun as Record<string, unknown>, 'commun']);
+  const ex = exercise ? (file['exercices'] as Record<string, unknown> | undefined)?.[exercise] : undefined;
+  if (ex && typeof ex === 'object') out.push([ex as Record<string, unknown>, `exercice ${exercise}`]);
+  return out;
+}
+
+/** Le barème en vigueur pour un exercice (ou le commun) : le livré, puis la surcharge du foyer s'il y en a une. */
+export function bareme(dataDir: string, exercise?: string, shippedFile = SHIPPED): Bareme {
   const overrideFile = path.join(dataDir, BAREME_FILE);
   let stamp = 'absent';
   try { stamp = String(fs.statSync(overrideFile).mtimeMs); } catch { /* pas de surcharge */ }
-  const key = shippedFile + '|' + overrideFile + '|' + stamp;
-  if (cache?.key === key) return cache.value;
+  const key = [shippedFile, overrideFile, stamp, exercise ?? ''].join('|');
+  const hit = cache.get(key);
+  if (hit) return hit;
   const warn = (l: string): void => log.attention(l);
   let value = SECOURS;
-  try { const s = readJson(shippedFile); if (s) value = layer(value, s, 'barème livré', warn); } catch (e) {
-    log.attention(`Tables : barème livré illisible (${shippedFile}) : ${(e as Error).message}. Valeurs de secours appliquées.`);
+  try {
+    const s = readJson(shippedFile);
+    if (s) for (const [raw, where] of layers(s, exercise)) value = layer(value, raw, `barème livré, ${where}`, warn);
+  } catch (e) {
+    log.attention(`Révisions : barème livré illisible (${shippedFile}) : ${(e as Error).message}. Valeurs de secours appliquées.`);
   }
   try {
     const o = readJson(overrideFile);
-    if (o) { value = layer(value, o, 'surcharge', warn); log.info(`Tables : barème chargé avec la surcharge ${overrideFile}.`); }
+    if (o) for (const [raw, where] of layers(o, exercise)) value = layer(value, raw, `surcharge, ${where}`, warn);
   } catch (e) {
-    log.attention(`Tables : surcharge du barème illisible (${overrideFile}) : ${(e as Error).message}. Le barème livré s'applique seul.`);
+    log.attention(`Révisions : surcharge du barème illisible (${overrideFile}) : ${(e as Error).message}. Le barème livré s'applique seul.`);
   }
-  cache = { key, value };
+  if (cache.size > 50) cache.clear();
+  cache.set(key, value);
   return value;
 }
 

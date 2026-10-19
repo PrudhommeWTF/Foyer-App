@@ -27,8 +27,9 @@ import { entretienRouter } from './entretien/routes';
 import { costsRouter } from './entretien/costs-routes';
 import { recordSpend } from './entretien/costs';
 import { gesteToShopping } from './entretien/courses';
-import { tablesRouter } from './tables/routes';
-import { bareme } from './tables/bareme';
+import { revisionsRouter } from './revisions/routes';
+import { bareme } from './revisions/bareme';
+import { matieres } from './revisions/matieres';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
@@ -401,7 +402,7 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
 // Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un
 // enfant sur un module adulte. Le masquage dans l'interface n'est pas la barrière,
 // c'en est le reflet ; la barrière est ici, côté serveur.
-const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modTables') => (_req: Request, res: Response, next: NextFunction): void => {
+const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions') => (_req: Request, res: Response, next: NextFunction): void => {
   if (effectiveSetting(flag) === false) { res.status(403).json({ error: 'Ce module est désactivé.' }); return; }
   next();
 };
@@ -444,11 +445,12 @@ onStockAlerts((ids, meta) => {
 // sans numéro de série ni montant, et n'ouvre ni facture ni plaque (filtre dans
 // le routeur). Pas de jeton d'API : l'assistant passe par le serveur MCP.
 api.use('/equipements', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modEquipements'), equipementsRouter(requireAdmin));
-// Module « Tables » (calcul mental) : un enfant lit et écrit ses sessions, un
-// adulte lit tout et règle les programmes (gardes dans le routeur). Pas de jeton
-// d'accès : l'assistant passe par le serveur MCP. Le barème vient de
-// config/tables-bareme.json, surchargeable dans le dossier de données.
-api.use('/tables', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modTables'), tablesRouter(() => bareme(DATA_DIR)));
+// Module « Révisions » (exercices, dont les tables) : un enfant lit et écrit ses
+// sessions, un adulte lit tout et règle les programmes (gardes dans le routeur).
+// Pas de jeton d'accès : l'assistant passe par le serveur MCP. Le barème et les
+// matières viennent de config/revisions/, surchargeables dans le dossier de données.
+api.use('/revisions', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modRevisions'),
+  revisionsRouter((ex) => bareme(DATA_DIR, ex), () => matieres(DATA_DIR)));
 
 // ---- Modules activables (activer / désactiver, remise à zéro) ----
 // L'activation elle-même est un réglage foyer (modRepas, modFidelite, modFinances,

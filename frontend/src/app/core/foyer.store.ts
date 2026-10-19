@@ -1296,10 +1296,10 @@ export class FoyerStore {
   // École est le seul module éteint par défaut : il faut l'avoir allumé.
   readonly modEcole = computed(() => this.setting('modEcole') === true);
   readonly modEntretien = computed(() => this.setting('modEntretien') !== false);
-  readonly modTables = computed(() => this.setting('modTables') !== false);
+  readonly modRevisions = computed(() => this.setting('modRevisions') !== false);
   moduleOn(flag: ModuleFlag): boolean {
     return flag === 'modRepas' ? this.modRepas() : flag === 'modFidelite' ? this.modFidelite() : flag === 'modFinances' ? this.modFinances()
-      : flag === 'modEcole' ? this.modEcole() : flag === 'modEntretien' ? this.modEntretien() : flag === 'modEquipements' ? this.modEquipements() : flag === 'modTables' ? this.modTables() : this.modEmploye();
+      : flag === 'modEcole' ? this.modEcole() : flag === 'modEntretien' ? this.modEntretien() : flag === 'modEquipements' ? this.modEquipements() : flag === 'modRevisions' ? this.modRevisions() : this.modEmploye();
   }
   /** Un écran est-il accessible ? (module actif, ou écran hors module.) */
   screenEnabled(screen: string): boolean {

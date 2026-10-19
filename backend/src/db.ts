@@ -7,8 +7,8 @@ import { initFinancesRepo } from './finances/repo';
 import { migrateEmployes } from './employes/schema';
 import { initEmployesRepo } from './employes/repo';
 import { migrateEcole } from './ecole/schema';
-import { migrateTables } from './tables/schema';
-import { initTablesRepo } from './tables/repo';
+import { migrateRevisions } from './revisions/schema';
+import { initRevisionsRepo } from './revisions/repo';
 import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
 import { migrateEntretien } from './entretien/schema';
@@ -180,9 +180,9 @@ initEmployesRepo(db);
 migrateEcole(db);
 initEcoleRepo(db);
 
-// Module « Tables » (calcul mental) : tables tab_*, mêmes principes.
-migrateTables(db);
-initTablesRepo(db);
+// Module « Révisions » (exercices, dont les tables) : tables rev_*, mêmes principes.
+migrateRevisions(db);
+initRevisionsRepo(db);
 
 // Household-side tables (files, ops journals), then the document itself.
 migrateHousehold(db);

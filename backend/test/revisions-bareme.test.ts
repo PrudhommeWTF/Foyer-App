@@ -1,14 +1,24 @@
-// Le barème du module Tables : le temps accordé selon l'âge, la surcharge d'un
-// programme, la surcharge du foyer, et une configuration abîmée qui ne casse rien.
+// Le barème du module Révisions : le temps accordé selon l'âge, la surcharge d'un
+// programme, les couches commun puis exercice, la surcharge du foyer, et une
+// configuration abîmée qui ne casse rien.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
-import { Bareme, ageOn, bareme, layer, timingFor } from '../src/tables/bareme';
+import { Bareme, ageOn, bareme, layer, timingFor } from '../src/revisions/bareme';
 
-const SHIPPED = path.join(__dirname, '..', 'config', 'tables-bareme.json');
-const livre = (): Bareme => bareme(fs.mkdtempSync(path.join(os.tmpdir(), 'foyer-bareme-')), SHIPPED);
+const SHIPPED = path.join(__dirname, '..', 'config', 'revisions', 'bareme.json');
+const tmp = (): string => fs.mkdtempSync(path.join(os.tmpdir(), 'foyer-bareme-'));
+const livre = (ex?: string): Bareme => bareme(tmp(), ex, SHIPPED);
+/** Écrit la surcharge du foyer, avec une date de modification qui force la relecture. */
+let tic = 0;
+const surcharge = (dir: string, contenu: string): void => {
+  const f = path.join(dir, 'revisions', 'bareme.json');
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, contenu);
+  const t = new Date(Date.now() + 5000 + 1000 * ++tic); fs.utimesSync(f, t, t);
+};
 
 describe('l’âge', () => {
   it('se compte en années révolues, anniversaire compris', () => {
@@ -46,11 +56,10 @@ describe('le temps accordé', () => {
 
 describe('la surcharge du foyer', () => {
   it('remplace ce qu’elle porte, garde le reste, et se relit sans redémarrer', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'foyer-bareme-'));
-    assert.equal(bareme(dir, SHIPPED).maitrise.niveauAcquis, 3);
-    fs.writeFileSync(path.join(dir, 'tables-bareme.json'), JSON.stringify({ maitrise: { niveauAcquis: 4 }, adulte: { accorde: 5 } }));
-    const t = new Date(Date.now() + 5000); fs.utimesSync(path.join(dir, 'tables-bareme.json'), t, t);
-    const b = bareme(dir, SHIPPED);
+    const dir = tmp();
+    assert.equal(bareme(dir, 'tables', SHIPPED).maitrise.niveauAcquis, 3);
+    surcharge(dir, JSON.stringify({ commun: { maitrise: { niveauAcquis: 4 }, adulte: { accorde: 5 } } }));
+    const b = bareme(dir, 'tables', SHIPPED);
     assert.equal(b.maitrise.niveauAcquis, 4);
     assert.equal(b.maitrise.bonnesMin, 3, 'le reste de « maitrise » demeure');
     assert.deepEqual(b.adulte, { accorde: 5, rapide: 2 });
@@ -68,8 +77,31 @@ describe('la surcharge du foyer', () => {
   });
 
   it('un fichier qui n’est pas du JSON laisse le barème livré', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'foyer-bareme-'));
-    fs.writeFileSync(path.join(dir, 'tables-bareme.json'), '{ pas du json');
-    assert.deepEqual(bareme(dir, SHIPPED), livre());
+    const dir = tmp();
+    surcharge(dir, '{ pas du json');
+    assert.deepEqual(bareme(dir, 'tables', SHIPPED), livre('tables'));
+  });
+});
+
+describe('les couches commun et exercice', () => {
+  it('la partie d’un exercice précise le commun pour lui seul', () => {
+    const dir = tmp();
+    surcharge(dir, JSON.stringify({ exercices: { dictee: { adulte: { accorde: 12, rapide: 6 }, maitrise: { bonnesMin: 2 } } } }));
+    const d = bareme(dir, 'dictee', SHIPPED), t = bareme(dir, 'tables', SHIPPED);
+    assert.deepEqual(d.adulte, { accorde: 12, rapide: 6 });
+    assert.equal(d.maitrise.bonnesMin, 2);
+    assert.equal(d.maitrise.niveauAcquis, 3, 'le reste vient du commun');
+    assert.deepEqual(t, livre('tables'), 'les autres exercices ne bougent pas');
+  });
+
+  it('le commun du foyer passe après la partie livrée d’un exercice, la partie du foyer en dernier', () => {
+    const shipped = path.join(tmp(), 'bareme.json');
+    fs.writeFileSync(shipped, JSON.stringify({ commun: { adulte: { accorde: 4, rapide: 2 } }, exercices: { x: { adulte: { accorde: 9 } } } }));
+    const dir = tmp();
+    assert.equal(bareme(dir, 'x', shipped).adulte.accorde, 9, 'livré : l’exercice précise le commun');
+    surcharge(dir, JSON.stringify({ commun: { adulte: { accorde: 6 } } }));
+    assert.equal(bareme(dir, 'x', shipped).adulte.accorde, 6, 'le commun du foyer l’emporte sur le livré');
+    surcharge(dir, JSON.stringify({ commun: { adulte: { accorde: 6 } }, exercices: { x: { adulte: { accorde: 11 } } } }));
+    assert.equal(bareme(dir, 'x', shipped).adulte.accorde, 11);
   });
 });

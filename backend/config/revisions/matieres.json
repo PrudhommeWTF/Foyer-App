@@ -1,0 +1,7 @@
+{
+  "_aide": "Les matières du module Révisions, par identifiant, avec leur nom affiché et l'ordre du bilan. Un exercice déclare son identifiant de matière ; une matière absente d'ici s'affiche sous son identifiant. Surchargeable au même chemin dans le dossier de données (FOYER_DATA_DIR/revisions/matieres.json).",
+  "matieres": [
+    { "id": "maths", "label": "Mathématiques" },
+    { "id": "francais", "label": "Français" }
+  ]
+}

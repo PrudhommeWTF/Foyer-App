@@ -1,11 +1,12 @@
-// Recalcul de la maîtrise du module Tables, depuis les réponses enregistrées.
+// Recalcul de la maîtrise du module Révisions, depuis les réponses enregistrées.
 //
-//   Docker : docker compose exec foyer npm run tables:recalcul -- --membre m2
-//   LXC    : runuser -u foyer -- node /opt/foyer/backend/dist/tables/recalcul.js --env - --membre m2 < /etc/foyer/foyer.env
+//   Docker : docker compose exec foyer npm run revisions:recalcul -- --membre m2
+//   LXC    : runuser -u foyer -- node /opt/foyer/backend/dist/revisions/recalcul.js --env - --membre m2 < /etc/foyer/foyer.env
 //
 // Options :
 //   --membre <id>        le membre à recalculer (identifiant de sa fiche, ex. m2)
 //   --tous               tous les membres qui ont des réponses
+//   --exercice <id>      un seul exercice (ex. tables) ; sans elle, tous
 //   --reclasser          refait d'abord « bonne » ou « lente » de chaque réponse juste,
 //                        avec le barème et le programme d'aujourd'hui : c'est le seul
 //                        geste qui réécrit le passé, il est donc explicite et journalisé
@@ -18,9 +19,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import { migrateTables } from './schema';
-import { SessionRow, initTablesRepo, membersWithAnswers, programById, recomputeMember } from './repo';
+import { migrateRevisions } from './schema';
+import { SessionRow, initRevisionsRepo, membersWithAnswers, programById, recomputeMember } from './repo';
 import { bareme, timingFor } from './bareme';
+import { EXERCISES, exerciseById } from './exercises';
 
 const args = process.argv.slice(2);
 const opt = (name: string): string | null => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] ?? '' : null; };
@@ -44,16 +46,17 @@ if (!fs.existsSync(DB_PATH)) die(2, `base introuvable : ${DB_PATH} (FOYER_DATA_D
 
 const db = new Database(DB_PATH);
 db.pragma('busy_timeout = 5000');
-migrateTables(db);
-initTablesRepo(db);
+migrateRevisions(db);
+initRevisionsRepo(db);
 
 const household = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
 const members = (household ? (JSON.parse(household.state) as { members?: { id: string; name: string; birthday?: string | null; enfant?: boolean }[] }).members : []) ?? [];
 const who = opt('membre');
 const targets = args.includes('--tous') ? membersWithAnswers() : who ? [who] : die(1, 'précisez --membre <id> ou --tous.');
 const reclasser = args.includes('--reclasser');
+const exercise = opt('exercice') || null;
+if (exercise && !exerciseById(exercise)) die(1, `exercice inconnu : ${exercise} (connus : ${EXERCISES.map((e) => e.id).join(', ')}).`);
 if (!targets.length) say('Aucune réponse enregistrée : rien à recalculer.');
-const b = bareme(DATA_DIR);
 
 for (const id of targets) {
   const m = members.find((x) => x.id === id);
@@ -61,12 +64,12 @@ for (const id of targets) {
   const parisDay = (iso: string): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(iso));
   const fastOf = (s: SessionRow): number => {
     const p = s.program_id !== null ? programById(s.program_id) : null;
-    return timingFor(b, m ?? {}, parisDay(s.started_at), p && { secondsAllowed: p.seconds_allowed, fastSeconds: p.fast_seconds }).fastMs;
+    return timingFor(bareme(DATA_DIR, s.exercise_id), m ?? {}, parisDay(s.started_at), p && { secondsAllowed: p.seconds_allowed, fastSeconds: p.fast_seconds }).fastMs;
   };
-  const out = recomputeMember(id, b.maitrise, reclasser ? fastOf : undefined);
-  const line = `${m?.name ?? id} (${id}) : ${out.pairs} opération(s) recalculée(s)` + (reclasser ? `, ${out.reclassified} réponse(s) reclassée(s) avec le barème actuel` : '');
+  const out = recomputeMember(id, exercise, (ex) => bareme(DATA_DIR, ex).maitrise, reclasser ? fastOf : undefined);
+  const line = `${m?.name ?? id} (${id})${exercise ? `, exercice ${exercise}` : ''} : ${out.items} item(s) recalculé(s)` + (reclasser ? `, ${out.reclassified} réponse(s) reclassée(s) avec le barème actuel` : '');
   say(line);
   // Le même compte rendu au journal du service, quand on le lance à côté de lui.
-  process.stderr.write(`[foyer] Tables : recalcul ${reclasser ? 'avec reclassement ' : ''}lancé à la main : ${line}\n`);
+  process.stderr.write(`[foyer] Révisions : recalcul ${reclasser ? 'avec reclassement ' : ''}lancé à la main : ${line}\n`);
 }
 db.close();
