@@ -2,7 +2,7 @@
 
 Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Le premier exercice est **Tables** (multiplication et addition) ; d'autres suivront (la dictée de mots est prévue), sans toucher au socle.
 
-> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place. Le suivi des enfants par un parent, avec le réglage de leur programme, le bilan hebdomadaire, le PDF pour l'enseignant et les outils d'assistant `revisions_*` arrivent dans la tranche suivante ; la dictée après. D'ici là, un programme se règle par l'API (`PUT …/program`, voir plus bas).
+> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille). Le bilan hebdomadaire, le PDF pour l'enseignant et les outils d'assistant `revisions_*` arrivent dans la tranche suivante ; la dictée après.
 
 ## Le module
 
@@ -126,6 +126,11 @@ Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions
 - **Le runner**, plein écran : l'énoncé et la correction viennent de la définition. La saisie `pave` est le pavé maison (jamais le clavier du système) ; le clavier physique marche aussi. Un exercice d'une saisie que l'écran ne sait pas encore afficher n'est pas proposé (`SUPPORTED_INPUTS` dans `screens/revisions/runner.ts`) ; la vue `liste` et la saisie `clavier` arriveront avec la dictée.
 - **Le bilan** : bonnes, lentes, fausses, ce qui est à revoir, la grille avec les cases qui viennent de changer. Pas de points ni de classement.
 - **La voix** (mode Apprendre, exercice qui déclare `spoken`) : la synthèse vocale de l'appareil, jamais un service en ligne. Réglage d'appareil `revisionsVoix` (Paramètres → Révisions) ; sans voix française, pas de bouton « Écouter ».
+
+**L'onglet Suivi des enfants** (adultes, quand le foyer a un enfant), par enfant puis par exercice :
+
+- **Le programme**, réglé ici : les paramètres de l'exercice dans le formulaire engendré, le nombre de questions par session, le temps par réponse (le barème selon l'âge, rappelé en clair, ou un temps fixé et son seuil « rapide »), l'objectif de sessions par jour. « Retirer le programme » le rend inactif sans rien effacer ; l'enfant s'entraîne alors aux réglages par défaut. Chaque réglage est daté et signé, et journalisé côté serveur.
+- **L'activité** sur quatre semaines (sessions par jour, heure de Paris), **la réussite par groupe** d'items du programme (pour Tables, par table ; un groupe sans réponse dit « pas encore vu »), **ce qui reste fragile** (dans le périmètre du programme en vigueur), et **la grille**, avec l'aide qui rappelle les règles d'acquisition du barème.
 
 **Hors ligne.** L'exercice tourne entièrement dans le navigateur. La session part en un seul envoi à la fin ; sans réseau, elle attend dans `foyer.revisionsQueue.<membre>` (rangée par membre, comme les autres files, voir `docs/portail-enfant.md`) et repart seule au retour du réseau, une seule fois grâce à son uuid. Un refus définitif (400) la retire en le disant ; un 403 (module éteint, autre membre) ou une panne du serveur la garde. La dernière vue connue (programmes, maîtrise, temps accordé) est copiée dans `foyer.revisions.<membre>` pour s'entraîner sans réseau. Une session d'enfant restée en file quand le parent reprend l'appareil dort sous le nom de l'enfant et part à sa prochaine session.
 

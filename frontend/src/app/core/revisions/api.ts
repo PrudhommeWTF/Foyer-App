@@ -29,6 +29,19 @@ export interface SessionReceipt {
   duplicate: boolean; session: RevisionsSession;
   changes: { key: string; label: string; before: Status; after: Status; level: number | null }[];
 }
+/** Le suivi d'un exercice depuis une date : sessions par jour (heure de Paris), réussite par groupe d'items. */
+export interface ExerciseStats {
+  exerciseId: string; since: string;
+  days: { day: string; sessions: number; questions: number; good: number }[];
+  groups: { group: string; questions: number; correct: number; fast: number }[];
+}
+/** Les règles de maîtrise et le barème d'un exercice, pour l'aide. */
+export interface RevisionsConfig {
+  maitrise: { espacementJours: number[]; descenteSiFaux: number; niveauAcquis: number; bonnesMin: number };
+  ages: { jusqua: number; accorde: number; rapide: number }[]; adulte: { accorde: number; rapide: number }; sansAge: { accorde: number; rapide: number };
+}
+/** Ce qu'un adulte règle pour un enfant : les paramètres de l'exercice, et ce que le socle porte pour tous. */
+export interface ProgramFields { params: Params; questions: number; secondsAllowed: number | null; fastSeconds: number | null; dailyGoal: number; }
 export interface ItemHistory {
   key: string; label: string;
   answers: { text: string; expected: string; given: string | null; ms: number; result: Result; askedAt: string; mode: Mode }[];
@@ -41,11 +54,18 @@ export class RevisionsApi {
   private api = inject(ApiService);
   matieres(): Promise<{ matieres: Matiere[] }> { return this.api.request('revisions/exercises'); }
   exercise(member: string, ex: string): Promise<ExerciseOverview> { return this.api.request(`${m(member)}/exercises/${encodeURIComponent(ex)}`); }
+  /** L'historique d'un item, pour soi ou, pour un adulte, pour un enfant suivi. */
   history(member: string, ex: string, key: string): Promise<ItemHistory> {
     return this.api.request(`${m(member)}/exercises/${encodeURIComponent(ex)}/items/${encodeURIComponent(key)}`);
   }
   sessions(member: string, since: string): Promise<{ sessions: RevisionsSession[] }> {
     return this.api.request(`${m(member)}/sessions?since=${encodeURIComponent(since)}&limit=200`);
   }
+  stats(member: string, ex: string): Promise<ExerciseStats> { return this.api.request(`${m(member)}/exercises/${encodeURIComponent(ex)}/stats`); }
+  config(ex: string): Promise<RevisionsConfig> { return this.api.request(`revisions/config?exercise=${encodeURIComponent(ex)}`); }
+  setProgram(member: string, ex: string, p: ProgramFields): Promise<{ program: RevisionsProgram }> {
+    return this.api.put(`${m(member)}/exercises/${encodeURIComponent(ex)}/program`, p);
+  }
+  stopProgram(member: string, ex: string): Promise<{ ok: boolean }> { return this.api.del(`${m(member)}/exercises/${encodeURIComponent(ex)}/program`); }
   send(s: SessionPayload): Promise<SessionReceipt> { return this.api.post('revisions/sessions', s); }
 }
