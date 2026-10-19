@@ -187,7 +187,7 @@ interface Semaine { key: string; label: string; shifts: EmpShift[]; }
     .copie { font-size: 12px; font-weight: 800; color: #5F7E5C; margin-top: 8px; }
     .decl { width: 100%; justify-content: center; margin-top: 12px; }
 
-    .sem-t { font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; margin: 8px 2px; }
+    .sem-t { font-size: 13.5px; font-weight: 800; color: var(--ink3); margin: 8px 2px; }
     .pres { background: var(--surface); border-radius: 14px; margin-bottom: 8px; box-shadow: 0 8px 20px -18px rgba(90,60,40,.6); overflow: hidden; }
     .pres-main { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; border: none; background: none; padding: 13px 16px; cursor: pointer; }
     .p-jour { font-weight: 800; font-size: 14px; color: var(--ink); text-transform: capitalize; min-width: 96px; }

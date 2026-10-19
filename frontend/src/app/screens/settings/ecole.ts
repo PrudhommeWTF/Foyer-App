@@ -204,18 +204,18 @@ import { ModalComponent } from '../../shared/modal';
     .a-meta { display: flex; flex-direction: column; gap: 2px; font-size: 12px; font-weight: 600; color: var(--ink3); margin-top: 6px; }
     .a-sync { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .a-sync div { background: var(--soft); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
-    .a-sync span { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .04em; }
+    .a-sync span { font-size: 12.5px; font-weight: 800; color: var(--ink3); }
     .a-sync b { font-size: 13px; font-weight: 800; color: var(--ink); margin-top: 2px; }
     .err { margin-top: 10px; font-size: 13px; font-weight: 700; color: #A33A22; background: #FCE9E3; border-radius: 10px; padding: 10px 12px; line-height: 1.45; }
     .err .code { font-size: 11px; font-weight: 700; color: #B86A55; margin-top: 4px; }
     .qcm { margin-top: 12px; border: 2px solid var(--primary); border-radius: 12px; padding: 12px; }
-    .q-t { font-size: 11px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .05em; }
+    .q-t { font-size: 12.5px; font-weight: 800; color: var(--primary); }
     .q-q { font-size: 14.5px; font-weight: 800; color: var(--ink); margin: 6px 0 10px; line-height: 1.4; }
     .q-props { display: flex; flex-direction: column; gap: 8px; }
     .q-props .btn { justify-content: flex-start; text-align: left; }
     .res { margin-top: 10px; font-size: 12.5px; font-weight: 800; color: #5F7E5C; }
     .res.ko { color: #C6492F; }
-    .sub-t { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
+    .sub-t { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin: 14px 0 6px; }
     .stu { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
     .s-name { font-size: 14px; font-weight: 800; color: var(--ink); }
     .s-meta { font-size: 12px; font-weight: 600; color: var(--ink3); }

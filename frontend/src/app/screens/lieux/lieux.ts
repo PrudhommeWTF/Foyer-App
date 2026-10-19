@@ -29,7 +29,7 @@ import { Place, PlaceItem } from '../../core/models';
       <!-- État de la synchronisation. Silencieux quand tout va bien. -->
       @if (store.syncOffline() || store.placePending()) {
         <div class="sync" [class.off]="store.syncOffline()">
-          <f-icon [name]="store.syncOffline() ? 'x' : 'refresh'" [size]="15" [color]="store.syncOffline() ? '#C6492F' : 'var(--ink2)'" [width]="2.4" />
+          <f-icon [name]="store.syncOffline() ? 'x' : 'refresh'" [size]="15" [color]="store.syncOffline() ? 'var(--status-crit)' : 'var(--ink2)'" [width]="2.4" />
           @if (store.syncOffline()) {
             <span>Hors ligne. {{ store.placePending() }} modification(s) en attente, elles partiront au retour du réseau.</span>
           } @else {
@@ -39,45 +39,49 @@ import { Place, PlaceItem } from '../../core/models';
       }
 
       @for (p of places(); track p.id) {
-        <div class="place" [style.border-left]="'4px solid ' + p.color">
-          <!-- Tout l'en-tête ouvre la fiche du lieu : le modifier, le supprimer, son inventaire. -->
+        <section class="reg-sec place">
+          <!-- Tout l'en-tête ouvre la fiche du lieu : le modifier, le supprimer, son inventaire. La tuile de couleur est son identité. -->
           <button class="place-head" (click)="store.openItem('place', p.id)">
             <span class="place-ic" [style.background]="p.color"><f-icon [path]="placeIcon(p)" [size]="18" color="#fff" /></span>
             <span class="place-title">
               <span class="place-name f-display">{{ p.name }}</span>
-              <span class="place-sub">
-                {{ countThere(p.id) }} sur place@if (countHome(p.id)) { <span class="home-n"> · {{ countHome(p.id) }} à la maison</span> }
-              </span>
+              <span class="place-sub">{{ countThere(p.id) }} sur place@if (countHome(p.id)) { · {{ countHome(p.id) }} à la maison }</span>
             </span>
             <f-icon name="chevronRight" [size]="17" color="var(--ink3)" [width]="2.4" />
           </button>
 
           @if (p.note) { <div class="place-note">{{ p.note }}</div> }
 
-          @for (it of items(p.id); track it.id) {
-            <div class="row" [class.home]="it.state === 'ici'">
-              <span class="st-dot" [class.there]="it.state === 'la-bas'" [title]="it.state === 'la-bas' ? 'Sur place' : 'À la maison'"></span>
-              <button class="row-body" (click)="store.openItem('placeItem', it.id)">
-                <span class="s-name">{{ it.name }}</span>
-                @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
-              </button>
-              @if (it.by) { <span class="who" [style.background]="store.memberColor(it.by)" [title]="whoTitle(it)"></span> }
-              @if (it.state === 'la-bas') {
-                <button class="gest" (click)="store.setPlaceItemState(it.id, 'ici')">J'ai ramené</button>
-              } @else {
-                <button class="gest back" (click)="store.setPlaceItemState(it.id, 'la-bas')">J'ai laissé</button>
-              }
-            </div>
-          } @empty {
-            <div class="empty-items">Aucune affaire notée pour ce lieu.</div>
-          }
+          <div class="reg-box">
+            @for (it of items(p.id); track it.id) {
+              <div class="reg-row it" [class.home]="it.state === 'ici'">
+                <!-- Rond plein : sur place ; rond vide : à la maison. -->
+                <span class="st-dot" [class.there]="it.state === 'la-bas'" aria-hidden="true"></span>
+                <button class="row-body" (click)="store.openItem('placeItem', it.id)">
+                  <span class="s-main">
+                    <span class="s-name">{{ it.name }}</span>
+                    <span class="s-state">{{ it.state === 'la-bas' ? 'Sur place' : 'À la maison' }}</span>
+                  </span>
+                  @if (it.qty) { <span class="s-qty">{{ it.qty }}</span> }
+                </button>
+                @if (it.by) { <span class="who" [style.background]="store.memberColor(it.by)" [title]="whoTitle(it)"></span> }
+                @if (it.state === 'la-bas') {
+                  <button class="reg-mini gest" (click)="store.setPlaceItemState(it.id, 'ici')">J'ai ramené</button>
+                } @else {
+                  <button class="reg-mini gest" (click)="store.setPlaceItemState(it.id, 'la-bas')">J'ai laissé</button>
+                }
+              </div>
+            } @empty {
+              <div class="empty-items">Aucune affaire notée pour ce lieu.</div>
+            }
+          </div>
 
           <div class="add">
             <input class="input" placeholder="Ajouter une affaire…" enterkeyhint="done" autocomplete="off" autocapitalize="sentences"
                    [ngModel]="addFor(p.id)" (ngModelChange)="setAdd(p.id, $event)" (keydown.enter)="submitAdd(p.id)">
             <button class="add-btn" (click)="submitAdd(p.id)" aria-label="Ajouter"><f-icon name="plus" [size]="20" color="#fff" [width]="2.6" /></button>
           </div>
-        </div>
+        </section>
       } @empty {
         <div class="empty">
           <f-icon name="map-pin" [size]="30" color="var(--ink3)" [width]="1.8" />
@@ -96,32 +100,31 @@ import { Place, PlaceItem } from '../../core/models';
     .new-btn { flex: none; display: inline-flex; align-items: center; gap: 7px; }
 
     .sync { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 13px; background: var(--soft2); color: var(--ink2); font-size: 12.5px; font-weight: 700; margin-bottom: 14px; }
-    .sync.off { background: #FCE9E3; color: #C6492F; }
+    .sync.off { background: var(--status-crit-bg); color: var(--status-crit); }
 
-    .place { background: var(--surface); border-radius: var(--r-card); padding: 14px 16px 12px; box-shadow: 0 12px 28px -20px rgba(90,60,40,.5); margin-bottom: 16px; }
-    .place-head { display: flex; align-items: center; gap: 11px; width: 100%; padding: 0; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
-    .place-ic { width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
+    .place-head { display: flex; align-items: center; gap: 11px; width: 100%; padding: 0 2px; margin-bottom: 10px; border: none; background: none; font: inherit; text-align: left; cursor: pointer; }
+    .place-ic { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; }
     .place-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-    .place-name { font-size: 18px; font-weight: 700; color: var(--ink); }
-    .place-sub { font-size: 12px; font-weight: 800; color: var(--ink3); }
-    .place-sub .home-n { color: var(--terracotta, #C6492F); }
-    .place-note { font-size: 13px; font-weight: 600; color: var(--ink2); margin: 8px 0 2px; padding: 8px 12px; background: var(--soft); border-radius: 11px; }
+    .place-name { font-size: 17px; font-weight: 700; color: var(--ink); }
+    .place-sub { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .place-note { font-size: 13px; font-weight: 600; color: var(--ink2); margin: -2px 2px 10px; }
 
-    .row { display: flex; align-items: center; gap: 11px; min-height: 52px; }
-    .row + .row { border-top: 1px solid var(--line); }
-    .st-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--line2); }
-    .st-dot.there { background: var(--sage); }
-    .row-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 14px 0; text-align: left; cursor: pointer; font: inherit; }
-    .s-name { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
-    .row.home .s-name { color: var(--ink3); }
-    .s-qty { font-size: 13px; font-weight: 800; color: var(--ink3); flex: none; }
-    .who { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-    /* Le geste : une pastille étroite, la couleur dit le sens (ramener vs laisser). */
-    .gest { flex: none; border: none; border-radius: 10px; padding: 9px 12px; font: inherit; font-size: 12.5px; font-weight: 800; cursor: pointer; background: var(--soft2); color: var(--ink2); }
-    .gest.back { background: #EDF2EB; color: #5F7E5C; }
-    .empty-items { color: var(--ink2); font-weight: 700; font-size: 13.5px; padding: 14px 0; }
+    /* Une affaire : une ligne registre. L'état se lit au rond (plein bleu sur place, vide à la maison) et dessous. */
+    .reg-row.it { cursor: default; padding-top: 0; padding-bottom: 0; }
+    .reg-row.it:hover { background: var(--surface); }
+    .st-dot { width: 10px; height: 10px; margin: 0 7px; border-radius: 50%; flex: none; box-sizing: border-box; border: 2px solid var(--ink3); }
+    .st-dot.there { background: var(--blue); border-color: var(--blue); }
+    .row-body { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: none; background: none; padding: 11px 0; text-align: left; cursor: pointer; font: inherit; }
+    .s-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .s-name { font-size: 15px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+    .s-state { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .s-qty { font-size: 13px; font-weight: 800; color: var(--ink2); flex: none; }
+    .who { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .gest { padding: 6px 11px; font-size: 12.5px; }
+    .empty-items { color: var(--ink2); font-weight: 700; font-size: 13.5px; padding: 14px 16px; }
 
     .add { display: flex; gap: 10px; margin-top: 10px; }
+    .add .input { border-width: 1px; }
     .add .input { flex: 1; min-height: 46px; font-size: 15px; }
     .add-btn { width: 46px; height: 46px; flex: none; border: none; border-radius: 13px; background: var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 

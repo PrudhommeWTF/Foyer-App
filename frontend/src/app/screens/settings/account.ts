@@ -205,7 +205,7 @@ import { contactIni } from '../../core/helpers';
     </button>
   `,
   styles: [`
-    .extra-t { font-size: 11px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .06em; margin: 22px 0 10px; }
+    .extra-t { font-size: 12.5px; font-weight: 800; color: var(--ink3); margin: 22px 0 10px; }
     .field-label { margin: 0 0 10px; }
     .hint { font-size: 11.5px; font-weight: 700; color: var(--ink3); margin-top: 6px; line-height: 1.5; }
     .hint + .field-label { margin-top: 16px; }
@@ -219,7 +219,7 @@ import { contactIni } from '../../core/helpers';
 
     .totp-on { display: flex; align-items: center; gap: 9px; background: #EDF2EB; border-radius: 12px; padding: 12px 14px; font-size: 13.5px; font-weight: 700; color: #4A6247; margin-bottom: 12px; }
     .secret-b { background: var(--soft); border-radius: 14px; padding: 14px; margin: 12px 0; }
-    .secret-t { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+    .secret-t { font-size: 13.5px; font-weight: 800; color: var(--ink2); margin-bottom: 8px; }
     .secret { display: block; font-size: 17px; font-weight: 800; letter-spacing: 2px; word-break: break-all; color: var(--ink); }
     .secours { background: #FDF0DA; border-radius: 14px; padding: 14px; margin: 12px 0; }
     .secours-t { font-size: 13px; font-weight: 800; color: #8A6520; margin-bottom: 10px; }

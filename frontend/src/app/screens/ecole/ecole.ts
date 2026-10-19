@@ -4,7 +4,7 @@ import { FoyerStore } from '../../core/foyer.store';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 import { EcoleApi, EdAverageView, EdHomework, EdLifeView, EdVueStudent } from '../../core/ecole.api';
 import { IconComponent } from '../../core/icon';
-import { normText } from '../../core/helpers';
+import { fmtShortDay, normText } from '../../core/helpers';
 
 interface DayGroup { day: string; label: string; items: EdHomework[]; }
 interface MonthGroup { key: string; label: string; count: number; days: DayGroup[]; }
@@ -105,21 +105,28 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
             }
           } @else if (mode() === 'vie') {
             @if (vie(); as items) {
-              @for (e of items; track e.id) {
-                <div class="life" [class]="'life ' + e.kind">
-                  <div class="g-top">
-                    <span class="g-s">{{ lifeLabel(e.kind) }}</span>
-                    @if (e.kind === 'absence' || e.kind === 'retard') {
-                      <span class="badge" [class.pend]="e.justified === false" [class.okb]="e.justified === true">{{ e.justified === null ? '' : e.justified ? 'justifié' + (e.kind === 'absence' ? 'e' : '') : 'non justifié' + (e.kind === 'absence' ? 'e' : '') }}</span>
-                    }
+              <!-- La vie scolaire en registre : l'intitulé, le type en couleur (sanction en rouge, encouragement en vert), la date à droite. -->
+              <div class="reg-box">
+                @for (e of items; track e.id) {
+                  <div class="reg-row life">
+                    <div class="reg-main">
+                      <div class="reg-text">{{ e.label || e.reason || lifeLabel(e.kind) }}</div>
+                      <div class="reg-meta">
+                        <span [class]="'lk ' + e.kind"><f-icon [name]="lifeIcon(e.kind)" [size]="12" color="currentColor" [width]="2.6" /> {{ lifeLabel(e.kind) }}</span>
+                        @if (e.kind === 'absence' || e.kind === 'retard') {
+                          @if (e.justified !== null) { <span [class.pend]="e.justified === false">{{ e.justified ? 'justifié' : 'non justifié' }}{{ e.kind === 'absence' ? 'e' : '' }}</span> }
+                        }
+                        @if (!e.date && e.displayDate) { <span>{{ e.displayDate }}</span> }
+                        @if (e.by) { <span>{{ e.by }}</span> }
+                      </div>
+                      @if (e.label && e.reason) { <div class="txt">{{ e.reason }}</div> }
+                    </div>
+                    @if (e.date) { <div class="reg-when life-when" [title]="e.displayDate">{{ shortDay(e.date) }}</div> }
                   </div>
-                  <div class="g-meta">{{ e.displayDate || (e.date ? fr(e.date) : '') }}</div>
-                  @if (e.label || e.reason) { <div class="txt">{{ [e.label, e.reason].filter(nonVide).join(' · ') }}</div> }
-                  @if (e.by) { <div class="g-meta">{{ e.by }}</div> }
-                </div>
-              } @empty {
-                <div class="empty">Rien d’enregistré cette année.</div>
-              }
+                } @empty {
+                  <div class="empty pad">Rien d’enregistré cette année.</div>
+                }
+              </div>
             } @else {
               <div class="hint">Chargement…</div>
             }
@@ -217,8 +224,8 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
     .seg button { border: none; background: none; padding: 7px 14px; border-radius: 9px; font-weight: 800; font-size: 13px; color: var(--ink2); cursor: pointer; }
     .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--sh-float); }
     .day { margin-bottom: 18px; }
-    .d-head { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--ink2); margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
-    .d-n { font-size: 11px; color: var(--ink3); }
+    .d-head { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--ink); margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: baseline; }
+    .d-n { font-family: var(--font-body); font-size: 13.5px; font-weight: 800; color: var(--ink3); }
     .hw { display: flex; gap: 12px; background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: var(--sh-card); margin-bottom: 8px; }
     .hw.done .subj, .hw.done .txt { opacity: .55; }
     .hw.archived { opacity: .7; }
@@ -249,10 +256,14 @@ interface MonthGroup { key: string; label: string; count: number; days: DayGroup
     .avg-s { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--ink2); }
     .avg-v { font-size: 15px; font-weight: 800; color: var(--ink); }
     .avg-c { font-size: 11.5px; font-weight: 700; color: var(--ink3); min-width: 74px; text-align: right; }
-    .grade, .life { display: block; width: 100%; text-align: left; border: none; font: inherit; background: var(--surface); border-radius: 14px; box-shadow: var(--sh-card); padding: 11px 14px; margin-bottom: 8px; cursor: pointer; }
-    .life { cursor: default; }
-    .life.sanction { border-left: 4px solid #C6492F; }
-    .life.encouragement { border-left: 4px solid #5F9E6E; }
+    .grade { display: block; width: 100%; text-align: left; border: none; font: inherit; background: var(--surface); border-radius: 14px; box-shadow: var(--sh-card); padding: 11px 14px; margin-bottom: 8px; cursor: pointer; }
+    .reg-row.life { cursor: default; align-items: flex-start; }
+    .reg-row.life:hover { background: var(--surface); }
+    .life-when { width: auto; padding-top: 2px; }
+    .lk.sanction { color: var(--status-crit); }
+    .lk.encouragement { color: var(--status-good); }
+    .reg-meta .pend { color: var(--status-warn); }
+    .empty.pad { padding: 14px 16px; }
     .g-top { display: flex; align-items: center; gap: 8px; }
     .g-s { flex: 1; font-size: 14px; font-weight: 800; color: var(--ink); }
     .g-v { font-size: 16px; font-weight: 900; color: var(--ink); }
@@ -388,5 +399,8 @@ export class EcoleScreen {
   name(s: EdVueStudent): string { return this.store.memberName(s.memberId) || s.firstName; }
   subject(h: EdHomework): string { return subjectLabel(h.subject); }
   fr(day: string): string { return day.split('-').reverse().slice(0, 2).join('/'); }
+  /** « 8 oct. », pour la colonne date de la vie scolaire. */
+  shortDay(day: string): string { return fmtShortDay(day, this.store.todayStr()); }
+  lifeIcon(k: EdLifeView['kind']): string { return k === 'sanction' ? 'urgent' : k === 'encouragement' ? 'check' : k === 'retard' ? 'clock' : 'calendar'; }
   openSettings(): void { this.store.go('settings'); this.store.patch({ settingsSection: 'ecole' }); }
 }
