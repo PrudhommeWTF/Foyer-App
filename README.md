@@ -123,6 +123,11 @@ Foyer-App/
 - Le module **École** aussi : tables `ed_*`, servies par `/api/ecole/*`, écrites en arrière-plan
   par le planificateur. Tout ce qui parle à ÉcoleDirecte vit dans `backend/src/ecole/client/`,
   seul dossier à corriger quand cette API non publique change. Voir [`docs/ecole.md`](docs/ecole.md).
+- Le module **Révisions** aussi : tables `rev_*`, servies par `/api/revisions/*`. Le socle
+  (sessions, maîtrise par item, programme de chaque enfant) ne connaît aucune matière : chaque
+  exercice (pour commencer, les tables) est une définition d'un registre, la correction est
+  refaite par le serveur, une session hors ligne se reçoit une seule fois. Voir
+  [`docs/revisions.md`](docs/revisions.md).
 - La **liste de courses** et les **tâches** restent dans le document, mais s'écrivent
   **article par article** et **tâche par tâche** (`/api/shopping/ops`, `/api/tasks/ops`) :
   `PUT /api/state` ignore ces champs et conserve ceux du serveur. Deux personnes cochent en

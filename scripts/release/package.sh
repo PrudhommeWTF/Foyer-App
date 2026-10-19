@@ -41,7 +41,7 @@ npm --prefix "$ROOT/frontend" ci
 npm --prefix "$ROOT/frontend" run build
 
 cp -r "$ROOT/backend/dist" "$APP/dist"
-# Les fichiers de configuration livrés (catalogue d'Entretien, barème des Tables),
+# Les fichiers de configuration livrés (catalogue d'Entretien, barème et matières des Révisions),
 # lus depuis dist/ en ../config : sans eux, le service démarre sur ses valeurs de secours.
 cp -r "$ROOT/backend/config" "$APP/config"
 cp -r "$ROOT/frontend/dist/frontend/browser" "$APP/public"

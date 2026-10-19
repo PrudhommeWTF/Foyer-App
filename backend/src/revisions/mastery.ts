@@ -1,29 +1,25 @@
-// Le modèle de maîtrise du module Tables : ce que Foyer sait, opération par
-// opération, de ce qu'un enfant connaît. Pur, sans base ni horloge : c'est ce
-// qu'on teste. Voir docs/tables.md.
+// Le modèle de maîtrise du module Révisions : ce que Foyer sait, item par
+// item, de ce qu'un enfant connaît. Générique : un item n'est qu'une clé, que
+// l'exercice fournit (« mult:6x7 », « mot:oiseau »). Pur, sans base ni
+// horloge : c'est ce qu'on teste. Voir docs/revisions.md.
 //
-// Une boîte de Leitner par couple (a, b), commutatif : 6 × 7 et 7 × 6 comptent
-// ensemble (la question, elle, est posée dans les deux sens). Niveau de 0 à 5 :
+// Une boîte de Leitner par item. Niveau de 0 à 5 :
 //
-//   - une bonne réponse **rapide** fait monter d'un niveau, mais seulement si le
-//     couple était **dû** (sa date de révision est passée). Sans cette règle, le
-//     même couple posé trois fois dans une session l'amènerait au niveau 3 en
-//     dix minutes, et « acquise » mentirait ;
+//   - une bonne réponse **rapide** fait monter d'un niveau, mais seulement si
+//     l'item était **dû** (sa date de révision est passée). Sans cette règle, le
+//     même item posé trois fois dans une session l'amènerait au niveau 3 en dix
+//     minutes, et « acquis » mentirait ;
 //   - une bonne réponse **lente** ne bouge pas le niveau ;
 //   - une réponse **fausse** (ou passée) fait descendre (de deux par défaut) et
-//     rend le couple dû tout de suite.
+//     rend l'item dû tout de suite.
 //
-// Le niveau fixe la prochaine révision (1, 3, 7, 14, 30 jours). « Acquise » :
+// Le niveau fixe la prochaine révision (1, 3, 7, 14, 30 jours). « Acquis » :
 // niveau au moins N, au moins M bonnes réponses, et la dernière rapide (N et M
 // dans le barème). Le résultat d'une réponse (bon, lent, faux) est figé quand
 // elle arrive : recalculer repart des résultats stockés, jamais des durées, si
 // bien que changer le barème ne réécrit pas le passé.
 
-export type Operation = 'multiplication' | 'addition';
-export const OPERATIONS: readonly Operation[] = ['multiplication', 'addition'];
 export type Result = 'bon' | 'lent' | 'faux' | 'passe';
-export type Mode = 'apprendre' | 'entrainer' | 'test';
-export const MODES: readonly Mode[] = ['apprendre', 'entrainer', 'test'];
 
 export interface MasteryCfg {
   /** Jours avant la prochaine révision, par niveau (l'indice est le niveau). */
@@ -46,25 +42,20 @@ export interface Mastery {
 /** Les quatre états qu'on affiche. « jamais » n'est pas « non sue » : on ne sait rien. */
 export type Status = 'jamais' | 'peu' | 'en-cours' | 'acquise';
 
-export const expectedOf = (op: Operation, a: number, b: number): number => (op === 'multiplication' ? a * b : a + b);
-
-/** Le couple commutatif, petit nombre d'abord. */
-export const pairOf = (a: number, b: number): [number, number] => (a <= b ? [a, b] : [b, a]);
-
 const addDays = (iso: string, days: number): string => new Date(Date.parse(iso) + days * 86400_000).toISOString();
 
 /**
- * Le résultat d'une réponse : fausse si elle n'est pas juste (ou pas donnée),
- * lente au-delà du seuil rapide, bonne sinon. Une réponse après la barre de
- * temps n'est pas refusée : elle est lente.
+ * Le résultat d'une réponse : passée sans réponse, fausse si l'exercice la dit
+ * fausse, lente au-delà du seuil rapide, bonne sinon. Une réponse après la barre
+ * de temps n'est pas refusée : elle est lente.
  */
-export function classify(expected: number, given: number | null, ms: number, fastMs: number): Result {
+export function classify(ok: boolean, given: string | null, ms: number, fastMs: number): Result {
   if (given === null) return 'passe';
-  if (given !== expected) return 'faux';
+  if (!ok) return 'faux';
   return ms <= fastMs ? 'bon' : 'lent';
 }
 
-/** Une réponse de plus sur ce couple. `at` : ISO, l'instant de la question. */
+/** Une réponse de plus sur cet item. `at` : ISO, l'instant de la question. */
 export function step(m: Mastery | undefined, result: Result, at: string, cfg: MasteryCfg): Mastery {
   const top = cfg.espacementJours.length - 1;
   const cur: Mastery = m ?? { level: 0, good: 0, wrong: 0, lastResult: result, lastAt: at, nextAt: at };
@@ -78,7 +69,7 @@ export function step(m: Mastery | undefined, result: Result, at: string, cfg: Ma
   return { level, good: cur.good + 1, wrong: cur.wrong, lastResult: result, lastAt: at, nextAt: addDays(at, cfg.espacementJours[level]) };
 }
 
-/** Rejoue toutes les réponses d'un couple, dans l'ordre où elles ont été données. */
+/** Rejoue toutes les réponses d'un item, dans l'ordre où elles ont été données. */
 export function replay(answers: readonly { result: Result; at: string }[], cfg: MasteryCfg): Mastery | undefined {
   let m: Mastery | undefined;
   for (const a of [...answers].sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0))) m = step(m, a.result, a.at, cfg);

@@ -1,0 +1,167 @@
+# Révisions
+
+Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Le premier exercice est **Tables** (multiplication et addition) ; d'autres suivront (la dictée de mots est prévue), sans toucher au socle.
+
+> État : le socle serveur est en place (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul). L'écran de l'enfant (« Mon entraînement du jour ») et le Suivi arrivent dans la tranche suivante ; le bilan hebdomadaire, le PDF pour l'enseignant et les outils d'assistant `revisions_*` ensuite ; la dictée après.
+
+## Le module
+
+Drapeau `modRevisions` (Paramètres → Modules actifs), **activé par défaut**. Désactivé : l'accès API répond 403, l'écran et la tuile disparaissent. Les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles : contrairement aux autres modules, Révisions ne propose **pas** de « repartir à zéro », parce qu'une session ne se supprime jamais.
+
+Aucun réglage propre à un exercice dans les Paramètres : ce qui le règle (pour Tables, l'opération, la dernière table proposée, les tables travaillées, le sens des questions) est un **paramètre de l'exercice**, porté par le programme de chaque enfant.
+
+## Le socle et les exercices
+
+Le socle (sessions, réponses, maîtrise, programmes, suivi, réception hors ligne) **ne connaît aucune matière**. Tout ce qui est propre à un exercice passe par une **définition** (`ExerciseDef`, contrat dans `backend/src/revisions/exercises/contract.ts`), rangée dans un registre (`exercises/index.ts`) :
+
+| Élément | Rôle |
+|---|---|
+| `id`, `label`, `matiere`, `icon`, `ageMin`, `desc` | ce qui s'affiche ; la matière renvoie à `config/revisions/matieres.json` ; l'âge est indicatif, jamais une interdiction |
+| `input`, `prompt`, `view`, `requires` | la saisie (`pave` : le pavé maison, `clavier`, `choix`), l'énoncé (`texte`, `audio`, `horloge`), la vue du suivi (`grille`, `liste`), ce que l'appareil doit savoir faire (`voix`) |
+| `params` | les paramètres que porte un programme, d'un des types `int`, `bool`, `enum`, `range` : le formulaire du programme est **engendré** depuis eux, jamais écrit pour un exercice. Un test refuse un autre type. |
+| `universe`, `question`, `parse` | les items que le programme peut poser (par leur clé), une question pour un item, la relecture d'une question reçue |
+| `itemKey`, `itemLabel`, `text`, `groups` | la clé de maîtrise (« mult:6x7 », commutative pour les tables), l'item en clair, l'énoncé, les regroupements du suivi (« Table de 7 ») |
+| `check` | la correction, la même sur l'appareil et sur le serveur |
+| `learn`, `spoken`, `grid`, `summary` | le mode Apprendre (absent : pas de mode Apprendre), ce que lit la voix, la forme de la grille, le programme en une ligne |
+
+Le dossier `exercises/` est **pur** (aucune dépendance hors de lui) : il vivra en deux copies identiques, ici et dans l'application (où l'exercice tourne hors ligne), vérifiées par un test, comme le moteur de récurrence. La copie de l'application arrive avec l'écran.
+
+### Ajouter un exercice
+
+1. Un fichier dans `backend/src/revisions/exercises/` qui exporte une définition respectant le contrat.
+2. Une ligne dans `exercises/index.ts`.
+3. Son contenu pédagogique (listes de mots, etc.) **en configuration**, dans `backend/config/revisions/<exercice>/*.json`, surchargeable au même chemin dans le dossier de données ; jamais dans le code.
+4. Si l'exercice prend plus ou moins de temps que le commun, sa partie dans le barème (`exercices.<id>`).
+5. Ses tests sur cas fixés (génération, correction), à côté de ceux de Tables (`backend/test/revisions-exercises.test.ts`) ; les tests du registre (types de paramètres, matière, icône) s'appliquent seuls.
+
+Ni table, ni colonne, ni route à ajouter. Un exercice qui demanderait une saisie ou un énoncé d'un type nouveau ajoute ce type au contrat et son composant à l'écran, une fois, pour tous les exercices qui en voudront.
+
+**Note pour la dictée (à venir).** Elle utilisera le **clavier système** de l'appareil, avec correction automatique, majuscule automatique et vérification orthographique coupées. Sur iPad et iPhone, la barre de suggestions peut subsister selon les réglages de l'appareil (Réglages → Général → Clavier → Prédiction) : à couper sur l'appareil familial si elle souffle les mots.
+
+## Ce que Foyer retient
+
+Tables relationnelles `rev_*` dans `foyer.db`, hors du document du foyer :
+
+| Table | Contenu |
+|---|---|
+| `rev_programs` | le programme d'un enfant pour un exercice, réglé par un parent : les paramètres de l'exercice (JSON), le nombre de questions, le temps accordé (ou le barème), l'objectif par jour. Un seul actif par enfant **et par exercice** ; l'ancien reste, daté et signé, pour que le bilan d'une période dise sur quoi elle portait. |
+| `rev_sessions` | une session : exercice, mode (apprendre, s'entraîner, test), paramètres, début et fin, abandon, nombre de bonnes, lentes et fausses, temps moyen, seuils appliqués, appareil, et le parent qui avait ouvert la session de l'enfant s'il y en a un. L'identifiant vient de l'appareil (uuid). |
+| `rev_answers` | chaque réponse : la question telle que posée (JSON propre à l'exercice), la clé de l'item, la bonne réponse et la réponse donnée (texte, ou rien si passée), le temps, le résultat, l'heure. |
+| `rev_mastery` | la maîtrise par membre, exercice et item : un cache, recalculable entièrement depuis `rev_answers`. |
+
+**Rien n'est jamais supprimé.** Une session abandonnée reste (ses réponses déjà données comptent), un programme remplacé ou retiré reste. Le passé ne se réécrit qu'avec une commande explicite (voir plus bas).
+
+Les tables `tab_*` d'une version de développement antérieure n'ont jamais été livrées : aucune migration de données n'existe ni n'est nécessaire.
+
+## Le modèle de maîtrise
+
+Le même pour tous les exercices : une boîte de Leitner par item, niveau de 0 à 5. Pour Tables, l'item est un couple **commutatif** : 6 × 7 et 7 × 6 comptent ensemble (la question, elle, peut être posée dans les deux sens).
+
+| Réponse | Effet |
+|---|---|
+| juste et **rapide** | monte d'un niveau, **si l'item était dû** (sa date de révision est passée) ; la prochaine révision est fixée selon le niveau : 1, 3, 7, 14 puis 30 jours |
+| juste mais **lente** | le niveau ne bouge pas, l'item reste à revoir |
+| **fausse** ou passée | descend de deux niveaux, et l'item redevient dû tout de suite |
+
+La règle « si l'item était dû » empêche un enfant d'obtenir « acquis » en répétant la même opération dix fois dans la soirée : il faut des jours différents.
+
+**Quatre états affichés :**
+
+| État | Quand |
+|---|---|
+| pas encore vu | aucune réponse : on ne sait rien, ce n'est pas « non su » |
+| pas assez de données | moins de réponses que le seuil (3 par défaut) |
+| en cours | le reste |
+| **acquis** | niveau 3 ou plus, au moins 3 bonnes réponses, et la dernière rapide |
+
+Avec les valeurs par défaut, un item peut être « acquis » **au plus tôt quatre jours** après sa première bonne réponse (jour 0, jour 1, puis jour 4). Une réponse lente ensuite retire « acquis » sans faire descendre le niveau.
+
+Le résultat d'une réponse (bonne, lente, fausse) est **fixé à sa réception**. Juste ou faux se décide sur le serveur, par la définition de l'exercice, pas d'après ce que dit l'appareil. « Rapide » se décide avec le seuil que l'appareil appliquait pendant la session (celui que le serveur lui avait donné). Changer le barème ensuite change les sessions à venir, pas le passé ; changer les seuils d'acquisition change l'affichage « acquis », pas les niveaux stockés.
+
+Une session faite hors ligne mardi et arrivée après celle de mercredi donne exactement la même maîtrise que si elles étaient arrivées dans l'ordre : la maîtrise d'un item est recalculée depuis toutes ses réponses, dans l'ordre où elles ont été données. L'horloge de l'appareil fait foi, bornée (une réponse datée dans le futur est ramenée à l'heure de réception).
+
+Le mode **Apprendre** (la matière sous les yeux, sans chronomètre) est enregistré, mais ne compte pas pour la maîtrise. Un exercice sans `learn` n'a pas de mode Apprendre (le serveur le refuse).
+
+## Le barème
+
+Fichier livré `backend/config/revisions/bareme.json`, surchargeable par `revisions/bareme.json` dans le dossier de données (`FOYER_DATA_DIR`), relu sans redémarrer. Deux parties :
+
+- `commun` vaut pour tous les exercices ;
+- `exercices.<id>` le précise pour l'un d'eux (taper un mot prend plus longtemps que répondre 42).
+
+Les couches s'appliquent dans l'ordre : commun livré, exercice livré, commun du foyer, exercice du foyer. Chacune ne contient que ce qui change (`ages` se remplace en bloc ; `adulte`, `sansAge` et `maitrise` champ par champ). Une valeur illisible est écartée et nommée au journal, le reste s'applique.
+
+Valeurs de départ communes, **à ajuster à l'usage** (aucune étude ne les fonde ; mestables.fr adapte lui aussi le temps à l'année de naissance, ses valeurs ne sont pas reprises ici). Tables n'y ajoute rien.
+
+| Âge | Temps accordé | « Rapide » sous |
+|---|---|---|
+| 6 ans et moins | 10 s | 5 s |
+| 7 ans | 9 s | 4,5 s |
+| 8 ans | 8 s | 4 s |
+| 9 ans | 7 s | 3,5 s |
+| 10 ans | 6 s | 3 s |
+| 11 à 14 ans | 5 s | 2,5 s |
+| 15 ans et plus | 4 s | 2 s |
+| enfant sans date de naissance | 8 s | 4 s |
+
+L'âge se calcule depuis la date de naissance de la fiche du membre, au jour de la session. Un adulte sans date de naissance a le temps d'un adulte. Le programme d'un enfant peut fixer son propre temps accordé et son propre seuil, qui l'emportent. Une réponse après le temps accordé n'est pas refusée : elle est « lente ».
+
+Exemple de surcharge (`/var/lib/foyer/revisions/bareme.json`), pour exiger un niveau de plus avant « acquis » partout, et laisser deux secondes de plus aux tables :
+
+```json
+{
+  "commun": { "maitrise": { "niveauAcquis": 4 } },
+  "exercices": { "tables": { "adulte": { "accorde": 6, "rapide": 3 } } }
+}
+```
+
+Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions/matieres.json`, surchargeables de la même façon.
+
+## Qui a le droit de quoi
+
+| | Enfant | Adulte |
+|---|---|---|
+| ses propres sessions, sa maîtrise, son historique | lire, écrire | lire, écrire (il s'entraîne pour lui-même, sans programme ni bilan) |
+| ceux d'un autre membre | refusé (403) | lire |
+| le programme d'un enfant | lire le sien | régler, retirer |
+| enregistrer une session au nom d'un autre | refusé | refusé |
+
+Un jeton d'accès (assistant, script) n'entre pas dans le module : l'assistant passera par ses outils MCP `revisions_*`.
+
+## API
+
+Sous `/api/revisions`, session de navigateur, membre du foyer, module activé. `:ex` est l'identifiant d'un exercice (`tables`).
+
+| Route | Effet |
+|---|---|
+| `GET /exercises` | les matières et les exercices, avec leurs paramètres déclarés (ce que l'écran affiche, ce que le formulaire engendre) |
+| `GET /config[?exercise=…]` | règles de maîtrise et barème (commun, ou d'un exercice), pour l'aide |
+| `GET /members/:id` | les programmes actifs du membre, un par exercice : ce qu'enchaîne « Mon entraînement du jour » |
+| `GET /members/:id/exercises/:ex` | programme, paramètres en vigueur (ceux du programme, sinon les défauts), temps accordé (et sa source : programme, barème, sans âge), maîtrise de chaque item avec son état |
+| `GET /members/:id/exercises/:ex/items/:clé` | l'historique d'un item (pour Tables, les deux sens), le plus récent d'abord |
+| `GET /members/:id/exercises/:ex/stats[?since=…]` | sessions par jour (heure de Paris) et réussite par groupe d'items, limitée à ce que le programme travaille ; quatre semaines par défaut |
+| `GET /members/:id/sessions[?exercise=…&since=…&limit=…]` | les sessions |
+| `PUT /members/:id/exercises/:ex/program` | régler le programme d'un enfant (adultes) : `params`, `questions`, `secondsAllowed`, `fastSeconds`, `dailyGoal`. Un paramètre refusé est nommé dans l'erreur. |
+| `DELETE /members/:id/exercises/:ex/program` | retirer le programme (il reste en base, inactif) |
+| `POST /sessions` | une session en un seul envoi : `id` (uuid de l'appareil), `exerciseId`, `mode`, `params` (ou `programId`, dont les paramètres s'appliquent), `startedAt`, `endedAt`, `aborted`, `fastMs` et `allowedMs` appliqués, `answers` (`question` dans la forme de l'exercice, `given` ou null, `ms`, `askedAt`). 201 à la première réception, 200 et `duplicate: true` ensuite. La réponse dit, pour chaque item touché, son état avant et après. |
+
+Chaque session reçue et chaque changement de programme sont journalisés (« Révisions : session Tables de Raphaël reçue (entrainer, Les tables de 6 à 9, multiplication) : 18 bonnes, 2 lentes, 0 fausses, 212 s. »).
+
+## Recalculer
+
+`rev_mastery` se reconstruit depuis les réponses. Utile si la table est abîmée, ou si les règles de maîtrise du barème ont changé et qu'on veut les appliquer à l'historique. Le service peut tourner pendant ce temps.
+
+```bash
+# Docker
+docker compose exec foyer npm run revisions:recalcul -- --membre m2
+# LXC
+runuser -u foyer -- node /opt/foyer/backend/dist/revisions/recalcul.js --env - --membre m2 < /etc/foyer/foyer.env
+# Tous les membres qui ont des réponses, un seul exercice
+runuser -u foyer -- node /opt/foyer/backend/dist/revisions/recalcul.js --env - --tous --exercice tables < /etc/foyer/foyer.env
+```
+
+`--exercice <id>` limite le recalcul à un exercice ; sans elle, tous. `--reclasser` refait d'abord « bonne » ou « lente » de chaque réponse juste avec le barème et le programme **d'aujourd'hui** : c'est le seul geste qui réécrit le passé. Il est donc explicite, et chaque lancement est écrit sur la sortie d'erreur pour le journal. Une réponse fausse reste fausse, le mode Apprendre n'est pas touché. L'identifiant d'un membre est celui de sa fiche (champ `members[].id` de `GET /api/state` ; le journal des sessions reçues donne le prénom).
+
+## Sauvegarde
+
+Les tables `rev_*` sont dans `foyer.db` : l'instantané `VACUUM INTO` et la procédure de `docs/sauvegarde-restauration.md` les emportent sans rien changer. Les surcharges éventuelles (`revisions/bareme.json`, `revisions/matieres.json`) sont dans le dossier de données, emportées avec lui.

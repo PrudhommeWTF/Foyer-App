@@ -1,8 +1,8 @@
-// Le modèle de maîtrise du module Tables : montée, descente, espacement,
-// acquisition, commutativité, et l'ordre des réponses qui seul compte.
+// Le modèle de maîtrise du module Révisions, commun à tous les exercices :
+// montée, descente, espacement, acquisition, et l'ordre des réponses qui seul compte.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { MasteryCfg, classify, pairOf, replay, status, step } from '../src/tables/mastery';
+import { MasteryCfg, classify, replay, status, step } from '../src/revisions/mastery';
 
 const cfg: MasteryCfg = { espacementJours: [0, 1, 3, 7, 14, 30], descenteSiFaux: 2, niveauAcquis: 3, bonnesMin: 3 };
 const jour = (d: number, h = 18): string => new Date(Date.UTC(2026, 9, 19 + d, h, 0, 0)).toISOString();
@@ -82,12 +82,7 @@ describe('l’état affiché', () => {
   });
 });
 
-describe('le couple et l’ordre', () => {
-  it('6 × 7 et 7 × 6 sont le même couple', () => {
-    assert.deepEqual(pairOf(7, 6), [6, 7]);
-    assert.deepEqual(pairOf(6, 7), [6, 7]);
-  });
-
+describe('l’ordre', () => {
   it('rejouer dans le désordre donne la même maîtrise que dans l’ordre', () => {
     const r = [{ result: 'bon' as const, at: jour(0) }, { result: 'faux' as const, at: jour(1) }, { result: 'bon' as const, at: jour(2) }, { result: 'bon' as const, at: jour(3) }];
     assert.deepEqual(replay([r[3], r[1], r[0], r[2]], cfg), replay(r, cfg));
@@ -96,9 +91,9 @@ describe('le couple et l’ordre', () => {
 
 describe('la correction', () => {
   it('juste et vite : bonne ; juste après le seuil : lente ; fausse ; passée', () => {
-    assert.equal(classify(42, 42, 3000, 4000), 'bon');
-    assert.equal(classify(42, 42, 4001, 4000), 'lent');
-    assert.equal(classify(42, 41, 1000, 4000), 'faux');
-    assert.equal(classify(42, null, 9000, 4000), 'passe');
+    assert.equal(classify(true, '42', 3000, 4000), 'bon');
+    assert.equal(classify(true, '42', 4001, 4000), 'lent');
+    assert.equal(classify(false, '41', 1000, 4000), 'faux');
+    assert.equal(classify(false, null, 9000, 4000), 'passe');
   });
 });
