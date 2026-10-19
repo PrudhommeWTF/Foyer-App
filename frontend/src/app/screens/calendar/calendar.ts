@@ -1,14 +1,24 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterRenderEffect, computed, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FoyerStore, DayExtra } from '../../core/foyer.store';
 import { AdminStore } from '../../core/admin.store';
 import { EmployesStore } from '../../core/employes.store';
 import { IconComponent } from '../../core/icon';
 import { WhoComponent } from '../../shared/who';
+import { AgendaRowComponent } from '../../shared/agenda-row';
 import { DOW, RECUR_LABELS, CAL_KINDS, SCHED_COLORS, SCHED_DAYS } from '../../core/constants';
-import { cap, parseDay, dstr, isoWeek, mondayOf } from '../../core/helpers';
+import { cap, parseDay, dstr, fmtShortDay, isoWeek, mondayOf } from '../../core/helpers';
+import { layoutTimed } from '../../core/day-layout';
 import { EventItem, Recur } from '../../core/models';
 import { SlotEvent, WhoBadge, whoBadges } from '../../core/schedule';
 import { HolidayBand, holidayBands } from '../../core/agenda';
+
+/** Le libellé gris d'un repère, là où un événement a son heure. */
+const EXTRA_LABELS: Record<string, string> = {
+  task: 'Tâche', birthday: 'Anniv.', holiday: 'Férié', school: 'Vacances', echeance: 'Échéance', cesu: 'CESU', ecole: 'Interro', garantie: 'Garantie',
+};
+const SHORT_DOW = ['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+const SHORT_MON = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
 
 /** Un élément d'agenda du jour : un événement propre, ou une occurrence de créneau publié. Trié par heure, les deux mêlés. */
 type DayItem = { t: string; kind: 'event'; ev: EventItem } | { t: string; kind: 'slot'; se: SlotEvent };
@@ -19,6 +29,8 @@ interface Bar { id: string; ev: EventItem; col: number; span: number; lane: numb
 interface WeekRow { key: string; week: number; days: MonthCell[]; bars: Bar[]; hbars: HolidayBand[]; lanes: number; }
 /** Un élément posé dans la grille horaire : sa place en pourcentage de la journée, et sa colonne de chevauchement. */
 interface PlacedItem { it: DayItem; top: number; height: number; left: number; width: number; }
+/** Une rangée de l'échéancier (affichage Liste) : la date, puis les vacances qui commencent là, les éléments et les repères. */
+interface ListDay { key: string; num: number; mon: string; dow: string; long: string; isToday: boolean; isSel: boolean; items: DayItem[]; extras: DayExtra[]; hols: { name: string; range: string }[]; }
 /** Une colonne-jour de la grille horaire : en-tête, bandeau « journée entière » et éléments horaires posés. */
 interface GridCol { key: string; dow: string; num: number; isToday: boolean; isSel: boolean; allDay: EventItem[]; extras: DayExtra[]; timed: PlacedItem[]; }
 
@@ -51,7 +63,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
   selector: 'screen-calendar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, WhoComponent],
+  imports: [NgTemplateOutlet, IconComponent, WhoComponent, AgendaRowComponent],
   template: `
     <div class="screen-enter">
       <div class="cal-wrap" [class.no-side]="!store.ui().calSide && !store.narrow()">
@@ -102,18 +114,23 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                         <span class="mnum">{{ c.num }}</span>
                         @for (it of c.items; track $index) {
                           @if (it.kind === 'event') {
-                            <div class="chip-ev tap" [style.background]="store.tint(eventColor(it.ev))" [style.color]="eventColor(it.ev)" (click)="openEventChip($event, it.ev.id, c.key)">{{ it.ev.title }}</div>
+                            <!-- Avec une heure, c'est l'heure qui porte la couleur ; sans heure, un point. -->
+                            <div class="chip-ev tap" (click)="openEventChip($event, it.ev.id, c.key)">
+                              @if (hasTime(it.ev)) { <span class="ch-t" [style.color]="eventColor(it.ev)">{{ it.ev.time }}</span> }
+                              @else { <span class="ch-dot" [style.background]="eventColor(it.ev)"></span> }
+                              <span class="ch-l">{{ it.ev.title }}</span>
+                            </div>
                           } @else {
-                            <div class="chip-ex slotev tap" [style.border-left]="'3px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
-                              <f-icon name="planning" [size]="10" [color]="slotColor(it.se.k)" [width]="2.4" />
-                              <span class="ex-lbl">{{ it.se.title }}</span>
+                            <div class="chip-ev tap slotev" (click)="openSlot($event, it.se)">
+                              <span class="ch-t" [style.color]="slotColor(it.se.k)">{{ it.se.time }}</span>
+                              <span class="ch-l">{{ it.se.title }}</span>
                             </div>
                           }
                         }
                         @for (ex of c.extras; track $index) {
-                          <div class="chip-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
-                            <span class="ex-dot" [style.background]="ex.color"></span>
-                            <span class="ex-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
+                          <div class="chip-ev" [class.tap]="ex.id" (click)="openExtra($event, ex)">
+                            @if (ex.kind === 'task') { <span class="ch-box"></span> } @else { <span class="ch-dot" [style.background]="ex.color"></span> }
+                            <span class="ch-l" [class.strike]="ex.done">{{ ex.label }}</span>
                           </div>
                         }
                         @if (c.more) { <span class="more">+{{ c.more }}</span> }
@@ -129,8 +146,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                       }
                       @for (b of wk.hbars; track b.name + b.col) {
                         <div class="bar hband" [class.ol]="!b.startsHere" [class.or]="!b.endsHere"
-                             [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1"
-                             [style.color]="b.color" [style.background]="store.tint(b.color)">{{ b.startsHere ? b.name : '' }}</div>
+                             [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1">{{ b.startsHere ? b.name : '' }}</div>
                       }
                     </div>
                   }
@@ -138,39 +154,37 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
               }
             </div>
           } @else {
-            @if (dayBands().length) {
-              <div class="col-hbands" [style.grid-template-columns]="'repeat(' + cols().length + ',minmax(0,1fr))'">
-                @for (b of dayBands(); track b.name + b.col) {
-                  <div class="col-hband" [class.ol]="!b.startsHere" [class.or]="!b.endsHere"
-                       [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1"
-                       [style.color]="b.color" [style.background]="store.tint(b.color)">{{ b.name }}</div>
-                }
-              </div>
-            }
             @if (display() === 'grid') {
               <div class="tgrid" [class.narrow]="store.narrow()" [style.--cols]="grid().length" [style.--hour-h]="hourH() + 'px'">
                 <div class="tg-row tg-heads">
                   <div class="tg-gutter-cell"></div>
                   @for (col of grid(); track col.key) {
-                    <div class="tg-head"
-                         [style.background]="col.isSel ? 'var(--primary)' : (col.isToday ? 'var(--honey)' : 'var(--surface)')"
-                         [style.color]="(col.isSel || col.isToday) ? '#fff' : 'var(--ink2)'"
-                         (click)="selectDay(col.key)" (dblclick)="addAt(col.key)">
-                      <span class="col-dow">{{ col.dow }}</span>
-                      <span class="col-num f-display">{{ col.num }}</span>
-                    </div>
+                    <button class="tg-head" [class.today]="col.isToday" [class.sel]="col.isSel" (click)="selectDay(col.key)" (dblclick)="addAt(col.key)">
+                      {{ col.dow }} {{ col.num }}
+                    </button>
                   }
                 </div>
-                <!-- Le bandeau « journée entière » : événements sans heure et repères (tâches, anniversaires, vacances en pile), qui ne tiennent pas dans l'horaire. -->
+                <!-- Les vacances, soulignées d'un trait miel sur toute leur durée, au-dessus des colonnes. -->
+                @if (dayBands().length) {
+                  <div class="tg-row tg-hbands">
+                    <div class="tg-gutter-cell"></div>
+                    <div class="tg-hb-in" [style.grid-template-columns]="'repeat(' + grid().length + ',minmax(0,1fr))'">
+                      @for (b of dayBands(); track b.name + b.col) {
+                        <div class="tg-hband" [style.grid-column]="b.col + ' / span ' + b.span" [style.grid-row]="b.lane + 1">{{ b.name }}</div>
+                      }
+                    </div>
+                  </div>
+                }
+                <!-- Le bandeau « journée entière » : événements sans heure et repères (tâches, anniversaires…), qui ne tiennent pas dans l'horaire. -->
                 <div class="tg-row tg-allday">
-                  <div class="tg-gutter-cell tg-ad-label">jour.</div>
+                  <div class="tg-gutter-cell tg-ad-label">journée</div>
                   @for (col of grid(); track col.key) {
                     <div class="tg-ad-cell">
                       @for (ev of col.allDay; track ev.id) {
-                        <div class="tg-ad-chip tap" [style.background]="store.tint(eventColor(ev))" [style.color]="eventColor(ev)" (click)="openEv(ev.id, col.key)">{{ ev.title }}</div>
+                        <div class="tg-ad-chip tap" (click)="openEv(ev.id, col.key)"><span class="ch-dot" [style.background]="eventColor(ev)"></span><span class="ch-l">{{ ev.title }}</span></div>
                       }
                       @for (ex of col.extras; track $index) {
-                        <div class="tg-ad-chip" [class.tap]="ex.id" [style.background]="store.tint(ex.color)" [style.color]="ex.color" (click)="openExtra($event, ex)"><span [class.strike]="ex.done">{{ ex.label }}</span></div>
+                        <div class="tg-ad-chip" [class.tap]="ex.id" (click)="openExtra($event, ex)"><span class="ch-dot" [style.background]="ex.color"></span><span class="ch-l" [class.strike]="ex.done">{{ ex.label }}</span></div>
                       }
                     </div>
                   }
@@ -185,69 +199,55 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
                       @for (h of tgHours; track h) { <div class="tg-line"></div> }
                       @for (p of col.timed; track $index) {
                         @if (p.it.kind === 'event') {
+                          <!-- Un aplat de la couleur, sans bordure : le titre reste à l'encre. -->
                           <div class="tg-ev" [style.top.%]="p.top" [style.height.%]="p.height" [style.left.%]="p.left" [style.width.%]="p.width"
-                               [style.background]="store.tint(eventColor(p.it.ev))" [style.color]="eventColor(p.it.ev)" [style.border-left]="'3px solid ' + eventColor(p.it.ev)" (click)="openEv(p.it.ev.id, col.key)">
-                            <span class="tg-ev-t">{{ timeLabel(p.it.ev) }}</span>
+                               [style.background]="mix(eventColor(p.it.ev), 24)" (click)="openEv(p.it.ev.id, col.key)">
                             <span class="tg-ev-title">{{ p.it.ev.title }}</span>
+                            <span class="tg-ev-t">{{ timeLabel(p.it.ev) }}</span>
                           </div>
                         } @else {
                           <div class="tg-ev slotev" [style.top.%]="p.top" [style.height.%]="p.height" [style.left.%]="p.left" [style.width.%]="p.width"
-                               [style.background]="store.tint(slotColor(p.it.se.k))" [style.color]="slotColor(p.it.se.k)" [style.border-left]="'3px solid ' + slotColor(p.it.se.k)" (click)="openSlot($event, p.it.se)">
+                               [style.background]="mix(slotColor(p.it.se.k), 14)" (click)="openSlot($event, p.it.se)">
+                            <span class="tg-ev-title"><f-icon name="planning" [size]="11" color="var(--ink2)" [width]="2.4" /> {{ p.it.se.title }}</span>
                             <span class="tg-ev-t">{{ p.it.se.time }}{{ p.it.se.end ? ' – ' + p.it.se.end : '' }}</span>
-                            <span class="tg-ev-title">{{ p.it.se.title }}</span>
                           </div>
                         }
                       }
+                      @if (col.isToday) { <div class="tg-now" [style.top.%]="nowMin() / 14.4" aria-hidden="true"></div> }
                     </div>
                   }
                 </div>
               </div>
             } @else {
-            <div class="cols" [style.grid-template-columns]="store.narrow() ? '1fr' : ('repeat(' + cols().length + ',minmax(0,1fr))')">
-              @for (col of cols(); track col.key) {
-                <div class="col">
-                  <div class="col-head"
-                       [style.background]="col.isSel ? 'var(--primary)' : (col.isToday ? 'var(--honey)' : 'var(--surface)')"
-                       [style.color]="(col.isSel || col.isToday) ? '#fff' : 'var(--ink2)'"
-                       (click)="selectDay(col.key)" (dblclick)="addAt(col.key)">
-                    <span class="col-dow">{{ col.dow }}</span>
-                    <span class="col-num f-display">{{ col.num }}</span>
-                  </div>
-                  <div class="col-body">
-                    @for (it of col.items; track $index) {
-                      @if (it.kind === 'event') {
-                        <div class="col-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="openEv(it.ev.id, col.key)">
-                          <div class="ce-time f-display">{{ timeLabel(it.ev) }}</div>
-                          <div class="ce-title">{{ it.ev.title }}</div>
-                          @if (it.ev.who.length) { <div class="ce-who"><f-who [badges]="eventBadges(it.ev)" /></div> }
-                        </div>
+              <!-- L'échéancier : un jour par rangée, la date dans la gouttière, puis la journée, ligne à ligne. -->
+              <div class="ag-list" style="--agenda-hover: var(--soft)">
+                @for (day of listDays(); track day.key) {
+                  @let empty = !day.items.length && !day.extras.length && !day.hols.length;
+                  <div class="ag-day">
+                    <button class="ag-g" [class.today]="day.isToday" [class.sel]="day.isSel" (click)="selectDay(day.key)" (dblclick)="addAt(day.key)"
+                            [attr.aria-label]="'Choisir le ' + day.long">
+                      <span class="ag-num f-display">{{ day.num }}</span>
+                      <span class="ag-mon">{{ day.mon }} · {{ day.dow }}</span>
+                    </button>
+                    <div class="ag-body">
+                      @for (h of day.hols; track h.name) {
+                        <div class="band-row"><span class="band-l"></span>{{ h.name }}<small>{{ h.range }}</small></div>
+                      }
+                      @for (it of day.items; track $index) {
+                        <ng-container [ngTemplateOutlet]="agItem" [ngTemplateOutletContext]="{ $implicit: it, key: day.key }" />
+                      }
+                      @for (ex of day.extras; track $index) {
+                        <ng-container [ngTemplateOutlet]="agExtra" [ngTemplateOutletContext]="{ $implicit: ex }" />
+                      }
+                      @if (empty) {
+                        <div class="ag-free">Libre · <button class="reg-link" (click)="addAt(day.key)">Ajouter</button></div>
                       } @else {
-                        <div class="col-ev slotev" [style.border-left]="'4px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
-                          <div class="ce-time f-display">{{ it.se.time }}{{ it.se.end ? ' – ' + it.se.end : '' }}</div>
-                          <div class="ce-title">{{ it.se.title }}</div>
-                          <div class="slotev-foot">
-                            <f-who [badges]="slotBadges(it.se)" />
-                            <span class="slotev-tag"><f-icon name="planning" [size]="11" [color]="slotColor(it.se.k)" [width]="2.4" /> Emploi du temps</span>
-                          </div>
-                        </div>
+                        <button class="ag-add" (click)="addAt(day.key)"><f-icon name="plus" [size]="13" color="currentColor" [width]="2.4" /> Ajouter</button>
                       }
-                    } @empty {
-                      @if (!col.extras.length) {
-                        <div class="col-empty" (click)="addAt(col.key)">Libre</div>
-                      }
-                    }
-                    @for (ex of col.extras; track $index) {
-                      <div class="col-ex" [class.tap]="ex.id" [style.border-left]="'3px solid ' + ex.color" (click)="openExtra($event, ex)">
-                        <span class="ex-dot" [style.background]="ex.color"></span>
-                        <span class="ex-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
-                        @if (ex.sub) { <span class="ex-sub">{{ ex.sub }}</span> }
-                      </div>
-                    }
-                    <button class="col-add" (click)="addAt(col.key)"><f-icon name="plus" [size]="16" color="var(--ink3)" /></button>
+                    </div>
                   </div>
-                </div>
-              }
-            </div>
+                }
+              </div>
             }
           }
         </div>
@@ -298,54 +298,61 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
               }
             </div>
           </div>
-          <div class="side-sel">{{ selLabel() }}</div>
-          @for (it of selItems(); track $index) {
-            @if (it.kind === 'event') {
-              <div class="side-ev" [style.border-left]="'4px solid ' + eventColor(it.ev)" (click)="openEv(it.ev.id, sel())">
-                <div class="se-top">
-                  <div class="se-time f-display">{{ timeLabel(it.ev) }}</div>
-                  @if (it.ev.recur !== 'none') {
-                    <span class="se-recur"><f-icon name="refresh" [size]="12" color="#7A9B76" [width]="2.4" /> {{ recurLabel(it.ev.recur) }}</span>
-                  }
-                </div>
-                <div class="se-title">{{ it.ev.title }}</div>
-                @if (it.ev.place) { <div class="se-place"><f-icon name="pin" [size]="13" color="var(--ink3)" [width]="2" /> {{ it.ev.place }}</div> }
-                @if (it.ev.end && it.ev.end !== it.ev.date) {
-                  <div class="se-span"><f-icon name="calendar" [size]="13" color="#4E93B8" [width]="2.2" /> du {{ fmtShort(it.ev.date) }} au {{ fmtShort(it.ev.end) }}</div>
-                }
-                @if (it.ev.who.length) { <div class="se-who"><f-who [badges]="eventBadges(it.ev)" /></div> }
-              </div>
-            } @else {
-              <div class="side-ev slotev" [style.border-left]="'4px solid ' + slotColor(it.se.k)" (click)="openSlot($event, it.se)">
-                <div class="se-top">
-                  <div class="se-time f-display">{{ it.se.time }}{{ it.se.end ? ' – ' + it.se.end : '' }}</div>
-                  <span class="se-slot"><f-icon name="planning" [size]="12" [color]="slotColor(it.se.k)" [width]="2.4" /> Emploi du temps</span>
-                </div>
-                <div class="se-title">{{ it.se.title }}</div>
-                <div class="se-who"><f-who [badges]="slotBadges(it.se)" /></div>
-              </div>
+          <div class="side-day">
+            <div class="sd-g">
+              <div class="sd-d f-display" [class.today]="sel() === store.todayStr()">{{ selDay().num }}</div>
+              <div class="sd-m">{{ selDay().mon }} · {{ selDay().dow }}</div>
+            </div>
+            <div class="sd-r">
+              <div class="sd-t">{{ selLabel() }}</div>
+              @for (h of selHols(); track h.name) { <div class="sd-b"><span class="band-l"></span>{{ h.name }} · jusqu’au {{ h.until }}</div> }
+            </div>
+          </div>
+          <div class="side-list">
+            @for (it of selItems(); track $index) {
+              <ng-container [ngTemplateOutlet]="agItem" [ngTemplateOutletContext]="{ $implicit: it, key: sel() }" />
             }
-          } @empty {
-            @if (!selExtras().length) {
+            @for (ex of selExtras(); track $index) {
+              <ng-container [ngTemplateOutlet]="agExtra" [ngTemplateOutletContext]="{ $implicit: ex }" />
+            }
+            @if (!selItems().length && !selExtras().length) {
               <div class="side-empty">Aucun événement ce jour</div>
             }
-          }
-          @if (selExtras().length) {
-            <div class="side-extras">
-              @for (ex of selExtras(); track $index) {
-                <div class="side-ex" [class.tap]="ex.id" [style.border-left]="'4px solid ' + ex.color" (click)="openExtra($event, ex)">
-                  <span class="ex-dot" [style.background]="ex.color"></span>
-                  <span class="sx-lbl" [class.strike]="ex.done">{{ ex.label }}</span>
-                  @if (ex.sub) { <span class="sx-sub">{{ ex.sub }}</span> }
-                </div>
-              }
-            </div>
-          }
+          </div>
           </div>
         </div>
       </div>
 
     </div>
+
+    <!-- Une ligne d'échéancier : un événement, ou une occurrence de créneau publié. -->
+    <ng-template #agItem let-it let-key="key">
+      @if (it.kind === 'event') {
+        @let ev = it.ev;
+        <f-agenda-row [start]="hasTime(ev) ? ev.time : ''" [end]="ev.endTime || ''" [timeColor]="eventColor(ev)" label="Journée"
+                      [dot]="hasTime(ev) ? '' : eventColor(ev)" [title]="ev.title" (click)="openEv(ev.id, key)">
+          @if (ev.place || ev.recur !== 'none' || (ev.end && ev.end !== ev.date)) {
+            <div meta class="reg-meta">
+              @if (ev.place) { <span><f-icon name="pin" [size]="12" color="var(--ink2)" [width]="2.2" /> {{ ev.place }}</span> }
+              @if (ev.recur !== 'none') { <span><f-icon name="refresh" [size]="12" color="var(--ink2)" [width]="2.4" /> {{ recurLabel(ev.recur) }}</span> }
+              @if (ev.end && ev.end !== ev.date) { <span><f-icon name="calendar" [size]="12" color="var(--ink2)" [width]="2.2" /> du {{ fmtShort(ev.date) }} au {{ fmtShort(ev.end) }}</span> }
+            </div>
+          }
+          @if (ev.who.length) { <f-who aside [badges]="eventBadges(ev)" [size]="22" /> }
+        </f-agenda-row>
+      } @else {
+        <f-agenda-row [start]="it.se.time" [end]="it.se.end" [title]="it.se.title" (click)="openSlot($event, it.se)">
+          <div meta class="reg-meta"><span><f-icon name="planning" [size]="12" color="var(--ink2)" [width]="2.2" /> Emploi du temps</span></div>
+          <f-who aside [badges]="slotBadges(it.se)" [size]="22" />
+        </f-agenda-row>
+      }
+    </ng-template>
+    <!-- Un repère (tâche, anniversaire, férié…) : un libellé gris à la place de l'heure. -->
+    <ng-template #agExtra let-ex>
+      <f-agenda-row [label]="extraLabel(ex.kind)" [title]="ex.label" [light]="true" [strike]="!!ex.done" [class.inert]="!ex.id" (click)="openExtra($event, ex)">
+        @if (ex.sub) { <div meta class="reg-meta"><span><span class="reg-sq" [style.background]="ex.color"></span>{{ ex.sub }}</span></div> }
+      </f-agenda-row>
+    </ng-template>
   `,
   styles: [`
     :host { display: block; container-type: inline-size; }
@@ -357,24 +364,15 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .nav-btn.side-toggle.active { background: var(--soft2); }
     /* En pile, les cartes s'étirent à toute la largeur : sans « stretch », un
        flex en colonne aligné « flex-start » les dimensionne à leur contenu, et
-       un libellé long (« Emploi du temps », une tâche non coupée) les fait
-       déborder à droite. Le conteneur (container-type sur :host) entraînerait
-       alors aussi la modale, posée en position fixe. */
+       un libellé long les fait déborder à droite. */
     :host-context(.shell.narrow) .cal-wrap { flex-direction: column; align-items: stretch; }
     :host-context(.shell.narrow) .side { width: auto; }
     @media (max-width: 860px) { .cal-wrap { flex-direction: column; align-items: stretch; } .side { width: auto; } }
-    /* En largeur moyenne (fenêtre pas en plein écran), le bandeau de 320 px laisse
-       trop peu de place aux sept colonnes : on le passe sous le calendrier, qui
-       reprend toute la largeur. Requête de conteneur : c'est la largeur réelle de
-       l'écran Calendrier qui décide, pas celle de la fenêtre. */
+    /* En largeur moyenne, le panneau passe sous le calendrier. Requête de
+       conteneur : c'est la largeur réelle de l'écran Calendrier qui décide. */
     @container (max-width: 1040px) { .cal-wrap { flex-direction: column; align-items: stretch; } .side { width: auto; } }
-    /* Le détail du jour : mini-calendrier, libellé de date, événements puis
-       repères, tous espacés du même écart pour que la colonne respire d'un pas
-       régulier plutôt que par à-coups. */
     .side-detail { display: flex; flex-direction: column; gap: 10px; }
-    /* Sur mobile, le mini-calendrier et le détail du jour sélectionné n'apportent
-       rien de plus que la vue et le bouton d'ajout : on les masque pour garder un
-       écran court. Les vues Semaine et 3 jours passent en pile (une colonne). */
+    /* Sur mobile, le mini-calendrier et le détail du jour sont masqués : la vue et le bouton d'ajout suffisent. */
     :host-context(.shell.narrow) .side-detail { display: none; }
     @media (max-width: 860px) { .side-detail { display: none; } }
 
@@ -385,106 +383,113 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .head-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .seg2 { display: flex; gap: 3px; background: var(--soft); border-radius: 12px; padding: 4px; }
     .seg2 button { padding: 7px 13px; border: none; background: transparent; border-radius: 9px; font-size: 12.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
-    .seg2 button.active { background: var(--surface); color: var(--ink); box-shadow: 0 4px 10px -6px rgba(90,60,40,.5); }
+    .seg2 button.active { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
     .seg2.disp button { padding: 7px 9px; display: inline-flex; align-items: center; }
     .navs { display: flex; gap: 8px; }
     .nav-btn { width: 38px; height: 38px; border: none; border-radius: 12px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 
+    /* ===== vue Mois ===== */
     .dow-row { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 2px; margin-bottom: 6px; }
     .dow { text-align: center; font-size: 12px; font-weight: 800; color: var(--ink3); padding: 4px; }
-    /* Cases resserrées (gap 2px, coins peu arrondis) : une barre « journée
-       entière » peut alors s'étaler d'une case à l'autre en une ligne continue,
-       posée dans .week-bars par-dessus la semaine. Le haut de chaque case laisse
-       la place aux voies de barres (--lanes, porté par la semaine). */
+    /* Cases resserrées : une barre « journée entière » peut s'étaler d'une case à
+       l'autre en une ligne continue, posée dans .week-bars par-dessus la semaine. */
     .month { display: flex; flex-direction: column; gap: 2px; }
     .week { position: relative; }
     .week-cells { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 2px; }
     .mcell { position: relative; min-height: 94px; border-radius: 5px; padding: calc(26px + var(--lanes,0) * 20px) 6px 6px; background: var(--soft); cursor: pointer; display: flex; flex-direction: column; gap: 3px; box-sizing: border-box; overflow: hidden; }
     .mcell.dim { opacity: .5; }
     .mcell.sel { box-shadow: inset 0 0 0 2px var(--primary); }
-    .mcell.today:not(.sel) { box-shadow: inset 0 0 0 2px var(--honey); }
     .mnum { position: absolute; top: 5px; right: 8px; font-size: 13px; font-weight: 800; color: var(--ink2); }
-    /* Le numéro de semaine, dans la première case de chaque ligne, face au jour. */
+    /* Aujourd'hui : le numéro en pastille, plus de cadre autour de la case. */
+    .mcell.today .mnum { top: 3px; right: 5px; min-width: 22px; padding: 2px 5px; border-radius: 7px; background: var(--primary); color: #fff; text-align: center; }
     .wknum { position: absolute; top: 5px; left: 8px; font-size: 11px; font-weight: 800; color: var(--ink3); opacity: .8; }
     .week-bars { position: absolute; top: 24px; left: 0; right: 0; display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); grid-auto-rows: 18px; gap: 2px; pointer-events: none; z-index: 1; }
     .bar { pointer-events: auto; height: 16px; align-self: center; border-radius: 5px; padding: 0 7px; font-size: 10.5px; font-weight: 800; line-height: 16px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
     .bar.ol { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -2px; padding-left: 9px; }
     .bar.or { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: -2px; }
-    .chip-ev { border-radius: 5px; padding: 2px 6px; font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Les vacances : pas d'aplat, le nom souligné d'un trait miel sur toute la durée. */
+    .bar.hband { pointer-events: none; color: var(--ink); background: none; border-radius: 0; padding: 0 4px; line-height: 14px; border-bottom: 2px solid var(--honey); cursor: default; }
+    /* Une pastille du mois : sans fond. L'heure (ou le point) porte la couleur, le titre reste à l'encre. */
+    .chip-ev { display: flex; align-items: center; gap: 4px; min-height: 16px; font-size: 11px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; }
+    .ch-t { flex: none; font-size: 11.5px; font-weight: 800; }
+    .ch-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .chip-ev.slotev .ch-l { color: var(--ink2); font-weight: 600; }
+    .ch-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .ch-box { width: 10px; height: 10px; border-radius: 3px; border: 1.5px solid var(--ink3); flex: none; box-sizing: border-box; }
+    .strike { text-decoration: line-through; color: var(--ink3); }
     .more { font-size: 10px; font-weight: 800; color: var(--ink3); }
     @media (max-width: 860px) { .mcell { min-height: 68px; } }
-    /* Sur grand écran, le mois occupe la hauteur disponible vers le bas : les six
-       lignes se partagent l'espace, plus lisible qu'un mois tassé en haut. */
     @media (min-width: 861px) { .mcell { min-height: max(94px, calc((100vh - 268px) / 6)); } }
 
-    /* Le bandeau des vacances, aligné aux colonnes du dessous (même gabarit et
-       même gouttière de 10 px), posé en barres continues plutôt qu'un repère
-       répété dans chaque colonne. */
-    .col-hbands { display: grid; gap: 6px 10px; grid-auto-rows: 24px; margin-bottom: 8px; }
-    .col-hband { align-self: center; height: 24px; line-height: 24px; border-radius: 9px; padding: 0 12px; font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .col-hband.ol { border-top-left-radius: 0; border-bottom-left-radius: 0; }
-    .col-hband.or { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-    .cols { display: grid; gap: 10px; align-items: start; }
-    .col { background: var(--soft); border-radius: 16px; padding: 10px; min-height: 300px; min-width: 0; display: flex; flex-direction: column; }
-    /* En pile sur mobile, une colonne pleine largeur par jour : inutile de la
-       tenir à 300 px, elle prend la hauteur de son contenu. */
-    @media (max-width: 860px) { .col { min-height: 132px; } }
-    .col-head { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 11px; padding: 8px 6px; margin-bottom: 10px; cursor: pointer; }
-    .col-dow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-    .col-num { font-size: 17px; font-weight: 700; }
-    .col-body { display: flex; flex-direction: column; gap: 7px; flex: 1; }
-    .col-ev { background: var(--surface); border-radius: 11px; padding: 9px 10px; cursor: pointer; box-shadow: 0 6px 14px -12px rgba(90,60,40,.6); }
-    .ce-time { font-size: 12px; font-weight: 700; color: var(--ink2); }
-    .ce-title { font-size: 13px; font-weight: 800; color: var(--ink); line-height: 1.2; margin-top: 1px; }
-    .ce-who { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
-    .ce-who span:last-child { font-size: 11px; font-weight: 700; color: var(--ink3); }
-    .dot { width: 16px; height: 16px; border-radius: 50%; color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex: none; }
-    .col-empty { flex: 1; min-height: 60px; display: flex; align-items: center; justify-content: center; color: var(--ink3); font-size: 12px; font-weight: 700; cursor: pointer; }
-    .col-add { border: none; background: transparent; display: flex; align-items: center; justify-content: center; padding: 6px; cursor: pointer; border-radius: 9px; }
-    .col-add:hover { background: var(--surface); }
+    /* ===== affichage Liste : l'échéancier ===== */
+    .ag-day { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line2); }
+    .ag-day:first-child { border-top: none; padding-top: 2px; }
+    .ag-g { width: 70px; flex: none; align-self: flex-start; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: none; background: none; border-radius: 10px; padding: 6px 8px; cursor: pointer; color: var(--ink); font-family: inherit; text-align: left; }
+    .ag-g.sel { background: var(--soft); }
+    .ag-g.today { color: var(--primary); }
+    .ag-num { font-size: 28px; font-weight: 700; line-height: 1; }
+    .ag-mon { font-size: 12px; font-weight: 800; color: var(--ink2); white-space: nowrap; }
+    .ag-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .ag-free { padding: 12px 6px; font-size: 13px; font-weight: 700; color: var(--ink3); }
+    .ag-free .reg-link { font-size: 13px; color: var(--ink2); }
+    /* « + Ajouter » se montre au survol de la journée ; toujours là au doigt et au clavier. */
+    .ag-add { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; border: none; background: none; padding: 6px 6px 2px 72px; font: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink3); cursor: pointer; opacity: 0; transition: opacity .15s ease; }
+    .ag-day:hover .ag-add, .ag-add:focus-visible { opacity: 1; }
+    .ag-add:hover { color: var(--ink2); }
+    @media (hover: none) { .ag-add { opacity: 1; } }
+    .band-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 6px 8px; font-size: 13px; font-weight: 800; color: var(--ink); }
+    .band-row small { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+    .band-l { display: inline-block; width: 14px; height: 3px; border-radius: 2px; background: var(--honey); flex: none; }
+    /* Les méta d'une ligne : un lieu long passe à la ligne plutôt que de déborder. */
+    .reg-meta > * { white-space: normal; }
+    f-agenda-row.inert { cursor: default; }
+    f-agenda-row.inert:hover { background: none; }
 
     /* ===== grille horaire (vues Semaine / 3 jours) ===== */
-    /* Toutes les rangées (en-têtes, bandeau journée, corps) partagent le même
-       gabarit de colonnes : la gouttière des heures puis une colonne par jour,
-       si bien que tout s'aligne verticalement. Les 24 heures tiennent d'un bloc,
-       sans défilement interne. */
-    /* Gouttière des heures : au plus juste sous l'entête « jour. » (le plus large
-       des libellés de la colonne, « 23h » tenant dedans), plutôt qu'une colonne
-       large à moitié vide. */
-    .tgrid { --gutter: 28px; --hour-h: 27px; }
+    /* Toutes les rangées partagent le même gabarit de colonnes : la gouttière des
+       heures puis une colonne par jour, si bien que tout s'aligne verticalement. */
+    .tgrid { --gutter: 34px; --hour-h: 27px; }
     .tgrid.narrow { --gutter: 28px; --hour-h: 24px; }
     .tg-row { display: grid; grid-template-columns: var(--gutter) repeat(var(--cols,3), minmax(0,1fr)); gap: 0 6px; }
     .tg-heads { margin-bottom: 6px; }
-    .tg-head { display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 11px; padding: 8px 6px; cursor: pointer; }
-    .tg-head .col-dow { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
-    .tg-head .col-num { font-size: 17px; font-weight: 700; }
+    /* En-têtes : du texte, la date du jour en orange, la sélection soulignée. Plus d'aplat. */
+    .tg-head { position: relative; border: none; background: none; padding: 6px 4px 8px; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tg-head.today { color: var(--primary); }
+    .tg-head.sel::after { content: ''; position: absolute; left: 4px; right: 4px; bottom: 2px; height: 2px; border-radius: 2px; background: var(--primary); }
+    .tg-hbands { margin-bottom: 4px; }
+    .tg-hb-in { grid-column: 2 / -1; display: grid; gap: 4px 6px; grid-auto-rows: 20px; }
+    .tg-hband { align-self: center; padding: 0 4px 1px; font-size: 12px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 2px solid var(--honey); }
     .tg-allday { margin-bottom: 6px; }
     .tg-gutter-cell { min-width: 0; }
-    .tg-ad-label { display: flex; align-items: flex-start; justify-content: flex-end; padding: 3px 6px 0 0; font-size: 9.5px; font-weight: 800; color: var(--ink3); }
-    .tg-ad-cell { display: flex; flex-direction: column; gap: 3px; background: var(--soft); border-radius: 8px; padding: 3px; min-width: 0; }
-    .tg-ad-chip { border-radius: 5px; padding: 2px 6px; font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tg-ad-chip.tap { cursor: pointer; }
-    .tg-ad-chip .strike { text-decoration: line-through; opacity: .7; }
+    .tg-ad-label { display: flex; align-items: flex-start; justify-content: flex-end; padding: 3px 4px 0 0; font-size: 9.5px; font-weight: 800; color: var(--ink3); }
+    .tg-ad-cell { display: flex; flex-direction: column; gap: 3px; padding: 3px 2px; min-width: 0; }
+    /* Bandeau « journée » : un point de couleur et le texte à l'encre, sans fond. */
+    .tg-ad-chip { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; }
+    .tg-ad-chip .ch-dot { width: 6px; height: 6px; }
+    .tap { cursor: pointer; }
     .tg-body { align-items: start; }
     .tg-gutter { height: calc(24 * var(--hour-h)); }
     .tg-hour { height: var(--hour-h); border-top: 1px solid var(--line); text-align: right; padding-right: 6px; }
     .tg-hour span { font-size: 9.5px; font-weight: 800; color: var(--ink3); display: inline-block; transform: translateY(-6px); }
-    .tg-col { position: relative; height: calc(24 * var(--hour-h)); background: var(--soft); border-radius: 10px; overflow: hidden; min-width: 0; }
-    .tg-col.today { background: color-mix(in srgb, var(--honey) 14%, var(--soft)); }
+    .tg-col { position: relative; height: calc(24 * var(--hour-h)); border-radius: 10px; overflow: hidden; min-width: 0; }
     .tg-line { height: var(--hour-h); border-top: 1px solid var(--line); }
     .tg-line:first-child { border-top: none; }
-    /* Un événement posé à son heure : la teinte de son membre en fond, sa couleur
-       en texte et en filet. La largeur se partage quand plusieurs se chevauchent. */
-    .tg-ev { position: absolute; overflow: hidden; border-radius: 6px; padding: 1px 5px; cursor: pointer; box-sizing: border-box; box-shadow: 0 4px 10px -8px rgba(90,60,40,.7); }
-    .tg-ev-t { display: block; font-size: 9.5px; font-weight: 800; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .tg-ev-title { display: block; font-size: 11px; font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; }
-    .tgrid.narrow .tg-ev { padding: 1px 3px; }
+    /* Un événement posé à son heure : un aplat de sa couleur, sans bordure ni ombre ; le titre à l'encre. */
+    .tg-ev { position: absolute; overflow: hidden; border-radius: 6px; padding: 3px 6px; cursor: pointer; box-sizing: border-box; border: 1px solid var(--surface); }
+    .tg-ev-title { display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--ink); line-height: 1.2; overflow: hidden; }
+    .tg-ev-t { display: block; font-size: 11px; font-weight: 700; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tg-ev.slotev .tg-ev-title { color: var(--ink2); font-weight: 700; }
+    .tgrid.narrow .tg-ev { padding: 2px 3px; }
     .tgrid.narrow .tg-ev-t { display: none; }
+    /* Maintenant : un trait orange, avec sa pastille, dans la colonne du jour. */
+    .tg-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--primary); z-index: 2; pointer-events: none; }
+    .tg-now::before { content: ''; position: absolute; left: -1px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
 
     .add-ev { margin-bottom: 6px; }
 
     /* ===== mini-calendrier ===== */
-    .mini { background: var(--surface); border-radius: 16px; padding: 12px 12px 8px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
+    .mini { background: var(--surface); border-radius: 16px; padding: 12px 12px 8px; border: 1px solid var(--line); }
+    :host-context(:root.dark) .mini { border-color: transparent; }
     .mini-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
     .mini-title { font-size: 15px; font-weight: 700; color: var(--ink); text-transform: capitalize; }
     .mini-navs { display: flex; gap: 2px; }
@@ -502,53 +507,25 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
     .mini-day.sel { background: var(--primary); color: #fff; font-weight: 800; box-shadow: none; }
     .mini-day.has::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
     .mini-day.sel.has::after { background: #fff; }
-    .side-sel { font-size: 13px; font-weight: 800; color: var(--ink2); text-transform: capitalize; margin: 0 2px; }
 
-    .side-ev { background: var(--surface); border-radius: 18px; padding: 16px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); cursor: pointer; }
-    .se-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .se-time { font-size: 16px; font-weight: 700; color: var(--ink); }
-    .se-recur { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; color: #7A9B76; background: #EDF2EB; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
-    .se-title { font-weight: 800; font-size: 15px; color: var(--ink); margin-top: 4px; }
-    .se-span { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 800; color: #4E93B8; margin-top: 6px; }
-    .se-place { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; color: var(--ink2); margin-top: 5px; }
-    .se-who { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
-    .se-who .dot { width: 20px; height: 20px; font-size: 10px; }
-    .se-who span:last-child { font-size: 13px; font-weight: 700; color: var(--ink2); }
-    .side-empty { background: var(--surface); border-radius: 18px; padding: 28px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 14px; box-shadow: 0 10px 24px -18px rgba(90,60,40,.6); }
+    /* ===== panneau du jour ===== */
+    .side-day { display: flex; gap: 14px; align-items: center; margin: 8px 2px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line2); }
+    .sd-g { flex: none; }
+    .sd-d { font-size: 30px; font-weight: 700; line-height: 1; color: var(--ink); }
+    .sd-d.today { color: var(--primary); }
+    .sd-m { font-size: 12px; font-weight: 800; color: var(--ink2); margin-top: 3px; white-space: nowrap; }
+    .sd-r { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .sd-t { font-size: 15px; font-weight: 800; color: var(--ink); }
+    .sd-b { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .side-list { display: flex; flex-direction: column; }
+    .side-empty { padding: 22px 6px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 14px; }
 
-    /* ===== informational overlay items (holidays, school, birthdays, tasks) ===== */
-    .ex-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-    .tap { cursor: pointer; }
-    .ex-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* Une tâche faite est barrée dans le calendrier comme dans sa liste. */
-    .ex-lbl.strike, .sx-lbl.strike { text-decoration: line-through; color: var(--ink3); }
-    .chip-ex { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 5px; background: var(--surface); font-size: 10px; font-weight: 800; color: var(--ink2); white-space: nowrap; overflow: hidden; }
-    .col-ex { display: flex; align-items: center; gap: 6px; background: var(--surface); border-radius: 10px; padding: 6px 9px; font-size: 12px; font-weight: 800; color: var(--ink2); }
-    .col-ex .ex-sub { margin-left: auto; font-size: 10.5px; font-weight: 700; color: var(--ink3); flex: none; }
-    /* Filtres d'affichage : la légende devient une rangée de cases à cocher, une
-       par type. Décochée, le type disparaît de toutes les vues. */
+    /* Filtres d'affichage : une case par type. Décochée, le type disparaît de toutes les vues. */
     .filters { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 2px 2px 4px; }
     .filt { display: inline-flex; align-items: center; gap: 6px; border: none; background: var(--soft); border-radius: 20px; padding: 5px 11px 5px 6px; cursor: pointer; font-size: 11.5px; font-weight: 800; color: var(--ink2); }
     .filt.off { opacity: .55; }
     .filt-box { width: 16px; height: 16px; flex: none; border-radius: 5px; border: 2px solid; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; }
     .ics-btn { margin-bottom: 2px; }
-    .side-extras { display: flex; flex-direction: column; gap: 10px; }
-    .side-ex { display: flex; align-items: center; gap: 9px; background: var(--surface); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 20px -18px rgba(90,60,40,.6); }
-    .side-ex .ex-dot { width: 10px; height: 10px; }
-    .sx-lbl { font-size: 13.5px; font-weight: 800; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .sx-sub { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--ink3); flex: none; }
-
-    /* ===== événements venus de l'emploi du temps ===== */
-    /* Dérivés d'un créneau, ils s'ouvrent sur leur créneau source : un fond
-       légèrement teinté et une étiquette « Emploi du temps » les distinguent
-       d'un événement propre à l'agenda, qu'on modifie sur place. */
-    .col-ev.slotev, .side-ev.slotev { background: color-mix(in srgb, var(--ink) 3%, var(--surface)); }
-    .slotev-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
-    .slotev-tag, .se-slot { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
-    .se-slot { font-size: 11px; background: var(--soft); padding: 3px 9px; border-radius: 20px; }
-    .side-ev.slotev .se-who { margin-top: 8px; }
-    .chip-ex.slotev { gap: 3px; }
-
   `],
 })
 export class CalendarScreen {
@@ -614,6 +591,10 @@ export class CalendarScreen {
     // Instancié pour son effet : le module Employé à domicile pose les repères
     // de déclaration CESU sur l'agenda (adultes uniquement, sans écran ouvert).
     inject(EmployesStore);
+    try {
+      const tick = setInterval(() => this.nowMin.set(this.readNow()), 60_000);
+      inject(DestroyRef).onDestroy(() => clearInterval(tick));
+    } catch { /* pas de minuterie : le trait reste à l'heure d'ouverture */ }
     try {
       const onResize = () => this.viewport.set(this.readViewport());
       window.addEventListener('resize', onResize, { passive: true });
@@ -746,23 +727,30 @@ export class CalendarScreen {
     return rows;
   });
 
-  cols = computed(() => {
+  /** L'échéancier des vues 3 jours / Semaine en affichage Liste : une rangée par jour. */
+  listDays = computed<ListDay[]>(() => {
     const v = this.cv();
     if (v === 'month') return [];
     const a = parseDay(this.calAnchor());
     const start = v === 'week' ? this.monday(a) : a;
     const n = v === 'week' ? 7 : 3;
+    const first = dstr(start);
+    const today = this.store.todayStr();
     const selDay = this.sel();
-    // En colonnes (large), les vacances passent dans le bandeau étalé au-dessus,
-    // pas en repère de jour ; en pile (mobile), pas de bandeau, on les garde par jour.
-    const wide = !this.store.narrow();
-    const out = [];
+    const hols = this.hidden().has('school') ? [] : this.store.schoolHolidays();
+    const out: ListDay[] = [];
     for (let i = 0; i < n; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = dstr(d);
-      const extras = wide ? this.visExtras(key).filter((e) => e.kind !== 'school') : this.visExtras(key);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), items: this.dayItems(key), extras, isToday: key === this.store.todayStr(), isSel: key === selDay });
+      const last = i === n - 1 ? key : '';
+      // Les vacances : une ligne au jour où elles commencent (ou au premier jour affiché si elles ont commencé avant).
+      const here = hols.filter((h) => (h.start < first ? first : h.start) === key && h.end >= first && (!last || h.start <= last))
+        .map((h) => ({ name: h.name, range: `du ${fmtShortDay(h.start, today)} au ${fmtShortDay(h.end, today)}` }));
+      out.push({
+        key, num: d.getDate(), mon: SHORT_MON[d.getMonth()], dow: SHORT_DOW[(d.getDay() + 6) % 7], long: this.fmtShort(key),
+        isToday: key === today, isSel: key === selDay, items: this.dayItems(key), extras: this.visExtras(key).filter((e) => e.kind !== 'school'), hols: here,
+      });
     }
     return out;
   });
@@ -797,60 +785,20 @@ export class CalendarScreen {
       const timed = this.layoutDay(rest);
       // Comme en liste, les vacances passent dans le bandeau étalé au-dessus en large, et restent par jour en pile.
       const extras = wide ? this.visExtras(key).filter((e) => e.kind !== 'school') : this.visExtras(key);
-      out.push({ key, dow: DOW[(d.getDay() + 6) % 7], num: d.getDate(), isToday: key === today, isSel: key === selDay, allDay, extras, timed });
+      out.push({ key, dow: SHORT_DOW[(d.getDay() + 6) % 7], num: d.getDate(), isToday: key === today, isSel: key === selDay, allDay, extras, timed });
     }
     return out;
   });
 
-  /** Minutes depuis minuit d'une heure « HH:MM », 0 si illisible. */
-  private mins(t: string): number { const m = /^(\d\d):(\d\d)/.exec(t); return m ? (+m[1]) * 60 + (+m[2]) : 0; }
-
   /**
-   * Pose les éléments horaires d'un jour dans la grille : chacun à sa hauteur
-   * (début et durée en pourcentage de la journée), les chevauchements répartis
-   * en colonnes côte à côte. Un groupe d'événements qui se recouvrent partage sa
-   * largeur ; deux groupes disjoints repartent chacun sur toute la largeur.
+   * Pose les éléments horaires d'un jour dans la grille (voir core/day-layout.ts) :
+   * chacun à sa hauteur, en pourcentage de la journée, les chevauchements côte à côte.
    */
   private layoutDay(items: DayItem[]): PlacedItem[] {
-    const MIN_DUR = 30; // durée d'affichage d'un événement sans heure de fin
-    const evs = items
-      .map((it) => {
-        const startT = it.kind === 'event' ? it.ev.time : it.se.time;
-        const endT = it.kind === 'event' ? (it.ev.endTime || '') : (it.se.end || '');
-        const s = Math.max(0, Math.min(1439, this.mins(startT)));
-        let e = endT ? this.mins(endT) : s + MIN_DUR;
-        if (e <= s) e = Math.min(1440, s + MIN_DUR);
-        return { it, s, e, col: 0, cols: 1 };
-      })
-      .sort((a, b) => a.s - b.s || a.e - b.e);
-    const placed: typeof evs = [];
-    let cluster: typeof evs = [];
-    let clusterEnd = -1;
-    const flush = (): void => {
-      const cols = Math.max(...cluster.map((p) => p.col)) + 1;
-      for (const p of cluster) p.cols = cols;
-      placed.push(...cluster);
-      cluster = [];
-    };
-    for (const ev of evs) {
-      if (cluster.length && ev.s >= clusterEnd) { flush(); clusterEnd = -1; }
-      // Première colonne libre : celle dont le dernier événement s'achève avant celui-ci.
-      const colEnd: number[] = [];
-      for (const p of cluster) colEnd[p.col] = Math.max(colEnd[p.col] ?? -1, p.e);
-      let col = 0;
-      while (colEnd[col] !== undefined && colEnd[col] > ev.s) col++;
-      ev.col = col;
-      cluster.push(ev);
-      clusterEnd = Math.max(clusterEnd, ev.e);
-    }
-    if (cluster.length) flush();
-    return placed.map((p) => ({
-      it: p.it,
-      top: (p.s / 1440) * 100,
-      height: Math.max(1.8, ((p.e - p.s) / 1440) * 100),
-      left: (p.col / p.cols) * 100,
-      width: 100 / p.cols,
-    }));
+    return layoutTimed<DayItem>(items.map((it) => it.kind === 'event'
+      ? { item: it, start: it.ev.time, end: it.ev.endTime || '' }
+      : { item: it, start: it.se.time, end: it.se.end || '' }))
+      .map((p) => ({ it: p.item, top: (p.s / 1440) * 100, height: Math.max(1.8, ((p.e - p.s) / 1440) * 100), left: (p.col / p.cols) * 100, width: 100 / p.cols }));
   }
 
   /** Les vacances scolaires étalées sur la plage visible (semaine ou 3 jours), en barres. Vide en vue mois, en pile mobile, ou sans vacances. */
@@ -866,7 +814,20 @@ export class CalendarScreen {
   });
 
   selItems = computed(() => this.dayItems(this.sel()));
-  selExtras = computed(() => this.visExtras(this.sel()));
+  /** Les repères du jour choisi ; les vacances sont dites dans l'en-tête du panneau. */
+  selExtras = computed(() => this.visExtras(this.sel()).filter((e) => e.kind !== 'school'));
+  /** L'en-tête du panneau : le numéro du jour en grand, « oct. · sam. ». */
+  selDay = computed(() => { const d = parseDay(this.sel()); return { num: d.getDate(), mon: SHORT_MON[d.getMonth()], dow: SHORT_DOW[(d.getDay() + 6) % 7] }; });
+  /** Les vacances en cours le jour choisi, avec leur fin. */
+  selHols = computed(() => {
+    const k = this.sel();
+    if (this.hidden().has('school')) return [];
+    return this.store.schoolHolidays().filter((h) => h.start <= k && h.end >= k).map((h) => ({ name: h.name, until: fmtShortDay(h.end, this.store.todayStr()) }));
+  });
+
+  /** L'heure qu'il est, en minutes, pour le trait « maintenant » de la grille. Rafraîchie chaque minute. */
+  readonly nowMin = signal(this.readNow());
+  private readNow(): number { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
 
   /** Les repères d'un jour, moins les types masqués par les filtres. */
   private visExtras(key: string): DayExtra[] {
@@ -886,6 +847,13 @@ export class CalendarScreen {
     const slots: DayItem[] = h.has('planning') ? [] : this.store.slotEventsForDay(key).map((se) => ({ t: se.time, kind: 'slot', se }));
     return [...evs, ...slots].sort((a, b) => a.t.localeCompare(b.t));
   }
+
+  /** Un événement a-t-il une heure ? Sinon il se lit « Journée », avec un point. */
+  hasTime(ev: EventItem): boolean { return !this.isAllDay(ev); }
+  /** « Tâche », « Anniv. », « Férié »… : ce qu'un repère affiche à la place de l'heure. */
+  extraLabel(kind: string): string { return EXTRA_LABELS[kind] || 'Repère'; }
+  /** L'aplat d'un élément de la grille : sa couleur mêlée à la surface. */
+  mix(color: string, pct: number): string { return `color-mix(in srgb, ${color} ${pct}%, var(--surface))`; }
 
   /** « 12:00 – 12:45 », ou « 12:00 » sans fin, ou « — » sans heure. */
   timeLabel(ev: EventItem): string { return ev.endTime ? ev.time + ' – ' + ev.endTime : ev.time; }
