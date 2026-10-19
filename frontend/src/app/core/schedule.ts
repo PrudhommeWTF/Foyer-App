@@ -207,15 +207,7 @@ export function whoBadges(slot: { who: readonly string[] }, members: Member[]): 
   return out;
 }
 
-// ---- les trous de la journée ------------------------------------------------
-//
-// La vue en listes absorbe les chevauchements, mais elle fait perdre le sens des
-// **trous** : on ne voit plus d'un coup d'oeil qu'il y a trois heures de libre
-// entre deux créneaux. Les calculer les rend visibles, et fait d'eux l'endroit
-// naturel où taper pour créer un créneau à cette heure-là.
-
-/** Un intervalle libre entre deux créneaux d'une même journée. */
-export interface FreeGap { start: string; end: string; minutes: number; }
+// ---- l'heure d'un nouveau créneau -------------------------------------------
 
 /** « 08:30 » vers 510. Une heure mal formée rend 0 plutôt que NaN. */
 const toMin = (hhmm: string): number => {
@@ -225,28 +217,6 @@ const toMin = (hhmm: string): number => {
 
 /** Heure de démarrage proposée quand la journée est vide et qu'on n'a rien d'autre. */
 export const DEFAULT_START = '08:00';
-
-/**
- * Les intervalles libres d'une journée, à partir de ses créneaux.
- *
- * Un créneau sans heure de fin compte comme un instant : le car scolaire de 7h50
- * n'occupe pas le reste de la matinée sous prétexte qu'on n'a pas dit quand il
- * arrive. Les trous plus courts que `minMinutes` sont ignorés : cinq minutes
- * entre deux cours ne sont pas du temps libre, et les afficher noierait les
- * vrais trous.
- */
-export function gapsOf(slots: SchedSlot[], minMinutes = 30): FreeGap[] {
-  const out: FreeGap[] = [];
-  let fin = '';
-  for (const s of sortSlots(slots)) {
-    if (fin && toMin(s.start) - toMin(fin) >= minMinutes) {
-      out.push({ start: fin, end: s.start, minutes: toMin(s.start) - toMin(fin) });
-    }
-    const bout = s.end || s.start;
-    if (!fin || toMin(bout) > toMin(fin)) fin = bout;
-  }
-  return out;
-}
 
 /**
  * L'heure à proposer pour un nouveau créneau : juste après le dernier de la

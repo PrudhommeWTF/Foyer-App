@@ -1,17 +1,28 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, inject, signal } from '@angular/core';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
 import { ModalComponent } from '../../shared/modal';
 import { WhoComponent } from '../../shared/who';
 import { SchedSlot } from '../../core/models';
-import { FreeGap, WHEN_LABELS, dowLabel, filterSlots, gapsOf, slotsOn, validityLabel, whoBadges } from '../../core/schedule';
+import { WHEN_LABELS, dowLabel, filterSlots, slotsOn, validityLabel, whoBadges } from '../../core/schedule';
+import { Placed, hourRange, isWholeDay, layoutTimed } from '../../core/day-layout';
 import { DOW, SCHED_TYPES, SCHED_COLORS } from '../../core/constants';
 import { isEdSlot } from '../../core/ecole-slots';
 import { EcoleStore } from '../../core/ecole.store';
 
 /** Un jour de la vue, déjà filtré et daté : l'affichage n'a plus qu'à le dessiner. */
 interface DayView { dow: number; date: string; label: string; short: string; num: string; today: boolean; slots: SchedSlot[]; }
+/** Un créneau posé dans la grille, en pixels depuis le haut de la plage affichée et en pourcentage de la colonne. */
+interface Block { s: SchedSlot; top: number; height: number; left: number; width: number; }
+/** Une colonne de la grille : le jour, ses créneaux de toute la journée (bandeau) et ses créneaux posés. */
+interface DayCol { v: DayView; allDay: SchedSlot[]; blocks: Block[]; }
+
+/** Hauteur d'une heure : 46 px sur la semaine, 54 px pour le jour seul du téléphone. */
+const HOUR_H = 46;
+const HOUR_H_NARROW = 54;
+const GUTTER = 38;
+const COL_GAP = 6;
 
 /**
  * L'emploi du temps de la semaine.
@@ -24,13 +35,12 @@ interface DayView { dow: number; date: string; label: string; short: string; num
  * sur un identifiant de maquette qui n'existait dans aucun foyer réel : il
  * n'affichait donc rien, jamais, tant qu'on n'avait pas cliqué sur une pastille.
  *
- * **Des listes triées par heure, pas une grille horaire proportionnelle.** Une
- * grille où la hauteur vaut la durée demande treize heures de hauteur pour
- * rester lisible, et gère les chevauchements en rétrécissant les colonnes :
- * avec quatre membres et trois créneaux à 18h, on obtient des bandes de trois
- * millimètres. Une liste absorbe les chevauchements sans rien faire, deux
- * créneaux à 18h étant deux lignes lisibles. Ce qu'on y perd, et c'est assumé :
- * le sens visuel de la durée et des trous de la journée.
+ * **Une vraie grille horaire.** La durée se lit, les creux aussi. Pour qu'elle
+ * reste lisible avec quatre membres, la plage d'heures se resserre sur la
+ * semaine (de l'heure pleine avant le premier créneau à celle après le
+ * dernier), un créneau seul dans sa grappe prend toute la largeur, et un
+ * créneau trop étroit écrit son titre debout. Les créneaux de toute la journée
+ * (« Congés ») montent dans un bandeau au lieu d'occuper la grille.
  */
 @Component({
   selector: 'screen-planning',
@@ -42,10 +52,10 @@ interface DayView { dow: number; date: string; label: string; short: string; num
       <div class="head-row">
         <div class="members">
           @for (m of d().members; track m.id) {
-            <div class="pill" [class.active]="filtered(m.id)" (click)="store.toggleSchedWho(m.id)">
+            <button type="button" class="pill" [class.active]="filtered(m.id)" [attr.aria-pressed]="filtered(m.id)" (click)="store.toggleSchedWho(m.id)">
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="24" />
               <span>{{ m.name }}</span>
-            </div>
+            </button>
           }
         </div>
         @if (!store.narrow()) {
@@ -81,7 +91,7 @@ interface DayView { dow: number; date: string; label: string; short: string; num
 
       @if (orphans(); as n) {
         <div class="warn-bar">
-          <f-icon name="urgent" [size]="16" color="#C6492F" [width]="2.2" />
+          <f-icon name="urgent" [size]="16" color="var(--status-crit)" [width]="2.2" />
           <span>{{ orphanText() }}</span>
         </div>
       }
@@ -124,68 +134,84 @@ interface DayView { dow: number; date: string; label: string; short: string; num
             }
           </div>
         }
-        <div class="grid" [class.solo]="store.narrow()">
-          @for (v of shown(); track v.dow) {
-            <div class="day-card" [class.is-today]="v.today && !store.narrow()"
-                 [class.drop-target]="dragId() && overDow() === v.dow"
-                 (dragover)="onDragOver($event, v.dow)" (dragleave)="onDragLeave(v.dow)" (drop)="onDrop(v.dow)">
-              <div class="day-head">
-                <div class="day-name">{{ v.label }} {{ v.num }}@if (v.today) { <span class="tag">aujourd'hui</span> }</div>
-                <span class="day-count">{{ v.slots.length }}</span>
-                <!-- Bouton visible, pas d'appui long à deviner. -->
-                <button class="icon-btn" title="Copier cette journée" (click)="store.copyDay(v.dow)">
-                  <f-icon name="copy" [size]="15" color="var(--ink2)" [width]="2.2" />
-                </button>
-              </div>
-              <div class="slots">
-                @for (s of v.slots; track s.id) {
-                  <!-- Le trou qui précède ce créneau. Il rend au passage le sens
-                       des temps libres, que la vue en listes faisait perdre. -->
-                  @if (gapBefore(v, s); as g) {
-                    <div class="gap" (click)="store.newSlot(v.dow, g.start)" [title]="'Ajouter un créneau à ' + g.start">
-                      <span class="gap-line"></span>
-                      <span class="gap-txt"><f-icon name="plus" [size]="11" color="var(--ink3)" [width]="2.6" /> {{ g.start }} – {{ g.end }} libre</span>
-                      <span class="gap-line"></span>
-                    </div>
+        <!-- La grille horaire : une colonne par jour (un seul jour sur téléphone), la durée se lit, les creux aussi. -->
+        <div class="eg" [class.solo]="store.narrow()" [style.--days]="cols().length" [style.--hour-h.px]="hourH()">
+          <div class="eg-row eg-heads">
+            <div></div>
+            @for (c of cols(); track c.v.dow) {
+              <div class="eg-head" [class.today]="c.v.today">
+                <span class="eg-day">{{ c.v.short }}. {{ c.v.num }}</span>
+                <span class="eg-n">{{ c.v.slots.length }}</span>
+                @if (c.v.today) { <span class="eg-tag">aujourd'hui</span> }
+                <span class="eg-acts">
+                  @if (pastableOn(c.v.dow)) {
+                    <button class="eg-act paste" (click)="store.pasteOn(c.v.dow)"><f-icon name="download" [size]="13" color="currentColor" [width]="2.6" /> Coller</button>
+                  } @else {
+                    <button class="eg-act reveal" title="Copier cette journée" [attr.aria-label]="'Copier ' + dayName(c.v)" (click)="store.copyDay(c.v.dow)">
+                      <f-icon name="copy" [size]="13" color="currentColor" [width]="2.2" />
+                    </button>
                   }
-                  <!-- Un cours importé d'ÉcoleDirecte se lit, il ne s'édite ni ne se déplace :
-                       il n'est pas dans le document, il vient du serveur. -->
-                  <div class="slot" [attr.draggable]="!ed(s.id)" (dragstart)="onDragStart(s)" (dragend)="onDragEnd()"
-                       [class.dragging]="dragId() === s.id" [class.ed]="ed(s.id)" [class.cancelled]="cancelled(s.id)"
-                       [style.border-left]="'4px solid ' + color(s.k)" (click)="store.openItem('slot', s.id, { occ: v.date })">
-                    <div class="slot-top">
-                      <div class="slot-time">{{ s.end ? s.start + ' – ' + s.end : s.start }}</div>
-                      <f-who [badges]="badges(s)" />
-                    </div>
-                    <div class="slot-label">{{ s.label }}</div>
-                    <div class="slot-tags">
-                      <span class="slot-badge" [style.background]="tintOf(s.k)" [style.color]="color(s.k)">
-                        <span class="dot" [style.background]="color(s.k)"></span>{{ typeLabel(s.k) }}
-                      </span>
-                      <!-- Une période ou une exception doit se voir sur la ligne :
-                           sinon rien ne distingue « toute l'année » de « jusqu'en juin ». -->
-                      @if (ed(s.id)) { <span class="slot-ed">ÉcoleDirecte{{ cancelled(s.id) ? ' · annulé' : modified(s.id) ? ' · modifié' : '' }}</span> }
-                      @else if (noteOf(s); as note) { <span class="slot-note">{{ note }}</span> }
-                    </div>
-                  </div>
-                } @empty {
-                  <!-- « Rien ici » et « rien ici à cause du filtre » ne se disent
-                       pas pareil : le second doit proposer sa propre sortie. -->
-                  <div class="free">{{ store.ui().schedWho.length ? 'Rien pour ce filtre' : 'Libre' }}</div>
-                }
+                  <!-- Le clavier n'a pas de survol : l'ajout reste un bouton du jour. -->
+                  <button class="eg-act reveal" title="Ajouter un créneau" [attr.aria-label]="'Ajouter un créneau ' + dayName(c.v)" (click)="store.newSlot(c.v.dow)">
+                    <f-icon name="plus" [size]="13" color="currentColor" [width]="2.6" />
+                  </button>
+                </span>
               </div>
-              <div class="day-foot">
-                <div class="add" (click)="store.newSlot(v.dow)">
-                  <f-icon name="plus" [size]="13" color="var(--ink2)" [width]="2.6" /> Ajouter
+            }
+          </div>
+          <!-- Les créneaux de toute la journée (« Congés ») montent dans ce bandeau plutôt que d'occuper la grille. -->
+          @if (hasAllDay()) {
+            <div class="eg-row eg-allday">
+              <div class="eg-gl">journée</div>
+              @for (c of cols(); track c.v.dow) {
+                <div class="eg-ad">
+                  @for (s of c.allDay; track s.id) {
+                    <button class="eg-adbar" [style.background]="mix(color(s.k), 24)" [title]="slotTitle(s)" (click)="open(s, c.v)">
+                      <span class="eg-adl">{{ s.label }}</span><f-who [badges]="badges(s)" [size]="16" />
+                    </button>
+                  }
                 </div>
-                @if (pastableOn(v.dow)) {
-                  <div class="add paste" (click)="store.pasteOn(v.dow)">
-                    <f-icon name="download" [size]="13" color="var(--primary)" [width]="2.6" /> Coller
-                  </div>
-                }
-              </div>
+              }
             </div>
           }
+          <div class="eg-row eg-body">
+            <div class="eg-gutter" [style.height.px]="bodyH()">
+              @for (h of hours(); track h) { <span class="eg-hour" [style.top.px]="(h - range()[0]) * hourH()">{{ h }}h</span> }
+            </div>
+            @for (c of cols(); track c.v.dow) {
+              <div class="eg-col" [style.height.px]="bodyH()" [class.drop-target]="dragId() && overDow() === c.v.dow"
+                   (dragover)="onDragOver($event, c.v.dow)" (dragleave)="onDragLeave(c.v.dow)" (drop)="onDrop(c.v.dow)"
+                   (mousemove)="onMove($event, c)" (mouseleave)="ghost.set(null)">
+                @for (h of hours(); track h) { <div class="eg-line" [style.top.px]="(h - range()[0]) * hourH()"></div> }
+                @for (b of c.blocks; track b.s.id) {
+                  <!-- Un cours importé d'ÉcoleDirecte se lit, il ne s'édite ni ne se déplace : il vient du serveur. -->
+                  <div class="eg-slot" role="button" tabindex="0" [attr.draggable]="!ed(b.s.id)"
+                       [class.ed]="ed(b.s.id)" [class.cancelled]="cancelled(b.s.id)" [class.vert]="vertical(b)" [class.short]="b.height < 50" [class.dragging]="dragId() === b.s.id"
+                       [style.top.px]="b.top" [style.height.px]="b.height" [style.left.%]="b.left" [style.width.%]="b.width"
+                       [style.background]="slotBg(b.s)" [title]="slotTitle(b.s)"
+                       (dragstart)="onDragStart(b.s)" (dragend)="onDragEnd()" (click)="open(b.s, c.v)" (keydown.enter)="open(b.s, c.v)">
+                    <f-who class="eg-who" [badges]="badges(b.s)" [size]="16" />
+                    <span class="eg-t">{{ b.s.label }}</span>
+                    @if (!vertical(b) && b.height >= 34) {
+                      <span class="eg-time">{{ b.s.start }}@if (b.s.end && b.height > 60) { – {{ b.s.end }} }@if (cancelled(b.s.id)) { · annulé } @else if (modified(b.s.id)) { · modifié }</span>
+                    }
+                  </div>
+                }
+                <!-- Le creux survolé : une heure en pointillés, à l'heure pleine, pour y ajouter un créneau. -->
+                @if (ghost(); as g) {
+                  @if (g.dow === c.v.dow) {
+                    <button class="eg-ghost" [style.top.px]="(g.hour - range()[0]) * hourH()" (click)="store.newSlot(c.v.dow, hhmm(g.hour))">+ {{ hhmm(g.hour) }}</button>
+                  }
+                }
+                @if (c.v.today && nowTop() !== null) { <div class="eg-now" [style.top.px]="nowTop()" aria-hidden="true"></div> }
+                @if (!c.v.slots.length && store.ui().schedWho.length) { <div class="eg-free">Rien pour ce filtre</div> }
+              </div>
+            }
+          </div>
+        </div>
+        <div class="legend">
+          @for (t of legend(); track t.k) { <span><span class="lg-sq" [style.background]="t.color"></span>{{ t.label }}</span> }
+          @if (hasEd()) { <span><span class="lg-sq hatch"></span>cours ÉcoleDirecte annulé</span> }
         </div>
       }
     </div>
@@ -269,91 +295,104 @@ interface DayView { dow: number; date: string; label: string; short: string; num
   `,
   styles: [`
     .head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
-    .members { display: flex; flex-wrap: wrap; gap: 10px; }
-    .pill { display: flex; align-items: center; gap: 9px; padding: 8px 16px 8px 8px; border-radius: 14px; cursor: pointer; background: var(--surface); color: var(--ink); font-weight: 800; font-size: 14px; box-shadow: 0 8px 18px -14px rgba(90,60,40,.6); }
-    .pill.active { background: var(--primary); color: #fff; }
+    .members { display: flex; flex-wrap: wrap; gap: 6px; }
+    /* Le filtre par membre : l'avatar et le prénom, sans fond ; le membre retenu se pose sur la surface. */
+    .pill { display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; border-radius: 999px; cursor: pointer; border: 1px solid transparent; background: none; color: var(--ink2); font: inherit; font-weight: 800; font-size: 14px; }
+    .pill:hover { color: var(--ink); }
+    .pill.active { background: var(--surface); border-color: var(--line2); color: var(--ink); }
     .head-row .btn { flex: none; }
     :host-context(.shell.narrow) .head-row { margin-bottom: 12px; }
-    :host-context(.shell.narrow) .members { gap: 8px; }
-    :host-context(.shell.narrow) .pill { padding: 6px 12px 6px 6px; font-size: 13px; gap: 7px; }
+    :host-context(.shell.narrow) .pill { font-size: 13px; gap: 6px; }
 
     .filter-bar, .warn-bar, .clip-bar { display: flex; align-items: center; gap: 9px; padding: 10px 14px; border-radius: 13px; margin-bottom: 14px; font-size: 13px; font-weight: 700; flex-wrap: wrap; }
     .filter-bar { background: var(--soft2); color: var(--ink2); }
     .clip-bar { background: color-mix(in srgb, var(--primary) 12%, var(--surface)); color: var(--ink); }
     .clip-bar span { flex: 1; min-width: 0; }
     .clear.ghost { background: transparent; padding: 6px 8px; display: inline-flex; }
-    .warn-bar { background: color-mix(in srgb, #C6492F 12%, var(--surface)); color: #C6492F; }
+    .warn-bar { background: var(--status-crit-bg); color: var(--status-crit); }
     .filter-bar span, .warn-bar span { flex: 1; min-width: 0; }
     .clear { border: none; cursor: pointer; background: var(--surface); color: var(--ink); border-radius: 9px; padding: 6px 12px; font-size: 12px; font-weight: 800; font-family: inherit; }
 
-    .blank { background: var(--surface); border-radius: 18px; padding: 34px 20px; text-align: center; box-shadow: 0 12px 28px -22px rgba(90,60,40,.5); }
+    .blank { background: var(--surface); border-radius: 18px; padding: 34px 20px; text-align: center; border: 1px solid var(--line); }
     .blank-title { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink); }
     .blank-sub { font-size: 13.5px; font-weight: 600; color: var(--ink2); margin: 6px 0 18px; }
     .blank .btn { display: inline-flex; }
 
     .week-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
     .week-label { flex: 1; min-width: 0; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink); }
+    .icon-btn { border: none; background: var(--soft2); border-radius: 9px; padding: 5px 7px; cursor: pointer; display: inline-flex; line-height: 0; }
 
-    .day-strip { display: flex; gap: 6px; margin-bottom: 14px; }
-    .dbtn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px; border: none; border-radius: 13px; background: var(--surface); color: var(--ink2); font-family: inherit; cursor: pointer; }
-    .dbtn.on { background: var(--primary); color: #fff; }
-    .dbtn.today:not(.on) { box-shadow: inset 0 0 0 2px var(--primary); }
-    .dbtn-name { font-size: 12px; font-weight: 800; }
-    .dbtn-num { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
-    .dbtn-count { font-size: 10.5px; font-weight: 800; opacity: .8; }
+    /* Téléphone : le sélecteur de jour. Le jour choisi en encre pleine, aujourd'hui en orange. */
+    .day-strip { display: flex; gap: 4px; margin-bottom: 14px; }
+    .dbtn { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px; border: none; border-radius: 12px; background: none; color: var(--ink2); font-family: inherit; cursor: pointer; }
+    .dbtn.today { color: var(--primary); }
+    .dbtn.on { background: var(--ink); color: var(--surface); }
+    .dbtn-name { font-size: 11.5px; font-weight: 700; }
+    .dbtn-num { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: inherit; }
+    .dbtn:not(.on):not(.today) .dbtn-num { color: var(--ink); }
+    .dbtn-count { font-size: 10.5px; font-weight: 800; opacity: .75; }
     .dbtn-count.zero { opacity: .35; }
 
-    /* La semaine se lit d'un coup quand elle tient sur une ligne. En dessous,
-       quatre colonnes valent mieux qu'un remplissage automatique, qui donnait
-       huit colonnes pour sept jours sur un grand écran. */
-    .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; align-items: start; }
-    @media (max-width: 1470px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-    @media (max-width: 1000px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    .grid.solo, :host-context(.shell.narrow) .grid { grid-template-columns: 1fr; }
-    .grid.solo .day-card { min-height: 0; }
-
-    .day-card { background: var(--surface); border-radius: 18px; padding: 14px; box-shadow: 0 12px 28px -22px rgba(90,60,40,.5); min-height: 230px; display: flex; flex-direction: column; }
-    .day-card.is-today { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
-    .day-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-    .day-head .day-name { flex: 1; min-width: 0; }
-    .icon-btn { border: none; background: var(--soft2); border-radius: 9px; padding: 5px 7px; cursor: pointer; display: inline-flex; line-height: 0; }
-    .day-name { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink); }
-    .day-count { font-size: 11px; font-weight: 800; color: var(--ink3); }
-    .tag { font-family: var(--font-body); font-size: 10.5px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .04em; margin-left: 6px; }
-
-    .slots { display: flex; flex-direction: column; gap: 8px; flex: 1; }
-    .gap { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 1px 0; }
-    .gap-line { flex: 1; height: 1px; background: var(--soft2); }
-    .gap-txt { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 800; color: var(--ink3); white-space: nowrap; }
-    .gap:hover .gap-txt { color: var(--primary); }
-    .slot.dragging { opacity: .4; }
-    .day-card.drop-target { box-shadow: 0 12px 28px -22px rgba(90,60,40,.5), inset 0 0 0 2px var(--primary); }
-    .slot { background: var(--soft); border-radius: 12px; padding: 10px 11px; cursor: pointer; }
-    .slot.cancelled .slot-label, .slot.cancelled .slot-time { text-decoration: line-through; opacity: .6; }
-    .slot-ed { font-size: 10.5px; font-weight: 800; color: #4E93B8; background: #E5F0F4; border-radius: 6px; padding: 2px 6px; }
-    .slot-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    /* Si la place manque, c'est l'heure qui se coupe, jamais le marqueur
-       d'identité : savoir de qui il s'agit prime sur la minute exacte. */
-    .slot-top f-who { flex: none; }
-    .slot-time { font-family: var(--font-display); font-size: 12.5px; font-weight: 700; color: var(--ink2); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .slot-label { font-size: 13.5px; font-weight: 800; color: var(--ink); margin-top: 3px; line-height: 1.2; }
-    .slot-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 7px; }
-    .slot-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 8px; font-size: 10.5px; font-weight: 800; }
-    .slot-note { padding: 3px 8px; border-radius: 8px; background: var(--soft2); color: var(--ink2); font-size: 10.5px; font-weight: 800; }
-    .slot-badge .dot { width: 7px; height: 7px; border-radius: 2px; }
-    .free { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--ink3); font-size: 12px; font-weight: 700; padding: 16px 0; text-align: center; }
-
-    .day-foot { display: flex; gap: 6px; margin-top: 8px; }
-    .add { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 8px; border-radius: 11px; background: var(--soft2); color: var(--ink2); font-size: 12px; font-weight: 800; cursor: pointer; }
-    .add.paste { background: color-mix(in srgb, var(--primary) 14%, var(--surface)); color: var(--primary); }
+    /* ===== la grille horaire ===== */
+    .eg { --gutter: 38px; }
+    .eg-row { display: grid; grid-template-columns: var(--gutter) repeat(var(--days, 7), minmax(0, 1fr)); gap: 0 6px; }
+    .eg-heads { margin-bottom: 4px; }
+    .eg-head { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 4px 2px 6px; font-size: 13.5px; font-weight: 800; color: var(--ink); }
+    .eg-head.today .eg-day { color: var(--primary); }
+    .eg-day { white-space: nowrap; }
+    .eg-n { font-size: 12px; font-weight: 700; color: var(--ink3); }
+    .eg-tag { font-size: 10.5px; font-weight: 800; color: var(--primary); white-space: nowrap; }
+    .eg-acts { margin-left: auto; display: flex; gap: 2px; flex: none; }
+    .eg-act { display: inline-flex; align-items: center; gap: 4px; border: none; background: none; border-radius: 7px; padding: 4px 5px; color: var(--ink2); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .eg-act:hover { background: var(--soft2); color: var(--ink); }
+    .eg-act.paste { color: var(--primary); }
+    .reveal { opacity: 0; transition: opacity .15s ease; }
+    .eg-head:hover .reveal, .eg-head:focus-within .reveal { opacity: 1; }
+    @media (hover: none) { .reveal { opacity: 1; } }
+    .eg-allday { margin-bottom: 6px; }
+    .eg-gl, .eg-hour { font-size: 10.5px; font-weight: 800; color: var(--ink3); text-align: right; }
+    .eg-gl { padding: 6px 6px 0 0; }
+    .eg-ad { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .eg-adbar { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 24px; border: none; border-radius: 7px; padding: 3px 4px 3px 8px; font: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; text-align: left; }
+    .eg-adl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .eg-body { align-items: start; }
+    .eg-gutter { position: relative; }
+    .eg-hour { position: absolute; right: 6px; transform: translateY(-6px); }
+    .eg-col { position: relative; min-width: 0; box-shadow: inset 1px 0 0 var(--line); border-top: 1px solid var(--line2); }
+    .eg-col.drop-target { background: var(--soft); }
+    .eg-line { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); pointer-events: none; }
+    /* Un créneau : un aplat de la couleur de son type, sans bordure ; le titre à l'encre, l'heure en gris. */
+    .eg-slot { position: absolute; z-index: 1; box-sizing: border-box; border: 1px solid var(--surface); border-radius: 8px; padding: 4px 6px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; gap: 1px; }
+    .eg-slot:focus-visible { outline: 2px solid var(--ink3); }
+    .eg-slot[draggable="true"] { cursor: grab; }
+    .eg-slot.dragging { opacity: .4; }
+    .eg-who { position: absolute; top: 4px; right: 4px; }
+    .eg-t { font-size: 12.5px; font-weight: 800; color: var(--ink); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; padding-right: 18px; }
+    .eg-slot.short .eg-t { white-space: nowrap; }
+    .eg-time { font-size: 11px; font-weight: 700; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Trop étroit pour un titre couché : il se lit debout, l'avatar au-dessus. */
+    .eg-slot.vert { align-items: center; padding: 4px 2px; gap: 6px; }
+    .eg-slot.vert .eg-who { position: static; }
+    .eg-slot.vert .eg-t { writing-mode: vertical-rl; transform: rotate(180deg); padding: 0; white-space: nowrap; max-height: calc(100% - 26px); }
+    /* Un cours annulé : un aplat pâle hachuré de sa couleur, le titre barré. */
+    .eg-slot.cancelled .eg-t { color: var(--ink2); text-decoration: line-through; }
+    .eg-ghost { position: absolute; left: 3px; right: 3px; z-index: 0; height: calc(var(--hour-h) - 4px); margin-top: 2px; border: 1.5px dashed var(--line2); border-radius: 8px; background: none; color: var(--ink2); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+    .eg-ghost:hover { color: var(--ink); border-color: var(--ink3); }
+    .eg-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--primary); z-index: 2; pointer-events: none; }
+    .eg-now::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+    .eg-free { position: absolute; top: 12px; left: 0; right: 0; text-align: center; font-size: 12px; font-weight: 700; color: var(--ink3); pointer-events: none; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .legend > span { display: inline-flex; align-items: center; gap: 6px; }
+    .lg-sq { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+    .lg-sq.hatch { width: 12px; height: 12px; background: repeating-linear-gradient(135deg, var(--ink3) 0 1.5px, transparent 1.5px 4px); }
 
     .hint { font-size: 12px; font-weight: 700; color: var(--ink2); margin: 8px 0 16px; line-height: 1.35; }
     .del-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .del-opts .btn { flex: 1 1 auto; }
     .report { background: var(--soft); border-radius: 13px; padding: 12px 14px; margin: 14px 0 4px; font-size: 13px; font-weight: 700; color: var(--ink2); }
-    .report.destructive { background: color-mix(in srgb, #C6492F 10%, var(--surface)); }
+    .report.destructive { background: var(--status-crit-bg); }
     .report .line + .line { margin-top: 5px; }
-    .report .strong { color: #C6492F; font-weight: 800; }
+    .report .strong { color: var(--status-crit); font-weight: 800; }
 
     .seg.wrap { flex-wrap: wrap; margin-bottom: 6px; }
     .seg > button:disabled { opacity: .35; cursor: default; }
@@ -421,12 +460,107 @@ export class PlanningScreen {
   /** Vrai quand la semaine affichée est celle d'aujourd'hui. */
   readonly onThisWeek = computed(() => this.store.schedWeek().includes(this.store.todayStr()));
 
-  /** Ce que la vue dessine : le jour retenu sur téléphone, la semaine ailleurs. */
-  readonly shown = computed<DayView[]>(() => {
-    if (!this.store.narrow()) return this.week();
+  // ---- la grille horaire ---------------------------------------------------
+  readonly hourH = computed(() => this.store.narrow() ? HOUR_H_NARROW : HOUR_H);
+  /** Chaque jour de la semaine, ses créneaux de toute la journée à part, les autres posés par layoutTimed. */
+  private readonly placed = computed(() => this.week().map((v) => ({
+    v,
+    allDay: v.slots.filter((s) => isWholeDay(s.start, s.end)),
+    timed: layoutTimed(v.slots.filter((s) => !isWholeDay(s.start, s.end)).map((s) => ({ item: s, start: s.start, end: s.end })), { minDur: 30 }),
+  })));
+  /** La plage d'heures pleines de la semaine, bornée à 6 h – 22 h ; 7 h – 19 h sans créneau. Stable d'un jour à l'autre. */
+  readonly range = computed(() => hourRange(this.placed().flatMap((d) => d.timed)));
+  readonly hours = computed(() => { const [a, b] = this.range(); return Array.from({ length: b - a + 1 }, (_, i) => a + i); });
+  readonly bodyH = computed(() => (this.range()[1] - this.range()[0]) * this.hourH());
+  /** Ce que la grille dessine : le jour retenu sur téléphone, la semaine ailleurs. */
+  readonly cols = computed<DayCol[]>(() => {
+    const [from, to] = this.range();
+    const h = this.hourH();
+    const narrow = this.store.narrow();
     const dow = this.store.ui().schedDow;
-    return this.week().filter((v) => v.dow === dow);
+    // Un créneau hors de la plage (avant 6 h, après 22 h) reste visible, ramené au bord.
+    const block = (p: Placed<SchedSlot>): Block => {
+      const s0 = Math.min(Math.max(p.s, from * 60), to * 60 - 15);
+      const e0 = Math.max(Math.min(p.e, to * 60), s0 + 15);
+      return { s: p.item, top: ((s0 - from * 60) / 60) * h, height: Math.max(18, ((e0 - s0) / 60) * h), left: (p.col / p.cols) * 100, width: 100 / p.cols };
+    };
+    return this.placed().filter((d) => !narrow || d.v.dow === dow).map((d) => ({ v: d.v, allDay: d.allDay, blocks: d.timed.map(block) }));
   });
+  readonly hasAllDay = computed(() => this.cols().some((c) => c.allDay.length));
+  /** Les types présents, pour la légende ; le motif hachuré s'y ajoute dès qu'un cours ÉcoleDirecte est là. */
+  readonly legend = computed(() => { const ks = new Set(this.cols().flatMap((c) => c.v.slots.map((s) => s.k))); return SCHED_TYPES.filter((t) => ks.has(t.k)); });
+  readonly hasEd = computed(() => this.cols().some((c) => c.v.slots.some((s) => this.ed(s.id))));
+
+  /** La largeur d'une colonne, mesurée : un créneau trop étroit écrit son titre debout. */
+  private readonly hostW = signal(0);
+  private readonly host = inject(ElementRef<HTMLElement>);
+  vertical(b: Block): boolean {
+    const n = this.cols().length || 1;
+    const colW = (this.hostW() - GUTTER - COL_GAP * n) / n;
+    return colW > 0 && (colW * b.width) / 100 < 64 && b.height > 100;
+  }
+
+  /** L'heure qu'il est, en minutes, pour le trait « maintenant ». Rafraîchie chaque minute. */
+  private readonly nowMin = signal(this.readNow());
+  private readNow(): number { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+  readonly nowTop = computed(() => {
+    const [from, to] = this.range(); const m = this.nowMin();
+    return m < from * 60 || m > to * 60 ? null : ((m - from * 60) / 60) * this.hourH();
+  });
+
+  constructor() {
+    const destroy = inject(DestroyRef);
+    try {
+      const tick = setInterval(() => this.nowMin.set(this.readNow()), 60_000);
+      destroy.onDestroy(() => clearInterval(tick));
+    } catch { /* pas de minuterie : le trait reste à l'heure d'ouverture */ }
+    afterNextRender(() => {
+      const el = this.host.nativeElement as HTMLElement;
+      this.hostW.set(el.clientWidth);
+      if ('ResizeObserver' in window) {
+        const ro = new ResizeObserver((e) => this.hostW.set(e[0].contentRect.width));
+        ro.observe(el);
+        destroy.onDestroy(() => ro.disconnect());
+      }
+    });
+  }
+
+  /**
+   * Le creux survolé, à l'heure pleine : un fantôme d'une heure y propose
+   * « + 11:00 ». Seulement sur une heure libre de la colonne, jamais pendant un
+   * glisser. Au clavier, le « + » de l'en-tête du jour fait la même chose.
+   */
+  readonly ghost = signal<{ dow: number; hour: number } | null>(null);
+  onMove(e: MouseEvent, c: DayCol): void {
+    const t = e.target as HTMLElement;
+    if (t.closest('.eg-ghost')) return;
+    const col = e.currentTarget as HTMLElement;
+    const [from, to] = this.range();
+    const h = this.hourH();
+    const hour = from + Math.floor((e.clientY - col.getBoundingClientRect().top) / h);
+    const top = (hour - from) * h;
+    const free = !this.dragId() && !t.closest('.eg-slot') && hour >= from && hour < to
+      && !c.blocks.some((b) => b.top < top + h && b.top + b.height > top);
+    const cur = this.ghost();
+    if (!free) { if (cur) this.ghost.set(null); return; }
+    if (cur?.dow !== c.v.dow || cur.hour !== hour) this.ghost.set({ dow: c.v.dow, hour });
+  }
+  hhmm(h: number): string { return String(h).padStart(2, '0') + ':00'; }
+
+  open(s: SchedSlot, v: DayView): void { this.store.openItem('slot', s.id, { occ: v.date }); }
+  /** « le mercredi 14 », pour les libellés des boutons du jour. */
+  dayName(v: DayView): string { return 'le ' + v.label.toLowerCase() + ' ' + v.num; }
+  mix(color: string, pct: number): string { return `color-mix(in srgb, ${color} ${pct}%, var(--surface))`; }
+  /** L'aplat d'un créneau ; un cours annulé est plus pâle et hachuré de sa couleur. */
+  slotBg(s: SchedSlot): string {
+    const c = this.color(s.k);
+    return this.cancelled(s.id) ? `repeating-linear-gradient(135deg, ${this.mix(c, 34)} 0 2px, transparent 2px 7px), ${this.mix(c, 8)}` : this.mix(c, 24);
+  }
+  /** Le survol dit tout ce que la carte ne dit plus : l'heure, le type, la période, « dehors ». */
+  slotTitle(s: SchedSlot): string {
+    const ed = this.ed(s.id) ? 'ÉcoleDirecte' + (this.cancelled(s.id) ? ', annulé' : this.modified(s.id) ? ', modifié' : '') : '';
+    return [s.label, s.end ? s.start + ' – ' + s.end : s.start, this.typeLabel(s.k), ed || this.noteOf(s)].filter(Boolean).join(' · ');
+  }
 
   readonly filterNames = computed(() => {
     const who = this.store.ui().schedWho;
@@ -495,12 +629,6 @@ export class PlanningScreen {
     this.store.moveSlot(slot.id, dow, 'all');
   }
 
-  /** Le temps libre qui précède un créneau, s'il y en a. */
-  gapBefore(v: DayView, s: SchedSlot): FreeGap | null {
-    return this.gapsFor(v).find((g) => g.end === s.start) || null;
-  }
-  private gapsFor(v: DayView): FreeGap[] { return gapsOf(v.slots); }
-
   /** Un jour accepte le collage tant qu'il n'est pas celui qu'on a copié. */
   pastableOn(dow: number): boolean {
     const clip = this.store.ui().schedClip;
@@ -554,9 +682,4 @@ export class PlanningScreen {
 
   typeLabel(k: string): string { return SCHED_TYPES.find((t) => t.k === k)?.label || k; }
   color(k: string): string { return SCHED_COLORS[k] || 'var(--ink3)'; }
-
-  tintOf(k: string): string {
-    return `color-mix(in srgb, ${this.color(k)} 14%, var(--surface))`;
-  }
-
 }
