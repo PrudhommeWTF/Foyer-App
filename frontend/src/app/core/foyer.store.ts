@@ -2369,7 +2369,11 @@ export class FoyerStore {
   saveMeal(key: string, value: MealValue): ItemResult {
     if (!value.items.length) { this.toast('Choisis au moins un plat'); return { kind: 'invalid' }; }
     if (sameMeal(this._data()?.meals[key], value)) return { kind: 'done' };
-    this.mutate((d) => { d.meals[key] = value; });
+    // Qui a prévu ce créneau, pour le fil d'activité. Reposés à chaque changement :
+    // planifier un repas est le geste, chaque fois.
+    const by = this.me()?.id ?? null;
+    const at = new Date().toISOString();
+    this.mutate((d) => { d.meals[key] = { ...value, at, by }; });
     this.toast(value.items.length > 1 ? value.items.length + ' plats enregistrés' : 'Repas enregistré');
     return { kind: 'done' };
   }
@@ -2789,10 +2793,14 @@ export class FoyerStore {
   saveRecipe(id: string, data: RecipeData, isNew: boolean): ItemResult {
     const cur = isNew ? undefined : this._data()?.recipes.find((r) => r.id === id);
     if (cur && !recipeChanges(cur, data)) return { kind: 'done' };
+    // L'ajout au carnet est le geste journalisé : on pose at/by à la création,
+    // une modification garde l'auteur et la date d'origine (data n'en porte pas).
+    const by = this.me()?.id ?? null;
+    const at = new Date().toISOString();
     this.mutate((d) => {
       const i = d.recipes.findIndex((r) => r.id === id);
       if (i >= 0) d.recipes[i] = { ...d.recipes[i], ...data };
-      else d.recipes.unshift({ id, ...data });
+      else d.recipes.unshift({ id, ...data, at, by });
     });
     this.toast(cur ? 'Recette modifiée' : 'Recette ajoutée au carnet');
     return { kind: 'done' };

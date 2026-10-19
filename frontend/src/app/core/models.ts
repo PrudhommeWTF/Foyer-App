@@ -338,6 +338,9 @@ export interface MealValue {
   pax?: number | null;
   /** Membres exceptionnellement absents de ce créneau, en dérogation à la semaine type. */
   away?: string[];
+  /** Qui a prévu ce créneau et quand, pour le fil d'activité. Posés à l'enregistrement. */
+  at?: string;
+  by?: string | null;
 }
 // `photoId` désigne un fichier servi par /api/files : les octets ne sont plus
 // dans le document, qui repartait en entier à chaque enregistrement.
@@ -364,6 +367,9 @@ export interface Recipe {
    */
   rating?: number | null;
   ingr: string[]; steps: string[];
+  /** Qui a ajouté la recette au carnet et quand, pour le fil d'activité. Posés à la création. */
+  at?: string;
+  by?: string | null;
 }
 /**
  * Un créneau de la semaine type.

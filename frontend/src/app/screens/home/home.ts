@@ -9,6 +9,7 @@ import { ReorderDirective } from '../../shared/reorder';
 import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
+import { splitMealKey } from '../../core/meals';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 import { gesteGroup, nextLabel, stockLow } from '../../core/entretien';
@@ -904,12 +905,14 @@ export class HomeScreen {
    * « a programmé l’évènement » → « a programmé »: on a one-line row the item's
    * name matters more than its type, which the coloured dot already gives.
    */
-  verbShort(verb: string): string { return verb.replace(/ (la tâche|le devoir|l’évènement|l’article)$/, ''); }
+  verbShort(verb: string): string { return verb.replace(/ (la tâche|le devoir|l’évènement|l’article|la recette)$/, ''); }
 
   /** Clic sur le nom d'une entrée du fil : ouvre la fiche de l'élément concerné. */
   openActivity(a: ActivityEntry): void {
     if (a.kind === 'task') this.store.openItem('task', a.ref);
     else if (a.kind === 'event') this.store.openItem('event', a.ref);
+    else if (a.kind === 'recipe') this.store.openItem('recipe', a.ref);
+    else if (a.kind === 'meal') { const { dateStr, slot } = splitMealKey(a.ref); this.store.openMeal(dateStr, slot); }
     else this.store.openShoppingList(a.ref);
   }
 
