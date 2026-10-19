@@ -45,7 +45,7 @@ type Scope = 'one' | 'all';
         <f-icon name="plus" [size]="14" color="var(--ink2)" [width]="2.6" /> {{ opener() }}
       </button>
     } @else {
-      <div class="composer" [class.compact]="!!opener()">
+      <div class="composer" [class.compact]="!!opener()" [class.flat]="!embedded()">
         <div class="row">
           <input #field class="input" [placeholder]="task() ? 'Intitulé' : 'Ajouter une tâche…'" enterkeyhint="done"
                  autocomplete="off" autocapitalize="sentences"
@@ -256,6 +256,9 @@ type Scope = 'one' | 'all';
       border-radius: 12px; padding: 9px; font-size: 12.5px; font-weight: 800; color: var(--ink2);
     }
     .composer.compact { margin-top: 12px; }
+    /* Dans l'écran, une surface registre : un filet, pas d'ombre. Dans la fiche, le champ reste celui des formulaires. */
+    .flat .row .input { border-width: 1px; }
+    .flat .go { box-shadow: none; }
     .row { display: flex; gap: 10px; }
     .row .input { flex: 1; min-width: 0; }
     .compact .row .input { padding: 9px 12px; font-size: 13.5px; }
