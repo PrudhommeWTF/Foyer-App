@@ -58,7 +58,8 @@
   /* Shadows */
   --sh-card: 0 12px 28px -20px rgba(90, 60, 40, .5);
   --sh-float: 0 6px 16px -14px rgba(90, 60, 40, .6);
-  --sh-primary: 0 12px 22px -10px rgba(229, 107, 78, .6);
+  /* Primary button: a plain drop, no orange glow. */
+  --sh-primary: 0 2px 6px -2px rgba(0, 0, 0, .25);
   --sh-modal: 0 40px 80px -20px rgba(0, 0, 0, .5);
   --sh-tabbar: 0 -8px 24px -18px rgba(30, 24, 20, .4);
 
@@ -109,6 +110,8 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Hours, dates and counters line up in columns. */
+  font-variant-numeric: tabular-nums;
 }
 
 a { color: var(--primary); text-decoration: none; }
@@ -253,6 +256,65 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
   transition: all .12s ease;
 }
 .tick.on { background: var(--sage); border-color: var(--sage); }
+
+/* ============================================================
+   Registre : one surface per section, rows split by a hairline
+   that starts after the check. No per-row shadow, no left stripe.
+   ============================================================ */
+.reg-sec { margin-bottom: 26px; }
+.reg-head { display: flex; align-items: center; gap: 8px; min-height: 26px; margin: 0 0 8px 2px; }
+.reg-title { font-family: var(--font-display); font-size: 16.5px; font-weight: 700; color: var(--ink); letter-spacing: -.005em; }
+.reg-n { font-size: 13.5px; font-weight: 800; color: var(--ink3); }
+.reg-head.late .reg-title { color: var(--status-crit); }
+/* A folding head: chevron, title and counter in one button. */
+.reg-fold { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 2px 0; font: inherit; cursor: pointer; color: var(--ink2); }
+.reg-fold.quiet .reg-title { font-family: var(--font-body); font-size: 14px; font-weight: 800; color: var(--ink2); letter-spacing: 0; }
+.reg-act { margin-left: auto; border: none; background: none; padding: 4px 0; font: inherit; font-size: 13px; font-weight: 800; color: var(--ink2); cursor: pointer; white-space: nowrap; }
+.reg-act:hover { color: var(--ink); }
+.reg-box { background: var(--surface); border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+:root.dark .reg-box { border-color: transparent; }
+.reg-box > * { position: relative; }
+.reg-box > * + *::before, .reg-sub::before { content: ''; position: absolute; z-index: 1; top: 0; left: 52px; right: 0; height: 1px; background: var(--line); pointer-events: none; }
+.reg-row { position: relative; display: flex; align-items: center; gap: 14px; padding: 11px 16px; min-height: 58px; background: var(--surface); cursor: pointer; }
+.reg-row:hover { background: var(--soft); }
+.reg-row.top { align-items: flex-start; padding-top: 14px; padding-bottom: 14px; }
+.reg-main { flex: 1; min-width: 0; }
+.reg-text { font-size: 15px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.reg-row.done .reg-text, .reg-text.strike { color: var(--ink3); text-decoration: line-through; }
+.reg-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+.reg-meta > * { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.reg-meta .late { color: var(--status-crit); }
+.reg-meta.dim { color: var(--ink3); }
+/* The one place a category colour lands, when it is not on the check. */
+.reg-sq { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.reg-when { width: 96px; flex: none; text-align: right; font-size: 13px; font-weight: 800; color: var(--ink); line-height: 1.3; }
+.reg-when small { display: block; font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+.reg-when.late, .reg-when.late small { color: var(--status-crit); }
+.reg-when.late small { opacity: .8; }
+.reg-link { display: inline-flex; align-items: center; gap: 4px; border: none; border-bottom: 1px dotted var(--line2); background: none; padding: 0; font: inherit; font-weight: 800; color: var(--ink2); cursor: pointer; }
+.reg-link.sage { color: var(--sage); }
+:root.dark .reg-link.sage { color: var(--status-good); }
+.reg-mini { flex: none; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line2); background: var(--surface); border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 12px; font-weight: 800; color: var(--ink2); cursor: pointer; white-space: nowrap; }
+.reg-mini.warn { color: var(--status-crit); border-color: color-mix(in srgb, var(--status-crit) 45%, transparent); }
+/* Sub-rows sit in their parent's surface, indented past the check. */
+.reg-sub { position: relative; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 16px 6px 54px; }
+.reg-sub::before { left: 54px; }
+/* Reorder handle in the left margin, shown on hover or focus. */
+.reg-grip { position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 2; border: none; background: none; padding: 4px 0; cursor: grab; touch-action: none; display: flex; border-radius: 6px; }
+.reg-grip:active { cursor: grabbing; }
+.reg-grip:focus-visible { outline: 2px solid var(--ink3); }
+/* Secondary actions: revealed on hover, always reachable by keyboard, always shown on touch. */
+.reveal { opacity: 0; transition: opacity .15s ease; }
+.reg-row:hover .reveal, .reg-sub:hover .reveal, .reg-row:focus-within .reveal, .reg-sub:focus-within .reveal, .reveal:focus-visible { opacity: 1; }
+@media (hover: none) {
+  .reveal { opacity: 1; }
+  .reg-grip { position: static; transform: none; margin: 0 -8px 0 -6px; }
+}
+@media (max-width: 860px) {
+  .reg-row { padding: 10px 12px; gap: 12px; }
+  .reg-box > * + *::before, .reg-sub::before { left: 48px; }
+  .reg-sub { padding-left: 48px; padding-right: 12px; }
+}
 
 /* Avatar */
 .avatar {

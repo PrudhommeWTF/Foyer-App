@@ -24,7 +24,7 @@
 //     décide dans le jour même, dans une checklist, dans les tâches sans date et
 //     sous un parent. Sur ce qui s'étale (« En retard », « À venir »), la date
 //     passe devant : elle est l'information utile, l'ordre manuel n'y départage.
-import { addDaysIso, normText, parseDay, weekdayOf } from './helpers';
+import { addDaysIso, fmtShortDay, normText, parseDay, weekdayOf } from './helpers';
 import { ListKind, Remind, TaskItem, TaskList } from './models';
 import { byOrd } from './task-order';
 import { windowEnd } from './recurrence';
@@ -304,6 +304,24 @@ export function quickDates(today: string): { label: string; date: string }[] {
 }
 
 const JOURS = ['', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+
+const SHORT_DAYS = ['', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'];
+/**
+ * L'échéance d'une ligne en deux temps, pour la colonne de droite :
+ * « Demain », « jeu. 22 », « 26 oct. », et dessous le relatif quand il apporte
+ * quelque chose (« il y a 16 j », « dans 9 j »). Une échéance souple (grace)
+ * se dit approchée : « ≈ 26 oct. ».
+ */
+export function whenLabel(due: string, today: string, grace = 0): { day: string; rel: string } {
+  const n = Math.round((parseDay(due).getTime() - parseDay(today).getTime()) / 86400000);
+  const short = fmtShortDay(due, today);
+  if (grace > 0) return { day: '≈ ' + short, rel: n < 0 ? `il y a ${-n} j` : n > 1 ? `dans ${n} j` : '' };
+  if (n === 0) return { day: 'Aujourd’hui', rel: '' };
+  if (n === 1) return { day: 'Demain', rel: '' };
+  if (n === -1) return { day: 'Hier', rel: '' };
+  if (n > 1 && n < 7) return { day: `${SHORT_DAYS[weekdayOf(due)]} ${Number(due.slice(8, 10))}`, rel: '' };
+  return { day: short, rel: n < 0 ? `il y a ${-n} j` : `dans ${n} j` };
+}
 
 /**
  * L'échéance telle qu'on la lit : « Aujourd’hui », « Demain », « Hier », le jour

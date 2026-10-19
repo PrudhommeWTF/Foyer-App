@@ -27,8 +27,10 @@ Le segment **Par pièce** range les mêmes gestes par pièce (« Sans pièce » 
 dernier). Chaque ligne dit le geste, son détail, la pièce, la fréquence en
 clair (« toutes les 4 semaines »), « Fait le … par … » ou « Pas encore noté »,
 la prochaine date (« Reprend le 01/05/2027 » hors saison, « Entre le 01/09 et le
-31/10 » puis « À faire d'ici le 31/10 » pour une fenêtre) ou la pause, le stock, et porte **Fait aujourd'hui** : un
-tap, annulable quelques secondes (le bouton devient « ✓ Fait aujourd'hui »).
+31/10 » puis « À faire d'ici le 31/10 » pour une fenêtre) ou la pause, le stock, et porte **Fait** : un
+tap, annulable quelques secondes (le bouton devient « ✓ Fait aujourd'hui »). La case ronde
+devant le geste fait la même chose ; son anneau se remplit d'une réalisation à l'autre
+(vide juste après « Fait », plein à l'échéance, rouge en retard).
 Le menu « … » propose **Fait un autre jour** (date, et qui : un membre ou « le
 foyer »), **Modifier**, **Mettre en pause** jusqu'à une date (ou **Reprendre
 maintenant**), **Archiver**, et la fiche avec l'historique complet.

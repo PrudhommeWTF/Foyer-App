@@ -5,7 +5,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskList } from './models';
-import { RELEGATION_DAYS, REORDERABLE, assignedTo, categories, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, quickDates, reorder, subProgress, subtasksOf, suggestTexts, todayTasks, visibleLists } from './tasks';
+import { RELEGATION_DAYS, REORDERABLE, assignedTo, categories, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, quickDates, reorder, subProgress, subtasksOf, suggestTexts, todayTasks, visibleLists, whenLabel } from './tasks';
 
 const TODAY = '2026-09-02';
 
@@ -315,4 +315,15 @@ test('mode manuel sans aucun retard : une seule liste, sans titre', () => {
   assert.deepEqual(g.map((x) => x.key), ['manuel']);
   assert.equal(g[0].label, '', 'pas de titre quand c’est l’unique groupe');
   assert.deepEqual(g[0].lines.map((l) => l.task.id), ['a', 'b']);
+});
+
+test('whenLabel : la colonne d’échéance, le relatif seulement quand il apporte', () => {
+  const T = '2026-10-17'; // un samedi
+  assert.deepEqual(whenLabel(T, T), { day: 'Aujourd’hui', rel: '' });
+  assert.deepEqual(whenLabel('2026-10-18', T), { day: 'Demain', rel: '' });
+  assert.deepEqual(whenLabel('2026-10-16', T), { day: 'Hier', rel: '' });
+  assert.deepEqual(whenLabel('2026-10-22', T), { day: 'jeu. 22', rel: '' });
+  assert.deepEqual(whenLabel('2026-10-26', T), { day: '26 oct.', rel: 'dans 9 j' });
+  assert.deepEqual(whenLabel('2026-10-01', T), { day: '1 oct.', rel: 'il y a 16 j' });
+  assert.deepEqual(whenLabel('2026-10-26', T, 3), { day: '≈ 26 oct.', rel: 'dans 9 j' });
 });

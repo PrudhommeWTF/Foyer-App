@@ -5,7 +5,11 @@ import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 import { TaskItem } from '../../core/models';
-import { GROUP_ORDER, GesteGroup, freqLabel, gesteGroup, groupLabel, lastDoneLabel, nextLabel, stockLabel, stockLow } from '../../core/entretien';
+import { GROUP_ORDER, GesteGroup, freqLabel, gesteGroup, groupLabel, lastDoneLabel, nextLabel, stockLabel, stockLeftLabel, stockLow } from '../../core/entretien';
+import { occurrenceProgress } from '../../core/recurrence';
+import { whenLabel } from '../../core/tasks';
+import { fmtShortDay } from '../../core/helpers';
+import { RingCheckComponent } from '../../shared/ring-check';
 import { lastDoneDay } from '../../core/task-ops';
 import { GesteForm } from './geste-form';
 import { EquipementsStore } from '../../core/equipements.store';
@@ -25,7 +29,7 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
   selector: 'screen-entretien',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, FormsModule, IconComponent, ModalComponent, GesteForm],
+  imports: [NgTemplateOutlet, FormsModule, IconComponent, ModalComponent, RingCheckComponent, GesteForm],
   template: `
     <div class="screen-enter">
       <div class="head-row">
@@ -49,20 +53,30 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
       }
 
       @for (s of sections(); track s.key) {
-        <div class="sec-title" [class.late]="s.late">{{ s.title }} · {{ s.gestes.length }}</div>
-        @for (t of s.gestes; track t.id) {
-          <ng-container [ngTemplateOutlet]="ligne" [ngTemplateOutletContext]="{ $implicit: t }" />
-        }
+        <section class="reg-sec">
+          <div class="reg-head" [class.late]="s.late"><h3 class="reg-title">{{ s.title }}</h3><span class="reg-n">{{ s.gestes.length }}</span></div>
+          <div class="reg-box">
+            @for (t of s.gestes; track t.id) {
+              <ng-container [ngTemplateOutlet]="ligne" [ngTemplateOutletContext]="{ $implicit: t }" />
+            }
+          </div>
+        </section>
       }
 
       @if (archives().length) {
-        <button class="arch-toggle" (click)="voirArchives.set(!voirArchives())">
-          <f-icon [name]="voirArchives() ? 'chevronDown' : 'chevronRight'" [size]="15" color="var(--ink3)" [width]="2.4" />
-          {{ groupLabel('archive') }} · {{ archives().length }}
-        </button>
-        @if (voirArchives()) {
-          @for (t of archives(); track t.id) { <ng-container [ngTemplateOutlet]="ligne" [ngTemplateOutletContext]="{ $implicit: t }" /> }
-        }
+        <section class="reg-sec">
+          <div class="reg-head">
+            <button class="reg-fold quiet" (click)="voirArchives.set(!voirArchives())" [attr.aria-expanded]="voirArchives()">
+              <f-icon [name]="voirArchives() ? 'chevronDown' : 'chevronRight'" [size]="15" color="var(--ink2)" [width]="2.4" />
+              <span class="reg-title">{{ groupLabel('archive') }}</span><span class="reg-n">{{ archives().length }}</span>
+            </button>
+          </div>
+          @if (voirArchives()) {
+            <div class="reg-box">
+              @for (t of archives(); track t.id) { <ng-container [ngTemplateOutlet]="ligne" [ngTemplateOutletContext]="{ $implicit: t }" /> }
+            </div>
+          }
+        </section>
       }
 
       @if (!store.gestes().length) {
@@ -75,42 +89,52 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     </div>
 
     <ng-template #ligne let-t>
-      <div class="geste" [class.arch]="t.done">
-        <button class="g-body" (click)="store.openItem('task', t.id)">
-          <span class="g-title">{{ t.text }}</span>
-          @if (t.maintenance?.howto) { <span class="g-howto">{{ t.maintenance.howto }}</span> }
-          <span class="g-meta">
-            @if (store.roomName(t.maintenance?.roomId); as r) { <span class="room"><f-icon name="home" [size]="12" color="var(--ink3)" [width]="2.4" /> {{ r }}</span> }
-            @if (t.rec) { <span>{{ freq(t) }}</span> }
+      @let late = isLate(t);
+      @let w = whenOf(t);
+      <div class="reg-row top geste" [class.arch]="t.done" (click)="store.openItem('task', t.id)">
+        <!-- La case est le geste : « Fait aujourd'hui ». L'anneau se remplit d'une fois à l'autre. -->
+        <f-ring-check [color]="late ? 'var(--status-crit)' : 'var(--sage)'" [progress]="ringOf(t)" [late]="late"
+                      [disabled]="t.done || doneToday(t)" [label]="t.text" (toggle)="store.toggleTask(t.id)" />
+        <div class="reg-main">
+          <div class="reg-text">{{ t.text }}</div>
+          @if (t.maintenance?.howto; as h) { <div class="g-howto" [title]="h">{{ h }}</div> }
+          <div class="reg-meta">
+            <!-- Sur téléphone, la date quitte sa colonne et passe en tête. -->
+            @if (w && store.narrow()) { <span [class.late]="late">{{ w.day }}{{ w.rel ? ' · ' + w.rel : '' }}</span> }
+            @if (store.roomName(t.maintenance?.roomId); as r) { <span><f-icon name="home" [size]="12" color="var(--ink2)" [width]="2.4" /> {{ r }}</span> }
+            @if (t.rec) { <span><f-icon name="refresh" [size]="12" color="var(--ink2)" [width]="2.4" /> {{ freq(t) }}</span> }
+            @if (nextNote(t); as n) { <span>{{ n }}</span> }
             @if (coutAn(t); as c) { <span>{{ c }}</span> }
-          </span>
-          @if (eqpName(t); as e) {
-            <span class="eqp" role="link" (click)="$event.stopPropagation(); store.openItem('equipment', '' + t.maintenance?.equipmentId)">{{ e }}</span>
-          }
-          <span class="g-last" [class.never]="!t.history?.length">{{ last(t) || 'Pas encore noté' }}</span>
-          @if (next(t); as n) { <span class="g-next" [class.late]="isLate(t)">{{ n }}</span> }
-          @if (t.maintenance?.stock; as st) { <span class="g-stock" [class.low]="low(st)">{{ stock(st) }}</span> }
-        </button>
-        @if (t.maintenance?.stock; as st) {
-          <!-- Le stock : racheter se note ici ; sous le seuil, l'article part aux courses d'un tap. -->
-          <div class="g-stock-act">
-            <button class="mini" (click)="ouvrirStock(t.id)">J'en ai racheté</button>
-            @if (low(st) && !t.done) {
-              @if (store.onShoppingList(st.article)) { <span class="mini ok"><f-icon name="check" [size]="12" color="var(--sage)" [width]="3" /> Dans les courses</span> }
-              @else { <button class="mini warn" (click)="store.gesteToShopping(t.id)">Ajouter aux courses</button> }
+            @if (eqpName(t); as e) {
+              <button class="reg-link" (click)="$event.stopPropagation(); store.openItem('equipment', '' + t.maintenance?.equipmentId)">{{ e }} ›</button>
             }
           </div>
+          <div class="reg-meta dim"><span [class.never]="!t.history?.length">{{ last(t) || 'Pas encore noté' }}</span></div>
+          @if (t.maintenance?.stock; as st) {
+            <!-- Le stock : racheter se note ici ; sous le seuil, l'article part aux courses d'un tap. -->
+            <div class="g-stock" [class.low]="low(st)">
+              <span [title]="stock(st)">{{ stockLeft(st) }}</span>
+              <button class="reg-mini" (click)="$event.stopPropagation(); ouvrirStock(t.id)">J'en ai racheté</button>
+              @if (low(st) && !t.done) {
+                @if (store.onShoppingList(st.article)) { <span class="ok"><f-icon name="check" [size]="12" color="currentColor" [width]="3" /> Dans les courses</span> }
+                @else { <button class="reg-mini warn" (click)="$event.stopPropagation(); store.gesteToShopping(t.id)">Ajouter aux courses</button> }
+              }
+            </div>
+          }
+        </div>
+        @if (w && !store.narrow()) {
+          <div class="reg-when" [class.late]="late">{{ w.day }}@if (w.rel) { <small>{{ w.rel }}</small> }</div>
         }
         <div class="g-act">
           @if (t.done) {
-            <button class="fait soft" (click)="store.archiveGeste(t.id, false)">Réactiver</button>
+            <button class="fait" (click)="$event.stopPropagation(); store.archiveGeste(t.id, false)">Réactiver</button>
           } @else if (doneToday(t)) {
-            <span class="fait ok"><f-icon name="check" [size]="14" color="var(--sage)" [width]="3" /> Fait aujourd'hui</span>
+            <span class="ok"><f-icon name="check" [size]="13" color="currentColor" [width]="3" /> Fait aujourd'hui</span>
           } @else {
-            <button class="fait" (click)="store.toggleTask(t.id)">Fait aujourd'hui</button>
+            <button class="fait" (click)="$event.stopPropagation(); store.toggleTask(t.id)"><f-icon name="check" [size]="13" color="currentColor" [width]="3" /> Fait</button>
           }
-          <button class="more" (click)="ouvrirMenu(t.id)" [attr.aria-label]="'Autres actions pour ' + t.text">
-            <f-icon name="more" [size]="20" color="var(--ink2)" [width]="3.2" />
+          <button class="more" (click)="$event.stopPropagation(); ouvrirMenu(t.id)" [attr.aria-label]="'Autres actions pour ' + t.text">
+            <f-icon name="more" [size]="18" color="var(--ink2)" [width]="3.2" />
           </button>
         </div>
       </div>
@@ -178,36 +202,24 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     .lien { border: none; background: none; padding: 0; font: inherit; font-weight: 800; color: var(--primary); cursor: pointer; text-decoration: underline; }
     .new-btn { flex: none; display: inline-flex; align-items: center; gap: 7px; }
     .tri { margin-bottom: 6px; }
-    .sec-title { font-size: 12px; font-weight: 800; color: var(--ink2); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 9px; }
-    .sec-title.late { color: #C6492F; }
-
-    .geste { display: flex; flex-direction: column; gap: 10px; background: var(--surface); border-radius: var(--r-card); padding: 12px 12px 12px 16px; box-shadow: 0 12px 28px -22px rgba(90,60,40,.55); margin-bottom: 10px; border-left: 4px solid var(--sage); }
-    .geste.arch { opacity: .7; border-left-color: var(--line2); }
-    .g-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; border: none; background: none; padding: 0; text-align: left; font: inherit; cursor: pointer; }
-    .g-title { font-size: 15.5px; font-weight: 800; color: var(--ink); overflow-wrap: anywhere; }
-    .g-howto { font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.4; }
-    .g-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; font-weight: 700; color: var(--ink3); }
-    .room { display: inline-flex; align-items: center; gap: 4px; }
-    .g-last { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
-    .g-last.never { color: var(--ink3); font-style: italic; }
-    .g-next { font-size: 12.5px; font-weight: 800; color: var(--ink); }
-    .g-next.late { color: #C6492F; }
-    .g-stock { font-size: 12px; font-weight: 700; color: var(--ink2); }
-    .g-stock.low { color: #9A6A12; }
-    .eqp { align-self: flex-start; font-size: 12px; font-weight: 800; color: #4E93B8; background: #E5F0F4; border-radius: 7px; padding: 2px 8px; cursor: pointer; }
-    .g-stock-act { display: flex; flex-wrap: wrap; gap: 6px; }
-    .mini { display: inline-flex; align-items: center; gap: 4px; border: none; border-radius: 10px; padding: 8px 11px; min-height: 36px; font: inherit; font-size: 12.5px; font-weight: 800; background: var(--soft); color: var(--ink2); cursor: pointer; }
-    .mini.warn { background: #FDF0DA; color: #9A6A12; }
-    .mini.ok { background: #EDF2EB; color: var(--sage); cursor: default; }
+    /* Une ligne de geste : la case, le texte et ses méta, la date, puis « Fait » et « ⋯ ». */
+    .geste.arch .reg-text { color: var(--ink2); }
+    .g-howto { font-size: 13px; font-weight: 600; color: var(--ink2); margin: 2px 0 3px; max-width: 56ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .never { font-style: italic; }
+    .g-stock { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; font-size: 12.5px; font-weight: 800; color: var(--ink2); }
+    .g-stock.low { color: var(--status-crit); }
+    .ok { display: inline-flex; align-items: center; gap: 4px; padding: 6px 4px; font-size: 12.5px; font-weight: 800; color: var(--status-good); white-space: nowrap; }
+    .g-stock .ok { padding: 0; }
     .lab.sp { margin-top: 14px; }
-    .g-act { display: flex; align-items: center; gap: 8px; }
-    /* Le geste : grand, à un tap, tenu au pouce sur téléphone. */
-    .fait { flex: 1; justify-content: center; border: none; border-radius: 12px; padding: 11px 13px; min-height: 44px; font: inherit; font-size: 13px; font-weight: 800; background: var(--sage); color: #fff; cursor: pointer; white-space: nowrap; }
-    .fait.soft { background: var(--soft2); color: var(--ink2); }
-    .fait.ok { display: inline-flex; align-items: center; gap: 5px; background: #EDF2EB; color: var(--sage); cursor: default; }
-    .more { flex: none; width: 44px; height: 44px; border: none; border-radius: 11px; background: var(--soft); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .g-act { display: flex; align-items: center; gap: 4px; flex: none; }
+    .fait { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line2); border-radius: 9px; background: var(--surface); padding: 6px 11px; min-height: 32px;
+            font: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; white-space: nowrap; }
+    .fait:hover { border-color: var(--sage); color: var(--sage); }
+    .more { flex: none; width: 32px; height: 32px; border: none; border-radius: 8px; background: none; display: grid; place-items: center; cursor: pointer; }
+    .more:hover { background: var(--soft2); }
+    /* Téléphone : « ⋯ » au-dessus, « Fait » dessous, calés à droite. */
+    @media (max-width: 860px) { .g-act { flex-direction: column-reverse; align-items: flex-end; } }
 
-    .arch-toggle { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 16px 0 8px; font: inherit; font-size: 12px; font-weight: 800; color: var(--ink3); text-transform: uppercase; letter-spacing: .05em; cursor: pointer; }
     .empty { text-align: center; color: var(--ink2); padding: 40px 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
     .empty p { font-size: 14px; font-weight: 600; line-height: 1.5; max-width: 440px; margin: 0; }
 
@@ -274,11 +286,19 @@ export class EntretienScreen {
   }
   voirFinances(): void { this.fin.goTab('contrats'); this.fin.patch({ contratsTab: 'entretien' }); this.store.go('finances'); }
 
-  private fmt = (d: string): string => this.store.fmtNumDate(d);
-  freq(t: TaskItem): string { return t.rec ? freqLabel(t.rec) : ''; }
+  /** « 19 sept. », « 2 nov. 2025 » : les dates courtes des lignes. */
+  private fmt = (d: string): string => fmtShortDay(d, this.store.todayStr());
+  /** « Chaque mois », « Toutes les 2 semaines, à date fixe ». */
+  freq(t: TaskItem): string { const f = t.rec ? freqLabel(t.rec) : ''; return f.charAt(0).toUpperCase() + f.slice(1); }
   last(t: TaskItem): string { return lastDoneLabel(t, this.fmt, (id) => this.store.memberName(id)); }
-  next(t: TaskItem): string { return nextLabel(t, this.store.todayStr(), this.fmt); }
+  /** La colonne date : la prochaine échéance, et son relatif. Rien pour un geste jamais noté ou archivé. */
+  whenOf(t: TaskItem): { day: string; rel: string } | null { return t.due && !t.done ? whenLabel(t.due, this.store.todayStr(), t.rec?.grace) : null; }
+  /** Ce que la date seule ne dit pas : la pause, la reprise de saison, la fenêtre d'un geste souple. */
+  nextNote(t: TaskItem): string { const n = nextLabel(t, this.store.todayStr(), this.fmt); return n.startsWith('Le ') ? '' : n; }
+  /** L'anneau : vide juste après « Fait », plein à l'échéance. Un geste jamais noté a sa case pleine. */
+  ringOf(t: TaskItem): number | null { return t.rec && t.due && !t.done ? occurrenceProgress(t.rec, t.due, this.store.todayStr()) : null; }
   stock = (s: NonNullable<NonNullable<TaskItem['maintenance']>['stock']>): string => stockLabel(s, this.fmt);
+  stockLeft = stockLeftLabel;
   low = stockLow;
   isLate(t: TaskItem): boolean { return !t.done && gesteGroup(t, this.store.todayStr(), this.horizon()) === 'retard'; }
   paused(t: TaskItem): boolean { const p = t.maintenance?.pausedUntil; return !!p && p > this.store.todayStr(); }

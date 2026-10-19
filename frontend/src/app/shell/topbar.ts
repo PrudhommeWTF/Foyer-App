@@ -85,7 +85,7 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
     .bell { position: relative; }
     .badge { position: absolute; top: 4px; right: 4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--primary); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg); }
     .add-wrap { position: relative; }
-    .add { width: 44px; height: 44px; border: none; border-radius: 14px; background: var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 16px -8px rgba(229,107,78,.7); transition: transform .2s ease; }
+    .add { width: 44px; height: 44px; border: none; border-radius: 14px; background: var(--primary); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--sh-primary); transition: transform .2s ease; }
     .add.open { transform: rotate(45deg); }
     .menu { position: absolute; top: 54px; right: 0; width: min(272px, calc(100vw - 24px)); max-height: 70vh; overflow-y: auto; background: var(--surface); border-radius: 18px; padding: 8px; z-index: 45; box-shadow: 0 24px 50px -16px rgba(30,24,20,.4); border: 1px solid var(--line); animation: fpop .16s ease; }
     .menu-item { display: flex; align-items: center; gap: 13px; padding: 12px; border-radius: 13px; cursor: pointer; border: none; background: transparent; width: 100%; text-align: left; }

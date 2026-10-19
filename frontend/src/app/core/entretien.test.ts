@@ -5,7 +5,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem } from './models';
 import { applyTaskOp, TaskOp } from './task-ops';
-import { Catalogue, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, stockLabel, stockLow } from './entretien';
+import { Catalogue, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, stockLabel, stockLeftLabel, stockLow } from './entretien';
 
 const TODAY = '2026-10-17';
 const fmt = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -156,4 +156,13 @@ test('fenêtre : le ramonage du catalogue devient une date fixe et sa souplesse'
   assert.equal(nextLabel(g, '2026-08-20', fmt), 'Entre le 01/09/2026 et le 31/10/2026');
   assert.equal(gesteGroup(g, TODAY, 14), 'bientot', 'dans la fenêtre : pas en retard');
   assert.equal(gesteGroup(g, '2026-11-01', 14), 'retard');
+});
+
+test('le stock restant se dit sur la ligne, sans accord hasardeux', () => {
+  const st = (qty: number, unit = 'cartouche') => ({ qty, unit, use: 1, threshold: 1, countedAt: '2026-10-01', article: 'Cartouches' });
+  assert.equal(stockLeftLabel(st(1)), 'Encore 1 cartouche');
+  assert.equal(stockLeftLabel(st(4)), 'Encore 4 cartouches');
+  assert.equal(stockLeftLabel(st(0)), 'Plus de cartouche');
+  assert.equal(stockLeftLabel(st(3, '')), 'Encore 3 en stock');
+  assert.equal(stockLeftLabel(st(0, '')), 'Stock épuisé');
 });
