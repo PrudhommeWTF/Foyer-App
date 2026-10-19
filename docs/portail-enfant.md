@@ -2,7 +2,20 @@
 
 Le soir, un parent ouvre Foyer sur l'iPad, choisit « Ouvrir la session de Raphaël », et l'iPad devient « Raphaël » : son accueil, ses écrans, ses droits, rien d'autre. Pour revenir à la session du parent, il faut son mot de passe (et son code s'il a posé un second facteur). L'enfant n'a besoin ni d'adresse, ni de mot de passe, ni de compte : il suffit qu'il soit membre du foyer avec la case « enfant » cochée.
 
-> État : le serveur et le traitement des files hors ligne sont en place. L'interface (menu du compte, bandeau, saisie du mot de passe, journal dans Paramètres → Membres) arrive dans la tranche suivante.
+## À l'usage
+
+- **Ouvrir** : toucher son avatar (en haut sur téléphone, en bas de la barre latérale sur tablette et ordinateur), puis l'enfant sous « Ouvrir la session de… ». Un tap, pas de confirmation. L'application se recharge sur l'accueil de l'enfant.
+- **En session d'enfant** : un bandeau en haut, « Raphaël · session ouverte par Nolwenn », et le bouton « Revenir à Nolwenn ». Le reste est l'interface d'un enfant. La session survit à la fermeture de l'application et ne se ferme **pas** après inactivité (réglage « Déconnexion après inactivité ») : un enfant ne saurait pas la rouvrir seul.
+- **Revenir** : « Revenir à Nolwenn », son mot de passe, puis le code de son téléphone si elle a un second facteur. L'application se recharge sur l'écran d'où elle était partie. « Se déconnecter » (menu de l'avatar) depuis la session de l'enfant ramène à l'écran de connexion, pas au parent.
+- **Passer d'un enfant à l'autre** : revenir au parent, puis ouvrir l'autre session. Deux gestes, c'est voulu : on ne bascule jamais d'une session d'enfant vers une autre.
+- **Le journal** : Paramètres → Membres, sous chaque enfant, les trois dernières sessions ouvertes pour lui (« Session ouverte par Nolwenn le 19/10 à 18 h 42 sur iPad »), comment elles se sont refermées, et « Fermer » pour une session restée ouverte.
+
+### Ce qu'un enfant voit
+
+Ceci vaut pour toute session d'enfant, ouverte par un parent ou avec ses propres identifiants.
+
+- **Menu** : Accueil, Calendrier, Tâches, Emploi du temps, École (si le module est activé). Les autres écrans (Courses, Repas, Recettes, Contacts, Cartes de fidélité, Équipements, Lieux, Entretien) n'y figurent plus. C'est un menu d'enfant, pas un droit : le serveur ne refuse que les écrans d'adultes (Finances, Employé, Paramètres). Le menu « + » ne propose qu'un événement, une tâche ou un créneau.
+- **Accueil** : de grandes tuiles (« Le calendrier », « Mes tâches », « Mon emploi du temps », « Mes devoirs »), puis ses tâches à faire, ses devoirs et les prochains événements. Pas de fil d'activité (il raconte les gestes des parents), et une carte sans rien à dire ne s'affiche pas.
 
 ## Ce qui ne change pas : les droits
 
@@ -65,13 +78,13 @@ Désormais :
 
 1. **Chaque file est rangée sous le membre qui l'a remplie** (`foyer.taskQueue.<membre>`, idem `shopQueue` et `placeQueue`). Celle d'un autre membre dort sous son nom et ne repart que quand il redevient la session de l'appareil. L'ancienne file sans propriétaire est reprise une fois par le premier membre qui se présente.
 2. **Le serveur vérifie** : chaque lot porte `as` (son propriétaire), et un lot d'un autre membre que la session est refusé en bloc (409). Il reste dans le navigateur ; l'application recharge, ce qui range chaque file sous son membre.
-3. (Tranche suivante) La bascule et le retour envoient d'abord tout ce qui attend, et sont refusés s'il reste quelque chose, puis la page est rechargée en entier pour que rien de la session précédente ne reste en mémoire.
+3. **La bascule et le retour envoient d'abord tout ce qui attend** (document et files), et sont refusés s'il reste quelque chose : « Des changements n'ont pas encore été envoyés. Réessayez quand l'appareil est en ligne. » Puis la page est rechargée en entier et le document gardé hors ligne effacé : rien de la session précédente ne reste en mémoire.
 
 Le champ `by` d'une opération (qui a fait le geste) n'est pas ce contrôle : il désigne légitimement un autre membre quand on note « fait par Nolwenn » depuis le téléphone de Thomas.
 
 ## Notifications
 
-Un navigateur n'a qu'un abonnement push, et un abonnement appartient à un membre. Le rattacher à l'enfant le retirerait au parent. Dans cette version, la session d'un enfant ne s'abonne donc pas (le réabonnement automatique du service worker bute sur le même refus), et l'abonnement du parent reste intact.
+Un navigateur n'a qu'un abonnement push, et un abonnement appartient à un membre. Le rattacher à l'enfant le retirerait au parent. Dans cette version, la session d'un enfant ne s'abonne donc pas : l'invitation « Recevoir les rappels » n'y apparaît pas, l'application ne redit pas l'abonnement du parent au serveur, et le réabonnement automatique du service worker bute sur le refus du serveur. L'abonnement du parent reste intact. Le menu de l'avatar le rappelle au parent quand cet appareil est abonné.
 
 Conséquence : les rappels du parent continuent d'arriver sur l'appareil pendant la session de l'enfant. Sur le téléphone du parent prêté dix minutes, c'est ce qu'on veut ; sur une tablette familiale qui reste « Raphaël » toute la semaine, l'écran verrouillé montrerait les rappels du parent. **N'abonnez pas un parent sur la tablette familiale.**
 

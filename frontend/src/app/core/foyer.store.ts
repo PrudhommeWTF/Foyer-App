@@ -1,5 +1,5 @@
 import { Injectable, Injector, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ApiError, ApiService, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
+import { ApiError, ApiService, SwitchBackResult, PlaceOp, PlaceOpDraft, SettingsPayload, SetupPayload, ShopOp, ShopOpDraft, isOffline } from './api.service';
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf, lastDoneDay } from './task-ops';
@@ -35,7 +35,7 @@ import {
 import { CalendarFacts, SchedScope, SlotEvent, calendarFacts, dowLabel, filterSlots, knownLabels, nextFreeStart, slotEventsOn, slotsOn } from './schedule';
 import { PastePlan, applyPaste as applyPastePlan, pasteSummary, planPaste, undoPaste } from './sched-copy';
 import { UiState, initialUi, rememberScreen } from './ui-state';
-import { ECRANS_ADULTES } from '../shell/nav';
+import { ECRANS_ADULTES, ECRANS_ENFANT } from '../shell/nav';
 import { ModuleFlag, SCREEN_MODULE } from './modules';
 import { EventDraft, EventFields, applyToSeries, detachOccurrence, draftChanges, eventDraft, isSeries, seriesDate, withSkip, withoutEvent, withoutSkip } from './event-scope';
 import { ITEM_KINDS, ItemCtx, ItemKindId, ItemResult } from './items';
@@ -106,6 +106,9 @@ const SHOP_QUEUE_KEY = 'foyer.shopQueue';
 const TASK_QUEUE_KEY = 'foyer.taskQueue';
 const PLACE_QUEUE_KEY = 'foyer.placeQueue';
 const keyStore = (): KeyStore | null => { try { return localStorage; } catch { return null; } };
+
+/** Le refus d'une bascule quand quelque chose attend encore le réseau. */
+const UNSENT_BEFORE_SWITCH = 'Des changements n’ont pas encore été envoyés. Réessayez quand l’appareil est en ligne.';
 
 /** Durée d'un toast simple, et celle d'un toast qui propose de revenir en arrière. */
 const TOAST_MS = 2600;
@@ -350,7 +353,7 @@ export class FoyerStore {
     // navigation, ceci la garde aussi à la restauration.
     effect(() => {
       const screen = this.ui().screen;
-      if (this.authed() && this.isChild() && ECRANS_ADULTES.has(screen)) { this.patch({ screen: 'home' }); return; }
+      if (this.authed() && this.isChild() && !ECRANS_ENFANT.has(screen)) { this.patch({ screen: 'home' }); return; }
       // Écran d'un module désactivé (retenu, ou éteint pendant qu'on le regarde) : retour à l'accueil.
       if (this.authed() && this._data() && !this.screenEnabled(screen)) { this.patch({ screen: 'home' }); return; }
       rememberScreen(screen);
@@ -538,6 +541,7 @@ export class FoyerStore {
       this.currentMemberId.set(me.memberId);
       this.isAdmin.set(me.admin);
       this.isChild.set(me.enfant);
+      this.switched.set(me.via ? { via: me.via, viaName: me.viaName || '', at: me.switchedAt || '' } : null);
       this.totpOn.set(me.totp);
       this.totpRecoveryLeft.set(me.totpRecoveryLeft);
       // Reprise douce du thème, maintenant que le membre et le document sont là.
@@ -652,6 +656,103 @@ export class FoyerStore {
     this.totpChallenge.set('');
   }
 
+  // ---- portail enfant : la session d'un enfant ouverte par un parent --------
+  //
+  // Le serveur fait tout ce qui compte (voir docs/portail-enfant.md) : il
+  // remplace le cookie du parent par celui de l'enfant, et ne rend celui du
+  // parent que contre son mot de passe. Ici, deux précautions de l'appareil :
+  // rien de ce qui attend l'envoi ne doit changer de session en route, et rien
+  // de la session d'avant ne doit rester en mémoire (d'où le rechargement).
+
+  /** Session d'un enfant ouverte par un parent sur cet appareil : qui l'a ouverte, et quand. Null sinon. */
+  readonly switched = signal<{ via: string; viaName: string; at: string } | null>(null);
+  /** Les enfants du foyer dont cette session (d'adulte) peut ouvrir la session. */
+  readonly children = computed(() => (this.isChild() ? [] : (this._data()?.members || []).filter((m) => m.enfant)));
+  /** Le menu du compte (avatar), ouvert ; la saisie du retour au parent, ouverte. */
+  readonly accountOpen = signal(false);
+  readonly switchBackOpen = signal(false);
+  /** Le défi du retour quand le parent a un second facteur, le message du dernier échec, et un geste en cours. */
+  readonly switchChallenge = signal('');
+  readonly switchError = signal('');
+  readonly switchBusy = signal(false);
+
+  /**
+   * Envoie tout ce qui attend (document et files) et dit s'il ne reste rien. Une
+   * coche du parent partie sous la session de l'enfant serait écrite avec ses
+   * droits : la bascule attend plutôt que de laisser faire.
+   */
+  private async drainBeforeSwitch(): Promise<boolean> {
+    for (let i = 0; i < 40 && this.saving; i++) await new Promise((r) => setTimeout(r, 150));
+    if (this.pending.length) await this.flush().catch(() => { /* compté ci-dessous */ });
+    await this.flushQueues();
+    return !this.saving && !this.pending.length && !this.shopQueue().length && !this.taskQueue().length && !this.placeQueue().length;
+  }
+
+  /** Repart de zéro sur l'écran voulu : la page est rechargée, la mémoire de la session d'avant avec. */
+  private async relaunch(screen: string): Promise<void> {
+    await clearCachedDoc();
+    rememberScreen(screen);
+    location.reload();
+  }
+
+  /** Ouvre la session d'un enfant sur cet appareil. Un tap, pas de confirmation : le retour, lui, se paie d'un mot de passe. */
+  async openChildSession(id: string): Promise<void> {
+    if (this.switchBusy()) return;
+    this.switchBusy.set(true);
+    try {
+      if (!await this.drainBeforeSwitch()) { this.toast(UNSENT_BEFORE_SWITCH); return; }
+      await this.api.switchTo(id, this.ui().screen, navigator.maxTouchPoints > 0);
+      this.accountOpen.set(false);
+      await this.relaunch('home');
+    } catch (e) {
+      this.toast((e as Error).message);
+    } finally {
+      this.switchBusy.set(false);
+    }
+  }
+
+  /** Revenir au parent, premier temps : son mot de passe. Avec un second facteur, `switchChallenge` se pose et le code est attendu. */
+  async switchBack(password: string): Promise<void> {
+    this.switchError.set('');
+    this.switchBusy.set(true);
+    try {
+      if (!await this.drainBeforeSwitch()) { this.switchError.set(UNSENT_BEFORE_SWITCH); return; }
+      await this.endSwitch(await this.api.switchBack(password));
+    } catch (e) {
+      this.switchError.set((e as Error).message);
+    } finally {
+      this.switchBusy.set(false);
+    }
+  }
+
+  /** Second temps : le code du téléphone du parent, ou un code de secours. */
+  async switchBackTotp(code: string): Promise<void> {
+    const defi = this.switchChallenge();
+    if (!defi) return;
+    this.switchError.set('');
+    this.switchBusy.set(true);
+    try {
+      await this.endSwitch(await this.api.switchBackTotp(defi, code));
+    } catch (e) {
+      const msg = (e as Error).message;
+      this.switchError.set(msg);
+      // Défi expiré : retour au mot de passe, comme à la connexion.
+      if (/expiré|plus valable/.test(msg)) this.switchChallenge.set('');
+    } finally {
+      this.switchBusy.set(false);
+    }
+  }
+
+  /** Le retour est accepté (ou attend le code) : la session du parent reprend là où il l'avait laissée. */
+  private async endSwitch(r: SwitchBackResult): Promise<void> {
+    if (r.totpRequired) { this.switchChallenge.set(r.challenge); return; }
+    this.switchChallenge.set('');
+    await this.relaunch(r.from || 'home');
+  }
+
+  /** On renonce à revenir : saisie et défi oubliés. */
+  cancelSwitchBack(): void { this.switchBackOpen.set(false); this.switchChallenge.set(''); this.switchError.set(''); }
+
   /** Ce qui est commun aux deux chemins d'entrée, une fois le jeton obtenu. */
   private async entrer(res: { token?: string }): Promise<boolean> {
     if (!res.token) { this.authError.set('Réponse inattendue du serveur.'); return false; }
@@ -683,7 +784,10 @@ export class FoyerStore {
       addEventListener(ev, bouge, { passive: true });
     }
     setInterval(() => {
-      if (!this.authed() || Date.now() - dernier < limite) return;
+      // La session d'un enfant ouverte par un parent ne se ferme pas d'elle-même :
+      // l'iPad familial reste « Raphaël » jusqu'au retour d'un parent, et un enfant
+      // ne saurait pas rouvrir sa session seul. Ses droits sont ceux d'un enfant.
+      if (!this.authed() || this.switched() || Date.now() - dernier < limite) return;
       this.logout();
       this.toast(`Session fermée après ${heures} h sans activité.`);
     }, 60_000);
@@ -706,6 +810,9 @@ export class FoyerStore {
     this.ui.set(initialUi());
     this.isAdmin.set(false);
     this.isChild.set(false);
+    this.switched.set(null);
+    this.switchChallenge.set('');
+    this.accountOpen.set(false);
     this.totpOn.set(false);
     this.totpRecoveryLeft.set(null);
     this.totpChallenge.set('');
@@ -1203,10 +1310,10 @@ export class FoyerStore {
     // Un seul point de passage, plutôt qu'une condition à chaque bouton : c'est
     // ce qui rend impossible d'ouvrir l'écran par une entrée qu'on aurait
     // oublié de cacher. Le serveur refuse de son côté, indépendamment.
-    if (this.isChild() && ECRANS_ADULTES.has(screen)) {
+    if (this.isChild() && !ECRANS_ENFANT.has(screen)) {
       this.toast(screen === 'settings'
         ? 'Les réglages du foyer sont réservés aux adultes.'
-        : 'Cet écran est réservé aux adultes du foyer.');
+        : ECRANS_ADULTES.has(screen) ? 'Cet écran est réservé aux adultes du foyer.' : 'Cet écran n’est pas dans ton espace.');
       return;
     }
     // Un écran de module désactivé ramène à l'accueil, comme une porte fermée.

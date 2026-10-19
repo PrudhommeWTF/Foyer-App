@@ -3,7 +3,7 @@ import { FoyerStore } from '../core/foyer.store';
 import { FinancesStore } from '../core/finances.store';
 import { IconComponent } from '../core/icon';
 import { AvatarComponent } from '../shared/avatar';
-import { ADD_MENU, AJOUTS_ADULTES } from './nav';
+import { ADD_MENU, AJOUTS_ENFANT } from './nav';
 import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 
 @Component({
@@ -30,14 +30,14 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
 
       @if (!store.narrow()) {
         <button class="search" (click)="store.openSearch()" title="Rechercher"><f-icon name="search" [size]="18" color="#B7ABA0" [width]="2.2" /><span>Rechercher…</span></button>
-        <div class="avatars" (click)="store.openMembers()" title="Membres et accès">
+        <button class="avatars" (click)="store.accountOpen.set(true)" title="Mon compte" aria-label="Mon compte">
           @for (m of d().members; track m.id) {
             <f-avatar [ini]="m.ini" [color]="m.color" [size]="38" border="3px solid var(--soft)" />
           }
-        </div>
+        </button>
       } @else {
         <button class="icon-btn lg" (click)="store.openSearch()" title="Rechercher"><f-icon name="search" [size]="21" /></button>
-        <button class="icon-btn lg" (click)="store.openMembers()" title="Membres et accès"><f-icon name="users" [size]="21" /></button>
+        <button class="me-btn" (click)="store.accountOpen.set(true)" title="Mon compte" aria-label="Mon compte"><f-avatar [ini]="store.me()?.ini || '?'" [color]="store.me()?.color || '#8A7E74'" [size]="34" /></button>
       }
 
       <button class="icon-btn lg bell" (click)="store.toggleNotif()" title="Notifications">
@@ -79,7 +79,8 @@ import { SCREEN_TITLES, SCREEN_TITLES_SHORT } from '../core/constants';
     .search { display: flex; align-items: center; gap: 10px; background: var(--surface); border: none; border-radius: 14px; padding: 10px 16px; flex: 0 1 280px; min-width: 46px; box-shadow: var(--sh-float); font-size: 14px; font-weight: 600; color: var(--ink3); cursor: text; font-family: inherit; text-align: left; transition: box-shadow .15s ease; }
     .search:hover { box-shadow: var(--sh-float), 0 0 0 2px var(--line); }
     .search span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .avatars { display: flex; cursor: pointer; }
+    .avatars { display: flex; cursor: pointer; border: none; background: transparent; padding: 0; }
+    .me-btn { border: none; background: transparent; padding: 0 4px; cursor: pointer; display: flex; align-items: center; min-height: 44px; }
     .avatars > * { margin-left: -10px; }
     .icon-btn.lg { width: 44px; height: 44px; border-radius: 14px; }
     .bell { position: relative; }
@@ -105,7 +106,7 @@ export class TopbarComponent {
   private finances = inject(FinancesStore);
   // Chaque entrée du « + » qui mène à un module suit son activation.
   private static readonly ADD_MODULE: Record<string, 'modRepas' | 'modFinances' | 'modFidelite' | 'modEquipements'> = { recipe: 'modRepas', tx: 'modFinances', card: 'modFidelite', equipment: 'modEquipements' };
-  menu = computed(() => (this.store.isChild() ? ADD_MENU.filter((a) => !AJOUTS_ADULTES.has(a.id)) : ADD_MENU)
+  menu = computed(() => (this.store.isChild() ? ADD_MENU.filter((a) => AJOUTS_ENFANT.has(a.id)) : ADD_MENU)
     .filter((a) => { const m = TopbarComponent.ADD_MODULE[a.id]; return !m || this.store.moduleOn(m); }));
   d = this.store.d;
   title = computed(() => {

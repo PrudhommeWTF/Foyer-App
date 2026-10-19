@@ -63,7 +63,7 @@ const FOLD_KEY = 'foyer.menuReduit';
       </button>
 
       <div class="foot">
-        <button class="profile" (click)="store.openProfile()" [attr.title]="reduit() ? store.me()?.name : null">
+        <button class="profile" (click)="store.accountOpen.set(true)" [attr.title]="reduit() ? store.me()?.name : null" aria-label="Mon compte">
           <f-avatar [ini]="store.me()?.ini || '?'" [color]="store.me()?.color || '#8A7E74'" [size]="reduit() ? 34 : 38" />
           @if (!reduit()) {
             <div class="pinfo">

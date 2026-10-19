@@ -10,6 +10,7 @@ import { SettingFieldComponent } from './field';
 import { SettingsAccountComponent } from './account';
 import { SettingsModulesComponent } from './modules';
 import { SettingsEcoleComponent } from './ecole';
+import { ChildSessionsComponent } from './child-sessions';
 import { ModuleFlag } from '../../core/modules';
 
 /**
@@ -54,7 +55,7 @@ const GESTES = new Set(['compte', 'membres']);
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsModulesComponent, SettingsEcoleComponent],
+  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsModulesComponent, SettingsEcoleComponent, ChildSessionsComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -316,6 +317,8 @@ const GESTES = new Set(['compte', 'membres']);
                     </button>
                   }
                 </div>
+                <!-- Les sessions ouvertes pour cet enfant depuis celle d'un parent (portail enfant). -->
+                @if (m.enfant) { <settings-child-sessions [memberId]="m.id" /> }
               }
             </div>
                         }
