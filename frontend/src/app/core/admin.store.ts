@@ -59,7 +59,10 @@ export class AdminStore {
    * installée, aucun report en cours. Sur iPhone non installé (`install`), rien
    * n'est proposé ici : le message d'installation reste dans Paramètres.
    */
-  readonly pushInvite = computed(() => pushInviteVisible(this.pushSupport(), this.isStandalone(), this.pushSnoozeUntil(), Date.now()));
+  // Pas d'invitation dans la session d'un enfant ouverte par un parent : un
+  // navigateur n'a qu'un abonnement, et l'abonner pour l'enfant le retirerait au
+  // parent. Le serveur refuse de toute façon (voir docs/portail-enfant.md).
+  readonly pushInvite = computed(() => !this.store.switched() && pushInviteVisible(this.pushSupport(), this.isStandalone(), this.pushSnoozeUntil(), Date.now()));
 
   // ---- exploitation -----------------------------------------------------
   readonly systemStatus = signal<SystemStatus | null>(null);
@@ -329,7 +332,8 @@ export class AdminStore {
       const sub = await reg.pushManager.getSubscription();
       this.pushSupport.set(sub ? 'on' : 'off');
       // Un abonnement déjà là est redit au serveur : il a pu changer de membre ou être perdu en base.
-      if (sub) this.api.pushSubscribe(sub.toJSON(), navigator.userAgent).catch(() => { /* l'état l'affichera */ });
+      // Sauf dans la session d'un enfant : cet abonnement est celui du parent, il le reste.
+      if (sub && !this.store.switched()) this.api.pushSubscribe(sub.toJSON(), navigator.userAgent).catch(() => { /* l'état l'affichera */ });
     }
     void this.refreshPushStatus();
   }

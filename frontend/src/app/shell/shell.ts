@@ -8,6 +8,8 @@ import { RepairModal } from './repair-modal';
 import { MemberModalsComponent } from './member-modals';
 import { SearchModalComponent } from './search-modal';
 import { ItemSheetComponent } from './item-sheet';
+import { AccountSheetComponent } from './account-sheet';
+import { SwitchBannerComponent } from './switch-banner';
 import { HomeScreen } from '../screens/home/home';
 import { CalendarScreen } from '../screens/calendar/calendar';
 import { CoursesScreen } from '../screens/courses/courses';
@@ -32,7 +34,7 @@ import { EcoleStore } from '../core/ecole.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     SidebarComponent, TopbarComponent, NotificationsComponent,
-    MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal, ItemSheetComponent,
+    MemberModalsComponent, SearchModalComponent, GenerateModal, RepairModal, ItemSheetComponent, AccountSheetComponent, SwitchBannerComponent,
     HomeScreen, CalendarScreen, CoursesScreen, TachesScreen, ContactsScreen, FideliteScreen,
     FinancesScreen, EmployeScreen, RepasScreen, RecettesScreen, PlanningScreen, SettingsScreen, LieuxScreen, EcoleScreen, EntretienScreen, EquipementsScreen,
   ],
@@ -40,6 +42,8 @@ import { EcoleStore } from '../core/ecole.store';
     <div class="shell" [class.narrow]="store.narrow()">
       @if (!store.narrow() && store.data()) { <app-sidebar /> }
       <div class="main">
+        <!-- Session d'un enfant ouverte par un parent : qui, et le chemin du retour. -->
+        <app-switch-banner />
         @if (store.data()) { <app-topbar /> }
         <div class="content fscroll" [class.mobile-pad]="store.narrow()">
           <!--
@@ -84,6 +88,7 @@ import { EcoleStore } from '../core/ecole.store';
     @if (store.ui().repairOpen) { <app-repair-modal /> }
     @if (store.ui().notifOpen) { <app-notifications /> }
     @if (store.ui().searchOpen) { <app-search-modal /> }
+    @if (store.accountOpen()) { <app-account-sheet /> }
     <app-member-modals />
     <!-- La fiche d'élément : par-dessus n'importe quel écran, sans en changer. -->
     @if (store.data()) { <app-item-sheet /> }

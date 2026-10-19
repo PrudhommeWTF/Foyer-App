@@ -82,6 +82,7 @@ compte administrateur et vos membres. Vous êtes prêt. (Détails : [Premier dé
 | 🥗 **Contraintes alimentaires** | Allergènes (liste européenne) et aliments refusés par membre. Les recettes affichent leurs allergènes et à qui elles ne conviennent pas ; le planning signale le créneau en cause. Honnête sur ses limites : un ingrédient non reconnu n'est pas vérifié, et l'interface le dit. |
 | ☎️ **Contacts** | Un carnet de contacts (urgences, santé, école) avec recherche transverse. |
 | 💳 **Cartes de fidélité** | Les cartes de tout le foyer, une fois pour toutes : **scannées par la caméra** (ou lues sur une photo), leur code (QR ou code-barres) est **réaffiché en grand** à présenter en caisse. Rangées par nom, avec un logo : soit un monogramme aux initiales, soit un vrai logo cherché en ligne d'après le nom (option `cardLogoSearch`, coupable). Le code reste du texte dans le document, jamais un fichier sur le disque. |
+| 🧒 **Portail enfant** | Sur l'iPad familial, un parent ouvre la **session d'un enfant** d'un tap depuis son avatar, sans que l'enfant ait d'adresse ni de mot de passe. L'appareil devient le sien : menu réduit à ses écrans (calendrier, tâches, emploi du temps, devoirs), accueil en grandes tuiles, droits d'enfant côté serveur. Le retour exige le **mot de passe du parent** (et son code de second facteur). Journal des sessions ouvertes sous la fiche de l'enfant, fermeture à distance. [Détails](docs/portail-enfant.md) |
 | ⚙️ **Paramètres** | Thème, membres et accès, rappels sur cet appareil, partage du calendrier, mises à jour. **Activation des modules** : un administrateur peut désactiver « Repas et cuisine », « Cartes de fidélité », « Finances », « Employé à domicile », « Entretien de la maison », « Équipements » et activer « École » (masqués partout et accès fermés, sans perte de données ; réactivation avec reprise ou remise à zéro). [Registre complet](docs/parametres.md) |
 
 Chaque membre a sa couleur d'identité. Thème clair/sombre synchronisé. Interface responsive
@@ -127,6 +128,10 @@ Foyer-App/
   `PUT /api/state` ignore ces champs et conserve ceux du serveur. Deux personnes cochent en
   même temps sans que l'une écrase l'autre, et les coches faites hors ligne sont rejouées au
   retour du réseau. Un seul sondage (`GET /api/live`) rafraîchit les deux. Voir [`docs/taches.md`](docs/taches.md).
+- **Portail enfant.** La session d'un enfant ouverte par un parent remplace le cookie du parent
+  (un seul cookie sur l'appareil), se revérifie à chaque requête et n'a aucun compte. Les files
+  hors ligne sont rangées par membre et ne partent jamais sous une autre session. Voir
+  [`docs/portail-enfant.md`](docs/portail-enfant.md).
 - **Hors ligne à froid.** Un service worker garde la coquille de l'application, et le dernier
   document lu est gardé dans IndexedDB : Foyer **s'ouvre sans réseau**, montre le foyer tel
   qu'il était (avec la date, dite en clair), accepte les coches et les envoie au retour du

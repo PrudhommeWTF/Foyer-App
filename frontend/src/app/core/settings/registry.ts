@@ -681,7 +681,7 @@ export const REGISTRY = [
     key: 'inactivityHours',
     type: 'int', scope: 'foyer', section: 'acces', module: 'Accès',
     label: 'Déconnexion après inactivité',
-    desc: 'Ferme la session sur un appareil resté inactif ce nombre d’heures : un téléphone oublié quelque part ne laisse pas le foyer ouvert. La déconnexion se fait dans le navigateur, sans rien envoyer. Zéro pour ne jamais déconnecter.',
+    desc: 'Ferme la session sur un appareil resté inactif ce nombre d’heures : un téléphone oublié quelque part ne laisse pas le foyer ouvert. La déconnexion se fait dans le navigateur, sans rien envoyer. La session d’un enfant ouverte par un parent n’est pas concernée : elle reste ouverte jusqu’au retour d’un parent. Zéro pour ne jamais déconnecter.',
     default: 12, min: 0, max: 720,
   },
   {

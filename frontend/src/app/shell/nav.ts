@@ -10,15 +10,23 @@ export interface NavItem { id: string; label: string; icon: string; }
  */
 export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'employe', 'settings']);
 
-/** Les entrées du menu « + » qui mènent à ces écrans, ou qui créent ce qu'un enfant ne peut pas écrire (un équipement). */
-export const AJOUTS_ADULTES: ReadonlySet<string> = new Set(['tx', 'equipment']);
+/**
+ * Les écrans du menu d'un enfant : les siens, et rien d'autre. Le reste n'est
+ * pas interdit pour autant (le serveur ne refuse que les écrans d'adultes) :
+ * c'est un menu d'enfant de primaire, quatre portes plutôt que douze, où
+ * Contacts, Cartes de fidélité ou Équipements n'ont rien à faire.
+ */
+export const ECRANS_ENFANT: ReadonlySet<string> = new Set(['home', 'calendar', 'taches', 'planning', 'ecole']);
+
+/** Les entrées du menu « + » d'un enfant : ce qui mène à ses écrans. */
+export const AJOUTS_ENFANT: ReadonlySet<string> = new Set(['event', 'task', 'slot']);
 
 /**
  * Les groupes de navigation, tels qu'ils s'affichent pour ce compte. `enabled`
  * masque les écrans d'un module désactivé (défaut : tout actif).
  */
 export const navGroupsFor = (enfant: boolean, enabled: (screen: string) => boolean = () => true): NavGroup[] =>
-  (enfant ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => !ECRANS_ADULTES.has(i.id)) })) : NAV_GROUPS)
+  (enfant ? NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => ECRANS_ENFANT.has(i.id)) })) : NAV_GROUPS)
     .map((g) => ({ ...g, items: g.items.filter((i) => enabled(i.id)) }))
     .filter((g) => g.items.length);
 export interface NavGroup { title: string; items: NavItem[]; }
