@@ -150,7 +150,7 @@ exercices existent et quels paramètres il peut régler.
 
 | Outil | Ce qu'il fait |
 |---|---|
-| `revisions_exercices` | Les exercices (les tables, les soustractions, les compléments, la lecture de l'heure, la dictée de mots, la conjugaison, l'orthographe), leur matière, et les paramètres d'un programme avec leurs bornes et leurs défauts |
+| `revisions_exercices` | Les exercices (les tables, les soustractions, les compléments, les doubles et moitiés, la lecture de l'heure, la dictée de mots, la conjugaison, l'orthographe), leur matière, et les paramètres d'un programme avec leurs bornes et leurs défauts |
 | `revisions_progression` | Où en est un enfant (ou chacun, sans `enfant`) : programme, temps par réponse, items acquis, en cours ou pas encore vus, ce qui reste fragile, réussite par groupe sur 4 semaines. `exercice` facultatif |
 | `revisions_sessions` | Les sessions depuis `depuis` (défaut : 7 jours) : date, exercice, mode, réglages, bonnes, lentes, fausses |
 | `revisions_bilan` (adultes) | Le bilan d'une période (`semaine`, `semaine-derniere`, `mois`, `mois-dernier`) : par matière puis par exercice, réussite comparée à la période précédente, ce qui reste fragile |

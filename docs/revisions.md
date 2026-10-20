@@ -94,6 +94,18 @@ Rien n'a été ajouté au socle. Une conséquence : plusieurs exercices ont dés
 
 Rien n'a été ajouté au socle.
 
+### Doubles et moitiés
+
+`doubles`, mathématiques, dès 6 ans environ : « Double de 7 = ? », « Moitié de 14 = ? ». Le calcul mental du cycle 2, qui prépare les tables de 2, 4 et 5, et le partage.
+
+- **Le programme** choisit ce qu'on travaille (les doubles par défaut, les moitiés, ou les deux) et les nombres : de 1 à 10 (par défaut), de 1 à 20, les dizaines de 10 à 50 (« double de 30 »), ou de 1 à 50. Les moitiés sont celles des résultats : de 1 à 10, c'est la moitié de 2 à 20.
+- **Un item** est un double (« dbl:7 ») ou une moitié (« moit:14 ») : le double de 30 est le même item dans « les dizaines » et « de 1 à 50 » ; le double de 7 et la moitié de 14 restent deux items, savoir l'un ne dit pas qu'on sait l'autre.
+- **L'énoncé** se lit « Le double de 7 = » (assez long pour la taille sobre, il tient sur une ligne au téléphone).
+- **Le suivi** en liste, groupé en « Doubles » et « Moitiés » ; le mode Apprendre récite dans l'ordre (le double de 1, 2…).
+- **Le temps** : celui du barème commun (partie `exercices.doubles` vide, à remplir pour l'adapter).
+
+Rien n'a été ajouté au socle.
+
 ### Soustractions
 
 Les tables de soustraction (`soustractions`, mathématiques, dès 6 ans environ), l'inverse des tables d'addition : « enlever 7 », c'est de 7 − 7 à 17 − 7, le résultat allant de 0 à 10.
