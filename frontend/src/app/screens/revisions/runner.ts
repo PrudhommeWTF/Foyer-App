@@ -119,7 +119,7 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
               @let q = current();
               @if (q !== null) {
                 @let cs = plan().def.choices?.(q) ?? [];
-                <div class="choices" [class.long]="longChoices(cs)" role="group" aria-label="Choisis la bonne réponse">
+                <div class="choices" [class.long]="longChoices(cs)" [class.signs]="signChoices(cs)" role="group" aria-label="Choisis la bonne réponse">
                   @for (c of cs; track c) {
                     <button type="button" class="choice" [class.picked]="typed() === c" [disabled]="busy()" (click)="pick(c)">{{ c }}</button>
                   }
@@ -175,6 +175,8 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
     .choice { min-height: 72px; border: 3px solid transparent; border-radius: 18px; background: var(--surface); box-shadow: var(--sh-float); font-family: inherit; font-size: 30px; font-weight: 800; color: var(--ink); cursor: pointer; touch-action: manipulation; }
     /* Des réponses de plusieurs mots (« sous les feuilles ») : une colonne, une taille plus sobre. */
     .choices.long { grid-template-columns: 1fr; width: 440px; }
+    .choices.signs { grid-template-columns: repeat(3, 1fr); }
+    .choices.signs .choice { font-size: 40px; }
     .choices.long .choice { min-height: 60px; font-size: 22px; padding: 8px 16px; }
     .ask.read { flex-direction: column; align-items: stretch; gap: 16px; width: 100%; font-size: clamp(22px, 5vw, 30px); }
     .passage { margin: 0; padding: 16px 20px; border-radius: 18px; background: var(--surface); box-shadow: var(--sh-float); font-weight: 700; line-height: 1.45; }
@@ -279,6 +281,8 @@ export class RunnerComponent implements OnInit, OnDestroy {
   /** Une réponse touchée parmi celles proposées : elle s'inscrit dans le trou, et compte aussitôt. */
   /** Des réponses trop longues pour deux colonnes. */
   longChoices(cs: string[]): boolean { return cs.some((c) => c.length > 12); }
+  /** Des signes (« < », « = », « > ») : une rangée, comme une touche chacun. */
+  signChoices(cs: string[]): boolean { return cs.length === 3 && cs.every((c) => c.length === 1); }
   pick(c: string): void { if (this.busy()) return; this.typed.set(c); this.ok(); }
 
   private answer(given: string | null): void {

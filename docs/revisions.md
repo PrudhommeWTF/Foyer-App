@@ -111,6 +111,17 @@ Rien n'a été ajouté au socle. Une conséquence : plusieurs exercices ont dés
 
 Rien n'a été ajouté au socle.
 
+### Comparer
+
+`comparer`, mathématiques, dès 6 ans environ : « 47 … 74 », l'enfant touche **<**, **=** ou **>** (trois boutons en rangée, toujours dans cet ordre ; les touches 1 à 3 d'un clavier marchent aussi).
+
+- **Le programme** choisit les nombres : jusqu'à 20, jusqu'à 100 (par défaut) ou jusqu'à 1 000.
+- **Un item** n'est pas une paire (il y en aurait un million jusqu'à 1 000), mais une **situation** et le bon signe : pas le même nombre de chiffres (9 et 12), le premier chiffre décide (38 et 52), même premier chiffre (43 et 47), chiffres inversés (47 et 74, à partir de 100), deux nombres égaux. Clé « cmp:100:inverse:lt ». Le tirage choisit une paire au hasard dans la situation ; le serveur retrouve la situation d'après la paire. Séparer < et > repère l'enfant qui confond les signes. Changer de plage, c'est une nouvelle série d'items : comparer jusqu'à 1 000 ne se sait pas parce qu'on compare jusqu'à 20.
+- **Le suivi** en liste, groupé par situation (7 items jusqu'à 20, 9 au-delà), chaque item lu sur un exemple (« 9 < 12 », « 74 > 47 »). Le mode Apprendre montre un exemple par item, toujours le même, et la voix le lit (« 47 est plus petit que 74 »).
+- **Le temps** : celui du barème commun (partie `exercices.comparer` vide).
+
+Ce que la comparaison a demandé au socle : rien, sinon que les boutons de trois signes s'affichent en une rangée.
+
 ### Doubles et moitiés
 
 `doubles`, mathématiques, dès 6 ans environ : « Double de 7 = ? », « Moitié de 14 = ? ». Le calcul mental du cycle 2, qui prépare les tables de 2, 4 et 5, et le partage.

@@ -83,7 +83,7 @@ describe('Révisions : outils d’assistant (MCP)', () => {
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', params: { tables: [2, 11] } }), /Refusé : « Tables travaillées » : de 0 à 10/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', questions: 3 }), /Refusé : `questions` entre 5 et 100/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Thomas', exercice: 'tables' }), /pour un enfant/);
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé' }), /Précisez `exercice` : tables, soustractions, complements, doubles, heure, dictee, conjugaison, orthographe, lecture/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé' }), /Précisez `exercice` : tables, soustractions, complements, doubles, comparer, heure, dictee, conjugaison, orthographe, lecture/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'chimie' }), /Exercice inconnu/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', retirer: true }), /retiré\. Son historique reste/);
     assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${NOE}/exercises/tables`, undefined, ctx.jetons.admin)).json.program, null);
