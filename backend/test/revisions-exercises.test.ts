@@ -635,7 +635,7 @@ describe('l’exercice Lire l’heure', () => {
   });
 
   it('la saisie s’affiche comme une heure à mesure qu’on tape', () => {
-    assert.deepEqual(['7', '74', '745', '1', '10', '100', '1005', '12'].map((t) => HEURE.display!(t)), ['7 h', '7 h 4', '7 h 45', '1 h', '10 h', '1 h 00', '10 h 05', '12 h']);
+    assert.deepEqual(['7', '74', '745', '1', '10', '100', '1005', '12'].map((t) => HEURE.display!(t, { h: 7, m: 45 })), ['7 h', '7 h 4', '7 h 45', '1 h', '10 h', '1 h 00', '10 h 05', '12 h']);
   });
 
   it('relit une question reçue ; le cadran, les groupes, la grille, le mode Apprendre et le résumé', () => {
