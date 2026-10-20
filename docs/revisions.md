@@ -23,6 +23,7 @@ Le socle (sessions, réponses, maîtrise, programmes, suivi, réception hors lig
 | `itemKey`, `itemLabel`, `text`, `groups` | la clé de maîtrise (« mult:6x7 », commutative pour les tables), l'item en clair, l'énoncé, les regroupements du suivi (« Table de 7 ») |
 | `ask`, `prerequisite` | facultatifs : l'énoncé de part et d'autre de la case de réponse (absent : le texte, « = », la case) ; l'item qu'il faut avoir **acquis** avant qu'un autre soit posé (le tirage l'applique, le serveur ne le refuse pas : c'est une progression, pas un droit) |
 | `check` | la correction, la même sur l'appareil et sur le serveur |
+| `clock`, `display` | facultatifs : l'heure que dessine un énoncé `horloge` (obligatoire pour lui, vérifié par un test du registre) ; la saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 ») |
 | `learn`, `spoken`, `grid`, `summary` | le mode Apprendre (absent : pas de mode Apprendre), ce que lit la voix, la forme de la grille, le programme en une ligne |
 
 Le dossier `exercises/` est **pur** (aucune dépendance hors de lui) : il vit en deux copies identiques, `backend/src/revisions/exercises/` et `frontend/src/app/core/revisions/exercises/` (où l'exercice tourne hors ligne), vérifiées octet pour octet par `backend/test/revisions-copy.test.ts`, comme le moteur de récurrence. Modifier l'une, puis copier : `cp backend/src/revisions/exercises/*.ts frontend/src/app/core/revisions/exercises/`.
@@ -56,6 +57,18 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 2. un argument `ctx` (le contexte : les listes de l'exercice) passé à `universe`, `groups`, `learn`, `summary`, `defaults` et `readParams`. Tables l'ignore : son code n'a pas changé.
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
+
+### Lire l'heure
+
+Troisième exercice (`heure`, mathématiques, dès 6 ans environ) : une **horloge à aiguilles** dessinée à l'écran, l'enfant écrit l'heure au pavé (7, 4, 5 pour « 7 h 45 »).
+
+- **Le programme** règle la précision : heures pleines, et demies (par défaut), et quarts, cinq minutes. L'univers est chaque heure du cadran (1 à 12) à chaque minute permise : 12, 24, 48 ou 144 items.
+- **Un item** est une position des aiguilles (« heure:7:45 ») ; 7 h 45 et 19 h 45 sont toutes deux justes, 0 h 15 vaut 12 h 15. Les minutes doivent y être : « 7 » ne répond pas à 7 h 45.
+- **La saisie** se lit comme un réveil : les deux derniers chiffres sont les minutes dès qu'il y en a trois (« 745 », « 1205 ») ; un ou deux chiffres sont l'heure seule (« 7 », « 15 »). L'écran l'affiche ainsi pendant la frappe ; le passage par « 1 h 00 » en tapant 10 h 05 est le seul moment trompeur, il disparaît au chiffre suivant.
+- **Le suivi** : une grille heures × minutes, et des groupes « Heures pleines », « Demies », « Quarts », « Cinq minutes ». Le mode Apprendre fait le tour du cadran à la précision du programme (à 4 heures, ou les douze heures pleines).
+- **Le temps** : partie `exercices.heure` du barème (15 s à 8 ans, rapide sous 8 s) : lire deux aiguilles prend plus longtemps qu'une table.
+
+Ce que l'heure a demandé au socle : deux éléments **facultatifs** du contrat, `clock` (l'énoncé `horloge` était prévu depuis la PR 4, sans cadran pour le dessiner) et `display`, et un composant d'écran, le cadran (`screens/revisions/clock.ts`, en SVG, aux couleurs du thème). Ni table, ni migration, ni route.
 
 ### Les questions à trous
 

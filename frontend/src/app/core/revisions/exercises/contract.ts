@@ -114,6 +114,10 @@ export interface ExerciseDef<Q = unknown> {
   learn?(p: Params, ctx: ExerciseContext): Q[];
   /** Ce que la voix de l'appareil lit en mode Apprendre (« 7 fois 3, 21 »). */
   spoken?(q: Q): string;
+  /** L'heure que dessine un énoncé « horloge » (heures de 1 à 12, minutes). Obligatoire pour cet énoncé. */
+  clock?(q: Q): { h: number; m: number };
+  /** La saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 »). Absent : les chiffres tels quels. */
+  display?(typed: string): string;
   /** La forme de la vue « grille ». */
   grid?(p: Params): GridShape;
   /** Un résumé du programme en une ligne (« Les tables de 6 à 9, multiplication »). */

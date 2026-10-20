@@ -4,7 +4,8 @@
 import { ExerciseDef } from './contract';
 import { TABLES } from './tables';
 import { DICTEE } from './dictee';
+import { HEURE } from './heure';
 
-export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, DICTEE as ExerciseDef];
+export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef];
 
 export const exerciseById = (id: unknown): ExerciseDef | undefined => EXERCISES.find((e) => e.id === id);

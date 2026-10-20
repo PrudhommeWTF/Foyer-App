@@ -13,6 +13,7 @@ import { shippedLists } from '../src/revisions/content';
 import { EXERCISES, exerciseById } from '../src/revisions/exercises';
 import { TABLES, TablesQuestion } from '../src/revisions/exercises/tables';
 import { DICTEE } from '../src/revisions/exercises/dictee';
+import { HEURE } from '../src/revisions/exercises/heure';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
 import { migrateRevisions } from '../src/revisions/schema';
 import {
@@ -36,6 +37,13 @@ describe('le registre', () => {
       assert.equal(exerciseById(e.id), e);
     }
     assert.equal(exerciseById('inconnu'), undefined);
+  });
+
+  it('un énoncé « horloge » dit quelle heure dessiner, une vue « grille » sa forme', () => {
+    for (const e of EXERCISES) {
+      if (e.prompt === 'horloge') assert.equal(typeof e.clock, 'function', `${e.id} : un énoncé horloge déclare clock()`);
+      if (e.view === 'grille') assert.equal(typeof e.grid, 'function', `${e.id} : une vue grille déclare grid()`);
+    }
   });
 
   it('chaque paramètre est d’un type que le formulaire engendré sait afficher, et bien déclaré', () => {
@@ -164,6 +172,56 @@ describe('l’exercice Tables', () => {
     const pt = readParams(TABLES, { tables: [6, 6], trous: true }), rand = seeded(9), trous = new Set<string>();
     for (let i = 0; i < 40; i++) { const q = TABLES.question('mult:6x7:trou', pt, rand); assert.equal(TABLES.itemKey(q), 'mult:6x7:trou'); trous.add(TABLES.text(q)); }
     assert.deepEqual([...trous].sort(), ['6 × ? = 42', '7 × ? = 42', '? × 6 = 42', '? × 7 = 42']);
+  });
+});
+
+describe('l’exercice Lire l’heure', () => {
+  const p = (precision: string) => readParams(HEURE, { precision });
+
+  it('l’univers suit la précision : 12 heures pleines, 24 avec les demies, 48 avec les quarts, 144 à cinq minutes', () => {
+    assert.deepEqual(['heure', 'demi', 'quart', 'cinq'].map((x) => HEURE.universe(p(x), NO_CONTEXT).length), [12, 24, 48, 144]);
+    assert.deepEqual(HEURE.universe(p('demi'), NO_CONTEXT).slice(0, 3), ['heure:1:00', 'heure:1:30', 'heure:2:00']);
+    assert.equal(readParams(HEURE, {}).precision, 'demi', 'par défaut, les demies');
+    assert.throws(() => readParams(HEURE, { precision: 'seconde' }));
+  });
+
+  it('la réponse au pavé : l’heure du cadran ou douze heures plus tard ; les minutes doivent y être', () => {
+    const q = { h: 7, m: 45 };
+    assert.deepEqual(HEURE.check(q, '745'), { ok: true, expected: '7 h 45' });
+    assert.equal(HEURE.check(q, '1945').ok, true, '19 h 45 aussi');
+    assert.equal(HEURE.check(q, '845').ok, false);
+    assert.equal(HEURE.check(q, '7').ok, false, 'sans les minutes');
+    assert.equal(HEURE.check(q, '').ok, false);
+    assert.deepEqual(HEURE.check({ h: 3, m: 0 }, '3'), { ok: true, expected: '3 h' });
+    assert.equal(HEURE.check({ h: 3, m: 0 }, '300').ok, true);
+    assert.equal(HEURE.check({ h: 3, m: 0 }, '15').ok, true, '15 h');
+    assert.equal(HEURE.check({ h: 12, m: 15 }, '1215').ok, true);
+    assert.equal(HEURE.check({ h: 12, m: 15 }, '015').ok, true, '0 h 15 sur un cadran, c’est 12 h 15');
+    assert.equal(HEURE.check({ h: 10, m: 5 }, '1005').ok, true);
+    assert.equal(HEURE.check({ h: 1, m: 0 }, '25').ok, false, 'pas d’heure 25');
+  });
+
+  it('la saisie s’affiche comme une heure à mesure qu’on tape', () => {
+    assert.deepEqual(['7', '74', '745', '1', '10', '100', '1005', '12'].map((t) => HEURE.display!(t)), ['7 h', '7 h 4', '7 h 45', '1 h', '10 h', '1 h 00', '10 h 05', '12 h']);
+  });
+
+  it('relit une question reçue ; le cadran, les groupes, la grille, le mode Apprendre et le résumé', () => {
+    assert.deepEqual(HEURE.parse({ h: 7, m: 45 }, p('quart')), { h: 7, m: 45 });
+    for (const bad of [null, {}, { h: 0, m: 0 }, { h: 13, m: 0 }, { h: 7, m: 7 }, { h: 7, m: 60 }, { h: '7', m: 0 }]) assert.equal(HEURE.parse(bad, p('cinq')), null, JSON.stringify(bad));
+    assert.equal(HEURE.itemKey({ h: 7, m: 5 }), 'heure:7:05');
+    assert.equal(HEURE.itemLabel('heure:7:05'), '7 h 05');
+    assert.deepEqual(HEURE.clock!({ h: 7, m: 45 }), { h: 7, m: 45 });
+    assert.deepEqual(['heure:7:00', 'heure:7:30', 'heure:7:15', 'heure:7:45', 'heure:7:20'].map((k) => HEURE.groups(k, p('cinq'), NO_CONTEXT)[0]),
+      ['Heures pleines', 'Demies', 'Quarts', 'Quarts', 'Cinq minutes']);
+    const g = HEURE.grid!(p('quart'));
+    assert.deepEqual([g.rows.length, g.cols], [12, ['00', '15', '30', '45']]);
+    assert.equal(g.keyAt(6, 3), 'heure:7:45');
+    assert.deepEqual(HEURE.learn!(p('quart'), NO_CONTEXT).map(HEURE.text), ['4 h', '4 h 15', '4 h 30', '4 h 45']);
+    assert.equal(HEURE.learn!(p('heure'), NO_CONTEXT).length, 12);
+    assert.equal(HEURE.spoken!({ h: 7, m: 45 }), '7 heures 45');
+    assert.equal(HEURE.summary(p('quart'), NO_CONTEXT), 'L’heure, au quart d’heure près');
+    const rand = seeded(3);
+    assert.equal(HEURE.itemKey(HEURE.question('heure:9:30', p('demi'), rand)), 'heure:9:30');
   });
 });
 

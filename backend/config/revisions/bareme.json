@@ -20,6 +20,19 @@
   },
   "exercices": {
     "tables": {},
+    "heure": {
+      "_aide": "Lire un cadran demande de regarder deux aiguilles avant d'écrire : un peu plus de temps que pour une table, avec les règles de maîtrise communes.",
+      "ages": [
+        { "jusqua": 6, "accorde": 20, "rapide": 10 },
+        { "jusqua": 7, "accorde": 18, "rapide": 9 },
+        { "jusqua": 8, "accorde": 15, "rapide": 8 },
+        { "jusqua": 9, "accorde": 13, "rapide": 7 },
+        { "jusqua": 10, "accorde": 12, "rapide": 6 },
+        { "jusqua": 14, "accorde": 10, "rapide": 5 }
+      ],
+      "adulte": { "accorde": 8, "rapide": 4 },
+      "sansAge": { "accorde": 15, "rapide": 8 }
+    },
     "dictee": {
       "_aide": "Écrire un mot au clavier prend plus longtemps que répondre 42 : la dictée a ses propres temps, en secondes par mot, et garde les règles de maîtrise communes.",
       "ages": [
