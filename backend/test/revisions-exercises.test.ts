@@ -14,6 +14,7 @@ import { EXERCISES, exerciseById } from '../src/revisions/exercises';
 import { TABLES, TablesQuestion } from '../src/revisions/exercises/tables';
 import { DICTEE } from '../src/revisions/exercises/dictee';
 import { HEURE } from '../src/revisions/exercises/heure';
+import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
 import { migrateRevisions } from '../src/revisions/schema';
 import {
@@ -172,6 +173,38 @@ describe('l’exercice Tables', () => {
     const pt = readParams(TABLES, { tables: [6, 6], trous: true }), rand = seeded(9), trous = new Set<string>();
     for (let i = 0; i < 40; i++) { const q = TABLES.question('mult:6x7:trou', pt, rand); assert.equal(TABLES.itemKey(q), 'mult:6x7:trou'); trous.add(TABLES.text(q)); }
     assert.deepEqual([...trous].sort(), ['6 × ? = 42', '7 × ? = 42', '? × 6 = 42', '? × 7 = 42']);
+  });
+});
+
+describe('l’exercice Soustractions', () => {
+  const p = readParams(SOUSTRACTIONS, { tables: [7, 7] });
+
+  it('l’univers : pour chaque nombre enlevé, chaque résultat de 0 à 10, jamais commutatif', () => {
+    const u = SOUSTRACTIONS.universe(p, NO_CONTEXT);
+    assert.equal(u.length, 11);
+    assert.deepEqual([u[0], u[10]], ['sub:7-7', 'sub:17-7']);
+    assert.equal(SOUSTRACTIONS.universe(readParams(SOUSTRACTIONS, {}), NO_CONTEXT).length, 44, 'par défaut, enlever de 2 à 5');
+    assert.throws(() => readParams(SOUSTRACTIONS, { tables: [3, 11] }));
+    assert.notEqual(SOUSTRACTIONS.itemKey({ a: 13, b: 7 }), SOUSTRACTIONS.itemKey({ a: 13, b: 6 }));
+  });
+
+  it('la correction, la relecture, les groupes, la grille, le mode Apprendre et le résumé', () => {
+    assert.deepEqual(SOUSTRACTIONS.check({ a: 13, b: 7 }, '6'), { ok: true, expected: '6' });
+    assert.equal(SOUSTRACTIONS.check({ a: 13, b: 7 }, ' 06 ').ok, true);
+    assert.equal(SOUSTRACTIONS.check({ a: 13, b: 7 }, '7').ok, false);
+    assert.deepEqual(SOUSTRACTIONS.check({ a: 7, b: 7 }, '0'), { ok: true, expected: '0' });
+    assert.deepEqual(SOUSTRACTIONS.parse({ a: 13, b: 7 }, p), { a: 13, b: 7 });
+    for (const bad of [null, {}, { a: 3, b: 7 }, { a: 19, b: 2 }, { a: 13, b: 11 }, { a: '13', b: 7 }]) assert.equal(SOUSTRACTIONS.parse(bad, p), null, JSON.stringify(bad));
+    assert.equal(SOUSTRACTIONS.text({ a: 13, b: 7 }), '13 − 7');
+    assert.equal(SOUSTRACTIONS.itemLabel('sub:13-7'), '13 − 7');
+    assert.deepEqual(SOUSTRACTIONS.groups('sub:13-7', p, NO_CONTEXT), ['Enlever 7']);
+    const g = SOUSTRACTIONS.grid!(p);
+    assert.deepEqual([g.rows.length, g.cols.length, g.rows[7], g.corner], [11, 11, '− 7', '=']);
+    assert.equal(g.keyAt(7, 3), 'sub:10-7');
+    assert.deepEqual(SOUSTRACTIONS.learn!(p, NO_CONTEXT).map(SOUSTRACTIONS.text).slice(0, 3), ['7 − 7', '8 − 7', '9 − 7']);
+    assert.equal(SOUSTRACTIONS.spoken!({ a: 13, b: 7 }), '13 moins 7, 6');
+    assert.equal(SOUSTRACTIONS.summary(p, NO_CONTEXT), 'Les soustractions, enlever 7');
+    assert.equal(SOUSTRACTIONS.summary(readParams(SOUSTRACTIONS, {}), NO_CONTEXT), 'Les soustractions, enlever de 2 à 5');
   });
 });
 
