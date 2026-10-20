@@ -205,7 +205,7 @@ Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions
 | le programme d'un enfant | lire le sien | régler, retirer |
 | enregistrer une session au nom d'un autre | refusé | refusé |
 
-Un jeton d'accès (assistant, script) n'entre pas dans l'API du module : l'assistant passe par ses outils MCP `revisions_*` (`docs/assistants.md`), avec les mêmes règles : un enfant ne voit que lui, le bilan et le réglage d'un programme sont réservés aux adultes, le réglage à un jeton d'écriture, chaque réglage est journalisé avec le nom du jeton.
+Un jeton d'accès (assistant, script) n'entre pas dans l'API du module : l'assistant passe par ses outils MCP `revisions_*` (`docs/assistants.md`), avec les mêmes règles : un enfant ne voit que lui, le bilan, le réglage d'un programme et la gestion des listes du foyer (créer, modifier, archiver) sont réservés aux adultes, les écritures à un jeton d'écriture, chacune est journalisée avec le nom du jeton. Les listes passent par les mêmes règles qu'à l'écran (`revisions/content.ts`).
 
 ## API
 

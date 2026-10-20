@@ -14,7 +14,8 @@ import { EXERCISES, exerciseById } from '../revisions/exercises';
 import { ExerciseContext, ExerciseDef, ParamDecl, Params, defaults, readParams } from '../revisions/exercises/contract';
 import { Status, status } from '../revisions/mastery';
 import { Matiere, matiereLabel } from '../revisions/matieres';
-import { activeProgram, countedAnswers, masteryRows, sessionsOf, setProgram, stopProgram, toMastery } from '../revisions/repo';
+import { activeProgram, countedAnswers, createList, foyerListId, masteryRows, sessionsOf, setProgram, stopProgram, toMastery, updateList } from '../revisions/repo';
+import { LIST_ITEMS_RULE, LIST_LABEL_RULE, cleanListItems, cleanListLabel } from '../revisions/content';
 import { syncDayTasks } from '../revisions/devoirs';
 import type { McpCtx } from './tools';
 
@@ -202,4 +203,84 @@ export function revisionsProgrammeDefinir(ctx: McpCtx, a: {
 /** Les tâches du jour suivent le programme ; un échec n'empêche pas de l'enregistrer, le passage suivant rattrape. */
 function dayTasks(): void {
   try { syncDayTasks(); } catch (e) { log.erreur('Révisions : tâches du jour en échec', e); }
+}
+
+// ---- Les listes de contenu (la dictée de la semaine) ----
+// Les mêmes règles qu'à l'écran (revisions/content.ts) : un adulte crée,
+// modifie ou archive une liste du foyer, jamais ne l'efface ; une liste livrée
+// ne se change que dans la configuration.
+
+/** L'exercice d'une liste : un exercice qui lit un contenu ; s'il n'y en a qu'un, celui-là. */
+function pickContentExercise(id?: string): ExerciseDef | string {
+  const avec = EXERCISES.filter((e) => e.params.some((p) => p.type === 'content'));
+  if (!id?.trim()) return avec.length === 1 ? avec[0] : `Précisez \`exercice\` : ${avec.map((e) => e.id).join(', ')}.`;
+  const d = exerciseById(id.trim());
+  if (!d) return `Exercice inconnu : « ${id} ». Exercices à listes : ${avec.map((e) => e.id).join(', ')}.`;
+  return avec.includes(d) ? d : `L’exercice ${d.label} n’a pas de listes.`;
+}
+/** Le nom d'un élément pour l'exercice (« mot », « mots »), d'après son paramètre de contenu. */
+const unit = (d: ExerciseDef, n: number): string => {
+  const p = d.params.find((x) => x.type === 'content');
+  return `${n} ${p && p.type === 'content' ? (n > 1 ? p.items : p.item) : n > 1 ? 'éléments' : 'élément'}`;
+};
+/** Des mots donnés en liste, ou en texte séparé par des virgules, des points-virgules ou des retours à la ligne, comme à l'écran. */
+const wordsOf = (v: unknown): unknown => (typeof v === 'string' ? v.split(/[\n,;]+/) : v);
+/** Les enfants dont le programme en vigueur lit cette liste. */
+function readersOf(d: ExerciseDef, listId: string): string[] {
+  const key = d.params.find((x) => x.type === 'content')?.key;
+  return members().filter((m) => m.enfant).filter((m) => {
+    const p = activeProgram(m.id, d.id);
+    try { return !!p && !!key && (JSON.parse(p.params_json) as Params)[key] === listId; } catch { return false; }
+  }).map((m) => m.name);
+}
+
+/** Les listes d'un exercice : livrées et du foyer, archivées marquées, et qui les travaille. */
+export function revisionsListes(a: { exercice?: string }): string {
+  const d = pickContentExercise(a.exercice);
+  if (typeof d === 'string') return d;
+  const lists = contextOf(d.id).lists;
+  if (!lists.length) return `Aucune liste pour ${d.label} : revisions_liste_creer en ajoute une.`;
+  return `${d.label}, les listes :\n` + lists.map((l) => {
+    const qui = readersOf(d, l.id);
+    const mots = l.items.slice(0, 12).join(', ') + (l.items.length > 12 ? ', …' : '');
+    return `- « ${l.label} » [${l.id}] (${l.source === 'livre' ? 'livrée' : 'du foyer'}${l.archived ? ', archivée' : ''}, ${unit(d, l.items.length)}) : ${mots}${qui.length ? ` ; programme de ${qui.join(', ')}` : ''}`;
+  }).join('\n') + '\n\nPour qu’un enfant la travaille : revisions_programme_definir, `params` { liste: l’identifiant }.';
+}
+
+/** Une liste du foyer (la dictée de la semaine). */
+export function revisionsListeCreer(ctx: McpCtx, a: { exercice?: string; nom?: string; mots?: unknown }): string {
+  const d = pickContentExercise(a.exercice);
+  if (typeof d === 'string') return d;
+  const label = cleanListLabel(a.nom);
+  if (label === null) return 'Refusé : ' + LIST_LABEL_RULE;
+  const items = cleanListItems(wordsOf(a.mots));
+  if (items === null) return 'Refusé : ' + LIST_ITEMS_RULE;
+  const l = createList(d.id, label, items, ctx.memberId);
+  const me = members().find((x) => x.id === ctx.memberId);
+  log.info(`Révisions : ${me?.name ?? ctx.memberId} a créé la liste « ${l.label} » (${d.label}, ${l.items.length} éléments) par l’assistant (${ctx.via}).`);
+  return `Liste « ${l.label} » [${l.id}] créée pour ${d.label} : ${unit(d, l.items.length)}. Pour qu’un enfant la travaille : revisions_programme_definir avec \`params\` { liste: "${l.id}" }.`;
+}
+
+/** Modifier une liste du foyer (nom, mots), l'archiver ou la ressortir. Jamais l'effacer ; une liste livrée ne se modifie pas ici. */
+export function revisionsListeModifier(ctx: McpCtx, a: { exercice?: string; id?: string; nom?: string; mots?: unknown; archiver?: boolean }): string {
+  const d = pickContentExercise(a.exercice);
+  if (typeof d === 'string') return d;
+  const ref = (a.id ?? '').trim();
+  const n = foyerListId(ref);
+  if (n === null) return contextOf(d.id).lists.some((l) => l.id === ref)
+    ? `« ${ref} » est une liste livrée : elle se change dans la configuration du serveur, pas ici. revisions_liste_creer en fait une copie du foyer.`
+    : `Liste inconnue : « ${ref} » (voir revisions_listes).`;
+  const change: { label?: string; items?: string[]; archived?: boolean } = {};
+  if (a.nom !== undefined) { const l = cleanListLabel(a.nom); if (l === null) return 'Refusé : ' + LIST_LABEL_RULE; change.label = l; }
+  if (a.mots !== undefined) { const it = cleanListItems(wordsOf(a.mots)); if (it === null) return 'Refusé : ' + LIST_ITEMS_RULE; change.items = it; }
+  if (typeof a.archiver === 'boolean') change.archived = a.archiver;
+  if (!Object.keys(change).length) return 'Rien à changer : donnez `nom`, `mots` ou `archiver`.';
+  const l = updateList(d.id, n, change);
+  if (!l) return `Liste inconnue : « ${ref} » (voir revisions_listes).`;
+  const me = members().find((x) => x.id === ctx.memberId);
+  const verbe = a.archiver === true ? 'archivé' : a.archiver === false ? 'ressorti' : 'modifié';
+  log.info(`Révisions : ${me?.name ?? ctx.memberId} a ${verbe} la liste « ${l.label} » (${d.label}) par l’assistant (${ctx.via}).`);
+  const qui = readersOf(d, l.id);
+  const suite = a.archiver === true && qui.length ? ` Elle reste lisible par le programme de ${qui.join(', ')}, qui la garde jusqu’à ce qu’on lui en donne une autre.` : '';
+  return `Liste « ${l.label} » [${l.id}] ${verbe === 'modifié' ? 'modifiée' : verbe === 'archivé' ? 'archivée' : 'ressortie'} : ${unit(d, l.items.length)}.${suite}`;
 }

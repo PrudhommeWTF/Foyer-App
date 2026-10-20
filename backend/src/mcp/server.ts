@@ -637,6 +637,26 @@ const TOOLS: ToolDef[] = [
     run: (ctx, a) => rv.revisionsBilan(ctx, { enfant: str(a.enfant), periode: str(a.periode) }),
   },
   {
+    name: 'revisions_listes',
+    description: 'Les listes d’un exercice à contenu (la dictée de mots) : livrées et du foyer, archivées signalées, leurs premiers mots, et quels enfants les travaillent. `exercice` : facultatif tant qu’un seul exercice a des listes.',
+    inputSchema: { type: 'object', properties: { exercice: S.string(40) } },
+    run: (_ctx, a) => rv.revisionsListes({ exercice: str(a.exercice) }),
+  },
+  {
+    name: 'revisions_liste_creer',
+    adultes: true, write: true,
+    description: 'Crée une liste du foyer pour un exercice à contenu (« la dictée de la semaine ») : `nom` (1 à 60 caractères), `mots` (une liste, ou un texte séparé par des virgules ou des retours à la ligne ; 1 à 200 mots de 40 caractères au plus, doublons retirés ; accents gardés tels quels). Pour qu’un enfant la travaille, ensuite : revisions_programme_definir avec `params` { liste: l’identifiant rendu }.',
+    inputSchema: { type: 'object', properties: { exercice: S.string(40), nom: S.string(60), mots: { type: ['array', 'string'], items: S.string(40) } }, required: ['nom', 'mots'] },
+    run: (ctx, a) => rv.revisionsListeCreer(ctx, { exercice: str(a.exercice), nom: str(a.nom), mots: a.mots }),
+  },
+  {
+    name: 'revisions_liste_modifier',
+    adultes: true, write: true,
+    description: 'Modifie une liste du foyer (par `id`, « foyer-<n> », voir revisions_listes) : `nom`, `mots` (remplace toute la liste), ou `archiver` (true la retire des choix, false la ressort). Une liste n’est jamais effacée ; une liste livrée ne se modifie pas ici.',
+    inputSchema: { type: 'object', properties: { exercice: S.string(40), id: S.string(40), nom: S.string(60), mots: { type: ['array', 'string'], items: S.string(40) }, archiver: { type: 'boolean' } }, required: ['id'] },
+    run: (ctx, a) => rv.revisionsListeModifier(ctx, { exercice: str(a.exercice), id: str(a.id), nom: a.nom === undefined ? undefined : str(a.nom) ?? '', mots: a.mots, archiver: bool(a.archiver) }),
+  },
+  {
     name: 'revisions_programme_definir',
     adultes: true, write: true,
     description: 'Règle le programme d’un enfant pour un exercice : `params` (les paramètres de l’exercice, voir revisions_exercices ; ceux qui manquent gardent la valeur du programme en cours), `questions` (5 à 100), `objectif_jour` (sessions par jour, 0 à 10), `secondes` (temps par réponse, null pour le barème selon l’âge). `retirer: true` retire le programme sans rien effacer. Pour « la maîtresse veut les tables de 2 à 5 pour Gaëtan ».',
