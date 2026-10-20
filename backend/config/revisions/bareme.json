@@ -24,6 +24,32 @@
     "complements": {},
     "doubles": {},
     "comparer": {},
+    "lettres": {},
+    "monnaie": {
+      "_aide": "Compter des pièces et des billets, en additionnant de tête : bien plus long qu'une table, un peu plus que l'heure.",
+      "ages": [
+        { "jusqua": 6, "accorde": 30, "rapide": 15 },
+        { "jusqua": 7, "accorde": 25, "rapide": 12 },
+        { "jusqua": 8, "accorde": 22, "rapide": 11 },
+        { "jusqua": 9, "accorde": 20, "rapide": 10 },
+        { "jusqua": 10, "accorde": 18, "rapide": 9 },
+        { "jusqua": 14, "accorde": 15, "rapide": 7 }
+      ],
+      "adulte": { "accorde": 10, "rapide": 5 },
+      "sansAge": { "accorde": 22, "rapide": 11 }
+    },
+    "accords": {
+      "_aide": "Écrire un mot au clavier, comme une forme conjuguée : les temps de la conjugaison.",
+      "ages": [
+        { "jusqua": 7, "accorde": 25, "rapide": 12 },
+        { "jusqua": 8, "accorde": 20, "rapide": 10 },
+        { "jusqua": 9, "accorde": 18, "rapide": 9 },
+        { "jusqua": 10, "accorde": 16, "rapide": 8 },
+        { "jusqua": 14, "accorde": 12, "rapide": 6 }
+      ],
+      "adulte": { "accorde": 8, "rapide": 4 },
+      "sansAge": { "accorde": 20, "rapide": 10 }
+    },
     "heure": {
       "_aide": "Lire un cadran demande de regarder deux aiguilles avant d'écrire : un peu plus de temps que pour une table, avec les règles de maîtrise communes.",
       "ages": [

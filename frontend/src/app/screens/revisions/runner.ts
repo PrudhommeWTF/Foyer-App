@@ -3,6 +3,7 @@ import type { ExerciseDef, Mode, Params } from '../../core/revisions/exercises/c
 import { MODE_LABELS, Result, classify } from '../../core/revisions/revisions';
 import { KeypadComponent } from './keypad';
 import { ClockComponent } from './clock';
+import { CoinsComponent } from './coins';
 
 export interface RunPlan {
   def: ExerciseDef; params: Params; mode: Mode; questions: unknown[];
@@ -42,7 +43,7 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
   selector: 'rev-runner',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KeypadComponent, ClockComponent],
+  imports: [KeypadComponent, ClockComponent, CoinsComponent],
   template: `
     <div class="run" [class.learn]="learn()">
       <div class="top">
@@ -82,6 +83,17 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
                   </div>
                 </div>
               }
+              @case ('monnaie') {
+                <!-- L'énoncé est la monnaie : sa légende dit les pièces, pas le total. -->
+                @let a = askOf(q);
+                <div class="ask clock" #ask tabindex="-1" [attr.aria-label]="'Combien cela fait-il en tout ? ' + plan().def.text(q)">
+                  <rev-coins [coins]="plan().def.coins?.(q) ?? []" />
+                  <div class="line">
+                    @if (a.before) { <span class="ops">{{ a.before }}</span> }
+                    <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span>
+                  </div>
+                </div>
+              }
               @case ('passage') {
                 <!-- Le texte à lire, puis la question : on répond en touchant, le texte reste sous les yeux. -->
                 @let a = askOf(q);
@@ -93,7 +105,7 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
               @default {
                 @let a = askOf(q);
                 <!-- Un énoncé long (« avoir (présent) : tu ») prend une taille plus sobre que « 6 × 7 = ». -->
-                <div class="ask" [class.long]="(a.before + a.after).length > 14" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
+                <div class="ask" [class.long]="(a.before + a.after).length > 14" #ask tabindex="-1" [attr.aria-label]="(a.before + ' … ' + a.after).trim()">
                   @if (a.before) { <span class="ops">{{ a.before }}</span> }
                   @if (plan().def.input !== 'clavier') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span> }
                   @if (a.after) { <span class="ops">{{ a.after }}</span> }
@@ -210,7 +222,7 @@ export class RunnerComponent implements OnInit, OnDestroy {
   readonly idx = signal(0);
   readonly typed = signal('');
   /** La saisie telle que l'exercice l'affiche (« 745 » : « 7 h 45 »), ou les chiffres tels quels. */
-  readonly shown = computed(() => { const t = this.typed(), d = this.plan().def.display; return t && d ? d(t) : t; });
+  readonly shown = computed(() => { const t = this.typed(), d = this.plan().def.display; return t && d ? d(t, this.current()) : t; });
   readonly fb = signal<{ kind: Result; text: string } | null>(null);
   readonly busy = signal(false);
   private readonly askEl = viewChild<ElementRef<HTMLElement>>('ask');

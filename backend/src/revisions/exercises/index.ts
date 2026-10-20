@@ -11,8 +11,11 @@ import { SOUSTRACTIONS } from './soustractions';
 import { COMPLEMENTS } from './complements';
 import { DOUBLES } from './doubles';
 import { COMPARER } from './comparer';
+import { LETTRES } from './lettres';
+import { MONNAIE } from './monnaie';
+import { ACCORDS } from './accords';
 import { LECTURE } from './lecture';
 
-export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, SOUSTRACTIONS as ExerciseDef, COMPLEMENTS as ExerciseDef, DOUBLES as ExerciseDef, COMPARER as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef, CONJUGAISON as ExerciseDef, ORTHOGRAPHE as ExerciseDef, LECTURE as ExerciseDef];
+export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, SOUSTRACTIONS as ExerciseDef, COMPLEMENTS as ExerciseDef, DOUBLES as ExerciseDef, COMPARER as ExerciseDef, LETTRES as ExerciseDef, MONNAIE as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef, CONJUGAISON as ExerciseDef, ORTHOGRAPHE as ExerciseDef, ACCORDS as ExerciseDef, LECTURE as ExerciseDef];
 
 export const exerciseById = (id: unknown): ExerciseDef | undefined => EXERCISES.find((e) => e.id === id);

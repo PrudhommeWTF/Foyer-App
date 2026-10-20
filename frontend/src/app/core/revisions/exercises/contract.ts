@@ -17,8 +17,8 @@ export const MODES: readonly Mode[] = ['apprendre', 'entrainer', 'test'];
 
 /** Comment l'enfant répond : le pavé numérique maison, le clavier, un choix parmi plusieurs. */
 export type InputKind = 'pave' | 'clavier' | 'choix';
-/** Comment la question est posée : un texte, une voix, un cadran, un texte à lire puis une question. */
-export type PromptKind = 'texte' | 'audio' | 'horloge' | 'passage';
+/** Comment la question est posée : un texte, une voix, un cadran, un texte à lire puis une question, des pièces et des billets. */
+export type PromptKind = 'texte' | 'audio' | 'horloge' | 'passage' | 'monnaie';
 /** Comment la maîtrise se montre : une grille à deux entrées, ou une liste. */
 export type ViewKind = 'grille' | 'liste';
 /** Ce que l'appareil doit savoir faire pour que l'exercice soit proposé. */
@@ -132,8 +132,10 @@ export interface ExerciseDef<Q = unknown> {
   passage?(q: Q): string;
   /** Les réponses proposées d'une saisie « choix », dans l'ordre de l'écran. Obligatoire pour cette saisie. */
   choices?(q: Q): string[];
-  /** La saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 »). Absent : les chiffres tels quels. */
-  display?(typed: string): string;
+  /** Les pièces et billets d'un énoncé « monnaie », en centimes. Obligatoire pour cet énoncé. */
+  coins?(q: Q): number[];
+  /** La saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 », « 340 » devient « 3,40 € » selon la question). Absent : les chiffres tels quels. */
+  display?(typed: string, q: Q): string;
   /** La forme de la vue « grille ». */
   grid?(p: Params): GridShape;
   /** Un résumé du programme en une ligne (« Les tables de 6 à 9, multiplication »). */
