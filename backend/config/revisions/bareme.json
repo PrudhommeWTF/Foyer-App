@@ -47,6 +47,18 @@
       "adulte": { "accorde": 10, "rapide": 5 },
       "sansAge": { "accorde": 25, "rapide": 12 }
     },
+    "orthographe": {
+      "_aide": "Lire une phrase puis choisir le bon mot : plus long qu'un calcul, plus court qu'un mot à écrire.",
+      "ages": [
+        { "jusqua": 7, "accorde": 18, "rapide": 9 },
+        { "jusqua": 8, "accorde": 15, "rapide": 7 },
+        { "jusqua": 9, "accorde": 13, "rapide": 6 },
+        { "jusqua": 10, "accorde": 12, "rapide": 5 },
+        { "jusqua": 14, "accorde": 10, "rapide": 4 }
+      ],
+      "adulte": { "accorde": 6, "rapide": 3 },
+      "sansAge": { "accorde": 15, "rapide": 7 }
+    },
     "conjugaison": {
       "_aide": "Écrire une forme conjuguée au clavier demande un peu moins qu'un mot de dictée (on la connaît ou pas), bien plus qu'un calcul.",
       "ages": [

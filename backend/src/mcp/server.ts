@@ -613,7 +613,7 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'revisions_exercices',
-    description: 'Les exercices du module Révisions (les tables, les soustractions, la lecture de l’heure, la dictée de mots, la conjugaison), leur matière, et les paramètres qu’un programme peut régler, avec leurs bornes et leurs valeurs par défaut. À lire avant revisions_programme_definir.',
+    description: 'Les exercices du module Révisions (les tables, les soustractions, la lecture de l’heure, la dictée de mots, la conjugaison, l’orthographe), leur matière, et les paramètres qu’un programme peut régler, avec leurs bornes et leurs valeurs par défaut. À lire avant revisions_programme_definir.',
     inputSchema: { type: 'object', properties: {} },
     run: () => rv.revisionsExercices(),
   },
@@ -645,7 +645,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'revisions_liste_creer',
     adultes: true, write: true,
-    description: 'Crée une liste du foyer pour un exercice à contenu (« la dictée de la semaine ») : `nom` (1 à 60 caractères), `mots` (une liste, ou un texte séparé par des virgules ou des retours à la ligne ; 1 à 200 mots de 40 caractères au plus, doublons retirés ; accents gardés tels quels). Pour la conjugaison, un élément par forme : « être (présent) : nous sommes ». Pour qu’un enfant la travaille, ensuite : revisions_programme_definir avec `params` { liste: l’identifiant rendu }.',
+    description: 'Crée une liste du foyer pour un exercice à contenu (« la dictée de la semaine ») : `nom` (1 à 60 caractères), `mots` (une liste, ou un texte séparé par des virgules ou des retours à la ligne ; 1 à 200 mots de 40 caractères au plus, doublons retirés ; accents gardés tels quels). Pour la conjugaison, un élément par forme : « être (présent) : nous sommes » ; pour l’orthographe, une phrase par élément, le trou entre accolades, le bon mot d’abord : « Il {a/à} un chat. ». Pour qu’un enfant la travaille, ensuite : revisions_programme_definir avec `params` { liste: l’identifiant rendu }.',
     inputSchema: { type: 'object', properties: { exercice: S.string(40), nom: S.string(60), mots: { type: ['array', 'string'], items: S.string(40) } }, required: ['nom', 'mots'] },
     run: (ctx, a) => rv.revisionsListeCreer(ctx, { exercice: str(a.exercice), nom: str(a.nom), mots: a.mots }),
   },

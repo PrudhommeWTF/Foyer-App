@@ -116,6 +116,8 @@ export interface ExerciseDef<Q = unknown> {
   spoken?(q: Q): string;
   /** L'heure que dessine un énoncé « horloge » (heures de 1 à 12, minutes). Obligatoire pour cet énoncé. */
   clock?(q: Q): { h: number; m: number };
+  /** Les réponses proposées d'une saisie « choix », dans l'ordre de l'écran. Obligatoire pour cette saisie. */
+  choices?(q: Q): string[];
   /** La saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 »). Absent : les chiffres tels quels. */
   display?(typed: string): string;
   /** La forme de la vue « grille ». */

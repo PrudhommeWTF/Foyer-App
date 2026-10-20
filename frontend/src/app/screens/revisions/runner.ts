@@ -14,7 +14,7 @@ export interface RunAnswer { question: unknown; key: string; given: string | nul
 export interface RunResult { startedAt: string; endedAt: string; aborted: boolean; answers: RunAnswer[]; }
 
 /** Les saisies que cet écran sait afficher. Un exercice d'une autre saisie n'est pas proposé. */
-export const SUPPORTED_INPUTS: ReadonlySet<string> = new Set(['pave', 'clavier']);
+export const SUPPORTED_INPUTS: ReadonlySet<string> = new Set(['pave', 'clavier', 'choix']);
 
 /** La voix française de l'appareil, locale de préférence ; null sans synthèse vocale ou sans voix française. */
 export function frenchVoice(): SpeechSynthesisVoice | null {
@@ -87,7 +87,7 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
                 <!-- Un énoncé long (« avoir (présent) : tu ») prend une taille plus sobre que « 6 × 7 = ». -->
                 <div class="ask" [class.long]="(a.before + a.after).length > 14" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
                   @if (a.before) { <span class="ops">{{ a.before }}</span> }
-                  @if (plan().def.input === 'pave') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span> }
+                  @if (plan().def.input !== 'clavier') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span> }
                   @if (a.after) { <span class="ops">{{ a.after }}</span> }
                 </div>
               }
@@ -106,6 +106,17 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
         <div class="padzone">
           @switch (plan().def.input) {
             @case ('pave') { <rev-keypad [disabled]="busy()" [canSubmit]="!!typed()" (digit)="digit($event)" (erase)="erase()" (submit)="ok()" /> }
+            @case ('choix') {
+              <!-- De grands boutons, un par réponse proposée : toucher répond. -->
+              @let q = current();
+              @if (q !== null) {
+                <div class="choices" role="group" aria-label="Choisis la bonne réponse">
+                  @for (c of plan().def.choices?.(q) ?? []; track c) {
+                    <button type="button" class="choice" [class.picked]="typed() === c" [disabled]="busy()" (click)="pick(c)">{{ c }}</button>
+                  }
+                </div>
+              }
+            }
             @case ('clavier') {
               <!-- Le clavier du système, sans correction automatique, majuscule ni vérification
                    orthographique : c'est l'enfant qui écrit, pas l'appareil. Sur iPhone et iPad,
@@ -151,6 +162,10 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
     .word { font-size: clamp(40px, 10vw, 64px); font-weight: 800; color: var(--primary); }
     .hint { font-size: 22px; font-weight: 800; color: var(--ink2); }
     .again { border: 2px solid var(--line); background: var(--surface); border-radius: 14px; padding: 10px 20px; font-family: inherit; font-size: 17px; font-weight: 800; color: var(--ink); min-height: 52px; cursor: pointer; }
+    .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 360px; max-width: 100%; }
+    .choice { min-height: 72px; border: 3px solid transparent; border-radius: 18px; background: var(--surface); box-shadow: var(--sh-float); font-family: inherit; font-size: 30px; font-weight: 800; color: var(--ink); cursor: pointer; touch-action: manipulation; }
+    .choice:active:not(:disabled), .choice.picked { border-color: var(--primary); }
+    .choice:disabled { cursor: default; }
     .type { display: flex; gap: 10px; width: 100%; max-width: 460px; }
     .field { flex: 1; min-width: 0; min-height: 60px; padding: 0 16px; border: 3px solid var(--line); border-radius: 16px; background: var(--surface); font-family: inherit; font-size: 28px; font-weight: 800; color: var(--ink); }
     .field:focus { outline: none; border-color: var(--primary); }
@@ -214,6 +229,12 @@ export class RunnerComponent implements OnInit, OnDestroy {
   /** Le clavier d'un Mac ou d'un clavier branché à l'iPad : chiffres, retour arrière, Entrée. */
   @HostListener('document:keydown', ['$event'])
   onKey(e: KeyboardEvent): void {
+    // Au choix, les touches 1 à 4 touchent le bouton correspondant (le clavier d'un Mac ou d'un iPad).
+    if (this.plan().def.input === 'choix') {
+      const q = this.current(), i = Number(e.key) - 1, c = q !== null ? this.plan().def.choices?.(q) ?? [] : [];
+      if (Number.isInteger(i) && i >= 0 && i < c.length) { this.pick(c[i]); e.preventDefault(); }
+      return;
+    }
     if (this.plan().def.input !== 'pave') return;
     if (/^[0-9]$/.test(e.key)) { this.digit(e.key); e.preventDefault(); }
     else if (e.key === 'Backspace') { this.erase(); e.preventDefault(); }
@@ -241,6 +262,8 @@ export class RunnerComponent implements OnInit, OnDestroy {
   erase(): void { if (!this.busy()) this.typed.update((t) => t.slice(0, -1)); }
   skip(): void { if (!this.busy()) this.answer(null); }
   ok(): void { if (!this.busy() && this.typed().trim()) this.answer(this.typed()); }
+  /** Une réponse touchée parmi celles proposées : elle s'inscrit dans le trou, et compte aussitôt. */
+  pick(c: string): void { if (this.busy()) return; this.typed.set(c); this.ok(); }
 
   private answer(given: string | null): void {
     const q = this.current(); if (q === null) return;
