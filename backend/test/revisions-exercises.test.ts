@@ -8,8 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import Database from 'better-sqlite3';
-import { ExerciseContext, NO_CONTEXT, PARAM_TYPES, ParamDecl, defaults, readParams } from '../src/revisions/exercises/contract';
-import { shippedLists } from '../src/revisions/content';
+import { ExerciseContext, LONG_ITEM_MAX, NO_CONTEXT, PARAM_TYPES, ParamDecl, defaults, longItems, readParams, splitItems } from '../src/revisions/exercises/contract';
+import { cleanListItems, shippedLists } from '../src/revisions/content';
 import { EXERCISES, exerciseById } from '../src/revisions/exercises';
 import { TABLES, TablesQuestion } from '../src/revisions/exercises/tables';
 import { DICTEE } from '../src/revisions/exercises/dictee';
@@ -19,6 +19,7 @@ import { COMPLEMENTS } from '../src/revisions/exercises/complements';
 import { DOUBLES } from '../src/revisions/exercises/doubles';
 import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
 import { ORTHOGRAPHE, readLine as readPhrase } from '../src/revisions/exercises/orthographe';
+import { LECTURE, readLine as readQuestion } from '../src/revisions/exercises/lecture';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
 import { migrateRevisions } from '../src/revisions/schema';
 import {
@@ -49,6 +50,7 @@ describe('le registre', () => {
       if (e.prompt === 'horloge') assert.equal(typeof e.clock, 'function', `${e.id} : un énoncé horloge déclare clock()`);
       if (e.view === 'grille') assert.equal(typeof e.grid, 'function', `${e.id} : une vue grille déclare grid()`);
       if (e.input === 'choix') assert.equal(typeof e.choices, 'function', `${e.id} : une saisie choix déclare choices()`);
+      if (e.prompt === 'passage') assert.equal(typeof e.passage, 'function', `${e.id} : un énoncé passage déclare passage()`);
     }
   });
 
@@ -310,6 +312,73 @@ describe('l’exercice Orthographe', () => {
     const lists = shippedLists(path.join(os.tmpdir(), 'foyer-sans-surcharge'), 'orthographe');
     assert.ok(lists.length >= 6);
     for (const l of lists) assert.equal(l.items.filter((x) => !readPhrase(x)).length, 0, l.id);
+  });
+});
+
+describe('l’exercice Lecture', () => {
+  const texte = 'Inès a sept ans. Son frère Malo a deux ans de plus.';
+  const ctx: ExerciseContext = { lists: [
+    { id: 'semaine', label: 'Inès et Malo', source: 'foyer', items: [
+      `${texte} | Quel âge a Malo ? | neuf ans / sept ans / cinq ans`,
+      `${texte} | Qui est le plus jeune ? | Inès / Malo`,
+      'Le chat dort. | Qui dort ? | le chat',
+      `${texte} | Quel âge a Malo ? | neuf ans / sept ans / cinq ans`,
+    ] },
+  ] };
+  const p = readParams(LECTURE, { liste: 'semaine' }, ctx);
+  const cle = `lect:${texte} | Quel âge a Malo ? | neuf ans / sept ans / cinq ans`;
+
+  it('une ligne par question : le texte, la question, de deux à quatre réponses distinctes', () => {
+    assert.deepEqual(readQuestion(' Le chat dort.|Qui dort ?|le chat / le chien '), { passage: 'Le chat dort.', question: 'Qui dort ?', options: ['le chat', 'le chien'] });
+    assert.deepEqual(readQuestion('Lou a 3 billes, Max en a 5. | Qui en a le plus ? | Max / Lou')?.passage, 'Lou a 3 billes, Max en a 5.', 'virgules et chiffres permis');
+    for (const bad of ['Le chat dort.', 'Le chat dort. | Qui dort ?', 'Le chat dort. | Qui dort ? | le chat', 'Le chat dort. | Qui dort ? | le chat / Le chat',
+      ' | Qui dort ? | a / b', 'Le chat dort. | Qui dort ? | a / b / c / d / e', 'Le chat / le chien. | Qui dort ? | a / b', 'a | b | c / d | e']) assert.equal(readQuestion(bad), null, bad);
+    assert.deepEqual(LECTURE.universe(p, ctx), [cle, `lect:${texte} | Qui est le plus jeune ? | Inès / Malo`], 'sans doublon ni ligne illisible');
+    assert.equal(LECTURE.summary(p, ctx), 'La liste « Inès et Malo » (2 questions)');
+  });
+
+  it('la question : le texte au-dessus, les boutons mélangés, la bonne réponse attendue', () => {
+    const q = LECTURE.question(cle, p, () => 0);
+    assert.equal(LECTURE.passage!(q), texte);
+    assert.deepEqual(LECTURE.ask!(q), { before: 'Quel âge a Malo ?', after: '' });
+    assert.deepEqual([...LECTURE.choices!(q)].sort(), ['cinq ans', 'neuf ans', 'sept ans']);
+    assert.deepEqual(LECTURE.check(q, 'Neuf ans'), { ok: true, expected: 'neuf ans' });
+    assert.equal(LECTURE.check(q, 'sept ans').ok, false);
+    assert.equal(LECTURE.text(q), `${texte} Quel âge a Malo ?`);
+    assert.equal(LECTURE.itemLabel(cle), 'Quel âge a Malo ? neuf ans');
+    const ordres = new Set<string>(); const rand = seeded(5);
+    for (let i = 0; i < 30; i++) ordres.add(LECTURE.choices!(LECTURE.question(cle, p, rand)).join('/'));
+    assert.ok(ordres.size > 2, 'la bonne réponse n’est pas toujours le premier bouton');
+    assert.deepEqual(LECTURE.groups(cle, p, ctx), [texte.slice(0, 29).trimEnd() + '…'], 'les questions d’un même texte vont ensemble');
+    assert.equal(LECTURE.learn, undefined, 'pas de mode Apprendre : on ne recopie pas une réponse de lecture');
+  });
+
+  it('une question relue n’entre dans l’univers que si elle est celle de la liste, bonne réponse comprise', () => {
+    const u = new Set(LECTURE.universe(p, ctx));
+    const vraie = LECTURE.parse({ passage: texte, question: 'Qui est le plus jeune ?', options: ['Inès', 'Malo'], shown: ['Malo', 'Inès'] }, p)!;
+    assert.ok(u.has(LECTURE.itemKey(vraie)));
+    const retournee = LECTURE.parse({ passage: texte, question: 'Qui est le plus jeune ?', options: ['Malo', 'Inès'], shown: ['Malo', 'Inès'] }, p)!;
+    assert.ok(!u.has(LECTURE.itemKey(retournee)), 'un appareil ne fait pas du piège la bonne réponse');
+    assert.equal(LECTURE.parse({ passage: texte, question: 'Qui est le plus jeune ?', options: ['Inès', 'Malo'], shown: ['Inès', 'Léo'] }, p), null);
+  });
+
+  it('les listes livrées se lisent toutes, et chaque ligne tient dans une liste du foyer', () => {
+    const lists = shippedLists(path.join(os.tmpdir(), 'foyer-sans-surcharge'), 'lecture');
+    assert.ok(lists.length >= 2);
+    for (const l of lists) {
+      assert.equal(l.items.filter((x) => !readQuestion(x)).length, 0, l.id);
+      assert.ok(l.items.every((x) => x.length <= LONG_ITEM_MAX), `${l.id} : une ligne de plus de ${LONG_ITEM_MAX} caractères`);
+    }
+  });
+
+  it('des éléments longs : coupés aux seuls retours à la ligne, jusqu’à 240 caractères', () => {
+    assert.equal(longItems(LECTURE), true);
+    assert.equal(longItems(ORTHOGRAPHE), false);
+    assert.deepEqual(splitItems('Lou a 3 billes, Max 5. | Qui ? | Max / Lou\n\nb | c | d / e', true), ['Lou a 3 billes, Max 5. | Qui ? | Max / Lou', 'b | c | d / e']);
+    assert.deepEqual(splitItems('oiseau, école;maison\noiseau', false), ['oiseau', 'école', 'maison']);
+    assert.equal(cleanListItems(['x'.repeat(41)]), null);
+    assert.deepEqual(cleanListItems(['x'.repeat(240)], true), ['x'.repeat(240)]);
+    assert.equal(cleanListItems(['x'.repeat(241)], true), null);
   });
 });
 

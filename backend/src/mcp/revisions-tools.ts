@@ -11,11 +11,11 @@ import { log } from '../log';
 import { Bareme, timingFor } from '../revisions/bareme';
 import { addDays, bilanFor, mondayOf, parisDay } from '../revisions/bilan';
 import { EXERCISES, exerciseById } from '../revisions/exercises';
-import { ExerciseContext, ExerciseDef, ParamDecl, Params, defaults, readParams } from '../revisions/exercises/contract';
+import { ExerciseContext, ExerciseDef, ParamDecl, Params, defaults, longItems, readParams, splitItems } from '../revisions/exercises/contract';
 import { Status, status } from '../revisions/mastery';
 import { Matiere, matiereLabel } from '../revisions/matieres';
 import { activeProgram, countedAnswers, createList, foyerListId, masteryRows, sessionsOf, setProgram, stopProgram, toMastery, updateList } from '../revisions/repo';
-import { LIST_ITEMS_RULE, LIST_LABEL_RULE, cleanListItems, cleanListLabel } from '../revisions/content';
+import { LIST_LABEL_RULE, cleanListItems, cleanListLabel, listItemsRule } from '../revisions/content';
 import { syncDayTasks } from '../revisions/devoirs';
 import type { McpCtx } from './tools';
 
@@ -223,8 +223,8 @@ const unit = (d: ExerciseDef, n: number): string => {
   const p = d.params.find((x) => x.type === 'content');
   return `${n} ${p && p.type === 'content' ? (n > 1 ? p.items : p.item) : n > 1 ? 'éléments' : 'élément'}`;
 };
-/** Des mots donnés en liste, ou en texte séparé par des virgules, des points-virgules ou des retours à la ligne, comme à l'écran. */
-const wordsOf = (v: unknown): unknown => (typeof v === 'string' ? v.split(/[\n,;]+/) : v);
+/** Des éléments donnés en liste, ou en texte coupé comme à l'écran (aux retours à la ligne, et aussi aux virgules pour des mots). */
+const itemsOf = (d: ExerciseDef, v: unknown): string[] | null => cleanListItems(typeof v === 'string' ? splitItems(v, longItems(d)) : v, longItems(d));
 /** Les enfants dont le programme en vigueur lit cette liste. */
 function readersOf(d: ExerciseDef, listId: string): string[] {
   const key = d.params.find((x) => x.type === 'content')?.key;
@@ -253,8 +253,8 @@ export function revisionsListeCreer(ctx: McpCtx, a: { exercice?: string; nom?: s
   if (typeof d === 'string') return d;
   const label = cleanListLabel(a.nom);
   if (label === null) return 'Refusé : ' + LIST_LABEL_RULE;
-  const items = cleanListItems(wordsOf(a.mots));
-  if (items === null) return 'Refusé : ' + LIST_ITEMS_RULE;
+  const items = itemsOf(d, a.mots);
+  if (items === null) return 'Refusé : ' + listItemsRule(longItems(d));
   const l = createList(d.id, label, items, ctx.memberId);
   const me = members().find((x) => x.id === ctx.memberId);
   log.info(`Révisions : ${me?.name ?? ctx.memberId} a créé la liste « ${l.label} » (${d.label}, ${l.items.length} éléments) par l’assistant (${ctx.via}).`);
@@ -272,7 +272,7 @@ export function revisionsListeModifier(ctx: McpCtx, a: { exercice?: string; id?:
     : `Liste inconnue : « ${ref} » (voir revisions_listes).`;
   const change: { label?: string; items?: string[]; archived?: boolean } = {};
   if (a.nom !== undefined) { const l = cleanListLabel(a.nom); if (l === null) return 'Refusé : ' + LIST_LABEL_RULE; change.label = l; }
-  if (a.mots !== undefined) { const it = cleanListItems(wordsOf(a.mots)); if (it === null) return 'Refusé : ' + LIST_ITEMS_RULE; change.items = it; }
+  if (a.mots !== undefined) { const it = itemsOf(d, a.mots); if (it === null) return 'Refusé : ' + listItemsRule(longItems(d)); change.items = it; }
   if (typeof a.archiver === 'boolean') change.archived = a.archiver;
   if (!Object.keys(change).length) return 'Rien à changer : donnez `nom`, `mots` ou `archiver`.';
   const l = updateList(d.id, n, change);

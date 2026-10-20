@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { Bilan, ExerciseOverview, ExerciseStats, ItemHistory, ProgramFields, RevisionsApi, RevisionsConfig } from '../../core/revisions/api';
 import { downloadBlob } from '../../core/download';
-import { ContentList, ExerciseDef, ParamDecl } from '../../core/revisions/exercises/contract';
+import { ContentList, ExerciseDef, ParamDecl, splitItems } from '../../core/revisions/exercises/contract';
 import { RevisionsStore } from '../../core/revisions/store';
 import { ListComponent } from './list';
 import { EXERCISES } from '../../core/revisions/exercises';
@@ -149,7 +149,8 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
             @for (l of lists(); track l.id) {
               <div class="li" [class.arch]="l.archived">
                 <div class="li-t"><b>{{ l.label }}</b> <span>{{ l.items.length }} {{ l.items.length > 1 ? cp.items : cp.item }}{{ l.source === 'livre' ? ', livrée' : '' }}{{ l.archived ? ', archivée' : '' }}</span>
-                  <div class="li-w">{{ l.items.slice(0, 12).join(', ') }}{{ l.items.length > 12 ? '…' : '' }}</div></div>
+                  @let shown = cp.lines ? 2 : 12;
+                  <div class="li-w">{{ l.items.slice(0, shown).join(cp.lines ? ' · ' : ', ') }}{{ l.items.length > shown ? '…' : '' }}</div></div>
                 @if (l.source === 'foyer') {
                   <div class="li-b">
                     @if (!l.archived) { <button class="btn btn-soft sm" (click)="editList(l)">Modifier</button> }
@@ -162,7 +163,8 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
               <div class="ed">
                 <div class="lbl">Nom de la liste</div>
                 <input class="input" [ngModel]="ed.label" (ngModelChange)="editing.set({ id: ed.id, label: $event, text: ed.text })" maxlength="60" placeholder="Semaine du 12 octobre" aria-label="Nom de la liste" />
-                <div class="lbl">Les {{ cp.items }}, un par ligne ou séparés par des virgules</div>
+                <div class="lbl">Les {{ cp.items }}, {{ cp.lines ? 'une par ligne' : 'un par ligne ou séparés par des virgules' }}</div>
+                @if (cp.format) { <p class="hint">{{ cp.format }}</p> }
                 <textarea class="input ta" [ngModel]="ed.text" (ngModelChange)="editing.set({ id: ed.id, label: ed.label, text: $event })" rows="6" [attr.aria-label]="'Les ' + cp.items"></textarea>
                 <p class="hint">{{ splitItems(ed.text).length }} {{ splitItems(ed.text).length > 1 ? cp.items : cp.item }}</p>
                 <div class="b-b">
@@ -374,7 +376,7 @@ export class SuiviComponent {
   readonly lists = computed(() => this.ctx().lists);
   readonly contentParam = computed(() => this.ex().params.find((p) => p.type === 'content') as Extract<ParamDecl, { type: 'content' }> | undefined);
   readonly editing = signal<{ id: string | null; label: string; text: string } | null>(null);
-  splitItems(text: string): string[] { return [...new Set(text.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean))]; }
+  splitItems(text: string): string[] { return splitItems(text, !!this.contentParam()?.lines); }
   editList(l: ContentList): void { this.editing.set({ id: l.id, label: l.label, text: l.items.join('\n') }); }
 
   async saveList(): Promise<void> {

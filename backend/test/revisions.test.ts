@@ -261,6 +261,9 @@ describe('la dictée et ses listes', () => {
     for (const bad of [{ ...corps, label: '' }, { ...corps, items: [] }, { ...corps, items: ['x'.repeat(41)] }]) {
       assert.equal((await appel(ctx.base, 'POST', '/revisions/exercises/dictee/content', bad, ctx.jetons.admin)).status, 400, JSON.stringify(bad));
     }
+    const lecture = await appel(ctx.base, 'POST', '/revisions/exercises/lecture/content', { label: 'Billes', items: ['Lou a 3 billes, Max en a 5 : qui en a le plus, à la fin de la partie ? | Qui en a le plus ? | Max / Lou'] }, ctx.jetons.admin);
+    assert.equal(lecture.status, 201, 'une question de lecture : une ligne longue, virgules comprises');
+    assert.match((await appel(ctx.base, 'POST', '/revisions/exercises/lecture/content', { label: 'x', items: ['x'.repeat(241)] }, ctx.jetons.admin)).json.error, /240 caractères/);
     const r = await appel(ctx.base, 'POST', '/revisions/exercises/dictee/content', corps, ctx.jetons.membre);
     assert.equal(r.status, 201, JSON.stringify(r.json));
     semaine = r.json.list.id;

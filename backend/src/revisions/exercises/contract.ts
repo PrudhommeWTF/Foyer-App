@@ -17,8 +17,8 @@ export const MODES: readonly Mode[] = ['apprendre', 'entrainer', 'test'];
 
 /** Comment l'enfant répond : le pavé numérique maison, le clavier, un choix parmi plusieurs. */
 export type InputKind = 'pave' | 'clavier' | 'choix';
-/** Comment la question est posée : un texte, une voix, un cadran. */
-export type PromptKind = 'texte' | 'audio' | 'horloge';
+/** Comment la question est posée : un texte, une voix, un cadran, un texte à lire puis une question. */
+export type PromptKind = 'texte' | 'audio' | 'horloge' | 'passage';
 /** Comment la maîtrise se montre : une grille à deux entrées, ou une liste. */
 export type ViewKind = 'grille' | 'liste';
 /** Ce que l'appareil doit savoir faire pour que l'exercice soit proposé. */
@@ -43,8 +43,20 @@ export type ParamDecl =
    * Une liste du contenu de l'exercice (livrée en configuration, ou saisie par
    * le foyer), par son identifiant. `default` vide : la première liste. `item`
    * et `items` nomment un élément pour le formulaire (« mot », « mots »).
+   * `lines` : des éléments longs, un par ligne (virgules permises), de
+   * LONG_ITEM_MAX caractères au plus, au lieu de mots de SHORT_ITEM_MAX.
+   * `format` : la forme d'un élément, rappelée sous le champ de saisie.
    */
-  | (ParamBase & { type: 'content'; default: string; item: string; items: string });
+  | (ParamBase & { type: 'content'; default: string; item: string; items: string; lines?: boolean; format?: string });
+
+/** La longueur d'un élément de liste du foyer : un mot, ou une ligne (paramètre `lines`). */
+export const SHORT_ITEM_MAX = 40;
+export const LONG_ITEM_MAX = 240;
+/** Les éléments de l'exercice sont-ils des lignes longues ? */
+export const longItems = (d: { params: readonly ParamDecl[] }): boolean => d.params.some((p) => p.type === 'content' && !!p.lines);
+/** Couper un texte saisi en éléments : aux retours à la ligne pour des lignes, aussi aux virgules et points-virgules pour des mots. */
+export const splitItems = (text: string, lines: boolean): string[] =>
+  [...new Set(text.split(lines ? /\n+/ : /[\n,;]+/).map((x) => x.trim()).filter(Boolean))];
 
 export type ParamValue = number | boolean | string | [number, number];
 export type Params = Record<string, ParamValue>;
@@ -116,6 +128,8 @@ export interface ExerciseDef<Q = unknown> {
   spoken?(q: Q): string;
   /** L'heure que dessine un énoncé « horloge » (heures de 1 à 12, minutes). Obligatoire pour cet énoncé. */
   clock?(q: Q): { h: number; m: number };
+  /** Le texte à lire d'un énoncé « passage », au-dessus de la question (`ask`). Obligatoire pour cet énoncé. */
+  passage?(q: Q): string;
   /** Les réponses proposées d'une saisie « choix », dans l'ordre de l'écran. Obligatoire pour cette saisie. */
   choices?(q: Q): string[];
   /** La saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 »). Absent : les chiffres tels quels. */

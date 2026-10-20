@@ -1,0 +1,37 @@
+{
+  "_aide": "Listes livrées pour la lecture du module Révisions. Une ligne par question : le texte à lire, la question, puis les réponses, séparés par « | » ; la bonne réponse d'abord, puis un à trois pièges séparés par « / », par exemple « Léo mange une pomme. | Que mange Léo ? | une pomme / une poire / un gâteau ». Le texte et la question sans « / » ; une réponse de 30 caractères au plus. Plusieurs questions sur le même texte se regroupent au suivi. L'écran mélange l'ordre des boutons. Pour en ajouter ou en changer, déposez un fichier .json dans le dossier de données (FOYER_DATA_DIR/revisions/lecture/) : au même nom il remplace celui-ci, sous un autre nom il s'ajoute. Un parent peut aussi saisir sa liste dans l'écran Révisions, au suivi de l'enfant (une question par ligne, 240 caractères au plus).",
+  "listes": [
+    {
+      "id": "phrases-cp",
+      "label": "Une phrase, une question (CP)",
+      "items": [
+        "Léo mange une pomme. | Que mange Léo ? | une pomme / une poire / un gâteau",
+        "Le chat dort sur le lit. | Où dort le chat ? | sur le lit / sous la table / dans le jardin",
+        "Lila a un ballon rouge. | De quelle couleur est le ballon ? | rouge / bleu / vert",
+        "Papa lit le journal. | Qui lit le journal ? | Papa / Maman / Léo",
+        "Le chien court vite. | Qui court vite ? | le chien / le chat / le lapin",
+        "Tom a trois billes. | Combien de billes a Tom ? | trois / deux / cinq",
+        "La poule pond un œuf. | Que pond la poule ? | un œuf / une plume / un poussin",
+        "Sam va à l'école à vélo. | Comment Sam va-t-il à l'école ? | à vélo / en bus / à pied",
+        "Le soir, Nina prend son bain. | Quand Nina prend-elle son bain ? | le soir / le matin / à midi",
+        "Le petit oiseau chante dans l'arbre. | Où chante l'oiseau ? | dans l'arbre / sur le toit / dans sa cage"
+      ]
+    },
+    {
+      "id": "petits-textes-ce1",
+      "label": "Un petit texte, des questions (CE1)",
+      "items": [
+        "Ce matin, Jules a perdu son bonnet bleu. Il le cherche partout. Enfin, il le trouve sous son lit. | Qu'a perdu Jules ? | son bonnet / son écharpe / ses gants",
+        "Ce matin, Jules a perdu son bonnet bleu. Il le cherche partout. Enfin, il le trouve sous son lit. | Où Jules trouve-t-il son bonnet ? | sous son lit / dans son sac / dans le jardin",
+        "Mamie prépare une tarte aux fraises. Emma l'aide à laver les fruits. Elles mangent la tarte au goûter. | Quelle tarte prépare Mamie ? | aux fraises / aux pommes / au chocolat",
+        "Mamie prépare une tarte aux fraises. Emma l'aide à laver les fruits. Elles mangent la tarte au goûter. | Quand mangent-elles la tarte ? | au goûter / au petit déjeuner / au dîner",
+        "Il pleut depuis le matin. Hugo ne peut pas aller au parc. Alors il construit une cabane avec des coussins. | Pourquoi Hugo ne va-t-il pas au parc ? | il pleut / il est malade / il fait nuit",
+        "Il pleut depuis le matin. Hugo ne peut pas aller au parc. Alors il construit une cabane avec des coussins. | Avec quoi Hugo fait-il sa cabane ? | des coussins / des branches / des cartons",
+        "Le hérisson se cache sous les feuilles. Il dort tout l'hiver. Au printemps, il se réveille et cherche à manger. | Quand le hérisson se réveille-t-il ? | au printemps / en hiver / la nuit",
+        "Le hérisson se cache sous les feuilles. Il dort tout l'hiver. Au printemps, il se réveille et cherche à manger. | Où se cache le hérisson ? | sous les feuilles / dans un arbre / dans l'eau",
+        "Inès a sept ans. Son frère Malo a deux ans de plus qu'elle. Ils partagent la même chambre. | Quel âge a Malo ? | neuf ans / sept ans / cinq ans",
+        "Inès a sept ans. Son frère Malo a deux ans de plus qu'elle. Ils partagent la même chambre. | Qui est le plus jeune ? | Inès / Malo"
+      ]
+    }
+  ]
+}

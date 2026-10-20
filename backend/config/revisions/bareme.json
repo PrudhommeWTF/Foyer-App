@@ -61,6 +61,19 @@
       "adulte": { "accorde": 6, "rapide": 3 },
       "sansAge": { "accorde": 15, "rapide": 7 }
     },
+    "lecture": {
+      "_aide": "Lire un petit texte puis la question, avant de toucher la réponse : le plus long des exercices à choix. Les temps valent pour une question ; un texte de trois phrases au CE1 se lit en vingt à trente secondes.",
+      "ages": [
+        { "jusqua": 6, "accorde": 60, "rapide": 30 },
+        { "jusqua": 7, "accorde": 50, "rapide": 25 },
+        { "jusqua": 8, "accorde": 40, "rapide": 20 },
+        { "jusqua": 9, "accorde": 35, "rapide": 17 },
+        { "jusqua": 10, "accorde": 30, "rapide": 15 },
+        { "jusqua": 14, "accorde": 25, "rapide": 12 }
+      ],
+      "adulte": { "accorde": 15, "rapide": 8 },
+      "sansAge": { "accorde": 45, "rapide": 22 }
+    },
     "conjugaison": {
       "_aide": "Écrire une forme conjuguée au clavier demande un peu moins qu'un mot de dictée (on la connaît ou pas), bien plus qu'un calcul.",
       "ages": [

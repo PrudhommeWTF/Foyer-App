@@ -20,13 +20,13 @@ import { AuthedRequest, currentMember } from '../auth/session';
 import { appareil } from '../auth/switches';
 import { Bareme, timingFor } from './bareme';
 import { Result, classify, status } from './mastery';
-import { MODES, Mode, ExerciseContext, ExerciseDef, Params, defaults, readParams } from './exercises/contract';
+import { MODES, Mode, ExerciseContext, ExerciseDef, Params, defaults, longItems, readParams } from './exercises/contract';
 import { EXERCISES, exerciseById } from './exercises';
 import { Matiere, matiereLabel } from './matieres';
 import { addDays, bilanFor, mondayOf, parisDay as dayOf } from './bilan';
 import { bilanPdf, sessionsCsv } from './export';
 import { devoirsListOf, syncDayTasks, tickDayTask } from './devoirs';
-import { LIST_ITEMS_RULE, LIST_LABEL_RULE, cleanListItems, cleanListLabel } from './content';
+import { LIST_LABEL_RULE, cleanListItems, cleanListLabel, listItemsRule } from './content';
 import {
   AnswerIn, ProgramRow, SessionRow, activeProgram, activePrograms, countedAnswers, itemHistory, masteryRows, programById,
   createList, foyerListId, recordSession, sessionsBetween, sessionsOf, setProgram, stopProgram, toMastery, updateList,
@@ -302,7 +302,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     if (me.enfant) { res.status(403).json({ error: 'Les listes se gèrent par un adulte du foyer.' }); return null; }
     return me;
   };
-  const listBody = (body: Record<string, unknown>, partial: boolean): { label?: string; items?: string[] } => {
+  const listBody = (d: ExerciseDef, body: Record<string, unknown>, partial: boolean): { label?: string; items?: string[] } => {
     const out: { label?: string; items?: string[] } = {};
     if (body['label'] !== undefined || !partial) {
       const l = cleanListLabel(body['label']);
@@ -311,8 +311,8 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     }
     if (body['items'] !== undefined || !partial) {
       if (!Array.isArray(body['items'])) throw new Invalid('Les éléments : une liste attendue.');
-      const items = cleanListItems(body['items']);
-      if (items === null) throw new Invalid(LIST_ITEMS_RULE);
+      const items = cleanListItems(body['items'], longItems(d));
+      if (items === null) throw new Invalid(listItemsRule(longItems(d)));
       out.items = items;
     }
     return out;
@@ -328,7 +328,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
   r.post('/exercises/:exercise/content', route((req, res) => {
     const me = adultOnly(req, res); if (!me) return;
     const d = withContent(req.params['exercise']);
-    const b = listBody((req.body ?? {}) as Record<string, unknown>, false);
+    const b = listBody(d, (req.body ?? {}) as Record<string, unknown>, false);
     const l = createList(d.id, b.label!, b.items!, me.id);
     log.info(`Révisions : ${me.name} a créé la liste « ${l.label} » (${d.label}, ${l.items.length} éléments).`);
     res.status(201).json({ list: l });
@@ -341,7 +341,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const id = foyerListId(String(req.params['id']));
     if (id === null) throw new Invalid('Seule une liste du foyer se modifie ; une liste livrée se change dans la configuration.');
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const l = updateList(d.id, id, { ...listBody(body, true), ...(typeof body['archived'] === 'boolean' ? { archived: body['archived'] } : {}) });
+    const l = updateList(d.id, id, { ...listBody(d, body, true), ...(typeof body['archived'] === 'boolean' ? { archived: body['archived'] } : {}) });
     if (!l) { res.status(404).json({ error: 'Liste introuvable.' }); return; }
     log.info(`Révisions : ${me.name} a ${body['archived'] === true ? 'archivé' : body['archived'] === false ? 'ressorti' : 'modifié'} la liste « ${l.label} » (${d.label}).`);
     res.json({ list: l });
