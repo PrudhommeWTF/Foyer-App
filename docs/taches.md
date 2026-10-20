@@ -35,6 +35,10 @@ exactement comme la liste de courses :
 Les tâches restent dans le même document JSON que le reste : une archive du
 répertoire de données demeure une sauvegarde complète.
 
+## Ce qu'un enfant voit
+
+Dans sa session, un enfant ne voit que ses tâches (celles où il est nommé, et le contenu de ses listes à lui) et les listes qui les portent ; ce qu'il ajoute porte son nom. Règle pure `childTasks` / `childLists` dans `core/tasks.ts`, appliquée par le store à tout ce qui lit les tâches (`d()`, `seenTasks`). C'est un affichage, pas un droit : voir [`portail-enfant.md`](portail-enfant.md).
+
 ## Le modèle
 
 ```ts

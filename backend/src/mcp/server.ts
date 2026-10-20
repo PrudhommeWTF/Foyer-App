@@ -172,6 +172,8 @@ const TOOLS: ToolDef[] = [
   {
     name: 'evenement_creer',
     write: true,
+    // Un enfant lit le calendrier sans le modifier (comme à l'écran, et PUT /state fige ses événements).
+    adultes: true,
     description: 'Ajoute un événement à l’agenda. Sans heure, c’est une journée entière. `pour` accepte des prénoms. `recurrence` : none (défaut), daily, weekday, weekly, biweekly, monthly.',
     inputSchema: {
       type: 'object',
@@ -183,6 +185,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'evenement_modifier',
     write: true,
+    adultes: true,
     description: 'Modifie un événement (par son [id]). Ne change que les champs fournis. `heure` vide bascule en journée entière. `pour` remplace les participants (prénoms).',
     inputSchema: {
       type: 'object',
@@ -194,6 +197,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'evenement_supprimer',
     write: true,
+    adultes: true,
     description: 'Supprime un événement de l’agenda, par son [id].',
     inputSchema: { type: 'object', properties: { id: S.string(80) }, required: ['id'] },
     run: (ctx, a) => t.evenementSupprimer(ctx, str(a.id) || ''),

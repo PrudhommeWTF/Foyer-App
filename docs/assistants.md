@@ -78,7 +78,7 @@ du geste, stock repris d'un coup, et l'historique garde « via un assistant ».
 
 Écriture (jeton `write` seulement), par domaine :
 
-- **Calendrier** : créer, modifier, supprimer un événement (récurrence comprise). Ces outils visent toujours la série entière ; les occurrences qu'une série saute (modifiées ou supprimées seules dans l'app) n'apparaissent pas dans `agenda`.
+- **Calendrier** (adultes seulement ; un jeton d'enfant lit `agenda` sans pouvoir le modifier) : créer, modifier, supprimer un événement (récurrence comprise). Ces outils visent toujours la série entière ; les occurrences qu'une série saute (modifiées ou supprimées seules dans l'app) n'apparaissent pas dans `agenda`.
 - **Courses** : ajouter, changer l'état (à prendre / au panier / introuvable),
   modifier (nom, quantité, rayon, liste), retirer ; créer, renommer, supprimer
   une liste de courses. Le rayon se donne par son nom, sans emoji ni souci

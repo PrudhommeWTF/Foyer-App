@@ -5,7 +5,7 @@ import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf, lastDoneDay } from './task-ops';
 import { ENTRETIEN_LIST_ID, GesteDraft, createOp, editOps, middayOf, plural } from './entretien';
 import { byOrd, singleMove } from './task-order';
-import { REMIND_LABELS, categories, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
+import { REMIND_LABELS, categories, childLists, childTasks, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { downloadBlob } from './download';
 import { KeyStore, adoptQueue, readOwner, readQueue, writeOwner, writeQueue } from './op-queues';
 import { askPersistence, clearCachedDoc, loadCachedDoc, packDoc, readDoc, saveCachedDoc, staleLabel } from './offline-doc';
@@ -204,7 +204,18 @@ export class FoyerStore {
    * lorsqu'il existe (voir shell.ts) : elles l'utilisaient toutes via le même
    * cast `data as () => NonNullable<...>`, recopié dans treize fichiers.
    */
-  readonly d = computed(() => this._data()!);
+  readonly d = computed(() => { const x = this._data()!; return x && this.isChild() ? { ...x, tasks: this.seenTasks() } : x; });
+  /**
+   * Les tâches telles que ce membre les voit : toutes pour un adulte ; pour un
+   * enfant, les siennes seulement (voir childTasks). `d()` les porte déjà ; le
+   * store écrit, lui, toujours sur le document entier.
+   */
+  readonly seenTasks = computed(() => {
+    const x = this._data(), me = this.currentMemberId();
+    return !x ? [] : this.isChild() && me ? childTasks(x.tasks, x.taskLists, me) : x.tasks;
+  });
+  /** Le document tel que ce membre le voit (ses tâches seulement, pour un enfant), ou null tant qu'il n'est pas chargé. */
+  readonly seenData = computed(() => (this._data() ? this.d() : null));
 
   /**
    * Meal slots actually shown. Breakfast is opt-in: it is almost never planned
@@ -585,7 +596,7 @@ export class FoyerStore {
   }
   /** Derived (non-event) calendar items for a day: holidays, school holidays, birthdays, dated tasks. */
   dayExtras(ds: string): DayExtra[] {
-    const d = this._data();
+    const d = this.seenData();
     if (!d) return [];
     return dayExtrasOn(ds, { doc: d, schoolHolidays: this.schoolHolidays(), external: this.externalDayExtras() });
   }
@@ -1331,7 +1342,7 @@ export class FoyerStore {
   /** Ouvre un élément (`id` vide : création). `stack` : depuis une autre fiche, qu'on retrouve au retour. */
   openItem(kind: ItemKindId, id: string | null, ctx?: ItemCtx, stack = false): void {
     const m = ITEM_KINDS[kind];
-    if ((m.module && !this.moduleOn(m.module)) || (m.adultOnly && this.isChild())) return;
+    if ((m.module && !this.moduleOn(m.module)) || (m.adultOnly && this.isChild()) || (m.childReadOnly && this.isChild() && !id)) return;
     this.patch({ item: sheetOpen(this.ui().item, kind, id, ctx, stack), addMenuOpen: false, notifOpen: false });
   }
   closeItem(): void { this.patch({ item: null }); }
@@ -1391,7 +1402,7 @@ export class FoyerStore {
 
   /** Accent/case-insensitive matches across the whole household state. */
   readonly searchResults = computed<SearchHit[]>(() => {
-    const d = this._data();
+    const d = this.seenData();
     const q = normText(this.ui().searchQuery);
     if (!d || !q) return [];
     const mname = (id: string): string => d.members.find((m) => m.id === id)?.name || '';
@@ -1447,6 +1458,7 @@ export class FoyerStore {
    * récurrence elle-même ne peut viser que la série.
    */
   saveEvent(f: EventFields, id: string | null, occ: string, scope?: string): ItemResult {
+    if (this.isChild()) { this.toast('Le calendrier se modifie par un adulte'); return { kind: 'invalid' }; }
     const draft = eventDraft(f);
     if (!draft) { this.toast('Donne un titre à l’événement'); return { kind: 'invalid' }; }
     const by = this.me()?.id ?? null;
@@ -1504,6 +1516,7 @@ export class FoyerStore {
    * offerte quelques secondes, et rend l'événement tel qu'il était.
    */
   delEvent(id: string, occ: string, scope?: string): ItemResult {
+    if (this.isChild()) { this.toast('Le calendrier se modifie par un adulte'); return { kind: 'invalid' }; }
     const ev = this._data()?.events.find((e) => e.id === id); if (!ev) return { kind: 'done' };
     const at = occ && isSeries(ev) ? occ : '';
     if (at && !scope) {
@@ -2076,7 +2089,10 @@ export class FoyerStore {
   /** Les listes que ce membre a le droit de voir. */
   visibleTaskLists(includeArchived = false): TaskList[] {
     // Module Entretien éteint : sa liste se cache dans Tâches (ses gestes sont gardés), pour ne pas surprendre.
-    const lists = visibleLists(this._data()?.taskLists || [], this.currentMemberId(), includeArchived);
+    const me = this.currentMemberId();
+    let lists = visibleLists(this._data()?.taskLists || [], me, includeArchived);
+    // Un enfant ne voit que les listes où il a quelque chose, et les siennes.
+    if (this.isChild() && me) lists = childLists(lists, this.seenTasks(), me);
     return this.modEntretien() ? lists : lists.filter((l) => l.kind !== 'entretien');
   }
 
@@ -2085,7 +2101,15 @@ export class FoyerStore {
     const lists = this.visibleTaskLists();
     const a = this.ui().activeList;
     if (a !== 'all' && lists.some((l) => l.id === a)) return a;
-    return (lists.find((l) => l.kind === 'taches') || lists[0])?.id || '';
+    // Un enfant qui n'a encore rien écrit ajoute dans la première liste « tâches » partagée : elle apparaîtra avec sa tâche.
+    const shared = this.isChild() ? visibleLists(this._data()?.taskLists || [], this.currentMemberId()).find((l) => l.kind === 'taches') : undefined;
+    return (lists.find((l) => l.kind === 'taches') || shared || lists[0])?.id || '';
+  }
+
+  /** Un enfant est toujours nommé sur ce qu'il ajoute : sinon la tâche lui échapperait aussitôt (voir childTasks). */
+  private childWho(who: string[]): string[] {
+    const me = this.currentMemberId();
+    return this.isChild() && me && !who.includes(me) ? [...who, me] : who;
   }
 
   taskSuggestions(listId: string, typed: string): string[] { return suggestTexts(this._data()?.tasks || [], listId, typed); }
@@ -2104,7 +2128,7 @@ export class FoyerStore {
     // Une série a toujours une échéance : sans elle, « toutes les semaines » ne veut rien dire.
     const due = draft.due || (draft.rec ? this.todayStr() : null);
     this.pushTaskOps([{
-      op: 'add', id, listId, text, who: draft.who, due, time: due ? draft.time || null : null,
+      op: 'add', id, listId, text, who: this.childWho(draft.who), due, time: due ? draft.time || null : null,
       cat: draft.cat.trim(), note: draft.note.trim(), rec: draft.rec, remind: due ? draft.remind : null,
     }]);
     return id;
@@ -3037,6 +3061,16 @@ export class FoyerStore {
   shiftSchedWeek(n: number): void { this.patch({ schedAnchor: addDaysIso(this.ui().schedAnchor, n * 7) }); }
   schedToday(): void { this.patch({ schedAnchor: this.todayStr(), schedDow: weekdayOf(this.todayStr()) }); }
 
+  /**
+   * Le filtre en vigueur de l'emploi du temps : celui que l'écran règle, et pour
+   * un enfant, toujours lui seul. Comme pour les tâches, c'est un menu, pas un
+   * droit ; le reste (couverts, présence) lit toujours tout le foyer.
+   */
+  readonly schedFilter = computed<string[]>(() => {
+    const me = this.currentMemberId();
+    return this.isChild() && me ? [me] : this.ui().schedWho;
+  });
+
   /** Les membres du filtre, tels que l'écran les coche et les décoche. */
   toggleSchedWho(id: string): void {
     const cur = this.ui().schedWho;
@@ -3060,7 +3094,7 @@ export class FoyerStore {
   }
   /** Ce qu'un créneau neuf reçoit d'office, au jour `date`. */
   slotDefaults(date: string, start = ''): SlotDefaults {
-    return { date, who: [...this.ui().schedWho], start: start || nextFreeStart(this.shownOn(weekdayOf(date))) };
+    return { date, who: [...this.schedFilter()], start: start || nextFreeStart(this.shownOn(weekdayOf(date))) };
   }
 
   /**
@@ -3249,7 +3283,7 @@ export class FoyerStore {
 
   /** Les créneaux d'un jour tels qu'ils sont affichés en ce moment, à sa date. */
   shownOn(dow: number): SchedSlot[] {
-    return filterSlots(slotsOn(this._data()?.sched || [], this.schedDate(dow), this.calendar()), this.ui().schedWho);
+    return filterSlots(slotsOn(this._data()?.sched || [], this.schedDate(dow), this.calendar()), this.schedFilter());
   }
 
   private snapshot(slots: SchedSlot[]): SchedSlot[] {
@@ -3273,7 +3307,7 @@ export class FoyerStore {
    * lorsqu'un filtre est actif.
    */
   copyWeek(): void {
-    const who = this.ui().schedWho;
+    const who = this.schedFilter();
     if (!who.length) { this.toast('Choisissez d’abord de qui vous copiez la semaine'); return; }
     // La semaine affichée, occurrence par occurrence : ce qui n'a pas lieu cette
     // semaine (activité arrêtée, période de vacances) ne se copie pas.
@@ -3476,7 +3510,7 @@ export class FoyerStore {
    * L'affichage est conditionné au réglage « Notifications ».
    */
   readonly notifications = computed<Notif[]>(() => {
-    const d = this._data();
+    const d = this.seenData();
     if (!d || !this.setting('prefNotifs')) return [];
     const today = this.todayStr();
     const read = this.readNotifs();

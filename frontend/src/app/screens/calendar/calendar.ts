@@ -254,7 +254,7 @@ const GRID_BOTTOM_GAP = 40;    // marge conservée sous la grille jusqu'au bas d
 
         <!-- ===== agenda side panel ===== -->
         <div class="side">
-          <button class="btn btn-primary btn-block add-ev" (click)="store.openItem('event', null)"><f-icon name="plus" [size]="18" color="#fff" /> Ajouter un événement</button>
+          @if (!store.isChild()) { <button class="btn btn-primary btn-block add-ev" (click)="store.openItem('event', null)"><f-icon name="plus" [size]="18" color="#fff" /> Ajouter un événement</button> }
           @if (admin.icsUrl()) {
             <button class="btn btn-soft btn-block ics-btn" (click)="copyIcs()"><f-icon name="copy" [size]="16" color="var(--ink2)" [width]="2.2" /> Copier le lien du calendrier (ICS)</button>
           }

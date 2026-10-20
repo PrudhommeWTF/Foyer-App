@@ -41,6 +41,10 @@ jamais rien.** Le filtre par membre est un affinage, pas un prérequis à
 l'affichage. Un écran qui paraît vide parce qu'un filtre est resté actif est un
 bug, pas une fonctionnalité.
 
+## Ce qu'un enfant voit
+
+Dans sa session, un enfant ne voit que son emploi du temps : le filtre est forcé sur lui (`schedFilter` du store) et les puces des membres disparaissent ; un créneau qu'il ajoute est pour lui. La présence aux repas lit toujours tout le foyer. Voir [`portail-enfant.md`](portail-enfant.md).
+
 ## Les cours importés d'ÉcoleDirecte
 
 Quand le module École est actif, les cours des élèves associés s'ajoutent à la
