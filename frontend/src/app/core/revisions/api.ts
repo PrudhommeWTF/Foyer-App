@@ -6,13 +6,15 @@ import type { MasteryItem, Result, Status } from './revisions';
 /** Le programme d'un enfant pour un exercice, tel que le serveur le rend. */
 export interface RevisionsProgram {
   id: number; exerciseId: string; params: Params; questions: number;
-  secondsAllowed: number | null; fastSeconds: number | null; dailyGoal: number; setBy: string | null; setAt: string;
+  secondsAllowed: number | null; fastSeconds: number | null; dailyGoal: number; dailyTask: boolean; setBy: string | null; setAt: string;
 }
 export interface Matiere { id: string; label: string; }
 /** Ce qu'il faut pour s'entraîner à un exercice : programme, paramètres en vigueur, temps accordé, maîtrise. */
 export interface ExerciseOverview {
   exerciseId: string; program: RevisionsProgram | null; params: Params;
   timing: { allowedMs: number; fastMs: number; source: 'programme' | 'bareme' | 'sans-age'; age: number | null };
+  /** La liste « Devoirs de … » où peut aller la tâche du jour ; null sans module École ni association à ÉcoleDirecte. */
+  devoirsList: string | null;
   mastery: MasteryItem[];
 }
 export interface RevisionsSession {
@@ -41,7 +43,7 @@ export interface RevisionsConfig {
   ages: { jusqua: number; accorde: number; rapide: number }[]; adulte: { accorde: number; rapide: number }; sansAge: { accorde: number; rapide: number };
 }
 /** Ce qu'un adulte règle pour un enfant : les paramètres de l'exercice, et ce que le socle porte pour tous. */
-export interface ProgramFields { params: Params; questions: number; secondsAllowed: number | null; fastSeconds: number | null; dailyGoal: number; }
+export interface ProgramFields { params: Params; questions: number; secondsAllowed: number | null; fastSeconds: number | null; dailyGoal: number; dailyTask?: boolean; }
 /** Le bilan d'une période, tel que le serveur le calcule (backend/src/revisions/bilan.ts). */
 export interface BilanTotals { sessions: number; questions: number; good: number; slow: number; wrong: number; pct: number; }
 export interface Bilan {

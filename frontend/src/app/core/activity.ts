@@ -81,6 +81,11 @@ export function recentActivity(state: HouseholdState, limit = 12): ActivityEntry
       if (t.done && t.doneAt) out.push({ ...base, at: t.doneAt, by: t.doneBy ?? t.who[0] ?? null, via: t.doneBy ? null : ED, verb: 'a terminé le devoir' });
       continue;
     }
+    if (t.revEx) {
+      // L'entraînement du jour : posé chaque jour d'école par le serveur, ce n'est pas une nouvelle. Fait, c'est l'enfant qui l'a fait.
+      if (t.done && t.doneAt) out.push({ at: t.doneAt, by: t.doneBy ?? t.who[0] ?? null, verb: 'a terminé la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
+      continue;
+    }
     if (t.at) out.push({ at: t.at, by: t.by ?? null, via: t.via ?? null, verb: 'a ajouté la tâche', what: t.text, where, color, kind: 'task', ref: t.id });
     if (t.history?.length) {
       for (const h of t.history) if (h.at) out.push({ at: h.at, by: h.by, verb: 'a terminé la tâche', what: t.text, where, color, kind: 'task', ref: t.id });

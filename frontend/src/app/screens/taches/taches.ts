@@ -147,7 +147,7 @@ import { TaskComposerComponent } from './composer';
         <div class="empty">Créez une liste pour commencer.</div>
       } @else if (activeObj()?.kind === 'devoirs') {
         <!-- Pas de « + » ici : la liste se remplit depuis ÉcoleDirecte. -->
-        <div class="ed-hint">Remplie par ÉcoleDirecte : une tâche par devoir, cochée ici ou dans l’écran École. Une tâche maison va dans une autre liste.</div>
+        <div class="ed-hint">Remplie par ÉcoleDirecte : une tâche par devoir, cochée ici ou dans l’écran École.@if (hasDayTask()) { L’entraînement du jour vient des Révisions et se coche tout seul quand l’objectif est atteint. } Une tâche maison va dans une autre liste.</div>
       } @else if (active() !== 'me') {
         <div class="compose"><app-task-composer (saved)="store.createTask($event)" /></div>
       }
@@ -198,7 +198,7 @@ import { TaskComposerComponent } from './composer';
                 <f-ring-check [color]="listColor(l.task.listId)" [progress]="ringOf(l.task)" [late]="l.late > 0" [label]="l.task.text" (toggle)="store.toggleTask(l.task.id)" />
                 <div class="reg-main">
                   <div class="reg-text">{{ l.task.text }}</div>
-                  @if ((w && store.narrow()) || l.task.edId || l.subs.length || l.task.time || l.task.rec || l.task.cat || l.task.note || l.task.shopListId || l.task.contractId || active() === 'all' || active() === 'me') {
+                  @if ((w && store.narrow()) || l.task.edId || l.task.revEx || l.subs.length || l.task.time || l.task.rec || l.task.cat || l.task.note || l.task.shopListId || l.task.contractId || active() === 'all' || active() === 'me') {
                     <div class="reg-meta">
                       <!-- Sur téléphone, l'échéance quitte sa colonne et passe en tête. -->
                       @if (w && store.narrow()) { <span [class.late]="l.late > 0">{{ w.day }}{{ w.rel ? ' · ' + w.rel : '' }}</span> }
@@ -217,6 +217,11 @@ import { TaskComposerComponent } from './composer';
                           {{ store.shopRemaining(l.task.shopListId!) }} article{{ store.shopRemaining(l.task.shopListId!) > 1 ? 's' : '' }} à prendre ›
                         </button>
                       }
+                      @if (l.task.revEx && store.screenEnabled('revisions')) {
+                        <button class="reg-link sage" (click)="$event.stopPropagation(); store.go('revisions')">
+                          <f-icon name="grille" [size]="12" color="currentColor" [width]="2.4" /> S’entraîner ›
+                        </button>
+                      }
                       @if (l.task.contractId) {
                         <button class="reg-link" (click)="$event.stopPropagation(); fin.openContract(l.task.contractId!)">
                           <f-icon name="budget" [size]="12" color="currentColor" [width]="2.4" /> Ouvrir le contrat ›
@@ -225,7 +230,7 @@ import { TaskComposerComponent } from './composer';
                     </div>
                   }
                 </div>
-                @if (g.key === 'late' || g.key === 'today') {
+                @if ((g.key === 'late' || g.key === 'today') && !l.task.revEx) {
                   <button class="reg-mini reveal" (click)="$event.stopPropagation(); store.postponeTask(l.task.id)">Demain</button>
                 }
                 @if (l.task.who.length) { <f-who [badges]="badges(l.task)" [size]="22" /> }
@@ -405,6 +410,8 @@ export class TachesScreen {
   archivedCount = computed(() => this.store.visibleTaskLists(true).filter((l) => l.archived).length);
   templates = computed(() => this.d().taskTemplates);
   activeObj = computed(() => this.d().taskLists.find((l) => l.id === this.active()) || null);
+  /** La liste de devoirs ouverte porte-t-elle un entraînement du jour des Révisions ? */
+  hasDayTask = computed(() => this.d().tasks.some((t) => t.revEx && t.listId === this.active()));
   /** L'affaire du jour : ce que « Toutes » montre et compte. */
   private daily = computed(() => dailyTasks(this.d().tasks, this.d().taskLists, this.store.currentMemberId()));
   allOpen = computed(() => openCount(this.daily()));

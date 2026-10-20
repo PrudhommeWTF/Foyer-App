@@ -33,6 +33,7 @@ import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
 import { setRevisionsToolsDeps } from './mcp/revisions-tools';
 import { contextFor } from './revisions/content';
+import { startDayTasksScheduler } from './revisions/devoirs';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
@@ -783,6 +784,8 @@ export function start(): void {
     },
   });
   startEcoleScheduler();
+  // L'entraînement du jour des Révisions dans « Devoirs de … » (revisions/devoirs.ts).
+  startDayTasksScheduler();
 
   // Le dire au démarrage plutôt qu'au premier bourrage : cru sur une interface
   // ouverte, X-Forwarded-For rend la temporisation contournable par quiconque

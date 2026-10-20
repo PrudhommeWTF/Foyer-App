@@ -69,6 +69,20 @@ Un paramètre de Tables, `trous` (« Questions à trous », non par défaut), qu
 
 Ce qu'il a fallu au contrat : deux éléments **facultatifs**, `ask` (où se place la case) et `prerequisite` (l'ordre d'apprentissage). Aucune table, aucune migration, et la dictée n'a pas changé.
 
+### L'entraînement du jour dans « Devoirs de … »
+
+Dans le programme d'un exercice, un parent peut cocher « Une tâche « Tables : entraînement du jour » dans « Devoirs de Raphaël », les jours d'école ». La case n'apparaît que si cette liste existe, c'est-à-dire si le module **École** est activé et l'enfant **associé à ÉcoleDirecte** : sans elle, pas de tâche, et Foyer n'invente pas de seconde liste.
+
+- **Les jours d'école** : d'après l'emploi du temps ÉcoleDirecte de l'enfant quand la semaine en a un (un jour avec au moins un cours qui n'est pas annulé, donc un mercredi libre reste libre) ; sinon le calendrier, du lundi au vendredi hors jours fériés et vacances scolaires de l'académie (vacances inconnues : le jour compte).
+- **Une tâche par jour**, affectée à l'enfant, échéance le jour même. Elle se **coche toute seule** quand l'objectif du jour du programme est atteint (les sessions du jour comptent comme pour l'écran : toutes, sauf le mode Apprendre). Il faut donc un objectif d'au moins une session.
+- **Le lendemain**, celle de la veille s'en va, faite ou non : pas de retard qui s'accumule ni de reproche.
+- **Le serveur ne décoche jamais** : relever l'objectif dans la journée laisse cochée une tâche déjà faite.
+- **Supprimée à la main**, elle ne revient pas le même jour (`rev_day_tasks` s'en souvient) ; le jour d'école suivant en apporte une nouvelle. Pour l'arrêter, on décoche la case du programme : la tâche du jour s'en va aussitôt.
+- Elle **ne se modifie pas** (c'est le programme qui la règle), se coche à la main comme toute tâche, et son lien « S'entraîner » ouvre l'écran Révisions.
+- Module Révisions ou École éteint : les tâches d'entraînement s'en vont, le choix fait dans le programme reste pour la réactivation. Un programme réglé par l'assistant garde le choix du programme qu'il remplace.
+
+Côté technique : `revisions/day-tasks.ts` décide (pur, testé), `revisions/devoirs.ts` lit les tables et écrit par les opérations de tâches « de confiance », comme la projection des devoirs (champ `revEx` de la tâche, posé par le serveur seul). Le passage a lieu au démarrage, chaque minute, à chaque programme enregistré, et à chaque session reçue (pour la coche).
+
 ### Le contenu des exercices
 
 - **Livré** : `backend/config/revisions/<exercice>/*.json`, chaque fichier portant `{ "listes": [{ "id", "label", "items": [...] }] }` (identifiant en minuscules, chiffres et tirets). Un fichier au même nom dans `FOYER_DATA_DIR/revisions/<exercice>/` le **remplace**, un fichier d'un autre nom **s'ajoute** ; relus sans redémarrer. Une liste illisible est écartée et nommée au journal.
@@ -86,6 +100,7 @@ Tables relationnelles `rev_*` dans `foyer.db`, hors du document du foyer :
 | `rev_answers` | chaque réponse : la question telle que posée (JSON propre à l'exercice), la clé de l'item, la bonne réponse et la réponse donnée (texte, ou rien si passée), le temps, le résultat, l'heure. |
 | `rev_mastery` | la maîtrise par membre, exercice et item : un cache, recalculable entièrement depuis `rev_answers`. |
 | `rev_content` | les listes de contenu saisies par le foyer (migration v2) : exercice, nom, éléments, auteur, dates, archivée. |
+| `rev_day_tasks` | les tâches d'entraînement du jour déjà projetées (migration v3) : enfant, exercice, jour, identifiant de la tâche. La même migration ajoute `daily_task` à `rev_programs`. |
 
 **Rien n'est jamais supprimé.** Une session abandonnée reste (ses réponses déjà données comptent), un programme remplacé ou retiré reste. Le passé ne se réécrit qu'avec une commande explicite (voir plus bas).
 
@@ -201,11 +216,11 @@ Sous `/api/revisions`, session de navigateur, membre du foyer, module activé. `
 | `GET /exercises` | les matières et les exercices, avec leurs paramètres déclarés (ce que l'écran affiche, ce que le formulaire engendre) |
 | `GET /config[?exercise=…]` | règles de maîtrise et barème (commun, ou d'un exercice), pour l'aide |
 | `GET /members/:id` | les programmes actifs du membre, un par exercice : ce qu'enchaîne « Mon entraînement du jour » |
-| `GET /members/:id/exercises/:ex` | programme, paramètres en vigueur (ceux du programme, sinon les défauts), temps accordé (et sa source : programme, barème, sans âge), maîtrise de chaque item avec son état |
+| `GET /members/:id/exercises/:ex` | programme, paramètres en vigueur (ceux du programme, sinon les défauts), temps accordé (et sa source : programme, barème, sans âge), la liste « Devoirs de … » où peut aller la tâche du jour (`devoirsList`, ou null), maîtrise de chaque item avec son état |
 | `GET /members/:id/exercises/:ex/items/:clé` | l'historique d'un item (pour Tables, les deux sens), le plus récent d'abord |
 | `GET /members/:id/exercises/:ex/stats[?since=…]` | sessions par jour (heure de Paris) et réussite par groupe d'items, limitée à ce que le programme travaille ; quatre semaines par défaut |
 | `GET /members/:id/sessions[?exercise=…&since=…&limit=…]` | les sessions |
-| `PUT /members/:id/exercises/:ex/program` | régler le programme d'un enfant (adultes) : `params`, `questions`, `secondsAllowed`, `fastSeconds`, `dailyGoal`. Un paramètre refusé est nommé dans l'erreur. |
+| `PUT /members/:id/exercises/:ex/program` | régler le programme d'un enfant (adultes) : `params`, `questions`, `secondsAllowed`, `fastSeconds`, `dailyGoal`, `dailyTask` (la tâche du jour ; absent : le choix du programme remplacé). Un paramètre refusé est nommé dans l'erreur. |
 | `DELETE /members/:id/exercises/:ex/program` | retirer le programme (il reste en base, inactif) |
 | `GET /members/:id/bilan[?from=AAAA-MM-JJ&to=AAAA-MM-JJ]` | le bilan d'une période (fin incluse, un an au plus ; par défaut la semaine en cours), adultes seulement, pour un enfant |
 | `GET /members/:id/bilan.pdf[?from&to]` | le même bilan en PDF, journalisé |
