@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy
 import type { ExerciseDef, Mode, Params } from '../../core/revisions/exercises/contract';
 import { MODE_LABELS, Result, classify } from '../../core/revisions/revisions';
 import { KeypadComponent } from './keypad';
+import { ClockComponent } from './clock';
 
 export interface RunPlan {
   def: ExerciseDef; params: Params; mode: Mode; questions: unknown[];
@@ -41,7 +42,7 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
   selector: 'rev-runner',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KeypadComponent],
+  imports: [KeypadComponent, ClockComponent],
   template: `
     <div class="run" [class.learn]="learn()">
       <div class="top">
@@ -68,11 +69,24 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
                   <button type="button" class="again" (click)="say()" [disabled]="!audioOn()">Réécouter</button>
                 </div>
               }
+              @case ('horloge') {
+                <!-- L'énoncé est le cadran : sa légende ne dit pas l'heure, c'est elle qu'on demande. -->
+                @let a = askOf(q);
+                @let c = plan().def.clock?.(q);
+                <div class="ask clock" #ask tabindex="-1" aria-label="Quelle heure est-il sur l’horloge ?">
+                  @if (c) { <rev-clock [h]="c.h" [m]="c.m" /> }
+                  <div class="line">
+                    @if (a.before) { <span class="ops">{{ a.before }}</span> }
+                    <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span>
+                    @if (a.after) { <span class="ops">{{ a.after }}</span> }
+                  </div>
+                </div>
+              }
               @default {
                 @let a = askOf(q);
                 <div class="ask" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
                   @if (a.before) { <span class="ops">{{ a.before }}</span> }
-                  @if (plan().def.input === 'pave') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ typed() || '?' }}</span> }
+                  @if (plan().def.input === 'pave') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span> }
                   @if (a.after) { <span class="ops">{{ a.after }}</span> }
                 </div>
               }
@@ -130,6 +144,8 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
     .fb.faux, .fb.passe { color: #C6492F; }
     .skip { border: none; background: transparent; color: var(--ink2); font-family: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; min-height: 44px; cursor: pointer; }
     .ask.audio { flex-direction: column; align-items: center; gap: 14px; }
+    .ask.clock { flex-direction: column; align-items: center; gap: 10px; font-size: clamp(34px, 8vw, 56px); }
+    .ask.clock .line { display: flex; align-items: baseline; gap: 14px; }
     .word { font-size: clamp(40px, 10vw, 64px); font-weight: 800; color: var(--primary); }
     .hint { font-size: 22px; font-weight: 800; color: var(--ink2); }
     .again { border: 2px solid var(--line); background: var(--surface); border-radius: 14px; padding: 10px 20px; font-family: inherit; font-size: 17px; font-weight: 800; color: var(--ink); min-height: 52px; cursor: pointer; }
@@ -160,6 +176,8 @@ export class RunnerComponent implements OnInit, OnDestroy {
 
   readonly idx = signal(0);
   readonly typed = signal('');
+  /** La saisie telle que l'exercice l'affiche (« 745 » : « 7 h 45 »), ou les chiffres tels quels. */
+  readonly shown = computed(() => { const t = this.typed(), d = this.plan().def.display; return t && d ? d(t) : t; });
   readonly fb = signal<{ kind: Result; text: string } | null>(null);
   readonly busy = signal(false);
   private readonly askEl = viewChild<ElementRef<HTMLElement>>('ask');
