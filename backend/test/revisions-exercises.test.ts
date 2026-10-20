@@ -16,6 +16,7 @@ import { DICTEE } from '../src/revisions/exercises/dictee';
 import { HEURE } from '../src/revisions/exercises/heure';
 import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
 import { COMPLEMENTS } from '../src/revisions/exercises/complements';
+import { DOUBLES } from '../src/revisions/exercises/doubles';
 import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
 import { ORTHOGRAPHE, readLine as readPhrase } from '../src/revisions/exercises/orthographe';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
@@ -204,6 +205,34 @@ describe('l’exercice Compléments', () => {
     assert.deepEqual(COMPLEMENTS.learn!(p('dix'), NO_CONTEXT).slice(0, 2), [{ cible: 10, n: 0 }, { cible: 10, n: 1 }]);
     assert.equal(COMPLEMENTS.spoken!(q), '3 plus 7, 10');
     assert.equal(COMPLEMENTS.summary(p('dizaines'), NO_CONTEXT), 'Les compléments à 100, par dizaines');
+  });
+});
+
+describe('l’exercice Doubles et moitiés', () => {
+  const p = (operation: string, jusqua: string) => readParams(DOUBLES, { operation, jusqua });
+
+  it('l’univers suit le programme : les doubles de la plage, les moitiés de leurs résultats', () => {
+    assert.deepEqual(['dix', 'vingt', 'dizaines', 'cent'].map((j) => DOUBLES.universe(p('doubles', j), NO_CONTEXT).length), [10, 20, 5, 50]);
+    assert.deepEqual(DOUBLES.universe(p('moities', 'dix'), NO_CONTEXT).slice(0, 3), ['moit:2', 'moit:4', 'moit:6']);
+    assert.deepEqual(DOUBLES.universe(p('deux', 'dizaines'), NO_CONTEXT), ['dbl:10', 'dbl:20', 'dbl:30', 'dbl:40', 'dbl:50', 'moit:20', 'moit:40', 'moit:60', 'moit:80', 'moit:100']);
+    assert.ok(DOUBLES.universe(p('doubles', 'cent'), NO_CONTEXT).includes('dbl:30'), 'le double de 30 est le même item dans les deux plages');
+    assert.deepEqual([readParams(DOUBLES, {}).operation, readParams(DOUBLES, {}).jusqua], ['doubles', 'dix'], 'par défaut, les doubles de 1 à 10');
+  });
+
+  it('l’énoncé, la correction, la relecture, les groupes, le mode Apprendre et le résumé', () => {
+    const d = DOUBLES.question('dbl:7', p('doubles', 'dix'), () => 0), m = DOUBLES.question('moit:30', p('moities', 'cent'), () => 0);
+    assert.deepEqual([DOUBLES.text(d), DOUBLES.text(m)], ['Double de 7', 'Moitié de 30']);
+    assert.deepEqual([DOUBLES.ask!(d), DOUBLES.ask!(m)], [{ before: 'Le double de 7 =', after: '' }, { before: 'La moitié de 30 =', after: '' }]);
+    assert.deepEqual(DOUBLES.check(d, '14'), { ok: true, expected: '14' });
+    assert.deepEqual(DOUBLES.check(m, '015'), { ok: true, expected: '15' });
+    assert.equal(DOUBLES.check(d, '7').ok, false);
+    assert.deepEqual(DOUBLES.parse({ op: 'moit', n: 14 }, p('moities', 'dix')), { op: 'moit', n: 14 });
+    for (const bad of [null, {}, { op: 'moit', n: 7 }, { op: 'dbl', n: 0 }, { op: 'dbl', n: 51 }, { op: 'tiers', n: 9 }, { op: 'dbl', n: '3' }]) assert.equal(DOUBLES.parse(bad, p('deux', 'cent')), null, JSON.stringify(bad));
+    assert.equal(DOUBLES.itemLabel('moit:14'), 'moitié de 14');
+    assert.deepEqual([DOUBLES.groups('dbl:7', p('deux', 'dix'), NO_CONTEXT), DOUBLES.groups('moit:14', p('deux', 'dix'), NO_CONTEXT)], [['Doubles'], ['Moitiés']]);
+    assert.deepEqual(DOUBLES.learn!(p('deux', 'dix'), NO_CONTEXT).slice(9, 11), [{ op: 'dbl', n: 10 }, { op: 'moit', n: 2 }]);
+    assert.deepEqual([DOUBLES.spoken!(d), DOUBLES.spoken!(m)], ['le double de 7, 14', 'la moitié de 30, 15']);
+    assert.equal(DOUBLES.summary(p('deux', 'dizaines'), NO_CONTEXT), 'Les doubles et les moitiés des dizaines, de 10 à 50');
   });
 });
 

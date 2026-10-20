@@ -613,7 +613,7 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'revisions_exercices',
-    description: 'Les exercices du module Révisions (les tables, les soustractions, les compléments, la lecture de l’heure, la dictée de mots, la conjugaison, l’orthographe), leur matière, et les paramètres qu’un programme peut régler, avec leurs bornes et leurs valeurs par défaut. À lire avant revisions_programme_definir.',
+    description: 'Les exercices du module Révisions (les tables, les soustractions, les compléments, les doubles et moitiés, la lecture de l’heure, la dictée de mots, la conjugaison, l’orthographe), leur matière, et les paramètres qu’un programme peut régler, avec leurs bornes et leurs valeurs par défaut. À lire avant revisions_programme_definir.',
     inputSchema: { type: 'object', properties: {} },
     run: () => rv.revisionsExercices(),
   },
