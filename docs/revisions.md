@@ -83,6 +83,17 @@ Ce que l'orthographe a demandé au socle : la saisie `choix`, **prévue au contr
 
 Rien n'a été ajouté au socle. Une conséquence : plusieurs exercices ont désormais des listes (la dictée, la conjugaison, l'orthographe), l'assistant doit donc préciser `exercice` pour en gérer une.
 
+### Compléments
+
+`complements`, mathématiques, dès 6 ans environ : ce qu'il manque pour arriver à la cible, « 3 + ? = 10 ». Le calcul mental qui sert à rendre la monnaie et à poser une soustraction.
+
+- **Le programme** choisit la cible : 10 (par défaut, 11 items), 20 (21 items), 100 par dizaines (« 30 + ? = 100 », 11 items) ou 100 (101 items).
+- **Un item** est un complément vers sa cible (« comp:100:30 ») : le même dans « 100, par dizaines » et « 100 », une dizaine sue le reste quand on passe à tous les nombres.
+- **Le suivi** en liste, groupé par cible (« Compléments à 10 ») ; le mode Apprendre récite les paires (0 + 10, 1 + 9…).
+- **Le temps** : celui du barème commun (partie `exercices.complements` vide, à remplir pour l'adapter).
+
+Rien n'a été ajouté au socle.
+
 ### Soustractions
 
 Les tables de soustraction (`soustractions`, mathématiques, dès 6 ans environ), l'inverse des tables d'addition : « enlever 7 », c'est de 7 − 7 à 17 − 7, le résultat allant de 0 à 10.

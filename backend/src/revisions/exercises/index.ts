@@ -8,7 +8,8 @@ import { CONJUGAISON } from './conjugaison';
 import { ORTHOGRAPHE } from './orthographe';
 import { HEURE } from './heure';
 import { SOUSTRACTIONS } from './soustractions';
+import { COMPLEMENTS } from './complements';
 
-export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, SOUSTRACTIONS as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef, CONJUGAISON as ExerciseDef, ORTHOGRAPHE as ExerciseDef];
+export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, SOUSTRACTIONS as ExerciseDef, COMPLEMENTS as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef, CONJUGAISON as ExerciseDef, ORTHOGRAPHE as ExerciseDef];
 
 export const exerciseById = (id: unknown): ExerciseDef | undefined => EXERCISES.find((e) => e.id === id);

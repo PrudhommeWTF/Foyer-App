@@ -15,6 +15,7 @@ import { TABLES, TablesQuestion } from '../src/revisions/exercises/tables';
 import { DICTEE } from '../src/revisions/exercises/dictee';
 import { HEURE } from '../src/revisions/exercises/heure';
 import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
+import { COMPLEMENTS } from '../src/revisions/exercises/complements';
 import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
 import { ORTHOGRAPHE, readLine as readPhrase } from '../src/revisions/exercises/orthographe';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
@@ -176,6 +177,33 @@ describe('l’exercice Tables', () => {
     const pt = readParams(TABLES, { tables: [6, 6], trous: true }), rand = seeded(9), trous = new Set<string>();
     for (let i = 0; i < 40; i++) { const q = TABLES.question('mult:6x7:trou', pt, rand); assert.equal(TABLES.itemKey(q), 'mult:6x7:trou'); trous.add(TABLES.text(q)); }
     assert.deepEqual([...trous].sort(), ['6 × ? = 42', '7 × ? = 42', '? × 6 = 42', '? × 7 = 42']);
+  });
+});
+
+describe('l’exercice Compléments', () => {
+  const p = (cible: string) => readParams(COMPLEMENTS, { cible });
+
+  it('l’univers suit la cible : 11 vers 10, 21 vers 20, 11 dizaines ou 101 nombres vers 100', () => {
+    assert.deepEqual(['dix', 'vingt', 'dizaines', 'cent'].map((c) => COMPLEMENTS.universe(p(c), NO_CONTEXT).length), [11, 21, 11, 101]);
+    assert.deepEqual(COMPLEMENTS.universe(p('dizaines'), NO_CONTEXT).slice(0, 3), ['comp:100:0', 'comp:100:10', 'comp:100:20']);
+    assert.ok(COMPLEMENTS.universe(p('cent'), NO_CONTEXT).includes('comp:100:30'), '30 + ? = 100 est le même item dans les deux programmes');
+    assert.equal(readParams(COMPLEMENTS, {}).cible, 'dix', 'par défaut, vers 10');
+  });
+
+  it('l’énoncé, la correction, la relecture, les groupes, le mode Apprendre et le résumé', () => {
+    const q = COMPLEMENTS.question('comp:10:3', p('dix'), () => 0);
+    assert.equal(COMPLEMENTS.text(q), '3 + ? = 10');
+    assert.deepEqual(COMPLEMENTS.ask!(q), { before: '3 +', after: '= 10' });
+    assert.deepEqual(COMPLEMENTS.check(q, '7'), { ok: true, expected: '7' });
+    assert.equal(COMPLEMENTS.check(q, '13').ok, false);
+    assert.deepEqual(COMPLEMENTS.check({ cible: 100, n: 100 }, '0'), { ok: true, expected: '0' });
+    assert.deepEqual(COMPLEMENTS.parse({ cible: 20, n: 13 }, p('vingt')), { cible: 20, n: 13 });
+    for (const bad of [null, {}, { cible: 30, n: 3 }, { cible: 10, n: 11 }, { cible: 10, n: '3' }]) assert.equal(COMPLEMENTS.parse(bad, p('dix')), null, JSON.stringify(bad));
+    assert.equal(COMPLEMENTS.itemLabel('comp:100:30'), '30 + … = 100');
+    assert.deepEqual(COMPLEMENTS.groups('comp:20:13', p('vingt'), NO_CONTEXT), ['Compléments à 20']);
+    assert.deepEqual(COMPLEMENTS.learn!(p('dix'), NO_CONTEXT).slice(0, 2), [{ cible: 10, n: 0 }, { cible: 10, n: 1 }]);
+    assert.equal(COMPLEMENTS.spoken!(q), '3 plus 7, 10');
+    assert.equal(COMPLEMENTS.summary(p('dizaines'), NO_CONTEXT), 'Les compléments à 100, par dizaines');
   });
 });
 
