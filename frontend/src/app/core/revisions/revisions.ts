@@ -52,7 +52,7 @@ export function drawQuestions<Q>(def: ExerciseDef<Q>, p: Params, o: {
 }): Q[] {
   const rand = o.rand ?? Math.random;
   const known = new Map(o.mastery.map((m) => [m.key, m] as const));
-  const keys = def.universe(p, o.ctx ?? NO_CONTEXT);
+  const keys = def.universe(p, o.ctx ?? NO_CONTEXT).filter((k) => { const pre = def.prerequisite?.(k); return !pre || known.get(pre)?.status === 'acquise'; });
   const due = keys.filter((k) => { const m = known.get(k); return m && m.nextAt <= o.now; })
     .sort((x, y) => known.get(x)!.nextAt.localeCompare(known.get(y)!.nextAt));
   const unseen = shuffle(keys.filter((k) => !known.has(k)), rand);

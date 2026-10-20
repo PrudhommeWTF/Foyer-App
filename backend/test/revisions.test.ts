@@ -164,7 +164,7 @@ describe('qui lit, qui écrit', () => {
     const t = r.exercises.find((e: { id: string }) => e.id === 'tables');
     assert.equal(t.matiereLabel, 'Mathématiques');
     assert.equal(t.learn, true);
-    assert.deepEqual(t.params.map((p: { key: string }) => p.key), ['operation', 'max', 'tables', 'bothDirections']);
+    assert.deepEqual(t.params.map((p: { key: string }) => p.key), ['operation', 'max', 'tables', 'bothDirections', 'trous']);
   });
 
   it('un jeton d’accès n’entre pas dans le module', async () => {
@@ -188,7 +188,7 @@ describe('le programme d’un enfant', () => {
     assert.equal(r.status, 200, JSON.stringify(r.json));
     assert.equal(r.json.program.setBy, camille);
     const vue = (await appel(ctx.base, 'GET', vueTables(lena), undefined, ctx.jetons.enfant)).json;
-    assert.deepEqual(vue.program.params, { operation: 'mult', max: 10, tables: [6, 9], bothDirections: true }, 'les paramètres absents prennent leur défaut');
+    assert.deepEqual(vue.program.params, { operation: 'mult', max: 10, tables: [6, 9], bothDirections: true, trous: false }, 'les paramètres absents prennent leur défaut');
     assert.deepEqual(vue.params.tables, [6, 9]);
     const accueil = (await appel(ctx.base, 'GET', `/revisions/members/${lena}`, undefined, ctx.jetons.enfant)).json;
     assert.deepEqual(accueil.programs.map((p: { exerciseId: string }) => p.exerciseId), ['tables'], 'l’entraînement du jour : un programme par exercice');
@@ -287,6 +287,8 @@ describe('la dictée et ses listes', () => {
     assert.match(r.json.error, /hors des réglages/);
     assert.equal((await poster(dict([['oiseau', 'oiseau']], { liste: 'inconnue' }), ctx.jetons.enfant)).status, 400);
     assert.equal((await poster(session([q(2, 3, 6, 1000, jour(3))], { params: tables(6, 9) }), ctx.jetons.enfant)).status, 400, '2 × 3 hors des tables 6 à 9');
+    const trou = { question: { op: 'mult', a: 6, b: 7, hole: 'a' }, given: '6', ms: 1000, askedAt: jour(3) };
+    assert.equal((await poster(session([trou as ReturnType<typeof q>], { params: tables(6, 9) }), ctx.jetons.enfant)).status, 400, 'un trou sans les trous au programme');
   });
 
   it('une liste archivée reste lisible par le programme qui la désigne', async () => {

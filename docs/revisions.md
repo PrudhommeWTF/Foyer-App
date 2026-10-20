@@ -21,6 +21,7 @@ Le socle (sessions, réponses, maîtrise, programmes, suivi, réception hors lig
 | `params` | les paramètres que porte un programme, d'un des types `int`, `bool`, `enum`, `range`, `content` (une liste du contenu de l'exercice) : le formulaire du programme est **engendré** depuis eux, jamais écrit pour un exercice. Un test refuse un autre type, et un type sans rendu dans le formulaire ne compile pas. |
 | `universe`, `question`, `parse` | les items que le programme peut poser (par leur clé), une question pour un item, la relecture d'une question reçue. `universe`, `groups`, `learn` et `summary` reçoivent aussi le **contexte** de l'exercice (ses listes de contenu) ; un exercice sans contenu l'ignore |
 | `itemKey`, `itemLabel`, `text`, `groups` | la clé de maîtrise (« mult:6x7 », commutative pour les tables), l'item en clair, l'énoncé, les regroupements du suivi (« Table de 7 ») |
+| `ask`, `prerequisite` | facultatifs : l'énoncé de part et d'autre de la case de réponse (absent : le texte, « = », la case) ; l'item qu'il faut avoir **acquis** avant qu'un autre soit posé (le tirage l'applique, le serveur ne le refuse pas : c'est une progression, pas un droit) |
 | `check` | la correction, la même sur l'appareil et sur le serveur |
 | `learn`, `spoken`, `grid`, `summary` | le mode Apprendre (absent : pas de mode Apprendre), ce que lit la voix, la forme de la grille, le programme en une ligne |
 
@@ -55,6 +56,18 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 2. un argument `ctx` (le contexte : les listes de l'exercice) passé à `universe`, `groups`, `learn`, `summary`, `defaults` et `readParams`. Tables l'ignore : son code n'a pas changé.
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
+
+### Les questions à trous
+
+Un paramètre de Tables, `trous` (« Questions à trous », non par défaut), que le parent active dans le programme : « ? × 7 = 42 » ou « 6 × ? = 42 », la case de réponse à la place du nombre qui manque.
+
+- **Item à part** : « mult:6x7:trou ». Retrouver le facteur qui manque n'est pas réciter la table, sa maîtrise se suit à part (« 6 × 7, à trous », groupe « Table de 6, à trous » au suivi).
+- **Prérequis** : la question à trous d'un couple n'est tirée qu'une fois ce couple **acquis** (niveau 3) dans le sens direct. Activer les trous sur une table toute neuve ne change donc rien tant qu'elle n'est pas sue.
+- **Pas de trou avec un 0 en multiplication** : « ? × 0 = 0 » a toutes les réponses. En addition, « 0 + ? = 6 » n'en a qu'une et reste posé.
+- **Correction** : la réponse attendue est le facteur manquant ; la correction affichée remet l'opération entière (« 6 × 7 = 42 »).
+- Le serveur refuse une question à trous dans une session dont les réglages n'ont pas `trous`, comme toute question hors de l'univers.
+
+Ce qu'il a fallu au contrat : deux éléments **facultatifs**, `ask` (où se place la case) et `prerequisite` (l'ordre d'apprentissage). Aucune table, aucune migration, et la dictée n'a pas changé.
 
 ### Le contenu des exercices
 

@@ -133,6 +133,38 @@ describe('l’exercice Tables', () => {
     assert.equal(TABLES.summary(readParams(TABLES, { tables: [6, 9] }), NO_CONTEXT), 'Les tables de 6 à 9, multiplication');
     assert.equal(TABLES.summary(readParams(TABLES, { operation: 'add', tables: [4, 4] }), NO_CONTEXT), 'La table de 4, addition');
   });
+
+  it('les questions à trous : un item à part, posé seulement si le programme les demande, jamais avec un 0 en multiplication', () => {
+    const sans = TABLES.universe(readParams(TABLES, { tables: [6, 6] }), NO_CONTEXT);
+    assert.ok(!sans.some((k) => k.endsWith(':trou')), 'par défaut, pas de trou');
+    const avec = TABLES.universe(readParams(TABLES, { tables: [6, 6], trous: true }), NO_CONTEXT);
+    assert.equal(avec.length, sans.length * 2 - 1, 'chaque couple a son trou, sauf 0 × 6');
+    assert.ok(avec.includes('mult:6x7:trou') && !avec.includes('mult:0x6:trou'));
+    assert.ok(TABLES.universe(readParams(TABLES, { operation: 'add', tables: [6, 6], trous: true }), NO_CONTEXT).includes('add:0x6:trou'), 'en addition, 0 + ? = 6 a une seule réponse');
+    assert.equal(TABLES.prerequisite!('mult:6x7:trou'), 'mult:6x7');
+    assert.equal(TABLES.prerequisite!('mult:6x7'), null);
+    assert.equal(TABLES.itemLabel('mult:6x7:trou'), '6 × 7, à trous');
+    assert.deepEqual(TABLES.groups('mult:6x7:trou', readParams(TABLES, { tables: [6, 6], trous: true }), NO_CONTEXT), ['Table de 6, à trous']);
+    assert.equal(TABLES.summary(readParams(TABLES, { tables: [6, 6], trous: true }), NO_CONTEXT), 'La table de 6, multiplication, avec trous');
+  });
+
+  it('une question à trous : l’énoncé, la case au bon endroit, la réponse est le facteur manquant', () => {
+    const a: TablesQuestion = { op: 'mult', a: 6, b: 7, hole: 'a' }, b: TablesQuestion = { op: 'mult', a: 6, b: 7, hole: 'b' };
+    assert.equal(TABLES.text(a), '? × 7 = 42');
+    assert.equal(TABLES.text(b), '6 × ? = 42');
+    assert.deepEqual(TABLES.ask!(a), { before: '', after: '× 7 = 42' });
+    assert.deepEqual(TABLES.ask!(b), { before: '6 ×', after: '= 42' });
+    assert.deepEqual(TABLES.ask!({ op: 'mult', a: 6, b: 7 }), { before: '6 × 7 =', after: '' });
+    assert.deepEqual(TABLES.check(a, '6'), { ok: true, expected: '6' });
+    assert.deepEqual(TABLES.check(b, '7'), { ok: true, expected: '7' });
+    assert.equal(TABLES.check(b, '42').ok, false);
+    assert.equal(TABLES.itemKey(a), 'mult:6x7:trou');
+    assert.deepEqual(TABLES.parse({ op: 'mult', a: 6, b: 7, hole: 'b' }, p), b);
+    assert.equal(TABLES.parse({ op: 'mult', a: 6, b: 7, hole: 'c' }, p), null);
+    const pt = readParams(TABLES, { tables: [6, 6], trous: true }), rand = seeded(9), trous = new Set<string>();
+    for (let i = 0; i < 40; i++) { const q = TABLES.question('mult:6x7:trou', pt, rand); assert.equal(TABLES.itemKey(q), 'mult:6x7:trou'); trous.add(TABLES.text(q)); }
+    assert.deepEqual([...trous].sort(), ['6 × ? = 42', '7 × ? = 42', '? × 6 = 42', '? × 7 = 42']);
+  });
 });
 
 describe('l’exercice Dictée de mots', () => {

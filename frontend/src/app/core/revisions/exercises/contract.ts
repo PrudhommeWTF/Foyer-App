@@ -94,6 +94,18 @@ export interface ExerciseDef<Q = unknown> {
   itemLabel(key: string): string;
   /** L'énoncé tel qu'il s'affiche (« 7 × 6 »). */
   text(q: Q): string;
+  /**
+   * L'énoncé autour de la case de réponse, à l'écran : « 6 × 7 = » puis la
+   * case, ou « ? × 7 = 42 » avec la case à la place du point d'interrogation.
+   * Absent : l'énoncé, « = », puis la case.
+   */
+  ask?(q: Q): { before: string; after: string };
+  /**
+   * L'item qu'il faut avoir acquis avant que celui-ci soit posé (« ? × 7 = 42 »
+   * après « 6 × 7 »), ou null. Le socle l'applique au tirage ; le serveur ne
+   * refuse pas une réponse pour autant (c'est une progression, pas un droit).
+   */
+  prerequisite?(key: string): string | null;
   /** Les regroupements de l'item pour le suivi (« Table de 6 », « Table de 7 »). */
   groups(key: string, p: Params, ctx: ExerciseContext): string[];
   /** La correction : la même ici et sur l'appareil. */

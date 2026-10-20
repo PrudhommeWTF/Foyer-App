@@ -51,6 +51,15 @@ test('un petit univers se répète, jamais deux fois de suite le même item', ()
   assert.ok(t.every((q) => q.op === 'add'));
 });
 
+test('une question à trous n’est posée qu’une fois l’opération acquise dans le sens direct', () => {
+  const p = readParams(TABLES, { tables: [6, 6], trous: true });
+  const draw = (mastery: MasteryItem[]) => drawQuestions(TABLES, p, { count: 40, mastery, now: NOW, rand: seeded(4) }).map((q) => TABLES.itemKey(q));
+  assert.ok(!draw([]).some((k) => k.endsWith(':trou')), 'rien d’acquis : pas de trou');
+  const acquis = draw([item('mult:6x7', '2026-11-01T00:00:00.000Z', { level: 3, status: 'acquise' })]).filter((k) => k.endsWith(':trou'));
+  assert.ok(acquis.length > 0 && acquis.every((k) => k === 'mult:6x7:trou'), '6 × 7 acquis : seul son trou');
+  assert.ok(!draw([item('mult:6x7', NOW, { status: 'en-cours' })]).some((k) => k.endsWith(':trou')), 'en cours ne suffit pas');
+});
+
 test('une dictée se tire dans la liste choisie, avec le contexte de l’exercice', () => {
   const ctx = { lists: [{ id: 's', label: 'Semaine', items: ['oiseau', 'école', 'maison'], source: 'foyer' as const }] };
   const p = readParams(DICTEE, {}, ctx);
