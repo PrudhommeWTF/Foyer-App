@@ -59,6 +59,18 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
 
+### Féminin et pluriel
+
+`accords`, français, dès 7 ans environ : « un cheval → des … », l'enfant écrit « chevaux » au **clavier système**, comme pour la conjugaison.
+
+- **Le contenu** est une liste de mots, **une ligne par mot** : le mot de départ, « > », puis le mot attendu avec son déterminant (« un cheval > des chevaux », « un lion > une lionne ») ; un adjectif sans déterminant (« petit > petite »). Pas de virgule (l'écran coupe aux virgules), aucune règle d'accord dans le code. Listes livrées dans `backend/config/revisions/accords/` (le féminin des noms, le pluriel en -s, le pluriel en -x, le féminin des adjectifs ; dix mots chacune), et celles du foyer, saisies dans le suivi ou par l'assistant (`exercice: "accords"`). Le format est rappelé sous le champ de saisie.
+- **Un item** est une ligne ; la clé la porte, mot attendu compris.
+- **La correction** suit la dictée : les accents comptent, pas les majuscules ; écrire le déterminant avec (« des chevaux ») est juste aussi.
+- **Le suivi** en liste, groupé par le déterminant demandé (« une … », « des … », « sans déterminant ») : il dit ce qui change. Le mode Apprendre déroule la liste, la voix lit chaque paire.
+- **Le temps** : partie `exercices.accords` du barème (les temps de la conjugaison).
+
+Rien n'a été ajouté au socle (le `format` des listes vient de la lecture).
+
 ### Lecture
 
 `lecture`, français, dès 6 ans environ : un petit texte à lire, une question, la bonne réponse à **toucher** parmi deux à quatre boutons. La compréhension, en lisant seul : ni voix (elle lirait à la place de l'enfant) ni clavier.
@@ -110,6 +122,30 @@ Rien n'a été ajouté au socle. Une conséquence : plusieurs exercices ont dés
 - **Le temps** : celui du barème commun (partie `exercices.complements` vide, à remplir pour l'adapter).
 
 Rien n'a été ajouté au socle.
+
+### Nombres en lettres
+
+`lettres`, mathématiques, dès 6 ans environ : « soixante-dix-sept », l'enfant tape 77 au pavé.
+
+- **Le programme** choisit les nombres (de 0 à 19, de 0 à 69 par défaut, de 0 à 99) et l'orthographe : **rectifiée** par défaut (des traits d'union partout : « vingt-et-un », celle des programmes depuis 2016) ou traditionnelle (« vingt et un »).
+- **Un item** est un nombre (« let:77 ») : le même d'une plage à l'autre et quelle que soit l'orthographe. L'écriture en lettres est une règle de la numération, calculée par l'exercice (`inWords`), pas une liste.
+- **Le suivi** en **grille** dizaines × unités, groupé par difficulté : de zéro à seize (les mots à apprendre), les dizaines, de 17 à 69, de 70 à 99. Le mode Apprendre déroule les nombres dans l'ordre, la voix lit chacun.
+- **Le temps** : celui du barème commun (partie `exercices.lettres` vide).
+
+Rien n'a été ajouté au socle.
+
+### La monnaie
+
+`monnaie`, mathématiques, dès 6 ans environ : des pièces et des billets **dessinés**, l'enfant tape combien cela fait en tout.
+
+- **Le programme** choisit la plage : des euros jusqu'à 20 € (par défaut : pièces de 1 et 2 €, billets de 5 et 10 €), jusqu'à 100 € (billets de 20 et 50 € en plus), ou des centimes jusqu'à 5 € (pièces de 10, 20, 50 centimes, 1 et 2 €).
+- **La saisie** : en euros, le nombre d'euros (« 13 ») ; en centimes, tous les chiffres (3, 4, 0 pour 3,40 €). L'écran affiche le montant à mesure qu'on tape (« 3,40 € »).
+- **Un item** est un total de la plage (« mon:c:340 ») : les pièces sont tirées à chaque question, plutôt les grosses, dix au plus, de la plus grosse à la plus petite. Le serveur refait la somme et vérifie que chaque pièce est de la plage.
+- **Le dessin** : un billet est un rectangle de sa couleur, une pièce un disque à sa taille (les centimes dorés, 1 € et 2 € bicolores), la valeur écrite dessus. On apprend à compter, pas à reconnaître une gravure ; aucune image n'est livrée.
+- **Le suivi** en liste, groupé par tranche (« Jusqu'à 10 € », « De 2 à 5 € »). Pas de mode Apprendre.
+- **Le temps** : partie `exercices.monnaie` du barème (22 s à 8 ans, rapide sous 11 s).
+
+Ce que la monnaie a demandé au socle : l'énoncé `monnaie` et son élément `coins(q)` (les pièces en centimes, dessinées par le composant `rev-coins`), et un second argument à `display(typed, q)` : la même saisie « 34 » se lit 34 € ou 0,34 € selon la question.
 
 ### Comparer
 

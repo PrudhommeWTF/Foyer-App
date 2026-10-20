@@ -1,0 +1,69 @@
+{
+  "_aide": "Listes livrées pour l'exercice « Féminin et pluriel » du module Révisions. Une ligne par mot : le mot de départ, « > », puis le mot attendu avec son déterminant, par exemple « un cheval > des chevaux » ou « un lion > une lionne ». L'écran montre « un cheval → des … », l'enfant écrit « chevaux ». Un adjectif s'écrit sans déterminant (« petit > petite »). Pour en ajouter ou en changer, déposez un fichier .json dans le dossier de données (FOYER_DATA_DIR/revisions/accords/) : au même nom il remplace celui-ci, sous un autre nom il s'ajoute. Un parent peut aussi saisir sa liste dans l'écran Révisions, au suivi de l'enfant (sans virgule : l'écran coupe les éléments aux virgules).",
+  "listes": [
+    {
+      "id": "feminin-noms",
+      "label": "Le féminin des noms",
+      "items": [
+        "un ami > une amie",
+        "un cousin > une cousine",
+        "un chien > une chienne",
+        "un lion > une lionne",
+        "un boulanger > une boulangère",
+        "un fermier > une fermière",
+        "un chanteur > une chanteuse",
+        "un coiffeur > une coiffeuse",
+        "un acteur > une actrice",
+        "un loup > une louve"
+      ]
+    },
+    {
+      "id": "pluriel-s",
+      "label": "Le pluriel en -s (et les mots qui ne changent pas)",
+      "items": [
+        "un chat > des chats",
+        "une fleur > des fleurs",
+        "un arbre > des arbres",
+        "le livre > les livres",
+        "la maison > les maisons",
+        "un ballon > des ballons",
+        "une souris > des souris",
+        "un nez > des nez",
+        "un bras > des bras",
+        "une voix > des voix"
+      ]
+    },
+    {
+      "id": "pluriel-x",
+      "label": "Le pluriel en -x (-eau, -eu, -ou, -al)",
+      "items": [
+        "un bateau > des bateaux",
+        "un oiseau > des oiseaux",
+        "un jeu > des jeux",
+        "un cheveu > des cheveux",
+        "un bijou > des bijoux",
+        "un genou > des genoux",
+        "un caillou > des cailloux",
+        "un hibou > des hiboux",
+        "un cheval > des chevaux",
+        "un journal > des journaux"
+      ]
+    },
+    {
+      "id": "adjectifs",
+      "label": "Le féminin des adjectifs",
+      "items": [
+        "petit > petite",
+        "grand > grande",
+        "vert > verte",
+        "gentil > gentille",
+        "gros > grosse",
+        "blanc > blanche",
+        "heureux > heureuse",
+        "doux > douce",
+        "neuf > neuve",
+        "beau > belle"
+      ]
+    }
+  ]
+}

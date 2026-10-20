@@ -18,6 +18,9 @@ import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
 import { COMPLEMENTS } from '../src/revisions/exercises/complements';
 import { DOUBLES } from '../src/revisions/exercises/doubles';
 import { COMPARER, situation } from '../src/revisions/exercises/comparer';
+import { LETTRES, inWords } from '../src/revisions/exercises/lettres';
+import { MONNAIE, money } from '../src/revisions/exercises/monnaie';
+import { ACCORDS, readLine as readAccord } from '../src/revisions/exercises/accords';
 import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
 import { ORTHOGRAPHE, readLine as readPhrase } from '../src/revisions/exercises/orthographe';
 import { LECTURE, readLine as readQuestion } from '../src/revisions/exercises/lecture';
@@ -52,6 +55,7 @@ describe('le registre', () => {
       if (e.view === 'grille') assert.equal(typeof e.grid, 'function', `${e.id} : une vue grille déclare grid()`);
       if (e.input === 'choix') assert.equal(typeof e.choices, 'function', `${e.id} : une saisie choix déclare choices()`);
       if (e.prompt === 'passage') assert.equal(typeof e.passage, 'function', `${e.id} : un énoncé passage déclare passage()`);
+      if (e.prompt === 'monnaie') assert.equal(typeof e.coins, 'function', `${e.id} : un énoncé monnaie déclare coins()`);
     }
   });
 
@@ -289,6 +293,126 @@ describe('l’exercice Comparer', () => {
     assert.deepEqual(COMPARER.learn!(p('cent'), NO_CONTEXT), l, 'toujours les mêmes exemples');
     assert.equal(COMPARER.spoken!(q), '47 est plus petit que 74');
     assert.equal(COMPARER.summary(p('mille'), NO_CONTEXT), 'La comparaison des nombres jusqu’à 1 000');
+  });
+});
+
+describe('l’exercice Nombres en lettres', () => {
+  const p = (jusqua: string, orthographe = 'rectifiee') => readParams(LETTRES, { jusqua, orthographe });
+
+  it('l’écriture en lettres de 0 à 99, rectifiée ou traditionnelle', () => {
+    const cas: [number, string, string][] = [
+      [0, 'zéro', 'zéro'], [16, 'seize', 'seize'], [17, 'dix-sept', 'dix-sept'], [21, 'vingt-et-un', 'vingt et un'], [42, 'quarante-deux', 'quarante-deux'],
+      [60, 'soixante', 'soixante'], [70, 'soixante-dix', 'soixante-dix'], [71, 'soixante-et-onze', 'soixante et onze'], [77, 'soixante-dix-sept', 'soixante-dix-sept'],
+      [80, 'quatre-vingts', 'quatre-vingts'], [81, 'quatre-vingt-un', 'quatre-vingt-un'], [91, 'quatre-vingt-onze', 'quatre-vingt-onze'], [99, 'quatre-vingt-dix-neuf', 'quatre-vingt-dix-neuf'],
+    ];
+    for (const [n, r, t] of cas) assert.deepEqual([inWords(n), inWords(n, true)], [r, t], String(n));
+    assert.equal(new Set(Array.from({ length: 100 }, (_, n) => inWords(n))).size, 100, 'cent écritures distinctes');
+  });
+
+  it('l’univers suit la plage ; la grille dizaines × unités le couvre exactement', () => {
+    assert.deepEqual(['vingt', 'soixante', 'cent'].map((j) => LETTRES.universe(p(j), NO_CONTEXT).length), [20, 70, 100]);
+    assert.equal(readParams(LETTRES, {}).jusqua, 'soixante');
+    for (const j of ['vingt', 'soixante', 'cent']) {
+      const g = LETTRES.grid!(p(j));
+      const cells = g.rows.flatMap((_, r) => g.cols.map((_, c) => g.keyAt(r, c)));
+      assert.deepEqual(cells, LETTRES.universe(p(j), NO_CONTEXT), j);
+    }
+  });
+
+  it('l’énoncé, la correction, les groupes, le mode Apprendre et le résumé', () => {
+    const q = LETTRES.question('let:71', p('cent'), () => 0);
+    assert.equal(LETTRES.text(q), 'soixante-et-onze');
+    assert.equal(LETTRES.text(LETTRES.question('let:71', p('cent', 'traditionnelle'), () => 0)), 'soixante et onze');
+    assert.deepEqual(LETTRES.check(q, '71'), { ok: true, expected: '71' });
+    assert.equal(LETTRES.check(q, '61').ok, false);
+    assert.equal(LETTRES.itemKey(LETTRES.parse({ n: 71 }, p('cent'))!), 'let:71');
+    for (const bad of [null, {}, { n: 100 }, { n: -1 }, { n: '7' }]) assert.equal(LETTRES.parse(bad, p('cent')), null, JSON.stringify(bad));
+    assert.equal(LETTRES.itemLabel('let:80'), 'quatre-vingts (80)');
+    assert.deepEqual([3, 30, 45, 77].map((n) => LETTRES.groups(`let:${n}`, p('cent'), NO_CONTEXT)[0]), ['De zéro à seize', 'Les dizaines', 'De 17 à 69', 'De 70 à 99']);
+    assert.equal(LETTRES.learn!(p('vingt'), NO_CONTEXT).length, 20);
+    assert.equal(LETTRES.spoken!(q), 'soixante-et-onze');
+    assert.equal(LETTRES.summary(p('cent', 'traditionnelle'), NO_CONTEXT), 'Les nombres en lettres de 0 à 99, orthographe traditionnelle');
+  });
+});
+
+describe('l’exercice Monnaie', () => {
+  const p = (plage: string) => readParams(MONNAIE, { plage });
+
+  it('l’univers : chaque total de la plage, au pas de la plus petite pièce', () => {
+    assert.deepEqual(['e20', 'e100', 'c'].map((x) => MONNAIE.universe(p(x), NO_CONTEXT).length), [20, 100, 50]);
+    assert.deepEqual(MONNAIE.universe(p('c'), NO_CONTEXT).slice(0, 3), ['mon:c:10', 'mon:c:20', 'mon:c:30']);
+    assert.equal(readParams(MONNAIE, {}).plage, 'e20');
+  });
+
+  it('le tirage fait le bon total, avec les pièces de la plage, dix au plus, du plus gros au plus petit', () => {
+    const denoms: Record<string, number[]> = { e20: [100, 200, 500, 1000], e100: [100, 200, 500, 1000, 2000, 5000], c: [10, 20, 50, 100, 200] };
+    for (const x of ['e20', 'e100', 'c']) {
+      const rand = seeded(3);
+      for (const k of MONNAIE.universe(p(x), NO_CONTEXT)) for (let i = 0; i < 10; i++) {
+        const q = MONNAIE.question(k, p(x), rand);
+        assert.equal(MONNAIE.itemKey(q), k);
+        assert.ok(q.coins.length <= 10 && q.coins.every((c) => denoms[x].includes(c)), `${k} : ${q.coins}`);
+        assert.deepEqual(q.coins, [...q.coins].sort((a, b) => b - a));
+        assert.ok(MONNAIE.parse(q, p(x)), 'relue telle quelle');
+      }
+    }
+  });
+
+  it('la saisie : des euros, ou tous les chiffres en centimes ; la correction et l’affichage', () => {
+    const e = { plage: 'e20' as const, coins: [1000, 200, 100] }, c = { plage: 'c' as const, coins: [200, 100, 20, 20] };
+    assert.deepEqual(MONNAIE.check(e, '13'), { ok: true, expected: '13 €' });
+    assert.equal(MONNAIE.check(e, '1300').ok, false);
+    assert.deepEqual(MONNAIE.check(c, '340'), { ok: true, expected: '3,40 €' });
+    assert.equal(MONNAIE.check(c, '34').ok, false, 'en centimes, 34 fait 0,34 €');
+    assert.deepEqual([MONNAIE.display!('13', e), MONNAIE.display!('34', c), MONNAIE.display!('340', c), MONNAIE.display!('5', c)], ['13 €', '0,34 €', '3,40 €', '0,05 €']);
+    assert.equal(MONNAIE.text(c), '2 € + 1 € + 20 c + 20 c');
+    assert.deepEqual(MONNAIE.coins!(c), c.coins);
+    assert.deepEqual([money(340), money(50, true), money(2000)], ['3,40 €', '50 c', '20 €']);
+    assert.equal(MONNAIE.itemLabel('mon:c:340'), '3,40 €');
+    assert.deepEqual(['mon:c:90', 'mon:c:340', 'mon:e100:4500'].map((k) => MONNAIE.groups(k, p('c'), NO_CONTEXT)[0]), ['Moins de 1 €', 'De 2 à 5 €', 'De 21 à 50 €']);
+    for (const bad of [null, {}, { plage: 'c', coins: [500] }, { plage: 'e20', coins: [100] }, { plage: 'c', coins: [] }, { plage: 'c', coins: Array(11).fill(10) }, { plage: 'c', coins: [200, 200, 200] }]) {
+      assert.equal(MONNAIE.parse(bad, p('c')), null, JSON.stringify(bad));
+    }
+    assert.equal(MONNAIE.summary(p('c'), NO_CONTEXT), 'La monnaie, centimes compris, jusqu’à 5 €');
+  });
+});
+
+describe('l’exercice Féminin et pluriel', () => {
+  const ctx: ExerciseContext = { lists: [
+    { id: 'semaine', label: 'Pluriels', source: 'foyer', items: ['un cheval > des chevaux', "l'arbre > les arbres", 'petit > petite', 'pas de flèche', 'un chat > un chat', 'un cheval > des chevaux'] },
+  ] };
+  const p = readParams(ACCORDS, { liste: 'semaine' }, ctx);
+
+  it('une ligne par mot : le mot de départ, « > », le mot attendu avec son déterminant', () => {
+    assert.deepEqual(readAccord('un cheval > des chevaux'), { from: 'un cheval', hint: 'des ', word: 'chevaux' });
+    assert.deepEqual(readAccord("un arbre > l'arbre"), { from: 'un arbre', hint: "l'", word: 'arbre' });
+    assert.deepEqual(readAccord('petit>petite'), { from: 'petit', hint: '', word: 'petite' });
+    for (const bad of ['pas de flèche', 'a > b > c', 'un chat > un chat', '> une', 'un 1 > des 2']) assert.equal(readAccord(bad), null, bad);
+    assert.deepEqual(ACCORDS.universe(p, ctx), ['acc:un cheval > des chevaux', "acc:l'arbre > les arbres", 'acc:petit > petite']);
+    assert.equal(ACCORDS.summary(p, ctx), 'La liste « Pluriels » (3 mots)');
+  });
+
+  it('la question : le déterminant donné, le mot à écrire, avec ou sans déterminant', () => {
+    const q = ACCORDS.question('acc:un cheval > des chevaux', p, () => 0);
+    assert.deepEqual(ACCORDS.ask!(q), { before: 'un cheval → des', after: '' });
+    assert.deepEqual(ACCORDS.check(q, 'Chevaux'), { ok: true, expected: 'chevaux' });
+    assert.equal(ACCORDS.check(q, 'des chevaux').ok, true);
+    assert.equal(ACCORDS.check(q, 'chevals').ok, false);
+    assert.equal(ACCORDS.check(ACCORDS.question('acc:petit > petite', p, () => 0), 'petité').ok, false, 'les accents comptent');
+    assert.equal(ACCORDS.text(q), 'un cheval → des chevaux');
+    assert.deepEqual(['acc:un cheval > des chevaux', 'acc:petit > petite', "acc:un arbre > l'arbre"].map((k) => ACCORDS.groups(k, p, ctx)[0]), ['des …', 'Sans déterminant', "l' …"]);
+    assert.equal(ACCORDS.spoken!(q), 'un cheval, des chevaux');
+    assert.ok(new Set(ACCORDS.universe(p, ctx)).has(ACCORDS.itemKey(ACCORDS.parse({ from: 'un cheval', hint: 'des ', word: 'chevaux' }, p)!)));
+    assert.ok(!new Set(ACCORDS.universe(p, ctx)).has(ACCORDS.itemKey(ACCORDS.parse({ from: 'un cheval', hint: 'des ', word: 'chevals' }, p)!)), 'un appareil ne change pas le mot attendu');
+  });
+
+  it('les listes livrées se lisent toutes, et tiennent dans une liste du foyer', () => {
+    const lists = shippedLists(path.join(os.tmpdir(), 'foyer-sans-surcharge'), 'accords');
+    assert.ok(lists.length >= 4);
+    for (const l of lists) {
+      assert.equal(l.items.filter((x) => !readAccord(x)).length, 0, l.id);
+      assert.deepEqual(cleanListItems(l.items), l.items, l.id);
+    }
   });
 });
 
