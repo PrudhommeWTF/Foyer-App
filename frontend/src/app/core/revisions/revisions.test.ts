@@ -4,7 +4,7 @@
 // de connu ; la correction ; et les mots du bilan et de l'objectif.
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { ExerciseDef, readParams } from './exercises/contract';
+import { ExerciseDef, NO_CONTEXT, readParams } from './exercises/contract';
 import { TABLES, TablesQuestion } from './exercises/tables';
 import { DICTEE } from './exercises/dictee';
 import { MasteryItem, activityDays, classify, dayLine, drawQuestions, fragile, goalLine, kidsLine, periodOf, programGroups, sessionUuid, summaryLine } from './revisions';
@@ -27,7 +27,7 @@ test('le tirage reste dans l’univers et fait le compte demandé', () => {
   const p = readParams(TABLES, { tables: [6, 9], bothDirections: false });
   const qs = drawQuestions(TABLES, p, { count: 20, mastery: [], now: NOW, rand: seeded() });
   assert.equal(qs.length, 20);
-  const universe = new Set(TABLES.universe(p));
+  const universe = new Set(TABLES.universe(p, NO_CONTEXT));
   assert.ok(qs.every((q) => universe.has(TABLES.itemKey(q))));
   assert.ok(qs.every((q) => q.a >= 6 && q.a <= 9), 'sans les deux sens, l’exercice pose la table travaillée en premier');
 });
@@ -35,7 +35,7 @@ test('le tirage reste dans l’univers et fait le compte demandé', () => {
 test('les items dus passent d’abord, les jamais vus au plus un tiers', () => {
   const p = readParams(TABLES, { tables: [6, 9] });
   const due = [item('mult:6x7', '2026-10-18T00:00:00.000Z'), item('mult:7x8', '2026-10-17T00:00:00.000Z')];
-  const later = TABLES.universe(p).filter((k) => !['mult:6x7', 'mult:7x8'].includes(k)).slice(0, 20).map((k) => item(k, '2026-11-01T00:00:00.000Z'));
+  const later = TABLES.universe(p, NO_CONTEXT).filter((k) => !['mult:6x7', 'mult:7x8'].includes(k)).slice(0, 20).map((k) => item(k, '2026-11-01T00:00:00.000Z'));
   const keys = drawQuestions(TABLES, p, { count: 9, mastery: [...due, ...later], now: NOW, rand: seeded(3) }).map((q) => TABLES.itemKey(q));
   assert.ok(keys.includes('mult:6x7') && keys.includes('mult:7x8'), 'les deux dus sont posés');
   const known = new Set([...due, ...later].map((m) => m.key));
