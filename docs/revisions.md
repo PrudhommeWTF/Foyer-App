@@ -58,6 +58,18 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
 
+### Conjugaison
+
+`conjugaison`, français, dès 7 ans environ : « être (présent) : nous … », l'enfant écrit la forme au **clavier système**, comme pour la dictée.
+
+- **Le contenu** est une liste de formes, **une ligne par forme** : « verbe (temps) : pronom forme », par exemple « être (présent) : nous sommes » ou « avoir (présent) : j'ai ». Pas de virgule (l'écran des listes coupe aux virgules), et aucune conjugaison dans le code. Listes livrées dans `backend/config/revisions/conjugaison/` (être et avoir au présent, au futur, à l'imparfait ; les verbes en -er au présent et au futur ; aller, faire, dire, venir au présent), et celles du foyer, saisies par un parent dans le suivi ou par l'assistant (`revisions_liste_creer` avec `exercice: "conjugaison"`). Une ligne qui n'a pas cette forme est ignorée.
+- **Un item** est une forme ; la clé porte la forme attendue (« conj:être:présent:nous:sommes »), ce qui permet au serveur de refuser une question dont la forme n'est pas celle de la liste.
+- **La correction** suit la dictée : les accents comptent, pas les majuscules, les espaces ni la forme de l'apostrophe. Écrire le pronom avec (« nous sommes ») est juste aussi.
+- **Le suivi** en liste, groupé par verbe et temps (« être (présent) »). Le mode Apprendre déroule la liste, la voix lit chaque forme.
+- **Le temps** : partie `exercices.conjugaison` du barème (20 s à 8 ans, rapide sous 10 s).
+
+Rien n'a été ajouté au socle. Une conséquence : deux exercices ont désormais des listes, l'assistant doit donc préciser `exercice` pour en gérer une.
+
 ### Soustractions
 
 Les tables de soustraction (`soustractions`, mathématiques, dès 6 ans environ), l'inverse des tables d'addition : « enlever 7 », c'est de 7 − 7 à 17 − 7, le résultat allant de 0 à 10.

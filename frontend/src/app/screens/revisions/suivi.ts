@@ -207,7 +207,10 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
     .seg { display: flex; background: var(--soft2); border-radius: 12px; padding: 3px; gap: 3px; }
     .seg button { flex: 1; border: none; background: transparent; border-radius: 10px; padding: 8px 12px; font-family: inherit; font-size: 14px; font-weight: 800; color: var(--ink2); cursor: pointer; min-height: 40px; }
     .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--sh-float); }
-    .ex-seg { margin-bottom: 14px; max-width: 520px; }
+    /* Un exercice de plus ne casse pas la rangée : elle défile, chaque nom sur une ligne. */
+    .ex-seg { margin-bottom: 14px; width: fit-content; max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .ex-seg::-webkit-scrollbar { display: none; }
+    .ex-seg button { flex: 0 0 auto; white-space: nowrap; }
     .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 16px; align-items: start; }
     .h { font-size: 15px; font-weight: 800; color: var(--ink); margin: 18px 0 10px; }
     .h:first-child { margin-top: 0; }

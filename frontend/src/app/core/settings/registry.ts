@@ -293,7 +293,7 @@ export const REGISTRY = [
     type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
     custom: true,
     label: 'Révisions',
-    desc: 'Des exercices courts pour réviser à la maison (les tables de multiplication et d’addition, les soustractions, la lecture de l’heure, la dictée de mots), avec le programme et le suivi de chaque enfant. Désactivé, l’écran, la tuile d’accueil, la tâche du jour dans « Devoirs de … », l’accès API et les outils d’assistant disparaissent ; les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles.',
+    desc: 'Des exercices courts pour réviser à la maison (les tables de multiplication et d’addition, les soustractions, la lecture de l’heure, la dictée de mots, la conjugaison), avec le programme et le suivi de chaque enfant. Désactivé, l’écran, la tuile d’accueil, la tâche du jour dans « Devoirs de … », l’accès API et les outils d’assistant disparaissent ; les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles.',
     default: true,
   },
   {

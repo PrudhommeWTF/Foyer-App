@@ -84,7 +84,8 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
               }
               @default {
                 @let a = askOf(q);
-                <div class="ask" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
+                <!-- Un énoncé long (« avoir (présent) : tu ») prend une taille plus sobre que « 6 × 7 = ». -->
+                <div class="ask" [class.long]="(a.before + a.after).length > 14" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
                   @if (a.before) { <span class="ops">{{ a.before }}</span> }
                   @if (plan().def.input === 'pave') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ shown() || '?' }}</span> }
                   @if (a.after) { <span class="ops">{{ a.after }}</span> }
@@ -144,6 +145,7 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
     .fb.faux, .fb.passe { color: #C6492F; }
     .skip { border: none; background: transparent; color: var(--ink2); font-family: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; min-height: 44px; cursor: pointer; }
     .ask.audio { flex-direction: column; align-items: center; gap: 14px; }
+    .ask.long { font-size: clamp(30px, 6vw, 48px); flex-wrap: wrap; justify-content: center; text-align: center; }
     .ask.clock { flex-direction: column; align-items: center; gap: 10px; font-size: clamp(34px, 8vw, 56px); }
     .ask.clock .line { display: flex; align-items: baseline; gap: 14px; }
     .word { font-size: clamp(40px, 10vw, 64px); font-weight: 800; color: var(--primary); }

@@ -46,6 +46,18 @@
       ],
       "adulte": { "accorde": 10, "rapide": 5 },
       "sansAge": { "accorde": 25, "rapide": 12 }
+    },
+    "conjugaison": {
+      "_aide": "Écrire une forme conjuguée au clavier demande un peu moins qu'un mot de dictée (on la connaît ou pas), bien plus qu'un calcul.",
+      "ages": [
+        { "jusqua": 7, "accorde": 25, "rapide": 12 },
+        { "jusqua": 8, "accorde": 20, "rapide": 10 },
+        { "jusqua": 9, "accorde": 18, "rapide": 9 },
+        { "jusqua": 10, "accorde": 16, "rapide": 8 },
+        { "jusqua": 14, "accorde": 12, "rapide": 6 }
+      ],
+      "adulte": { "accorde": 8, "rapide": 4 },
+      "sansAge": { "accorde": 20, "rapide": 10 }
     }
   }
 }

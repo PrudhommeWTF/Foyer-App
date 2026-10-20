@@ -1,0 +1,131 @@
+{
+  "_aide": "Listes livrées pour la conjugaison du module Révisions. Une ligne par forme : « verbe (temps) : pronom forme », par exemple « être (présent) : nous sommes » ou « avoir (présent) : j'ai ». Pour en ajouter ou en changer, déposez un fichier .json dans le dossier de données (FOYER_DATA_DIR/revisions/conjugaison/) : au même nom il remplace celui-ci, sous un autre nom il s'ajoute. Un parent peut aussi saisir sa liste dans l'écran Révisions, au suivi de l'enfant.",
+  "listes": [
+    {
+      "id": "etre-avoir-present",
+      "label": "Être et avoir, présent",
+      "items": [
+        "être (présent) : je suis",
+        "être (présent) : tu es",
+        "être (présent) : il est",
+        "être (présent) : nous sommes",
+        "être (présent) : vous êtes",
+        "être (présent) : ils sont",
+        "avoir (présent) : j'ai",
+        "avoir (présent) : tu as",
+        "avoir (présent) : il a",
+        "avoir (présent) : nous avons",
+        "avoir (présent) : vous avez",
+        "avoir (présent) : ils ont"
+      ]
+    },
+    {
+      "id": "er-present",
+      "label": "Verbes en -er, présent",
+      "items": [
+        "chanter (présent) : je chante",
+        "chanter (présent) : tu chantes",
+        "chanter (présent) : il chante",
+        "chanter (présent) : nous chantons",
+        "chanter (présent) : vous chantez",
+        "chanter (présent) : ils chantent",
+        "jouer (présent) : je joue",
+        "jouer (présent) : tu joues",
+        "jouer (présent) : il joue",
+        "jouer (présent) : nous jouons",
+        "jouer (présent) : vous jouez",
+        "jouer (présent) : ils jouent",
+        "aimer (présent) : j'aime",
+        "aimer (présent) : tu aimes",
+        "aimer (présent) : il aime",
+        "aimer (présent) : nous aimons",
+        "aimer (présent) : vous aimez",
+        "aimer (présent) : ils aiment"
+      ]
+    },
+    {
+      "id": "aller-faire-dire-venir-present",
+      "label": "Aller, faire, dire, venir, présent",
+      "items": [
+        "aller (présent) : je vais",
+        "aller (présent) : tu vas",
+        "aller (présent) : il va",
+        "aller (présent) : nous allons",
+        "aller (présent) : vous allez",
+        "aller (présent) : ils vont",
+        "faire (présent) : je fais",
+        "faire (présent) : tu fais",
+        "faire (présent) : il fait",
+        "faire (présent) : nous faisons",
+        "faire (présent) : vous faites",
+        "faire (présent) : ils font",
+        "dire (présent) : je dis",
+        "dire (présent) : tu dis",
+        "dire (présent) : il dit",
+        "dire (présent) : nous disons",
+        "dire (présent) : vous dites",
+        "dire (présent) : ils disent",
+        "venir (présent) : je viens",
+        "venir (présent) : tu viens",
+        "venir (présent) : il vient",
+        "venir (présent) : nous venons",
+        "venir (présent) : vous venez",
+        "venir (présent) : ils viennent"
+      ]
+    },
+    {
+      "id": "etre-avoir-futur",
+      "label": "Être et avoir, futur",
+      "items": [
+        "être (futur) : je serai",
+        "être (futur) : tu seras",
+        "être (futur) : il sera",
+        "être (futur) : nous serons",
+        "être (futur) : vous serez",
+        "être (futur) : ils seront",
+        "avoir (futur) : j'aurai",
+        "avoir (futur) : tu auras",
+        "avoir (futur) : il aura",
+        "avoir (futur) : nous aurons",
+        "avoir (futur) : vous aurez",
+        "avoir (futur) : ils auront"
+      ]
+    },
+    {
+      "id": "er-futur",
+      "label": "Verbes en -er, futur",
+      "items": [
+        "chanter (futur) : je chanterai",
+        "chanter (futur) : tu chanteras",
+        "chanter (futur) : il chantera",
+        "chanter (futur) : nous chanterons",
+        "chanter (futur) : vous chanterez",
+        "chanter (futur) : ils chanteront",
+        "jouer (futur) : je jouerai",
+        "jouer (futur) : tu joueras",
+        "jouer (futur) : il jouera",
+        "jouer (futur) : nous jouerons",
+        "jouer (futur) : vous jouerez",
+        "jouer (futur) : ils joueront"
+      ]
+    },
+    {
+      "id": "etre-avoir-imparfait",
+      "label": "Être et avoir, imparfait",
+      "items": [
+        "être (imparfait) : j'étais",
+        "être (imparfait) : tu étais",
+        "être (imparfait) : il était",
+        "être (imparfait) : nous étions",
+        "être (imparfait) : vous étiez",
+        "être (imparfait) : ils étaient",
+        "avoir (imparfait) : j'avais",
+        "avoir (imparfait) : tu avais",
+        "avoir (imparfait) : il avait",
+        "avoir (imparfait) : nous avions",
+        "avoir (imparfait) : vous aviez",
+        "avoir (imparfait) : ils avaient"
+      ]
+    }
+  ]
+}
