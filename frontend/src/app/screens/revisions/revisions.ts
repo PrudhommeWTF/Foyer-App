@@ -37,14 +37,13 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
   imports: [IconComponent, ModalComponent, GridComponent, ListComponent, RunnerComponent, HistoryComponent, ParamsFormComponent, SuiviComponent],
   template: `
     <div class="screen-enter">
-      @if (store.foyer.children().length) {
-        <div class="tabs" role="tablist">
-          <button role="tab" [attr.aria-selected]="tab() === 'moi'" [class.on]="tab() === 'moi'" (click)="tab.set('moi')">M’entraîner</button>
-          <button role="tab" [attr.aria-selected]="tab() === 'suivi'" [class.on]="tab() === 'suivi'" (click)="tab.set('suivi')">Suivi des enfants</button>
-        </div>
-      }
-      @if (tab() === 'suivi' && store.foyer.children().length) {
-        <rev-suivi [kid]="followed()" />
+      <!-- Un adulte ne s'entraîne pas ici : l'écran est le suivi de ses enfants. -->
+      @if (!store.foyer.isChild()) {
+        @if (store.foyer.children().length) {
+          <rev-suivi [kid]="followed()" />
+        } @else {
+          <div class="card empty">Les révisions se règlent et se suivent pour les enfants du foyer. Ajoutez un enfant dans la famille (fiche cochée « enfant ») pour commencer.</div>
+        }
       } @else {
       @if (store.queue().length; as n) {
         <div class="note">{{ n > 1 ? n + ' sessions attendent le réseau : elles partiront toutes seules.' : 'Une session attend le réseau : elle partira toute seule.' }}</div>
@@ -161,9 +160,6 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
     @if (history(); as h) { <rev-history [data]="h" (close)="history.set(null)" /> }
   `,
   styles: [`
-    .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
-    .tabs button { border: none; background: var(--soft2); color: var(--ink2); border-radius: 12px; padding: 10px 16px; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; min-height: 44px; }
-    .tabs button.on { background: var(--ink); color: var(--bg); }
     .na { margin: 6px 0 14px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
     .note { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: #FDF0DA; color: #8A5A07; font-size: 13px; font-weight: 700; }
     .empty { padding: 24px; text-align: center; font-weight: 700; color: var(--ink2); }
@@ -207,9 +203,7 @@ export class RevisionsScreen implements OnDestroy {
   readonly store = inject(RevisionsStore);
   readonly modeLabels = MODE_LABELS;
 
-  /** Pour un adulte qui a des enfants : s'entraîner soi-même, ou les suivre. */
-  readonly tab = signal<'moi' | 'suivi'>('moi');
-  /** L'enfant dont le suivi a été demandé (notification du dimanche), passé à l'onglet. */
+  /** L'enfant dont le suivi a été demandé (notification du dimanche), passé au suivi. */
   readonly followed = signal<string | null>(null);
   readonly chooser = signal<Chooser | null>(null);
   /** La série en cours : les sessions à enchaîner, et où on en est. */
@@ -229,7 +223,7 @@ export class RevisionsScreen implements OnDestroy {
     if (typeof speechSynthesis !== 'undefined') speechSynthesis.addEventListener?.('voiceschanged', this.onVoices);
     effect(() => {
       const kid = this.store.follow();
-      if (kid) untracked(() => { this.followed.set(kid); this.tab.set('suivi'); this.store.follow.set(null); });
+      if (kid) untracked(() => { this.followed.set(kid); this.store.follow.set(null); });
     });
   }
   ngOnDestroy(): void { if (typeof speechSynthesis !== 'undefined') speechSynthesis.removeEventListener?.('voiceschanged', this.onVoices); }

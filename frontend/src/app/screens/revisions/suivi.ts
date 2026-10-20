@@ -18,7 +18,7 @@ import { SUPPORTED_INPUTS } from './runner';
 interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
 
 /**
- * L'onglet Suivi, pour les adultes : par enfant et par exercice, son programme
+ * Le suivi des enfants, l'écran Révisions d'un adulte : par enfant et par exercice, son programme
  * (réglé ici, paramètres de l'exercice en formulaire engendré), son activité
  * sur quatre semaines, sa réussite par groupe d'items, ce qui reste fragile et
  * sa grille. Les règles d'acquisition viennent du barème du serveur et sont

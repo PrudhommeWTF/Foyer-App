@@ -2,7 +2,7 @@
 
 Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Deux exercices : **Tables** (multiplication et addition, maths) et **Dictée de mots** (français) ; d'autres suivront, un par un.
 
-> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` sont décrits dans `docs/assistants.md`. La dictée de mots, second exercice, a prouvé le socle (voir « Ce que la dictée a demandé au socle »).
+> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que le suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` sont décrits dans `docs/assistants.md`. La dictée de mots, second exercice, a prouvé le socle (voir « Ce que la dictée a demandé au socle »).
 
 ## Le module
 
@@ -43,7 +43,7 @@ La voix de l'appareil lit un mot (jamais affiché, sauf en mode Apprendre, où i
 
 - **Correction** : les accents comptent (c'est ce qu'on apprend), pas les majuscules, les espaces en trop ni la forme de l'apostrophe (’ ou ').
 - **Item** : le mot, quelle que soit la liste qui le porte. « oiseau » su dans la liste de la semaine reste su dans la suivante.
-- **Listes** : celles livrées dans `backend/config/revisions/dictee/` (mots invariables du CE1 et du CE2, pour commencer), et celles du foyer, saisies par un parent dans l'onglet Suivi (« la dictée de la semaine »). Le programme choisit une liste.
+- **Listes** : celles livrées dans `backend/config/revisions/dictee/` (mots invariables du CE1 et du CE2, pour commencer), et celles du foyer, saisies par un parent dans le suivi (« la dictée de la semaine »). Le programme choisit une liste.
 - **Temps** : le barème a une partie `exercices.dictee` (25 s par mot à 8 ans, rapide sous 12 s) : écrire un mot prend plus longtemps que répondre 42.
 - **Voix** : l'exercice déclare `requires: ['voix']`. Un appareil sans voix française ne le propose pas et le dit sur l'écran Révisions ; le réglage `revisionsVoix` ne coupe pas la dictée (la voix y est l'énoncé).
 - **Vue** : la maîtrise s'affiche en liste (un mot par ligne et son état), pas en grille.
@@ -172,15 +172,15 @@ Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions
 
 ## L'écran
 
-Écran **Révisions** (menu Organisation ; pour un enfant, la tuile « Mes révisions » de son accueil et son menu). Le même écran sert l'enfant et l'adulte qui s'entraîne pour lui-même ; rien n'y est écrit pour un exercice en particulier.
+Écran **Révisions** (menu Organisation ; pour un enfant, la tuile « Mes révisions » de son accueil et son menu). Pour un enfant, c'est son entraînement ; pour un adulte, c'est **seulement le suivi de ses enfants** (un adulte ne s'entraîne pas ici ; sans enfant dans le foyer, l'écran le dit). Rien n'y est écrit pour un exercice en particulier.
 
-- **Mon entraînement du jour** enchaîne, en mode S'entraîner, les exercices dont l'enfant a un programme, chacun avec ses paramètres et son nombre de questions ; entre deux exercices, « Continuer » ou « J'arrête là ». Sans aucun programme (un adulte, ou un enfant à qui rien n'est encore réglé), il enchaîne tous les exercices à leurs réglages par défaut, 20 questions chacun. L'objectif du jour s'affiche sans jamais reprocher un zéro (« Pas encore aujourd'hui », « Objectif du jour atteint ») ; toute session comptée du jour sur l'exercice compte.
+- **Mon entraînement du jour** enchaîne, en mode S'entraîner, les exercices dont l'enfant a un programme, chacun avec ses paramètres et son nombre de questions ; entre deux exercices, « Continuer » ou « J'arrête là ». Sans aucun programme (un enfant à qui rien n'est encore réglé), il enchaîne tous les exercices à leurs réglages par défaut, 20 questions chacun. L'objectif du jour s'affiche sans jamais reprocher un zéro (« Pas encore aujourd'hui », « Objectif du jour atteint ») ; toute session comptée du jour sur l'exercice compte.
 - **Une carte par exercice**, rangée par matière (ordre de `matieres.json`) : « S'entraîner » (le programme, ou les défauts), « Je choisis » (le mode, et les paramètres dans un **formulaire engendré** depuis leur déclaration : une liste pour un entier, oui ou non, un choix, « de … à … »), la grille de maîtrise (un exercice de vue `grille`) et les items à retravailler. Toucher une case ou un item ouvre son historique.
 - **Le runner**, plein écran : l'énoncé et la correction viennent de la définition. La saisie `pave` est le pavé maison (jamais le clavier du système) ; le clavier physique marche aussi. Un exercice d'une saisie que l'écran ne sait pas encore afficher n'est pas proposé (`SUPPORTED_INPUTS` dans `screens/revisions/runner.ts`) ; la vue `liste` et la saisie `clavier` arriveront avec la dictée.
 - **Le bilan** : bonnes, lentes, fausses, ce qui est à revoir, la grille avec les cases qui viennent de changer. Pas de points ni de classement.
 - **La voix** (mode Apprendre, exercice qui déclare `spoken`) : la synthèse vocale de l'appareil, jamais un service en ligne. Réglage d'appareil `revisionsVoix` (Paramètres → Révisions) ; sans voix française, pas de bouton « Écouter ».
 
-**L'onglet Suivi des enfants** (adultes, quand le foyer a un enfant), par enfant puis par exercice :
+**Le suivi des enfants** (l'écran d'un adulte, quand le foyer a un enfant), par enfant puis par exercice :
 
 - **Le programme**, réglé ici : les paramètres de l'exercice dans le formulaire engendré, le nombre de questions par session, le temps par réponse (le barème selon l'âge, rappelé en clair, ou un temps fixé et son seuil « rapide »), l'objectif de sessions par jour. « Retirer le programme » le rend inactif sans rien effacer ; l'enfant s'entraîne alors aux réglages par défaut. Chaque réglage est daté et signé, et journalisé côté serveur.
 - **L'activité** sur quatre semaines (sessions par jour, heure de Paris), **la réussite par groupe** d'items du programme (pour Tables, par table ; un groupe sans réponse dit « pas encore vu »), **ce qui reste fragile** (dans le périmètre du programme en vigueur), et **la grille**, avec l'aide qui rappelle les règles d'acquisition du barème.
@@ -200,7 +200,7 @@ Les matières (nom affiché, ordre du bilan) sont dans `backend/config/revisions
 
 | | Enfant | Adulte |
 |---|---|---|
-| ses propres sessions, sa maîtrise, son historique | lire, écrire | lire, écrire (il s'entraîne pour lui-même, sans programme ni bilan) |
+| ses propres sessions, sa maîtrise, son historique | lire, écrire | lire, écrire (l'API l'accepte, mais l'écran d'un adulte ne propose que le suivi des enfants) |
 | ceux d'un autre membre | refusé (403) | lire |
 | le programme d'un enfant | lire le sien | régler, retirer |
 | enregistrer une session au nom d'un autre | refusé | refusé |
