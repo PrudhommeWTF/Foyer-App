@@ -130,6 +130,29 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    label: 'tâche du jour dans « Devoirs de … »',
+    up: (db) => {
+      db.exec(`
+        -- Le parent demande, programme par programme, une tâche « Tables :
+        -- entraînement du jour » dans la liste « Devoirs de … » de l'enfant.
+        ALTER TABLE rev_programs ADD COLUMN daily_task INTEGER NOT NULL DEFAULT 0;
+
+        -- Les tâches du jour déjà projetées : une par enfant, exercice et jour.
+        -- Une tâche supprimée à la main le jour même n'est pas recréée ; le
+        -- lendemain en apporte une nouvelle.
+        CREATE TABLE rev_day_tasks (
+          member_id TEXT NOT NULL,
+          exercise_id TEXT NOT NULL,
+          day TEXT NOT NULL,
+          task_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (member_id, exercise_id, day)
+        );
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

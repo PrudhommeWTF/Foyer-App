@@ -15,6 +15,7 @@ import { ExerciseContext, ExerciseDef, ParamDecl, Params, defaults, readParams }
 import { Status, status } from '../revisions/mastery';
 import { Matiere, matiereLabel } from '../revisions/matieres';
 import { activeProgram, countedAnswers, masteryRows, sessionsOf, setProgram, stopProgram, toMastery } from '../revisions/repo';
+import { syncDayTasks } from '../revisions/devoirs';
 import type { McpCtx } from './tools';
 
 let deps: { bareme: (exercise?: string) => Bareme; matieres: () => Matiere[]; context: (exercise: string) => ExerciseContext } | null = null;
@@ -169,6 +170,7 @@ export function revisionsProgrammeDefinir(ctx: McpCtx, a: {
   if (a.retirer) {
     if (!stopProgram(m.id, def.id)) return `${m.name} n’a pas de programme ${def.label} actif.`;
     log.info(`Révisions : ${me?.name ?? ctx.memberId} a retiré le programme ${def.label} de ${m.name} (assistant ${ctx.via}).`);
+    dayTasks();
     return `Programme ${def.label} de ${m.name} retiré. Son historique reste ; il s’entraîne désormais aux réglages par défaut.`;
   }
   const cur = activeProgram(m.id, def.id), cx = contextOf(def.id);
@@ -191,5 +193,13 @@ export function revisionsProgrammeDefinir(ctx: McpCtx, a: {
     fastSeconds: secs === null ? null : Math.min(cur?.fast_seconds ?? secs / 2, secs),
   });
   log.info(`Révisions : ${me?.name ?? ctx.memberId} a réglé le programme ${def.label} de ${m.name} par l’assistant (${ctx.via}) : ${def.summary(params, cx)}, ${p.questions} questions, objectif ${p.daily_goal} par jour.`);
-  return `Programme ${def.label} de ${m.name} enregistré : ${def.summary(params, cx)}, ${p.questions} questions par session, objectif ${p.daily_goal} session(s) par jour, ${secs === null ? 'temps selon le barème de l’âge' : `${String(secs).replace('.', ',')} s par réponse`}. L’ancien programme reste dans l’historique.`;
+  dayTasks();
+  // La tâche du jour dans « Devoirs de … » se règle à l'écran ; l'assistant garde le choix du programme remplacé.
+  const task = p.daily_task ? ` La tâche du jour reste dans « Devoirs de ${m.name} »${p.daily_goal ? '' : ', mais sans objectif elle n’apparaît plus'}.` : '';
+  return `Programme ${def.label} de ${m.name} enregistré : ${def.summary(params, cx)}, ${p.questions} questions par session, objectif ${p.daily_goal} session(s) par jour, ${secs === null ? 'temps selon le barème de l’âge' : `${String(secs).replace('.', ',')} s par réponse`}.${task} L’ancien programme reste dans l’historique.`;
+}
+
+/** Les tâches du jour suivent le programme ; un échec n'empêche pas de l'enregistrer, le passage suivant rattrape. */
+function dayTasks(): void {
+  try { syncDayTasks(); } catch (e) { log.erreur('Révisions : tâches du jour en échec', e); }
 }

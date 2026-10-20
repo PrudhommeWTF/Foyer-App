@@ -70,6 +70,12 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
             }
             <div class="lbl">Objectif par jour</div>
             <div class="row"><input class="input num" type="number" min="0" max="10" [ngModel]="f().dailyGoal" (ngModelChange)="set({ dailyGoal: +$event })" aria-label="Sessions par jour" /> session(s), 0 pour aucun objectif</div>
+            @if (v.ov.devoirsList; as dl) {
+              <!-- La liste du module École : sans elle (module éteint, enfant non associé), pas d'option. -->
+              <label class="chk"><input type="checkbox" [ngModel]="f().dailyTask" (ngModelChange)="set({ dailyTask: $event })" [disabled]="f().dailyGoal < 1" />
+                Une tâche «&nbsp;{{ def.label }} : entraînement du jour&nbsp;» dans «&nbsp;{{ dl }}&nbsp;», les jours d’école</label>
+              <p class="hint">{{ f().dailyGoal < 1 ? 'Il faut un objectif d’au moins une session : c’est lui qui coche la tâche.' : 'Elle se coche toute seule quand l’objectif du jour est atteint.' }}</p>
+            }
             @if (err()) { <p class="err" role="alert">{{ err() }}</p> }
             <button class="btn btn-primary btn-block save" (click)="save()" [disabled]="busy()">{{ v.ov.program ? 'Enregistrer le programme' : 'Créer le programme' }}</button>
             @if (v.ov.program; as p) {
@@ -209,7 +215,7 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
     .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; font-weight: 700; color: var(--ink2); }
     .num { width: 86px; }
     .chk { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
-    .chk input { width: 20px; height: 20px; }
+    .chk input { width: 20px; height: 20px; flex-shrink: 0; }
     .hint { font-size: 12.5px; font-weight: 600; color: var(--ink2); line-height: 1.45; margin: 8px 0 0; }
     .hint.top { margin: -4px 0 4px; }
     .err { font-size: 13px; font-weight: 700; color: var(--primary); }
@@ -262,7 +268,7 @@ export class SuiviComponent {
   readonly busy = signal(false);
   readonly err = signal('');
   readonly history = signal<ItemHistory | null>(null);
-  readonly f = signal<ProgramFields>({ params: {}, questions: 20, secondsAllowed: null, fastSeconds: null, dailyGoal: 1 });
+  readonly f = signal<ProgramFields>({ params: {}, questions: 20, secondsAllowed: null, fastSeconds: null, dailyGoal: 1, dailyTask: false });
   readonly periods = PERIODS;
   readonly per = signal<PeriodPreset>('semaine');
   readonly bilan = signal<Bilan | null>(null);
@@ -279,8 +285,8 @@ export class SuiviComponent {
       if (!ov) return;
       const p = ov.program;
       untracked(() => this.f.set(p
-        ? { params: p.params, questions: p.questions, secondsAllowed: p.secondsAllowed, fastSeconds: p.fastSeconds, dailyGoal: p.dailyGoal }
-        : { params: ov.params, questions: 20, secondsAllowed: null, fastSeconds: null, dailyGoal: 1 }));
+        ? { params: p.params, questions: p.questions, secondsAllowed: p.secondsAllowed, fastSeconds: p.fastSeconds, dailyGoal: p.dailyGoal, dailyTask: p.dailyTask && !!ov.devoirsList }
+        : { params: ov.params, questions: 20, secondsAllowed: null, fastSeconds: null, dailyGoal: 1, dailyTask: false }));
     });
   }
 
@@ -338,7 +344,9 @@ export class SuiviComponent {
     this.busy.set(true); this.err.set('');
     try {
       const f = this.f();
-      await this.api.setProgram(id, this.ex().id, { ...f, fastSeconds: f.secondsAllowed === null ? null : f.fastSeconds });
+      // Sans liste « Devoirs de … » (module École éteint), le choix déjà fait reste tel quel au serveur.
+      const dailyTask = this.view()?.ov.devoirsList ? !!f.dailyTask && f.dailyGoal >= 1 : undefined;
+      await this.api.setProgram(id, this.ex().id, { ...f, dailyTask, fastSeconds: f.secondsAllowed === null ? null : f.fastSeconds });
       await this.reload(id, this.ex().id);
       this.foyer.toast('Programme enregistré');
     } catch (e) { this.err.set((e as Error).message); }

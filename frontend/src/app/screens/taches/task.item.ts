@@ -1,6 +1,8 @@
 // La tâche, telle qu'elle se déclare à la fiche d'élément. Une tâche de devoir
 // (venue d'ÉcoleDirecte) se lit et se coche, mais ne se modifie ni ne se
-// supprime ici : sa source est ÉcoleDirecte.
+// supprime ici : sa source est ÉcoleDirecte. L'entraînement du jour des
+// Révisions se coche et se supprime (pour aujourd'hui), mais ne se modifie pas :
+// c'est le programme de l'enfant qui le règle.
 import type { FoyerStore } from '../../core/foyer.store';
 import { ITEM_KINDS, ItemKind } from '../../core/items';
 import { TaskItem } from '../../core/models';
@@ -14,7 +16,7 @@ export const TASK_ITEM: ItemKind<TaskItem, FoyerStore> = {
   title: (t) => t.text,
   view: TaskView,
   form: TaskForm,
-  canEdit: (t) => !t.edId,
+  canEdit: (t) => !t.edId && !t.revEx,
   canRemove: (t) => !t.edId,
   // Sur une série, supprimer pose la question d'avant : passer cette occurrence, ou toute la série.
   remove: (s, t, _ctx, scope) => {
@@ -31,11 +33,13 @@ export const TASK_ITEM: ItemKind<TaskItem, FoyerStore> = {
     : [{ label: 'Fait', icon: 'check', run: () => s.toggleTask(t.id) }],
   openIn: (s, t) => {
     if (t.edId && s.modEcole()) { s.go('ecole'); return; }
+    if (t.revEx && s.screenEnabled('revisions')) { s.go('revisions'); return; }
     if (t.listId === ENTRETIEN_LIST_ID && s.modEntretien()) { s.go('entretien'); return; }
     s.go('taches');
     s.patch({ activeList: t.listId });
   },
   openTarget: (t, s) => (t.edId && s.modEcole() ? { label: 'Voir dans École', screen: 'ecole' }
+    : t.revEx && s.screenEnabled('revisions') ? { label: 'S’entraîner', screen: 'revisions' }
     : t.listId === ENTRETIEN_LIST_ID && s.modEntretien() ? { label: 'Ouvrir dans Entretien', screen: 'entretien' } : null),
   fingerprint: (t) => JSON.stringify(t),
   changedBy: (t) => ({ by: t.upBy ?? t.by ?? null, at: t.upAt ?? t.at ?? null }),

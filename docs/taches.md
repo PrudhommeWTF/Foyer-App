@@ -656,6 +656,11 @@ réapparaître ou bouger toute seule.
   remet la sienne), et aucune tâche n'y entre depuis un téléphone ou un
   assistant (opération écartée avec la raison). Elle compte dans « Toutes » et
   dans les rappels comme une liste « tâches ». Voir `docs/ecole.md`.
+- Seule autre tâche que le serveur y écrit : l'**entraînement du jour** des
+  Révisions (`revEx`), quand un parent l'a demandé dans le programme d'un
+  exercice. Une par jour d'école, cochée d'elle-même quand l'objectif est
+  atteint, retirée le lendemain ; elle ne se modifie pas, son lien
+  « S'entraîner » ouvre l'écran Révisions. Voir `docs/revisions.md`.
 
 ### Entretien : la liste des gestes
 

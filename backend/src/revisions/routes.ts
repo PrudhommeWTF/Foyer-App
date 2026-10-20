@@ -25,6 +25,7 @@ import { EXERCISES, exerciseById } from './exercises';
 import { Matiere, matiereLabel } from './matieres';
 import { addDays, bilanFor, mondayOf, parisDay as dayOf } from './bilan';
 import { bilanPdf, sessionsCsv } from './export';
+import { devoirsListOf, syncDayTasks, tickDayTask } from './devoirs';
 import {
   AnswerIn, ProgramRow, SessionRow, activeProgram, activePrograms, countedAnswers, itemHistory, masteryRows, programById,
   createList, foyerListId, recordSession, sessionsBetween, sessionsOf, setProgram, stopProgram, toMastery, updateList,
@@ -50,12 +51,15 @@ const storedParams = (def: ExerciseDef, json: string, ctx: ExerciseContext): Par
 /** Une liste de contenu reçue : un libellé, et des éléments non vides, sans doublon. */
 const MAX_ITEMS = 200;
 
+/** Les tâches du jour suivent le programme tout de suite ; un échec ne fait pas échouer l'enregistrement, le passage suivant rattrape. */
+const dayTasksNow = (): void => { try { syncDayTasks(); } catch (e) { log.erreur('Révisions : tâches du jour en échec', e); } };
+
 const members = (): Member[] => (getHousehold().state as HouseholdState).members;
 const parisDay = (isoAt: string): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(isoAt));
 
 export const programView = (p: ProgramRow | null) => p && ({
   id: p.id, exerciseId: p.exercise_id, params: JSON.parse(p.params_json) as Params, questions: p.questions,
-  secondsAllowed: p.seconds_allowed, fastSeconds: p.fast_seconds, dailyGoal: p.daily_goal, setBy: p.set_by, setAt: p.set_at,
+  secondsAllowed: p.seconds_allowed, fastSeconds: p.fast_seconds, dailyGoal: p.daily_goal, dailyTask: !!p.daily_task, setBy: p.set_by, setAt: p.set_at,
 });
 export const sessionView = (s: SessionRow) => ({
   id: s.id, exerciseId: s.exercise_id, mode: s.mode, params: JSON.parse(s.params_json) as Params, startedAt: s.started_at, endedAt: s.ended_at,
@@ -131,6 +135,8 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
       exerciseId: d.id, program: programView(program),
       params: program ? storedParams(d, program.params_json, getContext(d.id)) : defaults(d, getContext(d.id)),
       timing: timingOf(d, m, parisDay(new Date().toISOString()), program),
+      // La liste où peut aller la tâche du jour : null sans module École ni association à ÉcoleDirecte.
+      devoirsList: devoirsListOf(m.id)?.name ?? null,
       mastery: masteryRows(m.id, d.id).map((x) => ({ key: x.item_key, label: d.itemLabel(x.item_key), ...toMastery(x), status: status(toMastery(x), cfg) })),
     });
   }));
@@ -259,12 +265,17 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const secondsAllowed = secs(body['secondsAllowed'], 'Temps accordé'), fastSeconds = secs(body['fastSeconds'], 'Seuil rapide');
     if (secondsAllowed !== null && fastSeconds !== null && fastSeconds > secondsAllowed) throw new Invalid('Le seuil « rapide » ne peut pas dépasser le temps accordé.');
     const ctx = getContext(d.id), pp = params(d, body['params'], ctx);
+    const dailyGoal = int(body['dailyGoal'] ?? 1, 0, 10, 'Objectif par jour');
+    if (body['dailyTask'] !== undefined && typeof body['dailyTask'] !== 'boolean') throw new Invalid('Tâche du jour : oui ou non.');
+    const dailyTask = body['dailyTask'] as boolean | undefined;
+    if (dailyTask && dailyGoal < 1) throw new Invalid('La tâche du jour se coche quand l’objectif est atteint : il faut un objectif d’au moins une session.');
+    if (dailyTask && !devoirsListOf(target.id)) throw new Invalid(`La tâche du jour va dans la liste « Devoirs de ${target.name} », qui demande le module École et ${target.name} associé à ÉcoleDirecte.`);
     const p = setProgram({
       memberId: target.id, exerciseId: d.id, params: pp,
-      questions: int(body['questions'], 5, 100, 'Questions par session'), secondsAllowed, fastSeconds,
-      dailyGoal: int(body['dailyGoal'] ?? 1, 0, 10, 'Objectif par jour'), setBy: me.id,
+      questions: int(body['questions'], 5, 100, 'Questions par session'), secondsAllowed, fastSeconds, dailyGoal, dailyTask, setBy: me.id,
     });
-    log.info(`Révisions : ${me.name} a réglé le programme ${d.label} de ${target.name} (${d.summary(pp, ctx)}, ${p.questions} questions, objectif ${p.daily_goal} par jour).`);
+    log.info(`Révisions : ${me.name} a réglé le programme ${d.label} de ${target.name} (${d.summary(pp, ctx)}, ${p.questions} questions, objectif ${p.daily_goal} par jour${p.daily_task ? ', tâche du jour' : ''}).`);
+    dayTasksNow();
     res.json({ program: programView(p) });
   }));
 
@@ -277,6 +288,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const d = exercise(req.params['exercise']);
     if (!stopProgram(target.id, d.id)) { res.status(404).json({ error: 'Pas de programme actif pour cet exercice.' }); return; }
     log.info(`Révisions : ${me.name} a retiré le programme ${d.label} de ${target.name}.`);
+    dayTasksNow();
     res.json({ ok: true });
   }));
 
@@ -392,6 +404,11 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const s = out.session;
     const duree = Math.max(0, Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 1000));
     log.info(`Révisions : session ${d.label} de ${me.name} reçue (${s.mode}, ${d.summary(p, ctx)}${s.aborted ? ', abandonnée' : ''}) : ${s.good} bonnes, ${s.slow} lentes, ${s.wrong} fausses, ${duree} s.`);
+    const ap = activeProgram(me.id, d.id);
+    if (ap?.daily_task && s.mode !== 'apprendre') {
+      try { if (tickDayTask(me.id, d.id, s.started_at, ap.daily_goal)) log.info(`Révisions : objectif du jour atteint, la tâche ${d.label} de ${me.name} est cochée.`); }
+      catch (e) { log.erreur('Révisions : coche de la tâche du jour en échec', e); }
+    }
     const cfg = getBareme(d.id).maitrise;
     res.status(201).json({
       duplicate: false, session: sessionView(s),

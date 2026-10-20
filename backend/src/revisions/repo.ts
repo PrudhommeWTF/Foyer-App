@@ -30,7 +30,7 @@ export interface MasteryRow {
 }
 export interface ProgramRow {
   id: number; member_id: string; exercise_id: string; params_json: string; questions: number;
-  seconds_allowed: number | null; fast_seconds: number | null; daily_goal: number;
+  seconds_allowed: number | null; fast_seconds: number | null; daily_goal: number; daily_task: number;
   set_by: string | null; set_at: string; active: number;
 }
 export interface AnswerRow { item_key: string; question_json: string; expected: string; given: string | null; ms: number; result: Result; asked_at: string; mode: Mode; }
@@ -141,12 +141,15 @@ export function programById(id: number): ProgramRow | null {
 export function setProgram(p: {
   memberId: string; exerciseId: string; params: Params; questions: number; secondsAllowed: number | null;
   fastSeconds: number | null; dailyGoal: number; setBy: string;
+  /** La tâche du jour dans « Devoirs de … ». Absent : celle du programme remplacé. */
+  dailyTask?: boolean;
 }, now = new Date().toISOString()): ProgramRow {
   return database.transaction(() => {
+    const task = p.dailyTask ?? !!activeProgram(p.memberId, p.exerciseId)?.daily_task;
     database.prepare('UPDATE rev_programs SET active = 0 WHERE member_id = ? AND exercise_id = ? AND active = 1').run(p.memberId, p.exerciseId);
     const id = Number(database.prepare(`INSERT INTO rev_programs (member_id, exercise_id, params_json, questions, seconds_allowed, fast_seconds,
-      daily_goal, set_by, set_at, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-      .run(p.memberId, p.exerciseId, JSON.stringify(p.params), p.questions, p.secondsAllowed, p.fastSeconds, p.dailyGoal, p.setBy, now).lastInsertRowid);
+      daily_goal, daily_task, set_by, set_at, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+      .run(p.memberId, p.exerciseId, JSON.stringify(p.params), p.questions, p.secondsAllowed, p.fastSeconds, p.dailyGoal, task ? 1 : 0, p.setBy, now).lastInsertRowid);
     return programById(id)!;
   })();
 }
@@ -154,6 +157,30 @@ export function setProgram(p: {
 /** Retire le programme actif d'un exercice (il reste en base, inactif). Faux s'il n'y en avait pas. */
 export function stopProgram(member: string, exercise: string): boolean {
   return database.prepare('UPDATE rev_programs SET active = 0 WHERE member_id = ? AND exercise_id = ? AND active = 1').run(member, exercise).changes > 0;
+}
+
+/** Les programmes actifs qui demandent la tâche du jour, tous enfants confondus. */
+export function dailyTaskPrograms(): ProgramRow[] {
+  return database.prepare('SELECT * FROM rev_programs WHERE active = 1 AND daily_task = 1 AND daily_goal > 0 ORDER BY member_id, exercise_id').all() as ProgramRow[];
+}
+
+/** Les sessions qui comptent pour l'objectif d'un jour (heure de Paris) : toutes, sauf le mode Apprendre. */
+export function sessionsOnDay(member: string, exercise: string, day: string): number {
+  // Un jour de Paris déborde de son jour UTC de deux heures au plus : on lit large, on trie à l'heure de Paris.
+  return (database.prepare(`SELECT started_at FROM rev_sessions WHERE member_id = ? AND exercise_id = ? AND mode <> 'apprendre'
+    AND started_at >= ? AND started_at < ?`).all(member, exercise, shift(day, -1) + 'T20:00:00.000Z', shift(day, 1) + 'T04:00:00.000Z') as { started_at: string }[])
+    .filter((r) => parisDayOf(r.started_at) === day).length;
+}
+const shift = (day: string, n: number): string => { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const parisDayOf = (isoAt: string): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(isoAt));
+
+/** Les tâches du jour déjà projetées pour ce jour, par « membre|exercice ». */
+export function dayTasks(day: string): Set<string> {
+  return new Set((database.prepare('SELECT member_id, exercise_id FROM rev_day_tasks WHERE day = ?').all(day) as { member_id: string; exercise_id: string }[])
+    .map((r) => `${r.member_id}|${r.exercise_id}`));
+}
+export function recordDayTask(member: string, exercise: string, day: string, taskId: string, now: string): void {
+  database.prepare('INSERT OR IGNORE INTO rev_day_tasks (member_id, exercise_id, day, task_id, created_at) VALUES (?, ?, ?, ?, ?)').run(member, exercise, day, taskId, now);
 }
 
 /**

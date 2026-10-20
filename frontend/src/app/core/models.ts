@@ -254,6 +254,8 @@ export interface TaskItem {
   doneAt?: string | null; doneBy?: string | null;
   /** Devoir ÉcoleDirecte dont la tâche est la projection (posé par le serveur seul). */
   edId?: number | null;
+  /** Exercice des Révisions dont la tâche est l'entraînement du jour (posé par le serveur seul, coché quand l'objectif est atteint). */
+  revEx?: string | null;
   /** Auteur et date de création. */
   by?: string | null; at?: string | null;
   /** Nom du jeton d'accès quand la tâche a été créée par un assistant (posé par le serveur MCP). */

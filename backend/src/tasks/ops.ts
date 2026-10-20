@@ -139,6 +139,12 @@ export interface TaskItem {
    */
   edId?: number | null;
   /**
+   * Exercice du module Révisions dont la tâche est l'entraînement du jour, dans
+   * la liste « Devoirs de … ». Posé par le serveur seul, comme `edId` : la
+   * tâche se coche d'elle-même quand l'objectif du jour est atteint.
+   */
+  revEx?: string | null;
+  /**
    * Tâche parente, pour une sous-tâche. **Un seul niveau** : une sous-tâche ne
    * peut pas en avoir elle-même, et une tâche qui a des sous-tâches ne peut pas
    * en devenir une. Une sous-tâche est un détail du parent (intitulé, membres,
@@ -161,7 +167,7 @@ export interface TaskItem {
 export interface TaskFields {
   listId?: string; text?: string; note?: string; cat?: string; who?: string[];
   due?: string | null; time?: string | null; shopListId?: string | null; rec?: TaskRec | null; remind?: Remind | null;
-  contractId?: number | null; parentId?: string | null; ord?: string | null; edId?: number | null;
+  contractId?: number | null; parentId?: string | null; ord?: string | null; edId?: number | null; revEx?: string | null;
 }
 
 interface Base { opId: string; by?: string | null; at?: string | null; via?: string | null; }
@@ -216,8 +222,8 @@ export interface OpsContext {
   alreadyApplied: (opId: string) => boolean;
   /**
    * Opérations écrites par le serveur lui-même (projection des devoirs
-   * ÉcoleDirecte) : elles seules posent `edId` et écrivent dans une liste
-   * `devoirs`. Jamais vrai pour ce qui vient d'un téléphone ou d'un assistant.
+   * ÉcoleDirecte, entraînement du jour des Révisions) : elles seules posent
+   * `edId` ou `revEx` et écrivent dans une liste `devoirs`. Jamais vrai pour ce qui vient d'un téléphone ou d'un assistant.
    */
   trusted?: boolean;
 }
@@ -359,6 +365,10 @@ function readFields(o: Record<string, unknown>, ctx: OpsContext): { fields: Task
     const v = o['edId'];
     f.edId = typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null;
   }
+  if (o['revEx'] !== undefined && ctx.trusted) {
+    const v = o['revEx'];
+    f.revEx = typeof v === 'string' && /^[a-z0-9-]{1,40}$/.test(v) ? v : null;
+  }
   if (o['contractId'] !== undefined) {
     const v = o['contractId'];
     if (v === null || v === '') f.contractId = null;
@@ -457,8 +467,9 @@ const MAINT_REFUS = 'Les détails d’entretien (pièce, stock, pause) ne valent
 const isEntretien = (listId: string, ctx: OpsContext): boolean => ctx.listKind(listId) === 'entretien';
 
 /**
- * Une liste « Devoirs de … » n'accueille que ce qu'ÉcoleDirecte y projette :
- * ni ajout ni déplacement vers elle depuis un téléphone ou un assistant.
+ * Une liste « Devoirs de … » n'accueille que ce que le serveur y projette (les devoirs
+ * ÉcoleDirecte, l'entraînement du jour des Révisions) : ni ajout ni déplacement vers
+ * elle depuis un téléphone ou un assistant.
  */
 const DEVOIRS_REFUS = 'Les devoirs viennent d’ÉcoleDirecte : une tâche maison va dans une autre liste.';
 const intoDevoirs = (listId: string | undefined, from: string | null, ctx: OpsContext): boolean =>
@@ -476,6 +487,7 @@ function assign(t: TaskItem, f: TaskFields): TaskItem {
   if (next.shopListId === null || next.shopListId === undefined) delete next.shopListId;
   if (next.contractId === null || next.contractId === undefined) delete next.contractId;
   if (next.edId === null || next.edId === undefined) delete next.edId;
+  if (!next.revEx) delete next.revEx;
   if (next.parentId === null || next.parentId === undefined) delete next.parentId;
   if (!next.maintenance) delete next.maintenance;
   // Une sous-tâche est un détail du parent : la date, la récurrence et le rappel
