@@ -58,6 +58,17 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
 
+### Soustractions
+
+Les tables de soustraction (`soustractions`, mathématiques, dès 6 ans environ), l'inverse des tables d'addition : « enlever 7 », c'est de 7 − 7 à 17 − 7, le résultat allant de 0 à 10.
+
+- **Le programme** choisit les nombres enlevés (de 0 à 10, par défaut de 2 à 5). 11 items par nombre enlevé.
+- **Un item** est une soustraction (« sub:13-7 ») : elle n'est pas commutative, 13 − 7 et 13 − 6 se suivent à part.
+- **Le suivi** : une grille d'une ligne par nombre enlevé (« − 7 ») et d'une colonne par résultat ; groupes « Enlever 7 ». Le mode Apprendre récite la table du premier nombre enlevé.
+- **Le temps** : celui du barème commun, comme les Tables (partie `exercices.soustractions` vide, à remplir pour l'adapter).
+
+Rien n'a été ajouté au socle : l'exercice n'utilise que ce que le contrat offrait déjà.
+
 ### Lire l'heure
 
 Troisième exercice (`heure`, mathématiques, dès 6 ans environ) : une **horloge à aiguilles** dessinée à l'écran, l'enfant écrit l'heure au pavé (7, 4, 5 pour « 7 h 45 »).
