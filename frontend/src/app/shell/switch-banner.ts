@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../core/foyer.store';
-import { IconComponent } from '../core/icon';
 import { ModalComponent } from '../shared/modal';
 
 /**
@@ -14,7 +13,7 @@ import { ModalComponent } from '../shared/modal';
   selector: 'app-switch-banner',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, ModalComponent],
+  imports: [FormsModule, ModalComponent],
   template: `
     @if (store.switched(); as sw) {
       <div class="band" role="status">
