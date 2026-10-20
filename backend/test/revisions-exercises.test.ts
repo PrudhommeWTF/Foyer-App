@@ -17,6 +17,7 @@ import { HEURE } from '../src/revisions/exercises/heure';
 import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
 import { COMPLEMENTS } from '../src/revisions/exercises/complements';
 import { DOUBLES } from '../src/revisions/exercises/doubles';
+import { COMPARER, situation } from '../src/revisions/exercises/comparer';
 import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
 import { ORTHOGRAPHE, readLine as readPhrase } from '../src/revisions/exercises/orthographe';
 import { LECTURE, readLine as readQuestion } from '../src/revisions/exercises/lecture';
@@ -235,6 +236,59 @@ describe('l’exercice Doubles et moitiés', () => {
     assert.deepEqual(DOUBLES.learn!(p('deux', 'dix'), NO_CONTEXT).slice(9, 11), [{ op: 'dbl', n: 10 }, { op: 'moit', n: 2 }]);
     assert.deepEqual([DOUBLES.spoken!(d), DOUBLES.spoken!(m)], ['le double de 7, 14', 'la moitié de 30, 15']);
     assert.equal(DOUBLES.summary(p('deux', 'dizaines'), NO_CONTEXT), 'Les doubles et les moitiés des dizaines, de 10 à 50');
+  });
+});
+
+describe('l’exercice Comparer', () => {
+  const p = (jusqua: string) => readParams(COMPARER, { jusqua });
+  const PLAGE: Record<string, number> = { vingt: 20, cent: 100, mille: 1000 };
+
+  it('la situation d’une paire, du plus visible au plus piégeux', () => {
+    assert.deepEqual([[9, 12], [38, 52], [43, 47], [47, 74], [123, 321], [5, 5], [3, 7], [100, 99]].map(([a, b]) => situation(a, b)),
+      ['taille', 'premier', 'suivant', 'inverse', 'inverse', 'egal', 'premier', 'taille']);
+  });
+
+  it('l’univers : chaque situation de la plage, < et > séparés ; toute paire de la plage y tombe', () => {
+    assert.deepEqual(['vingt', 'cent', 'mille'].map((j) => COMPARER.universe(p(j), NO_CONTEXT).length), [7, 9, 9]);
+    assert.ok(!COMPARER.universe(p('vingt'), NO_CONTEXT).some((k) => k.includes('inverse')), 'pas de chiffres inversés jusqu’à 20');
+    assert.equal(readParams(COMPARER, {}).jusqua, 'cent');
+    const u = new Set(COMPARER.universe(p('vingt'), NO_CONTEXT));
+    for (let a = 0; a <= 20; a++) for (let b = 0; b <= 20; b++) assert.ok(u.has(COMPARER.itemKey({ a, b, max: 20 })), `${a} … ${b}`);
+  });
+
+  it('le tirage tombe toujours dans l’item demandé, dans la plage', () => {
+    for (const j of ['vingt', 'cent', 'mille']) {
+      const rand = seeded(11);
+      for (const k of COMPARER.universe(p(j), NO_CONTEXT)) for (let i = 0; i < 30; i++) {
+        const q = COMPARER.question(k, p(j), rand);
+        assert.equal(COMPARER.itemKey(q), k, `${k} : ${q.a} … ${q.b}`);
+        assert.ok(q.a <= q.max && q.b <= q.max);
+      }
+    }
+  });
+
+  it('l’énoncé, la correction, la relecture, les groupes, le mode Apprendre et le résumé', () => {
+    const q = { a: 47, b: 74, max: 100 };
+    assert.equal(COMPARER.text(q), '47 … 74');
+    assert.deepEqual(COMPARER.ask!(q), { before: '47', after: '74' });
+    assert.deepEqual(COMPARER.choices!(q), ['<', '=', '>'], 'toujours dans le même ordre, comme des touches');
+    assert.deepEqual(COMPARER.check(q, '<'), { ok: true, expected: '<' });
+    assert.equal(COMPARER.check(q, '>').ok, false);
+    assert.equal(COMPARER.itemKey(q), 'cmp:100:inverse:lt');
+    assert.deepEqual(['cmp:100:inverse:lt', 'cmp:100:inverse:gt', 'cmp:20:egal:eq', 'cmp:1000:suivant:gt'].map((k) => COMPARER.itemLabel(k)), ['47 < 74', '74 > 47', '8 = 8', '352 > 345']);
+    for (const j of ['vingt', 'cent', 'mille']) for (const k of COMPARER.universe(p(j), NO_CONTEXT)) {
+      const [a, s, b] = COMPARER.itemLabel(k).split(' ');
+      assert.equal(COMPARER.itemKey({ a: +a, b: +b, max: PLAGE[j] }), k, `l’exemple de ${k} est bien dans sa situation`);
+      assert.equal(COMPARER.check({ a: +a, b: +b, max: PLAGE[j] }, s).ok, true);
+    }
+    assert.deepEqual(COMPARER.groups('cmp:100:inverse:gt', p('cent'), NO_CONTEXT), ['Chiffres inversés']);
+    assert.deepEqual(COMPARER.parse({ a: 47, b: 74, max: 100 }, p('cent')), q);
+    for (const bad of [null, {}, { a: 47, b: 101, max: 100 }, { a: 47, b: 74, max: 1000 }, { a: -1, b: 3, max: 100 }, { a: '4', b: 3, max: 100 }]) assert.equal(COMPARER.parse(bad, p('cent')), null, JSON.stringify(bad));
+    const l = COMPARER.learn!(p('cent'), NO_CONTEXT);
+    assert.deepEqual(l.map((x) => COMPARER.itemKey(x)), COMPARER.universe(p('cent'), NO_CONTEXT), 'un exemple par item');
+    assert.deepEqual(COMPARER.learn!(p('cent'), NO_CONTEXT), l, 'toujours les mêmes exemples');
+    assert.equal(COMPARER.spoken!(q), '47 est plus petit que 74');
+    assert.equal(COMPARER.summary(p('mille'), NO_CONTEXT), 'La comparaison des nombres jusqu’à 1 000');
   });
 });
 
