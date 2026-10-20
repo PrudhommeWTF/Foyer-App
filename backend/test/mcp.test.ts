@@ -370,6 +370,16 @@ describe('Serveur MCP', () => {
     await enfant.close(); await adulte.close();
   });
 
+  it('le calendrier : un jeton d’enfant le lit, sans outil pour le modifier', async () => {
+    const enfant = await connect(tokenEnfant);
+    const noms = (await enfant.listTools()).tools.map((tl) => tl.name);
+    for (const n of ['evenement_creer', 'evenement_modifier', 'evenement_supprimer']) assert.ok(!noms.includes(n), 'un enfant ne voit pas ' + n);
+    assert.ok(noms.includes('agenda'), 'il lit l’agenda');
+    const res = await enfant.callTool({ name: 'evenement_creer', arguments: { titre: 'Fête', date: '2026-02-10' } });
+    assert.equal((res as { isError?: boolean }).isError, true);
+    await enfant.close();
+  });
+
   it('Employé à domicile : ajouter une présence (attribuée via un assistant), doublon, mois, gel', async () => {
     // Configuration par un administrateur (hors MCP) : employé + taux.
     assert.equal((await appel(ctx.base, 'POST', '/employes/employees', { name: 'Nolwenn', role: 'menage' }, ctx.jetons.admin)).status, 201);

@@ -45,12 +45,14 @@ export interface ItemKindMeta {
   module?: ModuleFlag;
   /** Réservé aux adultes. */
   adultOnly?: boolean;
+  /** Un enfant le consulte, mais ne le crée, ne le modifie ni ne le supprime (le serveur refuse aussi). */
+  childReadOnly?: boolean;
 }
 
 export const ITEM_KINDS: Readonly<Record<ItemKindId, ItemKindMeta>> = {
   event: {
     kind: 'event', label: 'Événement', newTitle: 'Nouvel événement', editTitle: 'Modifier l’événement',
-    screen: 'calendar', openLabel: 'Ouvrir dans Agenda', editable: true, removeMode: 'undo',
+    screen: 'calendar', openLabel: 'Ouvrir dans Agenda', editable: true, removeMode: 'undo', childReadOnly: true,
   },
   task: {
     kind: 'task', label: 'Tâche', newTitle: 'Nouvelle tâche', editTitle: 'Modifier la tâche',

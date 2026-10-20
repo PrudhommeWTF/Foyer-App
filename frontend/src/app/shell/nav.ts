@@ -19,7 +19,7 @@ export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'employe
 export const ECRANS_ENFANT: ReadonlySet<string> = new Set(['home', 'calendar', 'taches', 'planning', 'ecole', 'revisions']);
 
 /** Les entrées du menu « + » d'un enfant : ce qui mène à ses écrans. */
-export const AJOUTS_ENFANT: ReadonlySet<string> = new Set(['event', 'task', 'slot']);
+export const AJOUTS_ENFANT: ReadonlySet<string> = new Set(['task', 'slot']);
 
 /**
  * Les groupes de navigation, tels qu'ils s'affichent pour ce compte. `enabled`

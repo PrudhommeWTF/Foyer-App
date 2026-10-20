@@ -51,7 +51,8 @@ const COL_GAP = 6;
     <div class="screen-enter">
       <div class="head-row">
         <div class="members">
-          @for (m of d().members; track m.id) {
+          <!-- Un enfant ne voit que son emploi du temps : pas de filtre à régler. -->
+          @for (m of store.isChild() ? [] : d().members; track m.id) {
             <button type="button" class="pill" [class.active]="filtered(m.id)" [attr.aria-pressed]="filtered(m.id)" (click)="store.toggleSchedWho(m.id)">
               <f-avatar [ini]="m.ini" [color]="m.color" [size]="24" />
               <span>{{ m.name }}</span>
@@ -67,7 +68,7 @@ const COL_GAP = 6;
 
       <!-- Le filtre reste visible tant qu'il est actif, et s'efface en un geste :
            un écran qui paraît vide à cause d'un filtre oublié est un piège. -->
-      @if (store.ui().schedWho.length) {
+      @if (store.ui().schedWho.length && !store.isChild()) {
         <div class="filter-bar">
           <f-icon name="users" [size]="16" color="var(--ink2)" [width]="2.2" />
           <span>Filtré sur {{ filterNames() }}</span>
@@ -89,7 +90,7 @@ const COL_GAP = 6;
         </div>
       }
 
-      @if (orphans(); as n) {
+      @if (!store.isChild() && orphans(); as n) {
         <div class="warn-bar">
           <f-icon name="urgent" [size]="16" color="var(--status-crit)" [width]="2.2" />
           <span>{{ orphanText() }}</span>
@@ -418,7 +419,7 @@ export class PlanningScreen {
   days = [1, 2, 3, 4, 5, 6, 7];
 
   label(dow: number): string { return dowLabel(dow); }
-  filtered(id: string): boolean { return this.store.ui().schedWho.includes(id); }
+  filtered(id: string): boolean { return this.store.schedFilter().includes(id); }
 
   /**
    * La semaine affichée, résolue une seule fois pour les deux vues.
@@ -430,7 +431,7 @@ export class PlanningScreen {
   readonly week = computed<DayView[]>(() => {
     // Les créneaux du foyer et les cours importés d'ÉcoleDirecte, côte à côte.
     const sched = this.store.schedAll();
-    const who = this.store.ui().schedWho;
+    const who = this.store.schedFilter();
     const cal = this.store.calendar();
     const today = this.store.todayStr();
     return this.store.schedWeek().map((date, i) => ({

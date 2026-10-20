@@ -126,6 +126,27 @@ export function visibleLists(lists: TaskList[], me: string | null, includeArchiv
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 }
 
+/**
+ * Ce qu'un enfant voit des tâches : celles où il est nommé (sur la tâche ou
+ * l'une de ses sous-tâches, qui ne se montre que sous son parent), et tout le contenu des listes qui sont à lui (sa liste privée, la
+ * préparation de sa valise). Une tâche « pour le premier qui passe » n'est
+ * pas la sienne. C'est un menu, pas un droit : le document entier arrive sur
+ * l'appareil, comme pour le reste du portail enfant.
+ */
+export function childTasks(tasks: TaskItem[], lists: TaskList[], me: string): TaskItem[] {
+  const mine = new Set((lists || []).filter((l) => l.scope === me || l.forMember === me).map((l) => l.id));
+  const own = (t: TaskItem): boolean => mine.has(t.listId) || t.who.includes(me);
+  // Une sous-tâche ne s'affiche que sous son parent : nommé sur l'une, l'enfant voit la tâche entière.
+  const parents = new Set((tasks || []).filter((t) => own(t)).map((t) => t.parentId || t.id));
+  return (tasks || []).filter((t) => parents.has(t.parentId || t.id));
+}
+
+/** Les listes qu'un enfant voit : celles qui portent une de ses tâches, et les siennes, même vides. */
+export function childLists(lists: TaskList[], seen: TaskItem[], me: string): TaskList[] {
+  const used = new Set(seen.map((t) => t.listId));
+  return lists.filter((l) => used.has(l.id) || l.scope === me || l.forMember === me);
+}
+
 /** Les types qu'on choisit en créant une liste. Ni `devoirs` ni `entretien` : ces listes naissent de leur module. */
 export const KIND_ORDER: ListKind[] = ['taches', 'corvees', 'checklist', 'preparation'];
 /** L'ordre des types dans les puces : l'affaire du jour d'abord, devoirs compris. */

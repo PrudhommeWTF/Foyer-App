@@ -5,7 +5,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem, TaskList } from './models';
-import { RELEGATION_DAYS, REORDERABLE, assignedTo, categories, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, quickDates, reorder, subProgress, subtasksOf, suggestTexts, todayTasks, visibleLists, whenLabel } from './tasks';
+import { RELEGATION_DAYS, REORDERABLE, assignedTo, categories, childLists, childTasks, dailyTasks, doneTasks, dueLabel, groupOpen, openCount, quickDates, reorder, subProgress, subtasksOf, suggestTexts, todayTasks, visibleLists, whenLabel } from './tasks';
 
 const TODAY = '2026-09-02';
 
@@ -326,4 +326,18 @@ test('whenLabel : la colonne d’échéance, le relatif seulement quand il appor
   assert.deepEqual(whenLabel('2026-10-26', T), { day: '26 oct.', rel: 'dans 9 j' });
   assert.deepEqual(whenLabel('2026-10-01', T), { day: '1 oct.', rel: 'il y a 16 j' });
   assert.deepEqual(whenLabel('2026-10-26', T, 3), { day: '≈ 26 oct.', rel: 'dans 9 j' });
+});
+
+test('un enfant ne voit que ses tâches, leurs sous-tâches, et ce qui est dans ses listes à lui', () => {
+  const lists = [liste('maison'), liste('perso', { scope: 'lena' }), liste('valise', { kind: 'preparation', forMember: 'lena' }), liste('devoirs-noe', { kind: 'devoirs' })];
+  const tasks = [
+    tache('a', { listId: 'maison', who: ['lena'] }), tache('a1', { listId: 'maison', parentId: 'a', who: [] }),
+    tache('b', { listId: 'maison', who: ['camille'] }), tache('c', { listId: 'maison', who: [] }),
+    tache('d', { listId: 'maison', who: ['camille', 'lena'] }), tache('b1', { listId: 'maison', parentId: 'b', who: ['lena'] }),
+    tache('p', { listId: 'perso', who: [] }), tache('v', { listId: 'valise', who: [] }), tache('n', { listId: 'devoirs-noe', who: ['noe'] }),
+  ];
+  const seen = childTasks(tasks, lists, 'lena');
+  assert.deepEqual(seen.map((t) => t.id), ['a', 'a1', 'b', 'd', 'b1', 'p', 'v'], 'pas celles des autres ni « le premier qui passe » ; nommé sur une sous-tâche, il voit son parent');
+  assert.deepEqual(childLists(lists, seen, 'lena').map((l) => l.id), ['maison', 'perso', 'valise'], 'pas les devoirs du frère');
+  assert.deepEqual(childLists(lists, [], 'lena').map((l) => l.id), ['perso', 'valise'], 'ses listes, même vides');
 });

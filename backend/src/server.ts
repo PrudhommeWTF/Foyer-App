@@ -373,6 +373,10 @@ api.put('/state', auth, ...tokenGate, requireMember, jsonDoc, (req: AuthedReques
   // mais un appel direct ou l'assistant ne doit pas contourner la désactivation).
   if (effectiveSetting('modRepas') === false) { state.meals = avant.meals; state.recipes = avant.recipes; }
   if (effectiveSetting('modFidelite') === false) { state.cards = avant.cards; }
+  // Un enfant lit le calendrier sans le modifier : ses événements restent ceux du
+  // serveur, quoi que son appareil envoie (l'écran ne lui offre d'ailleurs ni
+  // création, ni modification, ni suppression ; voir docs/portail-enfant.md).
+  if (me?.enfant) state.events = avant.events;
 
   const result = saveHousehold(state);
   res.json(result);

@@ -10,6 +10,7 @@ import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
 import { cap, parseDay } from '../../core/helpers';
 import { splitMealKey } from '../../core/meals';
+import { filterSlots } from '../../core/schedule';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
 import { gesteGroup, nextLabel, stockLow } from '../../core/entretien';
@@ -742,7 +743,7 @@ export class HomeScreen {
   // Le carrousel prend la hauteur de son plus grand volet : on remplit donc les
   // volets plutôt que de laisser du vide. Six lignes sur mobile, douze sur le fil
   // pleine colonne du bureau.
-  readonly activity = computed(() => { const d = this.store.data(); return d ? recentActivity(d, this.store.narrow() ? 6 : 12) : []; });
+  readonly activity = computed(() => { const d = this.store.seenData(); return d ? recentActivity(d, this.store.narrow() ? 6 : 12) : []; });
 
   /** Les sections du carousel mobile. */
   readonly slides = computed(() => SLIDES.filter((s) =>
@@ -783,7 +784,7 @@ export class HomeScreen {
    * dès que tout est prêt ou le départ passé.
    */
   readonly prepAlerts = computed<{ list: TaskList; days: number; remaining: number }[]>(() => {
-    const d = this.store.data();
+    const d = this.store.seenData();
     if (!d) return [];
     const today = parseDay(this.store.todayStr());
     const out: { list: TaskList; days: number; remaining: number }[] = [];
@@ -807,7 +808,7 @@ export class HomeScreen {
   readonly homeModOrder = signal<string[]>(loadHomeMods());
 
   readonly modules = computed<Mod[]>(() => {
-    const d = this.store.data();
+    const d = this.store.seenData();
     if (!d) return [];
     const mods: Mod[] = navGroupsFor(this.store.isChild(), (s) => this.store.screenEnabled(s)).flatMap((g) => g.items).map((it) => ({
       id: it.id, label: it.label, icon: it.icon, color: MOD_COLOR[it.id] || '#E56B4E', sub: this.moduleSub(it.id),
@@ -846,7 +847,7 @@ export class HomeScreen {
    * puis par heure. Une tâche sans heure passe en tête de son jour.
    */
   readonly nextAgenda = computed<Ahead[]>(() => {
-    const d = this.store.data();
+    const d = this.store.seenData();
     if (!d) return [];
     const today = this.store.todayStr();
     const horizon = this.store.addDays(today, 62);
@@ -889,7 +890,7 @@ export class HomeScreen {
   /** Les 6 tâches les plus récemment ajoutées, dans les listes que ce membre voit. */
   /** Les tâches d'un enfant, à lui, pas encore faites, les plus proches d'abord. */
   readonly myTasks = computed(() => {
-    const d = this.store.data(); const me = this.store.me()?.id;
+    const d = this.store.seenData(); const me = this.store.me()?.id;
     if (!d || !me) return [];
     const lists = new Map(this.store.visibleTaskLists().map((l) => [l.id, l]));
     return (d.tasks || [])
@@ -903,7 +904,7 @@ export class HomeScreen {
   kidLabel(m: Mod): string { return KID_LABEL[m.id] || m.label; }
 
   readonly latestTasks = computed(() => {
-    const d = this.store.data();
+    const d = this.store.seenData();
     if (!d) return [];
     const lists = new Map(this.store.visibleTaskLists().map((l) => [l.id, l]));
     return (d.tasks || [])
@@ -919,7 +920,7 @@ export class HomeScreen {
 
   /** Les créneaux de repas d'un jour donné et leurs plats. */
   private mealsOf(day: string): { key: string; short: string; dot: string; label: string | null }[] {
-    const d = this.store.data();
+    const d = this.store.seenData();
     return this.store.mealSlots().map((s) => ({ key: s.key, short: s.short, dot: s.dot, label: this.store.mealLabel(d?.meals[day + '-' + s.key]) }));
   }
   /** Les créneaux de repas du jour (tous, « À planifier » compris). */
@@ -982,7 +983,7 @@ export class HomeScreen {
   }
 
   // ---- helpers de rendu ----
-  ini(id: string | null): string { return (id && (this.store.data()?.members || []).find((m) => m.id === id)?.ini) || '?'; }
+  ini(id: string | null): string { return (id && (this.store.seenData()?.members || []).find((m) => m.id === id)?.ini) || '?'; }
   col(id: string | null): string { return id ? this.store.memberColor(id) : '#8A7E74'; }
   /** Initiales d'un auteur hors foyer, civilité ôtée : « Mme MAZARS B. » donne « MB ». */
   authorIni(name: string): string {
@@ -1018,7 +1019,7 @@ export class HomeScreen {
 
   /** Les pastilles des membres concernés (trois au plus), pour l'entrée de la frise. */
   whoAv(ids: string[]): { id: string; ini: string; color: string }[] {
-    const members = this.store.data()?.members || [];
+    const members = this.store.seenData()?.members || [];
     return ids.slice(0, 3).map((id) => {
       const m = members.find((x) => x.id === id);
       return { id, ini: m?.ini || '?', color: m ? this.store.memberColor(id) : '#8A7E74' };
@@ -1027,7 +1028,7 @@ export class HomeScreen {
 
   /** Le sous-titre d'une tuile de module : un compte réel, jamais un décor. */
   private moduleSub(id: string): string {
-    const d = this.store.data();
+    const d = this.store.seenData();
     if (!d) return '';
     const n = (k: number, one: string, many: string, zero: string) => (k === 0 ? zero : k === 1 ? `1 ${one}` : `${k} ${many}`);
     switch (id) {
@@ -1035,7 +1036,7 @@ export class HomeScreen {
       case 'courses': return n(d.shop.filter((s) => s.state === 'a-prendre').length, 'article à prendre', 'articles à prendre', 'Rien à prendre');
       case 'taches': {
         const lists = new Set(this.store.visibleTaskLists().map((l) => l.id));
-        return n(d.tasks.filter((t) => !t.done && lists.has(t.listId)).length, 'tâche en cours', 'tâches en cours', 'Tout est fait');
+        return n(this.store.seenTasks().filter((t) => !t.done && lists.has(t.listId)).length, 'tâche en cours', 'tâches en cours', 'Tout est fait');
       }
       case 'repas': {
         const days = new Set(this.store.weekDays());
@@ -1045,7 +1046,8 @@ export class HomeScreen {
       }
       case 'recettes': return n(d.recipes.length, 'recette', 'recettes', 'Aucune recette');
       case 'finances': return 'Comptes et budget du mois';
-      case 'planning': return n(d.sched.length, 'créneau', 'créneaux', 'Aucun créneau');
+      // Un enfant compte ses créneaux, comme l'écran les lui montre.
+      case 'planning': return n(filterSlots(d.sched, this.store.isChild() ? this.store.schedFilter() : []).length, 'créneau', 'créneaux', 'Aucun créneau');
       case 'contacts': return n(d.contacts.length, 'contact', 'contacts', 'Aucun contact');
       case 'fidelite': return n(d.cards.length, 'carte', 'cartes', 'Aucune carte');
       case 'lieux': return n((d.places || []).length, 'lieu', 'lieux', 'Aucun lieu');

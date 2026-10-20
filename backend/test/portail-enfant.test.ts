@@ -342,3 +342,24 @@ describe('la temporisation est celle de la connexion', () => {
     assert.equal((await nav('GET', '/me', undefined, raph)).json.memberId, RAPH);
   });
 });
+
+describe('le calendrier d’un enfant est en lecture seule', () => {
+  it('ce qu’un enfant envoie pour les événements est ignoré, le reste de son envoi passe', async () => {
+    const lire = async (jeton: string) => (await appel(ctx.base, 'GET', '/state', undefined, jeton)).json;
+    const a = await lire(ctx.jetons.admin);
+    const ev = { id: 'ev-ro', title: 'Rentrée', date: '2026-09-01', time: '08:30', who: [], recur: 'none' };
+    assert.equal((await appel(ctx.base, 'PUT', '/state', { version: a.version, state: { ...a.state, events: [...a.state.events, ev] } }, ctx.jetons.admin)).status, 200);
+    const e = await lire(ctx.jetons.enfant);
+    const lena = (e.state.members as { id: string; name: string }[]).find((m) => m.name === 'Lena')!.id;
+    const slot = { id: 'sl-ro', who: [lena], dow: 3, start: '14:00', end: '15:00', label: 'Piscine', k: 'sport', rec: 'weekly' };
+    const r = await appel(ctx.base, 'PUT', '/state', { version: e.version, state: {
+      ...e.state, sched: [...e.state.sched, slot],
+      events: [...e.state.events.filter((x: { id: string }) => x.id !== 'ev-ro'), { ...ev, id: 'ev-enfant', title: 'Fête' }],
+    } }, ctx.jetons.enfant);
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    const apres = (await lire(ctx.jetons.admin)).state;
+    assert.ok(apres.events.some((x: { id: string }) => x.id === 'ev-ro'), 'l’événement n’est pas supprimé');
+    assert.ok(!apres.events.some((x: { id: string }) => x.id === 'ev-enfant'), 'ni créé');
+    assert.ok(apres.sched.some((x: { id: string }) => x.id === 'sl-ro'), 'son créneau, lui, est enregistré');
+  });
+});

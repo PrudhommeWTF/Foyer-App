@@ -129,8 +129,10 @@ export class ItemSheetComponent {
   /** Inutile quand on y est déjà. */
   readonly openInShown = computed(() => this.store.ui().screen !== this.target().screen);
   /** Modifier et Supprimer, seulement quand ils ont un effet. */
-  readonly canEdit = computed(() => { const it = this.item(); return !!it && this.meta().editable && !!this.desc().form && (this.desc().canEdit?.(it, this.store) ?? true); });
-  readonly canRemove = computed(() => { const it = this.item(); return !!it && !!this.desc().remove && (this.desc().canRemove?.(it, this.store) ?? true); });
+  /** Un type en lecture seule pour un enfant (l'événement) ne lui offre ni Modifier ni Supprimer. */
+  private readonly childLocked = computed(() => !!this.meta().childReadOnly && this.store.isChild());
+  readonly canEdit = computed(() => { const it = this.item(); return !!it && !this.childLocked() && this.meta().editable && !!this.desc().form && (this.desc().canEdit?.(it, this.store) ?? true); });
+  readonly canRemove = computed(() => { const it = this.item(); return !!it && !this.childLocked() && !!this.desc().remove && (this.desc().canRemove?.(it, this.store) ?? true); });
   /** Les actions propres au type (« Fait »…), sur l'élément tel qu'il est maintenant. */
   readonly actions = computed(() => { const r = this.ref(), it = this.item(); return r && it ? this.desc().actions?.(this.store, it, r.ctx) ?? [] : []; });
 
