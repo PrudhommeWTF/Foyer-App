@@ -59,6 +59,23 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
 
+### Lecture
+
+`lecture`, français, dès 6 ans environ : un petit texte à lire, une question, la bonne réponse à **toucher** parmi deux à quatre boutons. La compréhension, en lisant seul : ni voix (elle lirait à la place de l'enfant) ni clavier.
+
+- **Le contenu** est une liste de questions, **une ligne par question** : le texte, la question, puis les réponses, séparés par « | », la bonne réponse d'abord et les pièges après des « / ». Par exemple « Léo mange une pomme. | Que mange Léo ? | une pomme / une poire / un gâteau ». Plusieurs questions sur un même texte : une ligne chacune, le texte répété. Virgules permises, 240 caractères au plus par ligne, une réponse de 30 caractères au plus. Listes livrées dans `backend/config/revisions/lecture/` (une phrase et une question au CP, un petit texte et ses questions au CE1 ; dix questions chacune), et celles du foyer, saisies dans le suivi ou par l'assistant (`exercice: "lecture"`, une question par ligne). Une ligne qui n'a pas cette forme est ignorée.
+- **Un item** est une question ; la clé est la ligne entière, bonne réponse comprise : le serveur refuse une question qui n'est pas celle de la liste. L'ordre des boutons est tiré à chaque question.
+- **La correction** : la bonne réponse, majuscule indifférente.
+- **Le suivi** en liste, groupé par texte (les questions d'un même texte vont ensemble). Pas de mode Apprendre : recopier la réponse d'une question de lecture n'apprend rien.
+- **Le temps** : partie `exercices.lecture` du barème, le plus long des exercices à choix (40 s à 8 ans, rapide sous 20 s), pour lire le texte avant de répondre.
+
+Ce que la lecture a demandé au socle :
+
+- **l'énoncé `passage`** et son élément `passage(q)` : le texte à lire dans un encadré, la question dessous, les boutons à côté (en une colonne quand les réponses font plusieurs mots) ;
+- **des listes à lignes** : un paramètre `content` peut déclarer `lines` (éléments coupés aux seuls retours à la ligne, virgules permises, 240 caractères au plus au lieu de mots de 40) et `format` (la forme d'un élément, rappelée sous le champ de saisie). L'écran, la route et l'assistant appliquent la même règle (`splitItems`, `longItems` du contrat).
+
+Ni table, ni migration, ni route.
+
 ### Orthographe
 
 `orthographe`, français, dès 7 ans environ : une phrase à trou et des mots qui se prononcent pareil ; l'enfant **touche le bon** parmi deux à quatre grands boutons (les touches 1 à 4 d'un clavier marchent aussi).

@@ -82,6 +82,14 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
                   </div>
                 </div>
               }
+              @case ('passage') {
+                <!-- Le texte à lire, puis la question : on répond en touchant, le texte reste sous les yeux. -->
+                @let a = askOf(q);
+                <div class="ask read" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
+                  <p class="passage">{{ plan().def.passage?.(q) }}</p>
+                  <span class="ops">{{ a.before }}</span>
+                </div>
+              }
               @default {
                 @let a = askOf(q);
                 <!-- Un énoncé long (« avoir (présent) : tu ») prend une taille plus sobre que « 6 × 7 = ». -->
@@ -110,8 +118,9 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
               <!-- De grands boutons, un par réponse proposée : toucher répond. -->
               @let q = current();
               @if (q !== null) {
-                <div class="choices" role="group" aria-label="Choisis la bonne réponse">
-                  @for (c of plan().def.choices?.(q) ?? []; track c) {
+                @let cs = plan().def.choices?.(q) ?? [];
+                <div class="choices" [class.long]="longChoices(cs)" role="group" aria-label="Choisis la bonne réponse">
+                  @for (c of cs; track c) {
                     <button type="button" class="choice" [class.picked]="typed() === c" [disabled]="busy()" (click)="pick(c)">{{ c }}</button>
                   }
                 </div>
@@ -164,6 +173,11 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
     .again { border: 2px solid var(--line); background: var(--surface); border-radius: 14px; padding: 10px 20px; font-family: inherit; font-size: 17px; font-weight: 800; color: var(--ink); min-height: 52px; cursor: pointer; }
     .choices { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 360px; max-width: 100%; }
     .choice { min-height: 72px; border: 3px solid transparent; border-radius: 18px; background: var(--surface); box-shadow: var(--sh-float); font-family: inherit; font-size: 30px; font-weight: 800; color: var(--ink); cursor: pointer; touch-action: manipulation; }
+    /* Des réponses de plusieurs mots (« sous les feuilles ») : une colonne, une taille plus sobre. */
+    .choices.long { grid-template-columns: 1fr; width: 440px; }
+    .choices.long .choice { min-height: 60px; font-size: 22px; padding: 8px 16px; }
+    .ask.read { flex-direction: column; align-items: stretch; gap: 16px; width: 100%; font-size: clamp(22px, 5vw, 30px); }
+    .passage { margin: 0; padding: 16px 20px; border-radius: 18px; background: var(--surface); box-shadow: var(--sh-float); font-weight: 700; line-height: 1.45; }
     .choice:active:not(:disabled), .choice.picked { border-color: var(--primary); }
     .choice:disabled { cursor: default; }
     .type { display: flex; gap: 10px; width: 100%; max-width: 460px; }
@@ -263,6 +277,8 @@ export class RunnerComponent implements OnInit, OnDestroy {
   skip(): void { if (!this.busy()) this.answer(null); }
   ok(): void { if (!this.busy() && this.typed().trim()) this.answer(this.typed()); }
   /** Une réponse touchée parmi celles proposées : elle s'inscrit dans le trou, et compte aussitôt. */
+  /** Des réponses trop longues pour deux colonnes. */
+  longChoices(cs: string[]): boolean { return cs.some((c) => c.length > 12); }
   pick(c: string): void { if (this.busy()) return; this.typed.set(c); this.ok(); }
 
   private answer(given: string | null): void {

@@ -11,7 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { log } from '../log';
-import { ContentList, ExerciseContext } from './exercises/contract';
+import { ContentList, ExerciseContext, LONG_ITEM_MAX, SHORT_ITEM_MAX } from './exercises/contract';
 import { foyerLists } from './repo';
 
 const SHIPPED = path.join(__dirname, '..', '..', 'config', 'revisions');
@@ -49,17 +49,18 @@ const stampOf = (dir: string): string => {
 /** Les règles d'une liste du foyer, les mêmes à l'écran (routes.ts) et pour l'assistant (mcp/revisions-tools.ts). */
 export const LIST_MAX_ITEMS = 200;
 export const LIST_LABEL_RULE = 'Le nom de la liste : de 1 à 60 caractères.';
-export const LIST_ITEMS_RULE = `Les éléments : de 1 à ${LIST_MAX_ITEMS}, de 40 caractères au plus chacun.`;
+/** La règle des éléments : des mots de 40 caractères, ou des lignes de 160 pour un exercice à lignes (paramètre `lines`). */
+export const listItemsRule = (lines = false): string => `Les éléments : de 1 à ${LIST_MAX_ITEMS}, de ${lines ? LONG_ITEM_MAX : SHORT_ITEM_MAX} caractères au plus chacun.`;
 /** Le nom d'une liste, ou null s'il ne tient pas la règle. */
 export function cleanListLabel(v: unknown): string | null {
   const l = typeof v === 'string' ? v.trim() : '';
   return l && l.length <= 60 ? l : null;
 }
 /** Les éléments d'une liste, nettoyés (forme NFC, espaces) et sans doublon, ou null s'ils ne tiennent pas la règle. */
-export function cleanListItems(v: unknown): string[] | null {
+export function cleanListItems(v: unknown, lines = false): string[] | null {
   if (!Array.isArray(v)) return null;
   const items = [...new Set(v.filter((x): x is string => typeof x === 'string').map((x) => x.normalize('NFC').trim().replace(/\s+/g, ' ')).filter(Boolean))];
-  return items.length && items.length <= LIST_MAX_ITEMS && items.every((x) => x.length <= 40) ? items : null;
+  return items.length && items.length <= LIST_MAX_ITEMS && items.every((x) => x.length <= (lines ? LONG_ITEM_MAX : SHORT_ITEM_MAX)) ? items : null;
 }
 
 /** Les listes livrées d'un exercice, surcharge du foyer comprise. */
