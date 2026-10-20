@@ -5,7 +5,8 @@ import { test } from 'node:test';
 import { PARAM_TYPES, defaults } from './exercises/contract';
 import { EXERCISES } from './exercises';
 import { TABLES } from './exercises/tables';
-import { FORM_CONTROLS, rangeTop, setParam, steps } from './form';
+import { DICTEE } from './exercises/dictee';
+import { FORM_CONTROLS, contentChoices, rangeTop, setParam, steps } from './form';
 
 test('chaque type du contrat a un rendu, et chaque paramètre de chaque exercice aussi', () => {
   assert.deepEqual(Object.keys(FORM_CONTROLS).sort(), [...PARAM_TYPES].sort());
@@ -29,4 +30,15 @@ test('les valeurs proposées suivent les bornes', () => {
   assert.deepEqual(steps(10, 12), [10, 11, 12]);
   const d = TABLES.params.find((x) => x.type === 'range')!;
   assert.equal(d.type === 'range' && rangeTop(d, { max: 11 }), 11);
+});
+
+test('un paramètre de contenu : les listes en service, et celle déjà choisie même archivée', () => {
+  const ctx = { lists: [
+    { id: 'a', label: 'A', items: ['chat'], source: 'livre' as const },
+    { id: 'b', label: 'B', items: ['chien'], source: 'foyer' as const, archived: true },
+  ] };
+  assert.deepEqual(contentChoices(ctx, 'a').map((l) => l.id), ['a']);
+  assert.deepEqual(contentChoices(ctx, 'b').map((l) => l.id), ['a', 'b']);
+  assert.equal(setParam(DICTEE, defaults(DICTEE, ctx), 'liste', 'b', ctx)['liste'], 'b');
+  assert.throws(() => setParam(DICTEE, defaults(DICTEE, ctx), 'liste', 'zz', ctx), /cette liste n’existe pas/);
 });

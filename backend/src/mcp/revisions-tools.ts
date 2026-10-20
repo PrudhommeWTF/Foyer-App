@@ -11,16 +11,17 @@ import { log } from '../log';
 import { Bareme, timingFor } from '../revisions/bareme';
 import { addDays, bilanFor, mondayOf, parisDay } from '../revisions/bilan';
 import { EXERCISES, exerciseById } from '../revisions/exercises';
-import { ExerciseDef, ParamDecl, Params, defaults, readParams } from '../revisions/exercises/contract';
+import { ExerciseContext, ExerciseDef, ParamDecl, Params, defaults, readParams } from '../revisions/exercises/contract';
 import { Status, status } from '../revisions/mastery';
 import { Matiere, matiereLabel } from '../revisions/matieres';
 import { activeProgram, countedAnswers, masteryRows, sessionsOf, setProgram, stopProgram, toMastery } from '../revisions/repo';
 import type { McpCtx } from './tools';
 
-let deps: { bareme: (exercise?: string) => Bareme; matieres: () => Matiere[] } | null = null;
-/** Le barème et les matières en vigueur, lus dans le dossier de données (posés par server.ts). */
+let deps: { bareme: (exercise?: string) => Bareme; matieres: () => Matiere[]; context: (exercise: string) => ExerciseContext } | null = null;
+/** Le barème, les matières et le contenu des exercices en vigueur, lus dans le dossier de données et la base (posés par server.ts). */
 export function setRevisionsToolsDeps(d: NonNullable<typeof deps>): void { deps = d; }
 const bareme = (ex?: string): Bareme => deps!.bareme(ex);
+const contextOf = (ex: string): ExerciseContext => deps!.context(ex);
 
 const members = (): Member[] => (getHousehold().state as HouseholdState).members;
 const norm = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -57,10 +58,11 @@ function pickExercise(id?: string): ExerciseDef | string {
   return exerciseById(id.trim()) ?? `Exercice inconnu : « ${id} ». Exercices : ${EXERCISES.map((e) => e.id).join(', ')} (voir revisions_exercices).`;
 }
 
-const paramLine = (d: ParamDecl): string => {
+const paramLine = (d: ParamDecl, ctx: ExerciseContext): string => {
   const bornes = d.type === 'int' ? `entier de ${d.min} à ${d.max}` : d.type === 'bool' ? 'oui (true) ou non (false)'
     : d.type === 'enum' ? d.options.map((o) => `${o.value} (${o.label})`).join(', ')
-    : `deux entiers [de, à] entre ${d.min} et ${d.max}${d.maxFrom ? `, à au plus ${d.maxFrom}` : ''}`;
+    : d.type === 'range' ? `deux entiers [de, à] entre ${d.min} et ${d.max}${d.maxFrom ? `, à au plus ${d.maxFrom}` : ''}`
+    : `l’identifiant d’une liste : ${ctx.lists.filter((l) => !l.archived).map((l) => `${l.id} (« ${l.label} », ${l.items.length} ${d.items})`).join(', ') || 'aucune pour l’instant'}`;
   return `  - \`${d.key}\` : ${d.label}, ${bornes} ; défaut ${JSON.stringify(d.default)}${d.desc ? '. ' + d.desc : ''}`;
 };
 
@@ -70,18 +72,19 @@ export function revisionsExercices(): string {
   return EXERCISES.map((e) => [
     `${e.label} [${e.id}] (${matiereLabel(mat, e.matiere)}${e.ageMin ? `, dès ${e.ageMin} ans environ` : ''}) : ${e.desc}`,
     `  Modes : ${e.learn ? 'apprendre, ' : ''}s’entraîner, test. Paramètres du programme :`,
-    ...e.params.map(paramLine),
+    ...e.params.map((d) => paramLine(d, contextOf(e.id))),
   ].join('\n')).join('\n\n') + '\n\nUn programme règle aussi `questions` (5 à 100 par session), `objectif_jour` (0 à 10 sessions) et le temps par réponse (`secondes`, ou rien pour le barème selon l’âge).';
 }
 
 /** Où en est un membre pour un exercice : programme, temps accordé, maîtrise résumée, ce qui reste fragile, réussite sur 4 semaines. */
 function progressionOf(m: Member, def: ExerciseDef): string {
   const program = activeProgram(m.id, def.id);
+  const cx = contextOf(def.id);
   let p: Params;
-  try { p = program ? readParams(def, JSON.parse(program.params_json)) : defaults(def); } catch { p = defaults(def); }
+  try { p = program ? readParams(def, JSON.parse(program.params_json), cx) : defaults(def, cx); } catch { p = defaults(def, cx); }
   const b = bareme(def.id);
   const t = timingFor(b, m, today(), program && { secondsAllowed: program.seconds_allowed, fastSeconds: program.fast_seconds });
-  const universe = new Set(def.universe(p));
+  const universe = new Set(def.universe(p, cx));
   const rows = masteryRows(m.id, def.id).filter((r) => universe.has(r.item_key));
   const counts: Record<Status, number> = { jamais: 0, peu: 0, 'en-cours': 0, acquise: 0 };
   for (const r of rows) counts[status(toMastery(r), b.maitrise)]++;
@@ -90,12 +93,12 @@ function progressionOf(m: Member, def: ExerciseDef): string {
     .sort((x, y) => x.m.level - y.m.level || y.m.wrong - x.m.wrong).slice(0, 8).map(({ r }) => def.itemLabel(r.item_key));
   const since = new Date(Date.now() - 28 * 86400_000).toISOString();
   const groups = new Map<string, { q: number; ok: number }>();
-  for (const a of countedAnswers(m.id, def.id, since)) for (const g of def.groups(a.item_key, p)) {
+  for (const a of countedAnswers(m.id, def.id, since)) for (const g of def.groups(a.item_key, p, cx)) {
     const e = groups.get(g) ?? { q: 0, ok: 0 }; e.q++; if (a.result === 'bon' || a.result === 'lent') e.ok++; groups.set(g, e);
   }
   const s = (ms: number): string => String(ms / 1000).replace('.', ',');
   return [
-    `${m.name}, ${def.label} : ${program ? `programme « ${def.summary(p)} », ${program.questions} questions, objectif ${program.daily_goal} session(s) par jour` : `pas de programme (réglages par défaut : ${def.summary(p)})`}.`,
+    `${m.name}, ${def.label} : ${program ? `programme « ${def.summary(p, cx)} », ${program.questions} questions, objectif ${program.daily_goal} session(s) par jour` : `pas de programme (réglages par défaut : ${def.summary(p, cx)})`}.`,
     `Temps par réponse : ${s(t.allowedMs)} s, rapide sous ${s(t.fastMs)} s (${t.source === 'programme' ? 'fixé par le programme' : t.source === 'sans-age' ? 'barème, sans date de naissance' : `barème à ${t.age ?? '?'} ans`}).`,
     `Sur ${universe.size} items : ${(['acquise', 'en-cours', 'peu', 'jamais'] as Status[]).map((k) => `${counts[k]} ${STATUS[k]}`).join(', ')}.`,
     frag.length ? `Encore fragiles : ${frag.join(', ')}.` : 'Rien de fragile pour l’instant.',
@@ -123,7 +126,7 @@ export function revisionsSessions(ctx: McpCtx, a: { enfant?: string; depuis?: st
     return `${m.name}, ${ss.length} session(s) depuis le ${fr(from)} :\n` + ss.map((s) => {
       const d = exerciseById(s.exercise_id);
       let what = '';
-      try { what = d ? d.summary(readParams(d, JSON.parse(s.params_json))) : ''; } catch { /* réglages illisibles */ }
+      try { const cx = d && contextOf(d.id); what = d && cx ? d.summary(readParams(d, JSON.parse(s.params_json), cx), cx) : ''; } catch { /* réglages illisibles */ }
       const w = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(s.started_at));
       return `- ${w}, ${d?.label ?? s.exercise_id} (${MODE[s.mode] ?? s.mode}${what ? ', ' + what : ''}) : ${s.good} bonnes, ${s.slow} lentes, ${s.wrong} fausses${s.aborted ? ', arrêtée' : ''}`;
     }).join('\n');
@@ -141,7 +144,7 @@ export function revisionsBilan(ctx: McpCtx, a: { enfant?: string; periode?: stri
   const range = per === 'semaine' ? [monday, t] : per === 'semaine-derniere' ? [addDays(monday, -7), addDays(monday, -1)]
     : per === 'mois' ? [first, t] : [lastPrev.slice(0, 8) + '01', lastPrev];
   return kids.map((m) => {
-    const b = bilanFor({ id: m.id, name: m.name }, range[0], range[1], deps!.matieres(), (ex) => bareme(ex).maitrise);
+    const b = bilanFor({ id: m.id, name: m.name }, range[0], range[1], deps!.matieres(), (ex) => bareme(ex).maitrise, contextOf);
     if (!b.matieres.length) return `${m.name}, ${b.label.toLowerCase()} : pas de session de révisions.`;
     const lines = [`${m.name}, ${b.label.charAt(0).toLowerCase() + b.label.slice(1)} : ${b.totals.sessions} session(s), ${b.totals.questions} questions, ${b.totals.pct} % de réponses justes${b.prev ? ` (${b.prev.pct} % la période précédente)` : ''}.`];
     for (const mt of b.matieres) for (const e of mt.exercises) {
@@ -168,11 +171,11 @@ export function revisionsProgrammeDefinir(ctx: McpCtx, a: {
     log.info(`Révisions : ${me?.name ?? ctx.memberId} a retiré le programme ${def.label} de ${m.name} (assistant ${ctx.via}).`);
     return `Programme ${def.label} de ${m.name} retiré. Son historique reste ; il s’entraîne désormais aux réglages par défaut.`;
   }
-  const cur = activeProgram(m.id, def.id);
+  const cur = activeProgram(m.id, def.id), cx = contextOf(def.id);
   let base: Params;
-  try { base = cur ? readParams(def, JSON.parse(cur.params_json)) : defaults(def); } catch { base = defaults(def); }
+  try { base = cur ? readParams(def, JSON.parse(cur.params_json), cx) : defaults(def, cx); } catch { base = defaults(def, cx); }
   let params: Params;
-  try { params = readParams(def, { ...base, ...(a.params ?? {}) }); } catch (e) { return `Refusé : ${(e as Error).message} (voir revisions_exercices).`; }
+  try { params = readParams(def, { ...base, ...(a.params ?? {}) }, cx); } catch (e) { return `Refusé : ${(e as Error).message} (voir revisions_exercices).`; }
   const int = (v: number | undefined, d: number, min: number, max: number, what: string): number | string =>
     v === undefined ? d : Number.isInteger(v) && v >= min && v <= max ? v : `Refusé : ${what} entre ${min} et ${max}.`;
   const questions = int(a.questions, cur?.questions ?? 20, 5, 100, '`questions`');
@@ -187,6 +190,6 @@ export function revisionsProgrammeDefinir(ctx: McpCtx, a: {
     // Un temps fixé par l'assistant garde le seuil rapide du programme s'il tient dedans, sinon la moitié.
     fastSeconds: secs === null ? null : Math.min(cur?.fast_seconds ?? secs / 2, secs),
   });
-  log.info(`Révisions : ${me?.name ?? ctx.memberId} a réglé le programme ${def.label} de ${m.name} par l’assistant (${ctx.via}) : ${def.summary(params)}, ${p.questions} questions, objectif ${p.daily_goal} par jour.`);
-  return `Programme ${def.label} de ${m.name} enregistré : ${def.summary(params)}, ${p.questions} questions par session, objectif ${p.daily_goal} session(s) par jour, ${secs === null ? 'temps selon le barème de l’âge' : `${String(secs).replace('.', ',')} s par réponse`}. L’ancien programme reste dans l’historique.`;
+  log.info(`Révisions : ${me?.name ?? ctx.memberId} a réglé le programme ${def.label} de ${m.name} par l’assistant (${ctx.via}) : ${def.summary(params, cx)}, ${p.questions} questions, objectif ${p.daily_goal} par jour.`);
+  return `Programme ${def.label} de ${m.name} enregistré : ${def.summary(params, cx)}, ${p.questions} questions par session, objectif ${p.daily_goal} session(s) par jour, ${secs === null ? 'temps selon le barème de l’âge' : `${String(secs).replace('.', ',')} s par réponse`}. L’ancien programme reste dans l’historique.`;
 }

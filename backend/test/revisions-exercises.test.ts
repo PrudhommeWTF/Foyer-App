@@ -4,12 +4,15 @@
 // socle qui ne mélange jamais deux exercices.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import Database from 'better-sqlite3';
-import { PARAM_TYPES, ParamDecl, defaults, readParams } from '../src/revisions/exercises/contract';
+import { ExerciseContext, NO_CONTEXT, PARAM_TYPES, ParamDecl, defaults, readParams } from '../src/revisions/exercises/contract';
+import { shippedLists } from '../src/revisions/content';
 import { EXERCISES, exerciseById } from '../src/revisions/exercises';
 import { TABLES, TablesQuestion } from '../src/revisions/exercises/tables';
+import { DICTEE } from '../src/revisions/exercises/dictee';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
 import { migrateRevisions } from '../src/revisions/schema';
 import {
@@ -45,6 +48,7 @@ describe('le registre', () => {
         assert.ok(!keys.has(d.key), `${where} : clé en double`);
         if (d.type === 'enum') assert.ok(d.options.length >= 2 && d.options.some((o) => o.value === d.default), `${where} : au moins deux choix, dont le défaut`);
         if (d.type === 'int') assert.ok(d.min <= d.default && d.default <= d.max, `${where} : défaut dans les bornes`);
+        if (d.type === 'content') assert.ok(d.item.trim() && d.items.trim(), `${where} : le nom d’un élément, pour le formulaire`);
         if (d.type === 'range') {
           assert.ok(d.min <= d.default[0] && d.default[0] <= d.default[1] && d.default[1] <= d.max, `${where} : défaut dans les bornes`);
           if (d.maxFrom !== undefined) {
@@ -54,8 +58,10 @@ describe('le registre', () => {
         }
         keys.add(d.key);
       }
-      assert.deepEqual(readParams(e, {}), defaults(e), `${e.id} : les défauts se relisent tels quels`);
-      assert.ok(e.universe(defaults(e)).length > 0, `${e.id} : les défauts posent au moins une question`);
+      // Avec le contenu livré : un exercice à listes doit en livrer au moins une qui pose une question.
+      const ctx = { lists: shippedLists(os.tmpdir(), e.id) };
+      assert.deepEqual(readParams(e, {}, ctx), defaults(e, ctx), `${e.id} : les défauts se relisent tels quels`);
+      assert.ok(e.universe(defaults(e, ctx), ctx).length > 0, `${e.id} : les défauts posent au moins une question`);
     }
   });
 
@@ -74,11 +80,11 @@ describe('l’exercice Tables', () => {
   const p = readParams(TABLES, { tables: [2, 5] });
 
   it('l’univers : chaque table de la plage par 0 à 10, sans doublon commutatif', () => {
-    const u = TABLES.universe(p);
+    const u = TABLES.universe(p, NO_CONTEXT);
     assert.equal(u.length, 4 * 11 - 6, 'les six couples entre deux tables de la plage ne comptent qu’une fois');
     assert.ok(u.includes('mult:3x4') && !u.includes('mult:4x3'));
     assert.ok(u.includes('mult:0x2') && u.includes('mult:5x10'));
-    assert.equal(TABLES.universe(readParams(TABLES, { operation: 'add', tables: [7, 7] })).length, 11);
+    assert.equal(TABLES.universe(readParams(TABLES, { operation: 'add', tables: [7, 7] }), NO_CONTEXT).length, 11);
   });
 
   it('une question par item, dans un sens ou l’autre, toujours le même item', () => {
@@ -114,18 +120,58 @@ describe('l’exercice Tables', () => {
 
   it('le libellé, les groupes du suivi, la grille, le mode Apprendre et le résumé', () => {
     assert.equal(TABLES.itemLabel('mult:6x7'), '6 × 7');
-    assert.deepEqual(TABLES.groups('mult:3x4', p), ['Table de 3', 'Table de 4']);
-    assert.deepEqual(TABLES.groups('mult:3x9', p), ['Table de 3']);
-    assert.deepEqual(TABLES.groups('mult:3x3', p), ['Table de 3']);
+    assert.deepEqual(TABLES.groups('mult:3x4', p, NO_CONTEXT), ['Table de 3', 'Table de 4']);
+    assert.deepEqual(TABLES.groups('mult:3x9', p, NO_CONTEXT), ['Table de 3']);
+    assert.deepEqual(TABLES.groups('mult:3x3', p, NO_CONTEXT), ['Table de 3']);
     const g = TABLES.grid!(p);
     assert.equal(g.rows.length, 11);
     assert.equal(g.corner, '×');
     assert.equal(g.keyAt(7, 6), 'mult:6x7');
-    const learn = TABLES.learn!(readParams(TABLES, { tables: [7, 9] }));
+    const learn = TABLES.learn!(readParams(TABLES, { tables: [7, 9] }), NO_CONTEXT);
     assert.deepEqual(learn.map(TABLES.text), Array.from({ length: 10 }, (_, i) => `7 × ${i + 1}`));
     assert.equal(TABLES.spoken!({ op: 'mult', a: 7, b: 3 }), '7 fois 3, 21');
-    assert.equal(TABLES.summary(readParams(TABLES, { tables: [6, 9] })), 'Les tables de 6 à 9, multiplication');
-    assert.equal(TABLES.summary(readParams(TABLES, { operation: 'add', tables: [4, 4] })), 'La table de 4, addition');
+    assert.equal(TABLES.summary(readParams(TABLES, { tables: [6, 9] }), NO_CONTEXT), 'Les tables de 6 à 9, multiplication');
+    assert.equal(TABLES.summary(readParams(TABLES, { operation: 'add', tables: [4, 4] }), NO_CONTEXT), 'La table de 4, addition');
+  });
+});
+
+describe('l’exercice Dictée de mots', () => {
+  const ctx: ExerciseContext = { lists: [
+    { id: 'semaine', label: 'Semaine 12', items: ['oiseau', ' école ', 'aujourd’hui', 'oiseau', 'c’est-à-dire', '42', 'trop long ' + 'x'.repeat(40)], source: 'foyer' },
+    { id: 'vieille', label: 'Ancienne', items: ['hier'], source: 'foyer', archived: true },
+  ] };
+  const p = readParams(DICTEE, { liste: 'semaine' }, ctx);
+
+  it('l’univers : les mots de la liste, nettoyés, sans doublon ni ce qui n’est pas un mot', () => {
+    assert.deepEqual(DICTEE.universe(p, ctx), ['mot:oiseau', 'mot:école', 'mot:aujourd\'hui', 'mot:c\'est-à-dire']);
+    assert.equal(DICTEE.summary(p, ctx), 'La liste « Semaine 12 » (4 mots)');
+    assert.deepEqual(DICTEE.groups('mot:oiseau', p, ctx), ['Liste « Semaine 12 »']);
+    assert.deepEqual(DICTEE.learn!(p, ctx).map(DICTEE.text), ['oiseau', 'école', 'aujourd\'hui', 'c\'est-à-dire']);
+    assert.equal(DICTEE.spoken!({ mot: 'école' }), 'école');
+  });
+
+  it('la correction : les accents comptent, pas la casse, les espaces ni l’apostrophe', () => {
+    const q = { mot: 'école' };
+    assert.deepEqual(DICTEE.check(q, 'école'), { ok: true, expected: 'école' });
+    assert.equal(DICTEE.check(q, ' École ').ok, true);
+    assert.equal(DICTEE.check(q, 'ecole').ok, false, 'l’accent est ce qu’on apprend');
+    assert.equal(DICTEE.check({ mot: 'aujourd\'hui' }, 'aujourd’hui').ok, true);
+    assert.equal(DICTEE.check({ mot: 'parce que' }, 'parce  que').ok, true);
+    assert.equal(DICTEE.check(q, '').ok, false);
+  });
+
+  it('relit une question reçue, et refuse ce qui n’est pas un mot', () => {
+    assert.deepEqual(DICTEE.parse({ mot: ' oiseau ' }, p), { mot: 'oiseau' });
+    for (const bad of [null, {}, { mot: '' }, { mot: '42' }, { mot: 'x'.repeat(41) }, { mot: 7 }]) assert.equal(DICTEE.parse(bad, p), null, JSON.stringify(bad));
+    assert.equal(DICTEE.itemKey({ mot: 'oiseau' }), 'mot:oiseau');
+  });
+
+  it('le paramètre de liste : la première non archivée par défaut, une archivée reste lisible, une inconnue est refusée', () => {
+    assert.equal(defaults(DICTEE, ctx)['liste'], 'semaine');
+    assert.equal(readParams(DICTEE, { liste: 'vieille' }, ctx)['liste'], 'vieille');
+    assert.throws(() => readParams(DICTEE, { liste: 'inconnue' }, ctx), /« Liste de mots » : cette liste n’existe pas/);
+    assert.throws(() => readParams(DICTEE, {}, NO_CONTEXT), /aucune liste disponible/);
+    assert.equal(DICTEE.summary(readParams(DICTEE, { liste: 'vieille' }, ctx), NO_CONTEXT), 'Aucune liste de mots');
   });
 });
 

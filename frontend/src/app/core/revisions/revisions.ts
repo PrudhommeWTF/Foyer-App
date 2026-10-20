@@ -4,7 +4,7 @@
 // foi), les phrases du bilan et de l'objectif. Rien ici ne connaît une
 // matière : tout passe par la définition de l'exercice. Pur, pour être vérifié
 // par les tests. Voir docs/revisions.md.
-import type { ExerciseDef, Mode, Params } from './exercises/contract';
+import { ExerciseContext, ExerciseDef, Mode, NO_CONTEXT, Params } from './exercises/contract';
 
 export type Result = 'bon' | 'lent' | 'faux' | 'passe';
 export type Status = 'jamais' | 'peu' | 'en-cours' | 'acquise';
@@ -48,11 +48,11 @@ function shuffle<T>(xs: T[], rand: () => number): T[] {
  * La forme de chaque question (le sens de 6 × 7) revient à l'exercice.
  */
 export function drawQuestions<Q>(def: ExerciseDef<Q>, p: Params, o: {
-  count: number; mastery: readonly MasteryItem[]; now: string; rand?: () => number;
+  count: number; mastery: readonly MasteryItem[]; now: string; rand?: () => number; ctx?: ExerciseContext;
 }): Q[] {
   const rand = o.rand ?? Math.random;
   const known = new Map(o.mastery.map((m) => [m.key, m] as const));
-  const keys = def.universe(p);
+  const keys = def.universe(p, o.ctx ?? NO_CONTEXT);
   const due = keys.filter((k) => { const m = known.get(k); return m && m.nextAt <= o.now; })
     .sort((x, y) => known.get(x)!.nextAt.localeCompare(known.get(y)!.nextAt));
   const unseen = shuffle(keys.filter((k) => !known.has(k)), rand);
@@ -74,8 +74,8 @@ const n = (k: number, one: string, many: string): string => `${k} ${k > 1 ? many
 const lowerFirst = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
 
 /** Le bilan d'une session : « Tu as révisé les tables de 6 à 9, multiplication : 18 bonnes, 2 lentes, 0 fausse. » */
-export function summaryLine(def: ExerciseDef, p: Params, r: { good: number; slow: number; wrong: number }): string {
-  return `Tu as révisé ${lowerFirst(def.summary(p))} : ${n(r.good, 'bonne', 'bonnes')}, ${n(r.slow, 'lente', 'lentes')}, ${n(r.wrong, 'fausse', 'fausses')}.`;
+export function summaryLine(def: ExerciseDef, p: Params, r: { good: number; slow: number; wrong: number }, ctx: ExerciseContext = NO_CONTEXT): string {
+  return `Tu as révisé ${lowerFirst(def.summary(p, ctx))} : ${n(r.good, 'bonne', 'bonnes')}, ${n(r.slow, 'lente', 'lentes')}, ${n(r.wrong, 'fausse', 'fausses')}.`;
 }
 
 /**
@@ -118,10 +118,10 @@ export function dayLine(goals: readonly { done: number; goal: number }[]): strin
  * Les groupes du suivi d'un programme, dans l'ordre de l'univers, avec ceux
  * qui n'ont encore aucune réponse : « pas encore vu » se dit, il ne disparaît pas.
  */
-export function programGroups(def: ExerciseDef, p: Params, seen: readonly { group: string; questions: number; correct: number; fast: number }[]) {
+export function programGroups(def: ExerciseDef, p: Params, seen: readonly { group: string; questions: number; correct: number; fast: number }[], ctx: ExerciseContext = NO_CONTEXT) {
   const by = new Map(seen.map((g) => [g.group, g] as const));
   const names: string[] = [];
-  for (const k of def.universe(p)) for (const g of def.groups(k, p)) if (!names.includes(g)) names.push(g);
+  for (const k of def.universe(p, ctx)) for (const g of def.groups(k, p, ctx)) if (!names.includes(g)) names.push(g);
   names.sort((x, y) => x.localeCompare(y, 'fr', { numeric: true }));
   return names.map((group) => {
     const g = by.get(group);

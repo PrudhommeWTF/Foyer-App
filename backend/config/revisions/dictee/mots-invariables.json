@@ -1,0 +1,15 @@
+{
+  "_aide": "Listes de mots livrées pour la dictée du module Révisions. Chaque liste : un identifiant (minuscules, chiffres et tirets), un nom, et ses mots. Pour en ajouter ou en changer, déposez un fichier .json dans le dossier de données (FOYER_DATA_DIR/revisions/dictee/) : au même nom il remplace celui-ci, sous un autre nom il s'ajoute. La liste de la semaine donnée par la maîtresse se saisit plutôt dans l'écran Révisions, onglet Suivi.",
+  "listes": [
+    {
+      "id": "invariables-ce1",
+      "label": "Mots invariables (CE1)",
+      "items": ["avec", "dans", "pour", "sur", "sous", "chez", "très", "trop", "aussi", "alors", "après", "avant", "bien", "beaucoup", "encore", "jamais", "toujours", "souvent", "hier", "demain", "aujourd'hui", "maintenant", "ensuite", "puis", "vite", "mais", "parce que", "quand", "comme", "voici"]
+    },
+    {
+      "id": "invariables-ce2",
+      "label": "Mots invariables (CE2)",
+      "items": ["autour", "assez", "autant", "bientôt", "cependant", "certes", "comment", "dehors", "depuis", "derrière", "devant", "donc", "dessus", "dessous", "longtemps", "loin", "malgré", "parfois", "pendant", "plusieurs", "pourtant", "presque", "quelquefois", "selon", "seulement", "surtout", "tard", "tôt", "vers", "voilà"]
+    }
+  ]
+}

@@ -69,6 +69,8 @@ describe('Révisions : outils d’assistant (MCP)', () => {
     assert.match(t, /Tables \[tables\] \(Mathématiques, dès 6 ans environ\)/);
     assert.match(t, /`tables` : Tables travaillées, deux entiers \[de, à\] entre 0 et 12, à au plus max ; défaut \[2,5\]/);
     assert.match(t, /`operation` : Opération, mult \(Multiplication\), add \(Addition\)/);
+    assert.match(t, /Dictée de mots \[dictee\] \(Français, dès 6 ans environ\)/);
+    assert.match(t, /`liste` : Liste de mots, l’identifiant d’une liste : invariables-ce1 \(« Mots invariables \(CE1\) », 30 mots\)/);
   });
 
   it('régler le programme de Noé : les tables de 2 à 5, puis le retirer ; refus nommés', async () => {
@@ -76,19 +78,27 @@ describe('Révisions : outils d’assistant (MCP)', () => {
     assert.match(ok, /Programme Tables de Noé enregistré : Les tables de 2 à 5, multiplication, 15 questions par session, objectif 2 session\(s\) par jour, temps selon le barème/);
     const vue = (await appel(ctx.base, 'GET', `/revisions/members/${NOE}/exercises/tables`, undefined, ctx.jetons.admin)).json;
     assert.deepEqual([vue.program.params.tables, vue.program.questions, vue.program.dailyGoal], [[2, 5], 15, 2]);
-    const plus = await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', params: { operation: 'add' } });
+    const plus = await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', params: { operation: 'add' } });
     assert.match(plus, /Les tables de 2 à 5, addition, 15 questions/, 'les paramètres absents gardent ceux du programme en cours');
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', params: { tables: [2, 11] } }), /Refusé : « Tables travaillées » : de 0 à 10/);
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', questions: 3 }), /Refusé : `questions` entre 5 et 100/);
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Thomas' }), /pour un enfant/);
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'dictee' }), /Exercice inconnu/);
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', retirer: true }), /retiré\. Son historique reste/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', params: { tables: [2, 11] } }), /Refusé : « Tables travaillées » : de 0 à 10/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', questions: 3 }), /Refusé : `questions` entre 5 et 100/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Thomas', exercice: 'tables' }), /pour un enfant/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé' }), /Précisez `exercice` : tables, dictee/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'conjugaison' }), /Exercice inconnu/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', retirer: true }), /retiré\. Son historique reste/);
     assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${NOE}/exercises/tables`, undefined, ctx.jetons.admin)).json.program, null);
+  });
+
+  it('régler une dictée sur une liste livrée ; une liste inconnue est refusée', async () => {
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'dictee', params: { liste: 'invariables-ce2' }, questions: 10 }),
+      /Programme Dictée de mots de Noé enregistré : La liste « Mots invariables \(CE2\) » \(30 mots\), 10 questions/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'dictee', params: { liste: 'inconnue' } }), /Refusé : « Liste de mots » : cette liste n’existe pas/);
+    assert.match(await call(adulte, 'revisions_progression', { enfant: 'Noé', exercice: 'dictee' }), /Sur 30 items : 0 acquis, 0 en cours, 0 pas assez de réponses, 30 pas encore vus/);
   });
 
   it('progression et sessions : un enfant ne voit que lui', async () => {
     assert.match(await call(enfant, 'revisions_progression'), /^Lena, Tables : pas de programme \(réglages par défaut : Les tables de 2 à 5/);
-    await call(adulte, 'revisions_programme_definir', { enfant: 'Lena', params: { tables: [6, 9] } });
+    await call(adulte, 'revisions_programme_definir', { enfant: 'Lena', exercice: 'tables', params: { tables: [6, 9] } });
     const p = await call(enfant, 'revisions_progression');
     assert.match(p, /^Lena, Tables : programme « Les tables de 6 à 9, multiplication », 20 questions/);
     assert.match(p, /Encore fragiles : 7 × 8/, 'dans le périmètre du programme');

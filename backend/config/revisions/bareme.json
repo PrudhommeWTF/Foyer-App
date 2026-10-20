@@ -19,6 +19,19 @@
     }
   },
   "exercices": {
-    "tables": {}
+    "tables": {},
+    "dictee": {
+      "_aide": "Écrire un mot au clavier prend plus longtemps que répondre 42 : la dictée a ses propres temps, en secondes par mot, et garde les règles de maîtrise communes.",
+      "ages": [
+        { "jusqua": 6, "accorde": 30, "rapide": 15 },
+        { "jusqua": 7, "accorde": 28, "rapide": 14 },
+        { "jusqua": 8, "accorde": 25, "rapide": 12 },
+        { "jusqua": 9, "accorde": 22, "rapide": 11 },
+        { "jusqua": 10, "accorde": 20, "rapide": 10 },
+        { "jusqua": 14, "accorde": 15, "rapide": 8 }
+      ],
+      "adulte": { "accorde": 10, "rapide": 5 },
+      "sansAge": { "accorde": 25, "rapide": 12 }
+    }
   }
 }

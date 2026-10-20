@@ -6,6 +6,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { ExerciseDef, readParams } from './exercises/contract';
 import { TABLES, TablesQuestion } from './exercises/tables';
+import { DICTEE } from './exercises/dictee';
 import { MasteryItem, activityDays, classify, dayLine, drawQuestions, fragile, goalLine, kidsLine, periodOf, programGroups, sessionUuid, summaryLine } from './revisions';
 
 /** Un hasard reproductible : le même tirage à chaque passage. */
@@ -48,6 +49,17 @@ test('un petit univers se répète, jamais deux fois de suite le même item', ()
   const add = readParams(TABLES, { operation: 'add', tables: [2, 2], max: 10 });
   const t = drawQuestions(TABLES, add, { count: 30, mastery: [], now: NOW, rand: seeded(5) }) as TablesQuestion[];
   assert.ok(t.every((q) => q.op === 'add'));
+});
+
+test('une dictée se tire dans la liste choisie, avec le contexte de l’exercice', () => {
+  const ctx = { lists: [{ id: 's', label: 'Semaine', items: ['oiseau', 'école', 'maison'], source: 'foyer' as const }] };
+  const p = readParams(DICTEE, {}, ctx);
+  const qs = drawQuestions(DICTEE, p, { count: 7, mastery: [], now: NOW, rand: seeded(2), ctx });
+  assert.equal(qs.length, 7);
+  assert.ok(qs.every((q) => ['oiseau', 'école', 'maison'].includes(q.mot)));
+  for (let i = 1; i < qs.length; i++) assert.notEqual(qs[i].mot, qs[i - 1].mot);
+  assert.equal(summaryLine(DICTEE, p, { good: 2, slow: 0, wrong: 1 }, ctx), 'Tu as révisé la liste « Semaine » (3 mots) : 2 bonnes, 0 lente, 1 fausse.');
+  assert.deepEqual(drawQuestions(DICTEE, p, { count: 5, mastery: [], now: NOW }), [], 'sans le contexte, pas de mots');
 });
 
 test('la correction : bonne, lente, fausse, passée', () => {

@@ -108,6 +108,28 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    label: 'listes de contenu du foyer (la dictée de la semaine)',
+    up: (db) => {
+      db.exec(`
+        -- Une liste saisie par un parent pour un exercice (des mots, pour la
+        -- dictée). Jamais effacée : retirée, elle est archivée, et un programme
+        -- ou une session qui la désigne reste lisible. items_json : la liste.
+        CREATE TABLE rev_content (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          exercise_id TEXT NOT NULL,
+          label TEXT NOT NULL,
+          items_json TEXT NOT NULL,
+          created_by TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          archived INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX idx_rev_content_exercise ON rev_content(exercise_id, archived);
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

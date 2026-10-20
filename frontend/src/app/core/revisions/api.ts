@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../api.service';
-import type { Mode, Params } from './exercises/contract';
+import type { ContentList, Mode, Params } from './exercises/contract';
 import type { MasteryItem, Result, Status } from './revisions';
 
 /** Le programme d'un enfant pour un exercice, tel que le serveur le rend. */
@@ -81,5 +81,13 @@ export class RevisionsApi {
   bilan(member: string, from: string, to: string): Promise<Bilan> { return this.api.request(`${m(member)}/bilan?from=${from}&to=${to}`); }
   bilanPdf(member: string, from: string, to: string): Promise<Blob> { return this.api.download(`${m(member)}/bilan.pdf?from=${from}&to=${to}`); }
   sessionsCsv(member: string, from: string, to: string): Promise<Blob> { return this.api.download(`${m(member)}/sessions.csv?from=${from}&to=${to}`); }
+  /** Les listes d'un exercice à contenu (livrées et du foyer). */
+  content(ex: string): Promise<{ lists: ContentList[] }> { return this.api.request(`revisions/exercises/${encodeURIComponent(ex)}/content`); }
+  createList(ex: string, label: string, items: string[]): Promise<{ list: ContentList }> {
+    return this.api.post(`revisions/exercises/${encodeURIComponent(ex)}/content`, { label, items });
+  }
+  updateList(ex: string, id: string, change: { label?: string; items?: string[]; archived?: boolean }): Promise<{ list: ContentList }> {
+    return this.api.request(`revisions/exercises/${encodeURIComponent(ex)}/content/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(change) });
+  }
   send(s: SessionPayload): Promise<SessionReceipt> { return this.api.post('revisions/sessions', s); }
 }

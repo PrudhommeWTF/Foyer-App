@@ -20,14 +20,14 @@ import { AuthedRequest, currentMember } from '../auth/session';
 import { appareil } from '../auth/switches';
 import { Bareme, timingFor } from './bareme';
 import { Result, classify, status } from './mastery';
-import { MODES, Mode, ExerciseDef, Params, defaults, readParams } from './exercises/contract';
+import { MODES, Mode, ExerciseContext, ExerciseDef, Params, defaults, readParams } from './exercises/contract';
 import { EXERCISES, exerciseById } from './exercises';
 import { Matiere, matiereLabel } from './matieres';
 import { addDays, bilanFor, mondayOf, parisDay as dayOf } from './bilan';
 import { bilanPdf, sessionsCsv } from './export';
 import {
   AnswerIn, ProgramRow, SessionRow, activeProgram, activePrograms, countedAnswers, itemHistory, masteryRows, programById,
-  recordSession, sessionsBetween, sessionsOf, setProgram, stopProgram, toMastery,
+  createList, foyerListId, recordSession, sessionsBetween, sessionsOf, setProgram, stopProgram, toMastery, updateList,
 } from './repo';
 
 /** Au-delà, ce n'est plus une session d'enfant : une file hors ligne abîmée, ou autre chose. */
@@ -44,7 +44,11 @@ const iso = (v: unknown, what: string): string => {
   if (typeof v !== 'string' || !ISO.test(v) || Number.isNaN(Date.parse(v))) throw new Invalid(`${what} : date ISO attendue.`);
   return new Date(v).toISOString();
 };
-const params = (def: ExerciseDef, raw: unknown): Params => { try { return readParams(def, raw); } catch (e) { throw new Invalid((e as Error).message); } };
+const params = (def: ExerciseDef, raw: unknown, ctx: ExerciseContext): Params => { try { return readParams(def, raw, ctx); } catch (e) { throw new Invalid((e as Error).message); } };
+/** Les paramètres d'un programme enregistré, ou les défauts s'ils ne se relisent plus (une liste de contenu disparue de la configuration). */
+const storedParams = (def: ExerciseDef, json: string, ctx: ExerciseContext): Params => { try { return readParams(def, JSON.parse(json), ctx); } catch { return defaults(def, ctx); } };
+/** Une liste de contenu reçue : un libellé, et des éléments non vides, sans doublon. */
+const MAX_ITEMS = 200;
 
 const members = (): Member[] => (getHousehold().state as HouseholdState).members;
 const parisDay = (isoAt: string): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(isoAt));
@@ -63,7 +67,7 @@ export const exerciseView = (d: ExerciseDef, mat: Matiere[]) => ({
   input: d.input, prompt: d.prompt, view: d.view, requires: d.requires ?? [], learn: !!d.learn, params: d.params,
 });
 
-export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMatieres: () => Matiere[]): Router {
+export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMatieres: () => Matiere[], getContext: (exercise: string) => ExerciseContext): Router {
   const r = express.Router();
   r.use(express.json({ limit: '256kb' }));
 
@@ -125,7 +129,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     res.json({
       member: { id: m.id, name: m.name, enfant: !!m.enfant },
       exerciseId: d.id, program: programView(program),
-      params: program ? params(d, JSON.parse(program.params_json)) : defaults(d),
+      params: program ? storedParams(d, program.params_json, getContext(d.id)) : defaults(d, getContext(d.id)),
       timing: timingOf(d, m, parisDay(new Date().toISOString()), program),
       mastery: masteryRows(m.id, d.id).map((x) => ({ key: x.item_key, label: d.itemLabel(x.item_key), ...toMastery(x), status: status(toMastery(x), cfg) })),
     });
@@ -152,7 +156,8 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const d = exercise(req.params['exercise']);
     const since = req.query['since'] !== undefined ? iso(req.query['since'], 'since') : new Date(Date.now() - 28 * 86400_000).toISOString();
     const program = activeProgram(m.id, d.id);
-    const p = program ? params(d, JSON.parse(program.params_json)) : defaults(d);
+    const ctx = getContext(d.id);
+    const p = program ? storedParams(d, program.params_json, ctx) : defaults(d, ctx);
     const days = new Map<string, { day: string; sessions: number; questions: number; good: number }>();
     for (const s of sessionsOf(m.id, d.id, since, 10_000)) {
       const day = parisDay(s.started_at);
@@ -162,7 +167,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     }
     const groups = new Map<string, { group: string; questions: number; correct: number; fast: number }>();
     for (const a of countedAnswers(m.id, d.id, since)) {
-      for (const g of d.groups(a.item_key, p)) {
+      for (const g of d.groups(a.item_key, p, ctx)) {
         const e = groups.get(g) ?? { group: g, questions: 0, correct: 0, fast: 0 };
         e.questions++;
         if (a.result === 'bon' || a.result === 'lent') e.correct++;
@@ -207,7 +212,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     if (addDays(from, 366) < to) throw new Invalid('Une période d’un an au plus.');
     return { from, to };
   };
-  const bilanOf = (m: Member, p: { from: string; to: string }) => bilanFor({ id: m.id, name: m.name }, p.from, p.to, getMatieres(), (ex) => getBareme(ex).maitrise);
+  const bilanOf = (m: Member, p: { from: string; to: string }) => bilanFor({ id: m.id, name: m.name }, p.from, p.to, getMatieres(), (ex) => getBareme(ex).maitrise, getContext);
 
   /** Le bilan d'une période : par matière puis par exercice, comparé à la période précédente. */
   r.get('/members/:memberId/bilan', route((req, res) => {
@@ -234,7 +239,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
       .filter((s) => { const d = dayOf(s.started_at); return d >= p.from && d <= p.to; });
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="revisions-sessions-${m.name.normalize('NFD').replace(/[^\w-]+/g, '') || m.id}-${p.from}-${p.to}.csv"`);
-    res.send(sessionsCsv(rows));
+    res.send(sessionsCsv(rows, getContext));
   }));
 
   /** Le programme d'un enfant pour un exercice, réglé par un adulte. L'ancien reste en base : le passé ne change pas. */
@@ -253,12 +258,13 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     };
     const secondsAllowed = secs(body['secondsAllowed'], 'Temps accordé'), fastSeconds = secs(body['fastSeconds'], 'Seuil rapide');
     if (secondsAllowed !== null && fastSeconds !== null && fastSeconds > secondsAllowed) throw new Invalid('Le seuil « rapide » ne peut pas dépasser le temps accordé.');
+    const ctx = getContext(d.id), pp = params(d, body['params'], ctx);
     const p = setProgram({
-      memberId: target.id, exerciseId: d.id, params: params(d, body['params']),
+      memberId: target.id, exerciseId: d.id, params: pp,
       questions: int(body['questions'], 5, 100, 'Questions par session'), secondsAllowed, fastSeconds,
       dailyGoal: int(body['dailyGoal'] ?? 1, 0, 10, 'Objectif par jour'), setBy: me.id,
     });
-    log.info(`Révisions : ${me.name} a réglé le programme ${d.label} de ${target.name} (${d.summary(JSON.parse(p.params_json))}, ${p.questions} questions, objectif ${p.daily_goal} par jour).`);
+    log.info(`Révisions : ${me.name} a réglé le programme ${d.label} de ${target.name} (${d.summary(pp, ctx)}, ${p.questions} questions, objectif ${p.daily_goal} par jour).`);
     res.json({ program: programView(p) });
   }));
 
@@ -272,6 +278,62 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     if (!stopProgram(target.id, d.id)) { res.status(404).json({ error: 'Pas de programme actif pour cet exercice.' }); return; }
     log.info(`Révisions : ${me.name} a retiré le programme ${d.label} de ${target.name}.`);
     res.json({ ok: true });
+  }));
+
+  /** L'exercice d'une route de contenu : il doit déclarer un paramètre de contenu. */
+  const withContent = (id: unknown): ExerciseDef => {
+    const d = exercise(id);
+    if (!d.params.some((x) => x.type === 'content')) throw new Invalid(`L’exercice ${d.label} n’a pas de listes.`);
+    return d;
+  };
+  const adultOnly = (req: Request, res: Response): Member | null => {
+    const me = currentMember(req as AuthedRequest)!;
+    if (me.enfant) { res.status(403).json({ error: 'Les listes se gèrent par un adulte du foyer.' }); return null; }
+    return me;
+  };
+  const listBody = (body: Record<string, unknown>, partial: boolean): { label?: string; items?: string[] } => {
+    const out: { label?: string; items?: string[] } = {};
+    if (body['label'] !== undefined || !partial) {
+      const l = typeof body['label'] === 'string' ? body['label'].trim() : '';
+      if (!l || l.length > 60) throw new Invalid('Le nom de la liste : de 1 à 60 caractères.');
+      out.label = l;
+    }
+    if (body['items'] !== undefined || !partial) {
+      if (!Array.isArray(body['items'])) throw new Invalid('Les éléments : une liste attendue.');
+      const items = [...new Set(body['items'].filter((x): x is string => typeof x === 'string').map((x) => x.normalize('NFC').trim().replace(/\s+/g, ' ')).filter(Boolean))];
+      if (!items.length || items.length > MAX_ITEMS || items.some((x) => x.length > 40)) throw new Invalid(`Les éléments : de 1 à ${MAX_ITEMS}, de 40 caractères au plus chacun.`);
+      out.items = items;
+    }
+    return out;
+  };
+
+  /** Les listes d'un exercice : livrées et du foyer. Ouvertes à tout membre, l'appareil en a besoin pour s'entraîner hors ligne. */
+  r.get('/exercises/:exercise/content', route((req, res) => {
+    const d = withContent(req.params['exercise']);
+    res.json({ lists: getContext(d.id).lists });
+  }));
+
+  /** Une liste du foyer (la dictée de la semaine), saisie par un adulte. */
+  r.post('/exercises/:exercise/content', route((req, res) => {
+    const me = adultOnly(req, res); if (!me) return;
+    const d = withContent(req.params['exercise']);
+    const b = listBody((req.body ?? {}) as Record<string, unknown>, false);
+    const l = createList(d.id, b.label!, b.items!, me.id);
+    log.info(`Révisions : ${me.name} a créé la liste « ${l.label} » (${d.label}, ${l.items.length} éléments).`);
+    res.status(201).json({ list: l });
+  }));
+
+  /** Modifier une liste du foyer, ou l'archiver (`archived`) : jamais l'effacer. Les listes livrées ne se modifient pas ici. */
+  r.patch('/exercises/:exercise/content/:id', route((req, res) => {
+    const me = adultOnly(req, res); if (!me) return;
+    const d = withContent(req.params['exercise']);
+    const id = foyerListId(String(req.params['id']));
+    if (id === null) throw new Invalid('Seule une liste du foyer se modifie ; une liste livrée se change dans la configuration.');
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const l = updateList(d.id, id, { ...listBody(body, true), ...(typeof body['archived'] === 'boolean' ? { archived: body['archived'] } : {}) });
+    if (!l) { res.status(404).json({ error: 'Liste introuvable.' }); return; }
+    log.info(`Révisions : ${me.name} a ${body['archived'] === true ? 'archivé' : body['archived'] === false ? 'ressorti' : 'modifié'} la liste « ${l.label} » (${d.label}).`);
+    res.json({ list: l });
   }));
 
   /**
@@ -296,7 +358,10 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     const programId = body['programId'] === null || body['programId'] === undefined ? null : int(body['programId'], 1, Number.MAX_SAFE_INTEGER, 'programId');
     const program = programId !== null ? programById(programId) : null;
     if (programId !== null && (!program || program.member_id !== me.id || program.exercise_id !== d.id)) throw new Invalid('Ce programme n’est pas le tien, ou pas pour cet exercice.');
-    const p = params(d, program ? JSON.parse(program.params_json) : body['params']);
+    const ctx = getContext(d.id);
+    const p = params(d, program ? JSON.parse(program.params_json) : body['params'], ctx);
+    // Une question doit venir des réglages de la session : l'appareil ne peut pas inventer ses items.
+    const universe = new Set(d.universe(p, ctx));
     const now = Date.now();
     // L'horloge de l'appareil fait foi, bornée : rien dans le futur.
     const clamp = (at: string): string => (Date.parse(at) > now + 5 * 60_000 ? new Date(now).toISOString() : at);
@@ -311,6 +376,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
       const o = (x ?? {}) as Record<string, unknown>;
       const q = d.parse(o['question'], p);
       if (q === null) throw new Invalid(`Réponse ${i + 1} : question illisible pour l’exercice ${d.label}.`);
+      if (!universe.has(d.itemKey(q))) throw new Invalid(`Réponse ${i + 1} : question hors des réglages de la session.`);
       const given = o['given'] === null || o['given'] === undefined ? null : String(o['given']).slice(0, 200);
       const ms = int(Math.round(Number(o['ms'])), 0, 3_600_000, `Réponse ${i + 1}, ms`);
       const c = d.check(q, given ?? '');
@@ -325,7 +391,7 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
     if (out.duplicate) { res.json({ duplicate: true, session: sessionView(out.session), changes: [] }); return; }
     const s = out.session;
     const duree = Math.max(0, Math.round((Date.parse(s.ended_at) - Date.parse(s.started_at)) / 1000));
-    log.info(`Révisions : session ${d.label} de ${me.name} reçue (${s.mode}, ${d.summary(p)}${s.aborted ? ', abandonnée' : ''}) : ${s.good} bonnes, ${s.slow} lentes, ${s.wrong} fausses, ${duree} s.`);
+    log.info(`Révisions : session ${d.label} de ${me.name} reçue (${s.mode}, ${d.summary(p, ctx)}${s.aborted ? ', abandonnée' : ''}) : ${s.good} bonnes, ${s.slow} lentes, ${s.wrong} fausses, ${duree} s.`);
     const cfg = getBareme(d.id).maitrise;
     res.status(201).json({
       duplicate: false, session: sessionView(s),

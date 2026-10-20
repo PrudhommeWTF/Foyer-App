@@ -203,7 +203,7 @@ describe('le programme d’un enfant', () => {
       assert.equal(r.status, 400, JSON.stringify(bad));
       assert.ok(r.json.error);
     }
-    assert.equal((await appel(ctx.base, 'PUT', `/revisions/members/${lena}/exercises/dictee/program`, prog, ctx.jetons.admin)).status, 400, 'exercice inconnu');
+    assert.equal((await appel(ctx.base, 'PUT', `/revisions/members/${lena}/exercises/conjugaison/program`, prog, ctx.jetons.admin)).status, 400, 'exercice inconnu');
   });
 
   it('un nouveau programme remplace l’ancien, qui reste en base', async () => {
@@ -238,6 +238,78 @@ describe('le programme d’un enfant', () => {
     const { programById } = await import('../src/revisions/repo');
     assert.equal(programById(vue.program.id)?.active, 0);
     assert.equal((await appel(ctx.base, 'DELETE', `${vueTables(lena)}/program`, undefined, ctx.jetons.admin)).status, 404);
+  });
+});
+
+describe('la dictée et ses listes', () => {
+  const dict = (mots: [string, string | null][], params: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
+    id: crypto.randomUUID(), exerciseId: 'dictee', mode: 'entrainer', params, startedAt: jour(2), endedAt: jour(2), aborted: false,
+    answers: mots.map(([mot, given], i) => ({ question: { mot }, given, ms: 6000, askedAt: jour(2, 17 + i) })), ...extra,
+  });
+  let semaine = '';
+
+  it('les listes livrées se lisent par tout membre, enfant compris', async () => {
+    const r = await appel(ctx.base, 'GET', '/revisions/exercises/dictee/content', undefined, ctx.jetons.enfant);
+    assert.equal(r.status, 200);
+    assert.ok(r.json.lists.some((l: { id: string; source: string }) => l.id === 'invariables-ce1' && l.source === 'livre'));
+    assert.equal((await appel(ctx.base, 'GET', '/revisions/exercises/tables/content', undefined, ctx.jetons.enfant)).status, 400, 'Tables n’a pas de listes');
+  });
+
+  it('la liste de la semaine se saisit par un adulte, se modifie et s’archive sans s’effacer', async () => {
+    const corps = { label: 'Semaine 12', items: ['oiseau', 'école', ' oiseau ', 'maison'] };
+    assert.equal((await appel(ctx.base, 'POST', '/revisions/exercises/dictee/content', corps, ctx.jetons.enfant)).status, 403);
+    for (const bad of [{ ...corps, label: '' }, { ...corps, items: [] }, { ...corps, items: ['x'.repeat(41)] }]) {
+      assert.equal((await appel(ctx.base, 'POST', '/revisions/exercises/dictee/content', bad, ctx.jetons.admin)).status, 400, JSON.stringify(bad));
+    }
+    const r = await appel(ctx.base, 'POST', '/revisions/exercises/dictee/content', corps, ctx.jetons.membre);
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    semaine = r.json.list.id;
+    assert.match(semaine, /^foyer-\d+$/);
+    assert.deepEqual(r.json.list.items, ['oiseau', 'école', 'maison'], 'sans doublon');
+    const m = await appel(ctx.base, 'PATCH', `/revisions/exercises/dictee/content/${semaine}`, { items: ['oiseau', 'école', 'maison', 'aujourd’hui'] }, ctx.jetons.admin);
+    assert.equal(m.json.list.items.length, 4);
+    assert.equal((await appel(ctx.base, 'PATCH', '/revisions/exercises/dictee/content/invariables-ce1', { label: 'x' }, ctx.jetons.admin)).status, 400, 'une liste livrée ne se modifie pas ici');
+    assert.equal((await appel(ctx.base, 'PATCH', '/revisions/exercises/dictee/content/foyer-9999', { label: 'x' }, ctx.jetons.admin)).status, 404);
+  });
+
+  it('une session de dictée : la correction du serveur tient compte des accents, pas de la casse', async () => {
+    const r = await poster(dict([['oiseau', 'Oiseau'], ['école', 'ecole'], ['maison', null]], { liste: semaine }), ctx.jetons.enfant);
+    assert.equal(r.status, 201, JSON.stringify(r.json));
+    assert.deepEqual([r.json.session.good + r.json.session.slow, r.json.session.wrong], [1, 2]);
+    const v = (await appel(ctx.base, 'GET', `/revisions/members/${lena}/exercises/dictee`, undefined, ctx.jetons.enfant)).json;
+    assert.deepEqual(v.mastery.map((x: { label: string }) => x.label).sort(), ['maison', 'oiseau', 'école']);
+    assert.ok(v.timing.allowedMs >= 20000, 'la dictée a son propre temps dans le barème');
+  });
+
+  it('une question hors des réglages de la session est refusée, pour la dictée comme pour Tables', async () => {
+    const r = await poster(dict([['papillon', 'papillon']], { liste: semaine }), ctx.jetons.enfant);
+    assert.equal(r.status, 400);
+    assert.match(r.json.error, /hors des réglages/);
+    assert.equal((await poster(dict([['oiseau', 'oiseau']], { liste: 'inconnue' }), ctx.jetons.enfant)).status, 400);
+    assert.equal((await poster(session([q(2, 3, 6, 1000, jour(3))], { params: tables(6, 9) }), ctx.jetons.enfant)).status, 400, '2 × 3 hors des tables 6 à 9');
+  });
+
+  it('une liste archivée reste lisible par le programme qui la désigne', async () => {
+    assert.equal((await appel(ctx.base, 'PUT', `/revisions/members/${lena}/exercises/dictee/program`, { params: { liste: semaine }, questions: 10, dailyGoal: 1 }, ctx.jetons.admin)).status, 200);
+    await appel(ctx.base, 'PATCH', `/revisions/exercises/dictee/content/${semaine}`, { archived: true }, ctx.jetons.admin);
+    const v = (await appel(ctx.base, 'GET', `/revisions/members/${lena}/exercises/dictee`, undefined, ctx.jetons.enfant)).json;
+    assert.equal(v.params.liste, semaine);
+    const l = (await appel(ctx.base, 'GET', '/revisions/exercises/dictee/content', undefined, ctx.jetons.enfant)).json.lists.find((x: { id: string }) => x.id === semaine);
+    assert.equal(l.archived, true);
+    await appel(ctx.base, 'DELETE', `/revisions/members/${lena}/exercises/dictee/program`, undefined, ctx.jetons.admin);
+  });
+
+  it('une liste livrée se surcharge ou s’ajoute dans le dossier de données', async () => {
+    const dir = path.join(ctx.dir, 'revisions', 'dictee');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'mots-invariables.json'), JSON.stringify({ listes: [{ id: 'invariables-ce1', label: 'Ma version', items: ['avec'] }] }));
+    fs.writeFileSync(path.join(dir, 'animaux.json'), JSON.stringify({ listes: [{ id: 'animaux', label: 'Les animaux', items: ['chat', 'chien'] }, { id: 'foyer-1', label: 'interdit', items: ['x'] }] }));
+    const lists = (await appel(ctx.base, 'GET', '/revisions/exercises/dictee/content', undefined, ctx.jetons.enfant)).json.lists as { id: string; label: string }[];
+    assert.equal(lists.find((l) => l.id === 'invariables-ce1')!.label, 'Ma version', 'au même nom, le fichier remplace');
+    assert.ok(!lists.some((l) => l.id === 'invariables-ce2'), 'tout le fichier livré est remplacé');
+    assert.ok(lists.some((l) => l.id === 'animaux'), 'sous un autre nom, il s’ajoute');
+    assert.ok(!lists.some((l) => l.label === 'interdit'), 'un identifiant réservé au foyer est écarté');
+    fs.rmSync(dir, { recursive: true });
   });
 });
 
@@ -287,7 +359,8 @@ describe('le bilan d’un enfant', () => {
     assert.ok(texte.startsWith('\ufeffDate;Heure;Exercice'), 'BOM et en-tête');
     const lignes = texte.trim().split('\r\n');
     assert.ok(lignes.length > 1);
-    assert.ok(lignes.slice(1).every((l) => l.split(';')[2] === 'Tables'));
+    assert.ok(lignes.slice(1).every((l) => ['Tables', 'Dictée de mots'].includes(l.split(';')[2])));
+    assert.ok(lignes.some((l) => l.split(';')[2] === 'Dictée de mots' && /La liste « Semaine 12 »/.test(l)), 'le résumé d’une session de dictée nomme sa liste');
   });
 });
 
@@ -322,7 +395,7 @@ describe('la commande revisions:recalcul', () => {
   });
 
   it('refuse un exercice inconnu, en le nommant', () => {
-    assert.throws(() => lancer('--membre', thomas, '--exercice', 'dictee'), (e: { stderr: string }) => /exercice inconnu : dictee/.test(e.stderr));
+    assert.throws(() => lancer('--membre', thomas, '--exercice', 'conjugaison'), (e: { stderr: string }) => /exercice inconnu : conjugaison/.test(e.stderr));
   });
 
   it('ne reclasse le passé que sur demande explicite', async () => {

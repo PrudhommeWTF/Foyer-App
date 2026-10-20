@@ -7,7 +7,7 @@ import { DocBlock, documentPdf } from '../export/pdf';
 import { Bilan, BilanTotals } from './bilan';
 import { SessionRow } from './repo';
 import { exerciseById } from './exercises';
-import { Params } from './exercises/contract';
+import { ExerciseContext, NO_CONTEXT, readParams } from './exercises/contract';
 
 const n = (k: number, one: string, many: string): string => `${k} ${k > 1 ? many : one}`;
 const pct = (t: BilanTotals): string => `${t.pct} % de réponses justes`;
@@ -53,12 +53,12 @@ const MODE: Record<string, string> = { apprendre: 'Apprendre', entrainer: 'S’e
 const wall = (iso: string, opts: Intl.DateTimeFormatOptions): string => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', ...opts }).format(new Date(iso));
 
 /** Les sessions en CSV : séparateur « ; », UTF-8 avec BOM, fins de ligne CRLF, comme les autres exports de Foyer. */
-export function sessionsCsv(rows: SessionRow[]): Buffer {
+export function sessionsCsv(rows: SessionRow[], ctxOf: (exercise: string) => ExerciseContext = () => NO_CONTEXT): Buffer {
   const head = ['Date', 'Heure', 'Exercice', 'Mode', 'Réglages', 'Questions', 'Bonnes', 'Lentes', 'Fausses', 'Temps moyen (s)', 'Abandonnée'];
   const lines = [head, ...rows.map((s) => {
     const def = exerciseById(s.exercise_id);
     let what = '';
-    try { what = def ? def.summary(JSON.parse(s.params_json) as Params) : ''; } catch { /* réglages illisibles : laissés vides */ }
+    try { const ctx = ctxOf(s.exercise_id); what = def ? def.summary(readParams(def, JSON.parse(s.params_json), ctx), ctx) : ''; } catch { /* réglages illisibles : laissés vides */ }
     return [
       wall(s.started_at, { day: '2-digit', month: '2-digit', year: 'numeric' }), wall(s.started_at, { hour: '2-digit', minute: '2-digit' }),
       def?.label ?? s.exercise_id, MODE[s.mode] ?? s.mode, what, String(s.questions), String(s.good), String(s.slow), String(s.wrong),

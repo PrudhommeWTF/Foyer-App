@@ -3,7 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { FoyerStore } from '../../core/foyer.store';
 import { Bilan, ExerciseOverview, ExerciseStats, ItemHistory, ProgramFields, RevisionsApi, RevisionsConfig } from '../../core/revisions/api';
 import { downloadBlob } from '../../core/download';
-import { ExerciseDef } from '../../core/revisions/exercises/contract';
+import { ContentList, ExerciseDef, ParamDecl } from '../../core/revisions/exercises/contract';
+import { RevisionsStore } from '../../core/revisions/store';
+import { ListComponent } from './list';
 import { EXERCISES } from '../../core/revisions/exercises';
 import { MasteryItem, PERIODS, PeriodPreset, STATUS_LABEL, activityDays, fragile, parisDay, periodOf, programGroups } from '../../core/revisions/revisions';
 import { AvatarComponent } from '../../shared/avatar';
@@ -27,7 +29,7 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
   selector: 'rev-suivi',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, AvatarComponent, GridComponent, HistoryComponent, ParamsFormComponent],
+  imports: [FormsModule, AvatarComponent, GridComponent, ListComponent, HistoryComponent, ParamsFormComponent],
   template: `
     @if (!kids().length) {
       <div class="card empty">Aucun enfant dans le foyer. Un membre marqué « enfant » (Paramètres → Membres et accès) apparaît ici.</div>
@@ -53,7 +55,7 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
           <div class="card">
             <div class="h">Programme {{ def.label }} de {{ kidName() }}</div>
             <p class="hint top">{{ def.desc }}</p>
-            <rev-params-form [def]="def" [value]="f().params" (edited)="set({ params: $event })" />
+            <rev-params-form [def]="def" [value]="f().params" [ctx]="ctx()" (edited)="set({ params: $event })" />
             <div class="lbl">Questions par session</div>
             <input class="input num" type="number" min="5" max="100" [ngModel]="f().questions" (ngModelChange)="set({ questions: +$event })" aria-label="Questions par session" />
             <div class="lbl">Temps par réponse</div>
@@ -134,6 +136,46 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
           } @else { <p class="hint">Chargement du bilan…</p> }
         </div>
 
+        @if (contentParam(); as cp) {
+          <div class="card lists">
+            <div class="h">Les listes · {{ def.label }}</div>
+            <p class="hint top">Celles livrées avec Foyer, et celles du foyer : la dictée de la semaine donnée par la maîtresse se saisit ici. Une liste retirée est archivée, jamais effacée : l’historique de ses {{ cp.items }} reste.</p>
+            @for (l of lists(); track l.id) {
+              <div class="li" [class.arch]="l.archived">
+                <div class="li-t"><b>{{ l.label }}</b> <span>{{ l.items.length }} {{ l.items.length > 1 ? cp.items : cp.item }}{{ l.source === 'livre' ? ', livrée' : '' }}{{ l.archived ? ', archivée' : '' }}</span>
+                  <div class="li-w">{{ l.items.slice(0, 12).join(', ') }}{{ l.items.length > 12 ? '…' : '' }}</div></div>
+                @if (l.source === 'foyer') {
+                  <div class="li-b">
+                    @if (!l.archived) { <button class="btn btn-soft sm" (click)="editList(l)">Modifier</button> }
+                    <button class="btn btn-ghost sm" (click)="archive(l.id, !l.archived)" [disabled]="busy()">{{ l.archived ? 'Ressortir' : 'Archiver' }}</button>
+                  </div>
+                }
+              </div>
+            }
+            @if (editing(); as ed) {
+              <div class="ed">
+                <div class="lbl">Nom de la liste</div>
+                <input class="input" [ngModel]="ed.label" (ngModelChange)="editing.set({ id: ed.id, label: $event, text: ed.text })" maxlength="60" placeholder="Semaine du 12 octobre" aria-label="Nom de la liste" />
+                <div class="lbl">Les {{ cp.items }}, un par ligne ou séparés par des virgules</div>
+                <textarea class="input ta" [ngModel]="ed.text" (ngModelChange)="editing.set({ id: ed.id, label: ed.label, text: $event })" rows="6" [attr.aria-label]="'Les ' + cp.items"></textarea>
+                <p class="hint">{{ splitItems(ed.text).length }} {{ splitItems(ed.text).length > 1 ? cp.items : cp.item }}</p>
+                <div class="b-b">
+                  <button class="btn btn-primary" (click)="saveList()" [disabled]="busy() || !ed.label.trim() || !splitItems(ed.text).length">{{ ed.id ? 'Enregistrer la liste' : 'Créer la liste' }}</button>
+                  <button class="btn btn-ghost" (click)="editing.set(null)">Annuler</button>
+                </div>
+              </div>
+            } @else {
+              <button class="btn btn-soft" (click)="editing.set({ id: null, label: '', text: '' })">Nouvelle liste</button>
+            }
+          </div>
+        }
+
+        @if (def.view === 'liste') {
+          <div class="card">
+            <div class="h">{{ def.label }} de {{ kidName() }}</div>
+            <rev-list [def]="def" [params]="v.ov.params" [ctx]="ctx()" [items]="v.ov.mastery" (pick)="openHistory($event)" />
+          </div>
+        }
         @if (def.view === 'grille' && def.grid) {
           <div class="card">
             <div class="h">Grille de {{ kidName() }}</div>
@@ -182,7 +224,13 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
     .tl-v { font-weight: 700; color: var(--ink2); } .muted { color: var(--ink3); grid-column: 2 / 4; }
     .frag { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 2px; border: none; border-top: 1px solid var(--line); background: transparent; font-family: inherit; font-size: 15px; font-weight: 800; color: var(--ink); cursor: pointer; text-align: left; }
     .frag span { font-size: 12.5px; font-weight: 700; color: var(--ink2); }
-    .bilan { margin-bottom: 16px; }
+    .bilan, .lists { margin-bottom: 16px; }
+    .li { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--line); }
+    .li.arch { opacity: .6; }
+    .li-t { font-size: 14px; color: var(--ink); min-width: 0; } .li-t span { margin-left: 8px; font-size: 12.5px; font-weight: 700; color: var(--ink2); }
+    .li-w { margin-top: 2px; font-size: 12.5px; font-weight: 600; color: var(--ink3); overflow-wrap: anywhere; }
+    .li-b { display: flex; gap: 6px; flex: none; } .sm { min-height: 38px; padding: 0 12px; font-size: 13px; }
+    .ed { margin-top: 12px; } .ta { width: 100%; min-height: 120px; font-family: inherit; resize: vertical; }
     .per { max-width: 620px; flex-wrap: wrap; }
     .b-l { margin: 12px 0 4px; font-size: 14px; font-weight: 800; color: var(--ink2); }
     .b-ex { padding: 10px 0; border-top: 1px solid var(--line); }
@@ -199,6 +247,7 @@ interface Followed { ov: ExerciseOverview; stats: ExerciseStats | null; }
 export class SuiviComponent {
   private foyer = inject(FoyerStore);
   private api = inject(RevisionsApi);
+  private store = inject(RevisionsStore);
 
   /** L'enfant à montrer d'abord, quand on arrive d'une notification. */
   readonly kid = input<string | null>(null);
@@ -307,8 +356,36 @@ export class SuiviComponent {
     finally { this.busy.set(false); }
   }
 
-  readonly fragiles = computed(() => { const v = this.view(); return v ? fragile(v.ov.mastery, 8, this.ex().universe(v.ov.params)) : []; });
-  readonly groups = computed(() => { const v = this.view(); return v ? programGroups(this.ex(), v.ov.params, v.stats?.groups ?? []) : []; });
+  readonly fragiles = computed(() => { const v = this.view(); return v ? fragile(v.ov.mastery, 8, this.ex().universe(v.ov.params, this.ctx())) : []; });
+  readonly groups = computed(() => { const v = this.view(); return v ? programGroups(this.ex(), v.ov.params, v.stats?.groups ?? [], this.ctx()) : []; });
+  /** Les listes de l'exercice suivi, et son paramètre de contenu s'il en a un. */
+  readonly ctx = computed(() => this.store.ctxOf(this.ex().id));
+  readonly lists = computed(() => this.ctx().lists);
+  readonly contentParam = computed(() => this.ex().params.find((p) => p.type === 'content') as Extract<ParamDecl, { type: 'content' }> | undefined);
+  readonly editing = signal<{ id: string | null; label: string; text: string } | null>(null);
+  splitItems(text: string): string[] { return [...new Set(text.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean))]; }
+  editList(l: ContentList): void { this.editing.set({ id: l.id, label: l.label, text: l.items.join('\n') }); }
+
+  async saveList(): Promise<void> {
+    const ed = this.editing(); if (!ed) return;
+    this.busy.set(true); this.err.set('');
+    try {
+      const items = this.splitItems(ed.text);
+      if (ed.id) await this.api.updateList(this.ex().id, ed.id, { label: ed.label.trim(), items });
+      else await this.api.createList(this.ex().id, ed.label.trim(), items);
+      await this.store.reloadContent(this.ex().id);
+      this.editing.set(null);
+      this.foyer.toast(ed.id ? 'Liste enregistrée' : 'Liste créée : choisissez-la dans le programme');
+    } catch (e) { this.foyer.toast((e as Error).message); }
+    finally { this.busy.set(false); }
+  }
+
+  async archive(id: string, archived: boolean): Promise<void> {
+    this.busy.set(true);
+    try { await this.api.updateList(this.ex().id, id, { archived }); await this.store.reloadContent(this.ex().id); }
+    catch (e) { this.foyer.toast((e as Error).message); }
+    finally { this.busy.set(false); }
+  }
   readonly baremeLine = computed(() => {
     const t = this.view()?.ov.timing; if (!t || t.source === 'programme') return 'Le barème selon l’âge s’appliquera une fois le programme enregistré.';
     const s = (ms: number) => String(ms / 1000).replace('.', ',');
