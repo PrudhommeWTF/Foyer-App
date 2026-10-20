@@ -15,6 +15,7 @@ import { TABLES, TablesQuestion } from '../src/revisions/exercises/tables';
 import { DICTEE } from '../src/revisions/exercises/dictee';
 import { HEURE } from '../src/revisions/exercises/heure';
 import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
+import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
 import { migrateRevisions } from '../src/revisions/schema';
 import {
@@ -205,6 +206,54 @@ describe('l’exercice Soustractions', () => {
     assert.equal(SOUSTRACTIONS.spoken!({ a: 13, b: 7 }), '13 moins 7, 6');
     assert.equal(SOUSTRACTIONS.summary(p, NO_CONTEXT), 'Les soustractions, enlever 7');
     assert.equal(SOUSTRACTIONS.summary(readParams(SOUSTRACTIONS, {}), NO_CONTEXT), 'Les soustractions, enlever de 2 à 5');
+  });
+});
+
+describe('l’exercice Conjugaison', () => {
+  const ctx: ExerciseContext = { lists: [
+    { id: 'semaine', label: 'Être au présent', items: ['être (présent) : je suis', 'être (présent) : nous sommes', 'avoir (présent) : j\'ai', 'pas une forme', 'être (présent) : je suis'], source: 'foyer' },
+  ] };
+  const p = readParams(CONJUGAISON, { liste: 'semaine' }, ctx);
+
+  it('une ligne par forme : verbe, temps, pronom, forme ; ce qui n’a pas cette forme est écarté', () => {
+    assert.deepEqual(readLine('être (présent) : nous sommes'), { verbe: 'être', temps: 'présent', pronom: 'nous', forme: 'sommes' });
+    assert.deepEqual(readLine('Avoir (passé composé) : j’ai eu'), { verbe: 'avoir', temps: 'passé composé', pronom: 'j\'', forme: 'ai eu' });
+    assert.deepEqual(readLine('se laver (présent) : je me lave'), { verbe: 'se laver', temps: 'présent', pronom: 'je', forme: 'me lave' });
+    assert.equal(readLine('être présent je suis'), null);
+    assert.deepEqual(CONJUGAISON.universe(p, ctx), ['conj:être:présent:je:suis', 'conj:être:présent:nous:sommes', 'conj:avoir:présent:j\':ai'], 'sans doublon ni ligne illisible');
+    assert.equal(CONJUGAISON.summary(p, ctx), 'La liste « Être au présent » (3 formes)');
+  });
+
+  it('l’énoncé, la correction (avec ou sans pronom, accents comptés), les groupes, le mode Apprendre', () => {
+    const q = CONJUGAISON.question('conj:être:présent:nous:sommes', p, () => 0);
+    assert.deepEqual(CONJUGAISON.ask!(q), { before: 'être (présent) : nous', after: '' });
+    assert.equal(CONJUGAISON.text(q), 'être (présent) : nous sommes');
+    assert.deepEqual(CONJUGAISON.check(q, ' Sommes '), { ok: true, expected: 'sommes' });
+    assert.equal(CONJUGAISON.check(q, 'nous sommes').ok, true);
+    assert.equal(CONJUGAISON.check(q, 'somme').ok, false);
+    assert.equal(CONJUGAISON.check(q, '').ok, false);
+    const j = CONJUGAISON.question('conj:avoir:présent:j\':ai', p, () => 0);
+    assert.equal(CONJUGAISON.ask!(j).before, 'avoir (présent) : j’');
+    assert.equal(CONJUGAISON.check(j, 'j’ai').ok, true);
+    assert.equal(CONJUGAISON.check({ ...q, forme: 'êtes' }, 'etes').ok, false, 'l’accent compte');
+    assert.deepEqual(CONJUGAISON.groups('conj:être:présent:nous:sommes', p, ctx), ['être (présent)']);
+    assert.equal(CONJUGAISON.learn!(p, ctx).length, 3);
+    assert.equal(CONJUGAISON.spoken!(j), 'j’ai');
+  });
+
+  it('une question relue n’entre dans l’univers que si sa forme est celle de la liste', () => {
+    const u = new Set(CONJUGAISON.universe(p, ctx));
+    const vraie = CONJUGAISON.parse({ verbe: 'être', temps: 'présent', pronom: 'nous', forme: 'sommes' }, p)!;
+    const inventee = CONJUGAISON.parse({ verbe: 'être', temps: 'présent', pronom: 'nous', forme: 'n’importe' }, p)!;
+    assert.ok(u.has(CONJUGAISON.itemKey(vraie)));
+    assert.ok(!u.has(CONJUGAISON.itemKey(inventee)), 'le serveur la refuse');
+    assert.equal(CONJUGAISON.parse({ verbe: 'être:x', temps: 'présent', pronom: 'nous', forme: 'sommes' }, p), null);
+  });
+
+  it('les listes livrées se lisent toutes, ligne par ligne', () => {
+    const lists = shippedLists(path.join(os.tmpdir(), 'foyer-sans-surcharge'), 'conjugaison');
+    assert.ok(lists.length >= 6);
+    for (const l of lists) assert.equal(l.items.filter((x) => !readLine(x)).length, 0, l.id);
   });
 });
 

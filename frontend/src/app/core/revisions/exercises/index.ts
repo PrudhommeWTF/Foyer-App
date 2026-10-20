@@ -4,9 +4,10 @@
 import { ExerciseDef } from './contract';
 import { TABLES } from './tables';
 import { DICTEE } from './dictee';
+import { CONJUGAISON } from './conjugaison';
 import { HEURE } from './heure';
 import { SOUSTRACTIONS } from './soustractions';
 
-export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, SOUSTRACTIONS as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef];
+export const EXERCISES: readonly ExerciseDef[] = [TABLES as ExerciseDef, SOUSTRACTIONS as ExerciseDef, HEURE as ExerciseDef, DICTEE as ExerciseDef, CONJUGAISON as ExerciseDef];
 
 export const exerciseById = (id: unknown): ExerciseDef | undefined => EXERCISES.find((e) => e.id === id);

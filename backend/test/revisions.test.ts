@@ -203,7 +203,7 @@ describe('le programme d’un enfant', () => {
       assert.equal(r.status, 400, JSON.stringify(bad));
       assert.ok(r.json.error);
     }
-    assert.equal((await appel(ctx.base, 'PUT', `/revisions/members/${lena}/exercises/conjugaison/program`, prog, ctx.jetons.admin)).status, 400, 'exercice inconnu');
+    assert.equal((await appel(ctx.base, 'PUT', `/revisions/members/${lena}/exercises/chimie/program`, prog, ctx.jetons.admin)).status, 400, 'exercice inconnu');
   });
 
   it('un nouveau programme remplace l’ancien, qui reste en base', async () => {
@@ -397,7 +397,7 @@ describe('la commande revisions:recalcul', () => {
   });
 
   it('refuse un exercice inconnu, en le nommant', () => {
-    assert.throws(() => lancer('--membre', thomas, '--exercice', 'conjugaison'), (e: { stderr: string }) => /exercice inconnu : conjugaison/.test(e.stderr));
+    assert.throws(() => lancer('--membre', thomas, '--exercice', 'chimie'), (e: { stderr: string }) => /exercice inconnu : chimie/.test(e.stderr));
   });
 
   it('ne reclasse le passé que sur demande explicite', async () => {
