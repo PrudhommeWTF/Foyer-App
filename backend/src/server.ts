@@ -32,6 +32,7 @@ import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
 import { setRevisionsToolsDeps } from './mcp/revisions-tools';
+import { contextFor } from './revisions/content';
 import { equipementsRouter, rules as eqpRules, watchedWarranties } from './equipements/routes';
 import { moduleCounts as eqpCounts, resetModule as eqpReset } from './equipements/backup';
 import { calendarRouter } from './calendar/routes';
@@ -452,9 +453,9 @@ api.use('/equipements', auth, apiTokenLimiter, denyToken, requireMember, require
 // Pas de jeton d'accès : l'assistant passe par le serveur MCP. Le barème et les
 // matières viennent de config/revisions/, surchargeables dans le dossier de données.
 // Les outils d'assistant revisions_* lisent le même barème et les mêmes matières.
-setRevisionsToolsDeps({ bareme: (ex) => bareme(DATA_DIR, ex), matieres: () => matieres(DATA_DIR) });
+setRevisionsToolsDeps({ bareme: (ex) => bareme(DATA_DIR, ex), matieres: () => matieres(DATA_DIR), context: (ex) => contextFor(DATA_DIR, ex) });
 api.use('/revisions', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modRevisions'),
-  revisionsRouter((ex) => bareme(DATA_DIR, ex), () => matieres(DATA_DIR)));
+  revisionsRouter((ex) => bareme(DATA_DIR, ex), () => matieres(DATA_DIR), (ex) => contextFor(DATA_DIR, ex)));
 
 // ---- Modules activables (activer / désactiver, remise à zéro) ----
 // L'activation elle-même est un réglage foyer (modRepas, modFidelite, modFinances,
@@ -747,7 +748,7 @@ export function start(): void {
       (getHousehold().state as HouseholdState).members.filter((m) => m.enfant).map((m) => ({ id: m.id, name: m.name })),
       (() => { const accts = new Set(listMemberAccounts().map((a) => a.memberId)); return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id); })(),
       wall, String(effectiveSetting('revisionsBilanHeure') || '18:30'),
-      (kid, from, to) => bilanFor(kid, from, to, matieres(DATA_DIR), (ex) => bareme(DATA_DIR, ex).maitrise))),
+      (kid, from, to) => bilanFor(kid, from, to, matieres(DATA_DIR), (ex) => bareme(DATA_DIR, ex).maitrise, (ex) => contextFor(DATA_DIR, ex)))),
     garanties: () => (effectiveSetting('modEquipements') === false
       ? { items: [], alertDays: 0 }
       : { items: watchedWarranties(), alertDays: eqpRules().alertDays }),

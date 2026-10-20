@@ -29,7 +29,7 @@ export type Capability = 'voix';
  * formulaire du programme sait afficher. Un test refuse une définition qui en
  * déclare un autre : le formulaire est engendré, jamais écrit par exercice.
  */
-export const PARAM_TYPES = ['int', 'bool', 'enum', 'range'] as const;
+export const PARAM_TYPES = ['int', 'bool', 'enum', 'range', 'content'] as const;
 export type ParamType = typeof PARAM_TYPES[number];
 
 interface ParamBase { key: string; label: string; desc?: string; }
@@ -38,10 +38,28 @@ export type ParamDecl =
   | (ParamBase & { type: 'bool'; default: boolean })
   | (ParamBase & { type: 'enum'; default: string; options: { value: string; label: string }[] })
   /** Deux bornes « de … à … », la première jamais après la seconde. `maxFrom` : la clé d'un paramètre `int` qui borne le haut. */
-  | (ParamBase & { type: 'range'; default: [number, number]; min: number; max: number; maxFrom?: string });
+  | (ParamBase & { type: 'range'; default: [number, number]; min: number; max: number; maxFrom?: string })
+  /**
+   * Une liste du contenu de l'exercice (livrée en configuration, ou saisie par
+   * le foyer), par son identifiant. `default` vide : la première liste. `item`
+   * et `items` nomment un élément pour le formulaire (« mot », « mots »).
+   */
+  | (ParamBase & { type: 'content'; default: string; item: string; items: string });
 
 export type ParamValue = number | boolean | string | [number, number];
 export type Params = Record<string, ParamValue>;
+
+/** Une liste de contenu : des listes de mots livrées, ou celle de la semaine saisie par un parent. */
+export interface ContentList { id: string; label: string; items: string[]; source: 'livre' | 'foyer'; archived?: boolean; }
+/**
+ * Ce que l'exercice peut lire en plus de ses paramètres : ses listes de
+ * contenu. Le socle le construit (configuration et base côté serveur, copie
+ * locale côté appareil) ; un exercice sans contenu l'ignore.
+ */
+export interface ExerciseContext { lists: readonly ContentList[]; }
+export const NO_CONTEXT: ExerciseContext = { lists: [] };
+/** La liste désignée par un paramètre `content`, s'il en existe une. */
+export const listOf = (ctx: ExerciseContext, id: unknown): ContentList | undefined => ctx.lists.find((l) => l.id === id);
 
 /** La correction d'une réponse : juste ou non, et la bonne réponse telle qu'on l'affiche. */
 export interface Checked { ok: boolean; expected: string; }
@@ -65,7 +83,7 @@ export interface ExerciseDef<Q = unknown> {
   requires?: Capability[];
   params: ParamDecl[];
   /** Tous les items que le programme peut poser, par leur clé de maîtrise. */
-  universe(p: Params): string[];
+  universe(p: Params, ctx: ExerciseContext): string[];
   /** Une question pour cet item, dans une forme choisie (le sens de 6 × 7, par exemple). */
   question(key: string, p: Params, rand: () => number): Q;
   /** Relit une question reçue de l'appareil ; null si elle n'est pas de cet exercice ou sort des bornes. */
@@ -77,22 +95,24 @@ export interface ExerciseDef<Q = unknown> {
   /** L'énoncé tel qu'il s'affiche (« 7 × 6 »). */
   text(q: Q): string;
   /** Les regroupements de l'item pour le suivi (« Table de 6 », « Table de 7 »). */
-  groups(key: string, p: Params): string[];
+  groups(key: string, p: Params, ctx: ExerciseContext): string[];
   /** La correction : la même ici et sur l'appareil. */
   check(q: Q, given: string): Checked;
   /** Le mode Apprendre : la matière à recopier, dans l'ordre. Absent : pas de mode Apprendre. */
-  learn?(p: Params): Q[];
+  learn?(p: Params, ctx: ExerciseContext): Q[];
   /** Ce que la voix de l'appareil lit en mode Apprendre (« 7 fois 3, 21 »). */
   spoken?(q: Q): string;
   /** La forme de la vue « grille ». */
   grid?(p: Params): GridShape;
   /** Un résumé du programme en une ligne (« Les tables de 6 à 9, multiplication »). */
-  summary(p: Params): string;
+  summary(p: Params, ctx: ExerciseContext): string;
 }
 
 /** Les paramètres par défaut d'un exercice. */
-export function defaults(def: ExerciseDef): Params {
-  return Object.fromEntries(def.params.map((d) => [d.key, Array.isArray(d.default) ? [...d.default] as [number, number] : d.default]));
+export function defaults(def: ExerciseDef, ctx: ExerciseContext = NO_CONTEXT): Params {
+  return Object.fromEntries(def.params.map((d) => [d.key,
+    d.type === 'content' ? (listOf(ctx, d.default) ?? ctx.lists.find((l) => !l.archived))?.id ?? d.default
+    : Array.isArray(d.default) ? [...d.default] as [number, number] : d.default]));
 }
 
 /**
@@ -100,12 +120,13 @@ export function defaults(def: ExerciseDef): Params {
  * propres (les manquants prennent leur défaut). Lève avec un message en
  * français qui nomme le paramètre. Le même code sur l'appareil et sur le serveur.
  */
-export function readParams(def: ExerciseDef, raw: unknown): Params {
+export function readParams(def: ExerciseDef, raw: unknown, ctx: ExerciseContext = NO_CONTEXT): Params {
   const src = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
   const out: Params = {};
+  const base = defaults(def, ctx);
   const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
   for (const d of def.params) {
-    const v = src[d.key] === undefined ? d.default : src[d.key];
+    const v = src[d.key] === undefined ? base[d.key] : src[d.key];
     switch (d.type) {
       case 'int':
         if (!isInt(v, d.min, d.max)) throw new Error(`« ${d.label} » : un nombre entier de ${d.min} à ${d.max}.`);
@@ -123,6 +144,10 @@ export function readParams(def: ExerciseDef, raw: unknown): Params {
         }
         out[d.key] = [v[0], v[1]]; break;
       }
+      case 'content':
+        // Une liste archivée reste lisible : un programme ou une session qui la désigne ne casse pas.
+        if (!listOf(ctx, v)) throw new Error(ctx.lists.length ? `« ${d.label} » : cette liste n’existe pas.` : `« ${d.label} » : aucune liste disponible pour cet exercice.`);
+        out[d.key] = v as string; break;
     }
   }
   return out;

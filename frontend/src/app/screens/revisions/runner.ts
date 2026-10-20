@@ -13,7 +13,7 @@ export interface RunAnswer { question: unknown; key: string; given: string | nul
 export interface RunResult { startedAt: string; endedAt: string; aborted: boolean; answers: RunAnswer[]; }
 
 /** Les saisies que cet écran sait afficher. Un exercice d'une autre saisie n'est pas proposé. */
-export const SUPPORTED_INPUTS: ReadonlySet<string> = new Set(['pave']);
+export const SUPPORTED_INPUTS: ReadonlySet<string> = new Set(['pave', 'clavier']);
 
 /** La voix française de l'appareil, locale de préférence ; null sans synthèse vocale ou sans voix française. */
 export function frenchVoice(): SpeechSynthesisVoice | null {
@@ -54,16 +54,27 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
           @if (learn()) {
             <ol class="rows" aria-label="La série à apprendre">
               @for (q of plan().questions; track $index; let i = $index) {
-                <li class="row" [class.cur]="i === idx()" [class.done]="i < idx()">{{ plan().def.text(q) }} = {{ expectedOf(q) }}</li>
+                <li class="row" [class.cur]="i === idx()" [class.done]="i < idx()">{{ rowOf(q) }}</li>
               }
             </ol>
           }
           @let q = current();
           @if (q !== null) {
-            <div class="ask" #ask tabindex="-1" [attr.aria-label]="plan().def.spoken?.(q) ?? plan().def.text(q)">
-              <span class="ops">{{ plan().def.text(q) }} =</span>
-              <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ typed() || '?' }}</span>
-            </div>
+            @switch (plan().def.prompt) {
+              @case ('audio') {
+                <!-- L'énoncé est la voix : le mot ne s'affiche qu'en mode Apprendre, pour être recopié. -->
+                <div class="ask audio" #ask tabindex="-1" aria-label="Écoute le mot, puis écris-le">
+                  @if (learn()) { <span class="word">{{ plan().def.text(q) }}</span> } @else { <span class="hint">Écoute, puis écris le mot</span> }
+                  <button type="button" class="again" (click)="say()" [disabled]="!audioOn()">Réécouter</button>
+                </div>
+              }
+              @default {
+                <div class="ask" #ask tabindex="-1" [attr.aria-label]="plan().def.spoken?.(q) ?? plan().def.text(q)">
+                  <span class="ops">{{ plan().def.text(q) }} =</span>
+                  @if (plan().def.input === 'pave') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ typed() || '?' }}</span> }
+                </div>
+              }
+            }
             @if (!learn()) {
               @for (k of [idx()]; track k) {
                 <div class="bar" aria-hidden="true"><span [style.animation-duration.ms]="plan().allowedMs"></span></div>
@@ -71,13 +82,24 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
             }
           }
           <div class="fb" [class]="'fb ' + (fb()?.kind ?? '')" role="status" aria-live="polite">{{ fb()?.text ?? '' }}</div>
-          @if (learn() && voiceOn()) {
+          @if (learn() && voiceOn() && plan().def.prompt !== 'audio') {
             <button type="button" class="say" (click)="say()">Écouter</button>
           }
         </div>
         <div class="padzone">
           @switch (plan().def.input) {
             @case ('pave') { <rev-keypad [disabled]="busy()" [canSubmit]="!!typed()" (digit)="digit($event)" (erase)="erase()" (submit)="ok()" /> }
+            @case ('clavier') {
+              <!-- Le clavier du système, sans correction automatique, majuscule ni vérification
+                   orthographique : c'est l'enfant qui écrit, pas l'appareil. Sur iPhone et iPad,
+                   la barre de suggestions peut rester selon les réglages (docs/revisions.md). -->
+              <form class="type" (submit)="$event.preventDefault(); ok()">
+                <input #field class="field" [class.ko]="fb()?.kind === 'faux'" [value]="typed()" (input)="type($any($event.target).value)" [disabled]="busy()"
+                       type="text" inputmode="text" enterkeyhint="done" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                       maxlength="40" aria-label="Ta réponse" />
+                <button type="submit" class="ok" [disabled]="busy() || !typed().trim()">OK</button>
+              </form>
+            }
           }
           @if (!learn()) { <button type="button" class="skip" (click)="skip()" [disabled]="busy()">Je ne sais pas</button> }
         </div>
@@ -105,6 +127,16 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
     .fb.lent { color: #A86F0B; }
     .fb.faux, .fb.passe { color: #C6492F; }
     .skip { border: none; background: transparent; color: var(--ink2); font-family: inherit; font-size: 15px; font-weight: 800; text-decoration: underline; min-height: 44px; cursor: pointer; }
+    .ask.audio { flex-direction: column; align-items: center; gap: 14px; }
+    .word { font-size: clamp(40px, 10vw, 64px); font-weight: 800; color: var(--primary); }
+    .hint { font-size: 22px; font-weight: 800; color: var(--ink2); }
+    .again { border: 2px solid var(--line); background: var(--surface); border-radius: 14px; padding: 10px 20px; font-family: inherit; font-size: 17px; font-weight: 800; color: var(--ink); min-height: 52px; cursor: pointer; }
+    .type { display: flex; gap: 10px; width: 100%; max-width: 460px; }
+    .field { flex: 1; min-width: 0; min-height: 60px; padding: 0 16px; border: 3px solid var(--line); border-radius: 16px; background: var(--surface); font-family: inherit; font-size: 28px; font-weight: 800; color: var(--ink); }
+    .field:focus { outline: none; border-color: var(--primary); }
+    .field.ko { border-color: #C6492F; color: #C6492F; }
+    .ok { min-width: 84px; min-height: 60px; border: none; border-radius: 16px; background: var(--primary); color: #fff; font-family: inherit; font-size: 22px; font-weight: 800; cursor: pointer; }
+    .ok:disabled { opacity: .45; cursor: default; }
     .say { border: 2px solid var(--line); background: var(--surface); border-radius: 12px; padding: 8px 16px; font-family: inherit; font-weight: 800; color: var(--ink); min-height: 44px; cursor: pointer; }
     .rows { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 4px 18px; font-size: 18px; font-weight: 700; color: var(--ink3); }
     .row { padding: 3px 10px; border-radius: 8px; }
@@ -129,6 +161,7 @@ export class RunnerComponent implements OnInit, OnDestroy {
   readonly fb = signal<{ kind: Result; text: string } | null>(null);
   readonly busy = signal(false);
   private readonly askEl = viewChild<ElementRef<HTMLElement>>('ask');
+  private readonly fieldEl = viewChild<ElementRef<HTMLInputElement>>('field');
   private answers: RunAnswer[] = [];
   private startedAt = '';
   private shownAt = 0;
@@ -140,12 +173,16 @@ export class RunnerComponent implements OnInit, OnDestroy {
   readonly total = computed(() => this.plan().questions.length);
   readonly current = computed(() => this.plan().questions[this.idx()] ?? null);
   readonly voiceOn = computed(() => this.plan().voice && !!this.plan().def.spoken && !!frenchVoice());
+  /** Un énoncé lu à voix haute : toujours, quel que soit le réglage, c'est l'énoncé. */
+  readonly audioOn = computed(() => this.plan().def.prompt === 'audio' && !!this.plan().def.spoken && !!frenchVoice());
 
   ngOnInit(): void { this.startedAt = new Date().toISOString(); this.show(); }
   ngOnDestroy(): void { if (this.timer) clearTimeout(this.timer); if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel(); }
 
   /** La bonne réponse telle que l'exercice l'affiche. */
   expectedOf(q: unknown): string { return this.plan().def.check(q, '').expected; }
+  /** Une ligne du mode Apprendre : « 7 × 3 = 21 », ou le mot seul quand l'énoncé est la réponse. */
+  rowOf(q: unknown): string { const t = this.plan().def.text(q), e = this.expectedOf(q); return t === e ? t : `${t} = ${e}`; }
 
   /** Le clavier d'un Mac ou d'un clavier branché à l'iPad : chiffres, retour arrière, Entrée. */
   @HostListener('document:keydown', ['$event'])
@@ -158,8 +195,9 @@ export class RunnerComponent implements OnInit, OnDestroy {
 
   private show(): void {
     this.typed.set(''); this.shownAt = performance.now(); this.shownIso = new Date().toISOString();
-    setTimeout(() => this.askEl()?.nativeElement.focus());
-    if (this.learn() && this.voiceOn()) this.say();
+    // Au clavier, le champ prend le focus (le clavier du système monte) ; sinon l'énoncé, pour un lecteur d'écran.
+    setTimeout(() => (this.fieldEl() ?? this.askEl())?.nativeElement.focus());
+    if (this.audioOn() || (this.learn() && this.voiceOn())) this.say();
   }
 
   say(): void {
@@ -172,9 +210,10 @@ export class RunnerComponent implements OnInit, OnDestroy {
   }
 
   digit(d: string): void { if (!this.busy() && this.typed().length < 4) this.typed.update((t) => (t === '0' ? d : t + d)); }
+  type(v: string): void { if (!this.busy()) this.typed.set(v.slice(0, 40)); }
   erase(): void { if (!this.busy()) this.typed.update((t) => t.slice(0, -1)); }
   skip(): void { if (!this.busy()) this.answer(null); }
-  ok(): void { if (!this.busy() && this.typed()) this.answer(this.typed()); }
+  ok(): void { if (!this.busy() && this.typed().trim()) this.answer(this.typed()); }
 
   private answer(given: string | null): void {
     const q = this.current(); if (q === null) return;
@@ -194,7 +233,7 @@ export class RunnerComponent implements OnInit, OnDestroy {
     const show = p.mode === 'entrainer';
     const text = result === 'bon' ? 'Bravo !'
       : result === 'lent' ? 'Juste, un peu lent'
-      : show ? `${p.def.text(q)} = ${c.expected}` : result === 'passe' ? 'On passe' : 'Pas tout à fait';
+      : show ? this.rowOf(q) : result === 'passe' ? 'On passe' : 'Pas tout à fait';
     this.fb.set({ kind: result, text });
     this.next(result === 'bon' ? 600 : result === 'lent' ? 900 : show ? 1800 : 900);
   }

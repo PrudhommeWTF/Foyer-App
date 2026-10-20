@@ -7,6 +7,7 @@ import { MODE_LABELS, dayLine, drawQuestions, fragile, goalLine, sessionUuid, su
 import { RevisionsStore } from '../../core/revisions/store';
 import { ModalComponent } from '../../shared/modal';
 import { GridComponent } from './grid';
+import { ListComponent } from './list';
 import { HistoryComponent } from './history';
 import { ParamsFormComponent } from './params-form';
 import { RunPlan, RunResult, RunnerComponent, SUPPORTED_INPUTS, frenchVoice } from './runner';
@@ -33,7 +34,7 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
   selector: 'screen-revisions',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, ModalComponent, GridComponent, RunnerComponent, HistoryComponent, ParamsFormComponent, SuiviComponent],
+  imports: [IconComponent, ModalComponent, GridComponent, ListComponent, RunnerComponent, HistoryComponent, ParamsFormComponent, SuiviComponent],
   template: `
     <div class="screen-enter">
       @if (store.foyer.children().length) {
@@ -67,7 +68,7 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
                   <span class="ex-i"><f-icon [name]="def.icon" [size]="22" color="var(--primary)" [width]="2.2" /></span>
                   <div class="ex-t">
                     <div class="card-title">{{ def.label }}</div>
-                    <div class="ex-s">{{ def.summary(ov.params) }}@if (ov.program) { · {{ ov.program.questions }} questions }</div>
+                    <div class="ex-s">{{ def.summary(ov.params, store.ctxOf(def.id)) }}@if (ov.program) { · {{ ov.program.questions }} questions }</div>
                     @if (ov.program && goalOf(def.id); as gl) { <div class="ex-g">{{ gl }}</div> }
                   </div>
                 </div>
@@ -75,8 +76,9 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
                   <button class="btn btn-primary" (click)="startOne(def)">S’entraîner</button>
                   <button class="btn btn-soft" (click)="openChooser(def)">Je choisis</button>
                 </div>
-                @if (def.view === 'grille' && def.grid) {
-                  <rev-grid [def]="def" [params]="ov.params" [items]="ov.mastery" [highlight]="hl(def.id)" (pick)="openHistory(def, $event)" />
+                @switch (def.view) {
+                  @case ('grille') { @if (def.grid) { <rev-grid [def]="def" [params]="ov.params" [items]="ov.mastery" [highlight]="hl(def.id)" (pick)="openHistory(def, $event)" /> } }
+                  @case ('liste') { <rev-list [def]="def" [params]="ov.params" [ctx]="store.ctxOf(def.id)" [items]="ov.mastery" [highlight]="hl(def.id)" (pick)="openHistory(def, $event)" /> }
                 }
                 @if (toWork(def.id).length) {
                   <div class="work"><span class="work-l">À retravailler</span>
@@ -86,6 +88,9 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
               </section>
             }
           }
+        }
+        @for (d of unavailable(); track d.id) {
+          <p class="na">« {{ d.label }} » : pas sur cet appareil. L’exercice se lit à voix haute, et l’appareil n’a pas de voix française (sur iPhone et iPad : Réglages → Accessibilité → Contenu énoncé → Voix).</p>
         }
       }
       }
@@ -99,7 +104,7 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
             <button class="mode" [class.on]="c.mode === m" (click)="choose({ mode: m })"><b>{{ modeLabels[m].label }}</b><span>{{ modeLabels[m].sub }}</span></button>
           }
         </div>
-        <rev-params-form [def]="c.def" [value]="c.params" (edited)="choose({ params: $event })" />
+        <rev-params-form [def]="c.def" [value]="c.params" [ctx]="store.ctxOf(c.def.id)" (edited)="choose({ params: $event })" />
         <button class="btn btn-primary btn-block go" (click)="startChosen(c)">C’est parti</button>
       </f-modal>
     }
@@ -133,8 +138,13 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
               } @else {
                 <p class="sum-l">{{ line(d) }}</p>
                 @if (review(d).length) { <p class="sum-r">À revoir : {{ review(d).join(', ') }}</p> }
-                @if (d.receipt && d.plan.def.view === 'grille' && d.plan.def.grid && store.overviews()[d.plan.def.id]; as ov) {
-                  <div class="sum-g"><rev-grid [def]="d.plan.def" [params]="ov.params" [items]="ov.mastery" [highlight]="hl(d.plan.def.id)" /></div>
+                @if (d.receipt && store.overviews()[d.plan.def.id]; as ov) {
+                  <div class="sum-g">
+                    @switch (d.plan.def.view) {
+                      @case ('grille') { @if (d.plan.def.grid) { <rev-grid [def]="d.plan.def" [params]="ov.params" [items]="ov.mastery" [highlight]="hl(d.plan.def.id)" /> } }
+                      @case ('liste') { <rev-list [def]="d.plan.def" [params]="d.plan.params" [ctx]="store.ctxOf(d.plan.def.id)" [items]="ov.mastery" [highlight]="hl(d.plan.def.id)" /> }
+                    }
+                  </div>
                 }
               }
             </div>
@@ -154,6 +164,7 @@ interface Chooser { def: ExerciseDef; mode: Mode; params: Params; }
     .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
     .tabs button { border: none; background: var(--soft2); color: var(--ink2); border-radius: 12px; padding: 10px 16px; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; min-height: 44px; }
     .tabs button.on { background: var(--ink); color: var(--bg); }
+    .na { margin: 6px 0 14px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
     .note { margin-bottom: 14px; padding: 10px 14px; border-radius: 12px; background: #FDF0DA; color: #8A5A07; font-size: 13px; font-weight: 700; }
     .empty { padding: 24px; text-align: center; font-weight: 700; color: var(--ink2); }
     .big { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; width: 100%; min-height: 120px; padding: 20px 22px; margin-bottom: 8px; border: none; border-radius: 22px;
@@ -224,7 +235,11 @@ export class RevisionsScreen implements OnDestroy {
   ngOnDestroy(): void { if (typeof speechSynthesis !== 'undefined') speechSynthesis.removeEventListener?.('voiceschanged', this.onVoices); }
 
   /** Les exercices que cet écran sait faire tourner, rangés par matière dans l'ordre de la configuration. */
-  private readonly available = computed(() => EXERCISES.filter((d) => SUPPORTED_INPUTS.has(d.input)));
+  /** Ce que l'appareil sait faire : une voix française, pour un exercice qui lit à voix haute. */
+  private readonly can = (d: ExerciseDef): boolean => (d.requires ?? []).every((c) => c !== 'voix' || this.hasVoice());
+  private readonly available = computed(() => EXERCISES.filter((d) => SUPPORTED_INPUTS.has(d.input) && this.can(d)));
+  /** Les exercices que l'appareil ne peut pas faire tourner faute de voix : on le dit plutôt que de les cacher. */
+  readonly unavailable = computed(() => EXERCISES.filter((d) => SUPPORTED_INPUTS.has(d.input) && !this.can(d)));
   readonly groups = computed(() => {
     const order = this.store.matieres();
     const ids = [...new Set([...order.map((m) => m.id), ...this.available().map((d) => d.matiere)])];
@@ -244,7 +259,7 @@ export class RevisionsScreen implements OnDestroy {
     const ps = this.dayPlans();
     if (!ps.length) return '';
     const total = ps.reduce((t, p) => t + p.questions.length, 0);
-    return (ps.length === 1 ? ps[0].def.summary(ps[0].params) : ps.map((p) => p.def.label).join(', ')) + ` · ${total} questions`;
+    return (ps.length === 1 ? ps[0].def.summary(ps[0].params, this.store.ctxOf(ps[0].def.id)) : ps.map((p) => p.def.label).join(', ')) + ` · ${total} questions`;
   });
   readonly dayGoal = computed(() => {
     this.store.recent(); this.store.queue();
@@ -263,7 +278,7 @@ export class RevisionsScreen implements OnDestroy {
   hl(ex: string): ReadonlySet<string> { return this.changed()[ex] ?? NONE; }
   toWork(ex: string) {
     const ov = this.store.overviews()[ex]; const def = EXERCISES.find((d) => d.id === ex);
-    return ov && def ? fragile(ov.mastery, 6, def.universe(ov.params)) : [];
+    return ov && def ? fragile(ov.mastery, 6, def.universe(ov.params, this.store.ctxOf(ex))) : [];
   }
   modesOf(def: ExerciseDef): Mode[] { return MODES.filter((m) => m !== 'apprendre' || !!def.learn); }
 
@@ -275,8 +290,9 @@ export class RevisionsScreen implements OnDestroy {
   private planOf(def: ExerciseDef, mode: Mode, params: Params, program: boolean): RunPlan | null {
     const ov = this.store.overviews()[def.id]; if (!ov) return null;
     const prog = program ? ov.program : null;
-    const questions = mode === 'apprendre' ? def.learn?.(params) ?? []
-      : drawQuestions(def, params, { count: prog?.questions ?? ov.program?.questions ?? FREE_QUESTIONS, mastery: ov.mastery, now: new Date().toISOString() });
+    const ctx = this.store.ctxOf(def.id);
+    const questions = mode === 'apprendre' ? def.learn?.(params, ctx) ?? []
+      : drawQuestions(def, params, { count: prog?.questions ?? ov.program?.questions ?? FREE_QUESTIONS, mastery: ov.mastery, now: new Date().toISOString(), ctx });
     if (!questions.length) return null;
     const voice = mode === 'apprendre' && this.store.foyer.devicePref('revisionsVoix') !== false && this.hasVoice();
     return { def, params, mode, questions, allowedMs: ov.timing.allowedMs, fastMs: ov.timing.fastMs, programId: prog?.id ?? null, voice };
@@ -338,7 +354,7 @@ export class RevisionsScreen implements OnDestroy {
 
   private count(d: Done, r: string): number { return d.result.answers.filter((a) => a.result === r).length; }
   line(d: Done): string {
-    return summaryLine(d.plan.def, d.plan.params, { good: this.count(d, 'bon'), slow: this.count(d, 'lent'), wrong: this.count(d, 'faux') + this.count(d, 'passe') });
+    return summaryLine(d.plan.def, d.plan.params, { good: this.count(d, 'bon'), slow: this.count(d, 'lent'), wrong: this.count(d, 'faux') + this.count(d, 'passe') }, this.store.ctxOf(d.plan.def.id));
   }
   learnLine(d: Done): string {
     const k = this.count(d, 'bon'), n = d.plan.questions.length;

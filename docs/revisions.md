@@ -1,8 +1,8 @@
 # Révisions
 
-Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Le premier exercice est **Tables** (multiplication et addition) ; d'autres suivront (la dictée de mots est prévue), sans toucher au socle.
+Des exercices courts pour réviser à la maison, avec un programme réglé par un parent et un suivi par enfant, par item (6 × 7 est-il su ?), par groupe (la table de 7) et dans le temps. Deux exercices : **Tables** (multiplication et addition, maths) et **Dictée de mots** (français) ; d'autres suivront, un par un.
 
-> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` sont décrits dans `docs/assistants.md`. La dictée arrive ensuite.
+> État : le socle serveur (tables `rev_*`, registre d'exercices, exercice Tables, barème, maîtrise, réception des sessions, programmes, recalcul) et l'écran pour s'entraîner (« Mon entraînement du jour », une carte par exercice, grille, file hors ligne) sont en place, ainsi que l'onglet Suivi des parents (programme, activité, réussite, items fragiles, grille), le bilan d'une période (à l'écran, en PDF « Pour la maîtresse », sessions en CSV), le bilan du dimanche sur le téléphone et la tuile d'accueil. Les outils d'assistant `revisions_*` sont décrits dans `docs/assistants.md`. La dictée de mots, second exercice, a prouvé le socle (voir « Ce que la dictée a demandé au socle »).
 
 ## Le module
 
@@ -18,8 +18,8 @@ Le socle (sessions, réponses, maîtrise, programmes, suivi, réception hors lig
 |---|---|
 | `id`, `label`, `matiere`, `icon`, `ageMin`, `desc` | ce qui s'affiche ; la matière renvoie à `config/revisions/matieres.json` ; l'âge est indicatif, jamais une interdiction |
 | `input`, `prompt`, `view`, `requires` | la saisie (`pave` : le pavé maison, `clavier`, `choix`), l'énoncé (`texte`, `audio`, `horloge`), la vue du suivi (`grille`, `liste`), ce que l'appareil doit savoir faire (`voix`) |
-| `params` | les paramètres que porte un programme, d'un des types `int`, `bool`, `enum`, `range` : le formulaire du programme est **engendré** depuis eux, jamais écrit pour un exercice. Un test refuse un autre type. |
-| `universe`, `question`, `parse` | les items que le programme peut poser (par leur clé), une question pour un item, la relecture d'une question reçue |
+| `params` | les paramètres que porte un programme, d'un des types `int`, `bool`, `enum`, `range`, `content` (une liste du contenu de l'exercice) : le formulaire du programme est **engendré** depuis eux, jamais écrit pour un exercice. Un test refuse un autre type, et un type sans rendu dans le formulaire ne compile pas. |
+| `universe`, `question`, `parse` | les items que le programme peut poser (par leur clé), une question pour un item, la relecture d'une question reçue. `universe`, `groups`, `learn` et `summary` reçoivent aussi le **contexte** de l'exercice (ses listes de contenu) ; un exercice sans contenu l'ignore |
 | `itemKey`, `itemLabel`, `text`, `groups` | la clé de maîtrise (« mult:6x7 », commutative pour les tables), l'item en clair, l'énoncé, les regroupements du suivi (« Table de 7 ») |
 | `check` | la correction, la même sur l'appareil et sur le serveur |
 | `learn`, `spoken`, `grid`, `summary` | le mode Apprendre (absent : pas de mode Apprendre), ce que lit la voix, la forme de la grille, le programme en une ligne |
@@ -36,7 +36,31 @@ Le dossier `exercises/` est **pur** (aucune dépendance hors de lui) : il vit en
 
 Ni table, ni colonne, ni route à ajouter. Un exercice qui demanderait une saisie ou un énoncé d'un type nouveau ajoute ce type au contrat et son composant à l'écran, une fois, pour tous les exercices qui en voudront.
 
-**Note pour la dictée (à venir).** Elle utilisera le **clavier système** de l'appareil, avec correction automatique, majuscule automatique et vérification orthographique coupées. Sur iPad et iPhone, la barre de suggestions peut subsister selon les réglages de l'appareil (Réglages → Général → Clavier → Prédiction) : à couper sur l'appareil familial si elle souffle les mots.
+### La dictée de mots
+
+La voix de l'appareil lit un mot (jamais affiché, sauf en mode Apprendre, où il se recopie) ; l'enfant l'écrit au **clavier système**, avec correction automatique, majuscule automatique et vérification orthographique coupées. Sur iPad et iPhone, la barre de suggestions peut subsister selon les réglages de l'appareil (Réglages → Général → Clavier → Prédiction) : à couper sur l'appareil familial si elle souffle les mots.
+
+- **Correction** : les accents comptent (c'est ce qu'on apprend), pas les majuscules, les espaces en trop ni la forme de l'apostrophe (’ ou ').
+- **Item** : le mot, quelle que soit la liste qui le porte. « oiseau » su dans la liste de la semaine reste su dans la suivante.
+- **Listes** : celles livrées dans `backend/config/revisions/dictee/` (mots invariables du CE1 et du CE2, pour commencer), et celles du foyer, saisies par un parent dans l'onglet Suivi (« la dictée de la semaine »). Le programme choisit une liste.
+- **Temps** : le barème a une partie `exercices.dictee` (25 s par mot à 8 ans, rapide sous 12 s) : écrire un mot prend plus longtemps que répondre 42.
+- **Voix** : l'exercice déclare `requires: ['voix']`. Un appareil sans voix française ne le propose pas et le dit sur l'écran Révisions ; le réglage `revisionsVoix` ne coupe pas la dictée (la voix y est l'énoncé).
+- **Vue** : la maîtrise s'affiche en liste (un mot par ligne et son état), pas en grille.
+
+### Ce que la dictée a demandé au socle
+
+La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fait, sur un point : **un exercice qui lit un contenu**. Deux ajouts au contrat, et rien d'autre :
+
+1. un cinquième type de paramètre, `content`, qui désigne une liste du contenu de l'exercice ;
+2. un argument `ctx` (le contexte : les listes de l'exercice) passé à `universe`, `groups`, `learn`, `summary`, `defaults` et `readParams`. Tables l'ignore : son code n'a pas changé.
+
+Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
+
+### Le contenu des exercices
+
+- **Livré** : `backend/config/revisions/<exercice>/*.json`, chaque fichier portant `{ "listes": [{ "id", "label", "items": [...] }] }` (identifiant en minuscules, chiffres et tirets). Un fichier au même nom dans `FOYER_DATA_DIR/revisions/<exercice>/` le **remplace**, un fichier d'un autre nom **s'ajoute** ; relus sans redémarrer. Une liste illisible est écartée et nommée au journal.
+- **Du foyer** : table `rev_content` (migration v2), une ligne par liste, identifiant `foyer-<n>`. Un adulte la crée, la modifie ou l'archive ; **jamais effacée** : une liste archivée disparaît des choix, mais un programme ou une session qui la désigne reste lisible.
+- L'appareil garde les listes dans sa copie locale (`foyer.revisions.<membre>`) : la dictée marche sans réseau.
 
 ## Ce que Foyer retient
 
@@ -48,6 +72,7 @@ Tables relationnelles `rev_*` dans `foyer.db`, hors du document du foyer :
 | `rev_sessions` | une session : exercice, mode (apprendre, s'entraîner, test), paramètres, début et fin, abandon, nombre de bonnes, lentes et fausses, temps moyen, seuils appliqués, appareil, et le parent qui avait ouvert la session de l'enfant s'il y en a un. L'identifiant vient de l'appareil (uuid). |
 | `rev_answers` | chaque réponse : la question telle que posée (JSON propre à l'exercice), la clé de l'item, la bonne réponse et la réponse donnée (texte, ou rien si passée), le temps, le résultat, l'heure. |
 | `rev_mastery` | la maîtrise par membre, exercice et item : un cache, recalculable entièrement depuis `rev_answers`. |
+| `rev_content` | les listes de contenu saisies par le foyer (migration v2) : exercice, nom, éléments, auteur, dates, archivée. |
 
 **Rien n'est jamais supprimé.** Une session abandonnée reste (ses réponses déjà données comptent), un programme remplacé ou retiré reste. Le passé ne se réécrit qu'avec une commande explicite (voir plus bas).
 
@@ -172,6 +197,9 @@ Sous `/api/revisions`, session de navigateur, membre du foyer, module activé. `
 | `GET /members/:id/bilan[?from=AAAA-MM-JJ&to=AAAA-MM-JJ]` | le bilan d'une période (fin incluse, un an au plus ; par défaut la semaine en cours), adultes seulement, pour un enfant |
 | `GET /members/:id/bilan.pdf[?from&to]` | le même bilan en PDF, journalisé |
 | `GET /members/:id/sessions.csv[?from&to]` | les sessions de la période en CSV |
+| `GET /exercises/:ex/content` | les listes d'un exercice à contenu, livrées et du foyer (archivées marquées) : tout membre, l'appareil en a besoin hors ligne |
+| `POST /exercises/:ex/content` | créer une liste du foyer : `label`, `items` (1 à 200, de 40 caractères au plus) ; adultes |
+| `PATCH /exercises/:ex/content/:id` | modifier une liste du foyer (`label`, `items`) ou l'archiver (`archived`) ; une liste livrée ne se modifie pas ici ; adultes |
 | `POST /sessions` | une session en un seul envoi : `id` (uuid de l'appareil), `exerciseId`, `mode`, `params` (ou `programId`, dont les paramètres s'appliquent), `startedAt`, `endedAt`, `aborted`, `fastMs` et `allowedMs` appliqués, `answers` (`question` dans la forme de l'exercice, `given` ou null, `ms`, `askedAt`). 201 à la première réception, 200 et `duplicate: true` ensuite. La réponse dit, pour chaque item touché, son état avant et après. |
 
 Chaque session reçue et chaque changement de programme sont journalisés (« Révisions : session Tables de Raphaël reçue (entrainer, Les tables de 6 à 9, multiplication) : 18 bonnes, 2 lentes, 0 fausses, 212 s. »).
@@ -193,4 +221,4 @@ runuser -u foyer -- node /opt/foyer/backend/dist/revisions/recalcul.js --env - -
 
 ## Sauvegarde
 
-Les tables `rev_*` sont dans `foyer.db` : l'instantané `VACUUM INTO` et la procédure de `docs/sauvegarde-restauration.md` les emportent sans rien changer. Les surcharges éventuelles (`revisions/bareme.json`, `revisions/matieres.json`) sont dans le dossier de données, emportées avec lui.
+Les tables `rev_*` (dont `rev_content`, les listes du foyer) sont dans `foyer.db` : l'instantané `VACUUM INTO` et la procédure de `docs/sauvegarde-restauration.md` les emportent sans rien changer. Les surcharges éventuelles (`revisions/bareme.json`, `revisions/matieres.json`, `revisions/<exercice>/*.json`) sont dans le dossier de données, emportées avec lui.

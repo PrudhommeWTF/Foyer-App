@@ -4,6 +4,7 @@ import { FoyerStore } from '../foyer.store';
 import { KeyStore, readQueue, writeQueue } from '../op-queues';
 import { ExerciseOverview, Matiere, RevisionsApi, RevisionsSession, SessionPayload, SessionReceipt } from './api';
 import { EXERCISES } from './exercises';
+import { ContentList, ExerciseContext } from './exercises/contract';
 import { parisDay } from './revisions';
 
 /** La file des sessions pas encore reçues par le serveur, rangée par membre comme les autres (op-queues.ts). */
@@ -12,7 +13,9 @@ const QUEUE_KEY = 'foyer.revisionsQueue';
 const CACHE_PREFIX = 'foyer.revisions.';
 const keyStore = (): KeyStore | null => { try { return localStorage; } catch { return null; } };
 
-interface Kept { matieres: Matiere[]; overviews: Record<string, ExerciseOverview>; }
+interface Kept { matieres: Matiere[]; overviews: Record<string, ExerciseOverview>; contents?: Record<string, ContentList[]>; }
+/** Les exercices qui lisent un contenu (des listes de mots) : il voyage avec la vue, pour s'entraîner hors ligne. */
+const WITH_CONTENT = EXERCISES.filter((e) => e.params.some((p) => p.type === 'content')).map((e) => e.id);
 
 /**
  * État du module Révisions pour le membre de la session. L'exercice tourne
@@ -30,6 +33,8 @@ export class RevisionsStore {
   readonly matieres = signal<Matiere[]>([]);
   /** Par exercice : programme, paramètres en vigueur, temps accordé, maîtrise. */
   readonly overviews = signal<Record<string, ExerciseOverview>>({});
+  /** Les listes de chaque exercice à contenu. */
+  readonly contents = signal<Record<string, ContentList[]>>({});
   /** Les sessions reçues depuis hier : de quoi compter celles du jour. */
   readonly recent = signal<RevisionsSession[]>([]);
   /** Les sessions en attente du réseau, pour le membre de la session. */
@@ -90,28 +95,37 @@ export class RevisionsStore {
   async load(): Promise<void> {
     const me = this.owner; if (!me) return;
     try {
-      const [mat, list, recent] = await Promise.all([
+      const [mat, list, recent, contentList] = await Promise.all([
         this.api.matieres(),
         Promise.all(EXERCISES.map((e) => this.api.exercise(me, e.id))),
         this.api.sessions(me, new Date(Date.now() - 36 * 3600_000).toISOString()),
+        Promise.all(WITH_CONTENT.map(async (ex) => [ex, (await this.api.content(ex)).lists] as const)),
       ]);
       if (me !== this.owner) return;
       const overviews = Object.fromEntries(list.map((o) => [o.exerciseId, o]));
-      this.matieres.set(mat.matieres); this.overviews.set(overviews); this.recent.set(recent.sessions);
+      const contents = Object.fromEntries(contentList);
+      this.matieres.set(mat.matieres); this.overviews.set(overviews); this.recent.set(recent.sessions); this.contents.set(contents);
       this.offline.set(false);
-      try { keyStore()?.setItem(CACHE_PREFIX + me, JSON.stringify({ matieres: mat.matieres, overviews } satisfies Kept)); } catch { /* quota : la copie attendra */ }
+      try { keyStore()?.setItem(CACHE_PREFIX + me, JSON.stringify({ matieres: mat.matieres, overviews, contents } satisfies Kept)); } catch { /* quota : la copie attendra */ }
     } catch (e) {
       if (!isOffline(e)) { this.loaded.set(true); return; } // refus du serveur : l'écran restera sur ce qu'il a
       this.offline.set(true);
       try {
         const kept = JSON.parse(keyStore()?.getItem(CACHE_PREFIX + me) || 'null') as Kept | null;
-        if (kept) { this.matieres.set(kept.matieres); this.overviews.set(kept.overviews); }
+        if (kept) { this.matieres.set(kept.matieres); this.overviews.set(kept.overviews); this.contents.set(kept.contents ?? {}); }
       } catch { /* copie abîmée : rien à montrer */ }
     }
     this.loaded.set(true);
   }
 
   history(ex: string, key: string) { return this.api.history(this.owner ?? '', ex, key); }
+
+  /** Ce que lit un exercice en plus de ses paramètres : ses listes. */
+  ctxOf(ex: string): ExerciseContext { return { lists: this.contents()[ex] ?? [] }; }
+  /** Recharge les listes d'un exercice, après qu'un adulte en a créé ou modifié une. */
+  async reloadContent(ex: string): Promise<void> {
+    try { const r = await this.api.content(ex); this.contents.update((m) => ({ ...m, [ex]: r.lists })); } catch { /* la copie locale reste */ }
+  }
 
   /** Les sessions comptées du jour pour un exercice (heure de Paris), reçues ou encore en file. */
   doneToday(ex: string): number {

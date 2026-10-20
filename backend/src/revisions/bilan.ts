@@ -8,7 +8,7 @@
 // Le cœur (`computeBilan`) est pur : il reçoit les sessions, les réponses et la
 // maîtrise, et rend le bilan. `bilanFor` lit la base pour lui. Les jours sont
 // ceux de Paris (AAAA-MM-JJ), la fin incluse.
-import { ExerciseDef, Params, defaults, readParams } from './exercises/contract';
+import { ExerciseContext, ExerciseDef, NO_CONTEXT, Params, defaults, readParams } from './exercises/contract';
 import { EXERCISES, exerciseById } from './exercises';
 import { MasteryCfg, Result, Status, status } from './mastery';
 import { Matiere, matiereLabel } from './matieres';
@@ -36,6 +36,8 @@ export interface BilanInput {
   mastery: (exercise: string) => MasteryRow[];
   programs: Pick<ProgramRow, 'exercise_id' | 'params_json'>[];
   cfgOf: (exercise: string) => MasteryCfg;
+  /** Le contenu de chaque exercice (ses listes) ; aucun par défaut. */
+  ctxOf?: (exercise: string) => ExerciseContext;
   exercises?: readonly ExerciseDef[];
 }
 
@@ -75,7 +77,7 @@ const totalsOf = (ss: BilanInput['sessions']): BilanTotals => {
     { sessions: 0, questions: 0, good: 0, slow: 0, wrong: 0 });
   return { ...t, pct: t.questions ? Math.round(((t.good + t.slow) / t.questions) * 100) : 0 };
 };
-const parse = (def: ExerciseDef, json: string): Params => { try { return readParams(def, JSON.parse(json)); } catch { return defaults(def); } };
+const parse = (def: ExerciseDef, json: string, ctx: ExerciseContext): Params => { try { return readParams(def, JSON.parse(json), ctx); } catch { return defaults(def, ctx); } };
 
 /** Le bilan d'une période. Pur : voir l'en-tête. */
 export function computeBilan(i: BilanInput): Bilan {
@@ -92,13 +94,14 @@ export function computeBilan(i: BilanInput): Bilan {
     const mine = cur.filter((s) => s.exercise_id === def.id);
     const program = i.programs.find((p) => p.exercise_id === def.id);
     if (!mine.length && !program) continue;
+    const ctx = i.ctxOf?.(def.id) ?? NO_CONTEXT;
     // Les paramètres de référence : ceux du programme en vigueur, sinon ceux de la dernière session de la période.
-    const ref = program ? parse(def, program.params_json) : parse(def, mine[mine.length - 1].params_json);
+    const ref = program ? parse(def, program.params_json, ctx) : parse(def, mine[mine.length - 1].params_json, ctx);
     const groupsIn = (pred: (iso: string) => boolean) => {
       const by = new Map<string, { q: number; ok: number; fast: number }>();
       for (const a of i.answers) {
         if (a.exercise_id !== def.id || !pred(a.asked_at)) continue;
-        for (const g of def.groups(a.item_key, parse(def, a.params_json))) {
+        for (const g of def.groups(a.item_key, parse(def, a.params_json, ctx), ctx)) {
           const e = by.get(g) ?? { q: 0, ok: 0, fast: 0 };
           e.q++; if (a.result === 'bon' || a.result === 'lent') e.ok++; if (a.result === 'bon') e.fast++;
           by.set(g, e);
@@ -111,14 +114,14 @@ export function computeBilan(i: BilanInput): Bilan {
       const b = before.get(group);
       return { group, questions: e.q, pct: Math.round((e.ok / e.q) * 100), fastPct: Math.round((e.fast / e.q) * 100), prevPct: b ? Math.round((b.ok / b.q) * 100) : null };
     });
-    const universe = new Set(def.universe(ref));
+    const universe = new Set(def.universe(ref, ctx));
     const cfg = i.cfgOf(def.id);
     const fragiles = i.mastery(def.id).map((r) => ({ r, m: toMastery(r) }))
       .filter(({ r, m }) => universe.has(r.item_key) && status(m, cfg) !== 'acquise' && (m.wrong > 0 || m.lastResult !== 'bon'))
       .sort((x, y) => x.m.level - y.m.level || y.m.wrong - x.m.wrong || x.r.item_key.localeCompare(y.r.item_key))
       .slice(0, 8).map(({ r, m }) => ({ label: def.itemLabel(r.item_key), status: status(m, cfg) }));
     const p = prev.filter((s) => s.exercise_id === def.id);
-    exercises.push({ id: def.id, matiere: def.matiere, label: def.label, summary: def.summary(ref), totals: totalsOf(mine), prev: p.length ? totalsOf(p) : null, groups, fragiles });
+    exercises.push({ id: def.id, matiere: def.matiere, label: def.label, summary: def.summary(ref, ctx), totals: totalsOf(mine), prev: p.length ? totalsOf(p) : null, groups, fragiles });
   }
   const ids = [...new Set([...i.matieres.map((m) => m.id), ...exercises.map((e) => e.matiere)])];
   const matieres = ids.map((id) => ({ id, label: matiereLabel(i.matieres, id), exercises: exercises.filter((e) => e.matiere === id).map(({ matiere: _m, ...e }) => e) }))
@@ -127,12 +130,13 @@ export function computeBilan(i: BilanInput): Bilan {
 }
 
 /** Le bilan d'une période, lu dans la base. */
-export function bilanFor(member: { id: string; name: string }, from: string, to: string, matieres: Matiere[], cfgOf: (exercise: string) => MasteryCfg): Bilan {
+export function bilanFor(member: { id: string; name: string }, from: string, to: string, matieres: Matiere[], cfgOf: (exercise: string) => MasteryCfg,
+  ctxOf?: (exercise: string) => ExerciseContext): Bilan {
   const len = dayCount(from, to);
   // Une marge d'un jour de chaque côté : le tri au jour de Paris se fait ensuite.
   const since = addDays(from, -len - 1) + 'T00:00:00.000Z', until = addDays(to, 2) + 'T00:00:00.000Z';
   return computeBilan({
-    member, from, to, matieres, cfgOf,
+    member, from, to, matieres, cfgOf, ctxOf,
     sessions: sessionsBetween(member.id, since, until),
     answers: answersBetween(member.id, since, until),
     mastery: (ex) => masteryRows(member.id, ex),

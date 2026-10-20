@@ -7,7 +7,7 @@
 // des clés, fournis par les définitions (exercises/).
 import type { Database } from 'better-sqlite3';
 import { Mastery, MasteryCfg, Result, replay } from './mastery';
-import type { Mode, Params } from './exercises/contract';
+import type { ContentList, Mode, Params } from './exercises/contract';
 
 let database: Database;
 export function initRevisionsRepo(db: Database): void { database = db; }
@@ -205,6 +205,34 @@ export function answersBetween(member: string, since: string, until: string): { 
 /** Les sessions d'un membre entre deux instants, dans l'ordre : la matière d'un bilan et de l'export. */
 export function sessionsBetween(member: string, since: string, until: string): SessionRow[] {
   return database.prepare('SELECT * FROM rev_sessions WHERE member_id = ? AND started_at >= ? AND started_at < ? ORDER BY started_at').all(member, since, until) as SessionRow[];
+}
+
+interface ContentRow { id: number; exercise_id: string; label: string; items_json: string; archived: number; }
+const listView = (r: ContentRow): ContentList => {
+  let items: string[] = [];
+  try { const v = JSON.parse(r.items_json); if (Array.isArray(v)) items = v.filter((x): x is string => typeof x === 'string'); } catch { /* liste abîmée : vide */ }
+  return { id: `foyer-${r.id}`, label: r.label, items, source: 'foyer', archived: !!r.archived };
+};
+/** Les listes du foyer d'un exercice, archivées comprises (marquées), les plus récentes d'abord. */
+export function foyerLists(exercise: string): ContentList[] {
+  return (database.prepare('SELECT * FROM rev_content WHERE exercise_id = ? ORDER BY archived, id DESC').all(exercise) as ContentRow[]).map(listView);
+}
+/** L'identifiant en base d'une liste du foyer (« foyer-12 » → 12), ou null. */
+export const foyerListId = (id: string): number | null => (/^foyer-\d+$/.test(id) ? Number(id.slice(6)) : null);
+export function foyerList(exercise: string, id: number): ContentList | null {
+  const r = database.prepare('SELECT * FROM rev_content WHERE id = ? AND exercise_id = ?').get(id, exercise) as ContentRow | undefined;
+  return r ? listView(r) : null;
+}
+export function createList(exercise: string, label: string, items: string[], by: string, now = new Date().toISOString()): ContentList {
+  const id = Number(database.prepare('INSERT INTO rev_content (exercise_id, label, items_json, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(exercise, label, JSON.stringify(items), by, now, now).lastInsertRowid);
+  return foyerList(exercise, id)!;
+}
+export function updateList(exercise: string, id: number, change: { label?: string; items?: string[]; archived?: boolean }, now = new Date().toISOString()): ContentList | null {
+  const cur = foyerList(exercise, id); if (!cur) return null;
+  database.prepare('UPDATE rev_content SET label = ?, items_json = ?, archived = ?, updated_at = ? WHERE id = ?')
+    .run(change.label ?? cur.label, JSON.stringify(change.items ?? cur.items), (change.archived ?? cur.archived) ? 1 : 0, now, id);
+  return foyerList(exercise, id);
 }
 
 /** Les membres qui ont des réponses : ce que balaie `revisions:recalcul --tous`. */
