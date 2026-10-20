@@ -142,8 +142,9 @@ l'application. Module éteint : les six outils disparaissent.
 
 ### Révisions
 
-Quand le module **Révisions** est actif (il l'est par défaut), cinq outils
-lisent le suivi des enfants et règlent leur programme. Ils ne connaissent
+Quand le module **Révisions** est actif (il l'est par défaut), huit outils
+lisent le suivi des enfants, règlent leur programme et gèrent les listes de la
+dictée. Ils ne connaissent
 aucun exercice en particulier : `revisions_exercices` dit à l'assistant quels
 exercices existent et quels paramètres il peut régler.
 
@@ -154,11 +155,14 @@ exercices existent et quels paramètres il peut régler.
 | `revisions_sessions` | Les sessions depuis `depuis` (défaut : 7 jours) : date, exercice, mode, réglages, bonnes, lentes, fausses |
 | `revisions_bilan` (adultes) | Le bilan d'une période (`semaine`, `semaine-derniere`, `mois`, `mois-dernier`) : par matière puis par exercice, réussite comparée à la période précédente, ce qui reste fragile |
 | `revisions_programme_definir` (écriture, adultes) | Règle le programme d'un enfant : `params` de l'exercice (ceux qui manquent gardent la valeur en cours), `questions`, `objectif_jour`, `secondes` (ou `null` pour le barème selon l'âge) ; `retirer: true` le retire sans rien effacer |
+| `revisions_listes` | Les listes d'un exercice à contenu (la dictée) : livrées et du foyer, archivées signalées, leurs premiers mots, et quels enfants les travaillent |
+| `revisions_liste_creer` (écriture, adultes) | Crée une liste du foyer (« la dictée de la semaine ») : `nom`, `mots` (une liste, ou un texte séparé par des virgules ou des retours à la ligne), mêmes règles qu'à l'écran. Pour qu'un enfant la travaille, ensuite `revisions_programme_definir` avec `params` { liste } |
+| `revisions_liste_modifier` (écriture, adultes) | Change le `nom` ou les `mots` d'une liste du foyer, ou l'archive (`archiver`) ; jamais d'effacement, et une liste livrée ne se modifie pas ici |
 
 **Un enfant ne voit que lui** : sa progression et ses sessions, ni bilan ni
 réglage ; demander ceux de son frère est refusé. Le PDF « Pour la maîtresse »
 ne sort pas par l'assistant : il se télécharge depuis l'écran. Module éteint :
-les cinq outils disparaissent.
+les huit outils disparaissent.
 
 ## Brancher chaque client
 

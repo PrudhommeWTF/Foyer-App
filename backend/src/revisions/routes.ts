@@ -26,6 +26,7 @@ import { Matiere, matiereLabel } from './matieres';
 import { addDays, bilanFor, mondayOf, parisDay as dayOf } from './bilan';
 import { bilanPdf, sessionsCsv } from './export';
 import { devoirsListOf, syncDayTasks, tickDayTask } from './devoirs';
+import { LIST_ITEMS_RULE, LIST_LABEL_RULE, cleanListItems, cleanListLabel } from './content';
 import {
   AnswerIn, ProgramRow, SessionRow, activeProgram, activePrograms, countedAnswers, itemHistory, masteryRows, programById,
   createList, foyerListId, recordSession, sessionsBetween, sessionsOf, setProgram, stopProgram, toMastery, updateList,
@@ -48,8 +49,6 @@ const iso = (v: unknown, what: string): string => {
 const params = (def: ExerciseDef, raw: unknown, ctx: ExerciseContext): Params => { try { return readParams(def, raw, ctx); } catch (e) { throw new Invalid((e as Error).message); } };
 /** Les paramètres d'un programme enregistré, ou les défauts s'ils ne se relisent plus (une liste de contenu disparue de la configuration). */
 const storedParams = (def: ExerciseDef, json: string, ctx: ExerciseContext): Params => { try { return readParams(def, JSON.parse(json), ctx); } catch { return defaults(def, ctx); } };
-/** Une liste de contenu reçue : un libellé, et des éléments non vides, sans doublon. */
-const MAX_ITEMS = 200;
 
 /** Les tâches du jour suivent le programme tout de suite ; un échec ne fait pas échouer l'enregistrement, le passage suivant rattrape. */
 const dayTasksNow = (): void => { try { syncDayTasks(); } catch (e) { log.erreur('Révisions : tâches du jour en échec', e); } };
@@ -306,14 +305,14 @@ export function revisionsRouter(getBareme: (exercise?: string) => Bareme, getMat
   const listBody = (body: Record<string, unknown>, partial: boolean): { label?: string; items?: string[] } => {
     const out: { label?: string; items?: string[] } = {};
     if (body['label'] !== undefined || !partial) {
-      const l = typeof body['label'] === 'string' ? body['label'].trim() : '';
-      if (!l || l.length > 60) throw new Invalid('Le nom de la liste : de 1 à 60 caractères.');
+      const l = cleanListLabel(body['label']);
+      if (l === null) throw new Invalid(LIST_LABEL_RULE);
       out.label = l;
     }
     if (body['items'] !== undefined || !partial) {
       if (!Array.isArray(body['items'])) throw new Invalid('Les éléments : une liste attendue.');
-      const items = [...new Set(body['items'].filter((x): x is string => typeof x === 'string').map((x) => x.normalize('NFC').trim().replace(/\s+/g, ' ')).filter(Boolean))];
-      if (!items.length || items.length > MAX_ITEMS || items.some((x) => x.length > 40)) throw new Invalid(`Les éléments : de 1 à ${MAX_ITEMS}, de 40 caractères au plus chacun.`);
+      const items = cleanListItems(body['items']);
+      if (items === null) throw new Invalid(LIST_ITEMS_RULE);
       out.items = items;
     }
     return out;
