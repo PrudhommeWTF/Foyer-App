@@ -23,6 +23,7 @@ Le socle (sessions, réponses, maîtrise, programmes, suivi, réception hors lig
 | `itemKey`, `itemLabel`, `text`, `groups` | la clé de maîtrise (« mult:6x7 », commutative pour les tables), l'item en clair, l'énoncé, les regroupements du suivi (« Table de 7 ») |
 | `ask`, `prerequisite` | facultatifs : l'énoncé de part et d'autre de la case de réponse (absent : le texte, « = », la case) ; l'item qu'il faut avoir **acquis** avant qu'un autre soit posé (le tirage l'applique, le serveur ne le refuse pas : c'est une progression, pas un droit) |
 | `check` | la correction, la même sur l'appareil et sur le serveur |
+| `choices` | facultatif : les réponses proposées d'une saisie `choix`, dans l'ordre de l'écran (obligatoire pour elle, vérifié par un test du registre) |
 | `clock`, `display` | facultatifs : l'heure que dessine un énoncé `horloge` (obligatoire pour lui, vérifié par un test du registre) ; la saisie telle qu'elle s'affiche pendant qu'on tape (« 745 » devient « 7 h 45 ») |
 | `learn`, `spoken`, `grid`, `summary` | le mode Apprendre (absent : pas de mode Apprendre), ce que lit la voix, la forme de la grille, le programme en une ligne |
 
@@ -58,6 +59,18 @@ La PR 6 devait dire si le contrat de la PR 4 tenait. Il ne tenait pas tout à fa
 
 Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `clavier`, l'énoncé `audio`, la vue `liste`, la capacité `voix`, et la table de contenu `rev_content`. Au passage, le serveur refuse désormais une question qui sort de l'univers des réglages de la session (une question de dictée hors de sa liste, un 2 × 3 dans une session des tables 6 à 9) : l'appareil ne peut plus inventer ses items.
 
+### Orthographe
+
+`orthographe`, français, dès 7 ans environ : une phrase à trou et des mots qui se prononcent pareil ; l'enfant **touche le bon** parmi deux à quatre grands boutons (les touches 1 à 4 d'un clavier marchent aussi).
+
+- **Le contenu** est une liste de phrases, **une ligne par phrase**, le trou entre accolades, le bon mot d'abord puis les pièges : « Il {a/à} un chat. », « C'{est/et} beau. ». Pas de virgule dans une phrase saisie à l'écran (il coupe aux virgules). Listes livrées dans `backend/config/revisions/orthographe/` (a ou à, et ou est, son ou sont, on ou ont, ou ou où, ces ou ses ; huit phrases chacune), et celles du foyer, saisies dans le suivi ou par l'assistant (`exercice: "orthographe"`). Une ligne qui n'a pas cette forme est ignorée.
+- **Un item** est une phrase ; la clé est la ligne entière, bon mot compris : le serveur refuse une question dont les mots ou le bon mot ne sont pas ceux de la liste. L'ordre des boutons est tiré à chaque question.
+- **La correction** : le bon mot, accents compris, majuscule indifférente.
+- **Le suivi** en liste, groupé par mots qui se confondent (« a / à », « on / ont », majuscule ou non). Le mode Apprendre montre les phrases justes.
+- **Le temps** : partie `exercices.orthographe` du barème (15 s à 8 ans, rapide sous 7 s).
+
+Ce que l'orthographe a demandé au socle : la saisie `choix`, **prévue au contrat depuis la PR 4** mais sans écran, et l'élément facultatif `choices` qui donne les boutons. Le lecteur l'affiche en grille de boutons ; le mot touché s'inscrit dans le trou de la phrase. Ni table, ni migration, ni route.
+
 ### Conjugaison
 
 `conjugaison`, français, dès 7 ans environ : « être (présent) : nous … », l'enfant écrit la forme au **clavier système**, comme pour la dictée.
@@ -68,7 +81,7 @@ Ce qui était prévu et n'a demandé aucune retouche du contrat : la saisie `cla
 - **Le suivi** en liste, groupé par verbe et temps (« être (présent) »). Le mode Apprendre déroule la liste, la voix lit chaque forme.
 - **Le temps** : partie `exercices.conjugaison` du barème (20 s à 8 ans, rapide sous 10 s).
 
-Rien n'a été ajouté au socle. Une conséquence : deux exercices ont désormais des listes, l'assistant doit donc préciser `exercice` pour en gérer une.
+Rien n'a été ajouté au socle. Une conséquence : plusieurs exercices ont désormais des listes (la dictée, la conjugaison, l'orthographe), l'assistant doit donc préciser `exercice` pour en gérer une.
 
 ### Soustractions
 

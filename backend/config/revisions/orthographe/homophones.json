@@ -1,0 +1,89 @@
+{
+  "_aide": "Listes livrées pour l'orthographe du module Révisions. Une ligne par phrase, le trou entre accolades : le bon mot d'abord, puis un à trois pièges séparés par « / », par exemple « Il {a/à} un chat. ». L'écran mélange l'ordre des boutons. Pour en ajouter ou en changer, déposez un fichier .json dans le dossier de données (FOYER_DATA_DIR/revisions/orthographe/) : au même nom il remplace celui-ci, sous un autre nom il s'ajoute. Un parent peut aussi saisir sa liste dans l'écran Révisions, au suivi de l'enfant (sans virgule : l'écran coupe les éléments aux virgules).",
+  "listes": [
+    {
+      "id": "a-a-accent",
+      "label": "a ou à",
+      "items": [
+        "Léa {a/à} un vélo rouge.",
+        "Nous allons {à/a} la piscine.",
+        "Mon frère {a/à} perdu sa clé.",
+        "Il est parti {à/a} midi.",
+        "Papa {a/à} faim ce soir.",
+        "Je joue {à/a} la balle.",
+        "Le chat {a/à} grimpé sur le toit.",
+        "Elle habite {à/a} Lyon."
+      ]
+    },
+    {
+      "id": "et-est",
+      "label": "et ou est",
+      "items": [
+        "Le ciel {est/et} bleu.",
+        "Paul {et/est} Léa jouent dehors.",
+        "Ma sœur {est/et} malade.",
+        "J'aime les pommes {et/est} les poires.",
+        "Où {est/et} mon cartable ?",
+        "Il {est/et} tard.",
+        "Le chien {et/est} le chat dorment.",
+        "La soupe {est/et} chaude."
+      ]
+    },
+    {
+      "id": "son-sont",
+      "label": "son ou sont",
+      "items": [
+        "Les enfants {sont/son} à l'école.",
+        "Il range {son/sont} cahier.",
+        "Mes amis {sont/son} gentils.",
+        "Elle cherche {son/sont} chat.",
+        "Les fleurs {sont/son} belles.",
+        "Tom mange {son/sont} goûter.",
+        "Où {sont/son} mes chaussures ?",
+        "Il lave {son/sont} vélo."
+      ]
+    },
+    {
+      "id": "on-ont",
+      "label": "on ou ont",
+      "items": [
+        "Les oiseaux {ont/on} faim.",
+        "{On/Ont} va au parc.",
+        "Mes parents {ont/on} une voiture.",
+        "{On/Ont} mange à midi.",
+        "Ils {ont/on} gagné le match.",
+        "Demain {on/ont} part en vacances.",
+        "Les filles {ont/on} un chat.",
+        "{On/Ont} chante une chanson."
+      ]
+    },
+    {
+      "id": "ou-ou-accent",
+      "label": "ou ou où",
+      "items": [
+        "Tu veux du lait {ou/où} du jus ?",
+        "{Où/Ou} habites-tu ?",
+        "Rouge {ou/où} vert ?",
+        "Je sais {où/ou} est la clé.",
+        "Viens demain {ou/où} lundi.",
+        "{Où/Ou} vas-tu ?",
+        "Une pomme {ou/où} une poire ?",
+        "La maison {où/ou} je vis est grande."
+      ]
+    },
+    {
+      "id": "ces-ses",
+      "label": "ces ou ses",
+      "items": [
+        "Il range {ses/ces} jouets dans sa chambre.",
+        "Regarde {ces/ses} nuages là-bas !",
+        "Elle a perdu {ses/ces} gants.",
+        "{Ces/Ses} fleurs sont jolies.",
+        "Le chat lèche {ses/ces} pattes.",
+        "Je voudrais {ces/ses} bonbons-là.",
+        "Paul prête {ses/ces} crayons.",
+        "Tu vois {ces/ses} oiseaux ?"
+      ]
+    }
+  ]
+}

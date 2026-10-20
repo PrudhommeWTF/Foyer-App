@@ -16,6 +16,7 @@ import { DICTEE } from '../src/revisions/exercises/dictee';
 import { HEURE } from '../src/revisions/exercises/heure';
 import { SOUSTRACTIONS } from '../src/revisions/exercises/soustractions';
 import { CONJUGAISON, readLine } from '../src/revisions/exercises/conjugaison';
+import { ORTHOGRAPHE, readLine as readPhrase } from '../src/revisions/exercises/orthographe';
 import { MasteryCfg, Result } from '../src/revisions/mastery';
 import { migrateRevisions } from '../src/revisions/schema';
 import {
@@ -45,6 +46,7 @@ describe('le registre', () => {
     for (const e of EXERCISES) {
       if (e.prompt === 'horloge') assert.equal(typeof e.clock, 'function', `${e.id} : un énoncé horloge déclare clock()`);
       if (e.view === 'grille') assert.equal(typeof e.grid, 'function', `${e.id} : une vue grille déclare grid()`);
+      if (e.input === 'choix') assert.equal(typeof e.choices, 'function', `${e.id} : une saisie choix déclare choices()`);
     }
   });
 
@@ -206,6 +208,51 @@ describe('l’exercice Soustractions', () => {
     assert.equal(SOUSTRACTIONS.spoken!({ a: 13, b: 7 }), '13 moins 7, 6');
     assert.equal(SOUSTRACTIONS.summary(p, NO_CONTEXT), 'Les soustractions, enlever 7');
     assert.equal(SOUSTRACTIONS.summary(readParams(SOUSTRACTIONS, {}), NO_CONTEXT), 'Les soustractions, enlever de 2 à 5');
+  });
+});
+
+describe('l’exercice Orthographe', () => {
+  const ctx: ExerciseContext = { lists: [
+    { id: 'semaine', label: 'a ou à', items: ['Il {a/à} un chat.', 'Nous allons {à/a} la piscine.', 'Où {est/et} le chat ?', 'pas de trou', 'Il {a/a} faim.', 'Il {a/à} un chat.'], source: 'foyer' },
+  ] };
+  const p = readParams(ORTHOGRAPHE, { liste: 'semaine' }, ctx);
+
+  it('une ligne par phrase : un trou, le bon mot d’abord, de un à trois pièges distincts', () => {
+    assert.deepEqual(readPhrase('Il {a/à} un chat.'), { before: 'Il', after: 'un chat.', options: ['a', 'à'] });
+    assert.deepEqual(readPhrase("C'{est/et/ai} beau."), { before: "C'", after: 'beau.', options: ['est', 'et', 'ai'] });
+    for (const bad of ['pas de trou', '{a/à}', 'Il {a} faim.', 'Il {a/a} faim.', 'Il {a/à} {a/à}.', 'Il {a/à/b/c/d} faim.']) assert.equal(readPhrase(bad), null, bad);
+    assert.deepEqual(ORTHOGRAPHE.universe(p, ctx), ['orth:Il {a/à} un chat.', 'orth:Nous allons {à/a} la piscine.', 'orth:Où {est/et} le chat ?']);
+    assert.equal(ORTHOGRAPHE.summary(p, ctx), 'La liste « a ou à » (3 phrases)');
+  });
+
+  it('la question : la phrase autour du trou, les boutons mélangés, le bon mot attendu', () => {
+    const q = ORTHOGRAPHE.question('orth:Nous allons {à/a} la piscine.', p, () => 0);
+    assert.deepEqual(ORTHOGRAPHE.ask!(q), { before: 'Nous allons', after: 'la piscine.' });
+    assert.deepEqual([...ORTHOGRAPHE.choices!(q)].sort(), ['a', 'à']);
+    assert.deepEqual(ORTHOGRAPHE.check(q, 'à'), { ok: true, expected: 'à' });
+    assert.equal(ORTHOGRAPHE.check(q, 'a').ok, false, 'l’accent compte');
+    assert.equal(ORTHOGRAPHE.text(q), 'Nous allons à la piscine.');
+    assert.equal(ORTHOGRAPHE.text(ORTHOGRAPHE.question('orth:Où {est/et} le chat ?', p, () => 0)), 'Où est le chat ?', 'l’espace français avant « ? »');
+    const ordres = new Set<string>(); const rand = seeded(5);
+    for (let i = 0; i < 20; i++) ordres.add(ORTHOGRAPHE.choices!(ORTHOGRAPHE.question('orth:Il {a/à} un chat.', p, rand)).join('/'));
+    assert.equal(ordres.size, 2, 'le bon mot n’est pas toujours le premier bouton');
+    assert.deepEqual(ORTHOGRAPHE.groups('orth:Il {a/à} un chat.', p, ctx), ['a / à']);
+    assert.deepEqual(ORTHOGRAPHE.groups('orth:{On/Ont} va au parc.', p, ctx), ['on / ont'], 'la majuscule ne fait pas un autre groupe');
+  });
+
+  it('une question relue n’entre dans l’univers que si elle est celle de la liste, bon mot compris', () => {
+    const u = new Set(ORTHOGRAPHE.universe(p, ctx));
+    const vraie = ORTHOGRAPHE.parse({ before: 'Il', after: 'un chat.', options: ['a', 'à'], shown: ['à', 'a'] }, p)!;
+    assert.ok(u.has(ORTHOGRAPHE.itemKey(vraie)));
+    const retournee = ORTHOGRAPHE.parse({ before: 'Il', after: 'un chat.', options: ['à', 'a'], shown: ['à', 'a'] }, p)!;
+    assert.ok(!u.has(ORTHOGRAPHE.itemKey(retournee)), 'un appareil ne fait pas du piège la bonne réponse');
+    assert.equal(ORTHOGRAPHE.parse({ before: 'Il', after: 'un chat.', options: ['a', 'à'], shown: ['a', 'b'] }, p), null, 'des boutons qui ne sont pas les mots');
+  });
+
+  it('les listes livrées se lisent toutes, phrase par phrase', () => {
+    const lists = shippedLists(path.join(os.tmpdir(), 'foyer-sans-surcharge'), 'orthographe');
+    assert.ok(lists.length >= 6);
+    for (const l of lists) assert.equal(l.items.filter((x) => !readPhrase(x)).length, 0, l.id);
   });
 });
 

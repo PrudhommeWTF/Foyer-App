@@ -83,7 +83,7 @@ describe('Révisions : outils d’assistant (MCP)', () => {
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', params: { tables: [2, 11] } }), /Refusé : « Tables travaillées » : de 0 à 10/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', questions: 3 }), /Refusé : `questions` entre 5 et 100/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Thomas', exercice: 'tables' }), /pour un enfant/);
-    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé' }), /Précisez `exercice` : tables, soustractions, heure, dictee, conjugaison/);
+    assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé' }), /Précisez `exercice` : tables, soustractions, heure, dictee, conjugaison, orthographe/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'chimie' }), /Exercice inconnu/);
     assert.match(await call(adulte, 'revisions_programme_definir', { enfant: 'Noé', exercice: 'tables', retirer: true }), /retiré\. Son historique reste/);
     assert.equal((await appel(ctx.base, 'GET', `/revisions/members/${NOE}/exercises/tables`, undefined, ctx.jetons.admin)).json.program, null);
@@ -111,7 +111,7 @@ describe('Révisions : outils d’assistant (MCP)', () => {
     assert.match(await call(adulte, 'revisions_liste_modifier', { exercice: 'dictee', id, mots: ['oiseau', 'aujourd’hui'] }), /modifiée : 2 mots/);
     assert.match(await call(adulte, 'revisions_liste_modifier', { exercice: 'dictee', id, archiver: true }), /archivée : 2 mots\. Elle reste lisible par le programme de Noé/);
     assert.match(await call(adulte, 'revisions_listes', { exercice: 'dictee' }), /archivée/);
-    assert.match(await call(adulte, 'revisions_listes'), /Précisez `exercice` : dictee, conjugaison/, 'deux exercices ont des listes');
+    assert.match(await call(adulte, 'revisions_listes'), /Précisez `exercice` : dictee, conjugaison, orthographe/, 'deux exercices ont des listes');
     assert.match(await call(adulte, 'revisions_liste_creer', { exercice: 'dictee', nom: '', mots: ['a'] }), /Refusé : Le nom de la liste/);
     assert.match(await call(adulte, 'revisions_liste_creer', { exercice: 'dictee', nom: 'Trop', mots: [] }), /Refusé : Les éléments : de 1 à 200/);
     assert.match(await call(adulte, 'revisions_liste_modifier', { exercice: 'dictee', id: 'invariables-ce1', nom: 'Moi' }), /liste livrée/);
