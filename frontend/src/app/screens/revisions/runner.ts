@@ -69,9 +69,11 @@ export function frenchVoice(): SpeechSynthesisVoice | null {
                 </div>
               }
               @default {
-                <div class="ask" #ask tabindex="-1" [attr.aria-label]="plan().def.spoken?.(q) ?? plan().def.text(q)">
-                  <span class="ops">{{ plan().def.text(q) }} =</span>
+                @let a = askOf(q);
+                <div class="ask" #ask tabindex="-1" [attr.aria-label]="plan().def.text(q)">
+                  @if (a.before) { <span class="ops">{{ a.before }}</span> }
                   @if (plan().def.input === 'pave') { <span class="ans" [class.empty]="!typed()" [class.ko]="fb()?.kind === 'faux'">{{ typed() || '?' }}</span> }
+                  @if (a.after) { <span class="ops">{{ a.after }}</span> }
                 </div>
               }
             }
@@ -181,8 +183,13 @@ export class RunnerComponent implements OnInit, OnDestroy {
 
   /** La bonne réponse telle que l'exercice l'affiche. */
   expectedOf(q: unknown): string { return this.plan().def.check(q, '').expected; }
-  /** Une ligne du mode Apprendre : « 7 × 3 = 21 », ou le mot seul quand l'énoncé est la réponse. */
-  rowOf(q: unknown): string { const t = this.plan().def.text(q), e = this.expectedOf(q); return t === e ? t : `${t} = ${e}`; }
+  /** L'énoncé autour de la case de réponse : « 6 × 7 = ? », « ? × 7 = 42 » ; par défaut, le texte suivi de « = ». */
+  askOf(q: unknown): { before: string; after: string } { return this.plan().def.ask?.(q) ?? { before: `${this.plan().def.text(q)} =`, after: '' }; }
+  /** Une ligne du mode Apprendre ou de la correction : « 7 × 3 = 21 », « 6 × 7 = 42 » pour un trou, ou le mot seul quand l'énoncé est la réponse. */
+  rowOf(q: unknown): string {
+    const t = this.plan().def.text(q), e = this.expectedOf(q), a = this.plan().def.ask?.(q);
+    return a ? `${a.before} ${e} ${a.after}`.trim() : t === e ? t : `${t} = ${e}`;
+  }
 
   /** Le clavier d'un Mac ou d'un clavier branché à l'iPad : chiffres, retour arrière, Entrée. */
   @HostListener('document:keydown', ['$event'])
