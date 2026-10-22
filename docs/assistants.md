@@ -114,8 +114,11 @@ ambigu, l'outil rend les candidats au lieu de deviner. Exemple à la voix :
 
 Ce que l'assistant **ne peut pas** faire, quelle que soit la portée : les
 **Finances** (lecture comme écriture), les **réglages**, et la **gestion des
-comptes** et de la sécurité. Il ne peut pas **terminer une tâche récurrente** (une série se coche dans l'app, qui calcule la
-prochaine échéance). Les **suppressions** sont possibles, listes entières
+comptes** et de la sécurité. Une **tâche récurrente** se termine comme dans
+l'app : `tache_terminer` solde l'occurrence en cours, calcule la suivante avec le
+même moteur (`tasks/recurrence.ts`, copie de celui du navigateur), remet les
+sous-tâches à faire, et dit la prochaine échéance (ou que la série s'arrête là).
+Les **suppressions** sont possibles, listes entières
 comprises, exactement comme dans l'app : à manier avec le même soin. Chaque
 écriture est **attribuée** au membre, et le fil d'activité de l'accueil affiche
 « (via un assistant) ».
@@ -265,6 +268,7 @@ un assistant ».
 - « J'ai fini mes exercices de maths, coche-les. » (jeton de l'enfant)
 - « J'ai testé l'alarme ce matin. » (module Entretien : noté par vous, via l'assistant)
 - « Qu'est-ce qu'il y a à faire dans la maison cette semaine ? »
+- « J'ai sorti les poubelles. » (une tâche qui revient chaque semaine : la suivante est posée, l'assistant dit laquelle)
 - « J'ai racheté 6 cartouches Brita. »
 - « Mets le pH de la piscine en pause jusqu'au 15 avril. »
 - « Le lave-vaisselle fuit depuis ce matin. » (adulte : panne notée, fiche « en panne »)
@@ -278,7 +282,7 @@ un assistant ».
 - « Mets la dictée de Raphaël sur les mots invariables du CE2, 10 mots par session. » (adulte ; la liste de la semaine, elle, se saisit dans l'écran)
 
 Et ce à quoi il répondra qu'il ne peut pas : toucher aux finances, changer un
-réglage, terminer une tâche récurrente, ou supprimer quelque chose. Le suivi de
+réglage, ou supprimer quelque chose. Le suivi de
 l'**employé à domicile** n'existe pas non plus pour un enfant : ses outils lui
 sont invisibles et refusés. Un enfant qui demande les devoirs ou les notes de
 son frère reçoit un refus.

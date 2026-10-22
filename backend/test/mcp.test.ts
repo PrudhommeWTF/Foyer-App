@@ -142,16 +142,33 @@ describe('Serveur MCP', () => {
     assert.match(textOf(res), /inconnu ou non autorisé/i);
   });
 
-  it('tache_terminer refuse une série et renvoie vers l’app', async () => {
-    // Une tâche récurrente, créée par le chemin normal (opérations de tâches).
+  it('tache_terminer solde l’occurrence d’une série et passe à la suivante, comme l’application', async () => {
+    // Une tâche récurrente, créée par le chemin normal (opérations de tâches), avec une sous-tâche faite.
+    const tache = async (id: string) => ((await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.tasks as { id: string; due: string | null; done: boolean; history?: { by: string | null }[] }[]).find((t) => t.id === id)!;
     const lists = (await appel(ctx.base, 'GET', '/state', undefined, ctx.jetons.membre)).json.state.taskLists as { id: string; kind: string }[];
     const listId = (lists.find((l) => l.kind === 'taches') || lists[0]).id;
-    await appel(ctx.base, 'POST', '/tasks/ops', { ops: [{ op: 'add', opId: 'serie1', id: 'tserie', listId, text: 'Sortir les poubelles', due: '2026-01-06', rec: { freq: 'weekly', every: 1, base: 'due' } }] }, ctx.jetons.membre);
+    const due = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    await appel(ctx.base, 'POST', '/tasks/ops', { ops: [
+      { op: 'add', opId: 'serie1', id: 'tserie', listId, text: 'Sortir les poubelles', due, rec: { freq: 'weekly', every: 1, base: 'due' } },
+      { op: 'add', opId: 'serie2', id: 'tsous', listId, parentId: 'tserie', text: 'Bac jaune' },
+      { op: 'done', opId: 'serie3', id: 'tsous' },
+      { op: 'add', opId: 'serie4', id: 'tfin', listId, text: 'Dernier relevé', due, rec: { freq: 'weekly', every: 1, base: 'due', until: due } },
+    ] }, ctx.jetons.membre);
 
     const c = await connect(tokenWrite);
     const out = textOf(await c.callTool({ name: 'tache_terminer', arguments: { id: 'tserie' } }));
+    const fin = textOf(await c.callTool({ name: 'tache_terminer', arguments: { id: 'tfin' } }));
     await c.close();
-    assert.match(out, /revient régulièrement/);
+    const t = await tache('tserie');
+    const attendu = new Date(Date.parse(due) + 7 * 86400000).toISOString().slice(0, 10);
+    assert.equal(t.due, attendu, 'la semaine suivante, comme l’aurait calculé l’application');
+    assert.equal(t.done, false);
+    assert.equal(t.history?.length, 1);
+    assert.match(out, new RegExp(`Prochaine échéance le ${attendu.slice(8, 10)}/${attendu.slice(5, 7)}`));
+    assert.match(out, /sous-tâche est à refaire/);
+    assert.equal((await tache('tsous')).done, false, 'la sous-tâche repart à faire');
+    assert.match(fin, /la série s’arrête là/);
+    assert.equal((await tache('tfin')).done, true);
   });
 
   it('evenement_creer ajoute l’événement, attribué au membre', async () => {

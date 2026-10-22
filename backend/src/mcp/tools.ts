@@ -16,6 +16,7 @@ import { applyTaskOps, preserveTasks } from '../tasks/repo';
 import { applyPlaceOps } from '../places/repo';
 import { TaskItem } from '../tasks/ops';
 import { byOrd, orderedOf } from '../tasks/ordering';
+import { nextOccurrence } from '../tasks/recurrence';
 import { FALLBACK_AISLE_NAMES, isFallbackAisleName } from '../shopping/ops';
 import { matchAisle, nearestAisleNames, rayonFailureNote } from '../shopping/aisle-match';
 import { addDaysIso, publishedSlotOccurrences } from '../schedule';
@@ -493,10 +494,34 @@ export function tacheTerminer(ctx: McpCtx, id: string): string {
   const s = state();
   const t = (s.tasks || []).find((x) => x.id === id);
   if (!t) return 'Tâche introuvable.';
-  if (t.rec) return 'Cette tâche revient régulièrement ; cochez-la dans Foyer, qui calcule la prochaine échéance.';
   if (t.done) return 'Cette tâche est déjà terminée.';
-  applyTaskOps([{ op: 'done', opId: genId('op'), id, by: ctx.memberId, via: ctx.via, at: new Date().toISOString() }]);
-  return `Tâche « ${t.text} » marquée terminée.`;
+  const at = new Date().toISOString();
+  if (!t.rec) {
+    applyTaskOps([{ op: 'done', opId: genId('op'), id, by: ctx.memberId, via: ctx.via, at }]);
+    return `Tâche « ${t.text} » marquée terminée.`;
+  }
+  // Une série : la coche solde l'occurrence en cours et la suivante est
+  // calculée ici, par le même moteur que l'application (tasks/recurrence.ts,
+  // copie de celui du navigateur). Un geste d'entretien passe par la même
+  // opération, que le serveur complète lui-même (date suivante, stock).
+  const geste = (s.taskLists || []).find((l) => l.id === t.listId)?.kind === 'entretien';
+  if (!t.due && !geste) return 'Cette série n’a pas d’échéance en cours : rien à solder.';
+  const today = todayParis();
+  const next = geste ? undefined : nextOccurrence(t.rec, t.due!, today);
+  // Comme dans l'application : une série qui avance repart avec ses sous-tâches à refaire.
+  const remises = next ? (s.tasks || []).filter((x) => x.parentId === id && x.done) : [];
+  const r = applyTaskOps([
+    { op: 'done', opId: genId('op'), id, occ: t.due || '', ...(geste ? {} : { next }), by: ctx.memberId, via: ctx.via, at },
+    ...remises.map((x) => ({ op: 'reopen', opId: genId('op'), id: x.id, at })),
+  ]);
+  if (r.skipped.length) return r.skipped[0].reason;
+  const after = (state().tasks || []).find((x) => x.id === id);
+  if (!after || (after.due === t.due && !after.done && (after.history?.length || 0) === (t.history?.length || 0))) {
+    return `« ${t.text} » était déjà noté : rien de plus.`;
+  }
+  if (after.done) return `Tâche « ${t.text} » faite : la série s’arrête là.`;
+  return `Tâche « ${t.text} » faite. Prochaine échéance le ${frDate(after.due!, after.due!.slice(0, 4) !== today.slice(0, 4))}.`
+    + (remises.length ? ` Ses ${remises.length > 1 ? remises.length + ' sous-tâches sont' : 'sous-tâche est'} à refaire.` : '');
 }
 
 /**

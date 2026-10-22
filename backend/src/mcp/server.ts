@@ -154,7 +154,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'tache_terminer',
     write: true,
-    description: 'Marque une tâche terminée (uniquement une tâche sans série).',
+    description: 'Marque une tâche terminée. Pour une tâche qui revient (sortir les poubelles chaque mardi), solde l’occurrence en cours et passe à la suivante, calculée comme dans l’application ; la réponse donne la prochaine échéance.',
     inputSchema: { type: 'object', properties: { id: S.string(80) }, required: ['id'] },
     run: (ctx, a) => t.tacheTerminer(ctx, str(a.id) || ''),
   },
