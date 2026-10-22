@@ -137,6 +137,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'affichage', group: 'moi', label: 'Apparence', desc: 'Comment l’application se présente à vous. Le thème est propre à chaque appareil.' },
   { id: 'notifications', group: 'moi', label: 'Notifications et rappels', desc: 'Ce qui vous interpelle, dans l’application et sur le téléphone.' },
   { id: 'membres', group: 'cercle', label: 'Membres et accès', desc: 'Le nom du foyer, ses membres, et qui peut se connecter.' },
+  { id: 'pieces', group: 'cercle', label: 'Pièces de la maison', desc: 'Une seule liste pour tout le foyer : Entretien y range ses gestes, Équipements ses appareils. Supprimer une pièce ne supprime rien de ce qu’elle contient.' },
   { id: 'calendriers', group: 'cercle', label: 'Calendriers de référence', desc: 'Vacances scolaires et partage de l’agenda. Plusieurs modules en dépendent.' },
   { id: 'modules', group: 'cercle', label: 'Modules actifs', desc: 'Activer ou désactiver des pans entiers de l’application. Un module éteint disparaît partout et ses accès sont fermés, sans que ses données soient supprimées.' },
   { id: 'repas', group: 'modules', label: 'Repas et cuisine', desc: 'Planning des repas, suggestions et génération des courses.' },
