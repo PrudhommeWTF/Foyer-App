@@ -11,7 +11,8 @@ import {
 import { WARRANTY_TONE, fmtCents } from '../../core/equipements';
 import { frDate } from '../../core/warranty';
 import { TaskItem } from '../../core/models';
-import { nextLabel } from '../../core/entretien';
+import { CatalogueEntry, GesteSuggestion, bulkReady, freqLabel, nextLabel, suggestionsFor } from '../../core/entretien';
+import { GesteForm } from '../entretien/geste-form';
 import { EntretienApi } from '../../core/entretien.api';
 import { fmtEurosInt } from '../../core/finances.store';
 import { lastDoneDay } from '../../core/task-ops';
@@ -26,7 +27,7 @@ import { lastDoneDay } from '../../core/task-ops';
   selector: 'app-equipment-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent],
+  imports: [FormsModule, IconComponent, GesteForm],
   template: `
     @let it = item();
     @let d = detail();
@@ -104,6 +105,22 @@ import { lastDoneDay } from '../../core/task-ops';
       </ul>
     }
 
+    @if (suggestions().length) {
+      <!-- Ce que le catalogue d'Entretien prévoit pour cet appareil, d'après son nom : un tap l'ajoute, rattaché à lui. -->
+      <div class="overline">Entretien proposé</div>
+      <ul class="gestes">
+        @for (s of suggestions(); track s.entry.id) {
+          <li>
+            <div class="g-name static">{{ s.entry.titre }}<span>{{ s.existing ? 'Déjà dans vos gestes, sans appareil' : freq(s.entry) }}</span></div>
+            @if (s.existing) { <button class="g-add" (click)="foyer.linkGeste(s.existing.id, item().id, item().roomId)">Rattacher</button> }
+            @else if (bulkReady(s.entry)) { <button class="g-add" (click)="foyer.addGesteFor(s.entry, item().id, item().roomId)">Ajouter</button> }
+            @else { <button class="g-add" (click)="preset.set(s.entry)">Choisir la date</button> }
+          </li>
+        }
+      </ul>
+    }
+    @if (preset(); as p) { <app-geste-form [preset]="{ entry: p, equipmentId: item().id, roomId: item().roomId }" (close)="preset.set(null)" /> }
+
     <div class="overline">Historique</div>
     @if (eqp.canEdit()) {
       <div class="evt-form">
@@ -170,6 +187,8 @@ import { lastDoneDay } from '../../core/task-ops';
     .g-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; border: none; background: none; padding: 0; text-align: left; font: inherit; font-size: 13.5px; font-weight: 800; color: var(--ink); cursor: pointer; }
     .g-name span { font-size: 12px; font-weight: 700; color: var(--ink3); }
     .g-fait { flex: none; border: none; border-radius: 10px; padding: 8px 11px; min-height: 36px; font: inherit; font-size: 12.5px; font-weight: 800; background: var(--sage); color: #fff; cursor: pointer; }
+    .g-name.static { cursor: default; }
+    .g-add { flex: none; border: 1px solid var(--line2); border-radius: 10px; padding: 7px 11px; min-height: 34px; background: var(--surface); font: inherit; font-size: 12.5px; font-weight: 800; color: var(--ink); cursor: pointer; }
     .g-ok { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 800; color: var(--sage); }
   `],
 })
@@ -201,6 +220,19 @@ export class EquipmentView {
   readonly sending = signal(false);
   /** Ses gestes d'entretien, quand le module Entretien est allumé. */
   readonly gestes = computed(() => (this.foyer.modEntretien() ? this.foyer.gestesOf(this.item().id) : []));
+  /**
+   * Les gestes du catalogue qui concernent cet appareil, pour un adulte, quand
+   * Entretien est allumé et l'appareil encore là (en service ou en panne).
+   */
+  readonly suggestions = computed<GesteSuggestion[]>(() => {
+    const it = this.item(), c = this.entApi.catalogue();
+    if (!c || this.foyer.isChild() || !this.foyer.modEntretien() || it.archivedAt || (it.status !== 'en_service' && it.status !== 'en_panne')) return [];
+    return suggestionsFor(it.name, it.id, c, this.foyer.gestes());
+  });
+  readonly bulkReady = bulkReady;
+  /** Un geste à date fixe sans fenêtre (la chaudière) : sa fiche s'ouvre pour choisir la date. */
+  readonly preset = signal<CatalogueEntry | null>(null);
+  freq(e: CatalogueEntry): string { const f = freqLabel({ freq: e.rec.freq, every: e.rec.every, base: e.rec.base }); return f.charAt(0).toUpperCase() + f.slice(1); }
   gesteNext(t: TaskItem): string { return t.done ? 'Archivé' : nextLabel(t, this.foyer.todayStr(), frDate) || (t.history?.length ? '' : 'Pas encore noté'); }
   doneToday(t: TaskItem): boolean { return lastDoneDay(t) === this.foyer.todayStr(); }
 
@@ -212,6 +244,8 @@ export class EquipmentView {
   constructor() {
     // Le détail (pièces jointes, historique) se lit à l'ouverture de la fiche.
     effect(() => { void this.eqp.loadDetail(this.item().id); });
+    // Le catalogue d'Entretien, pour proposer les gestes de l'appareil (lu une fois par session).
+    effect(() => { if (!this.foyer.isChild() && this.foyer.modEntretien()) void this.entApi.charger(); });
   }
 
   url(a: EqpAttachment): string { return this.eqp.attachmentUrl(a.id); }

@@ -193,6 +193,8 @@ export interface CatalogueEntry {
   /** `season` : la saison d'un geste répété, ou la fenêtre annuelle d'un geste à date fixe. */
   rec: { freq: TaskRec['freq']; every: number; base: 'due' | 'done'; grace?: number; season?: Season };
   article?: { nom: string; unite: string; use: number; seuil: number };
+  /** Les appareils que le geste concerne, par des mots de leur nom (voir backend entretien/catalogue.ts). */
+  appareils?: string[];
 }
 export interface Catalogue { gestes: CatalogueEntry[]; }
 
@@ -232,6 +234,33 @@ export function catalogueByFamily(c: Catalogue, query: string): { famille: strin
     if (q && !norm(g.titre + ' ' + g.famille + ' ' + (g.article?.nom || '')).includes(q)) continue;
     const f = out.find((x) => x.famille === g.famille) ?? (out.push({ famille: g.famille, gestes: [] }), out[out.length - 1]);
     f.gestes.push(g);
+  }
+  return out;
+}
+
+/** Un nom réduit pour comparer : casse, accents, tirets et apostrophes ignorés. */
+const loose = (s: string): string => ` ${s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim()} `;
+
+/** Un geste du catalogue proposé sur la fiche d'un appareil, et le geste du foyer déjà là qu'il suffirait d'y rattacher. */
+export interface GesteSuggestion { entry: CatalogueEntry; existing?: TaskItem; }
+
+/**
+ * Les gestes du catalogue qui concernent un appareil, d'après son nom : un
+ * mot de `appareils` qu'on y trouve en entier (« lave-vaisselle » dans
+ * « Lave-vaisselle Bosch », pas « clim » dans « Climat »). Un geste déjà
+ * rattaché à cet appareil n'est plus proposé ; un geste du foyer de même
+ * modèle, rattaché à aucun appareil, est proposé au rattachement plutôt
+ * qu'en double.
+ */
+export function suggestionsFor(name: string, equipmentId: number, c: Catalogue, gestes: TaskItem[]): GesteSuggestion[] {
+  const n = loose(name);
+  const out: GesteSuggestion[] = [];
+  for (const e of c.gestes) {
+    if (!e.appareils?.some((w) => loose(w).trim() && n.includes(loose(w)))) continue;
+    const same = gestes.filter((t) => !t.done && t.maintenance?.catalogId === e.id);
+    if (same.some((t) => t.maintenance?.equipmentId === equipmentId)) continue;
+    const free = same.find((t) => !t.maintenance?.equipmentId);
+    out.push(free ? { entry: e, existing: free } : { entry: e });
   }
   return out;
 }

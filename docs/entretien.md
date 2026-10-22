@@ -165,7 +165,9 @@ geste choisi est une copie modifiable. Livré dans
 
 Chaque entrée : `id`, `titre`, `howto`, `famille` (regroupe la liste de choix),
 `piece` (suggérée), `rec` (`freq`, `every`, `base`, `grace`, `season`), et
-`article` éventuel (`nom`, `unite`, `use`, `seuil`). `season`
+`article` éventuel (`nom`, `unite`, `use`, `seuil`), et `appareils` éventuel :
+les mots du nom d'un équipement qui font proposer le geste sur sa fiche
+(`["lave-vaisselle"]`, au plus 12 mots de 40 caractères). `season`
 (`{ "from": "05-01", "to": "09-30" }`) est la saison d'un geste répété
 (`base: "done"`), ou la **fenêtre** d'un geste à date fixe (`base: "due"`) :
 à la création, elle devient la prochaine échéance (la fenêtre qui court, sinon
@@ -248,6 +250,23 @@ l'appareil, qui ouvre sa fiche (notice, numéro de série) ; le segment **Par
 gestes avec leur prochaine date et **Fait aujourd'hui**. Quand un appareil passe
 « remplacé », « donné ou vendu » ou « jeté », Foyer propose d'archiver ses
 gestes en cours (jamais d'office, une annulation pour tous).
+
+**Entretien proposé.** La fiche d'un appareil (pour un adulte, Entretien
+allumé, appareil en service ou en panne) propose les gestes du catalogue qui le
+concernent, reconnus à un mot de son nom (clé `appareils` du catalogue : un
+« Lave-vaisselle Bosch » se voit proposer le filtre, le sel et le joint) :
+
+- **Ajouter** crée le geste tel que le catalogue le propose, rattaché à
+  l'appareil et rangé dans sa pièce, « Pas encore noté » ;
+- **Rattacher**, quand le même geste existe déjà sans appareil : il est
+  rattaché, pas recréé (annulable) ;
+- **Choisir la date**, pour une date fixe sans fenêtre (la chaudière) : sa fiche
+  s'ouvre, déjà remplie et rattachée, pour la date de la visite.
+
+Un geste déjà rattaché à l'appareil n'est plus proposé. La reconnaissance se
+fait par mots entiers, casse, accents et tirets ignorés (« clim » ne se trouve
+pas dans « Climat ») ; un nom sans mot connu ne reçoit aucune proposition, et la
+surcharge du catalogue peut ajouter les siens (« robot aspirateur »).
 
 ## L'assistant
 

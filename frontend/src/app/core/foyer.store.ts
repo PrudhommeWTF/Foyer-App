@@ -2101,6 +2101,22 @@ export class FoyerStore {
   }
   /** Les gestes rattachés à un appareil du module Équipements. */
   gestesOf(equipmentId: number): TaskItem[] { return this.gestes().filter((t) => t.maintenance?.equipmentId === equipmentId); }
+  /**
+   * Crée, depuis la fiche d'un appareil, un geste du catalogue qui le concerne :
+   * rattaché à lui et rangé dans sa pièce (sinon celle que propose le
+   * catalogue), « Pas encore noté » ou à sa fenêtre de l'année.
+   */
+  addGesteFor(entry: CatalogueEntry, equipmentId: number, roomId: string | null): void {
+    const today = this.todayStr();
+    const room = roomId ?? (entry.piece ? this.ensureRoom(entry.piece) : null);
+    this.pushTaskOps([createOp({ ...draftFromCatalogue(entry, today, room), equipmentId }, uid('t'), today)]);
+    this.toast('Geste ajouté à l’entretien');
+  }
+  /** Rattache un geste déjà noté à un appareil (et à sa pièce s'il n'en a pas). Annulable. */
+  linkGeste(id: string, equipmentId: number, roomId: string | null): void {
+    const t = this.task(id); if (!t) return;
+    this.taskOpsWithUndo([{ op: 'edit', id, maintenance: { equipmentId, ...(roomId && !t.maintenance?.roomId ? { roomId } : {}) } }], 'Geste rattaché à l’appareil');
+  }
 
   /** Archiver : la série s'arrête sans réalisation, son historique reste. Réactiver : elle repart d'aujourd'hui. */
   archiveGeste(id: string, archive: boolean): void {

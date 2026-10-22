@@ -25,6 +25,7 @@ Menu, groupe « Le foyer », **Équipements**.
 - en tête la pastille de garantie et son explication (« 24 mois à partir du 12/03/2025, règle par défaut. »), puis le statut s'il n'est pas « en service » ;
 - pièce, catégorie, marque et modèle, **numéro de série avec un bouton Copier**, date et prix d'achat, vendeur, état à l'achat ;
 - les **pièces jointes** en vignettes (un tap ouvre la photo ou le PDF) et quatre boutons : « Photo de la plaque » (ouvre directement l'appareil photo sur iPhone), « Facture », « Notice », « Photo » ;
+- avec le module Entretien, ses **gestes d'entretien** (prochaine date, « Fait aujourd'hui ») et l'**Entretien proposé** : les gestes du catalogue qui concernent l'appareil d'après son nom, qu'un tap ajoute rattachés à lui (adultes ; voir `docs/entretien.md`, « Avec Équipements ») ;
 - l'**historique** : noter une panne, un appel au SAV, une réparation (avec son coût) sans passer en modification ;
 - « Archiver » et « Modifier » en bas. En modification, la pastille de garantie se recalcule pendant qu'on tape, avec la même fonction que le serveur.
 
