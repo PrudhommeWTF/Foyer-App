@@ -9,7 +9,7 @@
 import type { Database } from 'better-sqlite3';
 import { Migration, runMigrations } from '../storage/migrate';
 
-export const ENT_SCHEMA_VERSION = 1;
+export const ENT_SCHEMA_VERSION = 2;
 
 const MIGRATIONS: Migration[] = [
   {
@@ -43,6 +43,29 @@ const MIGRATIONS: Migration[] = [
           UNIQUE (task_id, done_at)
         );
         CREATE INDEX ent_spend_day ON ent_spend(day);
+      `);
+    },
+  },
+  {
+    version: 2,
+    label: 'notes des réalisations',
+    up: (db) => {
+      db.exec(`
+        -- La note d'une réalisation (« conduit propre, rien à signaler »),
+        -- ajoutée après coup. Une réalisation est désignée comme dans
+        -- ent_spend. Les justificatifs (attestation, certificat) sont des
+        -- fichiers de hh_attachments, genre « maintenance » : voir
+        -- realisations.ts. Une ligne survit à l'annulation de sa réalisation :
+        -- on ne perd pas une attestation sur un « Annuler ».
+        CREATE TABLE ent_done_notes (
+          task_id TEXT NOT NULL,
+          done_at TEXT NOT NULL,
+          day TEXT NOT NULL,
+          note TEXT NOT NULL,
+          updated_by TEXT,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (task_id, done_at)
+        );
       `);
     },
   },

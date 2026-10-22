@@ -260,7 +260,7 @@ const TEXT_MAX = 300;
 const NOTE_MAX = 2000;
 const CAT_MAX = 40;
 const FREQS = ['daily', 'weekly', 'monthly', 'yearly'];
-const HISTORY_MAX = 200;
+export const HISTORY_MAX = 200;
 const HOWTO_MAX = 2000;
 const STOCK_MAX = 9999;
 

@@ -31,10 +31,15 @@ export function initFiles(db: Database): void {
  * vérifient à chaque requête que le module est actif et que le membre a le
  * droit de voir cette pièce (un enfant ne voit ni facture ni plaque). La route
  * générique, qui sert tout fichier à tout membre, les ignore.
+ *
+ * `maintenance` est gardé de la même façon : les justificatifs d'une
+ * réalisation d'entretien (attestation de la chaudière, certificat de
+ * ramonage), servis par le module Entretien aux seuls adultes. Le propriétaire
+ * est la réalisation, `<geste>@<instant>` (voir entretien/realisations.ts).
  */
-export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment';
+export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment' | 'maintenance';
 export const OWNER_KINDS: OwnerKind[] = ['recipe', 'shop'];
-export const GUARDED_KINDS: OwnerKind[] = ['equipment'];
+export const GUARDED_KINDS: OwnerKind[] = ['equipment', 'maintenance'];
 
 export interface StoredFile {
   id: number;

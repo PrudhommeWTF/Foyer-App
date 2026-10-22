@@ -20,8 +20,7 @@ import { CONDITIONS, Warranty, WarrantyRules, WarrantyState, computeWarranty, is
 import { AuthedRequest, currentMember } from '../auth/session';
 import { effectiveSetting } from '../settings/repo';
 import { contentDisposition } from '../headers';
-import { detectType } from '../storage/blobs';
-import { imageSize } from '../storage/image-size';
+import { checkUpload } from '../storage/upload-check';
 import * as files from '../storage/files';
 import { log } from '../log';
 import { getHousehold } from '../db';
@@ -48,8 +47,6 @@ export const rules = (): WarrantyRules => ({
   alertDays: Number(effectiveSetting('eqpGarantieAlerteJours')),
 });
 
-/** Plus grand côté accepté pour une photo. L'application réduit avant l'envoi ; le serveur vérifie. */
-export const MAX_IMAGE_SIDE = 2000;
 /**
  * Plafond d'un fichier. Pas de réglage foyer ici : celui des photos de recettes
  * vit dans la section Repas, qui disparaît avec son module. Une photo réduite
@@ -60,7 +57,6 @@ const MAX_UPLOAD = '20mb';
 const CHILD_KINDS: readonly repo.AttachmentKind[] = ['notice', 'photo'];
 /** Une plaque ou une photo est une image ; une facture ou une notice peut être un PDF. */
 const PDF_KINDS: readonly repo.AttachmentKind[] = ['facture', 'notice', 'autre'];
-const PHOTO_MIMES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 
 // ---- saisie ---------------------------------------------------------------
 
@@ -320,29 +316,11 @@ export function equipementsRouter(requireAdmin: Guard): Router {
     const itemId = id(req.params['id'], 'id');
     const it = repo.getItem(itemId); if (!it) { res.status(404).json({ error: 'Équipement introuvable.' }); return; }
     const kind = oneOf(req.query['kind'], repo.ATTACHMENT_KINDS, 'kind');
-    const buf = req.body as Buffer;
-    if (!Buffer.isBuffer(buf) || !buf.length) fail('Aucun fichier reçu. Envoyez le contenu brut du fichier dans le corps de la requête.');
-    const type = detectType(buf);
-    if (type?.mime === 'image/heic') {
-      res.status(415).json({ error: 'Photo HEIC non acceptée : ouvrez-la dans Aperçu (Fichier > Exporter, format JPEG) ou prenez-la depuis Foyer sur l’iPhone, qui l’envoie en JPEG.' });
-      return;
-    }
-    const pdfOk = PDF_KINDS.includes(kind);
-    const ok = !!type && (PHOTO_MIMES.includes(type.mime) || (pdfOk && type.mime === 'application/pdf'));
-    if (!ok) {
-      res.status(415).json({ error: `Format non pris en charge. Formats acceptés : JPEG, PNG ou WEBP${pdfOk ? ', ou PDF' : ''}. Le type est reconnu d’après le contenu du fichier.` });
-      return;
-    }
-    if (type!.mime !== 'application/pdf') {
-      const size = imageSize(buf, type!.mime);
-      if (!size) { res.status(415).json({ error: 'Image illisible : son en-tête ne donne pas ses dimensions.' }); return; }
-      if (Math.max(size.width, size.height) > MAX_IMAGE_SIDE) {
-        res.status(422).json({ error: `Photo de ${size.width} × ${size.height} px : Foyer n’accepte que des photos réduites à ${MAX_IMAGE_SIDE} px de côté. L’application les réduit d’elle-même ; si vous envoyez par l’API, réduisez-la d’abord.` });
-        return;
-      }
-    }
+    const check = checkUpload(req.body, PDF_KINDS.includes(kind));
+    if (!check.ok) { res.status(check.status).json({ error: check.error }); return; }
+    const buf = req.body as Buffer, type = check.type;
     const name = String(req.query['filename'] || kind).slice(0, 200);
-    const { file, deduplicated } = files.storeOnce('equipment', 'eqp', name, buf, type!);
+    const { file, deduplicated } = files.storeOnce('equipment', 'eqp', name, buf, type);
     const { attachment, existed } = repo.attach(itemId, kind, file.id, text(req.query['label'], 'label', 120), author(req));
     log.info(`Équipements : ${kind} « ${name} » jointe à « ${it.name} » par ${who(req)}${deduplicated ? ' (fichier déjà connu, non dupliqué)' : ''}.`);
     res.status(existed ? 200 : 201).json({ attachment, deduplicated, item: detailView(itemId, false) });

@@ -6,7 +6,7 @@
 // dans task-ops.ts. Ce fichier range les gestes en groupes et les dit en
 // français.
 import { addDaysIso } from './helpers';
-import { MaintenanceStock, Remind, TaskItem, TaskRec } from './models';
+import { MaintenanceStock, Remind, TaskDone, TaskItem, TaskRec } from './models';
 import { Season, inSeason, seasonLabel, seasonStart, seasonWindow, windowEnd } from './recurrence';
 import { TaskOpDraft, parisDay } from './task-ops';
 
@@ -227,3 +227,28 @@ export function catalogueByFamily(c: Catalogue, query: string): { famille: strin
   }
   return out;
 }
+
+/** Ce que le serveur garde d'historique par tâche (backend tasks/ops.ts) : au-delà, les plus anciennes sortent. */
+export const HISTORY_MAX = 200;
+
+/** Une ligne de l'historique d'un geste, avec ce qu'on y a ajouté (note, justificatifs). */
+export interface RealisationRow<E> { at: string; done?: TaskDone; extras?: E; cancelled: boolean; }
+
+/**
+ * L'historique d'un geste, le plus récent d'abord : ses réalisations, plus
+ * celles qui portent une note ou un justificatif sans être (ou plus) dans
+ * l'historique. Celles-là sont des réalisations **annulées**, gardées pour ne
+ * pas perdre une attestation sur un « Annuler » ; sauf quand l'historique est
+ * plein et qu'elles sont plus anciennes que lui : elles ont eu lieu, elles en
+ * sont seulement sorties. Même règle que le carnet (backend entretien/carnet.ts).
+ */
+export function realisationRows<E extends { doneAt: string }>(history: TaskDone[], extras: E[]): RealisationRow<E>[] {
+  const ex = new Map(extras.map((e) => [e.doneAt, e]));
+  const seen = new Set(history.map((h) => h.at));
+  const full = history.length >= HISTORY_MAX ? history[0].at : null;
+  return [
+    ...history.map((h) => ({ at: h.at, done: h, extras: ex.get(h.at), cancelled: false })),
+    ...extras.filter((e) => !seen.has(e.doneAt)).map((e) => ({ at: e.doneAt, extras: e, cancelled: !(full && e.doneAt < full) })),
+  ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+

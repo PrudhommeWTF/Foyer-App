@@ -122,3 +122,9 @@ export function costSummary(tasks: TaskItem[], today: string, finances: boolean)
     },
   };
 }
+
+/** Le montant noté pour chaque réalisation, clé `<geste>@<instant>` (le carnet d'entretien). */
+export function spendByRealisation(): Map<string, number> {
+  const rows = database.prepare('SELECT task_id, done_at, amount FROM ent_spend').all() as { task_id: string; done_at: string; amount: number }[];
+  return new Map(rows.map((r) => [`${r.task_id}@${r.done_at}`, r.amount]));
+}

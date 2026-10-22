@@ -5,7 +5,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem } from './models';
 import { applyTaskOp, TaskOp } from './task-ops';
-import { Catalogue, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, stockLabel, stockLeftLabel, stockLow } from './entretien';
+import { Catalogue, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, realisationRows, HISTORY_MAX, stockLabel, stockLeftLabel, stockLow } from './entretien';
 
 const TODAY = '2026-10-17';
 const fmt = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -166,3 +166,23 @@ test('le stock restant se dit sur la ligne, sans accord hasardeux', () => {
   assert.equal(stockLeftLabel(st(3, '')), 'Encore 3 en stock');
   assert.equal(stockLeftLabel(st(0, '')), 'Stock épuisé');
 });
+
+test('historique : une note sur une réalisation annulée reste, marquée annulée', () => {
+  const h = [{ at: '2026-09-01T10:00:00Z', by: 'm1', due: null }, { at: '2026-10-01T10:00:00Z', by: null, due: '2026-09-29' }];
+  const rows = realisationRows(h, [
+    { doneAt: '2026-10-01T10:00:00Z', note: 'ok' },
+    { doneAt: '2026-10-10T10:00:00Z', note: 'refaite après annulation' },
+  ]);
+  assert.deepEqual(rows.map((r) => [r.at.slice(0, 10), r.cancelled, !!r.done, r.extras?.note ?? null]), [
+    ['2026-10-10', true, false, 'refaite après annulation'],
+    ['2026-10-01', false, true, 'ok'],
+    ['2026-09-01', false, true, null],
+  ]);
+});
+
+test('historique plein : une note plus ancienne que lui n’est pas une annulation', () => {
+  const h = Array.from({ length: HISTORY_MAX }, (_, i) => ({ at: `2027-01-01T00:00:${String(i % 60).padStart(2, '0')}.${String(i).padStart(3, '0')}Z`, by: null, due: null }));
+  const rows = realisationRows(h, [{ doneAt: '2020-05-01T10:00:00Z' }]);
+  assert.equal(rows.at(-1)!.cancelled, false);
+});
+
