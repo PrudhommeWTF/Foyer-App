@@ -10,6 +10,7 @@ import { SettingFieldComponent } from './field';
 import { SettingsAccountComponent } from './account';
 import { SettingsModulesComponent } from './modules';
 import { SettingsEcoleComponent } from './ecole';
+import { SettingsRoomsComponent } from './rooms';
 import { ChildSessionsComponent } from './child-sessions';
 import { ModuleFlag } from '../../core/modules';
 
@@ -42,6 +43,7 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
   acces: { icon: 'lock', tint: '#F2ECF5', color: '#9B6FA8' },
   serveur: { icon: 'bolt', tint: '#FDF0DA', color: '#D9930F' },
   membres: { icon: 'users', tint: '#E5F0F4', color: '#4E93B8' },
+  pieces: { icon: 'home', tint: '#EDF2EB', color: '#7A9B76' },
   exploitation: { icon: 'refresh', tint: '#F2ECF5', color: '#9B6FA8' },
 };
 
@@ -50,13 +52,13 @@ const ICONES: Record<string, { icon: string; tint: string; color: string }> = {
  * qu'elles portent des gestes : changer son mot de passe, ajouter un membre.
  * Ailleurs, une section vide est une section qu'on ne montre pas.
  */
-const GESTES = new Set(['compte', 'membres']);
+const GESTES = new Set(['compte', 'membres', 'pieces']);
 
 @Component({
   selector: 'screen-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsModulesComponent, SettingsEcoleComponent, ChildSessionsComponent],
+  imports: [FormsModule, IconComponent, SettingFieldComponent, ModalComponent, SettingsAccountComponent, SettingsModulesComponent, SettingsEcoleComponent, ChildSessionsComponent, SettingsRoomsComponent],
   template: `
     <div class="screen-enter">
       <div class="screen-head">
@@ -181,6 +183,7 @@ const GESTES = new Set(['compte', 'membres']);
                       @switch (s.id) {
                         @case ('compte') { <settings-account /> }
                         @case ('modules') { <settings-modules /> }
+                        @case ('pieces') { <settings-rooms /> }
                         @case ('ecole') { <settings-ecole /> }
                         @case ('courses') {
                           <!-- L'ordre des rayons et les articles de placard sont des

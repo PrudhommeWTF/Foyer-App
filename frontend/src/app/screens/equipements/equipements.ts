@@ -4,7 +4,6 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FoyerStore } from '../../core/foyer.store';
 import { EquipementsStore } from '../../core/equipements.store';
 import { IconComponent } from '../../core/icon';
-import { ModalComponent } from '../../shared/modal';
 import { tint } from '../../core/constants';
 import { EqpItem, WARRANTY_FILTERS, categoryOf, statusLabel } from '../../core/equipements.api';
 import { STARTER_ROOM_NAMES, WARRANTY_TONE, filterItems, groupByRoom } from '../../core/equipements';
@@ -20,7 +19,7 @@ import { WarrantyState } from '../../core/warranty';
   selector: 'screen-equipements',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, NgTemplateOutlet, IconComponent, ModalComponent],
+  imports: [FormsModule, NgTemplateOutlet, IconComponent],
   template: `
     <div class="screen-enter">
       <div class="head-row">
@@ -51,7 +50,7 @@ import { WarrantyState } from '../../core/warranty';
             <div class="menu-back" (click)="menu.set(false)"></div>
             <div class="menu" role="menu">
               @if (eqp.canEdit()) {
-                <button class="menu-item" (click)="menu.set(false); roomsOpen.set(true)"><f-icon name="home" [size]="16" color="var(--ink2)" [width]="2.2" /> Gérer les pièces</button>
+                <button class="menu-item" (click)="menu.set(false); store.openRooms()"><f-icon name="home" [size]="16" color="var(--ink2)" [width]="2.2" /> Gérer les pièces</button>
               }
               @if (eqp.canEdit()) {
                 <div class="menu-sep"></div>
@@ -74,7 +73,7 @@ import { WarrantyState } from '../../core/warranty';
           <b>Aucune pièce pour l’instant.</b> Les appareils se rangent par pièce, la même liste que pour l’Entretien.
           <div class="note-act">
             <button class="btn btn-soft" (click)="starterRooms()">Créer les pièces proposées</button>
-            <button class="btn btn-ghost" (click)="roomsOpen.set(true)">Les choisir moi-même</button>
+            <button class="btn btn-ghost" (click)="store.openRooms()">Les choisir moi-même</button>
           </div>
           <div class="small">{{ starterNames }}</div>
         </div>
@@ -126,25 +125,6 @@ import { WarrantyState } from '../../core/warranty';
       </button>
     </ng-template>
 
-    @if (roomsOpen()) {
-      <f-modal title="Pièces de la maison" [maxWidth]="460" (close)="roomsOpen.set(false)">
-        <p class="hint">Une seule liste pour tout le foyer : Entretien s’en sert aussi. Supprimer une pièce ne supprime aucun appareil, ils passent « Sans pièce ».</p>
-        <div class="rooms">
-          @for (r of store.rooms(); track r.id; let first = $first, last = $last) {
-            <div class="room">
-              <input class="input" [ngModel]="r.name" (change)="rename(r.id, $any($event.target).value)" maxlength="60" [attr.aria-label]="'Nom de la pièce ' + r.name" />
-              <button class="icon-btn sm" [disabled]="first" (click)="store.moveRoom(r.id, -1)" aria-label="Monter"><f-icon name="arrowUp" [size]="16" /></button>
-              <button class="icon-btn sm" [disabled]="last" (click)="store.moveRoom(r.id, 1)" aria-label="Descendre"><f-icon name="arrowDown" [size]="16" /></button>
-              <button class="icon-btn sm" (click)="store.removeRoom(r.id)" aria-label="Supprimer"><f-icon name="trash" [size]="16" color="#C6492F" /></button>
-            </div>
-          }
-        </div>
-        <div class="room add">
-          <input class="input" [ngModel]="newRoom()" (ngModelChange)="newRoom.set($event)" (keydown.enter)="addRoom()" placeholder="Nouvelle pièce" maxlength="60" />
-          <button class="btn btn-soft" [disabled]="!newRoom().trim()" (click)="addRoom()">Ajouter</button>
-        </div>
-      </f-modal>
-    }
   `,
   styles: [`
     .head-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
@@ -186,12 +166,6 @@ import { WarrantyState } from '../../core/warranty';
     .pill, .st { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 12px; white-space: nowrap; }
     .st { background: var(--soft2); color: var(--ink2); }
     .st.bad { background: #FCE9E3; color: #C6492F; }
-    .hint { font-size: 12.5px; font-weight: 600; color: var(--ink3); line-height: 1.5; margin: 0 0 14px; }
-    .rooms { display: flex; flex-direction: column; gap: 8px; }
-    .room { display: flex; align-items: center; gap: 6px; }
-    .room .input { flex: 1; min-width: 0; }
-    .room.add { margin-top: 14px; }
-    .icon-btn.sm[disabled] { opacity: .3; }
   `],
 })
 export class EquipementsScreen {
@@ -209,8 +183,6 @@ export class EquipementsScreen {
   readonly room = signal('');
   readonly garantie = signal<WarrantyState | ''>('');
   readonly menu = signal(false);
-  readonly roomsOpen = signal(false);
-  readonly newRoom = signal('');
 
   readonly filtered = computed(() => filterItems(this.eqp.items(), { q: this.q(), room: this.room(), garantie: this.garantie() }, this.store.rooms()));
   readonly groups = computed(() => groupByRoom(this.filtered(), this.store.rooms()));
@@ -219,7 +191,5 @@ export class EquipementsScreen {
   constructor() { void this.eqp.reload(); }
 
   open(it: EqpItem): void { this.store.openItem('equipment', String(it.id)); }
-  starterRooms(): void { this.store.addRooms(STARTER_ROOM_NAMES); this.store.toast('Pièces créées : renommez-les ou supprimez-les depuis le menu ⋯'); }
-  rename(id: string, name: string): void { const n = name.trim(); if (n) this.store.renameRoom(id, n); }
-  addRoom(): void { if (this.store.ensureRoom(this.newRoom())) this.newRoom.set(''); }
+  starterRooms(): void { this.store.addRooms(STARTER_ROOM_NAMES); this.store.toast('Pièces créées : renommez-les ou supprimez-les depuis le menu ⋯, « Gérer les pièces »'); }
 }

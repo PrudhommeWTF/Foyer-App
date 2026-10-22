@@ -40,6 +40,7 @@ import { ModuleFlag, SCREEN_MODULE } from './modules';
 import { EventDraft, EventFields, applyToSeries, detachOccurrence, draftChanges, eventDraft, isSeries, seriesDate, withSkip, withoutEvent, withoutSkip } from './event-scope';
 import { ITEM_KINDS, ItemCtx, ItemKindId, ItemResult } from './items';
 import { sheetBack, sheetEdit, sheetOpen, sheetSaved } from './item-sheet';
+import { roomNameCheck } from './rooms';
 import { addDaysIso, ageOn, cap, contactIni, dstr, fmtNumericDate, isBirthdayOn, keptIni, normText, parseDay, todayIn, uid, weekDates, weekdayOf } from './helpers';
 import { HOUSEHOLD_LOCALE, HOUSEHOLD_TZ, MEAL_SLOTS, isFallbackAisleName, tint, grad } from './constants';
 import { DayExtra, SchoolHoliday, dayExtrasOn, eventsOn } from './agenda';
@@ -1750,7 +1751,22 @@ export class FoyerStore {
       }
     });
   }
-  renameRoom(id: string, name: string): void { this.mutate((d) => { const r = (d.rooms || []).find((x) => x.id === id); if (r) r.name = name; }); }
+  /** Renomme une pièce ; un nom vide ou déjà pris est refusé (le toast dit pourquoi). Rend vrai si c'est fait. */
+  renameRoom(id: string, name: string): boolean {
+    const c = roomNameCheck(this.rooms(), name, id);
+    if (!c.ok) { this.toast(c.error); return false; }
+    if (this.rooms().find((r) => r.id === id)?.name === c.name) return true;
+    this.mutate((d) => { const r = (d.rooms || []).find((x) => x.id === id); if (r) r.name = c.name; });
+    return true;
+  }
+  /** Ajoute une pièce par son nom ; refusée (toast) si le nom est vide ou déjà pris. */
+  addRoom(name: string): boolean {
+    const c = roomNameCheck(this.rooms(), name);
+    if (!c.ok) { this.toast(c.error); return false; }
+    return !!this.ensureRoom(c.name);
+  }
+  /** Ouvre la gestion des pièces, dans Paramètres. */
+  openRooms(): void { this.patch({ settingsSection: 'pieces' }); this.go('settings'); }
   /** Monte (-1) ou descend (+1) une pièce, et renumérote pour garder un ordre sans trou. */
   moveRoom(id: string, delta: -1 | 1): void {
     this.mutate((d) => {

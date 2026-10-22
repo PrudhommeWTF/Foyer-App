@@ -16,7 +16,7 @@ Menu, groupe « Le foyer », **Équipements**.
 
 - **En tête** : la recherche (désignation, marque, modèle, numéro de série ; casse, accents et espaces ignorés, les tirets comptent), « Ajouter un équipement », deux filtres (pièce, état de garantie) et le nombre de fiches.
 - **Les cartes**, groupées par pièce dans l'ordre des pièces, puis « Sans pièce » : icône de catégorie, désignation, « marque · modèle », pastille de garantie (vert « Sous garantie jusqu'au … », orange « Garantie expire le … », gris « Hors garantie depuis le … » ou « Garantie inconnue ») et, s'il le faut, le statut (« En panne » en rouge). Un appareil remplacé, donné, jeté ou archivé est grisé.
-- **Menu ⋯** : « Gérer les pièces » (adultes) et « Voir les fiches archivées ».
+- **Menu ⋯** : « Gérer les pièces » (adultes, mène à Paramètres) et « Voir les fiches archivées ».
 - **Aucune pièce** : l'écran propose de créer les pièces de départ en un geste (Cuisine, Salon, Salle de bain, Chambre 1, Chambre 2, Bureau, Buanderie, Garage, Cave, Extérieur), ou de les choisir soi-même.
 - **Aucune fiche** : un texte d'accueil explique le module.
 
@@ -123,7 +123,9 @@ Les mois courts sont respectés : un achat le 31/01 avec 1 mois de garantie fini
 **Une seule liste pour tout le foyer**, partagée avec Entretien : le socle Maison (`rooms` dans le document du foyer, `{ id, name, position }`). Une fiche garde l'identifiant de sa pièce (`eqp_items.room_ref`).
 
 - Un foyer neuf n'a aucune pièce (choix d'Entretien) ; l'écran Équipements propose les pièces de départ en un geste.
-- On les renomme, réordonne, ajoute et supprime depuis le menu ⋯ de l'écran (« Gérer les pièces »). Supprimer une pièce ne supprime aucun appareil : ils passent « Sans pièce » (un Annuler de quelques secondes la remet).
+- On les gère dans **Paramètres, « Pièces de la maison »** (groupe « Le foyer »), où mène aussi « Gérer les pièces » du menu ⋯ : ajouter, renommer, réordonner, supprimer. La section reste là quand les modules sont éteints, puisque les pièces appartiennent au foyer.
+- Chaque pièce dit ce qu'elle contient (« 3 appareils et 1 geste d'entretien »). Supprimer une pièce qui n'est pas vide demande confirmation en le disant ; rien n'est effacé, appareils et gestes passent « Sans pièce » (un Annuler de quelques secondes la remet).
+- Deux pièces ne portent jamais le même nom (casse et accents ignorés) : la création comme le renommage refusent le doublon.
 - Les pièces appartiennent au foyer, pas au module : la remise à zéro d'Équipements ne les touche pas, et éteindre le module non plus.
 
 **Reprise de la première version.** La tranche 1 rangeait les pièces dans sa propre table `eqp_rooms`. Au premier démarrage de la tranche 2, une reprise unique (drapeau `rooms_adopted` dans `eqp_meta`) :

@@ -50,6 +50,7 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
           <button type="button" [class.active]="tri() === 'piece'" (click)="tri.set('piece')">Par pièce</button>
           @if (store.modEquipements()) { <button type="button" [class.active]="tri() === 'equipement'" (click)="tri.set('equipement')">Par équipement</button> }
         </div>
+        @if (tri() === 'piece' && !store.isChild()) { <button type="button" class="lien rooms-link" (click)="store.openRooms()">Gérer les pièces</button> }
       }
 
       @for (s of sections(); track s.key) {
@@ -200,6 +201,7 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     .couts { font-size: 13px; font-weight: 700; color: var(--ink2); background: var(--soft); border-radius: 12px; padding: 10px 13px; margin: 0 0 12px; line-height: 1.5; }
     .couts b { color: var(--ink); }
     .lien { border: none; background: none; padding: 0; font: inherit; font-weight: 800; color: var(--primary); cursor: pointer; text-decoration: underline; }
+    .rooms-link { display: block; margin: -4px 0 14px; font-size: 13px; }
     .new-btn { flex: none; display: inline-flex; align-items: center; gap: 7px; }
     .tri { margin-bottom: 6px; }
     /* Une ligne de geste : la case, le texte et ses méta, la date, puis « Fait » et « ⋯ ». */
