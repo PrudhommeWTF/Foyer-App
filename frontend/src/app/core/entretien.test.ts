@@ -5,7 +5,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem } from './models';
 import { applyTaskOp, TaskOp } from './task-ops';
-import { Catalogue, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, realisationRows, HISTORY_MAX, stockLabel, stockLeftLabel, stockLow } from './entretien';
+import { Catalogue, bulkReady, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, realisationRows, HISTORY_MAX, stockLabel, stockLeftLabel, stockLow } from './entretien';
 
 const TODAY = '2026-10-17';
 const fmt = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -184,5 +184,12 @@ test('historique plein : une note plus ancienne que lui n’est pas une annulati
   const h = Array.from({ length: HISTORY_MAX }, (_, i) => ({ at: `2027-01-01T00:00:${String(i % 60).padStart(2, '0')}.${String(i).padStart(3, '0')}Z`, by: null, due: null }));
   const rows = realisationRows(h, [{ doneAt: '2020-05-01T10:00:00Z' }]);
   assert.equal(rows.at(-1)!.cancelled, false);
+});
+
+test('création en lot : jamais une date fixe sans fenêtre, dont la date ne se devine pas', () => {
+  const e = (rec: Record<string, unknown>) => ({ id: 'x', titre: 'X', famille: 'F', rec } as never);
+  assert.equal(bulkReady(e({ freq: 'weekly', every: 4, base: 'done' })), true, 'naît « Pas encore noté »');
+  assert.equal(bulkReady(e({ freq: 'yearly', every: 1, base: 'due', season: { from: '09-01', to: '10-31' } })), true, 'naît à sa fenêtre');
+  assert.equal(bulkReady(e({ freq: 'yearly', every: 1, base: 'due', grace: 30 })), false, 'la chaudière : sa date se choisit');
 });
 

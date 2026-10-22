@@ -38,7 +38,13 @@ maintenant**), **Archiver**, et la fiche avec l'historique complet.
 
 **Nouveau geste** ouvre le catalogue (recherche, rangé par famille) ou une
 fiche libre. Depuis le catalogue, tout est prérempli, pièce comprise (créée si
-elle n'existe pas) : choisir, puis « Créer le geste ». On y règle la
+elle n'existe pas) : choisir, puis « Créer le geste ». Pour démarrer vite,
+**cocher plusieurs gestes** du catalogue et « Créer les N gestes » : chacun naît
+tel que le catalogue le propose, « Pas encore noté » (ou à sa fenêtre de
+l'année pour un geste à date fixe), rappel le matin, sa pièce retrouvée ou
+créée, son stock à zéro (à noter ensuite avec « J'en ai racheté »). Un geste
+déjà présent ne se coche pas, et la chaudière non plus : une date fixe sans
+fenêtre se choisit dans sa fiche, Foyer ne l'invente pas. On y règle la
 fréquence (semaines, mois, années, ou date fixe), la pièce, le
 détail, le stock, qui s'en charge, le rappel, et « Dernière fois » quand on la
 connaît (le geste part alors de cette date au lieu de rester « Pas encore
