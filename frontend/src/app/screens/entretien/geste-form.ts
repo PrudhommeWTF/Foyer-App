@@ -4,7 +4,7 @@ import { FoyerStore } from '../../core/foyer.store';
 import { EntretienApi } from '../../core/entretien.api';
 import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
-import { CatalogueEntry, GesteDraft, catalogueByFamily, draftFromCatalogue, draftOf, freqLabel, draftRec, stockLabel } from '../../core/entretien';
+import { CatalogueEntry, GesteDraft, bulkReady, catalogueByFamily, draftFromCatalogue, draftOf, freqLabel, draftRec, stockLabel } from '../../core/entretien';
 import { REMIND_LABELS } from '../../core/tasks';
 import { addDaysIso, normText } from '../../core/helpers';
 import { occurrencesPerYear } from '../../core/recurrence';
@@ -31,18 +31,32 @@ import { EquipementsStore } from '../../core/equipements.store';
           <f-icon name="plus" [size]="17" color="var(--primary)" [width]="2.6" /> Geste libre, sans modèle
         </button>
         <input class="input search" placeholder="Chercher : carafe, chaudière, filtre…" [ngModel]="q()" (ngModelChange)="q.set($event)" autocomplete="off" />
+        <div class="hint top">Cochez-en plusieurs pour les créer d'un coup, ou touchez un geste pour l'ajuster avant.</div>
         @if (api.erreur()) { <div class="ko">{{ api.erreur() }}</div> }
         @else if (!api.catalogue()) { <div class="hint">Chargement du catalogue…</div> }
         @for (f of familles(); track f.famille) {
           <div class="field-label fam">{{ f.famille }}</div>
           @for (g of f.gestes; track g.id) {
-            <button type="button" class="cat" (click)="choisir(g)">
-              <span class="cat-t">{{ g.titre }}</span>
-              <span class="cat-s">{{ freq(g) }}@if (g.article) { · {{ g.article.nom }} }@if (dejaLa(g.id)) { <b class="deja"> · déjà dans vos gestes</b> }</span>
-            </button>
+            <div class="cat-row">
+              <!-- La case : créer en lot. Pas pour un geste déjà là, ni pour une date fixe à choisir. -->
+              @if (bulkReady(g) && !dejaLa(g.id)) {
+                <input type="checkbox" class="pick" [checked]="coches().has(g.id)" (change)="cocher(g.id)" [attr.aria-label]="'Cocher ' + g.titre" />
+              } @else { <span class="pick"></span> }
+              <button type="button" class="cat" (click)="choisir(g)">
+                <span class="cat-t">{{ g.titre }}</span>
+                <span class="cat-s">{{ freq(g) }}@if (g.article) { · {{ g.article.nom }} }@if (dejaLa(g.id)) { <b class="deja"> · déjà dans vos gestes</b> } @else if (!bulkReady(g)) { <b class="adate"> · date à choisir dans sa fiche</b> }</span>
+              </button>
+            </div>
           }
         } @empty {
           @if (api.catalogue()) { <div class="hint">Rien ne correspond. Créez un geste libre.</div> }
+        }
+        @if (coches().size; as n) {
+          <div class="f-act lot">
+            @if (lotStock()) { <div class="hint lot-h">Les stocks partent de zéro : notez ce que vous avez avec « J'en ai racheté » sur chaque geste concerné.</div> }
+            <button class="btn btn-soft" (click)="toutDecocher()">Tout décocher</button>
+            <button class="btn btn-primary" (click)="creerLot()">Créer {{ n > 1 ? 'les ' + n + ' gestes' : 'le geste' }}</button>
+          </div>
         }
       } @else {
         @let v = f();
@@ -184,6 +198,12 @@ import { EquipementsStore } from '../../core/equipements.store';
     .ko { font-size: 12.5px; font-weight: 800; color: #C6492F; margin: 8px 0; }
     .libre { display: flex; align-items: center; gap: 8px; width: 100%; border: 2px dashed var(--line2); background: none; border-radius: 13px; padding: 13px 14px; font: inherit; font-size: 14px; font-weight: 800; color: var(--primary); cursor: pointer; margin-bottom: 12px; }
     .search { margin-bottom: 6px; }
+    .hint.top { margin: 4px 0 6px; }
+    .cat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .cat-row .cat { flex: 1; min-width: 0; margin-bottom: 0; }
+    .pick { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--primary); cursor: pointer; }
+    span.pick { cursor: default; }
+    .adate { color: var(--ink2); font-weight: 800; }
     .fam { margin-top: 16px; }
     .cat { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; border: none; background: var(--soft); border-radius: 12px; padding: 11px 13px; margin-bottom: 6px; font: inherit; cursor: pointer; }
     .cat-t { font-size: 14.5px; font-weight: 800; color: var(--ink); }
@@ -211,6 +231,8 @@ import { EquipementsStore } from '../../core/equipements.store';
     /* Toujours à portée de pouce : créer depuis le catalogue tient en trois taps, sans faire défiler. */
     .f-act { display: flex; gap: 8px; margin-top: 22px; position: sticky; bottom: -1px; padding: 12px 0 4px; background: var(--surface); }
     .f-act .btn { flex: 1; }
+    .f-act.lot { flex-wrap: wrap; }
+    .lot-h { flex-basis: 100%; margin: 0 0 4px; }
   `],
 })
 export class GesteForm implements OnInit {
@@ -268,6 +290,18 @@ export class GesteForm implements OnInit {
 
   freq(g: CatalogueEntry): string { return freqLabel({ freq: g.rec.freq, every: g.rec.every, base: g.rec.base }); }
   dejaLa(catalogId: string): boolean { return this.store.gestes().some((t) => t.maintenance?.catalogId === catalogId); }
+  readonly bulkReady = bulkReady;
+  /** Les gestes du catalogue cochés, à créer d'un coup. */
+  readonly coches = signal<Set<string>>(new Set());
+  cocher(id: string): void { this.coches.update((s) => { const n = new Set(s); if (!n.delete(id)) n.add(id); return n; }); }
+  /** Un des gestes cochés consomme quelque chose : sa quantité n'est pas connue. */
+  readonly lotStock = computed(() => (this.api.catalogue()?.gestes || []).some((g) => this.coches().has(g.id) && !!g.article));
+  toutDecocher(): void { this.coches.set(new Set()); }
+  creerLot(): void {
+    const c = this.api.catalogue(); if (!c) return;
+    this.store.createGestesFromCatalogue(c.gestes.filter((g) => this.coches().has(g.id)));
+    this.close.emit();
+  }
 
   /** Une ligne du catalogue (ou rien : geste libre) préremplit la fiche ; sa pièce est retrouvée par son nom, sinon proposée à la création. */
   choisir(g: CatalogueEntry | null): void {

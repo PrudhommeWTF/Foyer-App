@@ -215,6 +215,14 @@ export function draftFromCatalogue(e: CatalogueEntry | null, today: string, room
   };
 }
 
+/**
+ * Un geste du catalogue qu'on peut créer d'un coup avec d'autres, sans ouvrir
+ * sa fiche : il naît « Pas encore noté », ou à sa fenêtre de l'année. Pas une
+ * date fixe sans fenêtre (la chaudière) : sa date ne se devine pas, et une
+ * date inventée deviendrait un faux retard.
+ */
+export const bulkReady = (e: CatalogueEntry): boolean => !(e.rec.base === 'due' && !e.rec.season);
+
 /** Le catalogue rangé par famille, dans l'ordre d'apparition, filtré par une recherche tolérante (accents, casse). */
 export function catalogueByFamily(c: Catalogue, query: string): { famille: string; gestes: CatalogueEntry[] }[] {
   const norm = (s: string): string => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');

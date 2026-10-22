@@ -3,7 +3,7 @@ import { ApiError, ApiService, SwitchBackResult, PlaceOp, PlaceOpDraft, Settings
 import { Mutation, asConflict, rebase } from './state-sync';
 import { EventItem, HouseholdState, ListKind, MealItem, MealValue, Member, Notif, Place, PlaceItem, PlaceItemState, Rayon, Recipe, SchedSlot, ShopItem, ShopState, TaskItem, TaskList } from './models';
 import { TaskDraft, TaskFields, TaskOp, TaskOpDraft, applyTaskOp, inverseOf, lastDoneDay } from './task-ops';
-import { ENTRETIEN_LIST_ID, GesteDraft, createOp, editOps, middayOf, plural } from './entretien';
+import { CatalogueEntry, ENTRETIEN_LIST_ID, GesteDraft, createOp, draftFromCatalogue, editOps, middayOf, plural } from './entretien';
 import { byOrd, singleMove } from './task-order';
 import { REMIND_LABELS, categories, childLists, childTasks, dailyTasks, dueLabel, subtasksOf, suggestTexts, visibleLists } from './tasks';
 import { downloadBlob } from './download';
@@ -2025,6 +2025,18 @@ export class FoyerStore {
     const fait = (): void => { if (d.lastDone && !d.fixed) this.pushTaskOps([{ op: 'done', id, occ: '' }], { at: middayOf(d.lastDone) }); };
     if (avant) void avant(id).finally(fait); else fait();
     this.toast('Geste ajouté');
+  }
+  /**
+   * Crée d'un coup des gestes du catalogue, tels qu'il les propose : chacun
+   * « Pas encore noté » (ou à sa fenêtre de l'année), sa pièce retrouvée par
+   * son nom ou créée. Voir bulkReady pour ceux qui demandent leur fiche.
+   */
+  createGestesFromCatalogue(entries: CatalogueEntry[]): void {
+    const today = this.todayStr();
+    const ops = entries.map((e) => createOp(draftFromCatalogue(e, today, e.piece ? this.ensureRoom(e.piece) : null), uid('t'), today));
+    if (!ops.length) return;
+    this.pushTaskOps(ops);
+    this.toast(ops.length > 1 ? `${ops.length} gestes ajoutés` : 'Geste ajouté');
   }
   /** Modifie la fiche d'un geste (jamais la quantité d'un stock déjà là). */
   saveGeste(id: string, d: GesteDraft): void {
