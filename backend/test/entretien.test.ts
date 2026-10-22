@@ -120,7 +120,7 @@ describe('Entretien', () => {
     assert.equal((await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, M())).status, 403);
     assert.ok(await geste('g1'), 'éteindre ne supprime rien');
     const c = await appel(ctx.base, 'GET', '/modules', undefined, A());
-    assert.deepEqual(c.json.counts.entretien, { gestes: 1, realisations: 1 });
+    assert.deepEqual(c.json.counts.entretien, { gestes: 1, realisations: 1, justificatifs: 0 });
 
     assert.equal((await appel(ctx.base, 'POST', '/modules/entretien/reset', { confirm: 'SUPPRIMER' }, M())).status, 403);
     assert.equal((await appel(ctx.base, 'POST', '/modules/entretien/reset', { confirm: 'SUPPRIMER' }, A())).status, 200);

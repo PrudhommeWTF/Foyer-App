@@ -5,13 +5,14 @@
 // jamais par une écriture du document à côté de lui.
 import { applyTaskOps, getTasks } from '../tasks/repo';
 import { ENTRETIEN_LIST_ID } from './list';
+import { countProofs } from './realisations';
 
 const gestes = () => getTasks().items.filter((t) => t.listId === ENTRETIEN_LIST_ID);
 
 /** Ce que la confirmation d'un « repartir à zéro » annonce. */
-export function moduleCounts(): { gestes: number; realisations: number } {
+export function moduleCounts(): { gestes: number; realisations: number; justificatifs: number } {
   const g = gestes();
-  return { gestes: g.length, realisations: g.reduce((n, t) => n + (t.history?.length || 0), 0) };
+  return { gestes: g.length, realisations: g.reduce((n, t) => n + (t.history?.length || 0), 0), justificatifs: countProofs() };
 }
 
 /**

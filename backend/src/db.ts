@@ -13,6 +13,7 @@ import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
 import { migrateEntretien } from './entretien/schema';
 import { initCosts } from './entretien/costs';
+import { initRealisations, referencedFileIds as entFileIds } from './entretien/realisations';
 import { initEquipementsRepo, referencedFileIds as eqpFileIds } from './equipements/repo';
 import { adoptSharedRooms } from './equipements/rooms';
 import { initBlobs, reportOrphansAtBoot } from './storage/blobs';
@@ -197,6 +198,7 @@ initEquipementsRepo(db);
 // Les coûts des gestes d'entretien : hors du document, qui part aussi aux enfants.
 migrateEntretien(db);
 initCosts(db);
+initRealisations(db);
 migrateHouseholdDocument();
 // Après le document : les pièces d'Équipements rejoignent le socle Maison.
 adoptSharedRooms(db);
@@ -289,7 +291,7 @@ export function pruneUnreferencedFiles(): void {
   const row = db.prepare('SELECT state FROM household WHERE id = 1').get() as { state: string } | undefined;
   if (!row) return;
   try {
-    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[]; files?: { fileId?: number | null }[]; shop?: { photoId?: number | null }[] };
+    const doc = JSON.parse(row.state) as { recipes?: { photoId?: number | null }[]; files?: { fileId?: number | null }[]; shop?: { photoId?: number | null }[]; tasks?: { id?: string }[] };
     const referenced = new Set<number>();
     for (const r of doc.recipes || []) if (typeof r.photoId === 'number') referenced.add(r.photoId);
     for (const f of doc.files || []) if (typeof f.fileId === 'number') referenced.add(f.fileId);
@@ -297,6 +299,9 @@ export function pruneUnreferencedFiles(): void {
     // Les factures et plaques des équipements vivent hors du document : sans
     // cette ligne, elles seraient toutes effacées au premier redémarrage.
     for (const id of eqpFileIds()) referenced.add(id);
+    // Les justificatifs d'entretien aussi, tant que leur geste existe : un geste
+    // supprimé laisse les siens partir ici (voir entretien/realisations.ts).
+    for (const id of entFileIds(new Set((doc.tasks || []).map((t) => String(t.id))))) referenced.add(id);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
       log.info(`Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);

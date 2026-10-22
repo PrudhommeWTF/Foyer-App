@@ -26,6 +26,7 @@ import { moduleCounts as entCounts, resetModule as entReset } from './entretien/
 import { entretienRouter } from './entretien/routes';
 import { costsRouter } from './entretien/costs-routes';
 import { recordSpend } from './entretien/costs';
+import { forgetRemoved } from './entretien/realisations';
 import { gesteToShopping } from './entretien/courses';
 import { revisionsRouter } from './revisions/routes';
 import { bareme } from './revisions/bareme';
@@ -438,8 +439,9 @@ api.use('/entretien', auth, ...tokenGate, requireMember, requireModule('modEntre
 // passage, si le foyer l'a voulu. Hors transaction des tâches : un échec ici
 // ne défait pas le geste noté, il est seulement écrit au journal.
 // Le coût d'une réalisation s'inscrit avec elle, dans la transaction du lot ;
-// une remise à zéro du module (des suppressions de gestes) efface les montants.
-onTaskCommit(recordSpend);
+// une remise à zéro du module (des suppressions de gestes) efface les montants
+// et les notes des réalisations (leurs justificatifs partent au démarrage suivant).
+onTaskCommit((before, after) => { recordSpend(before, after); forgetRemoved(before, after); });
 onStockAlerts((ids, meta) => {
   if (effectiveSetting('modEntretien') === false || effectiveSetting('entretienCoursesAuto') !== true) return;
   for (const id of ids) {

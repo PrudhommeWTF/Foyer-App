@@ -9,7 +9,8 @@ Cadrage et choix : `docs/entretien-etat-des-lieux.md`.
 
 > État : livré en trois tranches (socle, écran, puis stock et courses, accueil,
 > équipements et assistant), puis les gestes saisonniers et à fenêtre, et le
-> coût des gestes avec leur total annuel dans Finances.
+> coût des gestes avec leur total annuel dans Finances, puis la note et les
+> justificatifs de chaque réalisation et le carnet d'entretien.
 
 ## L'écran
 
@@ -290,6 +291,66 @@ aussitôt la prévision (« Environ 207 € par an, 13 fois »).
 réalisations passées : le réel commence au premier geste fait après. Les outils
 de l'assistant ne disent pas les montants (ils servent aussi les enfants).
 
+## Notes, justificatifs et carnet
+
+Une réalisation peut porter, ajoutés après coup, une **note** (« brûleur
+nettoyé, le technicien conseille de changer le vase d'expansion ») et des
+**justificatifs** : l'attestation d'entretien de la chaudière (obligatoire, à
+garder deux ans), le certificat de ramonage (que l'assureur demande après un
+sinistre), une photo du compteur.
+
+**Où.** Dans la fiche d'un geste, chaque réalisation de l'historique propose
+« Ajouter une note » et « Joindre un justificatif ». Sur l'écran, un geste fait
+aujourd'hui porte « Note ou justificatif », qui ouvre la fiche sur la note de
+cette réalisation. Rien n'est demandé au moment de cocher : « Fait » reste un
+tap, le papier arrive souvent une semaine plus tard.
+
+**Qui.**
+
+| | Adulte | Enfant |
+|---|---|---|
+| Note | lit et écrit | lit et écrit (par l'API ; l'écran Entretien n'est pas dans son menu) |
+| Justificatifs | joint, ouvre, retire | rien : ni les fichiers, ni leur nombre (403 sur le fichier) |
+| Carnet | PDF et zip | 403 |
+
+**Les fichiers.** Une photo (JPEG, PNG, WEBP, réduite à 2 000 px par
+l'application avant l'envoi, le serveur vérifie) ou un PDF, reconnus d'après
+leur contenu, 20 Mo au plus. Ils vivent sur le disque comme les autres pièces
+jointes (dossier `pieces/`), rattachés à leur réalisation par `hh_attachments`
+(genre `maintenance`). Ce genre est **gardé** : seul le module les sert,
+`/api/files` les ignore.
+
+**Ce qui ne se perd pas.**
+
+- **Annuler une réalisation** garde sa note et ses justificatifs : la fiche
+  les montre sous « réalisation annulée », la note se modifie encore, les
+  fichiers se retirent à la main. On n'y ajoute plus de fichier.
+- **Archiver** un geste garde tout. **Supprimer** un geste (la fiche demande
+  d'abord : « Archiver le geste » ou « Supprimer le geste ») emporte ses notes
+  tout de suite, et ses justificatifs au **redémarrage suivant** du service (le
+  ménage du démarrage ne garde que ceux des gestes encore là). Effacer les
+  fichiers pendant l'enregistrement serait irréversible s'il échouait ensuite.
+- La remise à zéro du module fait de même, et sa confirmation compte les
+  justificatifs.
+
+**Le carnet d'entretien.** Bouton **Carnet** de l'écran (adultes) : chaque
+geste, rangé par pièce, avec ses réalisations sur la période choisie (12
+derniers mois, 2 ans, tout) : la date, qui l'a fait, le coût noté, la note, le
+nom des justificatifs. Un geste sans réalisation sur la période y figure
+(« Aucune réalisation sur la période ») : c'est aussi ce qu'un carnet doit
+montrer. Deux formats : **PDF**, ou **zip** avec le PDF et les justificatifs
+eux-mêmes, nommés `justificatifs/<pièce> - <geste> - <jour>.pdf`. Un fichier
+absent du disque est listé dans `absents.txt` au lieu de faire échouer l'export.
+
+```bash
+# Par l'API (cookie de session, ou jeton d'un adulte)
+curl -sS -H "Authorization: Bearer $JETON" -o carnet.zip "https://foyer.example/api/entretien/carnet.zip?periode=24"
+```
+
+**Limites.** Les outils de l'assistant ne lisent ni n'écrivent les notes. Le
+coût d'une réalisation faite avant la saisie du coût n'apparaît pas (voir plus
+haut).
+
 ## Réglages
 
 | Clé | Portée | Défaut | Effet |
@@ -301,18 +362,21 @@ de l'assistant ne disent pas les montants (ils servent aussi les enfants).
 
 Registre complet : `docs/parametres.md`. La remise à zéro du module
 (`POST /api/modules/entretien/reset`, confirmation « SUPPRIMER ») efface les
-gestes et leur historique ; la liste et les pièces restent.
+gestes, leur historique et leurs notes, et leurs justificatifs au redémarrage
+suivant ; la liste et les pièces restent.
 
 ## Sauvegarde et retour arrière
 
 Les gestes sont dans le document du foyer ; leurs coûts dans deux tables du
 même fichier de base, `ent_costs` (le coût prévu de chaque geste) et `ent_spend`
-(le montant de chaque réalisation), schéma versionné par `ent_meta`
+(le montant de chaque réalisation), les notes des réalisations dans
+`ent_done_notes`, schéma versionné par `ent_meta`
 (`backend/src/entretien/schema.ts`). Tout part donc dans la sauvegarde
 habituelle (`docs/sauvegarde-restauration.md`). Les migrations sont additives et
 rejouables ; le serveur dépose une copie du document d'avant migration dans
 `backups/`. Le fichier de surcharge du catalogue est dans le dossier des
-données, il part avec lui.
+données, il part avec lui. Les justificatifs sont des fichiers du dossier
+`pieces/` : sauvegardez-le avec la base, comme pour les factures d'Équipements.
 
 Avant la mise à jour qui crée les tables de coûts, un instantané suffit :
 
@@ -323,9 +387,28 @@ sqlite3 /var/lib/foyer/foyer.db "VACUUM INTO '/root/foyer-avant-couts.db'"
 docker exec foyer node -e "require('better-sqlite3')('/data/foyer.db',{readonly:true}).backup('/data/foyer-avant-couts.db').then(()=>console.log('sauvegarde faite'))"
 ```
 
+Avant la mise à jour qui ajoute les notes et justificatifs (`ent_done_notes`,
+migration `ent` 2), même geste :
+
+```bash
+# LXC
+sqlite3 /var/lib/foyer/foyer.db "VACUUM INTO '/root/foyer-avant-justificatifs.db'"
+sqlite3 /root/foyer-avant-justificatifs.db "PRAGMA integrity_check;"   # attendu : ok
+# Docker
+docker exec foyer node -e "require('better-sqlite3')('/data/foyer.db',{readonly:true}).backup('/data/foyer-avant-justificatifs.db').then(()=>console.log('sauvegarde faite'))"
+```
+
 Revenir en arrière : arrêter le service, remettre ce fichier à la place de
 `foyer.db`, réinstaller la version précédente. Une version antérieure ignore
 simplement les tables `ent_*`.
+
+**Attention aux justificatifs en redescendant de version.** Une version
+antérieure aux justificatifs ne les connaît pas : sans restauration de la base,
+son ménage du démarrage **efface** les justificatifs joints depuis (ligne et
+fichier). Avec la restauration de l'instantané ci-dessus, les lignes
+disparaissent avec la base et les fichiers restent sur le disque, signalés au
+journal comme orphelins, jamais effacés. Dans les deux cas, téléchargez d'abord
+le carnet en zip : il contient tous les justificatifs.
 
 Revenir à une version antérieure à Entretien demande de restaurer la sauvegarde
 d'avant la mise à jour : une ancienne version ne connaît pas la liste de type

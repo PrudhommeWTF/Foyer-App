@@ -2,11 +2,18 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ApiError, ApiService } from './api.service';
 import { Catalogue } from './entretien';
 import { FoyerStore } from './foyer.store';
+import { isImageFile, resizePhoto } from './image-resize';
+import { downloadBlob } from './download';
 
 /** Le coût d'un geste, tel que le sert GET /api/entretien/couts (centimes). */
 export interface GesteCost { taskId: string; amount: number | null; contractId: number | null; perYear: number | null; forecast: number | null; real12: number; }
 export interface CostContract { id: number; name: string; provider: string; status: string; real12: number; }
 export interface CostSummary { gestes: GesteCost[]; contracts: CostContract[]; totals: { real12: number; forecast: number }; }
+/** Un justificatif d'une réalisation (attestation, certificat), servi aux seuls adultes. */
+export interface Proof { id: number; name: string; mime: string; size: number; createdAt: string; }
+/** Ce qu'une réalisation porte en plus : sa note, et pour un adulte ses justificatifs. Voir backend entretien/realisations.ts. */
+export interface Extras { doneAt: string; day: string; note: string; noteBy: string | null; files?: Proof[]; }
+export type CarnetPeriod = '12' | '24' | 'tout';
 
 /**
  * Le catalogue des gestes d'entretien, lu une fois par session. Il ne change
@@ -15,6 +22,9 @@ export interface CostSummary { gestes: GesteCost[]; contracts: CostContract[]; t
  *
  * Et leurs coûts, pour les adultes seulement (le serveur refuse un enfant) :
  * hors du document, relus à la demande.
+ *
+ * Et la note et les justificatifs des réalisations, lus geste par geste quand
+ * on ouvre sa fiche ; le carnet d'entretien, téléchargé à la demande.
  */
 @Injectable({ providedIn: 'root' })
 export class EntretienApi {
@@ -71,5 +81,26 @@ export class EntretienApi {
       }
     }
     return false;
+  }
+
+  private base(taskId: string, at: string): string { return `entretien/gestes/${encodeURIComponent(taskId)}/realisations/${encodeURIComponent(at)}`; }
+  async realisations(taskId: string): Promise<Extras[]> {
+    return (await this.api.request<{ realisations: Extras[] }>(`entretien/gestes/${encodeURIComponent(taskId)}/realisations`)).realisations;
+  }
+  async setNote(taskId: string, at: string, note: string): Promise<Extras[]> {
+    return (await this.api.put<{ realisations: Extras[] }>(this.base(taskId, at) + '/note', { note })).realisations;
+  }
+  /** Joint un justificatif : une photo est réduite à 2 000 px en JPEG avant de partir, un PDF part tel quel. */
+  async joindre(taskId: string, at: string, file: File): Promise<Extras[]> {
+    const sent = isImageFile(file) ? await resizePhoto(file) : file;
+    return (await this.api.upload<{ realisations: Extras[] }>(`${this.base(taskId, at)}/justificatifs?filename=${encodeURIComponent(sent.name)}`, sent)).realisations;
+  }
+  async retirer(fileId: number): Promise<Extras[]> {
+    return (await this.api.del<{ realisations: Extras[] }>(`entretien/justificatifs/${fileId}`)).realisations;
+  }
+  justificatifUrl(fileId: number): string { return this.api.absolute(`entretien/justificatifs/${fileId}`); }
+  /** Télécharge le carnet d'entretien (adultes). */
+  async carnet(format: 'pdf' | 'zip', period: CarnetPeriod): Promise<void> {
+    downloadBlob(await this.api.download(`entretien/carnet.${format}?periode=${period}`), `carnet-entretien-${this.foyer.todayStr()}.${format}`);
   }
 }

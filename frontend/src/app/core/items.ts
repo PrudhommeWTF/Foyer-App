@@ -24,7 +24,11 @@ export type SheetMode = 'vue' | 'edition';
  * retrouve au retour (deux niveaux au plus).
  */
 export interface ItemRef { kind: ItemKindId; id: string | null; mode: SheetMode; ctx?: ItemCtx; }
-export interface ItemCtx { occ?: string; date?: string; slot?: string; time?: string; copy?: string; prev?: ItemRef; }
+export interface ItemCtx {
+  occ?: string; date?: string; slot?: string; time?: string; copy?: string; prev?: ItemRef;
+  /** Geste d'entretien : ouvre la note de sa dernière réalisation (« Note ou justificatif » de l'écran Entretien). */
+  note?: boolean;
+}
 
 /** La partie pure d'un type : ce que les tests vérifient et ce que le shell lit sans charger l'élément. */
 export interface ItemKindMeta {

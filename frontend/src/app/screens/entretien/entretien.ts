@@ -13,7 +13,7 @@ import { RingCheckComponent } from '../../shared/ring-check';
 import { lastDoneDay } from '../../core/task-ops';
 import { GesteForm } from './geste-form';
 import { EquipementsStore } from '../../core/equipements.store';
-import { EntretienApi } from '../../core/entretien.api';
+import { CarnetPeriod, EntretienApi } from '../../core/entretien.api';
 import { FinancesStore, fmtEurosInt } from '../../core/finances.store';
 
 /** Une section de l'écran : un groupe de dates, ou une pièce. */
@@ -34,9 +34,14 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     <div class="screen-enter">
       <div class="head-row">
         <p class="intro">Les gestes d'entretien qui reviennent. Quand c'est fait, un tap : la prochaine date part d'aujourd'hui.</p>
-        <button class="btn btn-primary new-btn" (click)="ouvrirForm(null)">
-          <f-icon name="plus" [size]="17" color="#fff" [width]="2.6" /> Nouveau geste
-        </button>
+        <div class="head-act">
+          @if (!store.isChild() && store.gestes().length) {
+            <button class="btn btn-soft" (click)="carnet.set(true)"><f-icon name="documents" [size]="16" color="currentColor" [width]="2.2" /> Carnet</button>
+          }
+          <button class="btn btn-primary new-btn" (click)="ouvrirForm(null)">
+            <f-icon name="plus" [size]="17" color="#fff" [width]="2.6" /> Nouveau geste
+          </button>
+        </div>
       </div>
       @if (couts(); as c) {
         <p class="couts">Environ <b>{{ eur(c.forecast) }} € par an</b> prévus, {{ eur(c.real12) }} € dépensés sur 12 mois.
@@ -131,6 +136,8 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
             <button class="fait" (click)="$event.stopPropagation(); store.archiveGeste(t.id, false)">Réactiver</button>
           } @else if (doneToday(t)) {
             <span class="ok"><f-icon name="check" [size]="13" color="currentColor" [width]="3" /> Fait aujourd'hui</span>
+            <!-- Le papier du technicien, une remarque : la note de la réalisation, dans la fiche. -->
+            <button class="reg-mini" (click)="$event.stopPropagation(); store.openItem('task', t.id, { note: true })">{{ store.isChild() ? 'Ajouter une note' : 'Note ou justificatif' }}</button>
           } @else {
             <button class="fait" (click)="$event.stopPropagation(); store.toggleTask(t.id)"><f-icon name="check" [size]="13" color="currentColor" [width]="3" /> Fait</button>
           }
@@ -194,9 +201,27 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     }
 
     @if (form(); as f) { <app-geste-form [id]="f.id" (close)="form.set(null)" /> }
+
+    @if (carnet()) {
+      <f-modal title="Carnet d'entretien" [maxWidth]="440" (close)="carnet.set(false)">
+        <p class="q">Chaque geste, pièce par pièce, avec ses réalisations : la date, qui l'a fait, le coût, la note et les justificatifs. Pour la vente du logement, le bailleur ou l'assureur.</p>
+        <div class="seg wrap" role="group" aria-label="Période">
+          <button type="button" [class.active]="periode() === '12'" (click)="periode.set('12')">12 derniers mois</button>
+          <button type="button" [class.active]="periode() === '24'" (click)="periode.set('24')">2 ans</button>
+          <button type="button" [class.active]="periode() === 'tout'" (click)="periode.set('tout')">Tout</button>
+        </div>
+        <div class="acts sp">
+          <button class="act" [disabled]="exporting()" (click)="exporter('pdf')"><f-icon name="documents" [size]="17" color="var(--ink2)" [width]="2.2" /> Le carnet en PDF</button>
+          <button class="act" [disabled]="exporting()" (click)="exporter('zip')"><f-icon name="folder" [size]="17" color="var(--ink2)" [width]="2.2" /> Le carnet et les justificatifs (zip)</button>
+        </div>
+      </f-modal>
+    }
   `,
   styles: [`
     .head-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+    .head-act { flex: none; display: flex; gap: 8px; }
+    .head-act .btn { display: inline-flex; align-items: center; gap: 7px; }
+    .acts.sp { margin-top: 14px; }
     .intro { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; margin: 2px 0; }
     .couts { font-size: 13px; font-weight: 700; color: var(--ink2); background: var(--soft); border-radius: 12px; padding: 10px 13px; margin: 0 0 12px; line-height: 1.5; }
     .couts b { color: var(--ink); }
@@ -233,6 +258,8 @@ interface Section { key: string; title: string; gestes: TaskItem[]; late?: boole
     .f-act .btn { flex: 1; }
 
     @media (min-width: 861px) { :host { display: block; max-width: 760px; } }
+    /* Téléphone : deux boutons ne laissent plus de place à l'introduction, ils passent dessous. */
+    @media (max-width: 560px) { .head-row { flex-wrap: wrap; } .intro { flex: 1 1 100%; } }
   `],
 })
 export class EntretienScreen {
@@ -315,5 +342,15 @@ export class EntretienScreen {
     return id && this.store.modEquipements() ? this.eqp.find(id)?.name || '' : '';
   }
   fermerMenu(): void { this.menuId.set(null); this.menuMode.set(''); }
+
+  readonly carnet = signal(false);
+  readonly periode = signal<CarnetPeriod>('12');
+  readonly exporting = signal(false);
+  async exporter(format: 'pdf' | 'zip'): Promise<void> {
+    this.exporting.set(true);
+    try { await this.api.carnet(format, this.periode()); this.carnet.set(false); }
+    catch (e) { this.store.toast((e as Error).message || 'Le carnet n’a pas pu être préparé.'); }
+    finally { this.exporting.set(false); }
+  }
   noterJour(t: TaskItem): void { this.store.gesteFaitLe(t.id, this.jour(), this.par() || null); this.fermerMenu(); }
 }

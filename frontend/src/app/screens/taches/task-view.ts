@@ -12,6 +12,7 @@ import { whoBadges } from '../../core/schedule';
 import { ItemCtx } from '../../core/items';
 import { stockLabel } from '../../core/entretien';
 import { parisDay } from '../../core/task-ops';
+import { RealisationsComponent } from '../entretien/realisations';
 
 /**
  * La fiche d'une tâche, en lecture : pour qui, pour quand, à quel rythme, la
@@ -21,7 +22,7 @@ import { parisDay } from '../../core/task-ops';
   selector: 'app-task-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, StampComponent, WhoComponent],
+  imports: [IconComponent, StampComponent, WhoComponent, RealisationsComponent],
   template: `
     @let t = item();
     @if (parent(); as p) {
@@ -108,11 +109,14 @@ import { parisDay } from '../../core/task-ops';
         }
       </div>
     }
-    @if (t.history?.length) {
-      <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus (toutes pour un geste d'entretien : c'est son historique). -->
+    @if (geste() && store.modEntretien()) {
+      <!-- Un geste d'entretien : tout son historique, avec la note et les justificatifs de chaque réalisation. -->
+      <app-realisations [item]="t" [openNote]="!!ctx()?.note" />
+    } @else if (t.history?.length) {
+      <!-- Les réalisations d'une série : la dernière d'abord, cinq au plus. -->
       <div class="field-label">Réalisations · {{ t.history!.length }}</div>
       @for (h of lastDone(); track h.at) {
-        <div class="hist-line">{{ store.fmtNumDate(day(h.at)) }}{{ h.by ? ' par ' + store.memberName(h.by) : (geste() ? ' par le foyer' : '') }}@if (h.used) { <span class="hist-due"> · {{ h.used }} pris dans le stock</span> }@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
+        <div class="hist-line">{{ store.fmtNumDate(day(h.at)) }}{{ h.by ? ' par ' + store.memberName(h.by) : '' }}@if (h.due) { <span class="hist-due"> · prévue le {{ store.fmtNumDate(h.due) }}</span> }</div>
       }
     }
     <f-stamp [fem]="true" [createdBy]="store.memberName(t.by || '')" [createdAt]="t.at"
@@ -182,7 +186,7 @@ export class TaskView {
   readonly listName = computed(() => this.list()?.name || 'Liste supprimée');
   readonly listColor = computed(() => this.list()?.color || 'var(--primary)');
   readonly geste = computed(() => this.list()?.kind === 'entretien');
-  readonly lastDone = computed(() => (this.item().history || []).slice(this.geste() ? 0 : -5).reverse());
+  readonly lastDone = computed(() => (this.item().history || []).slice(-5).reverse());
   readonly stock = computed(() => { const s = this.item().maintenance?.stock; return s ? stockLabel(s, (d) => this.store.fmtNumDate(d)) : ''; });
   readonly paused = computed(() => { const p = this.item().maintenance?.pausedUntil; return p && p > this.store.todayStr() ? 'En pause jusqu’au ' + this.store.fmtNumDate(p) : ''; });
   /** Le jour d'une réalisation, à Paris : une coche à 0 h 30 est du jour même, pas de la veille en UTC. */

@@ -19,7 +19,16 @@ export const TASK_ITEM: ItemKind<TaskItem, FoyerStore> = {
   canEdit: (t) => !t.edId && !t.revEx,
   canRemove: (t) => !t.edId,
   // Sur une série, supprimer pose la question d'avant : passer cette occurrence, ou toute la série.
+  // Un geste d'entretien : supprimer emporte son historique, ses notes et ses justificatifs ; l'archiver les garde.
   remove: (s, t, _ctx, scope) => {
+    if (t.listId === ENTRETIEN_LIST_ID && !t.parentId && s.modEntretien()) {
+      if (!scope) {
+        return { kind: 'ask', question: 'Supprimer ce geste efface aussi son historique, ses notes et ses justificatifs. L’archiver les garde.', choices: [
+          ...(t.done ? [] : [{ scope: 'archive', label: 'Archiver le geste' }]), { scope: 'all', label: 'Supprimer le geste', danger: true }] };
+      }
+      if (scope === 'archive') s.archiveGeste(t.id, true); else s.removeTask(t.id, 'all');
+      return { kind: 'done' };
+    }
     if (t.rec && !scope) {
       return { kind: 'ask', question: 'Cette tâche revient. Que faire ?', choices: [
         { scope: 'one', label: 'Passer cette occurrence' }, { scope: 'all', label: 'Supprimer la série', danger: true }] };
