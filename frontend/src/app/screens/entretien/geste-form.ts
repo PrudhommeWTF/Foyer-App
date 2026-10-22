@@ -185,7 +185,7 @@ import { EquipementsStore } from '../../core/equipements.store';
 
         @if (erreur()) { <div class="ko">{{ erreur() }}</div> }
         <div class="f-act">
-          <button class="btn btn-soft" (click)="id() ? close.emit() : retour()">{{ id() ? 'Annuler' : 'Retour' }}</button>
+          <button class="btn btn-soft" (click)="id() || preset() ? close.emit() : retour()">{{ id() || preset() ? 'Annuler' : 'Retour' }}</button>
           <button class="btn btn-primary" (click)="valider()">{{ id() ? 'Enregistrer' : 'Créer le geste' }}</button>
         </div>
       }
@@ -241,6 +241,12 @@ export class GesteForm implements OnInit {
   readonly eqp = inject(EquipementsStore);
   /** Le geste à modifier ; null pour en créer un. */
   readonly id = input<string | null>(null);
+  /**
+   * Création depuis la fiche d'un appareil : la ligne du catalogue, déjà
+   * choisie, rattachée à l'appareil et rangée dans sa pièce. On arrive
+   * directement sur la fiche du geste (pour choisir la date de la chaudière).
+   */
+  readonly preset = input<{ entry: CatalogueEntry; equipmentId: number; roomId: string | null } | null>(null);
   readonly close = output<void>();
   readonly REMIND_LABELS = REMIND_LABELS;
   readonly reminds: Remind[] = ['morning', 'eve', 'at'];
@@ -277,6 +283,13 @@ export class GesteForm implements OnInit {
     const t = this.id() ? this.store.task(this.id()!) : undefined;
     if (!this.store.isChild()) void this.api.chargerCouts().then(() => this.lireCout());
     if (t) { this.f.set(draftOf(t)); return; }
+    const p = this.preset();
+    if (p) {
+      this.choisir(p.entry);
+      this.set({ equipmentId: p.equipmentId, ...(p.roomId ? { roomId: p.roomId } : {}) });
+      if (p.roomId) this.roomNew.set('');
+      return;
+    }
     this.choix.set(true);
     void this.api.charger();
   }

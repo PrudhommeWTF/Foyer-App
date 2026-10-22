@@ -5,7 +5,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { TaskItem } from './models';
 import { applyTaskOp, TaskOp } from './task-ops';
-import { Catalogue, bulkReady, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, realisationRows, HISTORY_MAX, stockLabel, stockLeftLabel, stockLow } from './entretien';
+import { Catalogue, bulkReady, suggestionsFor, catalogueByFamily, createOp, draftFromCatalogue, draftOf, editOps, freqLabel, gesteGroup, groupLabel, lastDoneLabel, middayOf, nextLabel, realisationRows, HISTORY_MAX, stockLabel, stockLeftLabel, stockLow } from './entretien';
 
 const TODAY = '2026-10-17';
 const fmt = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
@@ -191,5 +191,22 @@ test('création en lot : jamais une date fixe sans fenêtre, dont la date ne se 
   assert.equal(bulkReady(e({ freq: 'weekly', every: 4, base: 'done' })), true, 'naît « Pas encore noté »');
   assert.equal(bulkReady(e({ freq: 'yearly', every: 1, base: 'due', season: { from: '09-01', to: '10-31' } })), true, 'naît à sa fenêtre');
   assert.equal(bulkReady(e({ freq: 'yearly', every: 1, base: 'due', grace: 30 })), false, 'la chaudière : sa date se choisit');
+});
+
+test('suggestions d’un appareil : par un mot entier de son nom, sans doublon, en rattachant ce qui existe', () => {
+  const rec = { freq: 'monthly' as const, every: 1, base: 'done' as const };
+  const c: Catalogue = { gestes: [
+    { id: 'lv-filtre', titre: 'Lave-vaisselle : filtre', famille: 'Cuisine', rec, appareils: ['lave-vaisselle'] },
+    { id: 'lv-sel', titre: 'Lave-vaisselle : sel', famille: 'Cuisine', rec, appareils: ['lave-vaisselle'] },
+    { id: 'clim', titre: 'Clim : filtres', famille: 'Air', rec, appareils: ['clim'] },
+    { id: 'carafe', titre: 'Carafe', famille: 'Eau', rec },
+  ] };
+  const lie = geste({ id: 'a', maintenance: { catalogId: 'lv-filtre', equipmentId: 7 } });
+  const libre = geste({ id: 'b', maintenance: { catalogId: 'lv-sel' } });
+  const s = suggestionsFor('Lave vaisselle Bosch', 7, c, [lie, libre]);
+  assert.deepEqual(s.map((x) => [x.entry.id, x.existing?.id ?? null]), [['lv-sel', 'b']], 'le filtre est déjà rattaché ; le sel existe, à rattacher');
+  assert.equal(suggestionsFor('Lave-vaisselle', 8, c, [lie, libre]).length, 2, 'un autre lave-vaisselle : le filtre rattaché au premier se propose de nouveau');
+  assert.equal(suggestionsFor('Station Climat', 9, c, []).length, 0, '« clim » n’est pas un mot de « Climat »');
+  assert.equal(suggestionsFor('Clim du salon', 9, c, []).length, 1);
 });
 

@@ -28,6 +28,12 @@ export interface CatalogueEntry {
   rec: CatalogueRec;
   /** Le consommable éventuel : ce qui entre dans la liste de courses. */
   article?: CatalogueArticle;
+  /**
+   * Les appareils que ce geste concerne, par des mots de leur nom
+   * (« lave-vaisselle », « chaudière ») : la fiche d'un équipement dont le nom
+   * en contient un propose le geste. Casse et accents ignorés.
+   */
+  appareils?: string[];
 }
 export interface Catalogue { gestes: CatalogueEntry[]; }
 
@@ -72,6 +78,13 @@ export function readEntry(raw: unknown): { entry: CatalogueEntry } | { reason: s
     const seuil = a['seuil'] === undefined ? 0 : int(a['seuil'], 0, 9999);
     if (!nom || use === null || seuil === null) return { reason: `« ${id} » : article illisible (nom, use 1 à 99, seuil 0 à 9999)` };
     entry.article = { nom, unite: text(a['unite'], 30), use, seuil };
+  }
+  if (o['appareils'] !== undefined) {
+    const list = o['appareils'];
+    if (!Array.isArray(list) || list.length > 12 || list.some((x) => typeof x !== 'string' || !x.trim() || x.trim().length > 40)) {
+      return { reason: `« ${id} » : appareils illisibles (une liste d’au plus 12 mots, 40 caractères chacun)` };
+    }
+    if (list.length) entry.appareils = list.map((x: string) => x.trim());
   }
   return { entry };
 }

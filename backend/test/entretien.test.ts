@@ -36,6 +36,20 @@ describe('Entretien', () => {
     const brita = r.json.gestes.find((g: { id: string }) => g.id === 'carafe-filtrante');
     assert.deepEqual(brita.rec, { freq: 'weekly', every: 4, base: 'done' });
     assert.equal(brita.article.unite, 'cartouche');
+    const lv = r.json.gestes.filter((g: { appareils?: string[] }) => g.appareils?.includes('lave-vaisselle')).length;
+    assert.equal(lv, 3, 'filtre, sel et joint : proposés sur la fiche d’un lave-vaisselle');
+  });
+
+  it('une liste d’appareils mal formée écarte le geste, et le nomme', async () => {
+    const file = path.join(ctx.dir, 'entretien-catalogue.json');
+    fs.writeFileSync(file, JSON.stringify({ gestes: [
+      { id: 'robot', titre: 'Robot : vider le bac', rec: { freq: 'weekly', every: 1, base: 'done' }, appareils: ['robot aspirateur'] },
+      { id: 'bad', titre: 'X', rec: { freq: 'weekly', every: 1, base: 'done' }, appareils: 'robot' },
+    ] }));
+    const r = await appel(ctx.base, 'GET', '/entretien/catalogue', undefined, M());
+    assert.deepEqual(r.json.gestes.find((g: { id: string }) => g.id === 'robot').appareils, ['robot aspirateur']);
+    assert.ok(!r.json.gestes.some((g: { id: string }) => g.id === 'bad'));
+    fs.unlinkSync(file);
   });
 
   it('le catalogue porte des saisons (piscine) et des fenêtres (ramonage) ; une saison mal formée est écartée', async () => {
