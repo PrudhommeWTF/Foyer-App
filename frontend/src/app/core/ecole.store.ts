@@ -132,6 +132,29 @@ export class EcoleStore {
     }));
   });
 
+  /**
+   * Les devoirs du prochain jour de classe (ni week-end, ni férié, ni vacances),
+   * par enfant : en vacances le vendredi, c'est la rentrée du lundi qui compte.
+   * `day` le dit comme on le dirait : « demain », « lundi ».
+   */
+  readonly nextClassByStudent = computed<{ date: string; day: string; students: { id: number; memberId: string; name: string; items: EdHomework[] }[] } | null>(() => {
+    const v = this.vue();
+    if (!v) return null;
+    const cal = this.foyer.calendar();
+    let date = '', i = 1;
+    for (; i <= 21; i++) {
+      const ds = this.foyer.addDays(v.today, i); const dow = new Date(ds + 'T12:00:00Z').getUTCDay(); const info = cal(ds);
+      if (dow !== 0 && dow !== 6 && !info.holiday && !info.schoolHoliday) { date = ds; break; }
+    }
+    if (!date) return null;
+    const day = i === 1 ? 'demain' : new Date(date + 'T12:00:00Z').toLocaleDateString('fr-FR', { weekday: 'long', timeZone: 'UTC' });
+    return { date, day, students: v.students.map((s) => ({
+      id: s.id, memberId: s.memberId, name: this.foyer.memberName(s.memberId) || s.firstName,
+      items: v.homework.filter((h) => h.studentId === s.id && h.due === date && !h.archived)
+        .sort((a, b) => Number(a.done) - Number(b.done) || Number(b.isTest) - Number(a.isTest) || a.subject.localeCompare(b.subject)),
+    })) };
+  });
+
   /** La même chose en une ligne courte, pour la tuile de la grille d'accueil : « Demain : Léna 1 · Nolan 2, 1 interro ». */
   readonly tomorrowShort = computed<string>(() => {
     const v = this.vue();
