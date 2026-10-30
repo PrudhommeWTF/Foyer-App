@@ -295,12 +295,10 @@ export class FinancesStore {
   readonly homeLoadedAt = signal('');
 
   /** « Reste pour finir le mois » du mois en cours, pour l'accueil : sans charger le module. */
-  readonly homeRemaining = computed(() => {
-    const h = this.home();
-    if (!h) return null;
-    const p = h.plan;
-    return remainingToFinish(h.summary, fixedCharges(h.month, p.contracts, p.categories, p.costs, p.paid));
-  });
+  private readonly homeCharges = computed(() => { const h = this.home(); if (!h) return null; const p = h.plan; return fixedCharges(h.month, p.contracts, p.categories, p.costs, p.paid); });
+  readonly homeRemaining = computed(() => { const h = this.home(); const c = this.homeCharges(); return h && c ? remainingToFinish(h.summary, c) : null; });
+  /** Les charges fixes du mois pas encore débitées, pour l'accueil. */
+  readonly homeFixedDue = computed(() => (this.homeCharges() ?? []).reduce((a, c) => a + (c.paid ? 0 : c.amount), 0));
 
   readonly ui = signal<FinancesUi>(initialUi(this.currentMonth()));
 

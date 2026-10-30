@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { recentActivity, relTime, teacherOf } from './activity';
+import { ActivityEntry, groupActivity, recentActivity, relTime, teacherOf } from './activity';
 import { EventItem, HouseholdState, ShopItem, ShopList, TaskItem, TaskList } from './models';
 
 // Fabriques typées : les fixtures ne portent que ce que le fil lit, mais restent
@@ -146,5 +146,39 @@ describe('relTime', () => {
   });
   it('rend une date courte au-delà d’un mois', () => {
     assert.equal(relTime('2026-06-15T12:00:00.000Z', now), '15 juin');
+  });
+});
+
+describe('groupActivity', () => {
+  const ev = (i: number, at: string, by = 'm1', over: Partial<ActivityEntry> = {}): ActivityEntry =>
+    ({ at, by, verb: 'a programmé l’évènement', what: 'Évènement ' + i, where: 'Agenda', color: '#E56B4E', kind: 'event', ref: 'e' + i, ...over });
+
+  it('fusionne les gestes consécutifs du même auteur dans la fenêtre de 30 min', () => {
+    const g = groupActivity([ev(1, '2026-10-30T10:40:00Z'), ev(2, '2026-10-30T10:20:00Z'), ev(3, '2026-10-30T09:55:00Z'), ev(4, '2026-10-30T09:00:00Z')]);
+    assert.equal(g.length, 2, 'le 4e est à 55 min du 3e : un nouveau groupe');
+    assert.equal(g[0].count, 3);
+    assert.equal(g[0].at, '2026-10-30T10:40:00Z');
+    assert.equal(`${g[0].verb} ${g[0].bold}${g[0].tail}`, 'a ajouté 3 évènements au calendrier');
+    assert.deepEqual(g[0].titles, ['Évènement 1', 'Évènement 2', 'Évènement 3']);
+    assert.equal(g[1].count, 1);
+    assert.equal(g[1].bold, 'Évènement 4');
+  });
+
+  it('ne fusionne pas deux auteurs différents', () => {
+    const g = groupActivity([ev(1, '2026-10-30T10:40:00Z', 'm1'), ev(2, '2026-10-30T10:39:00Z', 'm2')]);
+    assert.equal(g.length, 2);
+  });
+
+  it('ne fusionne pas deux verbes différents, ni un assistant avec un membre', () => {
+    assert.equal(groupActivity([ev(1, '2026-10-30T10:40:00Z'), ev(2, '2026-10-30T10:39:00Z', 'm1', { verb: 'a modifié l’évènement' })]).length, 2);
+    assert.equal(groupActivity([ev(1, '2026-10-30T10:40:00Z'), ev(2, '2026-10-30T10:39:00Z', 'm1', { via: 'Claude' })]).length, 2);
+  });
+
+  it('les repas se regroupent quel que soit le moment', () => {
+    const meal = (at: string, verb: string): ActivityEntry => ({ at, by: 'm1', verb, what: 'Pâtes', where: 'Repas', color: '#4E93B8', kind: 'meal', ref: '2026-10-30-midi' });
+    const g = groupActivity([meal('2026-10-30T10:40:00Z', 'a prévu le déjeuner'), meal('2026-10-30T10:39:00Z', 'a prévu le dîner')]);
+    assert.equal(g.length, 1);
+    assert.equal(g[0].bold, '2 repas');
+    assert.deepEqual(g[0].titles, ['Pâtes']);
   });
 });

@@ -58,6 +58,14 @@ export class EmployesStore {
   private moisNom(month: string): string {
     return new Intl.DateTimeFormat('fr-FR', { month: 'long', timeZone: HOUSEHOLD_TZ }).format(new Date(month + '-01T12:00:00Z'));
   }
+  /** Les mois encore à déclarer et leur jour de rappel, pour « À régler » de l'accueil. */
+  readonly cesuDue = computed(() => {
+    const b = this.boot();
+    if (!b || this.foyer.isChild()) return [];
+    return b.employees.flatMap((e) => (e.openMonths || []).map((mois) => ({
+      month: mois, who: e.role === 'menage' ? 'Ménage' : e.name, due: this.markDate(mois, b.rappelJour),
+    })));
+  });
   /** Les repères CESU, indexés par date : un par mois à déclarer, tous employés confondus. */
   private cesuDayExtras(): Record<string, DayExtra[]> {
     const b = this.boot();
