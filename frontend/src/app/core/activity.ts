@@ -137,3 +137,64 @@ export function relTime(iso: string, nowMs: number): string {
   if (sem < 5) return `il y a ${sem} sem`;
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
 }
+
+/**
+ * Un groupe du fil : une entrée seule, ou plusieurs gestes de même nature
+ * fusionnés (« Thomas a ajouté 9 évènements au calendrier »). Seul, `bold` est
+ * le nom de l'élément ; groupé, le compte (« 9 évènements ») et `titles` donne
+ * les premiers noms pour la sous-ligne.
+ */
+export interface ActivityGroup {
+  /** Instant du geste le plus récent du groupe. */
+  at: string;
+  first: ActivityEntry;
+  count: number;
+  verb: string;
+  bold: string;
+  tail: string;
+  titles: string[];
+}
+
+// La forme groupée de chaque verbe : la même clé fusionne (même verbe de base,
+// même module), le pluriel nomme le compte, la fin situe.
+const GROUP: Record<string, { key: string; verb: string; many: string; tail: string }> = {
+  'a ajouté la tâche': { key: 'task-add', verb: 'a ajouté', many: 'tâches', tail: '' },
+  'a terminé la tâche': { key: 'task-done', verb: 'a terminé', many: 'tâches', tail: '' },
+  'a donné le devoir': { key: 'hw-add', verb: 'a donné', many: 'devoirs', tail: '' },
+  'a terminé le devoir': { key: 'hw-done', verb: 'a terminé', many: 'devoirs', tail: '' },
+  [SHOP_VERB['a-prendre']]: { key: 'shop-add', verb: 'a ajouté', many: 'articles', tail: ' aux courses' },
+  [SHOP_VERB['panier']]: { key: 'shop-check', verb: 'a coché', many: 'articles', tail: '' },
+  [SHOP_VERB['indisponible']]: { key: 'shop-missing', verb: 'a noté introuvables', many: 'articles', tail: '' },
+  'a modifié l’article': { key: 'shop-edit', verb: 'a modifié', many: 'articles', tail: '' },
+  'a programmé l’évènement': { key: 'event-add', verb: 'a ajouté', many: 'évènements', tail: ' au calendrier' },
+  'a modifié l’évènement': { key: 'event-edit', verb: 'a modifié', many: 'évènements', tail: '' },
+  ...Object.fromEntries(['a prévu le repas', ...Object.values(MEAL_VERB)].map((v) => [v, { key: 'meal-plan', verb: 'a prévu', many: 'repas', tail: '' }])),
+  'a ajouté la recette': { key: 'recipe-add', verb: 'a ajouté', many: 'recettes', tail: ' au carnet' },
+};
+
+/** Écart maximal entre deux gestes consécutifs d'un même groupe. */
+const GROUP_WINDOW_MS = 30 * 60_000;
+
+/**
+ * Fusionne les entrées consécutives (le fil est trié du plus récent au plus
+ * ancien) qui ont le même auteur, le même verbe de base et le même module, à
+ * 30 minutes au plus l'une de l'autre.
+ */
+export function groupActivity(entries: ActivityEntry[]): ActivityGroup[] {
+  const out: { key: string | null; last: number; items: ActivityEntry[] }[] = [];
+  for (const e of entries) {
+    const key = GROUP[e.verb]?.key ?? null;
+    const t = new Date(e.at).getTime();
+    const g = out[out.length - 1];
+    const f = g?.items[0];
+    if (g && key && g.key === key && f.by === e.by && (f.via ?? null) === (e.via ?? null) && f.author === e.author && g.last - t <= GROUP_WINDOW_MS) {
+      g.items.push(e); g.last = t;
+    } else out.push({ key, last: t, items: [e] });
+  }
+  return out.map(({ items }) => {
+    const first = items[0];
+    if (items.length === 1) return { at: first.at, first, count: 1, verb: first.verb, bold: first.what, tail: '', titles: [] };
+    const p = GROUP[first.verb];
+    return { at: first.at, first, count: items.length, verb: p.verb, bold: `${items.length} ${p.many}`, tail: p.tail, titles: [...new Set(items.map((x) => x.what))] };
+  });
+}
