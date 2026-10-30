@@ -633,11 +633,13 @@ export class HomeScreen extends HomeBase {
   constructor() {
     super();
     // L'accueil demande aux finances le mois courant, une fois, et le laisse
-    // suivre l'horloge du foyer. Un compte enfant n'a pas accès au module :
-    // l'appeler ne rendrait qu'un 403.
+    // suivre l'horloge du foyer. Un compte enfant n'a pas accès au module, et un
+    // module éteint est verrouillé côté serveur : l'appeler ne rendrait qu'un
+    // 403. Éteint, on oublie le mois demandé pour recharger à la réactivation.
     let asked = '';
     effect(() => {
       if (!this.store.authed() || this.store.isChild()) return;
+      if (!this.store.modFinances()) { asked = ''; return; }
       const month = this.store.todayStr().slice(0, 7);
       if (!month || month === asked) return;
       asked = month;
