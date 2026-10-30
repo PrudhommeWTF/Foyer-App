@@ -1,15 +1,15 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, effect, inject, signal, viewChild, viewChildren } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { FoyerStore } from '../../core/foyer.store';
 import { AdminStore } from '../../core/admin.store';
-import { FinancesStore, fmtEuros } from '../../core/finances.store';
+import { FinancesStore } from '../../core/finances.store';
 import { IconComponent } from '../../core/icon';
 import { AvatarComponent } from '../../shared/avatar';
 import { ReorderDirective } from '../../shared/reorder';
-import { recentActivity, relTime, ActivityEntry } from '../../core/activity';
+import { recentActivity } from '../../core/activity';
 import { EventItem, TaskItem, TaskList } from '../../core/models';
+import { HomeBase } from './home-base';
+import { HomeDeskComponent } from './home-desk';
 import { cap, parseDay } from '../../core/helpers';
-import { splitMealKey } from '../../core/meals';
 import { filterSlots } from '../../core/schedule';
 import { navGroupsFor } from '../../shell/nav';
 import { EcoleStore, subjectLabel } from '../../core/ecole.store';
@@ -24,11 +24,6 @@ import { dayLine, kidsLine } from '../../core/revisions/revisions';
 type Ahead =
   | { date: string; time: string; kind: 'event'; ev: EventItem }
   | { date: string; time: string; kind: 'task'; task: TaskItem; list: string; color: string };
-
-interface FinLine { label: string; value: string; tone: 'pos' | 'neg' | 'ink'; }
-type FinState =
-  | { kind: 'hidden' | 'loading' | 'error' | 'empty' }
-  | { kind: 'ok'; month: string; lines: FinLine[] };
 
 /** Une tuile de module de la grille mobile. */
 interface Mod { id: string; label: string; icon: string; color: string; sub: string; }
@@ -87,7 +82,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
   selector: 'screen-home',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, NgTemplateOutlet, ReorderDirective],
+  imports: [IconComponent, AvatarComponent, NgTemplateOutlet, ReorderDirective, HomeDeskComponent],
   template: `
     <!-- Invitation à activer les rappels, au premier lancement installé. -->
     <ng-template #pushCard>
@@ -110,17 +105,12 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
         </div>
         @for (a of activity(); track $index) {
           <div class="act">
-            @if (a.author) { <f-avatar [ini]="authorIni(a.author)" color="#3D6FA8" [size]="avSize()" /> } @else { <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="avSize()" /> }
+            @if (a.author) { <f-avatar [ini]="authorIni(a.author)" color="#3D6FA8" [size]="26" /> } @else { <f-avatar [ini]="ini(a.by)" [color]="col(a.by)" [size]="26" /> }
             <div class="act-b">
-              <div class="act-l"><b>{{ a.author || nm(a.by) }}</b>@if (a.via && a.via !== a.author) { <span class="act-via" [class.ed]="a.via === 'ÉcoleDirecte'">{{ a.via === 'ÉcoleDirecte' ? 'sur ÉcoleDirecte' : 'via un assistant' }}</span>} {{ store.narrow() ? verbShort(a.verb) : a.verb }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
+              <div class="act-l"><b>{{ a.author || nm(a.by) }}</b>@if (a.via && a.via !== a.author) { <span class="act-via" [class.ed]="a.via === 'ÉcoleDirecte'">{{ a.via === 'ÉcoleDirecte' ? 'sur ÉcoleDirecte' : 'via un assistant' }}</span>} {{ verbShort(a.verb) }} <button type="button" class="act-name" (click)="openActivity(a)">« {{ a.what }} »</button></div>
               <div class="act-m">
-                @if (store.narrow()) {
-                  <span class="act-dot" [style.background]="a.color" [title]="a.where"></span>
-                  <span class="act-t">{{ relShort(a.at) }}</span>
-                } @else {
-                  <span class="act-where" [style.background]="store.tint(a.color)" [style.color]="a.color">{{ a.where }}</span>
-                  <span class="act-t">{{ rel(a.at) }}</span>
-                }
+                <span class="act-dot" [style.background]="a.color" [title]="a.where"></span>
+                <span class="act-t">{{ relShort(a.at) }}</span>
               </div>
             </div>
           </div>
@@ -260,20 +250,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
       </div>
     </ng-template>
 
-    <!-- Révisions, pour un adulte : où en est chaque enfant aujourd'hui, sans
-         jamais reprocher un zéro ; une ligne ouvre son suivi. -->
-    <ng-template #revisionsCard>
-      <div class="card rc">
-        <div class="rc-head"><span>Révisions</span><button class="rc-link" (click)="store.go('revisions')">Suivi</button></div>
-        @for (k of revKids(); track k.id) {
-          <button class="rc-row rev-row" (click)="revisions.openFollow(k.id)">
-            <f-icon name="grille" [size]="14" color="#E56B4E" [width]="2.2" />
-            <span class="rev-line">{{ k.line }}</span>
-          </button>
-        }
-      </div>
-    </ng-template>
-
     <ng-template #mealsCard>
       <div class="card rc">
         <div class="rc-head"><span>Repas du jour</span><button class="rc-link" (click)="store.go('repas')">Planning</button></div>
@@ -297,28 +273,8 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
       </div>
     </ng-template>
 
-    <ng-template #finCard>
-      <div class="card rc fin">
-        <div class="rc-head"><span>Finances</span><button class="rc-link" (click)="store.go('finances')">Détails</button></div>
-        @switch (fin()!.kind) {
-          @case ('ok') {
-            <div class="fin-month">{{ finOk().month }}</div>
-            @for (l of finOk().lines; track $index) {
-              <div class="rc-row fin-line">
-                <span class="f-label">{{ l.label }}</span>
-                <span class="f-val" [class.pos]="l.tone === 'pos'" [class.neg]="l.tone === 'neg'">{{ l.value }} €</span>
-              </div>
-            }
-          }
-          @case ('loading') { <div class="rc-empty">Chargement du relevé...</div> }
-          @case ('error') { <div class="rc-empty">Relevé indisponible pour le moment.</div> }
-          @case ('empty') { <div class="rc-empty">Le module Finances n'est pas encore utilisé.</div> }
-        }
-      </div>
-    </ng-template>
-
     <div class="screen-enter">
-      @if (!store.narrow()) {
+      @if (!store.narrow() && (store.isChild() || !store.data())) {
         <div class="home-head">
           <div>
             <div class="hello f-script">{{ hello() }}</div>
@@ -449,19 +405,8 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
           </div>
         </div>
       } @else {
-        <!-- ===== desktop : fil + bandeau ===== -->
-        <div class="home-wrap">
-          <ng-container [ngTemplateOutlet]="feedCard" />
-          <div class="rail">
-            <ng-container [ngTemplateOutlet]="agendaCard" />
-            <ng-container [ngTemplateOutlet]="tasksCard" />
-            @if (store.modRepas()) { <ng-container [ngTemplateOutlet]="mealsCard" /> }
-            @if (store.modFinances() && fin() !== null) { <ng-container [ngTemplateOutlet]="finCard" /> }
-            @if (store.modEcole() && ecole.vue()) { <ng-container [ngTemplateOutlet]="ecoleCard" /> }
-            @if (entretien().show) { <ng-container [ngTemplateOutlet]="entretienCard" /> }
-            @if (store.modRevisions() && revKids().length) { <ng-container [ngTemplateOutlet]="revisionsCard" /> }
-          </div>
-        </div>
+        <!-- ===== bureau : le point du jour ===== -->
+        <app-home-desk />
       }
     </div>
   `,
@@ -471,8 +416,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
 
     /* ===== accueil d'un enfant : des cibles faites pour un doigt de huit ans ===== */
     .kid { display: flex; flex-direction: column; gap: 18px; }
-    .rev-row { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: transparent; font-family: inherit; text-align: left; cursor: pointer; }
-    .rev-line { font-size: 14px; font-weight: 700; color: var(--ink); }
     .km-s { margin-top: -6px; font-size: 12.5px; font-weight: 700; color: var(--ink2); text-align: center; }
     .kid-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
     .kid-mod { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 132px; padding: 18px 12px; border: none; border-radius: 22px; background: var(--surface); box-shadow: var(--sh-float); cursor: pointer; font-family: inherit; }
@@ -494,10 +437,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .pi-text { margin: 8px 0 14px; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; }
     .pi-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
-    .home-wrap { display: grid; grid-template-columns: 1fr 344px; gap: 20px; align-items: start; }
-    :host-context(.shell.narrow) .home-wrap { grid-template-columns: 1fr; }
-    @media (max-width: 900px) { .home-wrap { grid-template-columns: 1fr; } }
-
     /* ===== fil d'activité ===== */
     .feed { padding: 20px 22px; }
     .feed-head { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 14px; }
@@ -511,14 +450,12 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .act-name { display: inline; font: inherit; font-weight: 800; color: var(--ink); background: none; border: none; padding: 0; cursor: pointer; }
     .act-name:hover { color: var(--primary); text-decoration: underline; }
     .act-m { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
-    .act-where { font-size: 10.5px; font-weight: 800; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
     .act-via { font-size: 10.5px; font-weight: 800; color: var(--violet); background: rgba(155,111,168,.14); padding: 1px 7px; border-radius: 20px; white-space: nowrap; }
     .act-via.ed { color: #3D6FA8; background: #E3ECF7; }
     .act-t { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
     .feed-empty { padding: 30px 10px; text-align: center; color: var(--ink3); font-weight: 700; font-size: 13.5px; line-height: 1.5; }
 
     /* ===== bandeau ===== */
-    .rail { display: flex; flex-direction: column; gap: 16px; }
     .rc { padding: 16px 18px; }
     .rc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 800; color: var(--ink); margin-bottom: 10px; }
     .rc-link { border: none; background: var(--soft); border-radius: 9px; padding: 5px 11px; font-size: 11.5px; font-weight: 800; color: var(--ink2); cursor: pointer; }
@@ -569,7 +506,7 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .meal-next { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 10px; font-size: 12.5px; font-weight: 800; color: var(--ink3); }
     .meal-next + .rc-row { border-top: none; }
 
-    /* finances */
+    /* entretien (carrousel mobile) */
     .en-sum { font-size: 13px; font-weight: 800; color: var(--ink2); margin-bottom: 4px; }
     .en-row { gap: 10px; }
     .en-name { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; border: none; background: none; padding: 0; text-align: left; font: inherit; font-size: 13.5px; font-weight: 800; color: var(--ink); cursor: pointer; }
@@ -580,12 +517,6 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .en-add { background: #FDF0DA; color: #9A6A12; }
     .en-low { flex: 1; min-width: 0; font-size: 13px; font-weight: 700; color: #9A6A12; }
     .en-ok { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--sage); }
-    .fin-month { font-size: 11.5px; font-weight: 800; color: var(--ink3); text-transform: capitalize; margin-bottom: 2px; }
-    .fin-line { cursor: default; }
-    .f-label { flex: 1; font-size: 13px; font-weight: 700; color: var(--ink2); }
-    .f-val { font-size: 13.5px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
-    .f-val.pos { color: #5F9A55; }
-    .f-val.neg { color: #C2503A; }
 
     /* ===== mobile : carousel + grille ===== */
     .home-m { display: flex; flex-direction: column; gap: 12px; }
@@ -672,18 +603,11 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .mods.editing .mod.dragging { border-style: solid; box-shadow: var(--sh-modal); transition: none; }
   `],
 })
-export class HomeScreen {
-  store = inject(FoyerStore);
+export class HomeScreen extends HomeBase {
   admin = inject(AdminStore);
   private fins = inject(FinancesStore);
   ecole = inject(EcoleStore);
   readonly revisions = inject(RevisionsStore);
-  /** Les enfants dont on connaît la journée de révisions (rien sans réseau). */
-  readonly revKids = computed(() => {
-    const today = this.revisions.kidsToday();
-    return this.store.children().filter((k) => today[k.id] !== undefined)
-      .map((k) => ({ id: k.id, line: kidsLine([{ name: k.name, sessions: today[k.id] }]) }));
-  });
   private eqp = inject(EquipementsStore);
   readonly subject = subjectLabel;
 
@@ -698,7 +622,6 @@ export class HomeScreen {
    * `null` tant que rien n'est mesuré (hauteur naturelle).
    */
   readonly trackH = computed(() => { const h = Math.max(0, ...this.slideH()); return h > 0 ? h : null; });
-  readonly avSize = computed(() => (this.store.narrow() ? 26 : 36));
   readonly tlAvSize = computed(() => (this.store.narrow() ? 22 : 28));
   /** Several people on one entry: each avatar covers a third of the previous one. */
   readonly tlOverlap = computed(() => Math.round(this.tlAvSize() / 3));
@@ -708,6 +631,7 @@ export class HomeScreen {
   private readonly reduced = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } })();
 
   constructor() {
+    super();
     // L'accueil demande aux finances le mois courant, une fois, et le laisse
     // suivre l'horloge du foyer. Un compte enfant n'a pas accès au module :
     // l'appeler ne rendrait qu'un 403.
@@ -738,12 +662,10 @@ export class HomeScreen {
     });
   }
 
-  readonly hello = computed(() => { const n = this.store.me()?.name; return n ? 'Bonjour ' + n : 'Bonjour'; });
 
-  // Le carrousel prend la hauteur de son plus grand volet : on remplit donc les
-  // volets plutôt que de laisser du vide. Six lignes sur mobile, douze sur le fil
-  // pleine colonne du bureau.
-  readonly activity = computed(() => { const d = this.store.seenData(); return d ? recentActivity(d, this.store.narrow() ? 6 : 12) : []; });
+  // Le carrousel prend la hauteur de son plus grand volet : six lignes remplissent
+  // le volet du fil plutôt que de laisser du vide.
+  readonly activity = computed(() => { const d = this.store.seenData(); return d ? recentActivity(d, 6) : []; });
 
   /** Les sections du carousel mobile. */
   readonly slides = computed(() => SLIDES.filter((s) =>
@@ -778,31 +700,11 @@ export class HomeScreen {
    * cette grille remplace le menu du bas sur mobile, elle porte aussi l'accès
    * aux paramètres (adultes), seul point d'entrée qui vivait dans ce menu.
    */
-  /**
-   * Les départs proches : une liste de préparation dans sa fenêtre de rappel
-   * (J-N à J-0) où il reste des affaires à préparer. La ligne d'accueil s'efface
-   * dès que tout est prêt ou le départ passé.
-   */
-  readonly prepAlerts = computed<{ list: TaskList; days: number; remaining: number }[]>(() => {
-    const d = this.store.seenData();
-    if (!d) return [];
-    const today = parseDay(this.store.todayStr());
-    const out: { list: TaskList; days: number; remaining: number }[] = [];
-    for (const l of this.store.visibleTaskLists()) {
-      if (l.kind !== 'preparation' || !l.departure) continue;
-      const days = Math.round((parseDay(l.departure).getTime() - today.getTime()) / 86_400_000);
-      if (days < 0 || days > (l.remindDaysBefore ?? 3)) continue;
-      const remaining = (d.tasks || []).filter((t) => t.listId === l.id && !t.done).length;
-      if (remaining > 0) out.push({ list: l, days, remaining });
-    }
-    return out.sort((a, b) => a.days - b.days);
-  });
   prepLine(a: { list: TaskList; days: number; remaining: number }): string {
     const nom = a.list.forMember ? this.store.memberName(a.list.forMember) : a.list.name;
     const quand = a.days > 1 ? `dans ${a.days} jours` : a.days === 1 ? 'demain' : 'aujourd’hui';
     return `Départ de ${nom} ${quand} : ${a.remaining} affaire${a.remaining > 1 ? 's' : ''} à préparer`;
   }
-  openPrep(id: string): void { this.store.go('taches'); this.store.patch({ activeList: id }); }
 
   /** L'ordre choisi des raccourcis sur cet appareil (localStorage), réactif. */
   readonly homeModOrder = signal<string[]>(loadHomeMods());
@@ -915,8 +817,7 @@ export class HomeScreen {
       .map((t) => ({ t, list: lists.get(t.listId)!.name, color: lists.get(t.listId)!.color }));
   });
 
-  /** Le lendemain, pour l'aperçu des repas. */
-  readonly tomorrowStr = computed(() => this.store.addDays(this.store.todayStr(), 1));
+
 
   /** Les créneaux de repas d'un jour donné et leurs plats. */
   private mealsOf(day: string): { key: string; short: string; dot: string; label: string | null }[] {
@@ -928,30 +829,6 @@ export class HomeScreen {
   // Les repas de demain déjà prévus, en bonus pour garnir le volet (les créneaux
   // encore vides sont tus : inutile de répéter trois « À planifier » pour demain).
   readonly tomorrowMeals = computed(() => this.mealsOf(this.tomorrowStr()).filter((m) => m.label));
-
-  /** Le sommaire des finances : caché pour un enfant, sinon quatre lignes du mois. */
-  readonly fin = computed<FinState | null>(() => {
-    if (this.store.isChild()) return null;
-    const home = this.fins.home();
-    if (!home) return this.fins.homeError() ? { kind: 'error' } : { kind: 'loading' };
-    if (!home.accounts) return { kind: 'empty' };
-    const s = home.summary;
-    const sign = (c: number): 'pos' | 'neg' | 'ink' => (c > 0 ? 'pos' : c < 0 ? 'neg' : 'ink');
-    const rest = this.fins.homeRemaining();
-    const lines: FinLine[] = [
-      ...(rest !== null ? [{ label: 'Reste pour finir le mois', value: fmtEuros(rest), tone: sign(rest) }] : []),
-      { label: 'Revenus', value: fmtEuros(s.income), tone: 'pos' },
-      { label: 'Dépenses', value: fmtEuros(s.expense), tone: 'neg' },
-      { label: 'Solde du mois', value: fmtEuros(s.balance), tone: sign(s.balance) },
-      home.currentBalance !== null
-        ? { label: 'Comptes courants', value: fmtEuros(home.currentBalance), tone: sign(home.currentBalance) }
-        : { label: 'Budget du mois', value: fmtEuros(s.budgetTotal), tone: 'ink' },
-    ];
-    return { kind: 'ok', month: cap(parseDay(home.month + '-01').toLocaleDateString(this.store.locale, { month: 'long', year: 'numeric' })), lines };
-  });
-
-  /** Vue affinée quand `fin()` vaut « ok », pour l'accès aux champs dans le template. */
-  readonly finOk = computed(() => this.fin() as { kind: 'ok'; month: string; lines: FinLine[] });
 
   // ---- carousel ----
   onScroll(el: HTMLElement): void {
@@ -983,15 +860,6 @@ export class HomeScreen {
   }
 
   // ---- helpers de rendu ----
-  ini(id: string | null): string { return (id && (this.store.seenData()?.members || []).find((m) => m.id === id)?.ini) || '?'; }
-  col(id: string | null): string { return id ? this.store.memberColor(id) : '#8A7E74'; }
-  /** Initiales d'un auteur hors foyer, civilité ôtée : « Mme MAZARS B. » donne « MB ». */
-  authorIni(name: string): string {
-    const w = name.split(/\s+/).filter((x) => x && !/^(M|Mme|Mlle|MM|Mmes|Mr|Mrs)\.?$/i.test(x));
-    return w.slice(0, 2).map((x) => x[0]).join('').toUpperCase() || 'ED';
-  }
-  nm(id: string | null): string { return (id && this.store.memberName(id)) || 'Quelqu’un'; }
-  rel(iso: string): string { return relTime(iso, Date.now()); }
   /** « il y a 5 min » → « 5 min », for the one-line activity rows on a phone. */
   relShort(iso: string): string { return this.rel(iso).replace(/^il y a /, ''); }
   /**
@@ -999,20 +867,6 @@ export class HomeScreen {
    * name matters more than its type, which the coloured dot already gives.
    */
   verbShort(verb: string): string { return verb.replace(/ (la tâche|le devoir|l’évènement|l’article|la recette)$/, ''); }
-
-  /** Clic sur le nom d'une entrée du fil : ouvre la fiche de l'élément concerné. */
-  openActivity(a: ActivityEntry): void {
-    if (a.kind === 'task') this.store.openItem('task', a.ref);
-    else if (a.kind === 'event') this.store.openItem('event', a.ref);
-    else if (a.kind === 'recipe') this.store.openItem('recipe', a.ref);
-    else if (a.kind === 'meal') { const { dateStr, slot } = splitMealKey(a.ref); this.store.openMeal(dateStr, slot); }
-    else this.store.openShoppingList(a.ref);
-  }
-
-  evColor(ev: EventItem): string { return ev.who.length ? this.store.memberColor(ev.who[0]) : '#E56B4E'; }
-
-  /** Un événement sans heure occupe la journée : il s'affiche en pastille, sans horaire. */
-  isAllDay(ev: EventItem): boolean { return !!ev.allDay || !ev.time || ev.time === '—'; }
 
   /** L'horaire d'un événement : « 7:00 - 8:00 », ou juste le début si la fin est inconnue. */
   evTime(ev: EventItem): string { return ev.endTime ? `${ev.time} - ${ev.endTime}` : ev.time; }
