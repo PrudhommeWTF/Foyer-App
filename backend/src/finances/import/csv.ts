@@ -4,6 +4,13 @@
 // (Date;Description;Compte;Montant;Catégorie;Sous-Catégorie;Note;Pointée) and the
 // English one (date,description,amount,asset_account,category,…) both work with
 // no configuration.
+//
+// Un cas résiste aux alias : l'export BoursoBank/Boursorama nomme le montant de
+// l'opération « Solde » (et il y a deux colonnes « Solde » : d'abord le montant,
+// puis le solde du compte après l'opération). « Solde » voulant dire « solde
+// courant » partout ailleurs, on ne peut pas en faire un alias de montant ; on
+// ne lit la première colonne « Solde » comme montant que sur la signature de cet
+// export précis (voir mapHeader).
 import { frDateToIso, isIsoDate, parseCents } from '../money';
 import { ParseResult, RawRow, RejectedRow } from './types';
 
@@ -59,14 +66,17 @@ const norm = (s: string): string =>
 const FIELDS: Record<string, string[]> = {
   date: ['date', 'dateoperation', 'datedoperation', 'datecomptable', 'datevaleur', 'bookingdate'],
   label: ['description', 'libelle', 'libelleoperation', 'intitule', 'label', 'name', 'payee', 'narrative'],
-  account: ['compte', 'assetaccount', 'account', 'accountname', 'comptebancaire', 'nomducompte'],
+  // `numerocompte`/`libellecompte` : BoursoBank sépare le numéro (unique, stable)
+  // du libellé (parfois générique, « BoursoBank » pour plusieurs comptes). On
+  // préfère le numéro, pour que deux comptes distincts ne fusionnent pas.
+  account: ['compte', 'assetaccount', 'account', 'accountname', 'comptebancaire', 'nomducompte', 'numerocompte', 'libellecompte'],
   amount: ['montant', 'amount', 'montanteur', 'valeur', 'value'],
   debit: ['debit'],
   credit: ['credit'],
   category: ['categorie', 'category'],
   subCategory: ['souscategorie', 'subcategory', 'sous categorie'],
   notes: ['note', 'notes', 'commentaire', 'comment', 'memo'],
-  cleared: ['pointee', 'pointe', 'cleared', 'rapprochee'],
+  cleared: ['pointee', 'pointe', 'pointage', 'cleared', 'rapprochee'],
 };
 
 function mapHeader(header: string[]): Record<string, number> {
@@ -77,6 +87,14 @@ function mapHeader(header: string[]): Record<string, number> {
       const at = normalised.indexOf(n);
       if (at >= 0) { idx[field] = at; break; }
     }
+  }
+  // BoursoBank : le montant est la première des deux colonnes « Solde ». On ne
+  // l'accepte que sur la signature de cet export (deux « Solde », un « Numéro
+  // Compte », une « Catégorie Parente »), pour ne jamais prendre le solde
+  // courant d'une banque qui, elle, porte un vrai montant ailleurs.
+  if (idx['amount'] === undefined) {
+    const soldes = normalised.reduce<number[]>((acc, n, i) => (n === 'solde' ? [...acc, i] : acc), []);
+    if (soldes.length >= 2 && normalised.includes('numerocompte') && normalised.includes('categorieparente')) idx['amount'] = soldes[0];
   }
   return idx;
 }

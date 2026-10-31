@@ -219,7 +219,7 @@ retouche : c'est un changement de structure, pas de contenu.
 
 | Format | Reconnaissance | Remarques |
 |---|---|---|
-| CSV, TSV | séparateur et colonnes reniflés | Bankin' (`Date;Description;Compte;Montant;…`) et en-têtes anglais |
+| CSV, TSV | séparateur et colonnes reniflés | Bankin' (`Date;Description;Compte;Montant;…`), en-têtes anglais, et BoursoBank/Boursorama (voir ci-dessous) |
 | OFX 1.x | `OFXHEADER:` ou `<OFX>` | dialecte SGML aux balises non fermées, normalisé avant lecture |
 | OFX 2.x | `<?xml>` + `<OFX>` | |
 | CAMT.053 | espace de noms ISO 20022 | un compte par `<Stmt>`, une ligne par `<Ntry>` |
@@ -230,6 +230,16 @@ retouche : c'est un changement de structure, pas de contenu.
 
 Décoder le BIFF8 à la main serait déraisonnable, et une bibliothèque pour ce seul cas ne vaut
 pas la dépendance. C'est une dette assumée, et le message d'erreur le dit.
+
+**BoursoBank/Boursorama** (`Date Opération;…;Solde;…;Numéro Compte;Libellé Compte;Solde;Pointage`)
+sort du lot des en-têtes génériques sur deux points, traités dans `csv.ts`. D'abord le **montant**
+de l'opération y est nommé « Solde », et il y a **deux** colonnes « Solde » (le montant, puis le
+solde du compte après l'opération) : « Solde » signifiant « solde courant » dans la plupart des
+exports, on ne peut pas en faire un alias de montant ; on ne lit la **première** « Solde » comme
+montant que sur la **signature** de cet export (deux « Solde », un « Numéro Compte », une
+« Catégorie Parente »). Ensuite le compte est identifié par le **Numéro Compte** (unique et stable)
+plutôt que par le « Libellé Compte », parfois générique (« BoursoBank » pour plusieurs comptes),
+qui fusionnerait des comptes distincts. Le BOM UTF-8 et le pointage « Oui/Non » sont lus au passage.
 
 ## 8. Règles de catégorisation
 

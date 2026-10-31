@@ -501,3 +501,45 @@ describe('avertissement avant annulation', () => {
     assert.equal(imports.getImport(first.importId)!.editedRows, 1);
   });
 });
+
+describe('format BoursoBank/Boursorama', () => {
+  // L'export nomme le montant « Solde » (deux colonnes « Solde » : montant puis
+  // solde du compte), identifie le compte par « Numéro Compte », et marque le
+  // pointage « Oui/Non ». BOM UTF-8 et séparateur point-virgule.
+  const bourso = '﻿"Date Opération";"Date Valeur";Libellé;"Libellé Suggéré";Catégorie;"Catégorie Parente";Solde;Commentaire;"Numéro Compte";"Libellé Compte";Solde;Pointage\n'
+    + '2026-10-30;2026-10-30;"CARTE 28/10/26 G20 CB*7836";"Supermarchés G20";Alimentation;"Vie quotidienne";-8,94;;00040203046;BoursoBank;983.2;Non\n'
+    + '2026-10-28;2026-10-28;"VIR SALAIRE";"Vir Salaire";"Salaire fixe";"Revenus du travail";"3 500,00";;00021425401;"COMPTE COURANT M THOMAS";77197.31;Oui\n'
+    + '2026-10-29;2026-10-29;"VIR CREATION COMPTE";"Vir Creation Compte";"Virements émis";"Virements émis";"-1 000,00";;00040203046;BoursoBank;992.14;Non';
+
+  it('lit le montant dans la première colonne « Solde », jamais le solde du compte', () => {
+    const r = parseFile(Buffer.from(bourso, 'utf8'), 'bourso.csv');
+    assert.equal(r.rejected.length, 0, JSON.stringify(r.rejected));
+    assert.equal(r.rows.length, 3);
+    const salaire = r.rows.find((x) => x.label.includes('SALAIRE'))!;
+    assert.equal(salaire.amount, 350000, 'montant avec séparateur de milliers');
+    assert.equal(salaire.cleared, true, '« Oui » = pointé');
+    const g20 = r.rows.find((x) => x.label.includes('G20'))!;
+    assert.equal(g20.amount, -894); // pas 98320 (le solde du compte, 983.2)
+    assert.equal(g20.cleared, false);
+    const vir = r.rows.find((x) => x.label.includes('CREATION'))!;
+    assert.equal(vir.amount, -100000);
+  });
+
+  it('groupe par « Numéro Compte » (le libellé « BoursoBank » est partagé)', () => {
+    const r = parseFile(Buffer.from(bourso, 'utf8'), 'bourso.csv');
+    const counts: Record<string, number> = {};
+    for (const row of r.rows) counts[row.accountLabel] = (counts[row.accountLabel] || 0) + 1;
+    assert.deepEqual(counts, { '00040203046': 2, '00021425401': 1 });
+  });
+
+  it('n’attrape pas une colonne « Solde » qui est vraiment le solde courant', () => {
+    // Banque à débit/crédit avec une colonne « Solde » (solde courant) : le
+    // montant doit venir de Débit/Crédit, jamais de « Solde ».
+    const classique = 'Date;Libellé;Débit;Crédit;Solde\n'
+      + '2026-10-30;Courses;8,94;;1983,20\n'
+      + '2026-10-28;Salaire;;3500,00;1992,14';
+    const r = parseFile(Buffer.from(classique, 'utf8'), 'banque.csv');
+    assert.equal(r.rejected.length, 0, JSON.stringify(r.rejected));
+    assert.deepEqual(r.rows.map((x) => x.amount), [-894, 350000]); // pas 198320 ni 199214
+  });
+});
