@@ -43,8 +43,14 @@ export class EmployesStore {
     // mois suivant. Réservé aux adultes (un enfant ne charge jamais le module).
     effect(() => this.foyer.setExternalDayExtras('employe', this.cesuDayExtras()));
     // Charger le socle dès qu'un adulte est connecté, pour que le repère
-    // d'agenda existe sans avoir ouvert l'écran « Ménage ».
-    effect(() => { if (this.foyer.authed() && !this.foyer.isChild() && !this.boot()) void this.reloadBoot(); });
+    // d'agenda existe sans avoir ouvert l'écran « Ménage ». Module éteint, le
+    // serveur le verrouille (403) : on n'appelle pas, et on oublie le socle déjà
+    // lu, ce qui retire ses repères et le fait recharger à la réactivation.
+    effect(() => {
+      if (!this.foyer.authed() || this.foyer.isChild()) return;
+      if (!this.foyer.modEmploye()) { this.boot.set(null); return; }
+      if (!this.boot()) void this.reloadBoot();
+    });
   }
 
   /** Date « AAAA-MM-JJ » du jour de rappel (borné [1, 28]) du mois suivant `month`. */
