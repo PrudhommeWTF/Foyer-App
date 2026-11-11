@@ -50,7 +50,7 @@ Supprimés en conséquence : `OS.stmt`, `OS.query`, `OS.setfield`, `OS.database`
 
 ### Le pont web
 
-- `src/tablet/Web.js` est **nouveau** (écrit pour Foyer) : le troisième pont, à la place d'`iOS.js` et d'`Android.js`. Dans cette version il garde tout **en mémoire**.
+- `src/tablet/Web.js` est **nouveau** (écrit pour Foyer) : le troisième pont, à la place d'`iOS.js` et d'`Android.js`. Projets, dessins et « mes personnages » passent par l'API de Foyer (`/api/atelier/*`). C'est le serveur qui nomme les fichiers : `setmedianame` ignore le nom demandé, l'éditeur utilisait déjà celui qu'on lui rend. `duplicateAsset` ne copie plus rien (la bibliothèque est servie avec l'éditeur). Un enregistrement refusé pour conflit propose le choix à l'enfant ; sans réseau, un témoin « Non enregistré » reste affiché jusqu'au prochain enregistrement réussi.
 - `src/tablet/OS.js` est réécrit : même rôle de façade, mais vers `Web.js` seulement. `waitForInterface` n'attend plus rien. `hidesplash`, `registerLibraryAssets`, `getfile`, `setfile`, `parse`, `tracemedia`, `pageError` sont retirés, plus rien ne les appelant.
 - `src/utils/lib.js` : `isiOS` vaut toujours vrai et `isAndroid` toujours faux. Les branches `if (isAndroid)` de l'éditeur sont laissées en place, inertes, pour ne pas toucher une cinquantaine d'endroits sans nécessité.
 - Sons : joués par Web Audio (`Web.js`) derrière les mêmes fonctions `registerSound`, `playSound`, `stopSound`.

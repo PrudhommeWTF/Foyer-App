@@ -10,6 +10,7 @@ export interface ModuleCounts {
   ecole: { comptes: number; eleves: number };
   entretien: { gestes: number; realisations: number; justificatifs: number };
   equipements: { fiches: number; pieces: number };
+  atelier: { projets: number; medias: number };
 }
 
 @Injectable({ providedIn: 'root' })

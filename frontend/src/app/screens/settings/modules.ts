@@ -137,6 +137,7 @@ export class SettingsModulesComponent {
       return n ? `${n} geste${n > 1 ? 's' : ''}, ${r} réalisation${r > 1 ? 's' : ''} notée${r > 1 ? 's' : ''}${j ? `, ${j} justificatif${j > 1 ? 's' : ''}` : ''}` : '';
     }
     if (id === 'equipements') { const n = c.equipements.fiches, p = c.equipements.pieces; return n ? `${n} fiche${n > 1 ? 's' : ''}, ${p} pièce${p > 1 ? 's' : ''} jointe${p > 1 ? 's' : ''}` : ''; }
+    if (id === 'atelier') { const n = c.atelier.projets; return n ? `${n} projet${n > 1 ? 's' : ''}` : ''; }
     if (id === 'employe') { const n = c.employe.employes, p = c.employe.presences; return n || p ? `${n} employé${n > 1 ? 's' : ''}, ${p} présence${p > 1 ? 's' : ''}` : ''; }
     return '';
   }
