@@ -87,6 +87,11 @@ async function garder(cle, reponse) {
 /** Cette adresse est-elle un fichier de la coquille ? Jamais l'API. */
 function estCoquilleUrl(url) {
   if (url.pathname.includes('/api/')) return false;
+  // L'Atelier code est une page à part, avec ses 250 fichiers aux noms sans
+  // empreinte : dans ce cache plafonné à 60 entrées et servi « cache d'abord »,
+  // ils chasseraient la coquille et resteraient figés après une mise à jour. Il
+  // passe donc par le réseau, en attendant son propre cache versionné.
+  if (url.pathname.includes('/atelier/')) return false;
   return /\.(?:js|css|png|svg|ico|webmanifest|woff2?)$/.test(url.pathname);
 }
 

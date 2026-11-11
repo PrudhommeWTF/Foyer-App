@@ -1,6 +1,6 @@
-# Atelier code : état des lieux (à valider)
+# Atelier code : état des lieux
 
-Ce document précède tout code. Il dit ce qui a été **vérifié** (lu dans les sources ou essayé dans un navigateur), ce qui ne l'a pas été, et les décisions qui t'attendent. Aucun code de ScratchJr ni de Scratch n'est entré dans le dépôt.
+Ce document a précédé tout code. Il dit ce qui a été **vérifié** (lu dans les sources ou essayé dans un navigateur), ce qui ne l'a pas été, et les décisions prises (en fin de document). Le fonctionnement du module est dans [`atelier.md`](atelier.md).
 
 Sources lues : `scratchfoundation/scratchjr` (commit `ff15b0f`, 8 avril 2022, version 1.2.0) et `scratchfoundation/scratch-editor` (commit `1f42af47`, 11 novembre 2026, version 15.3.0), conditions d'utilisation de Scratch dans le source du site (`scratchfoundation/scratch-www`, `src/views/terms/terms.jsx`).
 
@@ -173,16 +173,19 @@ systemctl start foyer
 
 Restauration : arrêter le service, extraire l'archive au même endroit, redémarrer. La PR 2 donnera la procédure exacte, sauvegarde de module comprise.
 
-## Décisions attendues
+## Décisions prises (11 novembre 2026)
 
-1. **Page à part plutôt qu'iframe** (point 6). Recommandé.
-2. **Bibliothèque de projets en écran Foyer**, l'éditeur seul restant le code d'origine (point 6). Recommandé.
-3. **Son en WAV** plutôt que le format natif du navigateur (point 1). Recommandé.
-4. **Licence du niveau 2** : dépôt séparé AGPL, ou tout Foyer sous AGPL (point 8). À toi.
-5. **Bibliothèque dans un dépôt à part sous CC BY-SA**, archive épinglée (point 7). Recommandé.
-6. **La mascotte** : Boulon, ou autre chose.
-7. **L'ordre entrelacé** (point 9), et le modèle d'iPad des garçons.
-8. **Accès réseau** : pour la PR 3, soit tu autorises `cdn.assets.scratch.mit.edu` dans l'environnement de mes sessions, soit tu lances toi-même le script de récupération.
+| Sujet | Décision |
+|---|---|
+| Isolation | **Page à part** (`/atelier/petits/`), pas d'iframe. |
+| Bibliothèque de projets | **Écran Foyer** ; l'éditeur seul reste le code d'origine. |
+| Son enregistré | **WAV** encodé dans le navigateur. |
+| Licence du niveau 2 | **Tout dans Foyer** : le dépôt passera sous AGPL-3.0-only à l'entrée du premier code AGPL (PR 7), dans un commit à part, à confirmer à ce moment. Les versions déjà publiées restent sous MIT. Il n'y aura donc ni dépôt séparé ni bundle épinglé pour le niveau 2, contrairement à ce qu'envisage le point 8. |
+| Mascotte | **Boulon**, validé. Redessiné en tracés seuls à la PR 1 : l'éditeur de dessin d'origine carrait ses angles arrondis. |
+| Ordre | **Entrelacé** : PR 1 à 4, puis 7 et 8, puis 5 et 6, puis 9. Essai court du niveau 2 après la PR 1. |
+| Tablette | iPad Pro 13 pouces (à confirmer) : 1 366 px de large en paysage, au-dessus des deux seuils de Scratch. |
+
+Restent ouverts, tous deux pour la PR 3 : **où ranger la bibliothèque de Scratch** (dans ce dépôt sous un dossier à licence propre, dans un dépôt à part, ou téléchargée à l'installation ; à trancher une fois son poids mesuré), et **l'accès de mes sessions à `cdn.assets.scratch.mit.edu`**, sans lequel c'est toi qui lances le script de récupération.
 
 ## Annexe A : les fonctions de `OS.js`
 

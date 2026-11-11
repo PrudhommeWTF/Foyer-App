@@ -542,6 +542,7 @@ conservée dans [`docs/`](docs/).
 | Assistants (serveur MCP) | [`docs/assistants.md`](docs/assistants.md) |
 | Paramètres (registre) | [`docs/parametres.md`](docs/parametres.md) |
 | Sécurité et mise en ligne | [`docs/audit-securite.md`](docs/audit-securite.md), [`docs/mise-en-ligne-checklist.md`](docs/mise-en-ligne-checklist.md) |
+| Atelier code (programmation par blocs pour les enfants, **en cours de construction**) | [`docs/atelier.md`](docs/atelier.md), [`docs/atelier-etat-des-lieux.md`](docs/atelier-etat-des-lieux.md) |
 | Sauvegarde et restauration | [`docs/sauvegarde-restauration.md`](docs/sauvegarde-restauration.md) |
 | Déploiement et exploitation | [`deploy/README.md`](deploy/README.md) |
 
@@ -557,4 +558,4 @@ conservée dans [`docs/`](docs/).
 
 ## 📝 Licence
 
-MIT.
+MIT. Le code de tiers embarqué (l'Atelier code est construit à partir du code source de ScratchJr, licence BSD 3 clauses) est décrit dans [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

@@ -4,9 +4,9 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
+    "build": "ng build && node scripts/build-atelier.mjs",
     "watch": "ng build --watch --configuration development",
-    "test": "node scripts/check-tests.js && tsx --test \"src/app/core/**/*.test.ts\"",
+    "test": "node scripts/check-tests.js && tsx --test \"src/app/core/**/*.test.ts\" && node --test scripts/build-atelier.test.mjs",
     "typecheck": "tsc -p tsconfig.test.json"
   },
   "private": true,
@@ -29,6 +29,7 @@
     "@angular/cli": "^21.2.22",
     "@angular/compiler-cli": "^21.2.22",
     "@types/node": "^22.20.1",
+    "esbuild": "^0.28.1",
     "tsx": "^4.20.6",
     "typescript": "~5.9.2"
   }
