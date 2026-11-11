@@ -8,6 +8,8 @@ import { migrateEmployes } from './employes/schema';
 import { initEmployesRepo } from './employes/repo';
 import { migrateEcole } from './ecole/schema';
 import { migrateRevisions } from './revisions/schema';
+import { migrateAtelier } from './atelier/schema';
+import { initAtelierRepo, referencedFileIds as atlFileIds } from './atelier/repo';
 import { initRevisionsRepo } from './revisions/repo';
 import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
@@ -199,6 +201,10 @@ initEquipementsRepo(db);
 migrateEntretien(db);
 initCosts(db);
 initRealisations(db);
+// L'Atelier code : ses médias sont des lignes de hh_attachments, que le ménage
+// ci-dessous doit savoir détenues avant de balayer.
+migrateAtelier(db);
+initAtelierRepo(db);
 migrateHouseholdDocument();
 // Après le document : les pièces d'Équipements rejoignent le socle Maison.
 adoptSharedRooms(db);
@@ -302,6 +308,8 @@ export function pruneUnreferencedFiles(): void {
     // Les justificatifs d'entretien aussi, tant que leur geste existe : un geste
     // supprimé laisse les siens partir ici (voir entretien/realisations.ts).
     for (const id of entFileIds(new Set((doc.tasks || []).map((t) => String(t.id))))) referenced.add(id);
+    // Les dessins et vignettes de l'Atelier code, tenus par atl_media.
+    for (const id of atlFileIds()) referenced.add(id);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
       log.info(`Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);

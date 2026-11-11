@@ -100,6 +100,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 | `modEcole` | École (ÉcoleDirecte) | Foyer | oui / non | désactivé | — | Foyer | — |
 | `modEntretien` | Entretien de la maison | Foyer | oui / non | activé | — | Foyer | — |
 | `modEquipements` | Équipements | Foyer | oui / non | activé | — | Foyer | — |
+| `modAtelier` | Atelier code | Foyer | oui / non | activé | — | Foyer | — |
 | `modRevisions` | Révisions | Foyer | oui / non | activé | — | Foyer | — |
 
 - **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
@@ -109,6 +110,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 - **École (ÉcoleDirecte)** (`modEcole`) : Rapatrie depuis ÉcoleDirecte ce qui concerne les enfants. Désactivé par défaut : tant qu’il l’est, Foyer ne contacte jamais ÉcoleDirecte, la section École des Paramètres disparaît et ses accès sont fermés ; les comptes enregistrés sont conservés.
 - **Entretien de la maison** (`modEntretien`) : Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran Entretien disparaît, sa liste se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.
 - **Équipements** (`modEquipements`) : Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.
+- **Atelier code** (`modAtelier`) : Un atelier pour apprendre à programmer en assemblant des blocs : des personnages, un décor, des scripts. Désactivé, l’écran et l’accès API disparaissent ; les projets et leurs dessins sont conservés.
 - **Révisions** (`modRevisions`) : Des exercices courts pour réviser à la maison (les tables de multiplication et d’addition, les soustractions, les compléments, les doubles et moitiés, la comparaison des nombres, les nombres en lettres, la monnaie, la lecture de l’heure, la dictée de mots, la conjugaison, l’orthographe, le féminin et le pluriel, la lecture d’un petit texte), avec le programme et le suivi de chaque enfant. Désactivé, l’écran, la tuile d’accueil, la tâche du jour dans « Devoirs de … », l’accès API et les outils d’assistant disparaissent ; les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles.
 
 ## Les modules
@@ -232,6 +234,20 @@ L’heure du bilan du dimanche, et la lecture à voix haute des exercices sur ce
 
 - **Heure du bilan du dimanche** (`revisionsBilanHeure`) : Le dimanche, à partir de cette heure, chaque adulte qui l’a demandé reçoit le bilan de la semaine de chaque enfant (lundi à dimanche).
 - **Lire à voix haute en mode Apprendre** (`revisionsVoix`) : En mode Apprendre, chaque ligne est lue à voix haute, quand cet appareil a une voix française. Rien ne part sur Internet : c’est la voix de l’appareil.
+
+### Atelier code
+
+Combien de projets un enfant peut garder, la place qu’ils peuvent prendre sur le disque, et le temps pendant lequel un projet supprimé reste récupérable.
+
+| Clé | Libellé | Portée | Type | Défaut | Valeurs admises | Module | Variable prioritaire |
+|---|---|---|---|---|---|---|---|
+| `atelierProjetsMax` | Nombre maximal de projets par enfant | Foyer | entier | `100` | de 10 à 500 | Atelier | — |
+| `atelierQuotaMo` | Espace disque maximal par membre | Foyer | entier | `500` | de 50 à 5000 | Atelier | — |
+| `atelierCorbeilleJours` | Garder un projet supprimé pendant | Foyer | entier | `30` | de 7 à 365 | Atelier | — |
+
+- **Nombre maximal de projets par enfant** (`atelierProjetsMax`) : Au-delà, l’Atelier demande à l’enfant de supprimer un vieux projet avant d’en créer un nouveau. Les projets supprimés ne comptent pas.
+- **Espace disque maximal par membre** (`atelierQuotaMo`) : En mégaoctets, pour les dessins et les vignettes d’un même membre. Une fois atteint, l’Atelier refuse un nouveau dessin et dit à l’enfant de demander à un parent.
+- **Garder un projet supprimé pendant** (`atelierCorbeilleJours`) : En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins.
 
 ### École
 

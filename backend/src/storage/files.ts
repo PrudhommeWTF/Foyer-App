@@ -36,10 +36,15 @@ export function initFiles(db: Database): void {
  * réalisation d'entretien (attestation de la chaudière, certificat de
  * ramonage), servis par le module Entretien aux seuls adultes. Le propriétaire
  * est la réalisation, `<geste>@<instant>` (voir entretien/realisations.ts).
+ *
+ * `atelier` est gardé lui aussi : les dessins et vignettes des projets de
+ * l'Atelier code, servis par le module à leur seul propriétaire (et aux adultes).
+ * Le propriétaire est toujours `atl` : c'est `atl_media` qui dit à qui est quoi,
+ * un même fichier pouvant appartenir à deux enfants (voir atelier/repo.ts).
  */
-export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment' | 'maintenance';
+export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment' | 'maintenance' | 'atelier';
 export const OWNER_KINDS: OwnerKind[] = ['recipe', 'shop'];
-export const GUARDED_KINDS: OwnerKind[] = ['equipment', 'maintenance'];
+export const GUARDED_KINDS: OwnerKind[] = ['equipment', 'maintenance', 'atelier'];
 
 export interface StoredFile {
   id: number;
