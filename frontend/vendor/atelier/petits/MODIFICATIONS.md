@@ -78,6 +78,14 @@ Le bundle n'a donc **aucune dépendance** à l'exécution.
 - `UI.js`, `editor.css` : le logo de la fiche du projet est retiré.
 - `settings.json` : `defaultSprite` vaut `Boulon.svg`. `media.json` : la bibliothèque de départ est Boulon (trois costumes), l'étoile et la ferme.
 
+### Hors ligne, téléphone, rotation
+
+- `src/tablet/Offline.js` est **nouveau** (écrit pour Foyer) : la copie, dans le navigateur (IndexedDB), des projets ouverts sur l'appareil, de leurs dessins, et de ce qui n'a pas encore pu être envoyé.
+- `Web.js` : un projet s'enregistre d'abord sur l'appareil, puis sur le serveur. Sans réseau il reste marqué « Non enregistré » et part au retour (relance toutes les 15 secondes tant qu'il reste quelque chose). Un dessin fait sans réseau porte un nom provisoire, remplacé dans le projet par le nom que le serveur lui donne à l'envoi.
+- `lib.js`, `app.js` : les feuilles de style étaient chargées par des requêtes **synchrones**, qu'un service worker ne sert pas : l'éditeur ne pouvait pas s'ouvrir hors ligne. Elles sont chargées l'une après l'autre par `fetch`, dans le même ordre. `IO.requestSynchronous`, que plus rien n'appelait, est retiré.
+- `app.js` : tenu debout, l'appareil n'affiche qu'un message (« Tourne l'iPad ») ; l'éditeur calcule sa mise en page une fois, pour un écran couché, et la page se recharge quand on le tourne.
+- `editor.js` : `vue=plein` ouvre un projet pour le regarder (mode présentation d'emblée, sans retour à l'éditeur) : c'est l'ouverture sur téléphone.
+
 ### Bibliothèque
 
 - `MediaLib.js` : la bibliothèque n'est plus un seul dossier. `MediaLib.url(md5)` dit où un fichier est servi (sept appels `MediaLib.path + md5` remplacés) ; `loadFamilyLibrary` ajoute en tête les dessins que la famille a déposés sur son serveur (`/api/atelier/bibliotheque`) ; `localizeMediaNames` garde le nom du catalogue quand les messages n'en donnent pas.

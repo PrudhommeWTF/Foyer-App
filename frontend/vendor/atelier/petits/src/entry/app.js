@@ -17,27 +17,61 @@ function loadSettings (settingsRoot, whenDone) {
     });
 }
 
+// Atelier: shows 'turn the screen' while the device is held upright. Returns true
+// when the page was loaded upright, in which case nothing else must start.
+function turnScreen () {
+    var upright = function () {
+        return window.innerHeight > window.innerWidth;
+    };
+    var loadedUpright = upright();
+    var veil = document.createElement('div');
+    var s = veil.style;
+    s.position = 'fixed'; s.left = '0'; s.top = '0'; s.width = '100%'; s.height = '100%'; s.zIndex = '100000';
+    s.background = '#F5F2F7'; s.color = '#1F3B4D'; s.font = '26px Roboto, sans-serif'; s.textAlign = 'center';
+    s.alignItems = 'center'; s.justifyContent = 'center'; s.padding = '24px'; s.boxSizing = 'border-box';
+    veil.setAttribute('role', 'alert');
+    veil.textContent = /iPad|Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1 ? 'Tourne l’iPad' : 'Tourne l’écran';
+    document.body.appendChild(veil);
+    var update = function () {
+        if (loadedUpright && !upright()) {
+            window.location.reload();
+            return;
+        }
+        veil.style.display = upright() ? 'flex' : 'none';
+    };
+    window.addEventListener('resize', update);
+    update();
+    return loadedUpright;
+}
+
 // App-wide entry-point
 window.onload = () => {
     let root = './';
 
-    preprocessAndLoadCss('css', 'css/font.css');
-    preprocessAndLoadCss('css', 'css/base.css');
-    preprocessAndLoadCss('css', 'css/editor.css');
-    preprocessAndLoadCss('css', 'css/editorleftpanel.css');
-    preprocessAndLoadCss('css', 'css/editorstage.css');
-    preprocessAndLoadCss('css', 'css/editormodal.css');
-    preprocessAndLoadCss('css', 'css/librarymodal.css');
-    preprocessAndLoadCss('css', 'css/paintlook.css');
+    // Atelier: the editor is laid out once, for a landscape screen, from the size of
+    // the window when the page loads. Held upright, the device only shows a message;
+    // turned, the page reloads to take its real size.
+    if (turnScreen()) {
+        return;
+    }
 
-    // Start up sequence
-    // Load settings from JSON
-    loadSettings(root, () => {
-        // Load locale strings from JSON
-        Localization.includeLocales(root, () => {
-            // Load Media Lib from JSON
-            MediaLib.loadMediaLib(root, () => {
-                OS.waitForInterface(editorMain);
+    // Atelier: the style sheets are fetched one after the other (see lib.js), in
+    // the original order, before anything is drawn.
+    var sheets = ['font', 'base', 'editor', 'editorleftpanel', 'editorstage', 'editormodal', 'librarymodal', 'paintlook'];
+    sheets.reduce(function (chain, name) {
+        return chain.then(function () {
+            return preprocessAndLoadCss('css', 'css/' + name + '.css');
+        });
+    }, Promise.resolve()).then(function () {
+        // Start up sequence
+        // Load settings from JSON
+        loadSettings(root, () => {
+            // Load locale strings from JSON
+            Localization.includeLocales(root, () => {
+                // Load Media Lib from JSON
+                MediaLib.loadMediaLib(root, () => {
+                    OS.waitForInterface(editorMain);
+                });
             });
         });
     });

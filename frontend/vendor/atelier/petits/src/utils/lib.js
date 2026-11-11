@@ -51,21 +51,22 @@ export function preprocess (s) {
 }
 
 /**
- * Load the URL synchronously (fine because it's file://), preprocess the result and return the string.
- */
-export function preprocessAndLoad (url) {
-    var xmlhttp = new XMLHttpRequest();
-    xmlhttp.open('GET', url, false);
-    xmlhttp.send();
-    return preprocess(xmlhttp.responseText);
-}
-
-/**
- * Load a CSS file, preprocess it using preprocessAndLoad() and then returns it as a style tag.
- * Also rewrites all instances of url() with a different base
+ * Load a CSS file, preprocess it and add it to the page as a style tag.
+ * Also rewrites all instances of url() with a different base.
+ * Atelier: the original loaded the file with a synchronous request, fine for a
+ * file:// page but never served by a service worker, hence never available
+ * offline. It is now fetched; the returned promise resolves once the style is in
+ * the page, and the caller keeps the order of the sheets.
  */
 export function preprocessAndLoadCss (baseUrl, url) {
-    var cssData = preprocessAndLoad(url);
+    return fetch(url).then(function (response) {
+        return response.text();
+    }).then(function (text) {
+        addCss(baseUrl, preprocess(text));
+    });
+}
+
+function addCss (baseUrl, cssData) {
     // search for url("../images") pattern
     cssData = cssData.replace(/url\("/g, 'url(\"' + baseUrl + '/');
     // search for url('../images') pattern

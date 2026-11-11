@@ -4,22 +4,6 @@ import {setCanvasSize, drawThumbnail} from '../utils/lib';
 import SVG2Canvas from '../utils/SVG2Canvas';
 
 export default class IO {
-    /**
-     * Synchronous requests are normally not recommended, but in this case we're
-     * going to file URLs so this should be okay.
-     */
-    static requestSynchronous (url) {
-        var request = new XMLHttpRequest();
-        request.open('GET', url, false);
-        request.send(null);
-        if (request.status === 0 || request.status === 200) {
-            return request.responseText;
-        } else {
-            // Failed synchronous loading
-            return '';
-        }
-    }
-
     static requestFromServer (url, whenDone) {
         var xmlrequest = new XMLHttpRequest();
         xmlrequest.addEventListener('error', transferFailed, false);

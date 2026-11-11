@@ -6,19 +6,21 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 3 sur 9 : une bibliothèque de personnages et de décors, et des exemples.**
+**Étape 4 sur 9 : l'Atelier marche sans réseau, et se regarde sur un téléphone.**
 
 | Fait | Pas encore |
 |---|---|
 | Écran « Atelier code » dans le menu, y compris celui d'un enfant ; module activable | Décors en image et personnages à plusieurs costumes (niveau Grands codeurs) |
 | 212 personnages et 17 décors, cinq projets d'exemple, dessins ajoutés par la famille | |
-| Projets par membre : créer, ouvrir, renommer, dupliquer, supprimer | Hors ligne (un projet non enregistré faute de réseau le reste jusqu'au prochain essai, page ouverte) |
-| Enregistrement automatique, avec refus d'écraser le travail d'un autre appareil | iPhone en lecture, message de rotation |
+| Projets par membre : créer, ouvrir, renommer, dupliquer, supprimer | Créer un projet sans réseau ; « mes personnages » sans réseau |
+| Hors ligne : l'Atelier s'ouvre, le projet déjà ouvert sur l'appareil se continue, tout part au retour du réseau | |
+| Enregistrement automatique, avec refus d'écraser le travail d'un autre appareil | |
+| Téléphone : les projets se regardent en plein écran ; écran debout : « Tourne l'iPad » | |
 | Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | Son enregistré, photo |
 | Corbeille : un projet supprimé reste récupérable, puis est purgé | Vue parent (lire les projets d'un enfant, restaurer depuis l'écran), partage |
 | Limites réglables : nombre de projets, espace disque | Niveau « Grands codeurs » |
 
-Sur un écran étroit (téléphone), l'écran montre les projets sans permettre de les ouvrir : l'éditeur n'y est pas utilisable.
+Sur un écran étroit (téléphone), les projets s'ouvrent pour être regardés, en plein écran, téléphone couché : l'éditeur n'y est pas utilisable, et rien n'y est modifié.
 
 ## Architecture
 
@@ -91,6 +93,35 @@ systemctl start foyer
 ```
 
 Pour revenir en arrière : arrêter le service, extraire l'archive dans `/var/lib/foyer`, réinstaller la version précédente, redémarrer. La sauvegarde chiffrée habituelle ([`sauvegarde-restauration.md`](sauvegarde-restauration.md)) emporte déjà tout : les tables sont dans `foyer.db`, les fichiers dans `pieces/`.
+
+## Hors ligne
+
+Deux mécanismes, un par nature de donnée :
+
+| Quoi | Où | Comment |
+|---|---|---|
+| Les fichiers de l'Atelier (code, images, sons, bibliothèque) | Cache du service worker de Foyer (`foyer-atelier-v1`) | Mis de côté en entier à la première ouverture en ligne (480 fichiers, 11,7 Mo). Servis depuis le cache, rafraîchis en arrière-plan |
+| Les projets et les dessins de l'enfant | IndexedDB du navigateur (`foyer-atelier`) | Copie de ce qui a été ouvert sur cet appareil, et file de ce qui reste à envoyer |
+
+Ce que cela donne à l'usage :
+
+- **L'Atelier s'ouvre sans réseau** dès qu'il a été ouvert une fois en ligne sur l'appareil.
+- **Un projet déjà ouvert sur l'appareil se continue** sans réseau, dessins compris. Le témoin « Non enregistré » reste affiché ; au retour du réseau tout part seul, une seule fois, y compris après fermeture et réouverture.
+- **L'écran Foyer**, sans réseau, ne peut pas lister les projets : il propose de continuer le dernier ouvert sur l'appareil.
+- **Une mise à jour de Foyer ne change rien sous les doigts de l'enfant** : la page ouverte garde ce qu'elle a chargé, la nouvelle version sert à l'ouverture suivante.
+
+Limites, à connaître :
+
+- Sans réseau, on ne **crée** pas de projet et on n'ouvre pas un projet **jamais ouvert sur cet appareil**.
+- Un dessin fait sans réseau entre dans le projet, mais pas dans « mes personnages ».
+- La copie locale vit dans le navigateur : la supprimer (réglages de Safari, « Effacer historique et données ») **perd ce qui n'était pas encore envoyé**. Ce qui est enregistré sur le serveur ne risque rien.
+- Si le même projet a été modifié ailleurs entre-temps, rien n'est écrasé : au prochain enregistrement, l'enfant choisit laquelle des deux versions garder.
+
+Pour repartir d'un état propre sur un appareil qui se comporte mal (dans la console du navigateur, sur une page de Foyer) :
+
+```js
+indexedDB.deleteDatabase('foyer-atelier'); caches.delete('foyer-atelier-v1');
+```
 
 ## Bibliothèque
 

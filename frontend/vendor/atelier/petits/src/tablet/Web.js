@@ -6,13 +6,17 @@
 //  browser, or asked from the Foyer API (/api/atelier/*) with the session cookie.
 //
 //  Projects, the child's own characters and backgrounds, and media files live on
-//  the server. The server is the only one to name a media file (the fingerprint
+//  the server. A copy of what this device has opened is kept in Offline.js, so
+//  that a project goes on without network and is sent when it comes back.
+//  The server is the only one to name a media file (the fingerprint
 //  of the content it has cleaned): the name sent back is the one the editor uses.
 //
 //  Recording and camera come later; until then getsettings() declares them
 //  unavailable, so the editor does not show their buttons, and the functions
 //  below throw if something calls them.
 //////////////////////////////////////////////////
+
+import Offline from './Offline';
 
 // The page is served at <foyer>/atelier/petits/, the API at <foyer>/api/atelier
 const API = '../../api/atelier';
@@ -22,6 +26,11 @@ const KINDS = {usershapes: 'personnage', userbkgs: 'decor'};
 const revisions = {}; // project id -> revision last read from the server
 const mediaCache = {}; // file name -> base64 content, as the editor expects it
 let unsavedBadge = null;
+const conflicts = {}; // project id -> revision the server holds, when it differs from the one this device started from
+let owner = null; // id of the member whose project is open: someone else's when an adult looks at a child's work
+let member = null; // id of the member of this session, or of the last one seen on this device
+const TEMP = /^horsligne-[0-9a-f]+\.(svg|png)$/; // a media file drawn without network
+const HINT = 'foyer.atelier.dernier'; // read by the Foyer screen, to offer the last project when offline
 
 // Sounds
 let audio = null;
@@ -111,8 +120,17 @@ function notice (text, buttons) {
     box.querySelector('button').focus();
 }
 
-// The 'not saved' state, visible as long as the last save has not reached the server
+// The 'not saved' state, visible as long as the last save has not reached the server.
+// While it lasts, sending is tried again regularly: the browser's 'online' event
+// alone is not reliable enough (it says a network is there, not that Foyer answers).
+let retry = null;
 function setUnsaved (on) {
+    if (on && !retry) {
+        retry = setInterval(flush, 15000);
+    } else if (!on && retry) {
+        clearInterval(retry);
+        retry = null;
+    }
     if (on && !unsavedBadge) {
         unsavedBadge = document.createElement('div');
         unsavedBadge.textContent = 'Non enregistré';
@@ -168,11 +186,13 @@ function isSvg (name) {
     return /\.svg$/.test(name);
 }
 
-// Sends a media file; the server answers with its name
+// Sends a media file; the server answers with its name. Without network the file
+// is kept on the device under a temporary name, and sent later (see flush).
 function upload (b64, ext, fcn) {
     api('POST', '/medias', undefined, bytesOf(b64, ext == 'svg')).then(function (r) {
         if (r.status == 200 || r.status == 201) {
             mediaCache[r.body.name] = b64;
+            Offline.put('medias', {name: r.body.name, b64: b64});
             fcn(r.body.name);
         } else {
             notice(r.body.error || 'Ce dessin n’a pas pu être enregistré.', [['D’accord', function () {
@@ -180,10 +200,88 @@ function upload (b64, ext, fcn) {
             }]]);
         }
     }, function () {
-        notice('Pas de réseau : ce dessin n’a pas pu être enregistré. Réessaie dans un moment.', [['D’accord', function () {
-            window.location.reload();
-        }]]);
+        var name = 'horsligne-' + digest(b64) + digest(ext + b64.length) + '.' + ext;
+        mediaCache[name] = b64;
+        Promise.all([Offline.put('medias', {name: name, b64: b64}), Offline.put('attente', {name: name, b64: b64, ext: ext})]).then(function () {
+            setUnsaved(true);
+            fcn(name);
+        });
     });
+}
+
+// Replaces, in a text, the temporary names of media files by the names the server gave
+function resolved (text, aliases) {
+    if (!text) {
+        return text;
+    }
+    aliases.forEach(function (a) {
+        text = text.split(a.temp).join(a.real);
+    });
+    return text;
+}
+
+// Sends what is waiting: the media files first, then the projects that refer to
+// them. Resolves with true when nothing is left to send. Never overwrites: a
+// project changed elsewhere in the meantime is left for the child to decide.
+let flushing = null;
+function flush () {
+    if (flushing) {
+        return flushing;
+    }
+    flushing = Offline.all('attente').then(function (pending) {
+        return pending.reduce(function (chain, m) {
+            return chain.then(function () {
+                return api('POST', '/medias', undefined, bytesOf(m.b64, m.ext == 'svg')).then(function (r) {
+                    if (r.status != 200 && r.status != 201) {
+                        return null; // refused (quota, format): it stays on the device, the project keeps its temporary name
+                    }
+                    mediaCache[r.body.name] = m.b64;
+                    return Promise.all([
+                        Offline.put('alias', {temp: m.name, real: r.body.name}),
+                        Offline.put('medias', {name: r.body.name, b64: m.b64}),
+                        Offline.remove('attente', m.name)
+                    ]);
+                });
+            });
+        }, Promise.resolve());
+    }).then(function () {
+        return Promise.all([Offline.all('projets'), Offline.all('alias')]);
+    }).then(function (found) {
+        var dirty = found[0].filter(function (p) {
+            return p.dirty && p.membre == member;
+        });
+        return dirty.reduce(function (chain, p) {
+            return chain.then(function (clean) {
+                var json = resolved(p.json, found[1]);
+                var thumbnail = resolved(p.thumbnail, found[1]);
+                if (TEMP.test(String(thumbnail && JSON.parse(thumbnail).md5))) {
+                    thumbnail = null; // its picture could not be sent: the project is saved without it
+                }
+                return api('PUT', '/projets/' + encodeURIComponent(p.id), {
+                    rev: p.rev, name: p.name, json: json, thumbnail: thumbnail, editorVersion: p.version
+                }).then(function (r) {
+                    if (r.status == 200) {
+                        revisions[p.id] = r.body.projet.rev;
+                        return Offline.put('projets', Object.assign({}, p, {json: json, thumbnail: thumbnail, rev: r.body.projet.rev, dirty: false})).then(function () {
+                            return clean;
+                        });
+                    }
+                    if (r.status == 409 && r.body.code == 'conflit') {
+                        conflicts[p.id] = r.body.projet.rev;
+                    }
+                    return false;
+                });
+            });
+        }, Promise.resolve(true));
+    }).then(function (clean) {
+        flushing = null;
+        setUnsaved(!clean);
+        return clean;
+    }, function () {
+        flushing = null;
+        return false;
+    });
+    return flushing;
 }
 
 // The row of a project, in the shape the editor parses
@@ -227,18 +325,79 @@ export default class Web {
         onSoundDone = fcn;
     }
 
+    // Who is working, then anything left from a session without network. Called
+    // once, before the editor opens a project.
+    static start (fcn) {
+        api('GET', '/contexte').then(function (r) {
+            member = r.body.membre ? r.body.membre.id : null;
+            return Offline.put('meta', {k: 'membre', v: member}).then(flush);
+        }, function () {
+            return Offline.get('meta', 'membre').then(function (m) {
+                member = m ? m.v : null;
+            });
+        }).then(function () {
+            fcn();
+        });
+        // Ask Foyer's service worker to keep the whole Atelier on the device, so that
+        // it opens without network next time (see public/sw.js)
+        if (navigator.serviceWorker && navigator.serviceWorker.controller && navigator.onLine) {
+            navigator.serviceWorker.controller.postMessage({type: 'atelier-precharger', base: new URL('./', window.location.href).pathname});
+        }
+        // The network is back: send what was waiting, without asking anything of the child
+        window.addEventListener('online', function () {
+            flush();
+        });
+    }
+
     // Projects
 
     static projectGet (id, fcn) {
-        api('GET', '/projets/' + encodeURIComponent(id)).then(function (r) {
+        var local = function () {
+            return Offline.get('projets', id).then(function (p) {
+                return (p && p.membre == member) ? p : null;
+            });
+        };
+        var open = function (p) {
+            revisions[p.id] = p.rev;
+            try {
+                window.localStorage.setItem(HINT, JSON.stringify({membre: member, id: p.id, name: p.name}));
+            } catch (e) {
+                // no storage: the Foyer screen will simply not offer it offline
+            }
+            fcn(JSON.stringify([{id: p.id, name: p.name, version: p.version, json: p.json, thumbnail: p.thumbnail, mtime: p.mtime}]));
+        };
+        Promise.all([local(), api('GET', '/projets/' + encodeURIComponent(id))]).then(function (found) {
+            var kept = found[0];
+            var r = found[1];
+            // What was done here without network, and is still not on the server, comes first
+            if (kept && kept.dirty) {
+                setUnsaved(true);
+                open(kept);
+                return;
+            }
             if (r.status != 200) {
                 fcn('[]');
                 return;
             }
-            revisions[r.body.projet.id] = r.body.projet.rev;
-            fcn(JSON.stringify([projectRow(r.body.projet)]));
+            var row = projectRow(r.body.projet);
+            var p = Object.assign(row, {rev: r.body.projet.rev, membre: r.body.projet.memberId, dirty: false});
+            owner = r.body.projet.memberId;
+            if (p.membre != member) {
+                open(p); // watched, not kept: the offline copy is for one's own projects
+                return;
+            }
+            Offline.put('projets', p).then(function () {
+                open(p);
+            });
         }, function () {
-            notice('Pas de réseau : ce projet ne peut pas s’ouvrir pour l’instant.', [['Revenir à Foyer', leave]]);
+            local().then(function (kept) {
+                if (kept) {
+                    setUnsaved(kept.dirty);
+                    open(kept);
+                } else {
+                    notice('Pas de réseau : ce projet n’a jamais été ouvert sur cet appareil, il ne peut pas s’ouvrir pour l’instant.', [['Revenir à Foyer', leave]]);
+                }
+            });
         });
     }
 
@@ -255,49 +414,43 @@ export default class Web {
         });
     }
 
-    // Saves with the revision last read. If another device has saved in between,
-    // the server refuses and the child chooses: nothing is ever overwritten silently.
+    // Saves on the device first, then on the server with the revision last read.
+    // If another device has saved in between, the server refuses and the child
+    // chooses: nothing is ever overwritten silently. Without network the project
+    // stays on the device, marked as not saved, and leaves when the network is back.
     static projectSave (obj, fcn) {
-        var send = function () {
-            return api('PUT', '/projets/' + encodeURIComponent(obj.id), {
-                rev: revisions[obj.id], name: obj.name, json: obj.json, thumbnail: obj.thumbnail, editorVersion: obj.version
-            });
+        var row = {
+            id: obj.id, name: obj.name, version: obj.version, json: obj.json, thumbnail: obj.thumbnail,
+            mtime: String(Date.now()), rev: revisions[obj.id], membre: member, dirty: true
         };
-        var done = function (r) {
-            if (r.status == 200) {
-                revisions[obj.id] = r.body.projet.rev;
-                setUnsaved(false);
-                later(fcn, 'ok');
-            } else if (r.status == 409 && r.body.code == 'conflit') {
-                notice('Ce projet a aussi été modifié sur un autre appareil. Lequel veux-tu garder ?', [
-                    ['Garder celui-ci', function () {
-                        revisions[obj.id] = r.body.projet.rev;
-                        send().then(done, failed);
-                    }],
-                    ['Garder l’autre', function () {
-                        window.location.reload();
-                    }]
-                ]);
-            } else {
-                setUnsaved(true);
-                notice(r.body.error || 'Ce projet n’a pas pu être enregistré.', [['D’accord', function () {
-                    later(fcn, 'error');
-                }]]);
+        Offline.put('projets', row).then(flush).then(function (clean) {
+            if (conflicts[obj.id] === undefined) {
+                later(fcn, clean ? 'ok' : 'error');
+                return;
             }
-        };
-        // No network: the editor goes on, the badge stays, the next save tries again
-        var failed = function () {
-            setUnsaved(true);
-            later(fcn, 'error');
-        };
-        send().then(done, failed);
+            var theirs = conflicts[obj.id];
+            delete conflicts[obj.id];
+            notice('Ce projet a aussi été modifié sur un autre appareil. Lequel veux-tu garder ?', [
+                ['Garder celui-ci', function () {
+                    revisions[obj.id] = theirs;
+                    Offline.put('projets', Object.assign({}, row, {rev: theirs})).then(flush).then(function () {
+                        later(fcn, 'ok');
+                    });
+                }],
+                ['Garder l’autre', function () {
+                    Offline.remove('projets', obj.id).then(function () {
+                        window.location.reload();
+                    });
+                }]
+            ]);
+        });
     }
 
     static projectRename (id, name, fcn) {
         api('PATCH', '/projets/' + encodeURIComponent(id), {name: name}).then(function () {
             later(fcn, 'ok');
         }, function () {
-            setUnsaved(true);
+            // Without network the name leaves with the next save, which carries it
             later(fcn, 'error');
         });
     }
@@ -361,13 +514,23 @@ export default class Web {
             later(fcn, mediaCache[file]);
             return;
         }
-        fetch(API + '/medias/' + encodeURIComponent(file), {credentials: 'same-origin'}).then(function (response) {
-            return response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)));
-        }).then(function (data) {
-            mediaCache[file] = base64Of(data, isSvg(file));
-            fcn(mediaCache[file]);
-        }).catch(function () {
-            fcn('');
+        Offline.get('medias', file).then(function (kept) {
+            if (kept) {
+                mediaCache[file] = kept.b64;
+                fcn(kept.b64);
+                return;
+            }
+            // The drawings of a project belong to its owner: say whose, when it is not this session's
+            var whose = (owner && owner != member) ? '?membre=' + encodeURIComponent(owner) : '';
+            fetch(API + '/medias/' + encodeURIComponent(file) + whose, {credentials: 'same-origin'}).then(function (response) {
+                return response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)));
+            }).then(function (data) {
+                mediaCache[file] = base64Of(data, isSvg(file));
+                Offline.put('medias', {name: file, b64: mediaCache[file]});
+                fcn(mediaCache[file]);
+            }).catch(function () {
+                fcn('');
+            });
         });
     }
 
@@ -388,6 +551,8 @@ export default class Web {
     // A request, not an order: the server only removes what nothing refers to any more
     static remove (name, fcn) {
         delete mediaCache[name];
+        Offline.remove('medias', name);
+        Offline.remove('attente', name);
         api('DELETE', '/medias/' + encodeURIComponent(name)).then(function () {
             later(fcn, 'ok');
         }, function () {

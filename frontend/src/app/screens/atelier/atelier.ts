@@ -23,7 +23,7 @@ const NARROW = '(max-width: 760px)';
   template: `
     <div class="screen-enter">
       @if (narrow()) {
-        <div class="note">Pour créer, ouvre l’Atelier sur l’iPad ou l’ordinateur.</div>
+        <div class="note">Ici, tu peux regarder tes projets. Pour créer, ouvre l’Atelier sur l’iPad ou l’ordinateur.</div>
       } @else {
         <div class="head-row">
           <div class="count">@if (projets()?.length; as n) { {{ n }} projet{{ n > 1 ? 's' : '' }} }</div>
@@ -32,8 +32,16 @@ const NARROW = '(max-width: 760px)';
       }
 
       @if (erreur(); as e) {
-        <div class="card empty"><div class="empty-title">L’Atelier ne répond pas</div><div class="empty-text">{{ e }}</div>
-          <button class="btn btn-primary" (click)="charger()">Réessayer</button></div>
+        <div class="card empty">
+          @if (dernier(); as d) {
+            <div class="empty-title">Pas de réseau</div>
+            <div class="empty-text">La liste de tes projets n’est pas disponible, mais tu peux continuer « {{ d.name }} » : il s’enregistrera au retour du réseau.</div>
+            <button class="btn btn-primary" (click)="narrow() ? regarder(d.id) : ouvrir(d.id)">Continuer « {{ d.name }} »</button>
+          } @else {
+            <div class="empty-title">L’Atelier ne répond pas</div><div class="empty-text">{{ e }}</div>
+            <button class="btn btn-primary" (click)="charger()">Réessayer</button>
+          }
+        </div>
       } @else if (projets(); as liste) {
         @if (!liste.length) {
           <div class="card empty">
@@ -47,7 +55,7 @@ const NARROW = '(max-width: 760px)';
             @for (p of liste; track p.id) {
               <div class="tile">
                 @if (narrow()) {
-                  <div class="thumb">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</div>
+                  <button class="thumb" (click)="regarder(p.id)" [attr.aria-label]="'Regarder ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
                 } @else {
                   <button class="thumb" (click)="ouvrir(p.id)" [attr.aria-label]="'Ouvrir ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
                 }
@@ -123,6 +131,8 @@ export class AtelierScreen {
   readonly erreur = signal('');
   readonly busy = signal(false);
   readonly narrow = signal(false);
+  /** The project last opened on this device by this member, left by the editor for when the list cannot load. */
+  readonly dernier = signal<{ id: string; name: string } | null>(null);
   readonly exemples = signal<Exemple[]>([]);
 
   constructor() {
@@ -139,12 +149,20 @@ export class AtelierScreen {
   async charger(): Promise<void> {
     this.erreur.set('');
     try { this.projets.set((await this.api.request<{ projets: Projet[] }>('atelier/projets')).projets); }
-    catch (e) { this.erreur.set((e as Error).message); }
+    catch (e) {
+      this.erreur.set((e as Error).message);
+      try {
+        const d = JSON.parse(localStorage.getItem('foyer.atelier.dernier') || 'null') as { membre: string; id: string; name: string } | null;
+        this.dernier.set(d && d.membre === this.store.me()?.id ? { id: d.id, name: d.name } : null);
+      } catch { this.dernier.set(null); }
+    }
   }
 
   /** The editor is a page of its own, served next to the application. */
   ouvrir(id: string): void { location.href = new URL(`atelier/petits/editor.html?pmd5=${encodeURIComponent(id)}&mode=edit`, document.baseURI).href; }
   exempleUrl(file: string): string { return new URL(`atelier/petits/samples/${file}`, document.baseURI).href; }
+  /** On a phone the editor cannot be used: the project opens to be watched, full screen. */
+  regarder(id: string): void { location.href = new URL(`atelier/petits/editor.html?pmd5=${encodeURIComponent(id)}&mode=look&vue=plein`, document.baseURI).href; }
   vignette(name: string): string { return new URL(`api/atelier/medias/${encodeURIComponent(name)}`, document.baseURI).href; }
 
   private async agir(fn: () => Promise<void>): Promise<void> {
