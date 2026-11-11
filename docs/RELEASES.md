@@ -94,7 +94,7 @@ docker buildx build --platform linux/amd64 --load -t foyer-app:smoke \
   --build-arg FOYER_VERSION=1.17.1 \
   --label org.opencontainers.image.source=https://github.com/PrudhommeWTF/Foyer-App \
   --label org.opencontainers.image.version=1.17.1 \
-  --label org.opencontainers.image.licenses=MIT \
+  --label org.opencontainers.image.licenses=AGPL-3.0-only \
   --label "org.opencontainers.image.description=Foyer" .
 scripts/release/smoke-image.sh foyer-app:smoke 1.17.1 linux/amd64
 

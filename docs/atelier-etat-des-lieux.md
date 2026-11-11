@@ -180,7 +180,7 @@ Restauration : arrêter le service, extraire l'archive au même endroit, redéma
 | Isolation | **Page à part** (`/atelier/petits/`), pas d'iframe. |
 | Bibliothèque de projets | **Écran Foyer** ; l'éditeur seul reste le code d'origine. |
 | Son enregistré | **WAV** encodé dans le navigateur. |
-| Licence du niveau 2 | **À trancher avant la PR 7.** Le code de Scratch entre dans ce dépôt, c'est acquis. Reste à choisir : dans un dossier à part sous AGPL, construit en bundle séparé, Foyer restant MIT (recommandé) ; ou Foyer entier sous AGPL. Rien n'est changé d'ici là : `LICENSE` est toujours MIT. |
+| Licence du niveau 2 | **Foyer entier sous AGPL-3.0-only**, décidé le 11 novembre 2026 et appliqué aussitôt (`LICENSE`, README, métadonnées). Le code de Scratch pourra donc vivre dans ce dépôt sans frontière à surveiller, et il n'y aura ni dépôt séparé ni bundle épinglé, contrairement à ce qu'envisage le point 8. Les versions déjà publiées sous MIT le restent. |
 | Mascotte | **Boulon**, validé. Redessiné en tracés seuls à la PR 1 : l'éditeur de dessin d'origine carrait ses angles arrondis. |
 | Ordre | **Entrelacé** : PR 1 à 4, puis 7 et 8, puis 5 et 6, puis 9. Essai court du niveau 2 après la PR 1. |
 | Tablette | iPad Pro 13 pouces (à confirmer) : 1 366 px de large en paysage, au-dessus des deux seuils de Scratch. |
