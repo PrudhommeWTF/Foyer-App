@@ -29,6 +29,9 @@ import { recordSpend } from './entretien/costs';
 import { forgetRemoved } from './entretien/realisations';
 import { gesteToShopping } from './entretien/courses';
 import { revisionsRouter } from './revisions/routes';
+import { atelierRouter } from './atelier/routes';
+import { loadFamilyLibrary } from './atelier/library';
+import { moduleCounts as atlCounts, purgeArchived as atlPurge, resetModule as atlReset } from './atelier/repo';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
@@ -411,7 +414,7 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
 // Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un
 // enfant sur un module adulte. Le masquage dans l'interface n'est pas la barrière,
 // c'en est le reflet ; la barrière est ici, côté serveur.
-const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions') => (_req: Request, res: Response, next: NextFunction): void => {
+const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions' | 'modAtelier') => (_req: Request, res: Response, next: NextFunction): void => {
   if (effectiveSetting(flag) === false) { res.status(403).json({ error: 'Ce module est désactivé.' }); return; }
   next();
 };
@@ -464,6 +467,27 @@ setRevisionsToolsDeps({ bareme: (ex) => bareme(DATA_DIR, ex), matieres: () => ma
 api.use('/revisions', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modRevisions'),
   revisionsRouter((ex) => bareme(DATA_DIR, ex), () => matieres(DATA_DIR), (ex) => contextFor(DATA_DIR, ex)));
 
+// Module « Atelier code » : programmation par blocs pour les enfants. L'éditeur
+// est une page à part (/atelier/…), qui parle à ces routes avec le cookie de
+// session. Pas de jeton d'accès : rien ici n'est fait pour un script.
+api.use('/atelier', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modAtelier'),
+  atelierRouter(() => (getHousehold().state as HouseholdState).members));
+// La corbeille de l'Atelier : au démarrage puis une fois par jour, les projets
+// supprimés depuis plus longtemps que le réglage partent pour de bon. Module
+// éteint, rien ne bouge : désactiver ne supprime jamais.
+// Les dessins que la famille a déposés dans son dossier de données : relus ici,
+// une fois, au démarrage.
+loadFamilyLibrary(DATA_DIR);
+const purgerAtelier = (): void => {
+  if (effectiveSetting('modAtelier') === false) return;
+  try {
+    const r = atlPurge(Number(effectiveSetting('atelierCorbeilleJours')));
+    if (r.projects) log.info(`Atelier : ${r.projects} projet(s) supprimé(s) depuis longtemps effacé(s) pour de bon, avec ${r.media} fichier(s).`);
+  } catch (e) { log.erreur('Atelier : purge de la corbeille en échec', e); }
+};
+purgerAtelier();
+setInterval(purgerAtelier, 24 * 3600 * 1000).unref();
+
 // ---- Modules activables (activer / désactiver, remise à zéro) ----
 // L'activation elle-même est un réglage foyer (modRepas, modFidelite, modFinances,
 // modEmploye, modEcole, modEquipements), écrit par /api/settings sous contrôle d'administrateur. Ici : le
@@ -481,6 +505,7 @@ api.get('/modules', auth, ...tokenGate, requireMember, (_req: Request, res: Resp
       ecole: { comptes: dc['ed_accounts'] || 0, eleves: dc['ed_students'] || 0 },
       entretien: entCounts(),
       equipements: { fiches: qc['eqp_items'] || 0, pieces: qc['eqp_attachments'] || 0 },
+      atelier: atlCounts(),
     },
   });
 });
@@ -507,6 +532,8 @@ api.post('/modules/:mod/reset', auth, ...tokenGate, requireMember, requireAdmin,
     entReset();
   } else if (mod === 'equipements') {
     eqpReset();
+  } else if (mod === 'atelier') {
+    atlReset();
   } else {
     res.status(404).json({ error: 'Module inconnu.' });
     return;

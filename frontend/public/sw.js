@@ -30,6 +30,12 @@
 // comme le reste des ressources : elles passent donc par le même cache et
 // restent disponibles hors ligne.
 const CACHE = 'foyer-shell-v1';
+/**
+ * L'Atelier code a son cache à lui. C'est une page à part, avec ses centaines de
+ * fichiers aux noms sans empreinte : ni le plafond ni la politique de la coquille
+ * ne lui conviennent (voir « L'Atelier » plus bas).
+ */
+const ATELIER = 'foyer-atelier-v1';
 /** Au-delà, les fichiers des builds précédents sont élagués, les plus anciens d'abord. */
 const MAX_ENTRIES = 60;
 const INDEX = new URL('index.html', self.registration.scope).href;
@@ -72,7 +78,7 @@ self.addEventListener('install', (event) => event.waitUntil((async () => {
   await self.skipWaiting();
 })()));
 self.addEventListener('activate', (event) => event.waitUntil((async () => {
-  for (const nom of await caches.keys()) if (nom !== CACHE) await caches.delete(nom);
+  for (const nom of await caches.keys()) if (nom !== CACHE && nom !== ATELIER) await caches.delete(nom);
   await self.clients.claim();
 })()));
 
@@ -87,6 +93,8 @@ async function garder(cle, reponse) {
 /** Cette adresse est-elle un fichier de la coquille ? Jamais l'API. */
 function estCoquilleUrl(url) {
   if (url.pathname.includes('/api/')) return false;
+  // L'Atelier code a son propre cache : ici, ses fichiers chasseraient la coquille.
+  if (url.pathname.includes('/atelier/')) return false;
   return /\.(?:js|css|png|svg|ico|webmanifest|woff2?)$/.test(url.pathname);
 }
 
@@ -95,8 +103,72 @@ function estCoquille(url, request) {
   return request.method === 'GET' && url.origin === self.location.origin && estCoquilleUrl(url);
 }
 
+// ---- L'Atelier -------------------------------------------------------------
+//
+// Ses fichiers sont servis **depuis le cache, et rafraîchis en arrière-plan**.
+// C'est ce qui donne les deux propriétés voulues :
+//
+//   - il s'ouvre sans réseau dès qu'il a été ouvert une fois (l'iPad en voiture) ;
+//   - une mise à jour de Foyer ne le remplace jamais sous les doigts de l'enfant :
+//     la page ouverte garde ce qu'elle a chargé, la nouvelle version est rangée
+//     pour la prochaine ouverture.
+//
+// La clé ignore les paramètres de l'adresse (`editor.html?pmd5=…` est la même
+// page pour tous les projets). L'API n'est jamais concernée : les projets sont
+// gardés par l'éditeur lui-même, qui sait dire lesquels ne sont pas enregistrés.
+
+/** Cette adresse est-elle un fichier de l'Atelier ? */
+function estAtelier(url, request) {
+  return request.method === 'GET' && url.origin === self.location.origin && url.pathname.includes('/atelier/') && !url.pathname.includes('/api/');
+}
+
+async function servirAtelier(event, url) {
+  const cache = await caches.open(ATELIER);
+  const cle = url.origin + url.pathname;
+  const garde = await cache.match(cle);
+  const frais = fetch(event.request).then(async (r) => {
+    if (r.ok && r.type === 'basic') await cache.put(cle, r.clone());
+    return r;
+  });
+  if (!garde) return frais;
+  event.waitUntil(frais.catch(() => { /* pas de réseau : le cache suffit */ }));
+  return garde;
+}
+
+/**
+ * Met de côté tout l'Atelier d'un coup, à la demande de l'éditeur quand il
+ * s'ouvre en ligne : sans cela, seuls les fichiers déjà affichés seraient là, et
+ * la bibliothèque de personnages manquerait hors ligne. La liste vient du build
+ * (`fichiers.json`). Ce qui n'y figure plus est retiré.
+ */
+async function prechargerAtelier(base) {
+  const racine = new URL(base, self.registration.scope);
+  if (racine.origin !== self.location.origin || !racine.pathname.includes('/atelier/')) return;
+  const reponse = await fetch(new URL('fichiers.json', racine).href, { cache: 'no-store' });
+  if (!reponse.ok) return;
+  const voulus = new Set((await reponse.json()).fichiers.map((f) => new URL(f, racine).href));
+  const cache = await caches.open(ATELIER);
+  for (const requete of await cache.keys()) {
+    if (requete.url.startsWith(racine.href) && !voulus.has(requete.url)) await cache.delete(requete);
+  }
+  for (const href of voulus) {
+    if (await cache.match(href)) continue;
+    try {
+      const r = await fetch(href);
+      if (r.ok && r.type === 'basic') await cache.put(href, r);
+    } catch { return; /* le réseau est parti : la suite au prochain passage */ }
+  }
+}
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'atelier-precharger' && typeof event.data.base === 'string') event.waitUntil(prechargerAtelier(event.data.base).catch(() => { /* rien à signaler */ }));
+});
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // L'Atelier d'abord : sa page est une navigation, mais ce n'est pas le HTML
+  // d'entrée de Foyer, et elle ne doit surtout pas prendre sa place dans le cache.
+  if (estAtelier(url, event.request)) { event.respondWith(servirAtelier(event, url)); return; }
 
   // Le HTML d'entrée : réseau d'abord, pour qu'une mise à jour arrive tout de suite.
   if (event.request.mode === 'navigate') {

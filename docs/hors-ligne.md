@@ -22,6 +22,10 @@ pourquoi le cache ne fige pas la version installée.
   se connecte ensuite sur l'appareil (ou si un parent ouvre la session d'un
   enfant), elle attend son propriétaire au lieu de partir sous la mauvaise
   session (voir [`portail-enfant.md`](portail-enfant.md)).
+- **L'Atelier code** s'ouvre et le projet en cours se continue, dessins
+  compris : il a son propre cache et sa propre file, rangée elle aussi sous le
+  membre (un projet en attente ne part que sous la session de son auteur). Voir
+  [`atelier.md`](atelier.md), « Hors ligne ».
 - Les autres écrans (agenda, repas, contacts, documents) se lisent et
   **s'éditent** : leurs modifications partent par l'enregistrement du document,
   qui réessaie tout seul jusqu'à passer.

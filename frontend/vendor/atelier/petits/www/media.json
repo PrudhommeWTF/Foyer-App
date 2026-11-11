@@ -1,0 +1,15 @@
+{
+    "assetLibraryVersion": 1,
+    "path": "./svglibrary/",
+    "samples": [],
+    "backgrounds": [
+        {"md5":"Farm.svg","width":480,"height":360,"ext":"svg","name":"Farm"}
+    ],
+    "sprites": [
+        {"md5":"Boulon.svg","width":120,"height":152,"ext":"svg","name":"Boulon","order":"characters,01 boulon","tags":["characters","01 boulon"]},
+        {"md5":"BoulonMarche.svg","width":120,"height":152,"ext":"svg","name":"Boulon marche","order":"characters,01 boulon","tags":["characters","01 boulon"]},
+        {"md5":"BoulonSaute.svg","width":120,"height":152,"ext":"svg","name":"Boulon saute","order":"characters,01 boulon","tags":["characters","01 boulon"]},
+        {"md5":"Star.svg","width":80,"height":101,"ext":"svg","name":"Star","order":"characters,07 weather","tags":["characters","07 weather"]}
+    ],
+    "sounds": ["pop.mp3"]
+}

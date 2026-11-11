@@ -1,0 +1,32 @@
+{
+  "_": "Ce que la bibliothèque de Scratch contient et que l'Atelier ne reprend pas, avec la raison. Les noms sont ceux de Scratch. Toute entrée ajoutée ici disparaît au prochain passage du script (backend/scripts/atelier-bibliotheque.ts).",
+  "personnages": {
+    "Cat": "marque : le chat Scratch",
+    "Cat 2": "marque : le chat Scratch",
+    "Cat Flying": "marque : le chat Scratch",
+    "Gobo": "marque : Gobo",
+    "Giga": "marque : Giga",
+    "Giga Walking": "marque : Giga",
+    "Nano": "marque : Nano",
+    "Pico": "marque : Pico",
+    "Pico Walking": "marque : Pico",
+    "Tera": "marque : Tera",
+    "Neigh Pony": "revue visuelle : un poney aux traits du chat Scratch, avec le logo sur le flanc",
+    "Hat1": "revue visuelle : une casquette qui porte le logo",
+    "City Bus": "revue visuelle : le bus porte l'inscription « Scratch Tours »",
+    "Dot": "doute : personnage de l'univers Scratch, proche de ses mascottes",
+    "Zepto": "doute : personnage de la même famille que les mascottes déposées"
+  },
+  "decors": {
+    "Bedroom 3": "revue visuelle : une affiche « Scratch Rocks » au mur",
+    "Field At Mit": "nomme le MIT, dont le nom est une marque (conditions d'utilisation de Scratch, 5.4)",
+    "Mural": "doute : photographie d'une fresque, œuvre d'un tiers"
+  },
+  "sons": {
+    "Meow": "le miaulement du chat Scratch"
+  },
+  "familles": {
+    "^(Block|Glow|Story)-": "lettres et chiffres : 88 personnages qui noieraient la bibliothèque d'un enfant qui ne lit pas encore ; gardés pour le niveau Grands codeurs",
+    "bitmap": "personnages et décors en image bitmap (dont des photographies de personnes réelles) : l'éditeur des Petits codeurs dessine en vectoriel et ne sait pas les modifier ; à réexaminer pour le niveau Grands codeurs"
+  }
+}

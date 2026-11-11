@@ -56,7 +56,7 @@ L'installation LXC (`deploy/lxc/`) et l'auto-mise à jour ne se servent pas de c
 
 Une préversion ne touche jamais `latest`, ni la mineure, ni la majeure.
 
-**Labels et annotations OCI** (`docker/metadata-action`) : `org.opencontainers.image.source` (le dépôt : c'est lui qui rattache le package au dépôt et fait apparaître l'image dans sa colonne *Packages*), `version`, `revision`, `created`, `licenses` (MIT), `title` et `description`. La description est aussi posée en annotation sur l'index multi-architecture : c'est là que la page du package la lit.
+**Labels et annotations OCI** (`docker/metadata-action`) : `org.opencontainers.image.source` (le dépôt : c'est lui qui rattache le package au dépôt et fait apparaître l'image dans sa colonne *Packages*), `version`, `revision`, `created`, `licenses` (AGPL-3.0-only), `title` et `description`. La description est aussi posée en annotation sur l'index multi-architecture : c'est là que la page du package la lit.
 
 **Pourquoi l'empreinte d'abord.** Les jobs `build` et `image` tournent en parallèle. Si une image était étiquetée dans son job, un échec du build arm64 des archives laisserait `latest` sur une version sans release. Chaque job `image` pousse donc **son** image d'architecture sans étiquette (`push-by-digest=true`), invisible pour qui ne connaît pas son digest ; le job `manifest` n'assemble l'index étiqueté qu'une fois tout réussi, par `docker buildx imagetools create` (qui réunit les empreintes sans reconstruire), et vérifie que chaque étiquette pointe bien sur lui. Un échec laisse au pire des **images sans étiquette** dans le package, inoffensives (voir *Rétention*).
 
@@ -94,7 +94,7 @@ docker buildx build --platform linux/amd64 --load -t foyer-app:smoke \
   --build-arg FOYER_VERSION=1.17.1 \
   --label org.opencontainers.image.source=https://github.com/PrudhommeWTF/Foyer-App \
   --label org.opencontainers.image.version=1.17.1 \
-  --label org.opencontainers.image.licenses=MIT \
+  --label org.opencontainers.image.licenses=AGPL-3.0-only \
   --label "org.opencontainers.image.description=Foyer" .
 scripts/release/smoke-image.sh foyer-app:smoke 1.17.1 linux/amd64
 

@@ -1,0 +1,771 @@
+[
+ {
+  "id": "promenade",
+  "name": "Boulon se promène",
+  "desc": "Le drapeau vert, et Boulon traverse le ciel.",
+  "image": "promenade.png",
+  "json": {
+   "pages": [
+    "page 1"
+   ],
+   "currentPage": "page 1",
+   "page 1": {
+    "textstartat": 36,
+    "sprites": [
+     "Boulon 11"
+    ],
+    "num": 1,
+    "layers": [
+     "Boulon 11"
+    ],
+    "md5": "e7c147730f19d284bcd7b3f00af19bb6.svg",
+    "Boulon 11": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "Boulon.svg",
+     "id": "Boulon 11",
+     "flip": false,
+     "name": "Boulon",
+     "angle": 0,
+     "scale": 0.5,
+     "speed": 2,
+     "defaultScale": 0.5,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 90,
+     "ycoor": 250,
+     "cx": 60,
+     "cy": 76,
+     "w": 120,
+     "h": 152,
+     "homex": 90,
+     "homey": 250,
+     "homescale": 0.5,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "forward",
+        5,
+        200,
+        40
+       ],
+       [
+        "hop",
+        2,
+        270,
+        40
+       ],
+       [
+        "forward",
+        5,
+        340,
+        40
+       ],
+       [
+        "endstack",
+        "null",
+        410,
+        40
+       ]
+      ]
+     ]
+    },
+    "lastSprite": "Boulon 11"
+   }
+  }
+ },
+ {
+  "id": "bonjour",
+  "name": "Bonjour !",
+  "desc": "Touche un personnage pour voir ce qu’il fait.",
+  "image": "bonjour.png",
+  "json": {
+   "pages": [
+    "page 1"
+   ],
+   "currentPage": "page 1",
+   "page 1": {
+    "textstartat": 36,
+    "sprites": [
+     "Boulon 11",
+     "Chien bleu 12"
+    ],
+    "num": 1,
+    "layers": [
+     "Boulon 11",
+     "Chien bleu 12"
+    ],
+    "md5": "Farm.svg",
+    "Boulon 11": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "Boulon.svg",
+     "id": "Boulon 11",
+     "flip": false,
+     "name": "Boulon",
+     "angle": 0,
+     "scale": 0.5,
+     "speed": 2,
+     "defaultScale": 0.5,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 150,
+     "ycoor": 240,
+     "cx": 60,
+     "cy": 76,
+     "w": 120,
+     "h": 152,
+     "homex": 150,
+     "homey": 240,
+     "homescale": 0.5,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onclick",
+        "null",
+        130,
+        40
+       ],
+       [
+        "say",
+        "Bonjour !",
+        200,
+        40
+       ],
+       [
+        "hop",
+        2,
+        270,
+        40
+       ]
+      ]
+     ]
+    },
+    "Chien bleu 12": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "66b435d333f34d02d5ae49a598bcc5b3.svg",
+     "id": "Chien bleu 12",
+     "flip": false,
+     "name": "Chien bleu",
+     "angle": 0,
+     "scale": 0.4,
+     "speed": 2,
+     "defaultScale": 0.4,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 340,
+     "ycoor": 260,
+     "cx": 64,
+     "cy": 55,
+     "w": 128,
+     "h": 110,
+     "homex": 340,
+     "homey": 260,
+     "homescale": 0.4,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onclick",
+        "null",
+        130,
+        40
+       ],
+       [
+        "playsnd",
+        "pop.mp3",
+        200,
+        40
+       ],
+       [
+        "grow",
+        2,
+        270,
+        40
+       ],
+       [
+        "shrink",
+        2,
+        340,
+        40
+       ]
+      ]
+     ]
+    },
+    "lastSprite": "Boulon 11"
+   }
+  }
+ },
+ {
+  "id": "course",
+  "name": "La course",
+  "desc": "Qui arrive le premier ? Change les vitesses.",
+  "image": "course.png",
+  "json": {
+   "pages": [
+    "page 1"
+   ],
+   "currentPage": "page 1",
+   "page 1": {
+    "textstartat": 36,
+    "sprites": [
+     "Cheval 11",
+     "Lapin 12"
+    ],
+    "num": 1,
+    "layers": [
+     "Cheval 11",
+     "Lapin 12"
+    ],
+    "md5": "7be1f5b3e682813dac1f297e52ff7dca.svg",
+    "Cheval 11": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "ad458251c5bf5b375870829f1762fa47.svg",
+     "id": "Cheval 11",
+     "flip": false,
+     "name": "Cheval",
+     "angle": 0,
+     "scale": 0.4,
+     "speed": 2,
+     "defaultScale": 0.4,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 60,
+     "ycoor": 120,
+     "cx": 93.5,
+     "cy": 70.5,
+     "w": 187,
+     "h": 141,
+     "homex": 60,
+     "homey": 120,
+     "homescale": 0.4,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "setspeed",
+        2,
+        200,
+        40
+       ],
+       [
+        "forward",
+        14,
+        270,
+        40
+       ],
+       [
+        "say",
+        "Gagné !",
+        340,
+        40
+       ]
+      ]
+     ]
+    },
+    "Lapin 12": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "970f886bfa454e1daa6d6c30ef49a972.svg",
+     "id": "Lapin 12",
+     "flip": false,
+     "name": "Lapin",
+     "angle": 0,
+     "scale": 0.4,
+     "speed": 2,
+     "defaultScale": 0.4,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 60,
+     "ycoor": 250,
+     "cx": 80,
+     "cy": 71.5,
+     "w": 160,
+     "h": 143,
+     "homex": 60,
+     "homey": 250,
+     "homescale": 0.4,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "setspeed",
+        1,
+        200,
+        40
+       ],
+       [
+        "repeat",
+        4,
+        270,
+        40,
+        [
+         [
+          "hop",
+          2,
+          300,
+          40
+         ],
+         [
+          "forward",
+          3,
+          370,
+          40
+         ]
+        ]
+       ]
+      ]
+     ]
+    },
+    "lastSprite": "Cheval 11"
+   }
+  }
+ },
+ {
+  "id": "sorciere",
+  "name": "Abracadabra",
+  "desc": "La sorcière envoie un message, et le fantôme apparaît.",
+  "image": "sorciere.png",
+  "json": {
+   "pages": [
+    "page 1"
+   ],
+   "currentPage": "page 1",
+   "page 1": {
+    "textstartat": 36,
+    "sprites": [
+     "Sorcière 11",
+     "Fantôme 12"
+    ],
+    "num": 1,
+    "layers": [
+     "Sorcière 11",
+     "Fantôme 12"
+    ],
+    "md5": "f3eb165d6f3fd23370f97079f2e631bf.svg",
+    "Sorcière 11": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "44cbaf358d2d8e66815e447c25a4b72e.svg",
+     "id": "Sorcière 11",
+     "flip": false,
+     "name": "Sorcière",
+     "angle": 0,
+     "scale": 0.5,
+     "speed": 2,
+     "defaultScale": 0.5,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 120,
+     "ycoor": 230,
+     "cx": 44,
+     "cy": 133,
+     "w": 88,
+     "h": 266,
+     "homex": 120,
+     "homey": 230,
+     "homescale": 0.5,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "say",
+        "Abracadabra !",
+        200,
+        40
+       ],
+       [
+        "message",
+        "Orange",
+        270,
+        40
+       ]
+      ]
+     ]
+    },
+    "Fantôme 12": {
+     "shown": false,
+     "type": "sprite",
+     "md5": "f522b08c5757569ad289d67bce290cd0.svg",
+     "id": "Fantôme 12",
+     "flip": false,
+     "name": "Fantôme",
+     "angle": 0,
+     "scale": 0.5,
+     "speed": 2,
+     "defaultScale": 0.5,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 350,
+     "ycoor": 200,
+     "cx": 37.5,
+     "cy": 69,
+     "w": 75,
+     "h": 138,
+     "homex": 350,
+     "homey": 200,
+     "homescale": 0.5,
+     "homeshown": false,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "hide",
+        "null",
+        200,
+        40
+       ]
+      ],
+      [
+       [
+        "onmessage",
+        "Orange",
+        130,
+        150
+       ],
+       [
+        "show",
+        "null",
+        200,
+        150
+       ],
+       [
+        "grow",
+        3,
+        270,
+        150
+       ],
+       [
+        "say",
+        "Bouh !",
+        340,
+        150
+       ],
+       [
+        "same",
+        "null",
+        410,
+        150
+       ]
+      ]
+     ]
+    },
+    "lastSprite": "Sorcière 11"
+   }
+  }
+ },
+ {
+  "id": "voyage",
+  "name": "Le grand voyage",
+  "desc": "Deux pages : de la mer à la neige.",
+  "image": "voyage.png",
+  "json": {
+   "pages": [
+    "page 1",
+    "page 2"
+   ],
+   "currentPage": "page 1",
+   "page 1": {
+    "textstartat": 36,
+    "sprites": [
+     "Poisson 11",
+     "Crabe 12"
+    ],
+    "num": 1,
+    "layers": [
+     "Poisson 11",
+     "Crabe 12"
+    ],
+    "md5": "d3344650f594bcecdf46aa4a9441badd.svg",
+    "Poisson 11": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "a9b3d163756621f8395592ad77fb9369.svg",
+     "id": "Poisson 11",
+     "flip": false,
+     "name": "Poisson",
+     "angle": 0,
+     "scale": 0.4,
+     "speed": 2,
+     "defaultScale": 0.4,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 80,
+     "ycoor": 180,
+     "cx": 56.5,
+     "cy": 32.5,
+     "w": 113,
+     "h": 65,
+     "homex": 80,
+     "homey": 180,
+     "homescale": 0.4,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "repeat",
+        3,
+        200,
+        40,
+        [
+         [
+          "forward",
+          3,
+          230,
+          40
+         ],
+         [
+          "up",
+          1,
+          300,
+          40
+         ],
+         [
+          "forward",
+          3,
+          370,
+          40
+         ],
+         [
+          "down",
+          1,
+          440,
+          40
+         ]
+        ]
+       ],
+       [
+        "gotopage",
+        2,
+        270,
+        40
+       ]
+      ]
+     ]
+    },
+    "Crabe 12": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "f7cdd2acbc6d7559d33be8675059c79e.svg",
+     "id": "Crabe 12",
+     "flip": false,
+     "name": "Crabe",
+     "angle": 0,
+     "scale": 0.4,
+     "speed": 2,
+     "defaultScale": 0.4,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 380,
+     "ycoor": 300,
+     "cx": 67.5,
+     "cy": 45.5,
+     "w": 135,
+     "h": 91,
+     "homex": 380,
+     "homey": 300,
+     "homescale": 0.4,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "ontouch",
+        "null",
+        130,
+        40
+       ],
+       [
+        "hop",
+        2,
+        200,
+        40
+       ]
+      ]
+     ]
+    },
+    "lastSprite": "Poisson 11"
+   },
+   "page 2": {
+    "textstartat": 36,
+    "sprites": [
+     "Bonhomme de neige 21",
+     "Pingouin 22"
+    ],
+    "num": 2,
+    "layers": [
+     "Bonhomme de neige 21",
+     "Pingouin 22"
+    ],
+    "md5": "5fa9385a60b904672d0e46e9d768bb32.svg",
+    "Bonhomme de neige 21": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "0f109df620f935b94cb154101e6586d4.svg",
+     "id": "Bonhomme de neige 21",
+     "flip": false,
+     "name": "Bonhomme de neige",
+     "angle": 0,
+     "scale": 0.5,
+     "speed": 2,
+     "defaultScale": 0.5,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 240,
+     "ycoor": 220,
+     "cx": 50,
+     "cy": 66.5,
+     "w": 100,
+     "h": 133,
+     "homex": 240,
+     "homey": 220,
+     "homescale": 0.5,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onflag",
+        "null",
+        130,
+        40
+       ],
+       [
+        "say",
+        "Brr, il fait froid !",
+        200,
+        40
+       ],
+       [
+        "repeat",
+        2,
+        270,
+        40,
+        [
+         [
+          "grow",
+          2,
+          300,
+          40
+         ],
+         [
+          "shrink",
+          2,
+          370,
+          40
+         ]
+        ]
+       ]
+      ]
+     ]
+    },
+    "Pingouin 22": {
+     "shown": true,
+     "type": "sprite",
+     "md5": "428772307d90f4b347d6cc3c0d8e76ef.svg",
+     "id": "Pingouin 22",
+     "flip": false,
+     "name": "Pingouin",
+     "angle": 0,
+     "scale": 0.4,
+     "speed": 2,
+     "defaultScale": 0.4,
+     "sounds": [
+      "pop.mp3"
+     ],
+     "xcoor": 100,
+     "ycoor": 260,
+     "cx": 54.5,
+     "cy": 62.5,
+     "w": 109,
+     "h": 125,
+     "homex": 100,
+     "homey": 260,
+     "homescale": 0.4,
+     "homeshown": true,
+     "homeflip": false,
+     "scripts": [
+      [
+       [
+        "onclick",
+        "null",
+        130,
+        40
+       ],
+       [
+        "hop",
+        2,
+        200,
+        40
+       ],
+       [
+        "say",
+        "Coucou !",
+        270,
+        40
+       ]
+      ]
+     ]
+    },
+    "lastSprite": "Bonhomme de neige 21"
+   }
+  }
+ }
+]

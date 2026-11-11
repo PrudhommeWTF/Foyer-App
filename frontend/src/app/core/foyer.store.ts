@@ -1309,9 +1309,10 @@ export class FoyerStore {
   readonly modEcole = computed(() => this.setting('modEcole') === true);
   readonly modEntretien = computed(() => this.setting('modEntretien') !== false);
   readonly modRevisions = computed(() => this.setting('modRevisions') !== false);
+  readonly modAtelier = computed(() => this.setting('modAtelier') !== false);
   moduleOn(flag: ModuleFlag): boolean {
     return flag === 'modRepas' ? this.modRepas() : flag === 'modFidelite' ? this.modFidelite() : flag === 'modFinances' ? this.modFinances()
-      : flag === 'modEcole' ? this.modEcole() : flag === 'modEntretien' ? this.modEntretien() : flag === 'modEquipements' ? this.modEquipements() : flag === 'modRevisions' ? this.modRevisions() : this.modEmploye();
+      : flag === 'modEcole' ? this.modEcole() : flag === 'modEntretien' ? this.modEntretien() : flag === 'modEquipements' ? this.modEquipements() : flag === 'modRevisions' ? this.modRevisions() : flag === 'modAtelier' ? this.modAtelier() : this.modEmploye();
   }
   /** Un écran est-il accessible ? (module actif, ou écran hors module.) */
   screenEnabled(screen: string): boolean {

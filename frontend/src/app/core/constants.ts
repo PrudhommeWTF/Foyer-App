@@ -120,6 +120,7 @@ export const ICONS: Record<string, string> = {
   grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
   // Une grille de 3 × 3 : les tables (la grille de maîtrise).
   grille: 'M4 4h16v16H4zM4 9.33h16M4 14.67h16M9.33 4v16M14.67 4v16',
+  blocs: 'M4 5h6v2.5h4V5h6v6H4zM4 13h6v2.5h4V13h6v6H4z',
 };
 
 export const CONTACT_CATS: ContactCat[] = ['Urgences', 'Santé', 'École', 'Famille', 'Maison', 'Autre'];
@@ -214,7 +215,7 @@ export const CAL_KINDS: Record<string, { color: string; label: string }> = {
  * visent qu'un écran de cette liste ; un test vérifie que la navigation n'en
  * oublie aucun.
  */
-export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'entretien', 'contacts', 'fidelite', 'finances', 'employe', 'equipements', 'ecole', 'repas', 'recettes', 'planning', 'revisions', 'settings'] as const;
+export const SCREENS = ['home', 'calendar', 'courses', 'taches', 'lieux', 'entretien', 'contacts', 'fidelite', 'finances', 'employe', 'equipements', 'ecole', 'repas', 'recettes', 'planning', 'revisions', 'atelier', 'settings'] as const;
 
 export const SCREEN_TITLES: Record<string, string> = {
   home: 'Accueil', calendar: 'Calendrier partagé', courses: 'Listes de courses', taches: 'Tâches',
@@ -222,7 +223,7 @@ export const SCREEN_TITLES: Record<string, string> = {
   entretien: 'Entretien de la maison',
   contacts: 'Contacts importants', fidelite: 'Cartes de fidélité', finances: 'Finances',
   repas: 'Planning des repas', recettes: 'Carnet de recettes', planning: 'Emploi du temps', settings: 'Paramètres',
-  ecole: 'École', equipements: 'Équipements', revisions: 'Révisions',
+  ecole: 'École', equipements: 'Équipements', revisions: 'Révisions', atelier: 'Atelier code',
 };
 
 /**

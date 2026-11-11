@@ -15,7 +15,7 @@ fidélité et emplois du temps, dans une seule application chaleureuse que vous 
 ![Vos données](https://img.shields.io/badge/vos%20donn%C3%A9es-chez%20vous-6E9E5F?style=flat-square)
 ![Hors ligne](https://img.shields.io/badge/fonctionne-hors%20ligne-4E93B8?style=flat-square)
 ![Pensé pour la France](https://img.shields.io/badge/pens%C3%A9%20pour-la%20France%20%F0%9F%87%AB%F0%9F%87%B7-9B6FA8?style=flat-square)
-![Licence MIT](https://img.shields.io/badge/licence-MIT-F0B24B?style=flat-square)
+![Licence AGPL v3](https://img.shields.io/badge/licence-AGPL--3.0-F0B24B?style=flat-square)
 
 Angular 21 · Node/Express · SQLite · Docker ou LXC Proxmox
 
@@ -542,6 +542,7 @@ conservée dans [`docs/`](docs/).
 | Assistants (serveur MCP) | [`docs/assistants.md`](docs/assistants.md) |
 | Paramètres (registre) | [`docs/parametres.md`](docs/parametres.md) |
 | Sécurité et mise en ligne | [`docs/audit-securite.md`](docs/audit-securite.md), [`docs/mise-en-ligne-checklist.md`](docs/mise-en-ligne-checklist.md) |
+| Atelier code (programmation par blocs pour les enfants, **en cours de construction** : l'éditeur et l'enregistrement fonctionnent, la bibliothèque de personnages arrive) | [`docs/atelier.md`](docs/atelier.md), [`docs/atelier-etat-des-lieux.md`](docs/atelier-etat-des-lieux.md) |
 | Sauvegarde et restauration | [`docs/sauvegarde-restauration.md`](docs/sauvegarde-restauration.md) |
 | Déploiement et exploitation | [`deploy/README.md`](deploy/README.md) |
 
@@ -557,4 +558,10 @@ conservée dans [`docs/`](docs/).
 
 ## 📝 Licence
 
-MIT.
+Copyright © 2026 PrudhommeWTF.
+
+Foyer est un logiciel libre sous **GNU Affero General Public License, version 3 seulement** (AGPL-3.0-only) : texte complet dans [`LICENSE`](LICENSE). Vous pouvez l'utiliser, l'installer et le modifier librement. Si vous faites utiliser par d'autres, par le réseau, une version que vous avez modifiée, vous devez leur en offrir le code source sous la même licence. Le logiciel est fourni sans aucune garantie.
+
+Les versions déjà publiées sous licence MIT le restent pour ceux qui les ont reçues ; le changement vaut pour les versions suivantes.
+
+Le code de tiers embarqué (l'Atelier code est construit à partir du code source de ScratchJr, licence BSD 3 clauses) garde sa propre licence, décrite dans [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
