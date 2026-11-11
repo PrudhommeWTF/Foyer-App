@@ -19,6 +19,7 @@ import { detectType } from '../storage/blobs';
 import { imageSize } from '../storage/image-size';
 import { sanitizeSvg } from './svg';
 import * as repo from './repo';
+import { familyFile, familyLibrary } from './library';
 
 /** Garde-fous techniques, pas des réglages : au-delà, ce n'est plus un projet ni un dessin d'enfant. */
 const MAX_PROJECT_BYTES = 1024 * 1024;
@@ -246,6 +247,18 @@ export function atelierRouter(members: () => Member[]): Router {
     const media = MEDIA_NAME.test(name) ? repo.getMedia(m.id, name) : null;
     if (media && !repo.mediaReferenced(m.id, name)) repo.removeMedia(media);
     res.json({ ok: true });
+  }));
+
+  // ---- la bibliothèque ajoutée par la famille (voir library.ts) ----
+  r.get('/bibliotheque', handler((_req, res) => { res.json(familyLibrary()); }));
+  r.get('/bibliotheque/fichiers/:name', handler((req, res) => {
+    const buf = familyFile(String(req.params['name']));
+    if (!buf) { res.status(404).json({ error: 'Dessin introuvable.' }); return; }
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.setHeader('Cache-Control', 'private, max-age=0, must-revalidate');
+    res.end(buf);
   }));
 
   // ---- mes personnages, mes décors ----

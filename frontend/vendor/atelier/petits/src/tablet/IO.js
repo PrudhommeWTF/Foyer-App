@@ -64,7 +64,7 @@ export default class IO {
     // also when in debug mode you need to get the base64 to avoid sandboxing issues
     static getAsset (md5, fcn) { // returns either a link or a base64 dataurl
         if (MediaLib.keys[md5]) {
-            fcn(MediaLib.path + md5); return;
+            fcn(MediaLib.url(md5)); return;
         } // just url link assets do not have photos
         if (md5.indexOf('/') > -1) {
             IO.requestFromServer(md5, gotit); // get url contents

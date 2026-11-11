@@ -185,7 +185,9 @@ Restauration : arrêter le service, extraire l'archive au même endroit, redéma
 | Ordre | **Entrelacé** : PR 1 à 4, puis 7 et 8, puis 5 et 6, puis 9. Essai court du niveau 2 après la PR 1. |
 | Tablette | iPad Pro 13 pouces (à confirmer) : 1 366 px de large en paysage, au-dessus des deux seuils de Scratch. |
 
-Restent ouverts, tous deux pour la PR 3 : **où ranger la bibliothèque de Scratch** (dans ce dépôt sous un dossier à licence propre, dans un dépôt à part, ou téléchargée à l'installation ; à trancher une fois son poids mesuré), et **l'accès de mes sessions à `cdn.assets.scratch.mit.edu`**, sans lequel c'est toi qui lances le script de récupération.
+**Bibliothèque de Scratch (PR 3).** Mesurée une fois l'accès ouvert : 1 347 fichiers, 54 Mo (costumes 19,6 ; décors 17,6 ; sons 17,1), toutes empreintes vérifiées. Le niveau Petits codeurs n'en reprend que le premier costume vectoriel de chaque personnage et les décors vectoriels : 212 personnages et 17 décors, 5,3 Mo, soit 1,8 Mo dans git. À ce poids, ils sont rangés **dans ce dépôt**, dans `frontend/vendor/atelier/bibliotheque/`, sous leur propre licence. La question se reposera pour le niveau Grands codeurs, qui voudra les costumes complets, les décors en image (16,5 Mo) et les sons (17 Mo).
+
+La revue visuelle a écarté huit éléments que le nom ne signalait pas (un poney aux traits du chat avec le logo, une casquette au logo, un bus « Scratch Tours », une chambre à l'affiche « Scratch Rocks », entre autres) : voir `exclusions.json`. Seules les images retenues ont été regardées ; les autres costumes le seront avant d'entrer.
 
 ## Annexe A : les fonctions de `OS.js`
 

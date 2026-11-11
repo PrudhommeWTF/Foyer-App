@@ -234,7 +234,7 @@ export default class Library {
 
         // Atelier: the original showed downsized PNG copies kept in 'pnglibrary', which the
         // open-source repository does not include. The browser scales the SVG itself.
-        img.src = MediaLib.path + md5;
+        img.src = MediaLib.url(md5);
 
         tb.ontouchstart = function (evt) {
             fcn(evt, tb);

@@ -78,7 +78,14 @@ Le bundle n'a donc **aucune dépendance** à l'exécution.
 - `UI.js`, `editor.css` : le logo de la fiche du projet est retiré.
 - `settings.json` : `defaultSprite` vaut `Boulon.svg`. `media.json` : la bibliothèque de départ est Boulon (trois costumes), l'étoile et la ferme.
 
+### Bibliothèque
+
+- `MediaLib.js` : la bibliothèque n'est plus un seul dossier. `MediaLib.url(md5)` dit où un fichier est servi (sept appels `MediaLib.path + md5` remplacés) ; `loadFamilyLibrary` ajoute en tête les dessins que la famille a déposés sur son serveur (`/api/atelier/bibliotheque`) ; `localizeMediaNames` garde le nom du catalogue quand les messages n'en donnent pas.
+- `media.json` est complété **au build** par le catalogue de `frontend/vendor/atelier/bibliotheque/` (212 personnages et 17 décors issus de Scratch, licence CC BY-SA 2.0, qui ne font pas partie du code de ScratchJr).
+
 ## Ce qui a été ajouté
+
+- `www/samples/` : cinq projets d'exemple écrits pour Foyer, avec leur image. L'original en livrait un seul dans le dépôt (`Star`), non repris. C'est l'écran Foyer qui les propose : l'enfant en reçoit une copie à lui.
 
 - `www/svglibrary/Boulon.svg`, `BoulonMarche.svg`, `BoulonSaute.svg` : la mascotte de l'Atelier, dessinée pour Foyer (ce n'est pas du code tiers). En tracés seuls (`M`, `L`, `C`, `Z`), sans groupe ni transformation : l'éditeur de dessin d'origine ne relit fidèlement que cela.
 - `www/editor.html` : la page de l'Atelier.

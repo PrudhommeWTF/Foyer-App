@@ -54,21 +54,55 @@ export default class MediaLib {
             }
 
             MediaLib.localizeMediaNames();
-            MediaLib.generateKeys();
+            MediaLib.loadFamilyLibrary(function () {
+                MediaLib.generateKeys();
+                whenDone();
+            });
+        });
+    }
 
+    // Atelier: the drawings a family has added on its own server (served by the
+    // Foyer API, not shipped with the editor) come first in the library. Without
+    // network, or with nothing added, the shipped library stands alone.
+    static loadFamilyLibrary (whenDone) {
+        var dir = '../../api/atelier/bibliotheque/fichiers/';
+        fetch('../../api/atelier/bibliotheque', {credentials: 'same-origin'}).then(function (response) {
+            return response.ok ? response.json() : {};
+        }).then(function (json) {
+            var mark = function (entry) {
+                entry.dir = dir;
+                return entry;
+            };
+            sprites = (json.sprites || []).map(mark).concat(sprites);
+            backgrounds = (json.backgrounds || []).map(mark).concat(backgrounds);
+            whenDone();
+        }).catch(function () {
             whenDone();
         });
     }
 
+    // Atelier: where a library file is served. The original had a single folder.
+    static url (md5) {
+        return ((keys[md5] && keys[md5].dir) || path) + md5;
+    }
+
+    // Atelier: the library catalogue already carries French names. A name is only
+    // looked up in the messages when the entry has a key there (the few elements
+    // that came with the editor); otherwise the catalogue name is kept.
     static localizeMediaNames () {
+        var named = function (prefix, entry) {
+            var key = prefix + entry.md5;
+            var found = Localization.localizeOptional(key);
+            return (found == key) ? entry.name : found;
+        };
         // Localize names of sprites
         for (let i = 0; i < sprites.length; i++) {
-            sprites[i].name = Localization.localize('CHARACTER_' + sprites[i].md5);
+            sprites[i].name = named('CHARACTER_', sprites[i]);
         }
 
         // Localize names of backgrounds
         for (let i = 0; i < backgrounds.length; i++) {
-            backgrounds[i].name = Localization.localize('BACKGROUND_' + backgrounds[i].md5);
+            backgrounds[i].name = named('BACKGROUND_', backgrounds[i]);
         }
 
         // Localize names of legacy sprites
@@ -80,12 +114,12 @@ export default class MediaLib {
     static generateKeys () {
         for (let i = 0; i < backgrounds.length; i++) {
             var bg = backgrounds[i];
-            keys[bg.md5] = {width: bg.width, height: bg.height, name: bg.name};
+            keys[bg.md5] = {width: bg.width, height: bg.height, name: bg.name, dir: bg.dir};
         }
 
         for (let i = 0; i < sprites.length; i++) {
             var spr = sprites[i];
-            keys[spr.md5] = {width: spr.width, height: spr.height, name: spr.name};
+            keys[spr.md5] = {width: spr.width, height: spr.height, name: spr.name, dir: spr.dir};
         }
 
         // when we change sprites (or remove them) the old ones still need to be in keys

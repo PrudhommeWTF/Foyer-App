@@ -32,6 +32,14 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 Ce code n'embarque plus aucune bibliothèque tierce : Snap.svg (Apache 2.0), `intl` et `intl-messageformat`, dont l'original dépendait, ont été remplacés par des fonctions du navigateur.
 
+## Bibliothèque de Scratch (personnages et décors de l'Atelier code)
+
+`frontend/vendor/atelier/bibliotheque/fichiers/` contient 212 personnages et 17 décors issus de la bibliothèque de Scratch (les « support materials » de <https://scratch.mit.edu>), sous licence **Creative Commons Attribution-ShareAlike 2.0** (<https://creativecommons.org/licenses/by-sa/2.0/>). Ces fichiers ne sont pas sous la licence de Foyer.
+
+> Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu.
+
+Les éléments qui sont aussi des marques (le chat Scratch, Gobo, Pico, Nano, Tera, Giga, et toute image montrant le nom ou le logo) n'ont pas été repris : voir `frontend/vendor/atelier/bibliotheque/exclusions.json`. Détail, modifications apportées et licence : `frontend/vendor/atelier/bibliotheque/LICENCE.md`, reproduit dans l'application servie (`atelier/petits/svglibrary/LICENCE.md`) et cité dans l'écran « Atelier code », rubrique « À propos ».
+
 ### Police Roboto
 
 `frontend/vendor/atelier/petits/www/assets/fonts/` contient trois fichiers de la police Roboto (Google, licence Apache 2.0), repris du dépôt ScratchJr.

@@ -3,7 +3,9 @@ import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 
-interface Projet { id: string; name: string; thumbnail: { pagecount: number; md5: string } | null; updatedAt: string; }
+interface Projet { id: string; name: string; rev: number; thumbnail: { pagecount: number; md5: string } | null; updatedAt: string; }
+/** An example shipped with the editor: a ready-made project the child gets a copy of. */
+interface Exemple { id: string; name: string; desc: string; image: string; json: unknown; }
 
 /** Below this width the editor is not usable: the library stays, creation and editing go. */
 const NARROW = '(max-width: 760px)';
@@ -62,6 +64,28 @@ const NARROW = '(max-width: 760px)';
           </div>
         }
       }
+
+      @if (!narrow() && exemples().length) {
+        <div class="sep">Partir d’un exemple</div>
+        <div class="tiles">
+          @for (e of exemples(); track e.id) {
+            <div class="tile">
+              <button class="thumb" [disabled]="busy()" (click)="partirDe(e)" [attr.aria-label]="'Partir de l’exemple ' + e.name"><img [src]="exempleUrl(e.image)" alt="" /></button>
+              <div class="tname">{{ e.name }}</div>
+              <div class="tdesc">{{ e.desc }}</div>
+            </div>
+          }
+        </div>
+      }
+
+      <details class="apropos">
+        <summary>À propos de l’Atelier code</summary>
+        <p>L’Atelier code est construit à partir du code source ouvert de ScratchJr, publié par le Massachusetts Institute of Technology sous licence BSD 3 clauses. Il est sans lien avec la Scratch Foundation ni approbation de sa part.
+          <a [href]="exempleUrl('../LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
+        <p>Les personnages et les décors de la bibliothèque viennent de Scratch, sous licence Creative Commons Attribution-ShareAlike 2.0 : « Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu. »
+          <a [href]="exempleUrl('../svglibrary/LICENCE.md')" target="_blank" rel="noopener">Détail et licence</a></p>
+        <p>Boulon, le robot de l’Atelier, a été dessiné pour Foyer.</p>
+      </details>
     </div>
   `,
   styles: [`
@@ -75,6 +99,13 @@ const NARROW = '(max-width: 760px)';
     button.thumb:active { transform: scale(.98); }
     .thumb img { width: 100%; height: 100%; object-fit: contain; }
     .tname { margin: 10px 4px 4px; font-weight: 800; font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tdesc { margin: 0 4px 6px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.4; }
+    .sep { display: flex; align-items: center; gap: 12px; margin: 28px 0 16px; font-size: 13px; font-weight: 800; color: var(--ink3); }
+    .sep::before, .sep::after { content: ''; flex: 1; height: 1px; background: var(--line2); }
+    .apropos { margin-top: 32px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.55; }
+    .apropos summary { cursor: pointer; font-weight: 800; color: var(--ink3); padding: 8px 0; }
+    .apropos p { margin: 8px 0; max-width: 640px; }
+    .apropos a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
     .acts { display: flex; gap: 4px; }
     .acts button { width: 44px; height: 44px; border: none; border-radius: 12px; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .acts button:hover { background: var(--line2); }
@@ -92,6 +123,7 @@ export class AtelierScreen {
   readonly erreur = signal('');
   readonly busy = signal(false);
   readonly narrow = signal(false);
+  readonly exemples = signal<Exemple[]>([]);
 
   constructor() {
     try {
@@ -100,6 +132,8 @@ export class AtelierScreen {
       inject(DestroyRef).onDestroy(() => mq.removeEventListener('change', on));
     } catch { /* no matchMedia: the wide layout stays */ }
     void this.charger();
+    // Shipped with the editor, as a static file: no example, no section.
+    fetch(this.exempleUrl('exemples.json')).then((r) => (r.ok ? r.json() : [])).then((l: Exemple[]) => this.exemples.set(l)).catch(() => { /* offline: the section stays hidden */ });
   }
 
   async charger(): Promise<void> {
@@ -110,6 +144,7 @@ export class AtelierScreen {
 
   /** The editor is a page of its own, served next to the application. */
   ouvrir(id: string): void { location.href = new URL(`atelier/petits/editor.html?pmd5=${encodeURIComponent(id)}&mode=edit`, document.baseURI).href; }
+  exempleUrl(file: string): string { return new URL(`atelier/petits/samples/${file}`, document.baseURI).href; }
   vignette(name: string): string { return new URL(`api/atelier/medias/${encodeURIComponent(name)}`, document.baseURI).href; }
 
   private async agir(fn: () => Promise<void>): Promise<void> {
@@ -122,6 +157,18 @@ export class AtelierScreen {
     return this.agir(async () => {
       const n = (this.projets()?.length ?? 0) + 1;
       const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: `Projet ${n}`, level: 'petits' });
+      this.ouvrir(projet.id);
+    });
+  }
+  /** The child never edits the example itself: a project of their own is created from it. */
+  partirDe(e: Exemple): Promise<void> {
+    return this.agir(async () => {
+      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: e.name, level: 'petits' });
+      // The picture of the example becomes the first thumbnail of the copy; the editor replaces it at the first change.
+      const image = await (await fetch(this.exempleUrl(e.image))).blob();
+      const { name } = await this.api.upload<{ name: string }>('atelier/medias', new File([image], e.image));
+      const pages = (e.json as { pages: unknown[] }).pages.length;
+      await this.api.put(`atelier/projets/${projet.id}`, { rev: projet.rev, name: e.name, json: JSON.stringify(e.json), thumbnail: JSON.stringify({ pagecount: pages, md5: name }) });
       this.ouvrir(projet.id);
     });
   }

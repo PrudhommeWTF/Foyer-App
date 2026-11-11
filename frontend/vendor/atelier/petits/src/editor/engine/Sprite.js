@@ -88,7 +88,7 @@ export default class Sprite {
     getAsset (whenDone) {
         var md5 = this.md5;
         var spr = this;
-        md5 = (MediaLib.keys[md5]) ? MediaLib.path + md5 : md5;
+        md5 = (MediaLib.keys[md5]) ? MediaLib.url(md5) : md5;
         if (md5.indexOf('/') > -1) {
             IO.requestFromServer(md5, doNext);
         } else {

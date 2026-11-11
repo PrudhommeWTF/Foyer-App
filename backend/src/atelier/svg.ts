@@ -85,3 +85,12 @@ export function sanitizeSvg(input: string): SvgResult {
   if (!/^<svg[\s>]/i.test(svg) || !/<\/svg>$/i.test(svg)) return { ok: false, error: 'Dessin refusé : ce n’est pas un SVG.' };
   return { ok: true, svg };
 }
+
+/** Largeur et hauteur d'un SVG, d'après ses attributs ou sa viewBox ; null quand il n'en dit rien. */
+export function svgSize(svg: string): { width: number; height: number } | null {
+  const root = /<svg[^>]*>/i.exec(svg)?.[0] ?? '';
+  const num = (a: string): number => parseFloat(new RegExp(`\\s${a}="([\\d.]+)`).exec(root)?.[1] ?? '');
+  const box = /viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)/.exec(root);
+  const width = num('width') || parseFloat(box?.[1] ?? ''), height = num('height') || parseFloat(box?.[2] ?? '');
+  return width > 0 && height > 0 ? { width: Math.round(width), height: Math.round(height) } : null;
+}

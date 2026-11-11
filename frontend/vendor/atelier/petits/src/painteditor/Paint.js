@@ -1107,7 +1107,7 @@ export default class Paint {
             OS.getmedia(md5, nextStep);
         } else {
             // Load library asset
-            Paint.getBkg(MediaLib.path + md5);
+            Paint.getBkg(MediaLib.url(md5));
         }
         function nextStep (base64) {
             var str = atob(base64);
@@ -1194,7 +1194,7 @@ export default class Paint {
             OS.getmedia(md5, nextStep);
         } else {
             // Load library asset
-            Paint.loadChar(MediaLib.path + md5);
+            Paint.loadChar(MediaLib.url(md5));
         }
         function nextStep (base64) {
             var str = atob(base64);

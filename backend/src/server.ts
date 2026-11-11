@@ -30,6 +30,7 @@ import { forgetRemoved } from './entretien/realisations';
 import { gesteToShopping } from './entretien/courses';
 import { revisionsRouter } from './revisions/routes';
 import { atelierRouter } from './atelier/routes';
+import { loadFamilyLibrary } from './atelier/library';
 import { moduleCounts as atlCounts, purgeArchived as atlPurge, resetModule as atlReset } from './atelier/repo';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
@@ -474,6 +475,9 @@ api.use('/atelier', auth, apiTokenLimiter, denyToken, requireMember, requireModu
 // La corbeille de l'Atelier : au démarrage puis une fois par jour, les projets
 // supprimés depuis plus longtemps que le réglage partent pour de bon. Module
 // éteint, rien ne bouge : désactiver ne supprime jamais.
+// Les dessins que la famille a déposés dans son dossier de données : relus ici,
+// une fois, au démarrage.
+loadFamilyLibrary(DATA_DIR);
 const purgerAtelier = (): void => {
   if (effectiveSetting('modAtelier') === false) return;
   try {

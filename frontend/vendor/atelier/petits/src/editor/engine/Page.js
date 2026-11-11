@@ -127,9 +127,9 @@ export default class Page {
         }
         var me = this;
         var url = (MediaLib.keys[name]) ?
-            MediaLib.path + name :
+            MediaLib.url(name) :
             (name.indexOf('/') < 0) ? OS.path + name : name;
-        var md5 = (MediaLib.keys[name]) ? MediaLib.path + name : name;
+        var md5 = (MediaLib.keys[name]) ? MediaLib.url(name) : name;
 
         var duplicateBkg = function () {
             var fileName = IO.getFilenameWithExt(md5);

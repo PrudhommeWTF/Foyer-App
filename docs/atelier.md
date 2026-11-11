@@ -6,11 +6,12 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 2 sur 9 : les projets s'enregistrent, chaque enfant a les siens.**
+**Étape 3 sur 9 : une bibliothèque de personnages et de décors, et des exemples.**
 
 | Fait | Pas encore |
 |---|---|
-| Écran « Atelier code » dans le menu, y compris celui d'un enfant ; module activable | Bibliothèque de personnages et de décors, projets d'exemple |
+| Écran « Atelier code » dans le menu, y compris celui d'un enfant ; module activable | Décors en image et personnages à plusieurs costumes (niveau Grands codeurs) |
+| 212 personnages et 17 décors, cinq projets d'exemple, dessins ajoutés par la famille | |
 | Projets par membre : créer, ouvrir, renommer, dupliquer, supprimer | Hors ligne (un projet non enregistré faute de réseau le reste jusqu'au prochain essai, page ouverte) |
 | Enregistrement automatique, avec refus d'écraser le travail d'un autre appareil | iPhone en lecture, message de rotation |
 | Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | Son enregistré, photo |
@@ -91,6 +92,56 @@ systemctl start foyer
 
 Pour revenir en arrière : arrêter le service, extraire l'archive dans `/var/lib/foyer`, réinstaller la version précédente, redémarrer. La sauvegarde chiffrée habituelle ([`sauvegarde-restauration.md`](sauvegarde-restauration.md)) emporte déjà tout : les tables sont dans `foyer.db`, les fichiers dans `pieces/`.
 
+## Bibliothèque
+
+Trois sources, dans l'ordre où l'enfant les voit :
+
+1. **Ce qu'il a dessiné** (« mes personnages », par membre).
+2. **Ce que la famille a ajouté** sur son serveur, sans reconstruire l'application.
+3. **La bibliothèque livrée** : Boulon, puis 212 personnages et 17 décors issus de Scratch, rangés par thème (animaux, personnes, fantastique, nourriture, musique, sport, objets).
+
+### Ajouter un personnage ou un décor
+
+Déposer un fichier SVG dans le dossier de données, puis redémarrer le service :
+
+```bash
+cp MonDessin.svg /var/lib/foyer/atelier/bibliotheque/personnages/
+```
+
+```bash
+systemctl restart foyer
+```
+
+- Les décors vont dans `decors/` (format 480 × 360).
+- Le nom du fichier devient le nom affiché.
+- Le fichier doit porter `width` et `height`, ou une `viewBox`.
+- Il est **nettoyé** comme le dessin d'un enfant avant d'être servi ; un fichier refusé est nommé dans le journal (`journalctl -u foyer | grep Atelier`) et n'empêche rien.
+- `LICENCES.md`, créé dans ce dossier au premier démarrage, est à tenir à la main : d'où vient chaque dessin, sous quelle licence.
+- Pour un dessin que l'éditeur de dessin doit pouvoir modifier fidèlement, préférer des tracés simples (`path`) : il ne relit pas bien les rectangles arrondis.
+
+### La bibliothèque issue de Scratch
+
+`frontend/vendor/atelier/bibliotheque/` : les fichiers (`fichiers/`), le catalogue, la licence (**CC BY-SA 2.0**, pas celle de Foyer), et les deux fichiers qui pilotent la sélection :
+
+- `exclusions.json` : ce qui n'est pas repris et pourquoi (marques, doutes, lettres, images bitmap) ;
+- `noms.json` : le nom français de chaque élément retenu. Un élément sans nom fait échouer le script : rien n'entre sans avoir été regardé.
+
+Refaire la sélection (réseau nécessaire, vers `cdn.assets.scratch.mit.edu` uniquement) :
+
+```bash
+git clone --depth 1 https://github.com/scratchfoundation/scratch-editor /tmp/scratch-editor
+```
+
+```bash
+cd backend && npx tsx scripts/atelier-bibliotheque.ts --scratch /tmp/scratch-editor/packages/scratch-gui/src/lib/libraries
+```
+
+Le script télécharge, vérifie l'empreinte MD5 de chaque fichier, le nettoie et réécrit `fichiers/` et `catalogue.json`. Il ne tourne **jamais** au build ni à l'exécution : en fonctionnement, l'Atelier ne contacte aucun domaine tiers.
+
+### Exemples
+
+Cinq projets (`frontend/vendor/atelier/petits/www/samples/`), du plus simple au plus riche. L'enfant ne modifie jamais l'exemple : « Partir d'un exemple » lui en crée une copie.
+
 ## Sécurité
 
 - **En-têtes** : la page reçoit la CSP de Foyer, **inchangée** (`script-src 'self'`, pas d'`eval`, `connect-src 'self'`). Les deux `eval` de l'original sont supprimés.
@@ -119,7 +170,7 @@ cd frontend && node scripts/build-atelier.mjs
 
 La dernière ligne donne le nombre de fichiers et le poids. `atelier/petits/fichiers.json` en garde la liste.
 
-Poids actuel : 244 fichiers, 6,1 Mo sur disque, dont 324 Ko de code. Ces fichiers sont **dans le dépôt git** (6,5 Mo, une fois pour toutes), ce qui alourdit d'autant un clone et une mise à jour.
+Poids actuel : 480 fichiers, 11,7 Mo sur disque, dont 325 Ko de code. Ces fichiers sont **dans le dépôt git** (environ 8,5 Mo, une fois pour toutes), ce qui alourdit d'autant un clone et une mise à jour.
 
 ## Modifier le code tiers
 

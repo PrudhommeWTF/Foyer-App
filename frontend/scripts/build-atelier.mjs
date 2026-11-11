@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), '..');
 const source = join(racine, 'vendor', 'atelier', 'petits');
+const bibliotheque = join(racine, 'vendor', 'atelier', 'bibliotheque');
 const sortie = join(racine, 'dist', 'frontend', 'browser', 'atelier', 'petits');
 
 const NOTICE = `/*! Atelier code, niveau Petits codeurs. Construit à partir du code source de ScratchJr.
@@ -60,6 +61,18 @@ async function construire() {
   mkdirSync(sortie, { recursive: true });
   cpSync(join(source, 'www'), sortie, { recursive: true });
   cpSync(join(source, 'LICENSE'), join(sortie, 'LICENSE.txt'));
+
+  // La bibliothèque de personnages et de décors (vendor/atelier/bibliotheque,
+  // issue de Scratch, licence CC BY-SA 2.0) rejoint les quelques éléments de
+  // départ : ses fichiers à côté des leurs, son catalogue à la suite du leur.
+  cpSync(join(bibliotheque, 'fichiers'), join(sortie, 'svglibrary'), { recursive: true });
+  cpSync(join(bibliotheque, 'LICENCE.md'), join(sortie, 'svglibrary', 'LICENCE.md'));
+  const media = JSON.parse(readFileSync(join(sortie, 'media.json'), 'utf8'));
+  const catalogue = JSON.parse(readFileSync(join(bibliotheque, 'catalogue.json'), 'utf8'));
+  const sansSource = ({ source: _source, ...entree }) => entree;
+  media.sprites.push(...catalogue.sprites.map(sansSource));
+  media.backgrounds.push(...catalogue.backgrounds.map(sansSource));
+  writeFileSync(join(sortie, 'media.json'), JSON.stringify(media));
   await build({
     entryPoints: [join(source, 'src', 'entry', 'app.js')],
     outfile: join(sortie, 'app.bundle.js'),
