@@ -1,0 +1,38 @@
+# Fichiers du code d'origine supprimés avant la construction, pour qu'aucun ne
+# puisse entrer dans le résultat. Un chemin par ligne, relatif à la racine du
+# dépôt d'origine ; un dossier est supprimé avec son contenu.
+
+# Le chat Scratch : costumes et miaulement du projet par défaut
+packages/scratch-gui/src/lib/default-project/bcf454acf82e4504149f7ffe07081dbc.svg
+packages/scratch-gui/src/lib/default-project/0fb9be3e8397c983338cb71dc84d0b25.svg
+packages/scratch-gui/src/lib/default-project/83c36d806dc92327b9e7049a565c6bff.wav
+
+# Les tutoriels : 1 481 images et vidéos montrant les mascottes et le site
+packages/scratch-gui/src/lib/libraries/decks/steps
+packages/scratch-gui/src/lib/libraries/decks/thumbnails
+packages/scratch-gui/src/lib/libraries/decks/am-steps.js
+packages/scratch-gui/src/lib/libraries/decks/ar-steps.js
+packages/scratch-gui/src/lib/libraries/decks/en-steps.js
+packages/scratch-gui/src/lib/libraries/decks/es-steps.js
+packages/scratch-gui/src/lib/libraries/decks/fr-steps.js
+packages/scratch-gui/src/lib/libraries/decks/ja-steps.js
+packages/scratch-gui/src/lib/libraries/decks/pt_BR-steps.js
+packages/scratch-gui/src/lib/libraries/decks/sw-steps.js
+packages/scratch-gui/src/lib/libraries/decks/tr-steps.js
+packages/scratch-gui/src/lib/libraries/decks/uk-steps.js
+packages/scratch-gui/src/lib/libraries/decks/zh_CN-steps.js
+packages/scratch-gui/src/lib/libraries/decks/zh_TW-steps.js
+packages/scratch-gui/src/lib/libraries/decks/zu-steps.js
+
+# Les images des extensions retirées (matériel, services en ligne, caméra)
+packages/scratch-gui/src/lib/libraries/extensions/boost
+packages/scratch-gui/src/lib/libraries/extensions/ev3
+packages/scratch-gui/src/lib/libraries/extensions/faceSensing
+packages/scratch-gui/src/lib/libraries/extensions/gdxfor
+packages/scratch-gui/src/lib/libraries/extensions/makeymakey
+packages/scratch-gui/src/lib/libraries/extensions/microbit
+packages/scratch-gui/src/lib/libraries/extensions/speech2text
+packages/scratch-gui/src/lib/libraries/extensions/text2speech
+packages/scratch-gui/src/lib/libraries/extensions/translate
+packages/scratch-gui/src/lib/libraries/extensions/videoSensing
+packages/scratch-gui/src/lib/libraries/extensions/wedo2

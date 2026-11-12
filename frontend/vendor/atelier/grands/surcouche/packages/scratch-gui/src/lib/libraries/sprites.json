@@ -1,0 +1,52 @@
+[
+    {
+        "name": "Boulon",
+        "tags": [
+            "robot",
+            "boulon"
+        ],
+        "isStage": false,
+        "variables": {},
+        "costumes": [
+            {
+                "name": "Boulon",
+                "assetId": "04fbbd28126392edae071a9cb1dea521",
+                "md5ext": "04fbbd28126392edae071a9cb1dea521.svg",
+                "dataFormat": "svg",
+                "bitmapResolution": 1,
+                "rotationCenterX": 60,
+                "rotationCenterY": 76
+            },
+            {
+                "name": "Boulon marche",
+                "assetId": "60202659746c562e77a43b5ae94f4667",
+                "md5ext": "60202659746c562e77a43b5ae94f4667.svg",
+                "dataFormat": "svg",
+                "bitmapResolution": 1,
+                "rotationCenterX": 60,
+                "rotationCenterY": 76
+            },
+            {
+                "name": "Boulon saute",
+                "assetId": "b207f5ce9a85590e91b29c50941b957c",
+                "md5ext": "b207f5ce9a85590e91b29c50941b957c.svg",
+                "dataFormat": "svg",
+                "bitmapResolution": 1,
+                "rotationCenterX": 60,
+                "rotationCenterY": 76
+            }
+        ],
+        "sounds": [
+            {
+                "name": "Pop",
+                "assetId": "83a9787d4cb6f3b7632b4ddfebf74367",
+                "md5ext": "83a9787d4cb6f3b7632b4ddfebf74367.wav",
+                "dataFormat": "wav",
+                "rate": 44100,
+                "sampleCount": 1032,
+                "format": ""
+            }
+        ],
+        "blocks": {}
+    }
+]

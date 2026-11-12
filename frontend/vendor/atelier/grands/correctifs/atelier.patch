@@ -1,0 +1,268 @@
+diff --git a/package.json b/package.json
+index c06f979..6f6114d 100644
+--- a/package.json
++++ b/package.json
+@@ -27,7 +27,6 @@
+   "scripts": {
+     "build": "cross-env NODE_ENV=production npm run --workspaces build",
+     "clean": "npm run --workspaces clean",
+-    "prepare": "husky install",
+     "refresh-gh-workflow": "ts-node scripts/update-gha-workflows.ts",
+     "start": "npm --workspace @scratch/scratch-gui start",
+     "test": "npm test --workspaces",
+diff --git a/packages/scratch-gui/package.json b/packages/scratch-gui/package.json
+index 64c85ea..93b3ce3 100644
+--- a/packages/scratch-gui/package.json
++++ b/packages/scratch-gui/package.json
+@@ -55,7 +55,6 @@
+     "clean": "rimraf build dist",
+     "i18n:push": "tx-push-src scratch-editor interface translations/en.json",
+     "i18n:src": "rimraf ./translations/messages/src && babel src > tmp.js && rimraf tmp.js && build-i18n-src ./translations/messages/src ./translations/",
+-    "prepare": "node scripts/prepare.mjs",
+     "prepublishOnly": "echo \"Please publish through CI only.\" && exit 1",
+     "start": "webpack serve",
+     "test": "npm run test:lint && npm run test:unit && npm run test:integration && npm run test:playwright",
+diff --git a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx b/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
+index 630fd49..42fb2f8 100644
+--- a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
++++ b/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
+@@ -334,7 +334,7 @@ class MenuBar extends React.Component {
+                         >
+                             <img
+                                 id="logo_img"
+-                                alt="Scratch"
++                                alt="Retour à Foyer"
+                                 className={classNames(styles.scratchLogo, {
+                                     [styles.clickable]: typeof this.props.onClickLogo !== 'undefined'
+                                 })}
+@@ -455,37 +455,7 @@ class MenuBar extends React.Component {
+                             </MenuBarItemTooltip>
+                         ) : [])}
+                     </div>
+-                    <Divider className={classNames(styles.divider)} />
+-                    <div className={styles.fileGroup}>
+-                        <button
+-                            aria-label={this.props.intl.formatMessage(ariaMessages.tutorials)}
+-                            className={
+-                                classNames(styles.menuBarItem, styles.noOffset, styles.hoverable, 'tutorials-button')
+-                            }
+-                            onClick={this.props.onOpenTipLibrary}
+-                        >
+-                            <img
+-                                className={styles.helpIcon}
+-                                src={helpIcon}
+-                            />
+-                            <span className={styles.tutorialsLabel}>
+-                                <FormattedMessage {...ariaMessages.tutorials} />
+-                            </span>
+-                        </button>
+-                        <button
+-                            aria-label={this.props.intl.formatMessage(ariaMessages.debug)}
+-                            className={classNames(styles.menuBarItem, styles.noOffset, styles.hoverable)}
+-                            onClick={this.props.onOpenDebugModal}
+-                        >
+-                            <img
+-                                className={styles.helpIcon}
+-                                src={debugIcon}
+-                            />
+-                            <span className={styles.debugLabel}>
+-                                <FormattedMessage {...ariaMessages.debug} />
+-                            </span>
+-                        </button>
+-                    </div>
++                    {/* Atelier (Foyer): the Tutorials and Debug buttons are removed with their content */}
+                 </div>
+ 
+                 {/* show the proper UI in the account menu, given whether the user is
+diff --git a/packages/scratch-gui/src/lib/default-project/index.ts b/packages/scratch-gui/src/lib/default-project/index.ts
+index b97c230..e3ceba1 100644
+--- a/packages/scratch-gui/src/lib/default-project/index.ts
++++ b/packages/scratch-gui/src/lib/default-project/index.ts
+@@ -3,10 +3,11 @@ import {TranslatorFunction} from '../../gui-config';
+ 
+ 
+ import popWav from '!arraybuffer-loader!./83a9787d4cb6f3b7632b4ddfebf74367.wav?';
+-import meowWav from '!arraybuffer-loader!./83c36d806dc92327b9e7049a565c6bff.wav?';
+ import backdrop from '!raw-loader!./cd21514d0531fdffb22204e0ec5ed84a.svg?';
+-import costume1 from '!raw-loader!./bcf454acf82e4504149f7ffe07081dbc.svg?';
+-import costume2 from '!raw-loader!./0fb9be3e8397c983338cb71dc84d0b25.svg?';
++// Atelier (Foyer): the default sprite is Boulon, drawn for Foyer, in place of the Scratch Cat.
++import costume1 from '!raw-loader!./04fbbd28126392edae071a9cb1dea521.svg?';
++import costume2 from '!raw-loader!./60202659746c562e77a43b5ae94f4667.svg?';
++import costume3 from '!raw-loader!./b207f5ce9a85590e91b29c50941b957c.svg?';
+ 
+ 
+ declare function require (path: 'fastestsmallesttextencoderdecoder'): {TextEncoder: typeof TextEncoder};
+@@ -34,26 +35,26 @@ const defaultProject = (translator?: TranslatorFunction) => {
+         assetType: 'Sound',
+         dataFormat: 'WAV',
+         data: new Uint8Array(popWav)
+-    }, {
+-        id: '83c36d806dc92327b9e7049a565c6bff',
+-        assetType: 'Sound',
+-        dataFormat: 'WAV',
+-        data: new Uint8Array(meowWav)
+     }, {
+         id: 'cd21514d0531fdffb22204e0ec5ed84a',
+         assetType: 'ImageVector',
+         dataFormat: 'SVG',
+         data: encoder.encode(backdrop)
+     }, {
+-        id: 'bcf454acf82e4504149f7ffe07081dbc',
++        id: '04fbbd28126392edae071a9cb1dea521',
+         assetType: 'ImageVector',
+         dataFormat: 'SVG',
+         data: encoder.encode(costume1)
+     }, {
+-        id: '0fb9be3e8397c983338cb71dc84d0b25',
++        id: '60202659746c562e77a43b5ae94f4667',
+         assetType: 'ImageVector',
+         dataFormat: 'SVG',
+         data: encoder.encode(costume2)
++    }, {
++        id: 'b207f5ce9a85590e91b29c50941b957c',
++        assetType: 'ImageVector',
++        dataFormat: 'SVG',
++        data: encoder.encode(costume3)
+     }];
+ };
+ 
+diff --git a/packages/scratch-gui/src/lib/default-project/project-data.ts b/packages/scratch-gui/src/lib/default-project/project-data.ts
+index fd288c7..a4e43c5 100644
+--- a/packages/scratch-gui/src/lib/default-project/project-data.ts
++++ b/packages/scratch-gui/src/lib/default-project/project-data.ts
+@@ -60,35 +60,45 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
+                 broadcasts: {},
+                 blocks: {},
+                 currentCostume: 0,
++                // Atelier (Foyer): Boulon and its three costumes, and the 'pop' of the stage
+                 costumes: [
+                     {
+-                        assetId: 'bcf454acf82e4504149f7ffe07081dbc',
++                        assetId: '04fbbd28126392edae071a9cb1dea521',
+                         name: translator(messages.costume, {index: 1}),
+                         bitmapResolution: 1,
+-                        md5ext: 'bcf454acf82e4504149f7ffe07081dbc.svg',
++                        md5ext: '04fbbd28126392edae071a9cb1dea521.svg',
+                         dataFormat: 'svg',
+-                        rotationCenterX: 48,
+-                        rotationCenterY: 50
++                        rotationCenterX: 60,
++                        rotationCenterY: 76
+                     },
+                     {
+-                        assetId: '0fb9be3e8397c983338cb71dc84d0b25',
++                        assetId: '60202659746c562e77a43b5ae94f4667',
+                         name: translator(messages.costume, {index: 2}),
+                         bitmapResolution: 1,
+-                        md5ext: '0fb9be3e8397c983338cb71dc84d0b25.svg',
++                        md5ext: '60202659746c562e77a43b5ae94f4667.svg',
+                         dataFormat: 'svg',
+-                        rotationCenterX: 46,
+-                        rotationCenterY: 53
++                        rotationCenterX: 60,
++                        rotationCenterY: 76
++                    },
++                    {
++                        assetId: 'b207f5ce9a85590e91b29c50941b957c',
++                        name: translator(messages.costume, {index: 3}),
++                        bitmapResolution: 1,
++                        md5ext: 'b207f5ce9a85590e91b29c50941b957c.svg',
++                        dataFormat: 'svg',
++                        rotationCenterX: 60,
++                        rotationCenterY: 76
+                     }
+                 ],
+                 sounds: [
+                     {
+-                        assetId: '83c36d806dc92327b9e7049a565c6bff',
+-                        name: translator(messages.meow),
++                        assetId: '83a9787d4cb6f3b7632b4ddfebf74367',
++                        name: translator(messages.pop),
+                         dataFormat: 'wav',
+                         format: '',
+-                        rate: 22050,
+-                        sampleCount: 18688,
+-                        md5ext: '83c36d806dc92327b9e7049a565c6bff.wav'
++                        rate: 11025,
++                        sampleCount: 258,
++                        md5ext: '83a9787d4cb6f3b7632b4ddfebf74367.wav'
+                     }
+                 ],
+                 volume: 100,
+diff --git a/packages/scratch-gui/webpack.config.js b/packages/scratch-gui/webpack.config.js
+index b97bc1c..3f026fa 100644
+--- a/packages/scratch-gui/webpack.config.js
++++ b/packages/scratch-gui/webpack.config.js
+@@ -235,8 +235,45 @@ const buildConfig = baseConfig.clone()
+ // `BUILD_MODE=dist npm run build`
+ const buildDist = process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist';
+ 
++// Atelier (Foyer): the only build Foyer uses. One page (editor.html), one bundle,
++// French and English messages only, and the project validators precompiled so
++// that nothing generates code at run time (the page is served under a strict
++// Content-Security-Policy, without 'unsafe-eval'). The generated modules are
++// written by the tools of frontend/vendor/atelier/grands/outils before this runs.
++const foyerGenerated = name => path.resolve(__dirname, 'src/foyer/generated', name);
++const foyerConfig = baseConfig.clone()
++    .merge({
++        entry: {
++            atelier: './src/foyer/index.jsx'
++        },
++        output: {
++            path: path.resolve(__dirname, 'dist-foyer'),
++            publicPath: '',
++            library: {
++                name: 'Atelier',
++                type: 'umd2'
++            }
++        },
++        devtool: false
++    })
++    .addPlugin(new HtmlWebpackPlugin({
++        chunks: ['atelier'],
++        filename: 'editor.html',
++        template: 'src/foyer/editor.ejs'
++    }))
++    .addPlugin(new webpack.NormalModuleReplacementPlugin(
++        /scratch-parser[\\/]lib[\\/]validate\.js$/, foyerGenerated('validate.js')
++    ))
++    .addPlugin(new webpack.NormalModuleReplacementPlugin(
++        /scratch-l10n[\\/]locales[\\/]editor-msgs(\.js)?$/, foyerGenerated('editor-msgs.js')
++    ))
++    .addPlugin(new webpack.NormalModuleReplacementPlugin(
++        /scratch-l10n[\\/]locales[\\/]paint-editor-msgs(\.js)?$/, foyerGenerated('paint-editor-msgs.js')
++    ));
++
+ let config;
+ switch (process.env.BUILD_TYPE) {
++case 'foyer': config = foyerConfig.get(); break;
+ case 'dist': config = distConfig.get(); break;
+ case 'dist-standalone': config = distStandaloneConfig.get(); break;
+ default: config = buildConfig.get(); break;
+diff --git a/packages/scratch-vm/src/extension-support/extension-manager.js b/packages/scratch-vm/src/extension-support/extension-manager.js
+index 6922cda..bc2c220 100644
+--- a/packages/scratch-vm/src/extension-support/extension-manager.js
++++ b/packages/scratch-vm/src/extension-support/extension-manager.js
+@@ -13,18 +13,10 @@ const builtinExtensions = {
+     // but serves as a reference for loading core blocks as extensions.
+     coreExample: () => require('../blocks/scratch3_core_example'),
+     // These are the non-core built-in extensions.
++    // Atelier (Foyer): only the extensions that need no server, no camera and no
++    // hardware are kept. A project that asks for another one cannot load it.
+     pen: () => require('../extensions/scratch3_pen'),
+-    wedo2: () => require('../extensions/scratch3_wedo2'),
+-    music: () => require('../extensions/scratch3_music'),
+-    microbit: () => require('../extensions/scratch3_microbit'),
+-    text2speech: () => require('../extensions/scratch3_text2speech'),
+-    translate: () => require('../extensions/scratch3_translate'),
+-    videoSensing: () => require('../extensions/scratch3_video_sensing'),
+-    ev3: () => require('../extensions/scratch3_ev3'),
+-    makeymakey: () => require('../extensions/scratch3_makeymakey'),
+-    boost: () => require('../extensions/scratch3_boost'),
+-    gdxfor: () => require('../extensions/scratch3_gdx_for'),
+-    faceSensing: () => require('../extensions/scratch3_face_sensing')
++    music: () => require('../extensions/scratch3_music')
+ };
+ 
+ /**
