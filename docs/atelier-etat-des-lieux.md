@@ -189,6 +189,25 @@ Restauration : arrêter le service, extraire l'archive au même endroit, redéma
 
 La revue visuelle a écarté huit éléments que le nom ne signalait pas (un poney aux traits du chat avec le logo, une casquette au logo, un bus « Scratch Tours », une chambre à l'affiche « Scratch Rocks », entre autres) : voir `exclusions.json`. Seules les images retenues ont été regardées ; les autres costumes le seront avant d'entrer.
 
+## Essai du niveau 2 (12 novembre 2026)
+
+L'éditeur de Scratch (`scratchfoundation/scratch-editor`, commit `1f42af4`, version 15.3.0) a été construit tel quel, hors du dépôt, puis ouvert dans Chromium sous la CSP de Foyer. Rien n'est entré dans Foyer.
+
+| Question du point 8 | Réponse mesurée |
+|---|---|
+| Se construit-il ? | Oui, du premier coup, avec Node 22 (ils demandent 24). Sept paquets, environ 4 minutes, 1,5 Go de dépendances de construction, 2 982 paquets npm. Son installation télécharge un fichier chez Scratch (`downloads.scratch.mit.edu`, pour la carte micro:bit) : étape à retirer. |
+| Combien pèse-t-il ? | Un seul fichier de code de **16,7 Mo** (5,5 Mo compressé), plus 0,8 Mo d'images de blocs. Le reste du résultat est à jeter : 68 Mo d'images de tutoriels, 16 Mo pour la détection de visage, quatre autres variantes de l'éditeur. Dans le code, 4,7 Mo sont des traductions (toutes les langues) et 4,7 Mo la détection de visage : en ne gardant que le français et en retirant celle-ci, on vise 8 à 9 Mo. |
+| Tient-il sous la CSP de Foyer ? | **Pas tel quel.** Il plante au chargement du projet : la bibliothèque qui valide un projet (`ajv`, dans `scratch-parser`) fabrique du code à la volée, ce que `script-src 'self'` interdit. Avec `'unsafe-eval'` en plus, et rien d'autre, tout marche : éditeur, éditeur de dessin (ses cadres isolés passent), onglet des sons. |
+| Appelle-t-il l'extérieur ? | **Aucune requête** au démarrage ni pendant l'essai. Les appels connus (bibliothèque, extensions) ne partent qu'à l'usage de ces fonctions. |
+| Tient-il sur l'iPad ? | À 1 366 × 1 024 (iPad Pro 13 pouces) : mise en page complète, en français. Un bloc se glisse **au doigt** et s'exécute. À 1 194 × 834 (iPad 11 pouces) : il s'ouvre, en mise en page réduite. |
+
+Non essayé : Safari, la sauvegarde, l'import d'un `.sb3`, la bibliothèque (elle appelle les serveurs de Scratch tant qu'elle n'est pas remplacée).
+
+Deux décisions en découlent, à prendre avant la PR 7 :
+
+1. **La CSP.** Soit la page du niveau 2 reçoit `'unsafe-eval'` (elle seule, pas le reste de Foyer), soit on précompile les validateurs à la construction pour s'en passer. La seconde est une modification de plus à tenir, mais c'est celle que tu demandais (« pas d'`eval` »).
+2. **Où vit le résultat.** Construire Scratch demande webpack, 1,5 Go de dépendances et plusieurs gigaoctets de mémoire : le faire à chaque `npm run build` de Foyer, donc à chaque mise à jour automatique du LXC, n'est pas raisonnable. Le résultat construit doit donc être produit ailleurs que sur le serveur.
+
 ## Annexe A : les fonctions de `OS.js`
 
 | Fonction | Devient |
