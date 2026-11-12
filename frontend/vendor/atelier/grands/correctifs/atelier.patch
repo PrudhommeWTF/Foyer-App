@@ -307,7 +307,7 @@ index b97c230231..b38d66677c 100644
  };
  
 diff --git a/packages/scratch-gui/src/lib/default-project/project-data.ts b/packages/scratch-gui/src/lib/default-project/project-data.ts
-index fd288c73b5..59c4c6667c 100644
+index fd288c73b5..5e2071e91d 100644
 --- a/packages/scratch-gui/src/lib/default-project/project-data.ts
 +++ b/packages/scratch-gui/src/lib/default-project/project-data.ts
 @@ -31,9 +31,9 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
@@ -322,7 +322,14 @@ index fd288c73b5..59c4c6667c 100644
                          dataFormat: 'svg',
                          rotationCenterX: 240,
                          rotationCenterY: 180
-@@ -60,35 +60,45 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
+@@ -54,41 +54,51 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
+             },
+             {
+                 isStage: false,
+-                name: translator(messages.sprite, {index: 1}),
++                name: 'Boulon', // Atelier (Foyer): the mascot of the Atelier, by its name
+                 variables: {},
+                 lists: {},
                  broadcasts: {},
                  blocks: {},
                  currentCostume: 0,
@@ -459,6 +466,22 @@ index b97bc1ce4f..7703e580d4 100644
  case 'dist': config = distConfig.get(); break;
  case 'dist-standalone': config = distStandaloneConfig.get(); break;
  default: config = buildConfig.get(); break;
+diff --git a/packages/scratch-storage/webpack.config.js b/packages/scratch-storage/webpack.config.js
+index 52e2834960..d02a129328 100644
+--- a/packages/scratch-storage/webpack.config.js
++++ b/packages/scratch-storage/webpack.config.js
+@@ -8,7 +8,10 @@ const baseConfig = new ScratchWebpackConfigBuilder(
+         rootPath: path.resolve(__dirname),
+         enableReact: false,
+         enableTs: true,
+-        shouldSplitChunks: false
++        shouldSplitChunks: false,
++        // Atelier (Foyer): the fetch worker is loaded next to the page, not at the root of
++        // the site: Foyer may be served under a sub-path
++        publicPath: ''
+     })
+     .setTarget('browserslist')
+     .merge({
 diff --git a/packages/scratch-vm/src/engine/runtime.js b/packages/scratch-vm/src/engine/runtime.js
 index 822fd8de26..0d029b67d0 100644
 --- a/packages/scratch-vm/src/engine/runtime.js

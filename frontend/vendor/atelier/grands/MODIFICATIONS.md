@@ -35,7 +35,7 @@ D'autres bibliothèques embarquées contiennent encore `new Function` ou `eval` 
 
 ## Ni nom, ni logo, ni mascotte
 
-- **Projet par défaut** : Boulon (trois costumes) à la place du chat ; le miaulement est retiré ; le décor vide d'origine, qui portait en commentaire l'adresse du site, est remplacé par le nôtre.
+- **Projet par défaut** : Boulon (trois costumes, et son nom) à la place du chat ; le miaulement est retiré ; le décor vide d'origine, qui portait en commentaire l'adresse du site, est remplacé par le nôtre.
 - **Bibliothèques** de personnages, costumes, décors et sons : remplacées par une liste minimale (Boulon, un décor blanc, « pop »). La bibliothèque complète arrive à l'étape suivante.
 - **Images remplacées** : le logo de la barre (une maison, qui ramène à Foyer), l'icône « choisir un personnage » et « choisir un costume » (une tête de chat, devenue une tête de robot), et dix images neutralisées (logos des modes anciens, oreilles de chat, avatars, « bientôt disponible », Scratch Link).
 - **Textes** (`outils/traductions.cjs`) : seuls le français et l'anglais (langue de repli de l'éditeur) sont gardés sur 82 langues. Cinq messages français qui nommaient la marque sont réécrits ; sept autres, de fonctions retirées, sont supprimés.
@@ -43,6 +43,10 @@ D'autres bibliothèques embarquées contiennent encore `new Function` ou `eval` 
 ## Réglages de la page (`surcouche/…/foyer/index.jsx`)
 
 Français imposé, sans menu de langue ; pas de compte, de partage, de remix, de communauté, de sac à dos ni de variables en ligne ; pas de menu Fichier ni d'enregistrement à cette étape.
+
+## Servi sous un sous-chemin
+
+Le module de stockage chargeait son fichier d'arrière-plan à la racine du site (`/chunks/…`). Il le charge à côté de la page (`scratch-storage/webpack.config.js`), pour que l'éditeur marche aussi quand Foyer est servi derrière un sous-chemin.
 
 ## Cible de construction
 
