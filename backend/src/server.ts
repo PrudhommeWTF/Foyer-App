@@ -2,7 +2,7 @@ import express, { NextFunction, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { cacheControlFor } from './static-cache';
+import { cacheControlFor, servedToSandbox } from './static-cache';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -665,7 +665,10 @@ if (fs.existsSync(STATIC_DIR)) {
   // racine et une adresse profonde reçoivent exactement les mêmes en-têtes.
   app.use(express.static(STATIC_DIR, {
     index: false,
-    setHeaders: (res, filePath) => res.setHeader('Cache-Control', cacheControlFor(filePath)),
+    setHeaders: (res, filePath) => {
+      res.setHeader('Cache-Control', cacheControlFor(filePath));
+      if (servedToSandbox(filePath)) res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    },
   }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();

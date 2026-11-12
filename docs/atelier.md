@@ -189,6 +189,14 @@ cd frontend/vendor/atelier/grands && ./construire.sh
 
 Le script clone le dépôt d'origine au commit de `amont.json`, applique nos écarts, construit, et range le résultat dans `dist/`.
 
+**Un en-tête à part pour trois fichiers.** Pour lire un dessin sans risque, l'éditeur le confie à un cadre isolé (un `iframe` bac à sable, sans origine). Foyer sert tout avec `Cross-Origin-Resource-Policy: same-origin`, ce qui refusait à ce cadre ses scripts : ceux de `atelier/grands/static/assets/*.js`, et eux seuls, partent en `cross-origin`. Ce sont des bibliothèques publiques sans rien du foyer ; la CSP ne change pas. Derrière un reverse-proxy qui réécrit les en-têtes, vérifier :
+
+```bash
+curl -sI https://<ton foyer>/atelier/grands/static/assets/$(curl -s https://<ton foyer>/atelier/grands/fichiers.json | grep -o 'runner[^"]*') | grep -i cross-origin-resource-policy
+```
+
+La réponse attendue est `cross-origin`. Sinon la zone de dessin des costumes reste vide.
+
 **Contrôle à chaque build de Foyer** : le résultat ne doit citer aucun hôte hors d'une liste explicite d'adresses inertes (espaces de noms XML, renvois à de la documentation dans des messages d'erreur). Les serveurs de Scratch n'y figurent pas : s'il en réapparaît un, le build échoue.
 
 ## Sécurité
