@@ -4,13 +4,13 @@
 import {EditorState, createStandaloneRoot, setAppElement} from '../index-standalone';
 import {FoyerStorage} from './storage';
 
-import './index.css';
+import styles from './index.css';
 
 // The page is served at <foyer>/atelier/grands/
 const FOYER = '../../';
 
 const target = document.createElement('div');
-target.className = 'foyer-atelier';
+target.className = styles.app;
 document.body.appendChild(target);
 setAppElement(target);
 
@@ -18,6 +18,8 @@ const state = new EditorState({locale: 'fr'}, () => ({storage: new FoyerStorage(
 
 createStandaloneRoot(state, target).render({
     basePath: './',
+    // '0' is the default project, built in the storage: nothing is fetched
+    projectId: '0',
     canChangeLanguage: false,
     canChangeColorMode: true,
     canChangeTheme: true,

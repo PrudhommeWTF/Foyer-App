@@ -173,6 +173,24 @@ Le script télécharge, vérifie l'empreinte MD5 de chaque fichier, le nettoie e
 
 Cinq projets (`frontend/vendor/atelier/petits/www/samples/`), du plus simple au plus riche. L'enfant ne modifie jamais l'exemple : « Partir d'un exemple » lui en crée une copie.
 
+## Niveau « Grands codeurs »
+
+Pour les plus grands : des blocs écrits, des variables, des conditions, des costumes, des clones. Il est construit à partir de l'éditeur de Scratch (AGPL), dans `frontend/vendor/atelier/grands/` ; ses écarts avec l'original sont dans son `MODIFICATIONS.md`.
+
+**Où il en est : l'éditeur s'ouvre, rien n'est enregistré.** En français, avec Boulon, sans compte, sans partage, sans tutoriel, sans extension qui appelle l'extérieur (restent Musique et Stylo). Il n'est pas encore proposé dans l'écran Foyer ; on l'ouvre par son adresse, `https://<ton foyer>/atelier/grands/editor.html`. Recharger la page efface le projet.
+
+**Il n'est pas construit sur le serveur.** Construire l'éditeur de Scratch demande 1,5 Go de dépendances et plusieurs gigaoctets de mémoire : le résultat (`grands/dist/`, 13 Mo) est commité, et `npm run build` ne fait que le recopier et le contrôler. Une mise à jour de Foyer sur le LXC ne coûte donc rien de plus.
+
+Reconstruire, sur un poste de développement (Node 22, git, une dizaine de minutes) :
+
+```bash
+cd frontend/vendor/atelier/grands && ./construire.sh
+```
+
+Le script clone le dépôt d'origine au commit de `amont.json`, applique nos écarts, construit, et range le résultat dans `dist/`.
+
+**Contrôle à chaque build de Foyer** : le résultat ne doit citer aucun hôte hors d'une liste explicite d'adresses inertes (espaces de noms XML, renvois à de la documentation dans des messages d'erreur). Les serveurs de Scratch n'y figurent pas : s'il en réapparaît un, le build échoue.
+
 ## Sécurité
 
 - **En-têtes** : la page reçoit la CSP de Foyer, **inchangée** (`script-src 'self'`, pas d'`eval`, `connect-src 'self'`). Les deux `eval` de l'original sont supprimés.

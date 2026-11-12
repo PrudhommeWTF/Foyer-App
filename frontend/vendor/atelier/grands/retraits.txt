@@ -7,6 +7,9 @@ packages/scratch-gui/src/lib/default-project/bcf454acf82e4504149f7ffe07081dbc.sv
 packages/scratch-gui/src/lib/default-project/0fb9be3e8397c983338cb71dc84d0b25.svg
 packages/scratch-gui/src/lib/default-project/83c36d806dc92327b9e7049a565c6bff.wav
 
+# Le décor vide d'origine : il porte en commentaire l'adresse du site de Scratch
+packages/scratch-gui/src/lib/default-project/cd21514d0531fdffb22204e0ec5ed84a.svg
+
 # Les tutoriels : 1 481 images et vidéos montrant les mascottes et le site
 packages/scratch-gui/src/lib/libraries/decks/steps
 packages/scratch-gui/src/lib/libraries/decks/thumbnails
@@ -36,3 +39,16 @@ packages/scratch-gui/src/lib/libraries/extensions/text2speech
 packages/scratch-gui/src/lib/libraries/extensions/translate
 packages/scratch-gui/src/lib/libraries/extensions/videoSensing
 packages/scratch-gui/src/lib/libraries/extensions/wedo2
+
+# Le code des extensions retirées : services en ligne, caméra, matériel
+packages/scratch-vm/src/extensions/scratch3_boost
+packages/scratch-vm/src/extensions/scratch3_ev3
+packages/scratch-vm/src/extensions/scratch3_face_sensing
+packages/scratch-vm/src/extensions/scratch3_gdx_for
+packages/scratch-vm/src/extensions/scratch3_makeymakey
+packages/scratch-vm/src/extensions/scratch3_microbit
+packages/scratch-vm/src/extensions/scratch3_speech2text
+packages/scratch-vm/src/extensions/scratch3_text2speech
+packages/scratch-vm/src/extensions/scratch3_translate
+packages/scratch-vm/src/extensions/scratch3_video_sensing
+packages/scratch-vm/src/extensions/scratch3_wedo2

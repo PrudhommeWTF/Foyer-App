@@ -26,7 +26,11 @@ ajv.addSchema(schema('sb2_definitions')).addSchema(schema('sb3_definitions'));
 
 for (const name of ['sb2_schema', 'sb3_schema', 'sprite2_schema', 'sprite3_schema']) {
     const code = pack(ajv, ajv.compile(schema(name)))
-        .replace(/require\('ajv\/lib\/compile\/(\w+)'\)/g, "require('./ajv-$1.js')");
+        .replace(/require\('ajv\/lib\/compile\/(\w+)'\)/g, "require('./ajv-$1.js')")
+        // The schemas are named by an address on the Scratch site. It is only a name,
+        // never fetched, but the Atelier carries no such address: it becomes a URN.
+        .replace(/https:\/\/scratch\.mit\.edu\/(\w+\.json)/g, 'urn:atelier:$1')
+        .replace(/http:\/\/json-schema\.org\/[\w#/-]*/g, 'urn:json-schema');
     if (/new Function|\beval\(/.test(code)) throw new Error(`${name}: the generated validator still builds code at run time`);
     fs.writeFileSync(path.join(out, `${name}.validate.js`), code);
 }

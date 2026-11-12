@@ -66,10 +66,12 @@ echo "[atelier] construction de la page"
 # bibliothèques embarquées, et la petite bibliothèque de départ. Rien d'autre.
 RESULTAT="packages/scratch-gui/dist-foyer"
 rm -rf "$ICI/dist" && mkdir -p "$ICI/dist/static" "$ICI/dist/bibliotheque"
-cp "$RESULTAT/editor.html" "$RESULTAT/atelier.js" "$RESULTAT/atelier.js.LICENSE.txt" "$ICI/dist/"
+cp "$RESULTAT/editor.html" "$RESULTAT/atelier.js" "$RESULTAT/atelier.js.LICENSE.txt" "$RESULTAT/extension-worker.js" "$ICI/dist/"
 cp -r "$RESULTAT/static/blocks-media" "$ICI/dist/static/"
 [ -d "$RESULTAT/static/assets" ] && cp -r "$RESULTAT/static/assets" "$ICI/dist/static/"
-[ -d "$RESULTAT/chunks" ] && find "$RESULTAT/chunks" -maxdepth 1 -name 'fetch-worker*.js' -exec sh -c 'mkdir -p "$1/dist/chunks" && cp "$2" "$1/dist/chunks/"' _ "$ICI" {} \;
+# Les morceaux chargés à la demande (éditeur de dessin, lecture des fichiers),
+# sans leurs cartes de sources ni le dossier de la détection de visage.
+mkdir -p "$ICI/dist/chunks" && find "$RESULTAT/chunks" -maxdepth 1 -type f -name '*.js' -exec cp {} "$ICI/dist/chunks/" \;
 cp packages/scratch-gui/src/lib/default-project/*.svg packages/scratch-gui/src/lib/default-project/*.wav "$ICI/dist/bibliotheque/"
 cp LICENSE "$ICI/dist/LICENSE.txt"
 echo "[atelier] terminé : $(find "$ICI/dist" -type f | wc -l) fichiers, $(du -sh "$ICI/dist" | cut -f1)"

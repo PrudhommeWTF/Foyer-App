@@ -22,6 +22,56 @@ index 64c85ea..93b3ce3 100644
      "prepublishOnly": "echo \"Please publish through CI only.\" && exit 1",
      "start": "webpack serve",
      "test": "npm run test:lint && npm run test:unit && npm run test:integration && npm run test:playwright",
+diff --git a/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx b/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx
+index 67f25b4..5cceff6 100644
+--- a/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx
++++ b/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx
+@@ -85,7 +85,7 @@ const BrowserModal = props => {
+                                 a: previewFaqLink => (
+                                     <a
+                                         className={styles.faqLink}
+-                                        href="//scratch.mit.edu/3faq"
++                                        href="#atelier"
+                                     >
+                                         {previewFaqLink}
+                                     </a>
+diff --git a/packages/scratch-gui/src/components/cards/cards.jsx b/packages/scratch-gui/src/components/cards/cards.jsx
+index 25f5150..e216cd1 100644
+--- a/packages/scratch-gui/src/components/cards/cards.jsx
++++ b/packages/scratch-gui/src/components/cards/cards.jsx
+@@ -140,17 +140,8 @@ const CardHeader = ({onCloseCards, onShrinkExpandCards, onShowAll, totalSteps, s
+ class VideoStep extends React.Component {
+ 
+     componentDidMount () {
+-        const script = document.createElement('script');
+-        script.src = `https://fast.wistia.com/embed/medias/${this.props.video}.jsonp`;
+-        script.async = true;
+-        script.setAttribute('id', 'wistia-video-content');
+-        document.body.appendChild(script);
+-
+-        const script2 = document.createElement('script');
+-        script2.src = 'https://fast.wistia.com/assets/external/E-v1.js';
+-        script2.async = true;
+-        script2.setAttribute('id', 'wistia-video-api');
+-        document.body.appendChild(script2);
++        // Atelier (Foyer): no video service is loaded. There is no tutorial deck any more,
++        // so this step is never shown.
+ 
+         // The Wistia API doesn't provide a callback for when the video is ready,
+         // so we use the global _wq queue that Wistia provides for this purpose.
+diff --git a/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx b/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
+index 1126241..7e854a0 100644
+--- a/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
++++ b/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
+@@ -23,7 +23,7 @@ const UPDATE_ACTIVITY = keyMirror({
+     results: null
+ });
+ 
+-const microBitFirmwareUrl = 'https://microbit.org/get-started/user-guide/firmware/';
++const microBitFirmwareUrl = '#atelier';
+ 
+ class UpdatePeripheralStep extends React.Component {
+     constructor (props) {
 diff --git a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx b/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
 index 630fd49..42fb2f8 100644
 --- a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
@@ -74,8 +124,69 @@ index 630fd49..42fb2f8 100644
                  </div>
  
                  {/* show the proper UI in the account menu, given whether the user is
+diff --git a/packages/scratch-gui/src/components/stage-header/stage-header.jsx b/packages/scratch-gui/src/components/stage-header/stage-header.jsx
+index fc44a19..1d603ce 100644
+--- a/packages/scratch-gui/src/components/stage-header/stage-header.jsx
++++ b/packages/scratch-gui/src/components/stage-header/stage-header.jsx
+@@ -211,7 +211,7 @@ const StageHeaderComponent = function (props) {
+         const stageButton = showBranding ? (
+             <div className={styles.embedScratchLogo}>
+                 <a
+-                    href="https://scratch.mit.edu"
++                    href="#atelier"
+                     rel="noopener noreferrer"
+                     target="_blank"
+                     data-focusable
+diff --git a/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx b/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx
+index cdf56d4..a0f8a47 100644
+--- a/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx
++++ b/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx
+@@ -151,7 +151,7 @@ class TelemetryModal extends React.PureComponent {
+                             privacyPolicyLink: <FormattedMessage {...messages.privacyPolicyLink} />,
+                             a: privacyPolicyLink => (<a
+                                 className={styles.privacyPolicyLink}
+-                                href="https://scratch.mit.edu/privacy_policy/"
++                                href="#atelier"
+                                 onClick={this.props.onShowPrivacyPolicy}
+                                 target="_blank"
+                                 rel="noopener noreferrer"
+diff --git a/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx b/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx
+index 417430d..1e510fe 100644
+--- a/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx
++++ b/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx
+@@ -48,7 +48,7 @@ const WebGlModal = props => {
+                                 a: webGlLink => (
+                                     <a
+                                         className={styles.faqLink}
+-                                        href="https://get.webgl.org/"
++                                        href="#atelier"
+                                     >
+                                         {webGlLink}
+                                     </a>
+@@ -87,7 +87,7 @@ const WebGlModal = props => {
+                                 a: previewFaqLink => (
+                                     <a
+                                         className={styles.faqLink}
+-                                        href="//scratch.mit.edu/3faq"
++                                        href="#atelier"
+                                     >
+                                         {previewFaqLink}
+                                     </a>
+diff --git a/packages/scratch-gui/src/lib/alerts/index.jsx b/packages/scratch-gui/src/lib/alerts/index.jsx
+index 15d2a7b..2344c24 100644
+--- a/packages/scratch-gui/src/lib/alerts/index.jsx
++++ b/packages/scratch-gui/src/lib/alerts/index.jsx
+@@ -190,7 +190,7 @@ const alerts = [
+                     ),
+                     a: learnMoreLink => (
+                         <a
+-                            href="https://scratch.mit.edu/info/faq/#clouddata"
++                            href="#atelier"
+                             rel="noopener noreferrer"
+                             target="_blank"
+                         >
 diff --git a/packages/scratch-gui/src/lib/default-project/index.ts b/packages/scratch-gui/src/lib/default-project/index.ts
-index b97c230..e3ceba1 100644
+index b97c230..b38d666 100644
 --- a/packages/scratch-gui/src/lib/default-project/index.ts
 +++ b/packages/scratch-gui/src/lib/default-project/index.ts
 @@ -3,10 +3,11 @@ import {TranslatorFunction} from '../../gui-config';
@@ -83,9 +194,10 @@ index b97c230..e3ceba1 100644
  
  import popWav from '!arraybuffer-loader!./83a9787d4cb6f3b7632b4ddfebf74367.wav?';
 -import meowWav from '!arraybuffer-loader!./83c36d806dc92327b9e7049a565c6bff.wav?';
- import backdrop from '!raw-loader!./cd21514d0531fdffb22204e0ec5ed84a.svg?';
+-import backdrop from '!raw-loader!./cd21514d0531fdffb22204e0ec5ed84a.svg?';
 -import costume1 from '!raw-loader!./bcf454acf82e4504149f7ffe07081dbc.svg?';
 -import costume2 from '!raw-loader!./0fb9be3e8397c983338cb71dc84d0b25.svg?';
++import backdrop from '!raw-loader!./fdea9761cb28cff2c09d747ad301a5e7.svg?';
 +// Atelier (Foyer): the default sprite is Boulon, drawn for Foyer, in place of the Scratch Cat.
 +import costume1 from '!raw-loader!./04fbbd28126392edae071a9cb1dea521.svg?';
 +import costume2 from '!raw-loader!./60202659746c562e77a43b5ae94f4667.svg?';
@@ -93,17 +205,17 @@ index b97c230..e3ceba1 100644
  
  
  declare function require (path: 'fastestsmallesttextencoderdecoder'): {TextEncoder: typeof TextEncoder};
-@@ -34,26 +35,26 @@ const defaultProject = (translator?: TranslatorFunction) => {
-         assetType: 'Sound',
+@@ -35,25 +36,25 @@ const defaultProject = (translator?: TranslatorFunction) => {
          dataFormat: 'WAV',
          data: new Uint8Array(popWav)
--    }, {
+     }, {
 -        id: '83c36d806dc92327b9e7049a565c6bff',
 -        assetType: 'Sound',
 -        dataFormat: 'WAV',
 -        data: new Uint8Array(meowWav)
-     }, {
-         id: 'cd21514d0531fdffb22204e0ec5ed84a',
+-    }, {
+-        id: 'cd21514d0531fdffb22204e0ec5ed84a',
++        id: 'fdea9761cb28cff2c09d747ad301a5e7',
          assetType: 'ImageVector',
          dataFormat: 'SVG',
          data: encoder.encode(backdrop)
@@ -128,9 +240,21 @@ index b97c230..e3ceba1 100644
  };
  
 diff --git a/packages/scratch-gui/src/lib/default-project/project-data.ts b/packages/scratch-gui/src/lib/default-project/project-data.ts
-index fd288c7..a4e43c5 100644
+index fd288c7..59c4c66 100644
 --- a/packages/scratch-gui/src/lib/default-project/project-data.ts
 +++ b/packages/scratch-gui/src/lib/default-project/project-data.ts
+@@ -31,9 +31,9 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
+                 currentCostume: 0,
+                 costumes: [
+                     {
+-                        assetId: 'cd21514d0531fdffb22204e0ec5ed84a',
++                        assetId: 'fdea9761cb28cff2c09d747ad301a5e7',
+                         name: translator(messages.backdrop, {index: 1}),
+-                        md5ext: 'cd21514d0531fdffb22204e0ec5ed84a.svg',
++                        md5ext: 'fdea9761cb28cff2c09d747ad301a5e7.svg',
+                         dataFormat: 'svg',
+                         rotationCenterX: 240,
+                         rotationCenterY: 180
 @@ -60,35 +60,45 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
                  broadcasts: {},
                  blocks: {},
@@ -190,8 +314,36 @@ index fd288c7..a4e43c5 100644
                      }
                  ],
                  volume: 100,
+diff --git a/packages/scratch-gui/src/lib/legacy-library-asset-url.ts b/packages/scratch-gui/src/lib/legacy-library-asset-url.ts
+index a28112f..0e84db1 100644
+--- a/packages/scratch-gui/src/lib/legacy-library-asset-url.ts
++++ b/packages/scratch-gui/src/lib/legacy-library-asset-url.ts
+@@ -1,5 +1,6 @@
+ /** Host serving library assets when no library asset host is configured. */
+-const LEGACY_LIBRARY_ASSET_HOST = 'https://cdn.assets.scratch.mit.edu';
++// Atelier (Foyer): no default host. Library pictures come from the storage of Foyer.
++const LEGACY_LIBRARY_ASSET_HOST = '';
+ 
+ /**
+  * Build the URL a library asset is fetched from, in the shape Scratch's asset service uses.
+diff --git a/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx b/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx
+index d26c1de..f923f01 100644
+--- a/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx
++++ b/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx
+@@ -146,8 +146,9 @@ const ProjectFetcherHOC = function (WrappedComponent) {
+         setProjectId: PropTypes.func
+     };
+     ProjectFetcherComponent.defaultProps = {
+-        assetHost: 'https://assets.scratch.mit.edu',
+-        projectHost: 'https://projects.scratch.mit.edu'
++        // Atelier (Foyer): no default host. Projects and assets come from the storage of Foyer.
++        assetHost: '',
++        projectHost: ''
+     };
+ 
+     const mapStateToProps = state => ({
 diff --git a/packages/scratch-gui/webpack.config.js b/packages/scratch-gui/webpack.config.js
-index b97bc1c..3f026fa 100644
+index b97bc1c..7703e58 100644
 --- a/packages/scratch-gui/webpack.config.js
 +++ b/packages/scratch-gui/webpack.config.js
 @@ -235,8 +235,45 @@ const buildConfig = baseConfig.clone()
@@ -217,22 +369,22 @@ index b97bc1c..3f026fa 100644
 +                type: 'umd2'
 +            }
 +        },
-+        devtool: false
++        devtool: false,
++        resolve: {
++            // An alias, not a module replacement: the generated validator requires
++            // its own neighbours, which must be looked up next to it.
++            alias: {
++                [require.resolve('scratch-parser/lib/validate.js')]: foyerGenerated('validate.js'),
++                'scratch-l10n/locales/editor-msgs$': foyerGenerated('editor-msgs.js'),
++                'scratch-l10n/locales/paint-editor-msgs$': foyerGenerated('paint-editor-msgs.js')
++            }
++        }
 +    })
 +    .addPlugin(new HtmlWebpackPlugin({
 +        chunks: ['atelier'],
 +        filename: 'editor.html',
 +        template: 'src/foyer/editor.ejs'
-+    }))
-+    .addPlugin(new webpack.NormalModuleReplacementPlugin(
-+        /scratch-parser[\\/]lib[\\/]validate\.js$/, foyerGenerated('validate.js')
-+    ))
-+    .addPlugin(new webpack.NormalModuleReplacementPlugin(
-+        /scratch-l10n[\\/]locales[\\/]editor-msgs(\.js)?$/, foyerGenerated('editor-msgs.js')
-+    ))
-+    .addPlugin(new webpack.NormalModuleReplacementPlugin(
-+        /scratch-l10n[\\/]locales[\\/]paint-editor-msgs(\.js)?$/, foyerGenerated('paint-editor-msgs.js')
-+    ));
++    }));
 +
  let config;
  switch (process.env.BUILD_TYPE) {
@@ -240,6 +392,29 @@ index b97bc1c..3f026fa 100644
  case 'dist': config = distConfig.get(); break;
  case 'dist-standalone': config = distStandaloneConfig.get(); break;
  default: config = buildConfig.get(); break;
+diff --git a/packages/scratch-vm/src/engine/runtime.js b/packages/scratch-vm/src/engine/runtime.js
+index 822fd8d..0d029b6 100644
+--- a/packages/scratch-vm/src/engine/runtime.js
++++ b/packages/scratch-vm/src/engine/runtime.js
+@@ -1646,7 +1646,8 @@ class Runtime extends EventEmitter {
+         // We should tune this over time based on user feedback and our budget.
+         const secondsPerAction = 4;
+ 
+-        const productionDomains = ['scratch.mit.edu', 'scratch.org'];
++        // Atelier (Foyer): never hosted on the Scratch sites
++        const productionDomains = [];
+         const isProductionHost = typeof window !== 'undefined' &&
+             productionDomains.some(d =>
+                 window.location.hostname === d || window.location.hostname.endsWith(`.${d}`)
+@@ -1670,7 +1671,7 @@ class Runtime extends EventEmitter {
+         };
+ 
+         /** @todo The extensions should probably specify their own queue options (within existing limits) */
+-        ['scratch.mit.edu', 'scratch.org'].forEach(scratchDomain => {
++        [].forEach(scratchDomain => {
+             ['synthesis-service', 'translate-service'].forEach(service => {
+                 storage.scratchFetch.createQueue(`${service}.${scratchDomain}`, extensionServiceQueueOptions);
+             });
 diff --git a/packages/scratch-vm/src/extension-support/extension-manager.js b/packages/scratch-vm/src/extension-support/extension-manager.js
 index 6922cda..bc2c220 100644
 --- a/packages/scratch-vm/src/extension-support/extension-manager.js
@@ -266,3 +441,47 @@ index 6922cda..bc2c220 100644
  };
  
  /**
+diff --git a/packages/scratch-vm/src/util/scratch-link-websocket.js b/packages/scratch-vm/src/util/scratch-link-websocket.js
+index 753baca..80c756c 100644
+--- a/packages/scratch-vm/src/util/scratch-link-websocket.js
++++ b/packages/scratch-vm/src/util/scratch-link-websocket.js
+@@ -56,7 +56,8 @@ class ScratchLinkWebSocket {
+         };
+ 
+         const ws = new WebSocket(`ws://127.0.0.1:20111/${pathname}`);
+-        const wss = new WebSocket(`wss://device-manager.scratch.mit.edu:20110/${pathname}`);
++        // Atelier (Foyer): only the local Scratch Link address is ever tried; no extension uses it.
++        const wss = ws;
+ 
+         const connectTimeout = setTimeout(() => {
+             // neither socket succeeded before the timeout
+diff --git a/packages/scratch-vm/webpack.config.js b/packages/scratch-vm/webpack.config.js
+index bbf5775259..9395dad95e 100644
+--- a/packages/scratch-vm/webpack.config.js
++++ b/packages/scratch-vm/webpack.config.js
+@@ -60,8 +60,7 @@ const playgroundBuilder = webBuilder
+         },
+         entry: {
+             'benchmark': './src/playground/benchmark',
+-            'video-sensing-extension-debug':
+-                './src/extensions/scratch3_video_sensing/debug',
++            // Atelier (Foyer): the video sensing extension is removed, and its debug page with it
+             'extension-worker': path.join(
+                 __dirname,
+                 'src/extension-support/extension-worker.js'
+@@ -78,15 +77,6 @@ const playgroundBuilder = webBuilder
+         test: require.resolve('stats.js/build/stats.min.js'),
+         loader: 'script-loader'
+     })
+-    .addModuleRule({
+-        test: require.resolve(
+-            './src/extensions/scratch3_video_sensing/debug.js'
+-        ),
+-        loader: 'expose-loader',
+-        options: {
+-            exposes: 'Scratch3VideoSensingDebug'
+-        }
+-    })
+     .addModuleRule({
+         test: require.resolve('scratch-blocks'),
+         loader: 'expose-loader',

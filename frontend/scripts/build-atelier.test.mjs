@@ -3,7 +3,7 @@
 // passer une adresse extérieure en gardant le build vert.
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { infractions } from './build-atelier.mjs';
+import { HOTES_INERTES, hotesInconnus, infractions } from './build-atelier.mjs';
 
 describe('contrôles du bundle de l’Atelier', () => {
   it('refuse une adresse extérieure, avec ou sans protocole', () => {
@@ -44,5 +44,26 @@ describe('contrôles du bundle de l’Atelier', () => {
     assert.equal(infractions('a.svg', '<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script></svg>').length, 1);
     assert.equal(infractions('a.svg', '<svg xmlns="http://www.w3.org/2000/svg" onload="x()"/>').length, 1);
     assert.equal(infractions('a.svg', '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>').length, 1);
+  });
+});
+
+describe('contrôle des hôtes du niveau Grands codeurs', () => {
+  it('laisse passer les hôtes listés, sous toutes leurs formes', () => {
+    assert.deepEqual(hotesInconnus('xmlns="http://www.w3.org/2000/svg" See https://github.com/x/y. "//fb.me/react"'), []);
+  });
+
+  it('nomme tout hôte absent de la liste', () => {
+    assert.deepEqual(hotesInconnus('fetch("https://cdn.assets.scratch.mit.edu/a") new WebSocket(`wss://device-manager.scratch.mit.edu:20110/x`)'),
+      ['cdn.assets.scratch.mit.edu', 'device-manager.scratch.mit.edu']);
+    assert.deepEqual(hotesInconnus('s.src="//fast.wistia.com/e.js"'), ['fast.wistia.com']);
+    assert.deepEqual(hotesInconnus('href="https://Scratch.MIT.edu"'), ['scratch.mit.edu']);
+  });
+
+  it('ne prend pas un chemin relatif pour une adresse', () => {
+    assert.deepEqual(hotesInconnus('src="static/blocks-media/default/a.svg" import("./chunks/paper.js") url(../fonts/x.woff2) "ws://127.0.0.1:20111/x"'), []);
+  });
+
+  it('aucun serveur de Scratch, de statistiques ou de vidéo n’est dans la liste', () => {
+    for (const h of Object.keys(HOTES_INERTES)) assert.ok(!/scratch|wistia|analytics|googletagmanager|firebase|jsdelivr|code\.org/.test(h), h);
   });
 });
