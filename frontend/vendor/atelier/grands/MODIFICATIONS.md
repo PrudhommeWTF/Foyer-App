@@ -21,9 +21,10 @@ Règle : on **adapte**, on ne réécrit pas. Tout écart est listé ici avec sa 
 - **Extensions** : seules Musique et Stylo restent (`extension-manager.js`, `libraries/extensions/index.jsx`). Sont retirées, code compris (`retraits.txt`) : synthèse vocale et traduction (serveurs de Scratch), reconnaissance vocale, détection de visage (elle se rabattait sur un CDN), détection vidéo (caméra, à rouvrir plus tard), et le matériel (micro:bit, LEGO, Vernier, Makey Makey).
 - **Stockage** (`surcouche/…/foyer/storage.js`) : remplace celui qui parlait aux serveurs de Scratch. À cette étape le projet vit **en mémoire**, et la bibliothèque est une poignée de fichiers servis par Foyer (`dist/bibliotheque/`).
 - **Hôtes par défaut vidés** : `project-fetcher-hoc.jsx` (projets, ressources), `legacy-library-asset-url.ts` (vignettes), `scratch-link-websocket.js` (matériel), `runtime.js` (liste des domaines de Scratch).
-- **Tutoriels** : les 1 481 images et vidéos sont supprimées, le chargeur de vidéos (`cards.jsx`) ne charge plus rien, les boutons « Tutoriels » et « Débogage » de la barre sont retirés (`menu-bar.jsx`).
+- **Tutoriels** : les 1 481 images et vidéos sont supprimées, le lecteur de vidéos en ligne (`cards.jsx`) est retiré, code compris, les boutons « Tutoriels » et « Débogage » de la barre sont retirés (`menu-bar.jsx`).
 - **Liens** vers le site de Scratch ou d'autres sites, dans des fenêtres de l'éditeur (navigateur non pris en charge, WebGL, télémétrie, variables en ligne, mise à jour d'une carte) : remplacés par une ancre vide.
 - **Statistiques** : `lib/analytics.js` est remplacé par un module qui ne fait rien.
+- **Page de débogage** de la détection vidéo : retirée de la construction de la machine virtuelle (`scratch-vm/webpack.config.js`), avec l'extension.
 - **Installation** : le script `prepare`, qui téléchargeait un micrologiciel chez Scratch, est retiré (`package.json`) ; le module qui l'attendait est un fichier vide (`generated/microbit-hex-url.cjs`).
 
 ## Pas d'`eval`

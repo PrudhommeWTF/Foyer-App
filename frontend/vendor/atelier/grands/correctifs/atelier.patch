@@ -1,5 +1,5 @@
 diff --git a/package.json b/package.json
-index c06f979..6f6114d 100644
+index c06f97951d..6f6114df87 100644
 --- a/package.json
 +++ b/package.json
 @@ -27,7 +27,6 @@
@@ -11,7 +11,7 @@ index c06f979..6f6114d 100644
      "start": "npm --workspace @scratch/scratch-gui start",
      "test": "npm test --workspaces",
 diff --git a/packages/scratch-gui/package.json b/packages/scratch-gui/package.json
-index 64c85ea..93b3ce3 100644
+index 64c85eaf60..93b3ce306b 100644
 --- a/packages/scratch-gui/package.json
 +++ b/packages/scratch-gui/package.json
 @@ -55,7 +55,6 @@
@@ -23,7 +23,7 @@ index 64c85ea..93b3ce3 100644
      "start": "webpack serve",
      "test": "npm run test:lint && npm run test:unit && npm run test:integration && npm run test:playwright",
 diff --git a/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx b/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx
-index 67f25b4..5cceff6 100644
+index 67f25b4025..5cceff6374 100644
 --- a/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx
 +++ b/packages/scratch-gui/src/components/browser-modal/browser-modal.jsx
 @@ -85,7 +85,7 @@ const BrowserModal = props => {
@@ -36,13 +36,16 @@ index 67f25b4..5cceff6 100644
                                          {previewFaqLink}
                                      </a>
 diff --git a/packages/scratch-gui/src/components/cards/cards.jsx b/packages/scratch-gui/src/components/cards/cards.jsx
-index 25f5150..e216cd1 100644
+index 25f515022b..d5700d7c60 100644
 --- a/packages/scratch-gui/src/components/cards/cards.jsx
 +++ b/packages/scratch-gui/src/components/cards/cards.jsx
-@@ -140,17 +140,8 @@ const CardHeader = ({onCloseCards, onShrinkExpandCards, onShowAll, totalSteps, s
- class VideoStep extends React.Component {
+@@ -137,82 +137,10 @@ const CardHeader = ({onCloseCards, onShrinkExpandCards, onShowAll, totalSteps, s
+     </div>);
+ };
  
-     componentDidMount () {
+-class VideoStep extends React.Component {
+-
+-    componentDidMount () {
 -        const script = document.createElement('script');
 -        script.src = `https://fast.wistia.com/embed/medias/${this.props.video}.jsonp`;
 -        script.async = true;
@@ -54,13 +57,77 @@ index 25f5150..e216cd1 100644
 -        script2.async = true;
 -        script2.setAttribute('id', 'wistia-video-api');
 -        document.body.appendChild(script2);
-+        // Atelier (Foyer): no video service is loaded. There is no tutorial deck any more,
-+        // so this step is never shown.
+-
+-        // The Wistia API doesn't provide a callback for when the video is ready,
+-        // so we use the global _wq queue that Wistia provides for this purpose.
+-        // See the below for more details.
+-        // https://docs.wistia.com/docs/javascript-player-api#with-standard-embeds
+-        window._wq = window._wq || [];
+-        window._wq.push({
+-            id: this.props.video,
+-            onReady: video => {
+-                if (video) {
+-                    video.focus();
+-                }
+-            }});
+-
+-    }
+-
+-    // We use the Wistia API here to update or pause the video dynamically:
+-    // https://wistia.com/support/developers/player-api
+-    componentDidUpdate (prevProps) {
+-        // Ensure the wistia API is loaded and available
+-        if (!(window.Wistia && window.Wistia.api)) return;
+-
+-        // Get a handle on the currently loaded video
+-        const video = window.Wistia.api(prevProps.video);
+-
+-        // Reset the video source if a new video has been chosen from the library
+-        if (prevProps.video !== this.props.video) {
+-            video.replaceWith(this.props.video);
+-        }
+-
+-        // Pause the video if the modal is being shrunken
+-        if (!this.props.expanded) {
+-            video.pause();
+-        }
+-    }
+-
+-    componentWillUnmount () {
+-        const script = document.getElementById('wistia-video-content');
+-        script.parentNode.removeChild(script);
+-
+-        const script2 = document.getElementById('wistia-video-api');
+-        script2.parentNode.removeChild(script2);
+-
+-        // Clean up the _wq queue to prevent old callbacks from firing
+-        // if the component is unmounted before the video is ready
+-        window._wq = window._wq.filter(video => video.id !== this.props.video);
+-    }
+-
+-    render () {
+-        return (
+-            <div className={styles.stepVideo}>
+-                <div
+-                    className={`wistia_embed wistia_async_${this.props.video}`}
+-                    id="video-div"
+-                    style={{height: `257px`, width: `466px`}}
+-                >
+-                    &nbsp;
+-                </div>
+-            </div>
+-        );
+-    }
+-}
++// Atelier (Foyer): the video step loaded a player from an online video service.
++// There is no tutorial deck any more, so it is never shown: it renders nothing
++// and the code that talked to that service is gone.
++const VideoStep = () => null;
  
-         // The Wistia API doesn't provide a callback for when the video is ready,
-         // so we use the global _wq queue that Wistia provides for this purpose.
+ VideoStep.propTypes = {
+     expanded: PropTypes.bool.isRequired,
 diff --git a/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx b/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
-index 1126241..7e854a0 100644
+index 1126241466..7e854a0c29 100644
 --- a/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
 +++ b/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
 @@ -23,7 +23,7 @@ const UPDATE_ACTIVITY = keyMirror({
@@ -73,7 +140,7 @@ index 1126241..7e854a0 100644
  class UpdatePeripheralStep extends React.Component {
      constructor (props) {
 diff --git a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx b/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
-index 630fd49..42fb2f8 100644
+index 630fd4915f..42fb2f8e47 100644
 --- a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
 +++ b/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
 @@ -334,7 +334,7 @@ class MenuBar extends React.Component {
@@ -125,7 +192,7 @@ index 630fd49..42fb2f8 100644
  
                  {/* show the proper UI in the account menu, given whether the user is
 diff --git a/packages/scratch-gui/src/components/stage-header/stage-header.jsx b/packages/scratch-gui/src/components/stage-header/stage-header.jsx
-index fc44a19..1d603ce 100644
+index fc44a19589..1d603cebf1 100644
 --- a/packages/scratch-gui/src/components/stage-header/stage-header.jsx
 +++ b/packages/scratch-gui/src/components/stage-header/stage-header.jsx
 @@ -211,7 +211,7 @@ const StageHeaderComponent = function (props) {
@@ -138,7 +205,7 @@ index fc44a19..1d603ce 100644
                      target="_blank"
                      data-focusable
 diff --git a/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx b/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx
-index cdf56d4..a0f8a47 100644
+index cdf56d494c..a0f8a47b75 100644
 --- a/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx
 +++ b/packages/scratch-gui/src/components/telemetry-modal/telemetry-modal.jsx
 @@ -151,7 +151,7 @@ class TelemetryModal extends React.PureComponent {
@@ -151,7 +218,7 @@ index cdf56d4..a0f8a47 100644
                                  target="_blank"
                                  rel="noopener noreferrer"
 diff --git a/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx b/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx
-index 417430d..1e510fe 100644
+index 417430d8f2..1e510fe3c1 100644
 --- a/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx
 +++ b/packages/scratch-gui/src/components/webgl-modal/webgl-modal.jsx
 @@ -48,7 +48,7 @@ const WebGlModal = props => {
@@ -173,7 +240,7 @@ index 417430d..1e510fe 100644
                                          {previewFaqLink}
                                      </a>
 diff --git a/packages/scratch-gui/src/lib/alerts/index.jsx b/packages/scratch-gui/src/lib/alerts/index.jsx
-index 15d2a7b..2344c24 100644
+index 15d2a7bd9e..2344c24bd5 100644
 --- a/packages/scratch-gui/src/lib/alerts/index.jsx
 +++ b/packages/scratch-gui/src/lib/alerts/index.jsx
 @@ -190,7 +190,7 @@ const alerts = [
@@ -186,7 +253,7 @@ index 15d2a7b..2344c24 100644
                              target="_blank"
                          >
 diff --git a/packages/scratch-gui/src/lib/default-project/index.ts b/packages/scratch-gui/src/lib/default-project/index.ts
-index b97c230..b38d666 100644
+index b97c230231..b38d66677c 100644
 --- a/packages/scratch-gui/src/lib/default-project/index.ts
 +++ b/packages/scratch-gui/src/lib/default-project/index.ts
 @@ -3,10 +3,11 @@ import {TranslatorFunction} from '../../gui-config';
@@ -240,7 +307,7 @@ index b97c230..b38d666 100644
  };
  
 diff --git a/packages/scratch-gui/src/lib/default-project/project-data.ts b/packages/scratch-gui/src/lib/default-project/project-data.ts
-index fd288c7..59c4c66 100644
+index fd288c73b5..59c4c6667c 100644
 --- a/packages/scratch-gui/src/lib/default-project/project-data.ts
 +++ b/packages/scratch-gui/src/lib/default-project/project-data.ts
 @@ -31,9 +31,9 @@ const projectData = (translateFunction?: TranslatorFunction): object => {
@@ -315,7 +382,7 @@ index fd288c7..59c4c66 100644
                  ],
                  volume: 100,
 diff --git a/packages/scratch-gui/src/lib/legacy-library-asset-url.ts b/packages/scratch-gui/src/lib/legacy-library-asset-url.ts
-index a28112f..0e84db1 100644
+index a28112fd97..0e84db16d0 100644
 --- a/packages/scratch-gui/src/lib/legacy-library-asset-url.ts
 +++ b/packages/scratch-gui/src/lib/legacy-library-asset-url.ts
 @@ -1,5 +1,6 @@
@@ -327,7 +394,7 @@ index a28112f..0e84db1 100644
  /**
   * Build the URL a library asset is fetched from, in the shape Scratch's asset service uses.
 diff --git a/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx b/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx
-index d26c1de..f923f01 100644
+index d26c1de37b..f923f0101d 100644
 --- a/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx
 +++ b/packages/scratch-gui/src/lib/project-fetcher-hoc.jsx
 @@ -146,8 +146,9 @@ const ProjectFetcherHOC = function (WrappedComponent) {
@@ -343,7 +410,7 @@ index d26c1de..f923f01 100644
  
      const mapStateToProps = state => ({
 diff --git a/packages/scratch-gui/webpack.config.js b/packages/scratch-gui/webpack.config.js
-index b97bc1c..7703e58 100644
+index b97bc1ce4f..7703e580d4 100644
 --- a/packages/scratch-gui/webpack.config.js
 +++ b/packages/scratch-gui/webpack.config.js
 @@ -235,8 +235,45 @@ const buildConfig = baseConfig.clone()
@@ -393,7 +460,7 @@ index b97bc1c..7703e58 100644
  case 'dist-standalone': config = distStandaloneConfig.get(); break;
  default: config = buildConfig.get(); break;
 diff --git a/packages/scratch-vm/src/engine/runtime.js b/packages/scratch-vm/src/engine/runtime.js
-index 822fd8d..0d029b6 100644
+index 822fd8de26..0d029b67d0 100644
 --- a/packages/scratch-vm/src/engine/runtime.js
 +++ b/packages/scratch-vm/src/engine/runtime.js
 @@ -1646,7 +1646,8 @@ class Runtime extends EventEmitter {
@@ -416,7 +483,7 @@ index 822fd8d..0d029b6 100644
                  storage.scratchFetch.createQueue(`${service}.${scratchDomain}`, extensionServiceQueueOptions);
              });
 diff --git a/packages/scratch-vm/src/extension-support/extension-manager.js b/packages/scratch-vm/src/extension-support/extension-manager.js
-index 6922cda..bc2c220 100644
+index 6922cdafd4..bc2c220fd4 100644
 --- a/packages/scratch-vm/src/extension-support/extension-manager.js
 +++ b/packages/scratch-vm/src/extension-support/extension-manager.js
 @@ -13,18 +13,10 @@ const builtinExtensions = {
@@ -442,7 +509,7 @@ index 6922cda..bc2c220 100644
  
  /**
 diff --git a/packages/scratch-vm/src/util/scratch-link-websocket.js b/packages/scratch-vm/src/util/scratch-link-websocket.js
-index 753baca..80c756c 100644
+index 753baca6a4..80c756ce7d 100644
 --- a/packages/scratch-vm/src/util/scratch-link-websocket.js
 +++ b/packages/scratch-vm/src/util/scratch-link-websocket.js
 @@ -56,7 +56,8 @@ class ScratchLinkWebSocket {
