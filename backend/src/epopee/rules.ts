@@ -7,7 +7,7 @@ export const AMORCE = 5;
 export const BRAVO_MAX = 3;
 export const NOTE_MAX = 120;
 
-export const KINDS = ['amorce', 'bravo', 'etape', 'annulation'] as const;
+export const KINDS = ['amorce', 'bravo', 'etape', 'exploit', 'annulation'] as const;
 export type Kind = typeof KINDS[number];
 export interface Entry { id: string; kind: Kind; delta: number; ref: string | null; }
 
@@ -46,3 +46,45 @@ export const dayAccepted = (day: unknown, today: string): day is string => day =
 
 /** L'identifiant de l'écriture d'une étape : un par étape et par jour, d'où un seul crédit quoi qu'il arrive. */
 export const stepEntryId = (stepId: string, day: string): string => `etape:${stepId}:${day}`;
+
+/** Comment la besace se montre à l'enfant : le nombre et les pièces, ou les pièces seules (avant la lecture des nombres). */
+export const DISPLAYS = ['nombre', 'pieces'] as const;
+export type Display = typeof DISPLAYS[number];
+
+/** Un exploit convenu vaut de 1 à 3 écus, une étape de 0 à 3 : jamais de gros lot. */
+export const EXPLOIT_ECUS_MAX = 3;
+export const STEPS_MAX = 12;
+export interface StepInput { id: string | null; title: string; hint: string; icon: string; seconds: number; ecus: number; }
+
+const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
+const whole = (v: unknown, min: number, max: number): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null);
+
+/** Le titre et les écus d'un exploit, ou la raison du refus. */
+export function exploitInput(raw: { title?: unknown; ecus?: unknown }): { title: string; ecus: number } | string {
+  const title = text(raw.title, 60), ecus = whole(raw.ecus, 1, EXPLOIT_ECUS_MAX);
+  if (!title) return 'title : un titre d’au plus 60 caractères.';
+  if (ecus === null) return `ecus : de 1 à ${EXPLOIT_ECUS_MAX}.`;
+  return { title, ecus };
+}
+
+/** Les étapes d'une routine telles qu'un parent les a réglées, ou la raison du refus (la première rencontrée). */
+export function stepsInput(raw: unknown): StepInput[] | string {
+  if (!Array.isArray(raw) || !raw.length || raw.length > STEPS_MAX) return `steps : de 1 à ${STEPS_MAX} étapes.`;
+  const out: StepInput[] = [];
+  for (const [i, s] of (raw as Record<string, unknown>[]).entries()) {
+    const title = text(s?.['title'], 60), seconds = whole(s?.['seconds'], 10, 3600), ecus = whole(s?.['ecus'], 0, 3);
+    const icon = typeof s?.['icon'] === 'string' && /^[a-zA-Z]{1,30}$/.test(s['icon']) ? s['icon'] : null;
+    const hint = s?.['hint'] === undefined || s?.['hint'] === null || s?.['hint'] === '' ? '' : text(s['hint'], 120);
+    const id = s?.['id'] === undefined || s?.['id'] === null ? null : text(s['id'], 60);
+    if (!title) return `Étape ${i + 1} : un titre d’au plus 60 caractères.`;
+    if (hint === null) return `Étape ${i + 1} : une phrase d’au plus 120 caractères.`;
+    if (!icon) return `Étape ${i + 1} : un pictogramme.`;
+    if (seconds === null) return `Étape ${i + 1} : une durée de 10 secondes à une heure.`;
+    if (ecus === null) return `Étape ${i + 1} : de 0 à 3 écus.`;
+    if (s?.['id'] !== undefined && s?.['id'] !== null && !id) return `Étape ${i + 1} : identifiant illisible.`;
+    if (id && out.some((x) => x.id === id)) return `Étape ${i + 1} : étape citée deux fois.`;
+    out.push({ id, title, hint, icon, seconds, ecus });
+  }
+  return out;
+}
+export const timeInput = (v: unknown): string | null => (typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? v : null);

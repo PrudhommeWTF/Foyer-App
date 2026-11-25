@@ -2,7 +2,7 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { ApiError, ApiService, isOffline } from '../api.service';
 import { FoyerStore } from '../foyer.store';
 import { KeyStore, readQueue, writeQueue } from '../op-queues';
-import { Besace, Pending, Routine, Step, StepStatus } from './epopee';
+import { Besace, Exploit, Pending, Routine, Step, StepStatus } from './epopee';
 
 const QUEUE_KEY = 'foyer.epopeeQueue';
 const keyStore = (): KeyStore | null => { try { return localStorage; } catch { return null; } };
@@ -20,6 +20,8 @@ export class EpopeeStore {
   private readonly foyer = inject(FoyerStore);
 
   readonly besaces = signal<Besace[] | null>(null);
+  /** Les exploits convenus du foyer. */
+  readonly exploits = signal<Exploit[]>([]);
   readonly erreur = signal('');
   readonly pending = signal<Pending[]>([]);
   private owner: string | null = null;
@@ -41,7 +43,8 @@ export class EpopeeStore {
   async charger(): Promise<void> {
     this.erreur.set('');
     try {
-      const { enfants } = await this.api.request<{ enfants: Besace[] }>('epopee/membres');
+      const [{ enfants }, { exploits }] = await Promise.all([this.api.request<{ enfants: Besace[] }>('epopee/membres'), this.api.request<{ exploits: Exploit[] }>('epopee/exploits')]);
+      this.exploits.set(exploits);
       this.besaces.set(await Promise.all(enfants.map((e) => (e.enrolled ? this.api.request<Besace>(`epopee/membres/${e.memberId}`) : e))));
     } catch (e) { if (!this.besaces()) this.erreur.set((e as Error).message); }
   }

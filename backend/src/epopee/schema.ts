@@ -111,6 +111,45 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    label: 'réglages par enfant, exploits convenus et demandes',
+    up: (db) => {
+      db.exec(`
+        -- Comment la besace se montre à l'enfant (nombre, ou pièces seules), et
+        -- si ses routines affichent le sablier.
+        ALTER TABLE epo_profiles ADD COLUMN display TEXT NOT NULL DEFAULT 'nombre';
+        ALTER TABLE epo_profiles ADD COLUMN timer INTEGER NOT NULL DEFAULT 1;
+
+        -- Les exploits convenus du foyer : ce qu'un parent crédite d'un geste,
+        -- et ce qu'un enfant peut signaler. Retirer un exploit pose archived_at.
+        CREATE TABLE epo_exploits (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          ecus INTEGER NOT NULL,
+          pos INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          archived_at TEXT
+        );
+
+        -- Un exploit signalé par un enfant, en attente d'un parent. status :
+        -- attente, validee (l'écriture du grand livre porte le même identifiant),
+        -- refusee (« pas tout à fait » : rien n'est retiré).
+        CREATE TABLE epo_requests (
+          id TEXT PRIMARY KEY,
+          member_id TEXT NOT NULL,
+          exploit_id TEXT NOT NULL REFERENCES epo_exploits(id),
+          status TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          decided_at TEXT,
+          decided_by TEXT
+        );
+        CREATE INDEX idx_epo_requests_member ON epo_requests(member_id, status);
+        -- Un exploit ne se signale pas deux fois tant qu'un parent n'a pas répondu.
+        CREATE UNIQUE INDEX idx_epo_requests_pending ON epo_requests(member_id, exploit_id) WHERE status = 'attente';
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

@@ -5,8 +5,17 @@
 export type StepStatus = 'fait' | 'saute';
 export interface Step { id: string; title: string; hint: string; icon: string; seconds: number; ecus: number; status: StepStatus | null; }
 export interface Routine { id: string; kind: 'matin' | 'soir'; title: string; time: string; startedAt: string | null; endedAt: string | null; pauses: number; steps: Step[]; }
-export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
-export interface Besace { memberId: string; enrolled: boolean; floor: number | null; balance: number | null; enrolledAt: string | null; day?: string; routines?: Routine[]; journal?: Entry[]; }
+export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'exploit' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
+/** An agreed feat of the household: what a parent credits in one tap, what a child may report. */
+export interface Exploit { id: string; title: string; ecus: number; }
+/** A feat reported by a child: waiting for a parent, granted, or "not quite" (nothing is taken away). */
+export interface Demande { id: string; exploitId: string; title: string; ecus: number; status: 'attente' | 'validee' | 'refusee'; createdAt: string; decidedBy: string | null; }
+export interface Besace {
+  memberId: string; enrolled: boolean; floor: number | null; balance: number | null; enrolledAt: string | null;
+  /** How the pouch shows to the child: the number and the coins, or the coins alone. */
+  display: 'nombre' | 'pieces' | null; timer: boolean | null;
+  day?: string; routines?: Routine[]; demandes?: Demande[]; journal?: Entry[];
+}
 /** A step marked on this device and not yet acknowledged by the server. */
 export interface Pending { stepId: string; status: StepStatus; day: string; }
 
@@ -53,3 +62,33 @@ export function breath(elapsedMs: number): { phase: number; label: string; left:
   }
   return { phase: 0, label: BREATH[0].label, left: BREATH[0].seconds };
 }
+
+/** The pictograms a parent may give a step, with the word that names each in the editor. */
+export const STEP_ICONS: { name: string; label: string }[] = [
+  { name: 'tshirt', label: 'Habits' }, { name: 'repas', label: 'Repas' }, { name: 'dent', label: 'Dents' }, { name: 'chaussure', label: 'Chaussures' },
+  { name: 'ecole', label: 'Cartable' }, { name: 'goutte', label: 'Douche' }, { name: 'moon', label: 'Coucher' }, { name: 'sun', label: 'Lever' },
+  { name: 'home', label: 'Maison' }, { name: 'recettes', label: 'Lecture' }, { name: 'suitcase', label: 'Affaires' }, { name: 'taches', label: 'Rangement' }, { name: 'clock', label: 'Autre' },
+];
+/** A step as the editor holds it: minutes rather than seconds, no id until the server names it. */
+export interface StepDraft { id: string | null; title: string; hint: string; icon: string; minutes: number; ecus: number; }
+export const toDraft = (s: Step): StepDraft => ({ id: s.id, title: s.title, hint: s.hint, icon: s.icon, minutes: Math.max(1, Math.round(s.seconds / 60)), ecus: s.ecus });
+export const newDraft = (): StepDraft => ({ id: null, title: '', hint: '', icon: 'clock', minutes: 3, ecus: 1 });
+/** The list with the step at `i` moved one place up (-1) or down (+1); unchanged at the edges. */
+export function moved<T>(list: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir;
+  if (i < 0 || j < 0 || i >= list.length || j >= list.length) return list;
+  const out = [...list]; [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+/** Why the drafts cannot be saved, or '' when they can. The server checks again. */
+export function draftsError(title: string, time: string, steps: StepDraft[]): string {
+  if (!title.trim()) return 'Donnez un nom à la routine.';
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return 'Indiquez une heure.';
+  if (!steps.length) return 'Une routine a au moins une étape.';
+  const i = steps.findIndex((s) => !s.title.trim());
+  if (i >= 0) return `Donnez un nom à l’étape ${i + 1}.`;
+  const j = steps.findIndex((s) => !Number.isInteger(s.minutes) || s.minutes < 1 || s.minutes > 60);
+  return j >= 0 ? `Étape ${j + 1} : une durée de 1 à 60 minutes.` : '';
+}
+/** The écus a child can earn in a day with these routines: what a parent weighs rewards against. */
+export const dailyEcus = (routines: Routine[]): number => routines.reduce((n, r) => n + r.steps.reduce((m, s) => m + s.ecus, 0), 0);
