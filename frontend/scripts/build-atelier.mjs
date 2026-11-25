@@ -94,6 +94,20 @@ function grandsCodeurs() {
   const cible = join(racine, 'dist', 'frontend', 'browser', 'atelier', 'grands');
   rmSync(cible, { recursive: true, force: true });
   cpSync(construit, cible, { recursive: true });
+  // Sa bibliothèque (personnages, décors, sons : vendor/atelier/bibliotheque, CC BY-SA 2.0)
+  // n'est pas dans le résultat construit, pour ne pas peser deux fois dans le dépôt :
+  // ses fichiers sont posés ici, d'après les listes que l'éditeur a reçues à sa construction.
+  const cites = new Set();
+  for (const liste of ['sprites', 'backdrops', 'sounds']) {
+    for (const e of JSON.parse(readFileSync(join(bibliotheque, 'grands', `${liste}.json`), 'utf8'))) {
+      for (const f of [e, ...(e.costumes ?? []), ...(e.sounds ?? [])]) if (f.md5ext) cites.add(f.md5ext);
+    }
+  }
+  for (const nom of cites) {
+    // Ce que Foyer fournit lui-même (Boulon, le décor blanc) est déjà dans le résultat construit
+    if (!existsSync(join(cible, 'bibliotheque', nom))) cpSync(join(bibliotheque, 'fichiers', nom), join(cible, 'bibliotheque', nom));
+  }
+  cpSync(join(bibliotheque, 'LICENCE.md'), join(cible, 'bibliotheque', 'LICENCE.md'));
   const tous = fichiers(cible);
   const fautes = [];
   for (const f of tous.filter((x) => TEXTE.has(extname(x)))) {
@@ -103,10 +117,13 @@ function grandsCodeurs() {
     if (extname(f) === '.svg' && /<script|<foreignObject|\son[a-z]+\s*=/i.test(texte)) fautes.push(`${relative(cible, f)} : SVG actif`);
   }
   if (fautes.length) throw new Error(`Le niveau Grands codeurs contient ce que l’Atelier s’interdit :\n  ${fautes.join('\n  ')}`);
-  const liste = tous.map((f) => relative(cible, f).split('\\').join('/')).sort();
-  const octets = tous.reduce((n, f) => n + statSync(f).size, 0);
+  // fichiers.json est ce que le service worker garde d'avance pour le hors-ligne : l'éditeur,
+  // pas sa bibliothèque (50 Mo), dont chaque fichier est gardé la première fois qu'il sert.
+  const liste = tous.map((f) => relative(cible, f).split('\\').join('/')).filter((f) => !f.startsWith('bibliotheque/')).sort();
+  const octets = liste.reduce((n, f) => n + statSync(join(cible, f)).size, 0);
+  const total = tous.reduce((n, f) => n + statSync(f).size, 0);
   writeFileSync(join(cible, 'fichiers.json'), `${JSON.stringify({ fichiers: liste, octets }, null, 1)}\n`);
-  console.log(`[atelier] grands : ${liste.length} fichiers, ${(octets / 1048576).toFixed(1)} Mo`);
+  console.log(`[atelier] grands : ${liste.length} fichiers, ${(octets / 1048576).toFixed(1)} Mo, et ${cites.size} fichiers de bibliothèque (${((total - octets) / 1048576).toFixed(1)} Mo)`);
 }
 
 async function construire() {
@@ -121,10 +138,12 @@ async function construire() {
   // La bibliothèque de personnages et de décors (vendor/atelier/bibliotheque,
   // issue de Scratch, licence CC BY-SA 2.0) rejoint les quelques éléments de
   // départ : ses fichiers à côté des leurs, son catalogue à la suite du leur.
-  cpSync(join(bibliotheque, 'fichiers'), join(sortie, 'svglibrary'), { recursive: true });
-  cpSync(join(bibliotheque, 'LICENCE.md'), join(sortie, 'svglibrary', 'LICENCE.md'));
+  // Le dossier de fichiers sert aux deux niveaux : seuls ceux du catalogue des
+  // petits viennent ici, pas les images ni les sons des grands.
   const media = JSON.parse(readFileSync(join(sortie, 'media.json'), 'utf8'));
   const catalogue = JSON.parse(readFileSync(join(bibliotheque, 'catalogue.json'), 'utf8'));
+  for (const e of [...catalogue.sprites, ...catalogue.backgrounds]) cpSync(join(bibliotheque, 'fichiers', e.md5), join(sortie, 'svglibrary', e.md5));
+  cpSync(join(bibliotheque, 'LICENCE.md'), join(sortie, 'svglibrary', 'LICENCE.md'));
   const sansSource = ({ source: _source, ...entree }) => entree;
   media.sprites.push(...catalogue.sprites.map(sansSource));
   media.backgrounds.push(...catalogue.backgrounds.map(sansSource));

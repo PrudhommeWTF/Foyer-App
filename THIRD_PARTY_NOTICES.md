@@ -40,13 +40,13 @@ Le niveau « Grands codeurs » est **construit à partir du code source de l'éd
 - Nos modifications, et le moyen de reconstruire : `frontend/vendor/atelier/grands/` (`MODIFICATIONS.md`, `construire.sh`). Le code source correspondant au résultat servi est le dépôt d'origine à ce commit, plus ce dossier.
 - Dans l'application servie : `atelier/grands/LICENSE.txt`, et `atelier/grands/atelier.js.LICENSE.txt` pour les notices des bibliothèques que l'éditeur embarque (React, Blockly, Paper.js, JSZip et d'autres, sous licences MIT, Apache 2.0 ou BSD).
 
-## Bibliothèque de Scratch (personnages et décors de l'Atelier code)
+## Bibliothèque de Scratch (personnages, décors et sons de l'Atelier code)
 
-`frontend/vendor/atelier/bibliotheque/fichiers/` contient 212 personnages et 17 décors issus de la bibliothèque de Scratch (les « support materials » de <https://scratch.mit.edu>), sous licence **Creative Commons Attribution-ShareAlike 2.0** (<https://creativecommons.org/licenses/by-sa/2.0/>). Ces fichiers ne sont pas sous la licence de Foyer.
+`frontend/vendor/atelier/bibliotheque/fichiers/` contient 315 personnages (775 costumes), 82 décors et 352 sons issus de la bibliothèque de Scratch (les « support materials » de <https://scratch.mit.edu>), sous licence **Creative Commons Attribution-ShareAlike 2.0** (<https://creativecommons.org/licenses/by-sa/2.0/>). Ces fichiers ne sont pas sous la licence de Foyer.
 
 > Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu.
 
-Les éléments qui sont aussi des marques (le chat Scratch, Gobo, Pico, Nano, Tera, Giga, et toute image montrant le nom ou le logo) n'ont pas été repris : voir `frontend/vendor/atelier/bibliotheque/exclusions.json`. Détail, modifications apportées et licence : `frontend/vendor/atelier/bibliotheque/LICENCE.md`, reproduit dans l'application servie (`atelier/petits/svglibrary/LICENCE.md`) et cité dans l'écran « Atelier code », rubrique « À propos ».
+Les éléments qui sont aussi des marques (le chat Scratch, Gobo, Pico, Nano, Tera, Giga, et toute image montrant le nom ou le logo) n'ont pas été repris, ni les photographies de personnes réelles : voir `frontend/vendor/atelier/bibliotheque/exclusions.json`. Détail, modifications apportées et licence : `frontend/vendor/atelier/bibliotheque/LICENCE.md`, reproduit dans l'application servie (`atelier/petits/svglibrary/LICENCE.md`) et cité dans l'écran « Atelier code », rubrique « À propos ».
 
 ### Police Roboto
 

@@ -43,6 +43,10 @@ grep -v '^#' "$ICI/retraits.txt" | grep . | while read -r chemin; do
   rm -rf "$chemin"
 done
 cp -r "$ICI/surcouche/." .
+# La bibliothèque : les listes produites par backend/scripts/atelier-bibliotheque.ts
+# (ce que Foyer fournit, puis ce qui vient de Scratch, noms en français). Les
+# fichiers eux-mêmes ne passent pas par ici : npm run build de Foyer les pose.
+cp "$ICI"/../bibliotheque/grands/*.json packages/scratch-gui/src/lib/libraries/
 git apply --whitespace=nowarn "$ICI"/correctifs/*.patch
 
 echo "[atelier] installation des dépendances"

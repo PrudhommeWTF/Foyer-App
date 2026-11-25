@@ -4,7 +4,7 @@
 		<rect id="SVGID_1_" x="0" width="480.24" height="360"/>
 	</defs>
 	<clipPath id="SVGID_2_">
-		
+		<use xlink:href="#SVGID_1_" overflow="visible"/>
 	</clipPath>
 	<g clip-path="url(#SVGID_2_)">
 		<polygon fill-rule="evenodd" clip-rule="evenodd" fill="#CBC39D" points="235.885,-162.485 227.225,-162.485 239.133,174.251 		

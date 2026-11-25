@@ -17,16 +17,33 @@
     "Dot": "doute : personnage de l'univers Scratch, proche de ses mascottes",
     "Zepto": "doute : personnage de la même famille que les mascottes déposées"
   },
+  "photographies": {
+    "_": "Personnages qui sont des photographies de personnes réelles, dont des enfants, souvent avec le logo d'une association sur le tee-shirt : la licence couvre l'image, pas le droit de la personne sur la sienne. Écartés des deux niveaux.",
+    "Amon": "photographie d'une personne réelle",
+    "Anina Dance": "photographie d'une personne réelle",
+    "Calvrett": "photographie d'une personne réelle",
+    "Cassy Dance": "photographie d'une personne réelle",
+    "Champ99": "photographie d'une personne réelle",
+    "D-Money Dance": "photographie d'une personne réelle",
+    "Dan": "photographie d'une personne réelle",
+    "Football": "photographie d'une personne réelle",
+    "Jouvi Dance": "photographie d'une personne réelle",
+    "LB Dance": "photographie d'une personne réelle",
+    "Marian": "photographie d'une personne réelle",
+    "Sam": "photographie d'une personne réelle",
+    "Ten80 Dance": "photographie d'une personne réelle"
+  },
   "decors": {
     "Bedroom 3": "revue visuelle : une affiche « Scratch Rocks » au mur",
     "Field At Mit": "nomme le MIT, dont le nom est une marque (conditions d'utilisation de Scratch, 5.4)",
     "Mural": "doute : photographie d'une fresque, œuvre d'un tiers"
   },
   "sons": {
-    "Meow": "le miaulement du chat Scratch"
+    "Meow": "le miaulement du chat Scratch",
+    "Meow2": "le miaulement du chat Scratch"
   },
   "familles": {
-    "^(Block|Glow|Story)-": "lettres et chiffres : 88 personnages qui noieraient la bibliothèque d'un enfant qui ne lit pas encore ; gardés pour le niveau Grands codeurs",
-    "bitmap": "personnages et décors en image bitmap (dont des photographies de personnes réelles) : l'éditeur des Petits codeurs dessine en vectoriel et ne sait pas les modifier ; à réexaminer pour le niveau Grands codeurs"
+    "^(Block|Glow|Story)-": "lettres et chiffres : 88 personnages qui noieraient la bibliothèque d'un enfant qui ne lit pas encore ; écartés des Petits codeurs, gardés pour les Grands codeurs",
+    "bitmap": "personnages et décors en image bitmap : l'éditeur des Petits codeurs dessine en vectoriel et ne sait pas les modifier ; écartés des Petits codeurs, gardés pour les Grands codeurs (sauf les photographies de personnes, voir plus haut)"
   }
 }
