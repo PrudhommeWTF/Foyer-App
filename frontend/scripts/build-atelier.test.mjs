@@ -2,7 +2,10 @@
 // doit pas prendre pour une faute. Sans ces tests, un motif trop lâche laisserait
 // passer une adresse extérieure en gardant le build vert.
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { HOTES_INERTES, hotesInconnus, infractions } from './build-atelier.mjs';
 
 describe('contrôles du bundle de l’Atelier', () => {
@@ -65,5 +68,42 @@ describe('contrôle des hôtes du niveau Grands codeurs', () => {
 
   it('aucun serveur de Scratch, de statistiques ou de vidéo n’est dans la liste', () => {
     for (const h of Object.keys(HOTES_INERTES)) assert.ok(!/scratch|wistia|analytics|googletagmanager|firebase|jsdelivr|code\.org/.test(h), h);
+  });
+});
+
+// La bibliothèque du niveau des grands : ce que ses listes citent doit exister, et
+// ce que exclusions.json écarte ne doit pas y revenir par une liste modifiée à la main.
+describe('bibliothèque des Grands codeurs', () => {
+  const bib = fileURLToPath(new URL('../vendor/atelier/bibliotheque/', import.meta.url));
+  const lire = (f) => JSON.parse(readFileSync(join(bib, f), 'utf8'));
+  const listes = Object.fromEntries(['sprites', 'costumes', 'backdrops', 'sounds'].map((n) => [n, lire(`grands/${n}.json`)]));
+  const exclusions = lire('exclusions.json'), noms = lire('noms.json');
+
+  it('chaque fichier cité existe, dans la bibliothèque ou parmi ce que Foyer fournit', () => {
+    const fournis = fileURLToPath(new URL('../vendor/atelier/grands/dist/bibliotheque/', import.meta.url));
+    for (const liste of Object.values(listes)) {
+      for (const e of liste) {
+        for (const f of [e, ...(e.costumes ?? []), ...(e.sounds ?? [])]) {
+          if (f.md5ext) assert.ok(existsSync(join(bib, 'fichiers', f.md5ext)) || existsSync(join(fournis, f.md5ext)), `${e.name} : ${f.md5ext} manque`);
+        }
+      }
+    }
+  });
+
+  it('aucun nom en double dans une liste : l’éditeur retrouve l’élément choisi par son nom', () => {
+    for (const [n, liste] of Object.entries(listes)) {
+      const vus = liste.map((e) => e.name);
+      assert.deepEqual(vus.filter((v, i) => vus.indexOf(v) !== i), [], n);
+    }
+  });
+
+  it('rien de ce qui est écarté n’y figure : marques, photographies de personnes, miaulement', () => {
+    const fr = (cle) => noms[cle];
+    const interdits = new Set([...Object.keys(exclusions.personnages), ...Object.keys(exclusions.photographies)].map(fr).filter(Boolean));
+    for (const e of listes.sprites) assert.ok(!interdits.has(e.name), e.name);
+    const texte = JSON.stringify(listes);
+    for (const mot of ['Meow', 'Scratch', 'Gobo', 'Pico', 'Nano', 'Giga', 'Tera']) assert.ok(!new RegExp(`"name":"${mot}\\b`).test(texte), mot);
+    // Les noms d'origine des écartés n'ont pas de nom français : ils ne peuvent pas entrer
+    for (const nom of [...Object.keys(exclusions.personnages), ...Object.keys(exclusions.photographies).filter((k) => k !== '_')]) assert.equal(noms[nom], undefined, nom);
   });
 });

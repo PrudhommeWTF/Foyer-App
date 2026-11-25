@@ -10,6 +10,9 @@
 //     on the device (local.js) and sent when the network is back.
 import {ScratchStorage} from '@scratch/scratch-storage';
 import defaultProject from '../lib/default-project';
+import sprites from '../lib/libraries/sprites.json';
+import backdrops from '../lib/libraries/backdrops.json';
+import sounds from '../lib/libraries/sounds.json';
 import local from './local';
 
 // The page is served at <foyer>/atelier/grands/. The addresses are made absolute
@@ -19,6 +22,13 @@ const FOYER = new URL('../../', document.baseURI).href;
 const API = `${FOYER}api/atelier`;
 const LIBRARY = new URL('bibliotheque/', document.baseURI).href;
 const RETRY_MS = 15000;
+
+// The files of the library shipped with the page (bibliotheque/), by name: everything
+// else a project names belongs to its owner and is read from the Foyer API
+const LIBRARY_FILES = new Set();
+[...sprites, ...backdrops, ...sounds].forEach(entry => [entry, ...(entry.costumes || []), ...(entry.sounds || [])].forEach(
+    file => file.md5ext && LIBRARY_FILES.add(file.md5ext)
+));
 
 /** A request that reached the server and was refused, with what it said. */
 class Refused extends Error {
@@ -72,8 +82,11 @@ class Magasin extends ScratchStorage {
             .catch(() => null)
             .then(asset => {
                 if (asset) {
-                    // Kept on the device, to open the project again without network
-                    if (!this.builtinHelper.get(assetId)) local.put('medias', {name, data: asset.data, attente: false});
+                    // Kept on the device, to open the project again without network. Not the
+                    // library: the service worker of Foyer keeps each of its files once fetched.
+                    if (!this.builtinHelper.get(assetId) && !this.foyer.library.has(name)) {
+                        local.put('medias', {name, data: asset.data, attente: false});
+                    }
                     return asset;
                 }
                 return local.get('medias', name).then(kept => (
@@ -115,7 +128,7 @@ export class FoyerStorage {
 
     cacheDefaultProject () {
         const storage = this.scratchStorage;
-        this.library = new Set();
+        this.library = new Set(LIBRARY_FILES);
         defaultProject(this.translator).forEach(asset => {
             this.library.add(`${asset.id}.${storage.DataFormat[asset.dataFormat]}`);
             storage.builtinHelper._store(

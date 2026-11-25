@@ -6,7 +6,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 6 sur 9 : le niveau « Grands codeurs » enregistre ses projets dans Foyer.**
+**Étape 6 sur 9, complétée : le niveau « Grands codeurs » a sa bibliothèque de personnages, de décors et de sons.**
 
 | Fait | Pas encore |
 |---|---|
@@ -19,7 +19,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | Son enregistré, photo |
 | Corbeille : un projet supprimé reste récupérable, puis est purgé | Vue parent (lire les projets d'un enfant, restaurer depuis l'écran), partage |
 | Limites réglables : nombre de projets, espace disque | |
-| Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier | Sa bibliothèque de personnages, de décors et de sons ; le niveau choisi par enfant |
+| Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | Le niveau choisi par enfant |
 
 Sur un écran étroit (téléphone), les projets s'ouvrent pour être regardés, en plein écran, téléphone couché : l'éditeur n'y est pas utilisable, et rien n'y est modifié.
 
@@ -132,6 +132,8 @@ Trois sources, dans l'ordre où l'enfant les voit :
 2. **Ce que la famille a ajouté** sur son serveur, sans reconstruire l'application.
 3. **La bibliothèque livrée** : Boulon, puis 212 personnages et 17 décors issus de Scratch, rangés par thème (animaux, personnes, fantastique, nourriture, musique, sport, objets).
 
+Ces trois sources sont celles des Petits codeurs. Les Grands codeurs ont la bibliothèque livrée entière (voir plus bas) ; « mes personnages » et les ajouts de la famille ne leur sont pas encore proposés.
+
 ### Ajouter un personnage ou un décor
 
 Déposer un fichier SVG dans le dossier de données, puis redémarrer le service :
@@ -153,10 +155,17 @@ systemctl restart foyer
 
 ### La bibliothèque issue de Scratch
 
-`frontend/vendor/atelier/bibliotheque/` : les fichiers (`fichiers/`), le catalogue, la licence (**CC BY-SA 2.0**, pas celle de Foyer), et les deux fichiers qui pilotent la sélection :
+`frontend/vendor/atelier/bibliotheque/` (50 Mo) : les fichiers des deux niveaux (`fichiers/`), le catalogue des petits (`catalogue.json`), les listes des grands (`grands/*.json`, au format de leur éditeur), la licence (**CC BY-SA 2.0**, pas celle de Foyer), et les deux fichiers qui pilotent la sélection :
 
-- `exclusions.json` : ce qui n'est pas repris et pourquoi (marques, doutes, lettres, images bitmap) ;
-- `noms.json` : le nom français de chaque élément retenu. Un élément sans nom fait échouer le script : rien n'entre sans avoir été regardé.
+- `exclusions.json` : ce qui n'est pas repris et pourquoi (marques, doutes, photographies de personnes réelles ; et pour les petits seulement, lettres et images bitmap) ;
+- `noms.json` : le nom français de chaque élément retenu (personnage, `decor:…`, `son:…`). Un élément sans nom fait échouer le script, deux éléments du même nom aussi : rien n'entre sans avoir été regardé.
+
+| | Petits codeurs | Grands codeurs |
+|---|---|---|
+| Personnages | 212, premier costume, vectoriels | 315, tous leurs costumes (775), images comprises |
+| Lettres et chiffres | non | oui (88) |
+| Décors | 17, vectoriels | 82, photos comprises |
+| Sons | ceux de l'éditeur | 352 |
 
 Refaire la sélection (réseau nécessaire, vers `cdn.assets.scratch.mit.edu` uniquement) :
 
@@ -168,7 +177,7 @@ git clone --depth 1 https://github.com/scratchfoundation/scratch-editor /tmp/scr
 cd backend && npx tsx scripts/atelier-bibliotheque.ts --scratch /tmp/scratch-editor/packages/scratch-gui/src/lib/libraries
 ```
 
-Le script télécharge, vérifie l'empreinte MD5 de chaque fichier, le nettoie et réécrit `fichiers/` et `catalogue.json`. Il ne tourne **jamais** au build ni à l'exécution : en fonctionnement, l'Atelier ne contacte aucun domaine tiers.
+Le script télécharge, vérifie l'empreinte MD5 de chaque fichier, nettoie les SVG et réécrit `fichiers/`, `catalogue.json` et `grands/*.json`. Les listes des grands sont lues **à la construction de leur éditeur** : après un changement de sélection, relancer aussi `frontend/vendor/atelier/grands/construire.sh`. Il ne tourne **jamais** au build ni à l'exécution : en fonctionnement, l'Atelier ne contacte aucun domaine tiers.
 
 ### Exemples
 
@@ -178,7 +187,9 @@ Cinq projets (`frontend/vendor/atelier/petits/www/samples/`), du plus simple au 
 
 Pour les plus grands : des blocs écrits, des variables, des conditions, des costumes, des clones. Il est construit à partir de l'éditeur de Scratch (AGPL), dans `frontend/vendor/atelier/grands/` ; ses écarts avec l'original sont dans son `MODIFICATIONS.md`.
 
-**Où il en est.** L'écran Atelier propose les deux niveaux à « Nouveau projet », et ouvre chaque projet dans son éditeur. En français, avec Boulon, sans compte, sans partage, sans tutoriel, sans extension qui appelle l'extérieur (restent Musique et Stylo). **Sa bibliothèque est encore presque vide** (Boulon, un décor blanc, un son) : l'enfant dessine, importe une image ou un son, ou part d'un fichier. La bibliothèque complète est l'étape suivante.
+**Où il en est.** L'écran Atelier propose les deux niveaux à « Nouveau projet », et ouvre chaque projet dans son éditeur. En français, avec Boulon, sans compte, sans partage, sans tutoriel, sans extension qui appelle l'extérieur (restent Musique et Stylo).
+
+**Sa bibliothèque** : Boulon, puis 315 personnages avec tous leurs costumes, 82 décors et 352 sons, noms en français. Ses fichiers sont servis par Foyer (`atelier/grands/bibliotheque/`) ; un projet ne fait que les citer, ils ne comptent pas dans la place de l'enfant. Sans réseau, seuls les éléments déjà vus sur l'appareil sont disponibles : les 50 Mo ne sont pas téléchargés d'avance.
 
 **Enregistrement.** Tout seul toutes les 30 secondes, depuis le menu Fichier, et quand la page passe à l'arrière-plan. Le projet est gardé au format de l'éditeur (`atl_projects.level = 'grands'`), ses dessins, photos et sons dans `atl_media` comme ceux des petits. Un enregistrement en retard sur un autre appareil n'écrase rien : l'enfant choisit la version à garder.
 

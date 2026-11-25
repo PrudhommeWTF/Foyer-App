@@ -6,7 +6,7 @@
 //   editor.html?projet=<id>&vue=plein  only plays it, full screen (phones)
 import {EditorState, createStandaloneRoot, setAppElement} from '../index-standalone';
 import {autoUpdateProject, getIsShowingWithId} from '../reducers/project-state';
-import {FoyerStorage} from './storage';
+import {legacyConfig} from '../legacy-config';
 
 import styles from './index.css';
 
@@ -100,7 +100,8 @@ const start = (storage, projet) => {
 };
 
 if (UUID.test(projectId)) {
-    const storage = new FoyerStorage();
+    // One storage for the whole editor: see legacy-config.ts
+    const {storage} = legacyConfig;
     storage.open(projectId).then(projet => start(storage, projet), err => {
         window.alert(err.message);
         leave();

@@ -542,7 +542,7 @@ conservée dans [`docs/`](docs/).
 | Assistants (serveur MCP) | [`docs/assistants.md`](docs/assistants.md) |
 | Paramètres (registre) | [`docs/parametres.md`](docs/parametres.md) |
 | Sécurité et mise en ligne | [`docs/audit-securite.md`](docs/audit-securite.md), [`docs/mise-en-ligne-checklist.md`](docs/mise-en-ligne-checklist.md) |
-| Atelier code (programmation par blocs pour les enfants, **en cours de construction** : deux niveaux, petits et grands codeurs, qui enregistrent leurs projets dans Foyer ; la bibliothèque du niveau des grands arrive) | [`docs/atelier.md`](docs/atelier.md), [`docs/atelier-etat-des-lieux.md`](docs/atelier-etat-des-lieux.md) |
+| Atelier code (programmation par blocs pour les enfants, **en cours de construction** : deux niveaux, petits et grands codeurs, qui enregistrent leurs projets dans Foyer, avec leur bibliothèque de personnages, de décors et de sons) | [`docs/atelier.md`](docs/atelier.md), [`docs/atelier-etat-des-lieux.md`](docs/atelier-etat-des-lieux.md) |
 | Épopée (écus des enfants, **en cours de construction** : la besace et les bravos fonctionnent, les routines et les récompenses arrivent) | [`docs/epopee.md`](docs/epopee.md) |
 | Sauvegarde et restauration | [`docs/sauvegarde-restauration.md`](docs/sauvegarde-restauration.md) |
 | Déploiement et exploitation | [`deploy/README.md`](deploy/README.md) |

@@ -106,7 +106,7 @@ const NARROW = '(max-width: 760px)';
           <a [href]="exempleUrl('../LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
         <p>Le niveau « Grands codeurs » est construit à partir du code source de l’éditeur de Scratch, publié par la Scratch Foundation sous licence GNU Affero General Public License, version 3. Sa source et les modifications de Foyer sont dans le dépôt de Foyer (frontend/vendor/atelier/grands).
           <a [href]="grandsUrl('LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
-        <p>Les personnages et les décors de la bibliothèque viennent de Scratch, sous licence Creative Commons Attribution-ShareAlike 2.0 : « Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu. »
+        <p>Les personnages, les décors et les sons de la bibliothèque viennent de Scratch, sous licence Creative Commons Attribution-ShareAlike 2.0 : « Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu. »
           <a [href]="exempleUrl('../svglibrary/LICENCE.md')" target="_blank" rel="noopener">Détail et licence</a></p>
         <p>Boulon, le robot de l’Atelier, a été dessiné pour Foyer.</p>
       </details>
