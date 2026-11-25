@@ -10,7 +10,7 @@ const RING = 2 * Math.PI * 54;
 
 /**
  * Une routine, pas à pas, en plein écran : une seule consigne à la fois, un
- * sablier qui n'est qu'un repère (passé le temps, rien ne se perd), l'écu au
+ * sablier (réglage par enfant) qui n'est qu'un repère (passé le temps, rien ne se perd), l'écu au
  * moment où l'étape est faite, et une pause « grain de sable » qui arrête le
  * sablier. L'étape est notée dans le store, qui l'envoie ; ici rien n'attend le
  * réseau.
@@ -69,12 +69,14 @@ const RING = 2 * Math.PI * 54;
               <div class="pic"><f-icon [name]="s.icon" [size]="72" color="var(--primary)" [width]="1.6" /></div>
               <h2>{{ s.title }}</h2>
               @if (s.hint) { <p class="soft">{{ s.hint }}</p> }
+              @if (timer()) {
               <div class="glass" [class.over]="!left()">
                 <svg viewBox="0 0 120 120" width="96" height="96" aria-hidden="true">
                   <circle cx="60" cy="60" r="54" class="bg" /><circle cx="60" cy="60" r="54" class="fg" [attr.stroke-dasharray]="ring" [attr.stroke-dashoffset]="offset()" transform="rotate(-90 60 60)" />
                 </svg>
                 <div class="gl">@if (left(); as l) { <b>{{ fmt(l) }}</b> } @else { <b>Prends ton temps</b><span>tes écus t’attendent</span> }</div>
               </div>
+              }
             </div>
             <div class="acts">
               <button class="btn btn-primary go" (click)="valider()"><f-icon name="check" [size]="22" color="#fff" [width]="2.6" /> C’est fait !@if (s.ecus) { <span class="plus">+{{ s.ecus }}</span> }</button>
@@ -141,6 +143,8 @@ export class EpopeeRunner {
   /** The routine, with what this device already marked (see withPending). */
   readonly routine = input.required<Routine>();
   readonly day = input.required<string>();
+  /** The hourglass is a per-child setting: some children do better without one. */
+  readonly timer = input(true);
   readonly closed = output<void>();
 
   readonly ring = RING;
@@ -151,7 +155,7 @@ export class EpopeeRunner {
   private readonly started = signal(Date.now());
   private readonly paused = signal(0);
   private pauseAt = 0;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private next: ReturnType<typeof setTimeout> | null = null;
 
   readonly index = computed(() => nextStep(this.routine()));
   readonly step = computed(() => this.routine().steps[this.index()] ?? null);
@@ -162,7 +166,7 @@ export class EpopeeRunner {
 
   constructor() {
     const tick = setInterval(() => this.now.set(Date.now()), 250);
-    inject(DestroyRef).onDestroy(() => { clearInterval(tick); if (this.timer) clearTimeout(this.timer); });
+    inject(DestroyRef).onDestroy(() => { clearInterval(tick); if (this.next) clearTimeout(this.next); });
     // Opened on a routine already finished (a second tap, another device): straight to the end.
     queueMicrotask(() => { if (this.index() < 0) this.phase.set('fin'); });
   }
@@ -182,7 +186,7 @@ export class EpopeeRunner {
     this.epopee.noter(s, 'fait', this.day());
     coin();
     this.phase.set('bravo');
-    this.timer = setTimeout(() => this.advance(), BRAVO_MS);
+    this.next = setTimeout(() => this.advance(), BRAVO_MS);
   }
   grain(): void {
     this.pauseAt = Date.now(); this.now.set(this.pauseAt);

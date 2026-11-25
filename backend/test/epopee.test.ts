@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { Contexte, appel, arreter, demarrer } from './securite-helpers';
-import { AMORCE, Entry, balance, bravoEcus, cancelRefusal, dayAccepted, dayBefore } from '../src/epopee/rules';
-import { parseGabarit } from '../src/epopee/gabarit';
+import { AMORCE, Entry, balance, bravoEcus, cancelRefusal, dayAccepted, dayBefore, exploitInput, stepsInput } from '../src/epopee/rules';
+import { parseExploits, parseGabarit } from '../src/epopee/gabarit';
 
 describe('règles', () => {
   const amorce: Entry = { id: 'a', kind: 'amorce', delta: AMORCE, ref: null };
@@ -59,8 +59,29 @@ describe('routines : règles et gabarit', () => {
   });
 });
 
+describe('réglages des parents : règles de saisie', () => {
+  const etape = { title: ' Dents ', icon: 'dent', seconds: 120, ecus: 1 };
+  it('les étapes d’une routine : la première faute est nommée', () => {
+    assert.deepEqual(stepsInput([etape, { ...etape, id: 'x', hint: 'En cercles' }]), [{ id: null, title: 'Dents', hint: '', icon: 'dent', seconds: 120, ecus: 1 }, { id: 'x', title: 'Dents', hint: 'En cercles', icon: 'dent', seconds: 120, ecus: 1 }]);
+    assert.match(stepsInput([]) as string, /de 1 à 12/);
+    assert.match(stepsInput(Array(13).fill(etape)) as string, /de 1 à 12/);
+    assert.match(stepsInput([etape, { ...etape, title: '' }]) as string, /Étape 2 : un titre/);
+    assert.match(stepsInput([{ ...etape, seconds: 5 }]) as string, /durée/);
+    assert.match(stepsInput([{ ...etape, ecus: 4 }]) as string, /0 à 3 écus/);
+    assert.match(stepsInput([{ ...etape, icon: '<svg>' }]) as string, /pictogramme/);
+    assert.match(stepsInput([{ ...etape, id: 'a' }, { ...etape, id: 'a' }]) as string, /deux fois/);
+  });
+  it('un exploit convenu vaut 1 à 3 écus', () => {
+    assert.deepEqual(exploitInput({ title: ' Mettre la table ', ecus: 2 }), { title: 'Mettre la table', ecus: 2 });
+    assert.equal(typeof exploitInput({ title: 'x', ecus: 0 }), 'string'); assert.equal(typeof exploitInput({ title: 'x', ecus: 4 }), 'string'); assert.equal(typeof exploitInput({ ecus: 1 }), 'string');
+    const lignes: string[] = [];
+    assert.deepEqual(parseExploits({ exploits: [{ title: 'Ranger', ecus: 2 }, { title: 'Trop', ecus: 9 }] }, 'test', (l) => lignes.push(l)), [{ title: 'Ranger', ecus: 2 }]);
+    assert.equal(lignes.length, 1);
+  });
+});
+
 let ctx: Contexte;
-let lena = '', camille = '';
+let lena = '', camille = '', noe = '';
 const uuid = () => crypto.randomUUID();
 const besace = async (jeton: string, id = lena) => appel(ctx.base, 'GET', `/epopee/membres/${id}`, undefined, jeton);
 
@@ -75,7 +96,7 @@ after(async () => { await arreter(ctx); });
 describe('enrôlement', () => {
   it('avant : l’enfant figure, sans besace ; un bravo est refusé', async () => {
     const l = await appel(ctx.base, 'GET', '/epopee/membres', undefined, ctx.jetons.membre);
-    assert.deepEqual(l.json.enfants, [{ memberId: lena, enrolled: false, floor: null, balance: null, enrolledAt: null }]);
+    assert.deepEqual(l.json.enfants, [{ memberId: lena, enrolled: false, floor: null, balance: null, enrolledAt: null, display: null, timer: null }]);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 1 }, ctx.jetons.membre)).status, 409);
   });
   it('un enfant ne s’enrôle pas lui-même, un adulte ne s’enrôle pas', async () => {
@@ -165,7 +186,7 @@ describe('accès et module', () => {
 describe('routines', () => {
   type Etape = { id: string; title: string; ecus: number; status: string | null };
   type Routine = { id: string; kind: string; pauses: number; endedAt: string | null; steps: Etape[] };
-  let noe = '', matin: Routine, soir: Routine;
+  let matin: Routine, soir: Routine;
   const hier = () => dayBefore(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date()));
   const noter = (id: string, corps: Record<string, unknown>, jeton: string) => appel(ctx.base, 'POST', `/epopee/etapes/${id}`, corps, jeton);
 
@@ -248,5 +269,103 @@ describe('routines', () => {
     await appel(ctx.base, 'DELETE', `/epopee/membres/${lena}/enrolement`, undefined, ctx.jetons.membre);
     assert.equal((await noter(soir.steps[1].id, { status: 'fait' }, ctx.jetons.enfant)).status, 409);
     assert.deepEqual((await besace(ctx.jetons.enfant)).json.routines, []);
+  });
+});
+
+describe('réglages, exploits convenus et demandes', () => {
+  type Exploit = { id: string; title: string; ecus: number };
+  let table: Exploit;
+  const solde = async () => (await besace(ctx.jetons.membre)).json.balance as number;
+
+  before(async () => { await appel(ctx.base, 'POST', `/epopee/membres/${lena}/enrolement`, undefined, ctx.jetons.membre); });
+
+  it('les exploits proposés sont posés au premier enrôlement ; un adulte en ajoute, en règle et en retire', async () => {
+    const liste = (await appel(ctx.base, 'GET', '/epopee/exploits', undefined, ctx.jetons.enfant)).json.exploits as Exploit[];
+    assert.ok(liste.length >= 2);
+    table = liste[0];
+    const plus = await appel(ctx.base, 'POST', '/epopee/exploits', { title: 'Arroser les plantes', ecus: 1 }, ctx.jetons.membre);
+    assert.equal(plus.status, 201);
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/exploits/${plus.json.exploit.id}`, { title: 'Arroser le jardin', ecus: 2 }, ctx.jetons.membre)).json.exploit.ecus, 2);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/exploits/${plus.json.exploit.id}`, undefined, ctx.jetons.membre)).status, 200);
+    assert.equal((await appel(ctx.base, 'GET', '/epopee/exploits', undefined, ctx.jetons.membre)).json.exploits.length, liste.length);
+    assert.equal((await appel(ctx.base, 'POST', '/epopee/exploits', { title: 'x', ecus: 9 }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'POST', '/epopee/exploits', { title: 'Tricher', ecus: 3 }, ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/exploits/${table.id}`, undefined, ctx.jetons.enfant)).status, 403);
+  });
+
+  it('crédit express : le montant est celui de l’exploit, un renvoi ne compte pas, et il s’annule', async () => {
+    const avant = await solde(), id = uuid();
+    const un = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/exploits`, { id, exploitId: table.id, ecus: 99 }, ctx.jetons.membre);
+    assert.equal(un.status, 201); assert.deepEqual([un.json.entry.kind, un.json.entry.delta, un.json.entry.note, un.json.balance], ['exploit', table.ecus, table.title, avant + table.ecus]);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/exploits`, { id, exploitId: table.id }, ctx.jetons.membre)).json.duplicate, true);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/journal/${id}/annulation`, undefined, ctx.jetons.membre)).json.balance, avant);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/exploits`, { id: uuid(), exploitId: 'inconnu' }, ctx.jetons.membre)).status, 404);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/exploits`, { id: uuid(), exploitId: table.id }, ctx.jetons.enfant)).status, 403);
+  });
+
+  it('un enfant signale un exploit : rien n’est versé avant la réponse, et il ne le signale pas deux fois', async () => {
+    const avant = await solde();
+    const un = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/demandes`, { id: uuid(), exploitId: table.id }, ctx.jetons.enfant);
+    assert.equal(un.status, 201); assert.deepEqual(un.json.demandes.map((d: { status: string; title: string }) => [d.status, d.title]), [['attente', table.title]]);
+    const deux = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/demandes`, { id: uuid(), exploitId: table.id }, ctx.jetons.enfant);
+    assert.equal(deux.status, 200); assert.equal(deux.json.demandes.length, 1);
+    assert.equal(await solde(), avant);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/demandes`, { id: uuid(), exploitId: table.id }, ctx.jetons.membre)).status, 403, 'un adulte ne signale pas à la place de l’enfant');
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${noe}/demandes`, { id: uuid(), exploitId: table.id }, ctx.jetons.enfant)).status, 403);
+  });
+
+  it('« pas tout à fait » ne retire rien ; validé, l’écu est versé une seule fois', async () => {
+    const avant = await solde();
+    const demande = (await besace(ctx.jetons.membre)).json.demandes[0] as { id: string };
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/demandes/${demande.id}/decision`, { accept: false }, ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/demandes/${demande.id}/decision`, {}, ctx.jetons.membre)).status, 400);
+    const non = await appel(ctx.base, 'POST', `/epopee/demandes/${demande.id}/decision`, { accept: false }, ctx.jetons.membre);
+    assert.deepEqual([non.status, non.json.status, non.json.balance], [200, 'refusee', avant]);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/demandes/${demande.id}/decision`, { accept: true }, ctx.jetons.membre)).status, 409);
+    // The child may ask again, and this time it is granted.
+    const encore = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/demandes`, { id: uuid(), exploitId: table.id }, ctx.jetons.enfant);
+    const attente = encore.json.demandes.find((d: { status: string }) => d.status === 'attente') as { id: string };
+    const oui = await appel(ctx.base, 'POST', `/epopee/demandes/${attente.id}/decision`, { accept: true }, ctx.jetons.admin);
+    assert.deepEqual([oui.json.status, oui.json.balance], ['validee', avant + table.ecus]);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/demandes/${attente.id}/decision`, { accept: true }, ctx.jetons.admin)).status, 409);
+    const vues = (await besace(ctx.jetons.enfant)).json.demandes as { status: string; decidedBy: string | null }[];
+    assert.deepEqual(vues.map((d) => d.status).sort(), ['refusee', 'validee']); assert.ok(vues.every((d) => d.decidedBy));
+  });
+
+  it('réglages par enfant : affichage de la besace et sablier', async () => {
+    assert.deepEqual([(await besace(ctx.jetons.enfant)).json.display, (await besace(ctx.jetons.enfant)).json.timer], ['nombre', true]);
+    const r = await appel(ctx.base, 'PATCH', `/epopee/membres/${lena}/reglages`, { display: 'pieces', timer: false }, ctx.jetons.membre);
+    assert.deepEqual([r.status, r.json.display, r.json.timer], [200, 'pieces', false]);
+    assert.equal((await appel(ctx.base, 'PATCH', `/epopee/membres/${lena}/reglages`, { timer: true }, ctx.jetons.membre)).json.display, 'pieces', 'un réglage absent ne bouge pas');
+    assert.equal((await appel(ctx.base, 'PATCH', `/epopee/membres/${lena}/reglages`, { display: 'hologramme' }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'PATCH', `/epopee/membres/${lena}/reglages`, { display: 'nombre' }, ctx.jetons.enfant)).status, 403);
+  });
+
+  it('régler une routine : titre, heure, étapes ajoutées, retirées et réordonnées ; les coches passées restent', async () => {
+    type R = { id: string; title: string; time: string; steps: { id: string; title: string; status: string | null; ecus: number }[] };
+    const r = ((await besace(ctx.jetons.membre)).json.routines as R[])[0];
+    const [a, b, ...reste] = r.steps;
+    const avant = await solde();
+    const corps = { title: 'Le matin de Lena', time: '07:05', steps: [{ ...b, hint: '', icon: 'dent', seconds: 90 }, { title: 'Faire son lit', icon: 'home', seconds: 120, ecus: 2 }, ...reste.map((s) => ({ ...s, hint: '', icon: 'dent', seconds: 60 }))] };
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/routines/${r.id}`, corps, ctx.jetons.enfant)).status, 403);
+    const fait = await appel(ctx.base, 'PUT', `/epopee/routines/${r.id}`, corps, ctx.jetons.membre);
+    assert.equal(fait.status, 200, JSON.stringify(fait.json));
+    const apres = (fait.json.routines as R[])[0];
+    assert.deepEqual([apres.title, apres.time], ['Le matin de Lena', '07:05']);
+    assert.deepEqual(apres.steps.map((s) => s.title), [b.title, 'Faire son lit', ...reste.map((s) => s.title)]);
+    assert.ok(!apres.steps.some((s) => s.id === a.id), 'l’étape retirée ne figure plus');
+    assert.deepEqual(apres.steps.map((s) => s.status), [b.status, null, ...reste.map((s) => s.status)], 'les coches du jour suivent leurs étapes');
+    assert.equal(await solde(), avant, 'régler une routine ne touche pas à la besace');
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/routines/${r.id}`, { ...corps, steps: [{ ...corps.steps[1], id: 'autre-routine' }] }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/routines/${r.id}`, { ...corps, time: '7h' }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/routines/${r.id}`, { ...corps, steps: [] }, ctx.jetons.membre)).status, 400);
+  });
+
+  it('revenir aux routines proposées remplace celles de l’enfant', async () => {
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines/gabarit`, { replace: true }, ctx.jetons.enfant)).status, 403);
+    const r = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines/gabarit`, { replace: true }, ctx.jetons.membre);
+    assert.equal(r.status, 201); assert.equal(r.json.routines.length, 2);
+    assert.notEqual(r.json.routines[0].title, 'Le matin de Lena');
+    assert.ok(r.json.routines[0].steps.every((s: { status: string | null }) => s.status === null));
   });
 });
