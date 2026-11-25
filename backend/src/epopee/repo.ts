@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
 import type { ExploitTpl, RoutineTpl } from './gabarit';
-import { AMORCE, Display, Entry, Kind, RoutineKind, StepInput, StepStatus, cancelRefusal, stepEntryId } from './rules';
+import { AMORCE, Display, Entry, Kind, QuestStatus, RewardCategory, RewardInput, RoutineKind, StepInput, StepStatus, canExchange, cancelRefusal, exchangeEntryId, pactTopUp, stepEntryId } from './rules';
 
 let database: Database;
 export function initEpopeeRepo(db: Database): void { database = db; }
@@ -264,13 +264,112 @@ export function decideRequest(r: RequestRow, e: ExploitRow, accept: boolean, by:
   })();
 }
 
+// ---- Armurerie : récompenses et quêtes ----------------------------------------
+
+export interface RewardRow { id: string; title: string; description: string; cost: number; category: RewardCategory; pos: number; created_at: string; archived_at: string | null; }
+export interface QuestRow {
+  id: string; member_id: string; reward_id: string; title: string; cost: number; status: QuestStatus; proposed_by: string | null; created_at: string;
+  pact_date: string | null; pact_items: string; pact_rule: string; pact_note: string; sealed_by: string | null; sealed_at: string | null;
+  reached_at: string | null; honored_at: string | null; honored_by: string | null; memory_child: string; memory_parent: string; closed_at: string | null;
+}
+export interface Pact { date: string | null; items: string; rule: string; note: string; }
+
+export function rewards(): RewardRow[] {
+  return database.prepare('SELECT * FROM epo_rewards WHERE archived_at IS NULL ORDER BY cost, pos').all() as RewardRow[];
+}
+export function getReward(id: string): RewardRow | null {
+  return (database.prepare('SELECT * FROM epo_rewards WHERE id = ?').get(id) as RewardRow | undefined) ?? null;
+}
+export function addReward(r: RewardInput): RewardRow {
+  const id = crypto.randomUUID();
+  const pos = (database.prepare('SELECT COALESCE(MAX(pos), -1) + 1 AS n FROM epo_rewards').get() as { n: number }).n;
+  database.prepare('INSERT INTO epo_rewards (id, title, description, cost, category, pos, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, r.title, r.description, r.cost, r.category, pos, now());
+  return getReward(id)!;
+}
+export function updateReward(id: string, r: RewardInput): void {
+  database.prepare('UPDATE epo_rewards SET title = ?, description = ?, cost = ?, category = ? WHERE id = ?').run(r.title, r.description, r.cost, r.category, id);
+}
+/** Retire une récompense du catalogue. Les quêtes qui la visent déjà continuent : elles portent leur titre et leur coût. */
+export function archiveReward(id: string): void {
+  database.prepare('UPDATE epo_rewards SET archived_at = ? WHERE id = ? AND archived_at IS NULL').run(now(), id);
+}
+/** Pose les récompenses proposées du gabarit dans un foyer qui n'en a jamais eu. */
+export function installRewards(list: RewardInput[]): void {
+  database.transaction(() => {
+    if ((database.prepare('SELECT COUNT(*) AS n FROM epo_rewards').get() as { n: number }).n) return;
+    list.forEach((r) => addReward(r));
+  })();
+}
+
+export function getQuest(id: string): QuestRow | null {
+  return (database.prepare('SELECT * FROM epo_quests WHERE id = ?').get(id) as QuestRow | undefined) ?? null;
+}
+/** Les quêtes vivantes d'un enfant : celle en cours (proposée ou active), et les trésors atteints qui restent à vivre. */
+export function openQuests(memberId: string): QuestRow[] {
+  return database.prepare("SELECT * FROM epo_quests WHERE member_id = ? AND status IN ('proposee', 'active', 'atteinte') ORDER BY created_at").all(memberId) as QuestRow[];
+}
+/** Les souvenirs : les quêtes honorées, la plus récente d'abord. */
+export function memories(memberId: string, limit: number): QuestRow[] {
+  return database.prepare("SELECT * FROM epo_quests WHERE member_id = ? AND status = 'honoree' ORDER BY honored_at DESC LIMIT ?").all(memberId, limit) as QuestRow[];
+}
+/** Propose une quête. Rend null si l'enfant en a déjà une en cours ; le même identifiant reçu deux fois rend la même quête. */
+export function proposeQuest(id: string, memberId: string, r: RewardRow, by: string | null): { quest: QuestRow; duplicate: boolean } | null {
+  return database.transaction(() => {
+    const same = getQuest(id);
+    if (same) return same.member_id === memberId ? { quest: same, duplicate: true } : null;
+    if (database.prepare("SELECT 1 FROM epo_quests WHERE member_id = ? AND status IN ('proposee', 'active')").get(memberId)) return null;
+    database.prepare("INSERT INTO epo_quests (id, member_id, reward_id, title, cost, status, proposed_by, created_at) VALUES (?, ?, ?, ?, ?, 'proposee', ?, ?)").run(id, memberId, r.id, r.title, r.cost, by, now());
+    return { quest: getQuest(id)!, duplicate: false };
+  })();
+}
+/**
+ * Scelle le pacte d'une quête proposée : elle devient active, et la besace est
+ * ramenée à son plancher si un échange l'avait vidée (une quête ne commence
+ * jamais sous l'amorce). Rend null si la quête n'attendait plus.
+ */
+export function sealQuest(q: QuestRow, pact: Pact, by: string | null): { quest: QuestRow; topUp: number } | null {
+  return database.transaction(() => {
+    const info = database.prepare("UPDATE epo_quests SET status = 'active', pact_date = ?, pact_items = ?, pact_rule = ?, pact_note = ?, sealed_by = ?, sealed_at = ? WHERE id = ? AND status = 'proposee'")
+      .run(pact.date, pact.items, pact.rule, pact.note, by, now(), q.id);
+    if (!info.changes) return null;
+    const topUp = pactTopUp(balanceOf(q.member_id), profileOf(q.member_id)?.floor ?? AMORCE);
+    if (topUp) write(crypto.randomUUID(), q.member_id, 'amorce', topUp, q.title, null, by);
+    return { quest: getQuest(q.id)!, topUp };
+  })();
+}
+/** Abandonne une quête en cours (proposée ou active) : rien n'est retiré de la besace. */
+export function abandonQuest(q: QuestRow): boolean {
+  return !!database.prepare("UPDATE epo_quests SET status = 'abandonnee', closed_at = ? WHERE id = ? AND status IN ('proposee', 'active')").run(now(), q.id).changes;
+}
+/**
+ * Échange les écus contre le trésor d'une quête active : le coût entier est
+ * dépensé, dans la même transaction que le changement d'état. Rend la raison du
+ * refus quand les écus manquent ou que la quête n'est plus active.
+ */
+export function exchangeQuest(q: QuestRow, by: string | null): { quest: QuestRow } | { refusal: string } {
+  return database.transaction(() => {
+    const fresh = getQuest(q.id)!;
+    if (fresh.status !== 'active') return { refusal: 'Cette quête n’est pas en cours.' };
+    const missing = fresh.cost - balanceOf(fresh.member_id);
+    if (!canExchange(balanceOf(fresh.member_id), fresh.cost)) return { refusal: `Il manque encore ${missing} écu${missing > 1 ? 's' : ''}.` };
+    write(exchangeEntryId(fresh.id), fresh.member_id, 'echange', -fresh.cost, fresh.title, null, by);
+    database.prepare("UPDATE epo_quests SET status = 'atteinte', reached_at = ? WHERE id = ?").run(now(), fresh.id);
+    return { quest: getQuest(fresh.id)! };
+  })();
+}
+/** Le moment a été vécu : la quête atteinte devient un souvenir. */
+export function honorQuest(q: QuestRow, day: string, child: string, parent: string, by: string | null): QuestRow | null {
+  const info = database.prepare("UPDATE epo_quests SET status = 'honoree', honored_at = ?, honored_by = ?, memory_child = ?, memory_parent = ?, closed_at = ? WHERE id = ? AND status = 'atteinte'").run(day, by, child, parent, now(), q.id);
+  return info.changes ? getQuest(q.id) : null;
+}
+
 // ---- Module -----------------------------------------------------------------
 
 export function moduleCounts(): { enfants: number; ecritures: number } {
   const n = (sql: string): number => (database.prepare(sql).get() as { n: number }).n;
   return { enfants: n('SELECT COUNT(*) AS n FROM epo_profiles'), ecritures: n('SELECT COUNT(*) AS n FROM epo_ledger') };
 }
-/** Remise à zéro du module : exploits, demandes, routines, profils et grand livre. */
+/** Remise à zéro du module : quêtes, récompenses, exploits, demandes, routines, profils et grand livre. */
 export function resetModule(): void {
-  database.transaction(() => { for (const t of ['epo_requests', 'epo_exploits', 'epo_step_marks', 'epo_routine_days', 'epo_steps', 'epo_routines', 'epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
+  database.transaction(() => { for (const t of ['epo_quests', 'epo_rewards', 'epo_requests', 'epo_exploits', 'epo_step_marks', 'epo_routine_days', 'epo_steps', 'epo_routines', 'epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
 }

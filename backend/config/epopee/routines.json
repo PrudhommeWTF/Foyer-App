@@ -102,5 +102,37 @@
       "title": "Aider sans qu’on le demande",
       "ecus": 3
     }
+  ],
+  "recompenses": [
+    {
+      "title": "Une histoire de plus au coucher",
+      "description": "Ce soir, on lit une histoire en plus, celle que tu choisis.",
+      "cost": 10,
+      "category": "petit"
+    },
+    {
+      "title": "Choisir le film du samedi",
+      "description": "C’est toi qui décides du film de la famille.",
+      "cost": 20,
+      "category": "privilege"
+    },
+    {
+      "title": "Atelier gâteau à deux",
+      "description": "On choisit la recette ensemble et on cuisine tous les deux.",
+      "cost": 30,
+      "category": "duo"
+    },
+    {
+      "title": "Soirée cinéma à deux",
+      "description": "Une séance rien que nous deux, avec le pop-corn.",
+      "cost": 40,
+      "category": "duo"
+    },
+    {
+      "title": "Nuit sous la tente",
+      "description": "On monte la tente et on dort dehors, lampe torche comprise.",
+      "cost": 50,
+      "category": "duo"
+    }
   ]
 }

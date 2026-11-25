@@ -7,12 +7,12 @@
 import fs from 'fs';
 import path from 'path';
 import { log } from '../log';
-import { ROUTINE_KINDS, RoutineKind, exploitInput } from './rules';
+import { ROUTINE_KINDS, RewardInput, RoutineKind, exploitInput, rewardInput } from './rules';
 
 export interface StepTpl { title: string; hint: string; icon: string; seconds: number; ecus: number; }
 export interface RoutineTpl { kind: RoutineKind; title: string; time: string; steps: StepTpl[]; }
 export interface ExploitTpl { title: string; ecus: number; }
-export interface Gabarit { routines: RoutineTpl[]; exploits: ExploitTpl[]; }
+export interface Gabarit { routines: RoutineTpl[]; exploits: ExploitTpl[]; rewards: RewardInput[]; }
 
 export const GABARIT_FILE = path.join('epopee', 'routines.json');
 const SHIPPED = path.join(__dirname, '..', '..', 'config', GABARIT_FILE);
@@ -55,6 +55,17 @@ export function parseExploits(raw: unknown, where: string, warn: (l: string) => 
   return out;
 }
 
+/** Les récompenses proposées d'un gabarit (clé « recompenses »). Une récompense mal formée est écartée et nommée. */
+export function parseRewards(raw: unknown, where: string, warn: (l: string) => void): RewardInput[] {
+  const out: RewardInput[] = [];
+  const list = (raw as { recompenses?: unknown })?.recompenses;
+  for (const r of Array.isArray(list) ? list as Record<string, unknown>[] : []) {
+    const x = rewardInput(r ?? {});
+    if (typeof x === 'string') warn(`Épopée : ${where}, récompense « ${String(r?.['title'] ?? '?')} » écartée (${x})`); else out.push(x);
+  }
+  return out;
+}
+
 const read = (file: string): unknown => JSON.parse(fs.readFileSync(file, 'utf8'));
 
 /** Le gabarit en vigueur : celui du foyer s'il en a posé un avec au moins une routine valable, sinon le livré. */
@@ -63,10 +74,10 @@ export function loadGabarit(dataDir: string): Gabarit {
   if (fs.existsSync(own)) {
     try {
       const raw = read(own), routines = parseGabarit(raw, 'gabarit du foyer', warn);
-      if (routines.length) return { routines, exploits: parseExploits(raw, 'gabarit du foyer', warn) };
+      if (routines.length) return { routines, exploits: parseExploits(raw, 'gabarit du foyer', warn), rewards: parseRewards(raw, 'gabarit du foyer', warn) };
       log.attention('Épopée : le gabarit du foyer ne contient aucune routine valable, le gabarit livré s’applique.');
     } catch (e) { log.attention(`Épopée : gabarit du foyer illisible (${(e as Error).message}), le gabarit livré s’applique.`); }
   }
   const raw = read(SHIPPED);
-  return { routines: parseGabarit(raw, 'gabarit livré', warn), exploits: parseExploits(raw, 'gabarit livré', warn) };
+  return { routines: parseGabarit(raw, 'gabarit livré', warn), exploits: parseExploits(raw, 'gabarit livré', warn), rewards: parseRewards(raw, 'gabarit livré', warn) };
 }

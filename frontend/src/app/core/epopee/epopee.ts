@@ -5,7 +5,7 @@
 export type StepStatus = 'fait' | 'saute';
 export interface Step { id: string; title: string; hint: string; icon: string; seconds: number; ecus: number; status: StepStatus | null; }
 export interface Routine { id: string; kind: 'matin' | 'soir'; title: string; time: string; startedAt: string | null; endedAt: string | null; pauses: number; steps: Step[]; }
-export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'exploit' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
+export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'exploit' | 'echange' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
 /** An agreed feat of the household: what a parent credits in one tap, what a child may report. */
 export interface Exploit { id: string; title: string; ecus: number; }
 /** A feat reported by a child: waiting for a parent, granted, or "not quite" (nothing is taken away). */
@@ -14,8 +14,19 @@ export interface Besace {
   memberId: string; enrolled: boolean; floor: number | null; balance: number | null; enrolledAt: string | null;
   /** How the pouch shows to the child: the number and the coins, or the coins alone. */
   display: 'nombre' | 'pieces' | null; timer: boolean | null;
-  day?: string; routines?: Routine[]; demandes?: Demande[]; journal?: Entry[];
+  day?: string; routines?: Routine[]; demandes?: Demande[]; quetes?: Quest[]; souvenirs?: Quest[]; journal?: Entry[];
 }
+/** A pouch joined to its member (name, colour), as the screen shows it. */
+export interface Kid extends Besace { name: string; ini: string; color: string; }
+/** A real-life reward of the household's armoury, at a fixed, known price. */
+export interface Reward { id: string; title: string; description: string; cost: number; category: 'duo' | 'privilege' | 'petit'; }
+/** A child aiming at a reward: proposed, sealed by a pact, reached (to be lived), then a memory. */
+export interface Quest {
+  id: string; rewardId: string; title: string; cost: number; status: 'proposee' | 'active' | 'atteinte' | 'honoree' | 'abandonnee'; proposedBy: string | null; createdAt: string;
+  pact: { date: string | null; items: string; rule: string; note: string; by: string | null } | null;
+  reachedAt: string | null; honoredAt: string | null; memory: { child: string; parent: string; by: string | null } | null;
+}
+export const CATEGORY_LABEL: Record<Reward['category'], string> = { duo: 'À deux', privilege: 'Privilège', petit: 'Petit plaisir' };
 /** A step marked on this device and not yet acknowledged by the server. */
 export interface Pending { stepId: string; status: StepStatus; day: string; }
 
@@ -92,3 +103,26 @@ export function draftsError(title: string, time: string, steps: StepDraft[]): st
 }
 /** The écus a child can earn in a day with these routines: what a parent weighs rewards against. */
 export const dailyEcus = (routines: Routine[]): number => routines.reduce((n, r) => n + r.steps.reduce((m, s) => m + s.ecus, 0), 0);
+
+/** The écus still missing for a price; never negative. */
+export const missing = (cost: number, bal: number): number => Math.max(0, cost - bal);
+/**
+ * How far a reward is, in days, if the routines are done: what lets a child
+ * picture the wait, and a parent see a price is out of reach. 0 when the écus
+ * are already there, null when nothing is earned per day (no routine).
+ */
+export function daysToReach(cost: number, bal: number, perDay: number): number | null {
+  const m = missing(cost, bal);
+  return !m ? 0 : perDay > 0 ? Math.ceil(m / perDay) : null;
+}
+/** The sentence that goes with it. `child` speaks to the child. */
+export function reachLine(cost: number, bal: number, perDay: number, child: boolean): string {
+  const m = missing(cost, bal), d = daysToReach(cost, bal, perDay);
+  if (!m) return child ? 'Tu as assez d’écus !' : 'Les écus sont là.';
+  const still = `Encore ${m} écu${m > 1 ? 's' : ''}`;
+  return d === null ? still : `${still}, environ ${d} jour${d > 1 ? 's' : ''} de routines`;
+}
+/** '2026-12-05' → 'samedi 5 décembre'. */
+export const longDay = (day: string): string => new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(day + 'T12:00:00Z'));
+/** The quest a child is on (chosen or sealed), if any. */
+export const currentQuest = (quests: Quest[]): Quest | null => quests.find((q) => q.status === 'proposee' || q.status === 'active') ?? null;

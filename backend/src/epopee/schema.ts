@@ -150,6 +150,57 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    label: 'Armurerie : récompenses, quêtes et souvenirs',
+    up: (db) => {
+      db.exec(`
+        -- Les récompenses du foyer : des moments et des privilèges réels, à prix
+        -- fixe et connu. category : duo, privilege, petit.
+        CREATE TABLE epo_rewards (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          cost INTEGER NOT NULL,
+          category TEXT NOT NULL,
+          pos INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          archived_at TEXT
+        );
+
+        -- Une quête : un enfant vise une récompense. title et cost sont ceux de
+        -- la récompense au moment du choix (la changer ensuite ne change pas une
+        -- quête en cours). status : proposee, active, atteinte, honoree,
+        -- abandonnee. pact_* : ce à quoi le parent s'engage en scellant le pacte.
+        -- memory_* : le souvenir noté une fois le moment vécu.
+        CREATE TABLE epo_quests (
+          id TEXT PRIMARY KEY,
+          member_id TEXT NOT NULL,
+          reward_id TEXT NOT NULL REFERENCES epo_rewards(id),
+          title TEXT NOT NULL,
+          cost INTEGER NOT NULL,
+          status TEXT NOT NULL,
+          proposed_by TEXT,
+          created_at TEXT NOT NULL,
+          pact_date TEXT,
+          pact_items TEXT NOT NULL DEFAULT '',
+          pact_rule TEXT NOT NULL DEFAULT '',
+          pact_note TEXT NOT NULL DEFAULT '',
+          sealed_by TEXT,
+          sealed_at TEXT,
+          reached_at TEXT,
+          honored_at TEXT,
+          honored_by TEXT,
+          memory_child TEXT NOT NULL DEFAULT '',
+          memory_parent TEXT NOT NULL DEFAULT '',
+          closed_at TEXT
+        );
+        CREATE INDEX idx_epo_quests_member ON epo_quests(member_id, status);
+        -- Une seule quête en cours (proposée ou active) par enfant.
+        CREATE UNIQUE INDEX idx_epo_quests_open ON epo_quests(member_id) WHERE status IN ('proposee', 'active');
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

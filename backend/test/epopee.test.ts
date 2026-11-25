@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { Contexte, appel, arreter, demarrer } from './securite-helpers';
-import { AMORCE, Entry, balance, bravoEcus, cancelRefusal, dayAccepted, dayBefore, exploitInput, stepsInput } from '../src/epopee/rules';
-import { parseExploits, parseGabarit } from '../src/epopee/gabarit';
+import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
+import { parseExploits, parseGabarit, parseRewards } from '../src/epopee/gabarit';
 
 describe('règles', () => {
   const amorce: Entry = { id: 'a', kind: 'amorce', delta: AMORCE, ref: null };
@@ -77,6 +77,32 @@ describe('réglages des parents : règles de saisie', () => {
     const lignes: string[] = [];
     assert.deepEqual(parseExploits({ exploits: [{ title: 'Ranger', ecus: 2 }, { title: 'Trop', ecus: 9 }] }, 'test', (l) => lignes.push(l)), [{ title: 'Ranger', ecus: 2 }]);
     assert.equal(lignes.length, 1);
+  });
+});
+
+describe('Armurerie : règles', () => {
+  it('une récompense coûte au moins deux fois l’amorce, et dit ce qui manque', () => {
+    assert.deepEqual(rewardInput({ title: ' Cinéma ', cost: 40, category: 'duo' }), { title: 'Cinéma', description: '', cost: 40, category: 'duo' });
+    assert.equal(REWARD_COST_MIN, 2 * AMORCE);
+    assert.match(rewardInput({ title: 'x', cost: REWARD_COST_MIN - 1, category: 'duo' }) as string, /cost/);
+    assert.match(rewardInput({ title: 'x', cost: 20, category: 'loterie' }) as string, /category/);
+    assert.match(rewardInput({ cost: 20, category: 'duo' }) as string, /title/);
+    const lignes: string[] = [];
+    assert.equal(parseRewards({ recompenses: [{ title: 'Film', cost: 20, category: 'privilege' }, { title: 'Gratuit', cost: 1, category: 'petit' }] }, 'test', (l) => lignes.push(l)).length, 1);
+    assert.equal(lignes.length, 1);
+  });
+  it('un échange dépense le coût entier, plancher compris ; sceller un pacte ramène la besace à l’amorce', () => {
+    assert.ok(canExchange(20, 20)); assert.ok(!canExchange(19, 20));
+    assert.equal(pactTopUp(0, AMORCE), AMORCE); assert.equal(pactTopUp(3, AMORCE), 2); assert.equal(pactTopUp(12, AMORCE), 0);
+  });
+  it('un trésor échangé ne se reprend pas', () => {
+    const e: Entry = { id: 'echange:q', kind: 'echange', delta: -20, ref: null };
+    assert.match(cancelRefusal(e, [e], AMORCE)!, /pacte est scellé/);
+  });
+  it('textes facultatifs et dates', () => {
+    assert.equal(optionalText(undefined, 10), ''); assert.equal(optionalText('  ', 10), ''); assert.equal(optionalText(' ok ', 10), 'ok');
+    assert.equal(optionalText('x'.repeat(11), 10), null); assert.equal(optionalText(12, 10), null);
+    assert.equal(dateInput('2026-12-05'), '2026-12-05'); assert.equal(dateInput('05/12/2026'), null); assert.equal(dateInput('2026-13-45'), null);
   });
 });
 
@@ -367,5 +393,95 @@ describe('réglages, exploits convenus et demandes', () => {
     assert.equal(r.status, 201); assert.equal(r.json.routines.length, 2);
     assert.notEqual(r.json.routines[0].title, 'Le matin de Lena');
     assert.ok(r.json.routines[0].steps.every((s: { status: string | null }) => s.status === null));
+  });
+});
+
+describe('Armurerie : récompenses, quêtes, pacte, souvenir', () => {
+  type Recompense = { id: string; title: string; cost: number };
+  type Quete = { id: string; title: string; cost: number; status: string; pact: { date: string | null; note: string; by: string } | null; memory: { child: string; parent: string } | null };
+  let petite: Recompense, quete = '';
+  const etat = async (jeton = ctx.jetons.membre) => (await besace(jeton)).json as { balance: number; quetes: Quete[]; souvenirs: Quete[] };
+  const proposer = (rewardId: string, jeton: string, membre = lena) => appel(ctx.base, 'POST', `/epopee/membres/${membre}/quetes`, { id: uuid(), rewardId }, jeton);
+
+  it('le catalogue proposé est posé au premier enrôlement ; un adulte le tient, un enfant le lit', async () => {
+    const liste = (await appel(ctx.base, 'GET', '/epopee/recompenses', undefined, ctx.jetons.enfant)).json.recompenses as Recompense[];
+    assert.ok(liste.length >= 3); assert.deepEqual(liste.map((r) => r.cost), [...liste.map((r) => r.cost)].sort((a, b) => a - b), 'du moins cher au plus cher');
+    petite = liste[0];
+    const plus = await appel(ctx.base, 'POST', '/epopee/recompenses', { title: 'Choisir le dessert', cost: 12, category: 'privilege' }, ctx.jetons.membre);
+    assert.equal(plus.status, 201);
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/recompenses/${plus.json.recompense.id}`, { title: 'Choisir le dessert', cost: 15, category: 'privilege' }, ctx.jetons.membre)).json.recompense.cost, 15);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/recompenses/${plus.json.recompense.id}`, undefined, ctx.jetons.membre)).status, 200);
+    assert.equal((await appel(ctx.base, 'POST', '/epopee/recompenses', { title: 'Presque gratuit', cost: 2, category: 'petit' }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'POST', '/epopee/recompenses', { title: 'Console', cost: 10, category: 'petit' }, ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/recompenses/${petite.id}`, undefined, ctx.jetons.enfant)).status, 403);
+  });
+
+  it('un enfant choisit un trésor : une seule quête à la fois, et il peut y renoncer avant le pacte', async () => {
+    const un = await proposer(petite.id, ctx.jetons.enfant);
+    assert.equal(un.status, 201); assert.deepEqual([un.json.quete.status, un.json.quete.title, un.json.quete.cost, un.json.quete.pact], ['proposee', petite.title, petite.cost, null]);
+    assert.equal((await proposer(petite.id, ctx.jetons.enfant)).status, 409);
+    assert.equal((await proposer('inconnue', ctx.jetons.enfant)).status, 404);
+    assert.equal((await proposer(petite.id, ctx.jetons.enfant, noe)).status, 403);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${un.json.quete.id}/pacte`, {}, ctx.jetons.enfant)).status, 403, 'un enfant ne scelle pas son propre pacte');
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${un.json.quete.id}/abandon`, undefined, ctx.jetons.enfant)).status, 200);
+    assert.deepEqual((await etat()).quetes, []);
+  });
+
+  it('un adulte scelle le pacte ; sans assez d’écus, l’échange est refusé', async () => {
+    quete = (await proposer(petite.id, ctx.jetons.membre)).json.quete.id;
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/pacte`, { date: 'samedi' }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/pacte`, { note: 'x'.repeat(201) }, ctx.jetons.membre)).status, 400);
+    const avant = (await etat()).balance;
+    const scelle = await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/pacte`, { date: '2030-01-05', items: 'Le livre des dragons', rule: 'Lumière éteinte à 21 h', note: 'Je suis fière de toi.' }, ctx.jetons.membre);
+    assert.equal(scelle.status, 200); assert.deepEqual([scelle.json.quete.status, scelle.json.quete.pact.date, scelle.json.quete.pact.by, scelle.json.balance], ['active', '2030-01-05', 'Camille', avant]);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/pacte`, {}, ctx.jetons.membre)).status, 409);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/abandon`, undefined, ctx.jetons.enfant)).status, 403, 'pacte scellé : l’enfant ne renonce plus seul');
+    if (avant < petite.cost) {
+      const refus = await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/echange`, undefined, ctx.jetons.enfant);
+      assert.equal(refus.status, 409); assert.match(refus.json.error, /Il manque encore/);
+    }
+  });
+
+  it('l’échange dépense le coût entier, une seule fois, et ne s’annule pas', async () => {
+    while ((await etat()).balance < petite.cost) await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 3 }, ctx.jetons.membre);
+    const avant = (await etat()).balance;
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/echange`, undefined, ctx.jetons.sansMembre)).status, 403);
+    const fait = await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/echange`, undefined, ctx.jetons.enfant);
+    assert.equal(fait.status, 201); assert.deepEqual([fait.json.quete.status, fait.json.balance], ['atteinte', avant - petite.cost]);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/echange`, undefined, ctx.jetons.enfant)).status, 409);
+    const j = (await besace(ctx.jetons.membre)).json.journal as { id: string; kind: string; delta: number; note: string }[];
+    assert.deepEqual([j[0].kind, j[0].delta, j[0].note], ['echange', -petite.cost, petite.title]);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/journal/${encodeURIComponent(j[0].id)}/annulation`, undefined, ctx.jetons.membre)).status, 409);
+  });
+
+  it('la besace vidée repart à l’amorce quand le pacte suivant est scellé', async () => {
+    // Bring the pouch under its floor is only possible by exchanging: drain it with a second quest priced at the balance.
+    const solde = (await etat()).balance;
+    if (solde >= AMORCE) {
+      const juste = (await appel(ctx.base, 'POST', '/epopee/recompenses', { title: 'Tout dépenser', cost: Math.max(solde, 10), category: 'petit' }, ctx.jetons.membre)).json.recompense as Recompense;
+      while ((await etat()).balance < juste.cost) await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 1 }, ctx.jetons.membre);
+      const q = (await proposer(juste.id, ctx.jetons.membre)).json.quete.id;
+      await appel(ctx.base, 'POST', `/epopee/quetes/${q}/pacte`, {}, ctx.jetons.membre);
+      assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${q}/echange`, undefined, ctx.jetons.membre)).json.balance, 0);
+    }
+    const avantChoix = (await etat()).balance;
+    const q = (await proposer(petite.id, ctx.jetons.enfant)).json.quete.id;
+    assert.equal((await etat()).balance, avantChoix, 'choisir un trésor ne verse rien');
+    const bas = (await etat()).balance;
+    assert.ok(bas < AMORCE, 'la besace est passée sous son plancher par un échange, jamais par un retrait');
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${q}/pacte`, {}, ctx.jetons.membre)).json.balance, AMORCE);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${q}/abandon`, undefined, ctx.jetons.membre)).json.balance, AMORCE, 'abandonner ne retire rien');
+  });
+
+  it('le moment vécu devient un souvenir, que l’enfant relit', async () => {
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/vecu`, { child: 'Le dragon !' }, ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/vecu`, { date: '2999-01-01' }, ctx.jetons.membre)).status, 400);
+    const vecu = await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/vecu`, { child: 'Quand le dragon a éternué.', parent: 'Tu as écouté jusqu’au bout, blotti contre moi.' }, ctx.jetons.membre);
+    assert.equal(vecu.status, 200); assert.equal(vecu.json.quete.status, 'honoree');
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${quete}/vecu`, {}, ctx.jetons.membre)).status, 409);
+    const e = await etat(ctx.jetons.enfant);
+    assert.ok(!e.quetes.some((q) => q.id === quete));
+    const souvenir = e.souvenirs.find((q) => q.id === quete)!;
+    assert.deepEqual([souvenir.title, souvenir.memory!.child, souvenir.pact!.note], [petite.title, 'Quand le dragon a éternué.', 'Je suis fière de toi.']);
   });
 });

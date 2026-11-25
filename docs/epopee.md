@@ -4,17 +4,16 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 ## Où en est le module
 
-**Étape 3 sur 6 : l'espace des parents.** Une besace par enfant, les routines pas à pas, et de quoi les régler et créditer d'un geste.
+**Étape 4 sur 6 : l'Armurerie.** Les écus mènent quelque part : un trésor choisi, un pacte, un moment vécu.
 
 | Fait | Pas encore |
 |---|---|
-| Enrôler un enfant : sa besace commence avec 5 écus d'amorce | L'Armurerie : récompenses, quêtes, pacte, souvenirs |
-| Routines du matin et du soir, une consigne à la fois, avec sablier et pause « grain de sable » | Le parcours d'alliance et le parchemin à imprimer |
-| Régler une routine : nom, heure, étapes (consigne, pictogramme, durée, écus), ordre | Le bilan de la semaine pour le conseil de famille |
-| Exploits convenus : crédit d'un geste par un parent, avec cinq secondes pour annuler | Une notification au parent quand un enfant signale un exploit |
-| L'enfant signale un exploit ; un parent valide ou répond « pas tout à fait » | Créer une routine de plus que le matin et le soir |
-| Bravo spontané, journal, annulation de toute écriture | |
-| Réglages par enfant : pièces sans le nombre, routines sans sablier | |
+| Enrôler un enfant : sa besace commence avec 5 écus d'amorce | Le parcours d'alliance et le parchemin à imprimer |
+| Routines du matin et du soir, pas à pas, réglables | Le bilan de la semaine pour le conseil de famille |
+| Exploits convenus, exploits signalés, bravos, journal | Une notification au parent (exploit signalé, trésor choisi, trésor gagné) |
+| L'Armurerie : un catalogue de récompenses réelles, à prix fixe | Une photo du moment dans le souvenir |
+| Une quête à la fois : trésor choisi, pacte scellé par un parent, jauge | Créer une routine de plus que le matin et le soir |
+| L'échange des écus contre le trésor, puis le souvenir du moment vécu | |
 
 Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
 
@@ -40,6 +39,18 @@ Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombr
 - **Réglages de l'enfant.** « Montrer les pièces sans le nombre » : la besace n'affiche que des pièces, plus grosses, pour un enfant qui ne lit pas encore les nombres. « Sablier dans les routines » : coupé, les étapes s'enchaînent sans décompte. La carte rappelle le nombre d'écus possibles par jour avec les routines telles qu'elles sont réglées.
 - **Exploits convenus** (communs au foyer) : les ajouter, changer leur valeur (1 à 3 écus), les retirer. Des exploits proposés viennent du gabarit (clé `exploits` du même fichier) au premier enrôlement. Retirer un exploit referme les demandes qui l'attendaient ; les écus déjà gagnés restent.
 
+## L'Armurerie, à l'usage
+
+1. **Choisir.** L'enfant ouvre l'Armurerie et vise un trésor (« Je le vise ») ; un parent peut aussi choisir pour lui. Chaque trésor dit son prix, les écus qui manquent, et à peu près combien de jours de routines cela représente. Rien n'est engagé : tant que le pacte n'est pas scellé, l'enfant peut garder ses écus pour plus tard.
+2. **Sceller le pacte.** Le parent s'engage sur le moment : quand (s'il le sait), ce qu'il faut préparer, la règle convenue, et un mot d'encouragement. C'est un engagement des deux côtés : l'enfant sur ses efforts, le parent sur la réalité du trésor. « Pas celui-ci » referme la proposition sans rien retirer.
+3. **Avancer.** La quête s'affiche en tête de la besace : une jauge, avec le repère des écus d'amorce (ou des emplacements de pièces, pour un enfant réglé sur « pièces sans le nombre » et un trésor de 40 écus au plus), les écus qui manquent, et le pacte avec le mot du parent.
+4. **Échanger.** Dès que la besace atteint le prix, l'enfant échange lui-même ses écus contre son trésor. Le trésor est gagné tout de suite ; il reste à le vivre.
+5. **Vivre, puis se souvenir.** Une fois le moment vécu, le parent note le moment préféré de l'enfant et son propre mot : la quête rejoint les souvenirs, que l'enfant relit.
+
+Une seule quête à la fois. Un trésor gagné qui attend d'être vécu n'empêche pas d'en viser un autre.
+
+**Le catalogue** se tient dans la carte « L'Armurerie » : titre, phrase, genre (à deux, privilège, petit plaisir), prix de 10 à 300 écus. Cinq récompenses proposées viennent du gabarit (clé `recompenses` du même fichier) au premier enrôlement. La carte rappelle combien d'écus sont possibles par jour, pour fixer un prix qui se laisse atteindre en quelques jours plutôt qu'en plusieurs semaines. Pas de tirage au sort, pas de coffre surprise : le prix est fixe et connu d'avance.
+
 ## Les règles
 
 Elles sont dans `backend/src/epopee/rules.ts`, pures et testées. Le serveur les applique avant chaque écriture ; l'appareil ne décide d'aucun montant.
@@ -51,6 +62,11 @@ Elles sont dans `backend/src/epopee/rules.ts`, pures et testées. Le serveur les
 - **Une étape ne se note qu'une fois par jour** (faite ou passée), et son écu n'est versé qu'une fois : l'identifiant de l'écriture se déduit de l'étape et du jour. L'appareil annonce aujourd'hui ou hier (heure de Paris), rien d'autre.
 - **Reprendre l'écu d'une étape** (un adulte, depuis le journal) ne rouvre pas l'étape : elle reste notée pour ce jour.
 - **Un exploit convenu se verse à son montant**, jamais à celui qu'annonce l'appareil. La demande d'un enfant validée est versée sous l'identifiant de la demande : une seule fois, quoi que fassent deux parents.
+- **Un échange dépense le prix entier**, écus d'amorce compris : le plancher ne protège que des retraits, pas de ce que l'enfant choisit de dépenser. Un trésor échangé ne se reprend pas.
+- **Une quête ne commence jamais sous l'amorce** : quand un pacte est scellé alors que la besace est passée sous son plancher (après un échange), elle y est ramenée. C'est le seul cas où l'amorce est versée à nouveau, et c'est un parent qui le déclenche.
+- **Un trésor coûte au moins deux fois l'amorce** (10 écus) : la besace d'amorce seule n'achète rien.
+- **Une quête garde son prix** : changer ou retirer une récompense ne touche pas une quête déjà choisie.
+- **Abandonner une quête ne retire rien** de la besace.
 - **Retirer un enfant** de l'Épopée ne supprime rien : réenrôlé, il retrouve sa besace telle quelle, sans seconde amorce.
 
 Décision à venir avec l'Armurerie, déjà arrêtée : le plancher ne protège que des retraits. Échanger un trésor dépense son coût entier, et chaque nouvelle quête repart avec une amorce.
@@ -62,11 +78,13 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | Table | Contenu |
 |---|---|
 | `epo_profiles` | un enfant enrôlé : son plancher, la date, l'adulte qui l'a enrôlé, la date de retrait s'il a été retiré, ses réglages (affichage de la besace, sablier) |
-| `epo_ledger` | le grand livre : identifiant, enfant, genre (`amorce`, `bravo`, `etape`, `exploit`, `annulation`), montant, quelques mots, écriture annulée (`ref`), auteur, instant |
+| `epo_ledger` | le grand livre : identifiant, enfant, genre (`amorce`, `bravo`, `etape`, `exploit`, `echange`, `annulation`), montant, quelques mots, écriture annulée (`ref`), auteur, instant |
 | `epo_routines`, `epo_steps` | les routines d'un enfant (matin, soir, heure prévue) et leurs étapes (titre, phrase, pictogramme, durée du sablier, écus) |
 | `epo_step_marks` | une étape un jour donné : faite ou passée, par qui |
 | `epo_exploits` | les exploits convenus du foyer : titre, écus, ordre |
 | `epo_requests` | un exploit signalé par un enfant : en attente, validé, ou « pas tout à fait », et par qui |
+| `epo_rewards` | le catalogue de l'Armurerie : titre, phrase, prix, genre |
+| `epo_quests` | une quête : enfant, récompense, titre et prix au moment du choix, état (proposée, active, atteinte, honorée, abandonnée), pacte, souvenir |
 | `epo_routine_days` | le déroulé d'une routine un jour donné : début, fin, nombre de pauses |
 
 ## Qui a le droit de quoi
@@ -77,6 +95,8 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | noter une étape de ses routines, faire une pause | oui, pour lui seul | oui, pour n'importe quel enfant |
 | ceux d'un autre enfant | refusé (403) | lire |
 | signaler un exploit convenu | oui, pour lui seul | non : un adulte crédite directement |
+| choisir un trésor, y renoncer avant le pacte, échanger ses écus | oui, pour lui seul | oui, pour n'importe quel enfant |
+| tenir le catalogue, sceller un pacte, abandonner une quête scellée, noter le moment vécu | refusé (403) | oui |
 | enrôler, retirer, régler (routines, exploits, affichage), créditer, répondre à une demande, annuler | refusé (403) | oui |
 
 Un jeton d'accès (assistant, script) n'entre pas dans l'API du module. L'écran figure au menu d'un enfant (`ECRANS_ENFANT`), sous « Mon épopée » à l'accueil.
@@ -88,7 +108,7 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | Route | Effet |
 |---|---|
 | `GET /membres` | les enfants du foyer et leur besace (`enrolled`, `floor`, `balance`) : tous pour un adulte, soi pour un enfant |
-| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, ses demandes (en attente, ou tranchées ce jour), ses réglages (`display`, `timer`), et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
+| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, ses demandes (en attente, ou tranchées ce jour), ses réglages (`display`, `timer`), ses quêtes vivantes (`quetes`) et ses souvenirs (`souvenirs`, 30 au plus), et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
 | `POST /membres/:id/enrolement` | enrôler (adultes). 201 quand l'amorce est versée, 200 ensuite. 400 si le membre n'est pas un enfant |
 | `DELETE /membres/:id/enrolement` | retirer de l'Épopée (adultes) ; rien n'est supprimé |
 | `POST /membres/:id/bravos` | `{ id (uuid), ecus (1 à 3), note (120 caractères au plus) }` (adultes). 201 à la première réception, 200 et `duplicate: true` ensuite. 409 si l'enfant n'est pas enrôlé |
@@ -102,13 +122,20 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | `POST /demandes/:id/decision` | `{ accept }` (adultes). 409 si la demande a déjà sa réponse |
 | `POST /etapes/:id` | `{ status: "fait" ou "saute", day (aujourd'hui par défaut, ou hier) }`. 201 à la première réception, 200 et `duplicate: true` ensuite. Rend `ecus`, `balance`, `routineDone` |
 | `POST /routines/:id/pauses` | une pause « grain de sable » de plus dans la routine du jour |
+| `GET /recompenses` | le catalogue de l'Armurerie, du moins cher au plus cher (tout membre) |
+| `POST /recompenses`, `PUT /recompenses/:id`, `DELETE /recompenses/:id` | ajouter, régler (`title`, `description`, `cost` de 10 à 300, `category`), retirer (adultes) |
+| `POST /membres/:id/quetes` | choisir un trésor : `{ id (uuid), rewardId }`. 409 si une quête est déjà en cours |
+| `POST /quetes/:id/pacte` | sceller (adultes) : `{ date, items, rule, note }`, tous facultatifs. Rend la quête et le solde |
+| `POST /quetes/:id/abandon` | renoncer : l'enfant avant le pacte, un adulte tant que la quête est en cours |
+| `POST /quetes/:id/echange` | échanger les écus contre le trésor. 409 avec ce qui manque si la besace n'y est pas |
+| `POST /quetes/:id/vecu` | le moment a été vécu (adultes) : `{ date (aujourd'hui par défaut), child, parent }` |
 | `POST /journal/:id/annulation` | annuler une écriture (adultes). 409 avec la raison quand la règle le refuse |
 
 Chaque geste est journalisé (« Épopée : bravo de Nolwenn à Raphaël, +2 écus (« Table mise sans rappel »). »).
 
 ## Module éteint, remise à zéro
 
-Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface exploits, demandes, routines, profils et grand livre.
+Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface quêtes, récompenses, exploits, demandes, routines, profils et grand livre.
 
 ## Vérifier depuis le serveur
 

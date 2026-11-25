@@ -1,17 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
-import { Besace, Demande, Entry, Exploit, Routine, dailyEcus, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
+import { Demande, Entry, Exploit, Kid, Routine, dailyEcus, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
 import { EpopeeStore } from '../../core/epopee/store';
 import { IconComponent } from '../../core/icon';
 import { sessionUuid } from '../../core/revisions/revisions';
 import { AvatarComponent } from '../../shared/avatar';
 import { ToggleComponent } from '../../shared/toggle';
+import { ArmoryAdmin } from './armory-admin';
+import { QuestPanel } from './quest-panel';
 import { RoutineEditor } from './routine-editor';
 import { EpopeeRunner } from './runner';
-
-/** A child of the household with their pouch, as the screen shows them. */
-interface Kid extends Besace { name: string; ini: string; color: string; }
 
 const WHEN = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 /** Beyond this, counting coins one by one stops helping: the number alone speaks. */
@@ -22,14 +21,15 @@ const COINS_MAX = 30;
  * enrôle, crédite (exploit convenu d'un geste, bravo en quelques mots), répond
  * aux exploits signalés, règle les routines (routine-editor.ts) et relit le
  * journal ; un enfant voit sa besace, déroule ses routines pas à pas (runner.ts)
- * et signale un exploit. Le solde et chaque montant
+ * et signale un exploit. L'Armurerie (quest-panel.ts, armory-admin.ts) porte
+ * les récompenses, la quête en cours et les souvenirs. Le solde et chaque montant
  * viennent du serveur (grand livre en ajout seul), l'écran ne calcule rien.
  */
 @Component({
   selector: 'screen-epopee',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, ToggleComponent, EpopeeRunner, RoutineEditor],
+  imports: [IconComponent, AvatarComponent, ToggleComponent, EpopeeRunner, RoutineEditor, QuestPanel, ArmoryAdmin],
   template: `
     <div class="screen-enter">
       @if (running(); as run) { <epopee-runner [routine]="run.routine" [day]="run.day" [timer]="run.timer" (closed)="fermer()" /> }
@@ -74,6 +74,8 @@ const COINS_MAX = 30;
               @if (k.balance! <= coinsMax) {
                 <div class="coins" [class.big]="store.isChild() && k.display === 'pieces'" [attr.aria-hidden]="!(store.isChild() && k.display === 'pieces')" [attr.aria-label]="k.balance + ' écus'">@for (c of coins(k); track $index) { <span class="coin" [class.kept]="c"></span> }</div>
               }
+
+              <epopee-quest-panel [kid]="k" [rewards]="recompenses()" [child]="store.isChild()" (changed)="charger()" />
 
               @if (k.routines?.length) {
                 <div class="routines">
@@ -141,7 +143,7 @@ const COINS_MAX = 30;
                           <div class="s">{{ sub(e) }}</div>
                         </div>
                         <div class="d" [class.neg]="e.delta < 0">{{ e.delta > 0 ? '+' : '' }}{{ e.delta }}</div>
-                        @if (!store.isChild() && e.kind !== 'amorce' && e.kind !== 'annulation' && !e.cancelled) { <button class="undo" [disabled]="busy()" (click)="annuler(k, e)">Annuler</button> }
+                        @if (!store.isChild() && e.kind !== 'amorce' && e.kind !== 'annulation' && e.kind !== 'echange' && !e.cancelled) { <button class="undo" [disabled]="busy()" (click)="annuler(k, e)">Annuler</button> }
                       </div>
                     }
                   </details>
@@ -179,6 +181,10 @@ const COINS_MAX = 30;
               <input class="input" maxlength="60" placeholder="Un nouvel exploit, en quelques mots" aria-label="Nouvel exploit" [value]="nouveau()" (input)="nouveau.set($any($event.target).value)" (keydown.enter)="ajouterExploit()" />
               <button class="btn btn-soft" [disabled]="busy() || !nouveau().trim()" (click)="ajouterExploit()">Ajouter</button>
             </div>
+          </section>
+          <section class="card kid">
+            <header class="kid-head"><h2>L’Armurerie</h2></header>
+            <epopee-armory-admin [rewards]="recompenses()" [perDay]="jourMax()" (changed)="charger()" />
           </section>
         }
       }
@@ -262,6 +268,9 @@ export class EpopeeScreen {
   private readonly run = signal<{ memberId: string; routineId: string } | null>(null);
   private readonly edit = signal<{ memberId: string; routineId: string } | null>(null);
   readonly exploits = this.epopee.exploits;
+  readonly recompenses = this.epopee.recompenses;
+  /** The most écus an enrolled child can earn in a day: what the armoury weighs its prices against. */
+  readonly jourMax = computed(() => Math.max(0, ...(this.kids() || []).filter((k) => k.enrolled).map((k) => dailyEcus(k.routines || []))));
   readonly nouveau = signal('');
 
   /**
@@ -320,7 +329,7 @@ export class EpopeeScreen {
   coins(k: Kid): boolean[] { return Array.from({ length: Math.max(0, k.balance ?? 0) }, (_, i) => i < (k.floor ?? 0)); }
   /** A child reads what they earned: what was cancelled, and its cancellation, stay out of their sight. */
   lines(k: Kid): Entry[] { return (k.journal || []).filter((e) => !this.store.isChild() || (!e.cancelled && e.kind !== 'annulation')); }
-  label(e: Entry): string { return e.kind === 'amorce' ? 'Écus d’amorce' : e.kind === 'annulation' ? 'Annulation' : e.note || (e.kind === 'etape' ? 'Étape de routine' : e.kind === 'exploit' ? 'Exploit' : 'Bravo'); }
+  label(e: Entry): string { return e.kind === 'amorce' ? 'Écus d’amorce' : e.kind === 'annulation' ? 'Annulation' : e.kind === 'echange' ? `Trésor : ${e.note || 'échange'}` : e.note || (e.kind === 'etape' ? 'Étape de routine' : e.kind === 'exploit' ? 'Exploit' : 'Bravo'); }
   sub(e: Entry): string { return [WHEN.format(new Date(e.at)), e.by, e.cancelled ? 'annulé' : ''].filter(Boolean).join(', '); }
   ecusFor(id: string): number { return this.ecus()[id] || 1; }
   setEcus(id: string, n: number): void { this.ecus.update((x) => ({ ...x, [id]: n })); }
