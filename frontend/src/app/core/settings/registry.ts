@@ -392,6 +392,13 @@ export const REGISTRY = [
     default: true,
   },
   {
+    key: 'epopeeSurLeMoment',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Épopée',
+    label: 'Sur le téléphone : quand un enfant attend ma réponse dans l’Épopée',
+    desc: 'Un enfant signale un exploit, vise un trésor ou vient de le gagner : vous êtes prévenu tout de suite, pour répondre pendant que c’est encore frais. Toucher la notification ouvre l’Épopée. Rien pour une étape faite ou un bravo donné. Réservé aux adultes : un compte enfant n’en reçoit jamais.',
+    default: true,
+  },
+  {
     key: 'notifEvents',
     type: 'bool', scope: 'personnel', section: 'notifications', module: 'Agenda',
     label: 'Dans la cloche : agenda du jour et de demain',

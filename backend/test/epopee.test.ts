@@ -9,6 +9,7 @@ import { after, before, describe, it } from 'node:test';
 import { Contexte, appel, arreter, demarrer } from './securite-helpers';
 import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
 import { parseExploits, parseGabarit, parseRewards } from '../src/epopee/gabarit';
+import { EpopeeEvent, emit, eventMessage, onEpopeeEvent, recipients } from '../src/epopee/events';
 import { BilanInput, computeBilan, councilPdf, eventful, lines, weekLine, weeklyHits } from '../src/epopee/bilan';
 
 describe('règles', () => {
@@ -155,6 +156,31 @@ describe('le bilan de la semaine : calcul', () => {
     const hits = weeklyHits(kids, ['a', 'b'], '2026-10-18T18:00', '18:00', de);
     assert.deepEqual(hits.map((h) => [h.key, h.title, h.memberIds.length]), [['epopee-hebdo|k|2026-10-12', 'L’Épopée de Raphaël', 2], ['epopee-hebdo|g|2026-10-12', 'L’Épopée de Gaëtan', 2]]);
     assert.match(hits[1].body, /une semaine calme/);
+  });
+});
+
+describe('notifications sur le moment : mots et destinataires', () => {
+  const exploit: EpopeeEvent = { kind: 'exploit', id: 'd1', childId: 'k', child: 'Raphaël', actorId: 'k', title: 'Mettre la table', ecus: 2 };
+  const quete: EpopeeEvent = { kind: 'quete', id: 'q1', childId: 'k', child: 'Raphaël', actorId: 'k', title: 'Soirée cinéma à deux', cost: 40 };
+  const tresor: EpopeeEvent = { kind: 'tresor', id: 'q1', childId: 'k', child: 'Raphaël', actorId: 'k', title: 'Soirée cinéma à deux', date: '2026-12-05' };
+
+  it('chaque moment dit qui, quoi, et ce qui est attendu du parent', () => {
+    assert.deepEqual(eventMessage(exploit), { key: 'epopee|exploit|d1', tag: 'epopee-k', title: 'Raphaël signale un exploit', body: '« Mettre la table », +2 écus si vous validez.' });
+    assert.equal(eventMessage({ ...exploit, ecus: 1 }).body, '« Mettre la table », +1 écu si vous validez.');
+    assert.deepEqual([eventMessage(quete).title, eventMessage(quete).body], ['Raphaël vise un trésor', '« Soirée cinéma à deux », 40 écus. Il reste à sceller le pacte ensemble.']);
+    assert.equal(eventMessage(tresor).body, '« Soirée cinéma à deux » : à vous de tenir le pacte, prévu samedi 5 décembre.');
+    assert.equal(eventMessage({ ...tresor, date: null }).body, '« Soirée cinéma à deux » : à vous de tenir le pacte.');
+    assert.notEqual(eventMessage(quete).key, eventMessage(tresor).key, 'viser puis gagner la même quête : deux notifications');
+  });
+  it('les adultes qui le veulent sont prévenus, sauf celui qui vient de faire le geste', () => {
+    assert.deepEqual(recipients(exploit, ['a', 'b', 'c'], (m) => m !== 'c'), ['a', 'b']);
+    assert.deepEqual(recipients({ ...tresor, actorId: 'a' }, ['a', 'b'], () => true), ['b'], 'un parent qui échange pour son enfant le sait déjà');
+    assert.deepEqual(recipients(exploit, [], () => true), []);
+  });
+  it('un abonné en panne ne fait pas échouer le geste', () => {
+    onEpopeeEvent(() => { throw new Error('push en panne'); });
+    assert.doesNotThrow(() => emit(exploit));
+    onEpopeeEvent(null); assert.doesNotThrow(() => emit(exploit));
   });
 });
 
@@ -588,5 +614,44 @@ describe('le conseil de famille', () => {
     assert.equal((await conseil(ctx.jetons.enfant)).status, 403);
     assert.equal((await appel(ctx.base, 'PUT', '/epopee/conseil', { notes: 'Plus de dessert' }, ctx.jetons.enfant)).status, 403);
     assert.equal((await fetch(ctx.base + '/epopee/conseil.pdf', { headers: { authorization: 'Bearer ' + ctx.jetons.enfant } })).status, 403);
+  });
+});
+
+describe('notifications sur le moment : ce que les routes émettent', () => {
+  const vus: EpopeeEvent[] = [];
+  let table = '', petite = '';
+  before(async () => {
+    onEpopeeEvent((e) => vus.push(e));
+    table = (await appel(ctx.base, 'GET', '/epopee/exploits', undefined, ctx.jetons.membre)).json.exploits[0].id;
+    petite = (await appel(ctx.base, 'GET', '/epopee/recompenses', undefined, ctx.jetons.membre)).json.recompenses[0].id;
+    // A clean slate: no pending request, no open quest.
+    const b = (await besace(ctx.jetons.membre)).json as { demandes: { id: string; status: string }[]; quetes: { id: string; status: string }[] };
+    for (const d of b.demandes.filter((x) => x.status === 'attente')) await appel(ctx.base, 'POST', `/epopee/demandes/${d.id}/decision`, { accept: false }, ctx.jetons.membre);
+    for (const q of b.quetes.filter((x) => x.status !== 'atteinte')) await appel(ctx.base, 'POST', `/epopee/quetes/${q.id}/abandon`, undefined, ctx.jetons.membre);
+    vus.length = 0;
+  });
+  after(() => onEpopeeEvent(null));
+
+  it('un exploit signalé émet une fois ; le signaler à nouveau en attente n’émet rien', async () => {
+    await appel(ctx.base, 'POST', `/epopee/membres/${lena}/demandes`, { id: uuid(), exploitId: table }, ctx.jetons.enfant);
+    await appel(ctx.base, 'POST', `/epopee/membres/${lena}/demandes`, { id: uuid(), exploitId: table }, ctx.jetons.enfant);
+    assert.deepEqual(vus.map((e) => [e.kind, e.childId, e.actorId, e.child]), [['exploit', lena, lena, 'Lena']]);
+  });
+  it('un crédit, un bravo ou une étape n’émettent rien : personne n’attend de réponse', async () => {
+    vus.length = 0;
+    await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 1 }, ctx.jetons.membre);
+    await appel(ctx.base, 'POST', `/epopee/membres/${lena}/exploits`, { id: uuid(), exploitId: table }, ctx.jetons.membre);
+    assert.deepEqual(vus, []);
+  });
+  it('un trésor visé puis gagné : deux moments, avec l’auteur du geste', async () => {
+    vus.length = 0;
+    const q = (await appel(ctx.base, 'POST', `/epopee/membres/${lena}/quetes`, { id: uuid(), rewardId: petite }, ctx.jetons.enfant)).json.quete as { id: string; cost: number };
+    await appel(ctx.base, 'POST', `/epopee/quetes/${q.id}/pacte`, { date: '2030-01-05' }, ctx.jetons.membre);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/quetes/${q.id}/echange`, undefined, ctx.jetons.enfant)).status === 409 ? vus.length : 1, 1, 'un échange refusé n’émet rien');
+    while ((await besace(ctx.jetons.membre)).json.balance < q.cost) await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 3 }, ctx.jetons.membre);
+    if (!vus.some((e) => e.kind === 'tresor')) await appel(ctx.base, 'POST', `/epopee/quetes/${q.id}/echange`, undefined, ctx.jetons.membre);
+    assert.deepEqual(vus.map((e) => e.kind), ['quete', 'tresor']);
+    const tresor = vus[1] as Extract<EpopeeEvent, { kind: 'tresor' }>;
+    assert.deepEqual([tresor.id, tresor.date, tresor.actorId === camille || tresor.actorId === lena], [q.id, '2030-01-05', true]);
   });
 });

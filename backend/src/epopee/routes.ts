@@ -20,6 +20,7 @@ import { log } from '../log';
 import { AuthedRequest, currentMember } from '../auth/session';
 import { addDays, mondayOf, periodLabel } from '../revisions/bilan';
 import { RITUEL, computeBilan, councilPdf, lines } from './bilan';
+import { emit } from './events';
 import type { Gabarit } from './gabarit';
 import { DISPLAYS, NOTE_MAX, STEP_STATUS, bravoEcus, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput } from './rules';
 import * as repo from './repo';
@@ -55,7 +56,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
 
   const exploitView = (e: repo.ExploitRow) => ({ id: e.id, title: e.title, ecus: e.ecus });
   /** Les demandes d'un enfant : celles qui attendent, et celles tranchées aujourd'hui. */
-  const requestsView = (memberId: string, day: string) => repo.requestsOf(memberId, day + 'T00:00:00.000Z').map((q) => {
+  const requestsView = (memberId: string, day: string) => repo.requestsOf(memberId, day).map((q) => {
     const e = repo.getExploit(q.exploit_id);
     return { id: q.id, exploitId: q.exploit_id, title: e?.title ?? '', ecus: e?.ecus ?? 0, status: q.status, createdAt: q.created_at, decidedBy: nameOf(q.decided_by) };
   });
@@ -298,7 +299,10 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const e = exploitOf(req, res); if (!e) return;
     const out = repo.addRequest(id, m.id, e.id);
     if (!out) { res.status(409).json({ error: 'Cet identifiant a déjà servi à autre chose.' }); return; }
-    if (!out.duplicate) log.info(`Épopée : ${m.name} signale « ${e.title} ».`);
+    if (!out.duplicate) {
+      log.info(`Épopée : ${m.name} signale « ${e.title} ».`);
+      emit({ kind: 'exploit', id: out.request.id, childId: m.id, child: m.name, actorId: me(req).id, title: e.title, ecus: e.ecus });
+    }
     res.status(out.duplicate ? 200 : 201).json({ duplicate: out.duplicate, demandes: requestsView(m.id, today()) });
   }));
 
@@ -381,7 +385,10 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     if (!reward || reward.archived_at) { res.status(404).json({ error: 'Récompense introuvable.' }); return; }
     const out = repo.proposeQuest(id, m.id, reward, me(req).id);
     if (!out) { res.status(409).json({ error: 'Une quête est déjà en cours. Une seule à la fois.' }); return; }
-    if (!out.duplicate) log.info(`Épopée : ${m.name} vise « ${reward.title} » (${reward.cost} écus)${me(req).id !== m.id ? `, proposé par ${me(req).name}` : ''}.`);
+    if (!out.duplicate) {
+      log.info(`Épopée : ${m.name} vise « ${reward.title} » (${reward.cost} écus)${me(req).id !== m.id ? `, proposé par ${me(req).name}` : ''}.`);
+      emit({ kind: 'quete', id: out.quest.id, childId: m.id, child: m.name, actorId: me(req).id, title: reward.title, cost: reward.cost });
+    }
     res.status(out.duplicate ? 200 : 201).json({ quete: questView(out.quest) });
   }));
 
@@ -417,6 +424,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const out = repo.exchangeQuest(q, me(req).id);
     if ('refusal' in out) { res.status(409).json({ error: out.refusal }); return; }
     log.info(`Épopée : ${nameOf(q.member_id) ?? 'un enfant'} échange ${q.cost} écus contre « ${q.title} ».`);
+    emit({ kind: 'tresor', id: q.id, childId: q.member_id, child: nameOf(q.member_id) ?? 'Votre enfant', actorId: me(req).id, title: q.title, date: out.quest.pact_date });
     res.status(201).json({ quete: questView(out.quest), balance: repo.balanceOf(q.member_id) });
   }));
 
