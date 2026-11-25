@@ -44,7 +44,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
 
   const summary = (m: Member) => {
     const p = repo.activeProfile(m.id);
-    return { memberId: m.id, enrolled: !!p, floor: p?.floor ?? null, balance: p ? repo.balanceOf(m.id) : null, enrolledAt: p?.enrolled_at ?? null, display: p?.display ?? null, timer: p ? !!p.timer : null };
+    return { memberId: m.id, enrolled: !!p, floor: p?.floor ?? null, balance: p ? repo.balanceOf(m.id) : null, enrolledAt: p?.enrolled_at ?? null, display: p?.display ?? null, timer: p ? !!p.timer : null, swornAt: p?.sworn_at ?? null, swornBy: nameOf(p?.sworn_by ?? null) };
   };
   const entryView = (e: repo.LedgerRow, cancelled: Set<string>) => ({
     id: e.id, kind: e.kind, delta: e.delta, note: e.note, ref: e.ref, by: nameOf(e.by_member), at: e.at, cancelled: cancelled.has(e.id),
@@ -191,6 +191,14 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     if (!done) { res.status(409).json({ error: 'Cet identifiant a déjà servi à autre chose.' }); return; }
     if (!done.duplicate) log.info(`Épopée : bravo de ${me(req).name} à ${m.name}, +${n} écu${n > 1 ? 's' : ''}${done.entry.note ? ` (« ${done.entry.note} »)` : ''}.`);
     res.status(done.duplicate ? 200 : 201).json({ duplicate: done.duplicate, entry: entryView(done.entry, new Set()), balance: repo.balanceOf(m.id) });
+  }));
+
+  // Le serment de l'alliance : scellé une fois, par un adulte, avec l'enfant à côté de lui.
+  r.post('/membres/:id/serment', handler((req, res) => {
+    const m = enrolled(req, res); if (!m) return;
+    const first = repo.swear(m.id, me(req).id);
+    if (first) log.info(`Épopée : serment de l’alliance scellé par ${m.name} et ${me(req).name}.`);
+    res.status(first ? 201 : 200).json(summary(m));
   }));
 
   // Affichage de la besace et sablier, par enfant.

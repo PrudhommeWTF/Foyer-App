@@ -331,3 +331,12 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.4; }
 @media (max-width: 860px) {
   .screen-head h1 { font-size: 24px; }
 }
+
+/* Épopée : le parchemin du serment s'imprime seul. Tant qu'il est ouvert, le
+   reste de l'application ne part pas à l'imprimante (voir screens/epopee/parchment.ts). */
+@media print {
+  body.print-parchment * { visibility: hidden !important; }
+  body.print-parchment .parchment, body.print-parchment .parchment * { visibility: visible !important; }
+  body.print-parchment .parchment { position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important; max-width: none !important; border-radius: 0 !important; border: none !important; box-shadow: none !important; }
+  body.print-parchment .no-print { display: none !important; }
+}

@@ -8,7 +8,7 @@ import { AMORCE, Display, Entry, Kind, QuestStatus, RewardCategory, RewardInput,
 let database: Database;
 export function initEpopeeRepo(db: Database): void { database = db; }
 
-export interface ProfileRow { member_id: string; floor: number; enrolled_at: string; enrolled_by: string | null; retired_at: string | null; display: Display; timer: number; }
+export interface ProfileRow { member_id: string; floor: number; enrolled_at: string; enrolled_by: string | null; retired_at: string | null; display: Display; timer: number; sworn_at: string | null; sworn_by: string | null; }
 export interface LedgerRow extends Entry { member_id: string; kind: Kind; note: string | null; by_member: string | null; at: string; }
 
 const now = (): string => new Date().toISOString();
@@ -57,6 +57,11 @@ export function retire(memberId: string): void {
 
 export function setSettings(memberId: string, s: { display: Display; timer: boolean }): void {
   database.prepare('UPDATE epo_profiles SET display = ?, timer = ? WHERE member_id = ?').run(s.display, s.timer ? 1 : 0, memberId);
+}
+
+/** Scelle le serment de l'alliance. Rend false s'il l'était déjà : la date du premier serment reste. */
+export function swear(memberId: string, by: string | null): boolean {
+  return !!database.prepare('UPDATE epo_profiles SET sworn_at = ?, sworn_by = ? WHERE member_id = ? AND sworn_at IS NULL').run(now(), by, memberId).changes;
 }
 
 /** Verse un bravo. Le même identifiant reçu deux fois ne compte qu'une fois (`duplicate`). */

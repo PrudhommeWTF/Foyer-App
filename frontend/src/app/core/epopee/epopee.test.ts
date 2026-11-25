@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Pending, Quest, Routine, breath, currentQuest, dailyEcus, daysToReach, longDay, missing, reachLine, doneCount, draftsError, earned, hourLabel, mmss, moved, newDraft, nextStep, pendingEcus, remaining, toDraft, withPending } from './epopee';
+import { LOIS, Pending, Quest, Routine, SEAL_LATCH_MS, SERMENT, bothSealed, breath, currentQuest, dailyEcus, daysToReach, longDay, missing, reachLine, doneCount, draftsError, earned, hourLabel, mmss, moved, newDraft, nextStep, pendingEcus, remaining, toDraft, withPending } from './epopee';
 
 const step = (id: string, status: 'fait' | 'saute' | null = null, ecus = 1) => ({ id, title: id, hint: '', icon: 'dent', seconds: 120, ecus, status });
 const routine = (...steps: ReturnType<typeof step>[]): Routine => ({ id: 'r', kind: 'matin', title: 'Matin', time: '07:20', startedAt: null, endedAt: null, pauses: 0, steps });
@@ -87,4 +87,16 @@ test('la quête en cours est la proposée ou l’active, jamais un trésor déj�
   const q = (status: Quest['status']): Quest => ({ id: status, rewardId: 'r', title: 't', cost: 10, status, proposedBy: null, createdAt: '', pact: null, reachedAt: null, honoredAt: null, memory: null });
   assert.equal(currentQuest([q('atteinte'), q('active')])?.id, 'active');
   assert.equal(currentQuest([q('atteinte'), q('honoree')]), null);
+});
+
+test('le serment se scelle quand les deux sceaux sont posés en même temps', () => {
+  const off = { down: false, tappedAt: 0 }, held = { down: true, tappedAt: 0 };
+  assert.ok(bothSealed(held, held, 1000), 'deux pouces ensemble');
+  assert.ok(!bothSealed(held, off, 1000), 'un seul sceau ne suffit pas');
+  assert.ok(bothSealed({ down: false, tappedAt: 1000 }, held, 1000 + SEAL_LATCH_MS - 1), 'l’un après l’autre, à temps');
+  assert.ok(!bothSealed({ down: false, tappedAt: 1000 }, held, 1000 + SEAL_LATCH_MS), 'trop tard : le premier sceau s’est relevé');
+});
+
+test('le serment est réciproque : trois lois, autant de promesses de chaque côté', () => {
+  assert.equal(LOIS.length, 3); assert.equal(SERMENT.child.length, SERMENT.parent.length);
 });

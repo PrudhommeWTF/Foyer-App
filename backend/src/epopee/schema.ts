@@ -201,6 +201,18 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 5,
+    label: 'le serment de l’alliance',
+    up: (db) => {
+      db.exec(`
+        -- Le serment scellé par l'enfant et un parent à la fin du parcours
+        -- d'alliance : quand, et avec quel adulte. Il ne se scelle qu'une fois.
+        ALTER TABLE epo_profiles ADD COLUMN sworn_at TEXT;
+        ALTER TABLE epo_profiles ADD COLUMN sworn_by TEXT;
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

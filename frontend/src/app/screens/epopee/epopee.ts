@@ -7,7 +7,9 @@ import { IconComponent } from '../../core/icon';
 import { sessionUuid } from '../../core/revisions/revisions';
 import { AvatarComponent } from '../../shared/avatar';
 import { ToggleComponent } from '../../shared/toggle';
+import { Alliance } from './alliance';
 import { ArmoryAdmin } from './armory-admin';
+import { Parchment } from './parchment';
 import { QuestPanel } from './quest-panel';
 import { RoutineEditor } from './routine-editor';
 import { EpopeeRunner } from './runner';
@@ -22,17 +24,21 @@ const COINS_MAX = 30;
  * aux exploits signalés, règle les routines (routine-editor.ts) et relit le
  * journal ; un enfant voit sa besace, déroule ses routines pas à pas (runner.ts)
  * et signale un exploit. L'Armurerie (quest-panel.ts, armory-admin.ts) porte
- * les récompenses, la quête en cours et les souvenirs. Le solde et chaque montant
+ * les récompenses, la quête en cours et les souvenirs. Tout commence par
+ * l'alliance (alliance.ts), que parent et enfant parcourent ensemble, et dont
+ * le serment se relit et s'imprime (parchment.ts). Le solde et chaque montant
  * viennent du serveur (grand livre en ajout seul), l'écran ne calcule rien.
  */
 @Component({
   selector: 'screen-epopee',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, ToggleComponent, EpopeeRunner, RoutineEditor, QuestPanel, ArmoryAdmin],
+  imports: [IconComponent, AvatarComponent, ToggleComponent, EpopeeRunner, RoutineEditor, QuestPanel, ArmoryAdmin, Alliance, Parchment],
   template: `
     <div class="screen-enter">
       @if (running(); as run) { <epopee-runner [routine]="run.routine" [day]="run.day" [timer]="run.timer" (closed)="fermer()" /> }
+      @if (allied(); as al) { <epopee-alliance [kid]="al" [rewards]="recompenses()" (changed)="charger()" (sealed)="scelle(al)" (closed)="alliance.set(null)" /> }
+      @if (parchment(); as pk) { <epopee-parchment [kid]="pk" (closed)="parchemin.set(null)" /> }
       @if (editing(); as ed) { <epopee-routine-editor [routine]="ed.routine" [name]="ed.name" (closed)="finEdition($event)" /> }
       @if (erreur(); as e) {
         <div class="card empty"><div class="empty-title">L’Épopée ne répond pas</div><div class="empty-text">{{ e }}</div><button class="btn btn-primary" (click)="charger()">Réessayer</button></div>
@@ -54,8 +60,8 @@ const COINS_MAX = 30;
                 <div class="empty-title">Ton épopée n’a pas encore commencé</div>
                 <p class="lead">Demande à tes parents de t’enrôler : ta besace t’attend, avec des écus dedans dès le départ.</p>
               } @else {
-                <p class="lead">Enrôler {{ k.name }} lui ouvre une besace, avec {{ amorce }} écus d’amorce dedans : elle ne commence jamais vide, et ces écus-là ne se reprennent pas.</p>
-                <button class="btn btn-primary" [disabled]="busy()" (click)="enroler(k)"><f-icon name="bouclier" [size]="18" color="#fff" [width]="2.2" /> Enrôler {{ k.name }}</button>
+                <p class="lead">L’Épopée de {{ k.name }} commence par une alliance : quelques minutes côte à côte pour lire les trois lois, ouvrir sa besace ({{ amorce }} écus l’y attendent), viser un premier trésor et sceller le serment.</p>
+                <button class="btn btn-primary" (click)="alliance.set(k.memberId)"><f-icon name="bouclier" [size]="18" color="#fff" [width]="2.2" /> Commencer l’alliance avec {{ k.name }}</button>
               }
             } @else {
               @if (!store.isChild()) {
@@ -66,6 +72,12 @@ const COINS_MAX = 30;
                     <button class="btn btn-soft" [disabled]="busy()" (click)="decider(k, q, false)">Pas tout à fait</button>
                   </div>
                 }
+              }
+              @if (!store.isChild() && !k.swornAt) {
+                <div class="ask">
+                  <div class="what"><div class="t">Le serment n’est pas encore scellé</div><div class="s">Les trois lois et les promesses de chacun, à lire ensemble : quelques minutes côte à côte.</div></div>
+                  <button class="btn btn-soft" (click)="alliance.set(k.memberId)">Faire l’alliance</button>
+                </div>
               }
               <div class="pouch">
                 @if (store.isChild() && k.display === 'pieces') { <div class="solde solo">Ma besace</div> } @else { <div class="solde"><span class="n">{{ k.balance }}</span> écu{{ k.balance! > 1 ? 's' : '' }}</div> }
@@ -160,9 +172,14 @@ const COINS_MAX = 30;
                     <div class="set"><div class="what"><div class="t">{{ jour(k) }} écus possibles par jour</div><div class="s">Avec les routines telles qu’elles sont réglées. À garder en tête pour le prix des récompenses.</div></div>
                       <button class="btn btn-soft" [disabled]="busy()" (click)="remettre(k)">Revenir aux routines proposées</button></div>
                   }
+                  @if (k.swornAt) {
+                    <div class="set"><div class="what"><div class="t">Le serment de {{ k.name }}</div><div class="s">Les trois lois et les promesses de chacun, à relire ou à imprimer pour la porte de sa chambre.</div></div>
+                      <button class="btn btn-soft" (click)="parchemin.set(k.memberId)">Voir le parchemin</button></div>
+                  }
                   <button class="btn btn-ghost retire" [disabled]="busy()" (click)="retirer(k)">Retirer {{ k.name }} de l’Épopée</button>
                 </details>
               }
+              @if (store.isChild() && k.swornAt) { <button class="btn btn-ghost retire" (click)="parchemin.set(k.memberId)">Relire mon serment</button> }
             }
           </section>
         }
@@ -272,6 +289,9 @@ export class EpopeeScreen {
   /** The most écus an enrolled child can earn in a day: what the armoury weighs its prices against. */
   readonly jourMax = computed(() => Math.max(0, ...(this.kids() || []).filter((k) => k.enrolled).map((k) => dailyEcus(k.routines || []))));
   readonly nouveau = signal('');
+  /** The child whose alliance is being walked through, and the one whose parchment is open. */
+  readonly alliance = signal<string | null>(null);
+  readonly parchemin = signal<string | null>(null);
 
   /**
    * The pouches joined to the members of the document (name, colour), in the
@@ -296,6 +316,8 @@ export class EpopeeScreen {
     const k = this.kids()?.find((x) => x.memberId === e.memberId), routine = k?.routines?.find((x) => x.id === e.routineId);
     return k && routine ? { routine, name: k.name } : null;
   });
+  readonly allied = computed(() => this.kids()?.find((k) => k.memberId === this.alliance()) ?? null);
+  readonly parchment = computed(() => this.kids()?.find((k) => k.memberId === this.parchemin()) ?? null);
   readonly anyEnrolled = computed(() => !!this.kids()?.some((k) => k.enrolled));
 
   constructor() { void this.charger(); }
@@ -322,6 +344,8 @@ export class EpopeeScreen {
     if (q?.status === 'refusee') return 'Pas tout à fait cette fois. Tu peux réessayer.';
     return ecus;
   }
+  /** The oath is sealed: the flow gives way to the parchment, ready to print. */
+  scelle(k: Kid): void { this.alliance.set(null); this.parchemin.set(k.memberId); }
   lancer(k: Kid, r: Routine): void { this.run.set({ memberId: k.memberId, routineId: r.id }); }
   fermer(): void { this.run.set(null); void this.charger(); }
 
@@ -341,9 +365,6 @@ export class EpopeeScreen {
     try { await fn(); await this.charger(); } catch (e) { this.store.toast((e as Error).message); } finally { this.busy.set(false); }
   }
 
-  enroler(k: Kid): Promise<void> {
-    return this.agir(async () => { await this.api.post(`epopee/membres/${k.memberId}/enrolement`); this.store.toast(`${k.name} entre dans l’Épopée.`); });
-  }
   /** The toast that follows a credit: five seconds to take it back, no confirmation before. */
   private credited(k: Kid, id: string, n: number): void {
     this.store.toastWithUndo(`+${n} écu${n > 1 ? 's' : ''} pour ${k.name}.`, () => void this.agir(async () => { await this.api.post(`epopee/journal/${encodeURIComponent(id)}/annulation`); }));
