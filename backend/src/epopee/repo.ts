@@ -2,7 +2,8 @@
 // concerné : ce sont les routes qui décident qui a le droit de le nommer.
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
-import { AMORCE, Entry, Kind, cancelRefusal } from './rules';
+import type { RoutineTpl } from './gabarit';
+import { AMORCE, Entry, Kind, RoutineKind, StepStatus, cancelRefusal, stepEntryId } from './rules';
 
 let database: Database;
 export function initEpopeeRepo(db: Database): void { database = db; }
@@ -75,13 +76,88 @@ export function cancel(entry: LedgerRow, by: string | null): { entry: LedgerRow 
   })();
 }
 
+// ---- Routines ---------------------------------------------------------------
+
+export interface RoutineRow { id: string; member_id: string; kind: RoutineKind; title: string; time: string; created_at: string; archived_at: string | null; }
+export interface StepRow { id: string; routine_id: string; pos: number; title: string; hint: string; icon: string; seconds: number; ecus: number; archived_at: string | null; }
+export interface MarkRow { step_id: string; day: string; member_id: string; status: StepStatus; by_member: string | null; at: string; }
+export interface RoutineDayRow { routine_id: string; day: string; member_id: string; started_at: string | null; ended_at: string | null; pauses: number; }
+
+export function routinesOf(memberId: string): RoutineRow[] {
+  return database.prepare('SELECT * FROM epo_routines WHERE member_id = ? AND archived_at IS NULL ORDER BY time, created_at').all(memberId) as RoutineRow[];
+}
+export function getRoutine(id: string): RoutineRow | null {
+  return (database.prepare('SELECT * FROM epo_routines WHERE id = ? AND archived_at IS NULL').get(id) as RoutineRow | undefined) ?? null;
+}
+export function stepsOf(routineId: string): StepRow[] {
+  return database.prepare('SELECT * FROM epo_steps WHERE routine_id = ? AND archived_at IS NULL ORDER BY pos').all(routineId) as StepRow[];
+}
+export function getStep(id: string): StepRow | null {
+  return (database.prepare('SELECT * FROM epo_steps WHERE id = ? AND archived_at IS NULL').get(id) as StepRow | undefined) ?? null;
+}
+export function marksOf(memberId: string, day: string): MarkRow[] {
+  return database.prepare('SELECT * FROM epo_step_marks WHERE member_id = ? AND day = ?').all(memberId, day) as MarkRow[];
+}
+export function routineDay(routineId: string, day: string): RoutineDayRow | null {
+  return (database.prepare('SELECT * FROM epo_routine_days WHERE routine_id = ? AND day = ?').get(routineId, day) as RoutineDayRow | undefined) ?? null;
+}
+
+/** Pose les routines du gabarit à un enfant qui n'en a aucune. Rend le nombre de routines créées. */
+export function installGabarit(memberId: string, gabarit: RoutineTpl[]): number {
+  return database.transaction(() => {
+    if (routinesOf(memberId).length) return 0;
+    for (const r of gabarit) {
+      const id = crypto.randomUUID();
+      database.prepare('INSERT INTO epo_routines (id, member_id, kind, title, time, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, memberId, r.kind, r.title, r.time, now());
+      r.steps.forEach((s, pos) => database.prepare('INSERT INTO epo_steps (id, routine_id, pos, title, hint, icon, seconds, ecus) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(crypto.randomUUID(), id, pos, s.title, s.hint, s.icon, s.seconds, s.ecus));
+    }
+    return gabarit.length;
+  })();
+}
+
+const touchDay = (r: RoutineRow, day: string): void => {
+  database.prepare('INSERT INTO epo_routine_days (routine_id, day, member_id, started_at) VALUES (?, ?, ?, ?) ON CONFLICT (routine_id, day) DO UPDATE SET started_at = COALESCE(started_at, excluded.started_at)')
+    .run(r.id, day, r.member_id, now());
+};
+
+/**
+ * Note une étape pour un jour : faite (son écu est écrit au grand livre, dans la
+ * même transaction) ou passée. Une étape ne se note qu'une fois par jour : la
+ * seconde fois ne change rien (`duplicate`). `routineDone` dit si la routine du
+ * jour est allée au bout.
+ */
+export function markStep(step: StepRow, routine: RoutineRow, day: string, status: StepStatus, by: string | null): { duplicate: boolean; ecus: number; routineDone: boolean } {
+  return database.transaction(() => {
+    const done = (): boolean => !!routineDay(routine.id, day)?.ended_at;
+    const known = database.prepare('SELECT status FROM epo_step_marks WHERE step_id = ? AND day = ?').get(step.id, day) as { status: StepStatus } | undefined;
+    if (known) return { duplicate: true, ecus: known.status === 'fait' ? step.ecus : 0, routineDone: done() };
+    database.prepare('INSERT INTO epo_step_marks (step_id, day, member_id, status, by_member, at) VALUES (?, ?, ?, ?, ?, ?)').run(step.id, day, routine.member_id, status, by, now());
+    const ecus = status === 'fait' ? step.ecus : 0;
+    if (ecus) write(stepEntryId(step.id, day), routine.member_id, 'etape', ecus, step.title, null, by);
+    touchDay(routine, day);
+    const marked = new Set(marksOf(routine.member_id, day).map((m) => m.step_id));
+    if (stepsOf(routine.id).every((s) => marked.has(s.id))) database.prepare('UPDATE epo_routine_days SET ended_at = ? WHERE routine_id = ? AND day = ? AND ended_at IS NULL').run(now(), routine.id, day);
+    return { duplicate: false, ecus, routineDone: done() };
+  })();
+}
+
+/** Une pause « grain de sable » de plus dans la routine du jour. Rend leur nombre. */
+export function addPause(routine: RoutineRow, day: string): number {
+  return database.transaction(() => {
+    touchDay(routine, day);
+    database.prepare('UPDATE epo_routine_days SET pauses = pauses + 1 WHERE routine_id = ? AND day = ?').run(routine.id, day);
+    return routineDay(routine.id, day)!.pauses;
+  })();
+}
+
 // ---- Module -----------------------------------------------------------------
 
 export function moduleCounts(): { enfants: number; ecritures: number } {
   const n = (sql: string): number => (database.prepare(sql).get() as { n: number }).n;
   return { enfants: n('SELECT COUNT(*) AS n FROM epo_profiles'), ecritures: n('SELECT COUNT(*) AS n FROM epo_ledger') };
 }
-/** Remise à zéro du module : profils et grand livre. */
+/** Remise à zéro du module : routines, profils et grand livre. */
 export function resetModule(): void {
-  database.transaction(() => { for (const t of ['epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
+  database.transaction(() => { for (const t of ['epo_step_marks', 'epo_routine_days', 'epo_steps', 'epo_routines', 'epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
 }

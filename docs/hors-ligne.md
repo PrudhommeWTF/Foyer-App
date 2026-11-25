@@ -26,6 +26,11 @@ pourquoi le cache ne fige pas la version installée.
   compris : il a son propre cache et sa propre file, rangée elle aussi sous le
   membre (un projet en attente ne part que sous la session de son auteur). Voir
   [`atelier.md`](atelier.md), « Hors ligne ».
+- **L'Épopée** : une routine commencée se termine sans réseau, chaque étape
+  est fêtée et attend dans une file rangée sous le membre, envoyée au retour du
+  réseau (jusqu'au lendemain). En revanche l'écran ne s'ouvre pas sans réseau :
+  la besace et les routines du jour ne sont pas gardées sur l'appareil. Voir
+  [`epopee.md`](epopee.md).
 - Les autres écrans (agenda, repas, contacts, documents) se lisent et
   **s'éditent** : leurs modifications partent par l'enregistrement du document,
   qui réessaie tout seul jusqu'à passer.

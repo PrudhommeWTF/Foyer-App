@@ -33,6 +33,7 @@ import { atelierRouter } from './atelier/routes';
 import { loadFamilyLibrary } from './atelier/library';
 import { moduleCounts as atlCounts, purgeArchived as atlPurge, resetModule as atlReset } from './atelier/repo';
 import { epopeeRouter } from './epopee/routes';
+import { loadGabarit } from './epopee/gabarit';
 import { moduleCounts as epoCounts, resetModule as epoReset } from './epopee/repo';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
@@ -479,7 +480,7 @@ api.use('/atelier', auth, apiTokenLimiter, denyToken, requireMember, requireModu
 // Hors du document : le solde est la somme d'un grand livre en ajout seul. Un
 // enfant n'y lit que sa besace, un adulte y écrit.
 api.use('/epopee', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modEpopee'),
-  epopeeRouter(() => (getHousehold().state as HouseholdState).members));
+  epopeeRouter(() => (getHousehold().state as HouseholdState).members, () => loadGabarit(DATA_DIR)));
 // La corbeille de l'Atelier : au démarrage puis une fois par jour, les projets
 // supprimés depuis plus longtemps que le réglage partent pour de bon. Module
 // éteint, rien ne bouge : désactiver ne supprime jamais.
