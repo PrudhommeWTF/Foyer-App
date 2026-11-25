@@ -36,6 +36,7 @@ import { epopeeRouter } from './epopee/routes';
 import { loadGabarit } from './epopee/gabarit';
 import { activeProfile as epoActive, moduleCounts as epoCounts, resetModule as epoReset, weekData as epoWeekData } from './epopee/repo';
 import { computeBilan as epoBilan, weeklyHits as epoWeeklyHits } from './epopee/bilan';
+import { eventMessage as epoMessage, onEpopeeEvent, recipients as epoRecipients } from './epopee/events';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
@@ -762,7 +763,7 @@ export function start(): void {
    * La préférence est personnelle : chacun coupe les siennes sans rien imposer
    * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
    */
-  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions' | 'epopee'): boolean => {
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions' | 'epopee' | 'epopeeMoment'): boolean => {
     const state = getHousehold().state as HouseholdState;
     // Les clés sont écrites en toutes lettres : une clé calculée ne dit rien
     // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
@@ -770,6 +771,7 @@ export function start(): void {
     if (kind === 'garantie') return setting('eqpGarantieRappel', state, memberId);
     if (kind === 'revisions') return setting('revisionsBilanHebdo', state, memberId);
     if (kind === 'epopee') return setting('epopeeBilanHebdo', state, memberId);
+    if (kind === 'epopeeMoment') return setting('epopeeSurLeMoment', state, memberId);
     return kind === 'reminder'
       ? setting('pushReminders', state, memberId)
       : setting('pushAssigned', state, memberId);
@@ -788,6 +790,21 @@ export function start(): void {
       const m = r.members[0];
       if (m && m.status !== 'skipped') notifLog(`Notifications : affectation « ${task.text} » → ${memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`);
     }).catch((e) => notifLog('Notifications : affectation non envoyée : ' + (e as Error).message));
+  });
+
+  // Épopée : un enfant signale un exploit, vise un trésor ou le gagne. Les
+  // adultes qui ont un compte sont prévenus tout de suite, sauf l'auteur du geste.
+  onEpopeeEvent((e) => {
+    if (effectiveSetting('pushPaused') === true || effectiveSetting('modEpopee') === false) return;
+    const accts = new Set(listMemberAccounts().map((a) => a.memberId));
+    const adults = (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id);
+    const pour = epoRecipients(e, adults, (m) => memberWants(m, 'epopeeMoment'));
+    if (!pour.length) return;
+    const msg = epoMessage(e);
+    void notify(msg.key, pour, { kind: 'reminder', title: msg.title, body: msg.body, url: appUrl(), tag: msg.tag }).then((r) => {
+      const parts = r.members.filter((m) => m.status !== 'skipped').map((m) => `${m.memberId} : ${m.status}${m.error ? ' (' + m.error + ')' : ''}`).join(' ; ');
+      if (parts) notifLog(`Notifications : Épopée « ${msg.title} » → ${parts}`);
+    }).catch((x) => notifLog('Notifications : Épopée non envoyée : ' + (x as Error).message));
   });
 
   startScheduler({

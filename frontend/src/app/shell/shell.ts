@@ -29,6 +29,7 @@ import { EquipementsScreen } from '../screens/equipements/equipements';
 import { RevisionsScreen } from '../screens/revisions/revisions';
 import { AtelierScreen } from '../screens/atelier/atelier';
 import { EpopeeScreen } from '../screens/epopee/epopee';
+import { EpopeeStore } from '../core/epopee/store';
 import { EcoleStore } from '../core/ecole.store';
 import { RevisionsStore } from '../core/revisions/store';
 
@@ -123,6 +124,9 @@ export class ShellComponent implements AfterViewInit, OnDestroy {
   // Révisions : la tuile d'accueil compte les sessions du jour, et le bilan du
   // dimanche touché ouvre le suivi d'un enfant, avant toute visite de l'écran.
   readonly revisions = inject(RevisionsStore);
+  // Épopée : une notification touchée (bilan du dimanche, enfant qui attend une
+  // réponse) ouvre son écran, avant toute visite de celui-ci.
+  readonly epopee = inject(EpopeeStore);
   private ro?: ResizeObserver;
 
   ngAfterViewInit(): void {

@@ -45,9 +45,18 @@ export class EpopeeStore {
     // Le bilan du dimanche touché : « #conseil » quand l'app était fermée, un
     // message du service worker quand elle était ouverte (voir sw.js).
     if (location.hash === '#conseil') { history.replaceState(history.state, '', location.pathname + location.search); this.ouvrirConseil(); }
-    navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => { if ((e.data as { type?: string } | null)?.type === 'foyer-epopee-conseil') this.ouvrirConseil(); });
+    // Un enfant attend une réponse (exploit signalé, trésor visé ou gagné) :
+    // « #epopee » ou un message, et l'écran s'ouvre sur des données fraîches.
+    if (location.hash === '#epopee') { history.replaceState(history.state, '', location.pathname + location.search); this.ouvrir(); }
+    navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => {
+      const type = (e.data as { type?: string } | null)?.type;
+      if (type === 'foyer-epopee-conseil') this.ouvrirConseil();
+      if (type === 'foyer-epopee') this.ouvrir();
+    });
   }
 
+  /** Ouvre l'écran Épopée et le recharge : ce que la notification annonçait y figure. */
+  ouvrir(): void { this.foyer.go('epopee'); void this.charger(); }
   ouvrirConseil(): void { this.conseil.set(true); this.foyer.go('epopee'); }
 
   async charger(): Promise<void> {

@@ -270,16 +270,19 @@ self.addEventListener('notificationclick', (event) => {
     : tag.startsWith('eqp-') ? { kind: 'equipment', id: tag.slice(4) } : null;
   const suivi = tag.startsWith('rev-') ? tag.slice(4) : null;
   const conseil = tag.startsWith('epo-');
+  // Un enfant attend une réponse (« epopee-<membre> ») : l'écran Épopée, rechargé.
+  const epopee = tag.startsWith('epopee-');
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     for (const client of list) {
       if ('focus' in client) {
         if (fiche) client.postMessage({ type: 'foyer-fiche', kind: fiche.kind, id: fiche.id });
         if (suivi) client.postMessage({ type: 'foyer-revisions', member: suivi });
         if (conseil) client.postMessage({ type: 'foyer-epopee-conseil' });
+        if (epopee) client.postMessage({ type: 'foyer-epopee' });
         return client.focus();
       }
     }
     return self.clients.openWindow(fiche ? url.split('#')[0] + '#fiche=' + fiche.kind + ':' + encodeURIComponent(fiche.id)
-      : suivi ? url.split('#')[0] + '#suivi=' + encodeURIComponent(suivi) : conseil ? url.split('#')[0] + '#conseil' : url);
+      : suivi ? url.split('#')[0] + '#suivi=' + encodeURIComponent(suivi) : conseil ? url.split('#')[0] + '#conseil' : epopee ? url.split('#')[0] + '#epopee' : url);
   }));
 });

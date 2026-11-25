@@ -242,9 +242,15 @@ export function creditExploit(id: string, memberId: string, e: ExploitRow, by: s
 export function getRequest(id: string): RequestRow | null {
   return (database.prepare('SELECT * FROM epo_requests WHERE id = ?').get(id) as RequestRow | undefined) ?? null;
 }
-/** Les demandes en attente d'un enfant, et celles tranchées depuis `since` (pour qu'il voie la réponse). */
-export function requestsOf(memberId: string, since: string): RequestRow[] {
-  return database.prepare("SELECT * FROM epo_requests WHERE member_id = ? AND (status = 'attente' OR decided_at >= ?) ORDER BY created_at DESC").all(memberId, since) as RequestRow[];
+/**
+ * Les demandes en attente d'un enfant, et celles tranchées le jour `day` (heure
+ * de Paris), pour qu'il voie la réponse. Le jour se compare à Paris, pas en UTC :
+ * une réponse donnée à minuit et demi est bien d'aujourd'hui.
+ */
+export function requestsOf(memberId: string, day: string): RequestRow[] {
+  const recent = new Date(Date.parse(day + 'T00:00:00Z') - 86_400_000).toISOString();
+  return (database.prepare("SELECT * FROM epo_requests WHERE member_id = ? AND (status = 'attente' OR decided_at >= ?) ORDER BY created_at DESC").all(memberId, recent) as RequestRow[])
+    .filter((q) => q.status === 'attente' || (!!q.decided_at && parisDay(q.decided_at) === day));
 }
 /** Signale un exploit. Rend la demande déjà en attente pour cet exploit s'il y en a une (`duplicate`). */
 export function addRequest(id: string, memberId: string, exploitId: string): { request: RequestRow; duplicate: boolean } | null {
