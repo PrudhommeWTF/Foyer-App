@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Pending, Routine, breath, doneCount, earned, hourLabel, mmss, nextStep, pendingEcus, remaining, withPending } from './epopee';
+import { Pending, Quest, Routine, breath, currentQuest, dailyEcus, daysToReach, longDay, missing, reachLine, doneCount, draftsError, earned, hourLabel, mmss, moved, newDraft, nextStep, pendingEcus, remaining, toDraft, withPending } from './epopee';
 
 const step = (id: string, status: 'fait' | 'saute' | null = null, ecus = 1) => ({ id, title: id, hint: '', icon: 'dent', seconds: 120, ecus, status });
 const routine = (...steps: ReturnType<typeof step>[]): Routine => ({ id: 'r', kind: 'matin', title: 'Matin', time: '07:20', startedAt: null, endedAt: null, pauses: 0, steps });
@@ -44,4 +44,47 @@ test('la respiration tourne : inspirer 4 s, garder 2 s, souffler 4 s', () => {
   assert.deepEqual(breath(4500), { phase: 1, label: 'Garde', left: 2 });
   assert.deepEqual(breath(6000), { phase: 2, label: 'Souffle', left: 4 });
   assert.equal(breath(10_000).phase, 0); assert.equal(breath(-5).phase, 0);
+});
+
+test('une étape se déplace d’un cran, et reste en place aux extrémités', () => {
+  assert.deepEqual(moved(['a', 'b', 'c'], 0, 1), ['b', 'a', 'c']);
+  assert.deepEqual(moved(['a', 'b', 'c'], 2, -1), ['a', 'c', 'b']);
+  const l = ['a', 'b']; assert.equal(moved(l, 0, -1), l); assert.equal(moved(l, 1, 1), l);
+});
+
+test('le brouillon d’une étape compte en minutes, jamais moins d’une', () => {
+  assert.equal(toDraft(step('a')).minutes, 2);
+  assert.equal(toDraft({ ...step('a'), seconds: 20 }).minutes, 1);
+});
+
+test('l’éditeur dit ce qui manque avant d’envoyer', () => {
+  const ok = { ...newDraft(), title: 'Dents' };
+  assert.equal(draftsError('Matin', '07:20', [ok]), '');
+  assert.match(draftsError(' ', '07:20', [ok]), /nom à la routine/);
+  assert.match(draftsError('Matin', '7h', [ok]), /heure/);
+  assert.match(draftsError('Matin', '07:20', []), /au moins une étape/);
+  assert.match(draftsError('Matin', '07:20', [ok, newDraft()]), /étape 2/);
+  assert.match(draftsError('Matin', '07:20', [{ ...ok, minutes: 0 }]), /1 à 60 minutes/);
+});
+
+test('les écus possibles d’une journée s’additionnent sur toutes les routines', () => {
+  assert.equal(dailyEcus([routine(step('a', null, 1), step('b', null, 2)), routine(step('c', null, 0), step('d', null, 3))]), 6);
+});
+
+test('la distance d’un trésor se compte en écus manquants, puis en jours de routines', () => {
+  assert.equal(missing(20, 7), 13); assert.equal(missing(20, 25), 0);
+  assert.equal(daysToReach(20, 7, 5), 3); assert.equal(daysToReach(20, 20, 5), 0); assert.equal(daysToReach(20, 7, 0), null);
+  assert.equal(reachLine(20, 7, 5, true), 'Encore 13 écus, environ 3 jours de routines');
+  assert.equal(reachLine(20, 19, 0, true), 'Encore 1 écu');
+  assert.equal(reachLine(20, 20, 5, true), 'Tu as assez d’écus !'); assert.equal(reachLine(20, 30, 5, false), 'Les écus sont là.');
+});
+
+test('une date de pacte se lit en toutes lettres', () => {
+  assert.equal(longDay('2026-12-05'), 'samedi 5 décembre');
+});
+
+test('la quête en cours est la proposée ou l’active, jamais un trésor déjà atteint', () => {
+  const q = (status: Quest['status']): Quest => ({ id: status, rewardId: 'r', title: 't', cost: 10, status, proposedBy: null, createdAt: '', pact: null, reachedAt: null, honoredAt: null, memory: null });
+  assert.equal(currentQuest([q('atteinte'), q('active')])?.id, 'active');
+  assert.equal(currentQuest([q('atteinte'), q('honoree')]), null);
 });

@@ -5,11 +5,41 @@
       "title": "Les préparatifs du matin",
       "time": "07:20",
       "steps": [
-        { "title": "S’habiller", "hint": "Les habits préparés hier soir, dans l’ordre que tu veux.", "icon": "tshirt", "seconds": 300, "ecus": 1 },
-        { "title": "Petit-déjeuner", "hint": "Assis à table, tranquillement.", "icon": "repas", "seconds": 600, "ecus": 1 },
-        { "title": "Se brosser les dents", "hint": "Deux minutes, en petits cercles.", "icon": "dent", "seconds": 180, "ecus": 1 },
-        { "title": "Chaussures et manteau", "hint": "Dans l’entrée, prêt à partir.", "icon": "chaussure", "seconds": 180, "ecus": 1 },
-        { "title": "Cartable sur le dos", "hint": "Un dernier coup d’œil : rien n’est oublié ?", "icon": "ecole", "seconds": 120, "ecus": 1 }
+        {
+          "title": "S’habiller",
+          "hint": "Les habits préparés hier soir, dans l’ordre que tu veux.",
+          "icon": "tshirt",
+          "seconds": 300,
+          "ecus": 1
+        },
+        {
+          "title": "Petit-déjeuner",
+          "hint": "Assis à table, tranquillement.",
+          "icon": "repas",
+          "seconds": 600,
+          "ecus": 1
+        },
+        {
+          "title": "Se brosser les dents",
+          "hint": "Deux minutes, en petits cercles.",
+          "icon": "dent",
+          "seconds": 180,
+          "ecus": 1
+        },
+        {
+          "title": "Chaussures et manteau",
+          "hint": "Dans l’entrée, prêt à partir.",
+          "icon": "chaussure",
+          "seconds": 180,
+          "ecus": 1
+        },
+        {
+          "title": "Cartable sur le dos",
+          "hint": "Un dernier coup d’œil : rien n’est oublié ?",
+          "icon": "ecole",
+          "seconds": 120,
+          "ecus": 1
+        }
       ]
     },
     {
@@ -17,12 +47,92 @@
       "title": "Le rituel du soir",
       "time": "19:45",
       "steps": [
-        { "title": "La douche", "hint": "On se lave, on se rince, on se sèche.", "icon": "goutte", "seconds": 600, "ecus": 1 },
-        { "title": "Le pyjama", "hint": "Les habits du jour vont au linge sale.", "icon": "tshirt", "seconds": 180, "ecus": 1 },
-        { "title": "Se brosser les dents", "hint": "Deux minutes, en petits cercles.", "icon": "dent", "seconds": 180, "ecus": 1 },
-        { "title": "Préparer demain", "hint": "Les habits et le cartable sont prêts pour le matin.", "icon": "ecole", "seconds": 240, "ecus": 1 },
-        { "title": "Au lit", "hint": "Une histoire, un câlin, et on éteint.", "icon": "moon", "seconds": 600, "ecus": 1 }
+        {
+          "title": "La douche",
+          "hint": "On se lave, on se rince, on se sèche.",
+          "icon": "goutte",
+          "seconds": 600,
+          "ecus": 1
+        },
+        {
+          "title": "Le pyjama",
+          "hint": "Les habits du jour vont au linge sale.",
+          "icon": "tshirt",
+          "seconds": 180,
+          "ecus": 1
+        },
+        {
+          "title": "Se brosser les dents",
+          "hint": "Deux minutes, en petits cercles.",
+          "icon": "dent",
+          "seconds": 180,
+          "ecus": 1
+        },
+        {
+          "title": "Préparer demain",
+          "hint": "Les habits et le cartable sont prêts pour le matin.",
+          "icon": "ecole",
+          "seconds": 240,
+          "ecus": 1
+        },
+        {
+          "title": "Au lit",
+          "hint": "Une histoire, un câlin, et on éteint.",
+          "icon": "moon",
+          "seconds": 600,
+          "ecus": 1
+        }
       ]
+    }
+  ],
+  "exploits": [
+    {
+      "title": "Mettre la table",
+      "ecus": 2
+    },
+    {
+      "title": "Devoirs commencés au premier appel",
+      "ecus": 2
+    },
+    {
+      "title": "Ranger sa chambre",
+      "ecus": 2
+    },
+    {
+      "title": "Aider sans qu’on le demande",
+      "ecus": 3
+    }
+  ],
+  "recompenses": [
+    {
+      "title": "Une histoire de plus au coucher",
+      "description": "Ce soir, on lit une histoire en plus, celle que tu choisis.",
+      "cost": 10,
+      "category": "petit"
+    },
+    {
+      "title": "Choisir le film du samedi",
+      "description": "C’est toi qui décides du film de la famille.",
+      "cost": 20,
+      "category": "privilege"
+    },
+    {
+      "title": "Atelier gâteau à deux",
+      "description": "On choisit la recette ensemble et on cuisine tous les deux.",
+      "cost": 30,
+      "category": "duo"
+    },
+    {
+      "title": "Soirée cinéma à deux",
+      "description": "Une séance rien que nous deux, avec le pop-corn.",
+      "cost": 40,
+      "category": "duo"
+    },
+    {
+      "title": "Nuit sous la tente",
+      "description": "On monte la tente et on dort dehors, lampe torche comprise.",
+      "cost": 50,
+      "category": "duo"
     }
   ]
 }
