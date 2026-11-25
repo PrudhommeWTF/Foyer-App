@@ -19,7 +19,7 @@ Règle : on **adapte**, on ne réécrit pas. Tout écart est listé ici avec sa 
 ## Aucun serveur extérieur
 
 - **Extensions** : seules Musique et Stylo restent (`extension-manager.js`, `libraries/extensions/index.jsx`). Sont retirées, code compris (`retraits.txt`) : synthèse vocale et traduction (serveurs de Scratch), reconnaissance vocale, détection de visage (elle se rabattait sur un CDN), détection vidéo (caméra, à rouvrir plus tard), et le matériel (micro:bit, LEGO, Vernier, Makey Makey).
-- **Stockage** (`surcouche/…/foyer/storage.js`) : remplace celui qui parlait aux serveurs de Scratch. À cette étape le projet vit **en mémoire**, et la bibliothèque est une poignée de fichiers servis par Foyer (`dist/bibliotheque/`).
+- **Stockage** (`surcouche/…/foyer/storage.js`) : remplace celui qui parlait aux serveurs de Scratch. Les projets et leurs fichiers vivent dans Foyer (`/api/atelier`), sous la session de celui qui est connecté. Voir « Enregistrer dans Foyer » plus bas.
 - **Hôtes par défaut vidés** : `project-fetcher-hoc.jsx` (projets, ressources), `legacy-library-asset-url.ts` (vignettes), `scratch-link-websocket.js` (matériel), `runtime.js` (liste des domaines de Scratch).
 - **Tutoriels** : les 1 481 images et vidéos sont supprimées, le lecteur de vidéos en ligne (`cards.jsx`) est retiré, code compris, les boutons « Tutoriels » et « Débogage » de la barre sont retirés (`menu-bar.jsx`).
 - **Liens** vers le site de Scratch ou d'autres sites, dans des fenêtres de l'éditeur (navigateur non pris en charge, WebGL, télémétrie, variables en ligne, mise à jour d'une carte) : remplacés par une ancre vide.
@@ -38,11 +38,24 @@ D'autres bibliothèques embarquées contiennent encore `new Function` ou `eval` 
 - **Projet par défaut** : Boulon (trois costumes, et son nom) à la place du chat ; le miaulement est retiré ; le décor vide d'origine, qui portait en commentaire l'adresse du site, est remplacé par le nôtre.
 - **Bibliothèques** de personnages, costumes, décors et sons : remplacées par une liste minimale (Boulon, un décor blanc, « pop »). La bibliothèque complète arrive à l'étape suivante.
 - **Images remplacées** : le logo de la barre (une maison, qui ramène à Foyer), l'icône « choisir un personnage » et « choisir un costume » (une tête de chat, devenue une tête de robot), et dix images neutralisées (logos des modes anciens, oreilles de chat, avatars, « bientôt disponible », Scratch Link).
-- **Textes** (`outils/traductions.cjs`) : seuls le français et l'anglais (langue de repli de l'éditeur) sont gardés sur 82 langues. Cinq messages français qui nommaient la marque sont réécrits ; sept autres, de fonctions retirées, sont supprimés.
+- **Textes** (`outils/traductions.cjs`) : seuls le français et l'anglais (langue de repli de l'éditeur) sont gardés sur 82 langues. Cinq messages français qui nommaient la marque sont réécrits ; sept autres, de fonctions retirées, sont supprimés. Quatorze messages apparus dans l'éditeur depuis la dernière publication de ses traductions reçoivent leur texte français (sinon ils s'affichaient en anglais).
+
+## Enregistrer dans Foyer
+
+Tout est dans `surcouche/…/foyer/` (`index.jsx`, `storage.js`, `local.js`), sans retoucher le mécanisme d'enregistrement de l'éditeur : on lui fournit son stockage et ses réglages.
+
+- **Un projet de Foyer, ou rien.** La page s'ouvre sur `editor.html?projet=<identifiant>` ; sans identifiant elle renvoie à Foyer. C'est l'écran Atelier qui crée les projets : l'entrée « Nouveau » du menu Fichier est retirée (`file-menu.jsx`), elle ouvrait un projet sans propriétaire, jamais enregistré.
+- **Enregistrement automatique toutes les 30 secondes** (réglage de l'éditeur, 120 à l'origine), et quand la page passe à l'arrière-plan : un iPad qui se met en veille peut ne jamais y revenir.
+- **Jamais d'écrasement silencieux.** Chaque envoi présente la version lue ; si un autre appareil a enregistré entre-temps, le serveur refuse et l'enfant choisit la version à garder.
+- **Sans réseau** (`local.js`, IndexedDB) : le projet et ses nouveaux fichiers restent sur l'appareil, l'éditeur dit qu'il n'a pas pu enregistrer, et l'envoi est retenté toutes les 15 secondes. Les fichiers déjà lus sont gardés aussi, pour rouvrir le projet sans réseau.
+- **Les fichiers gardent le nom que l'éditeur leur donne** (l'empreinte de ce qu'il envoie) : le serveur recalcule cette empreinte lui-même et garde le contenu nettoyé.
+- **Adresses absolues.** L'éditeur lit ses fichiers depuis un script d'arrière-plan, qui résoudrait une adresse relative depuis son propre dossier.
+- **Regarder** (`&vue=plein`) : la scène seule, en plein écran, sans rien enregistrer. C'est ce qu'ouvre un téléphone.
+- **Import et export d'un fichier** : le menu Fichier de l'éditeur, tel quel. Un fichier importé remplace le contenu du projet ouvert et s'enregistre comme lui.
 
 ## Réglages de la page (`surcouche/…/foyer/index.jsx`)
 
-Français imposé, sans menu de langue ; pas de compte, de partage, de remix, de communauté, de sac à dos ni de variables en ligne ; pas de menu Fichier ni d'enregistrement à cette étape.
+Français imposé, sans menu de langue ; pas de compte, de partage, de remix, de communauté, de sac à dos ni de variables en ligne.
 
 ## Servi sous un sous-chemin
 
