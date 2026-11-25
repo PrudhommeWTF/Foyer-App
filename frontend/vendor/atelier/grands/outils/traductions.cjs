@@ -21,6 +21,25 @@ const REWRITTEN = {
     'gui.webglModal.description': 'Ce navigateur ou cet appareil <a>{webGlLink}</a>. L’Atelier en a besoin pour fonctionner.'
 };
 
+// Messages the editor gained after its translations were last published: without
+// these they would show in English
+const ADDED = {
+    'gui.sharedMessages.loadFromComputerTitle': 'Importer depuis votre ordinateur',
+    'gui.menuBar.theme': 'Thème',
+    'gui.menuBar.colorMode': 'Couleurs',
+    'gui.sharedMessages.backdrop': 'arrière-plan{index}',
+    'gui.sharedMessages.costume': 'costume{index}',
+    'gui.sharedMessages.sprite': 'Sprite{index}',
+    'gui.sharedMessages.pop': 'pop',
+    'gui.aria.clearButton': 'Effacer',
+    'gui.aria.startProjectButton': 'Démarrer le projet',
+    'gui.aria.stopProjectButton': 'Arrêter le projet',
+    'gui.aria.fileMenu': 'Menu Fichier',
+    'gui.aria.editMenu': 'Menu Modifier',
+    'gui.aria.settingsMenu': 'Menu Paramètres',
+    'gui.aria.modeMenu': 'Menu des modes'
+};
+
 fs.mkdirSync(out, {recursive: true});
 for (const name of ['editor-msgs', 'paint-editor-msgs']) {
     const source = fs.readFileSync(path.join(root, 'node_modules', 'scratch-l10n', 'locales', `${name}.js`), 'utf8');
@@ -29,6 +48,7 @@ for (const name of ['editor-msgs', 'paint-editor-msgs']) {
     const kept = {};
     for (const locale of KEPT) kept[locale] = all[locale];
     for (const [key, text] of Object.entries(REWRITTEN)) if (key in kept.fr) kept.fr[key] = text;
+    if (name === 'editor-msgs') for (const [key, text] of Object.entries(ADDED)) if (!(key in kept.fr)) kept.fr[key] = text;
     // What still names the brand belongs to features the Atelier does not have
     // (account, telemetry, hardware): those messages fall back to nothing shown.
     const left = Object.entries(kept.fr).filter(([, text]) => /scratch/i.test(text));

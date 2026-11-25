@@ -32,7 +32,7 @@ describe('nettoyage d’un SVG', () => {
   it('ne laisse aucun lien sortir du document', () => {
     const r = propre(`<svg ${NS} xmlns:xlink="http://www.w3.org/1999/xlink"><image xlink:href="https://exemple.fr/a.png"/><image href="//exemple.fr/a.png"/><image xlink:href="javascript:alert(1)"/><use href="#forme"/></svg>`);
     assert.ok(!/exemple|javascript/.test(r));
-    assert.ok(!r.includes('<use'));
+    assert.ok(r.includes('<use href="#forme"/>'), 'un renvoi interne reste');
   });
 
   it('garde une photo embarquée et un renvoi interne', () => {
@@ -73,5 +73,11 @@ describe('nettoyage d’un SVG', () => {
     const r = propre(`<svg ${NS}><text x="1">a < b</text></svg>`.replace('a < b', 'a &lt; b &amp; c'));
     assert.ok(r.includes('a &lt; b &amp; c'));
     assert.ok(propre(`<svg ${NS}><path d="a&b"/></svg>`).includes('d="a&amp;b"'));
+  });
+
+  it('garde use et mask, que des dessins de la bibliothèque emploient, avec des liens internes seulement', () => {
+    const dessin = `<svg ${NS}><defs><path id="a" d="M0 0"/><mask id="m"><rect width="5" height="5"/></mask></defs><use href="#a" mask="url(#m)"/></svg>`;
+    assert.equal(propre(dessin), dessin);
+    assert.doesNotMatch(propre(`<svg ${NS}><use href="https://exemple.fr/x.svg#a"/></svg>`), /exemple/);
   });
 });

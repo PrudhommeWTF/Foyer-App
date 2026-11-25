@@ -6,7 +6,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 4 sur 9 : l'Atelier marche sans réseau, et se regarde sur un téléphone.**
+**Étape 6 sur 9 : le niveau « Grands codeurs » enregistre ses projets dans Foyer.**
 
 | Fait | Pas encore |
 |---|---|
@@ -18,7 +18,8 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Téléphone : les projets se regardent en plein écran ; écran debout : « Tourne l'iPad » | |
 | Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | Son enregistré, photo |
 | Corbeille : un projet supprimé reste récupérable, puis est purgé | Vue parent (lire les projets d'un enfant, restaurer depuis l'écran), partage |
-| Limites réglables : nombre de projets, espace disque | Niveau « Grands codeurs » |
+| Limites réglables : nombre de projets, espace disque | |
+| Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier | Sa bibliothèque de personnages, de décors et de sons ; le niveau choisi par enfant |
 
 Sur un écran étroit (téléphone), les projets s'ouvrent pour être regardés, en plein écran, téléphone couché : l'éditeur n'y est pas utilisable, et rien n'y est modifié.
 
@@ -177,7 +178,19 @@ Cinq projets (`frontend/vendor/atelier/petits/www/samples/`), du plus simple au 
 
 Pour les plus grands : des blocs écrits, des variables, des conditions, des costumes, des clones. Il est construit à partir de l'éditeur de Scratch (AGPL), dans `frontend/vendor/atelier/grands/` ; ses écarts avec l'original sont dans son `MODIFICATIONS.md`.
 
-**Où il en est : l'éditeur s'ouvre, rien n'est enregistré.** En français, avec Boulon, sans compte, sans partage, sans tutoriel, sans extension qui appelle l'extérieur (restent Musique et Stylo). Il n'est pas encore proposé dans l'écran Foyer ; on l'ouvre par son adresse, `https://<ton foyer>/atelier/grands/editor.html`. Recharger la page efface le projet.
+**Où il en est.** L'écran Atelier propose les deux niveaux à « Nouveau projet », et ouvre chaque projet dans son éditeur. En français, avec Boulon, sans compte, sans partage, sans tutoriel, sans extension qui appelle l'extérieur (restent Musique et Stylo). **Sa bibliothèque est encore presque vide** (Boulon, un décor blanc, un son) : l'enfant dessine, importe une image ou un son, ou part d'un fichier. La bibliothèque complète est l'étape suivante.
+
+**Enregistrement.** Tout seul toutes les 30 secondes, depuis le menu Fichier, et quand la page passe à l'arrière-plan. Le projet est gardé au format de l'éditeur (`atl_projects.level = 'grands'`), ses dessins, photos et sons dans `atl_media` comme ceux des petits. Un enregistrement en retard sur un autre appareil n'écrase rien : l'enfant choisit la version à garder.
+
+**Sans réseau.** L'éditeur dit qu'il n'a pas pu enregistrer ; le projet et ses nouveaux fichiers restent sur l'appareil (IndexedDB `foyer-atelier-grands`) et repartent dès que le réseau revient, même si l'onglet a été fermé entre-temps (à la réouverture du projet). Un projet déjà ouvert sur l'appareil se rouvre sans réseau.
+
+**Importer, exporter.** Le menu Fichier lit et écrit un fichier de projet (`.sb3`, le format de l'éditeur d'origine). Un fichier importé **remplace** le contenu du projet ouvert, après confirmation, et prend le nom du fichier. C'est aussi la sauvegarde personnelle la plus simple d'un projet.
+
+**Limites.** Un projet pèse au plus 5 Mo, une image 2 Mo et 1 024 points de côté, un son 10 Mo (WAV ou MP3) ; au-delà le serveur refuse et l'éditeur affiche sa phrase. La place totale d'un membre est le réglage « Espace disque maximal par membre ».
+
+**Ménage.** L'éditeur ne dit pas quand un costume ou un son n'est plus utilisé. Une fois par jour, le serveur efface les fichiers que plus aucun projet ne cite (corbeille comprise) et qui ont plus que le délai du réglage « Garder un projet supprimé pendant ».
+
+**Sur un téléphone**, le projet s'ouvre pour être regardé : la scène seule, avec son drapeau vert.
 
 **Il n'est pas construit sur le serveur.** Construire l'éditeur de Scratch demande 1,5 Go de dépendances et plusieurs gigaoctets de mémoire : le résultat (`grands/dist/`, 13 Mo) est commité, et `npm run build` ne fait que le recopier et le contrôler. Une mise à jour de Foyer sur le LXC ne coûte donc rien de plus.
 

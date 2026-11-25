@@ -13,7 +13,7 @@
 /** Les éléments d'un dessin. Tout autre élément disparaît, avec son contenu. */
 const ELEMENTS = new Set([
   'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'image',
-  'defs', 'clippath', 'lineargradient', 'radialgradient', 'stop', 'title', 'desc',
+  'defs', 'clippath', 'lineargradient', 'radialgradient', 'stop', 'title', 'desc', 'use', 'mask',
 ]);
 /** Un lien n'est accepté que vers l'intérieur du document, ou vers une photo embarquée. */
 const LINK_OK = /^(#[\w.:-]+|data:image\/(png|jpeg);base64,[A-Za-z0-9+/=\s]+)$/;

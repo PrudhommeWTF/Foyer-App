@@ -587,14 +587,14 @@ export const REGISTRY = [
     key: 'atelierQuotaMo',
     type: 'int', scope: 'foyer', section: 'atelier', module: 'Atelier',
     label: 'Espace disque maximal par membre',
-    desc: 'En mégaoctets, pour les dessins et les vignettes d’un même membre. Une fois atteint, l’Atelier refuse un nouveau dessin et dit à l’enfant de demander à un parent.',
+    desc: 'En mégaoctets, pour les dessins, les photos, les sons et les vignettes d’un même membre. Une fois atteint, l’Atelier refuse un nouveau fichier et dit à l’enfant de demander à un parent.',
     default: 500, min: 50, max: 5000,
   },
   {
     key: 'atelierCorbeilleJours',
     type: 'int', scope: 'foyer', section: 'atelier', module: 'Atelier',
     label: 'Garder un projet supprimé pendant',
-    desc: 'En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins.',
+    desc: 'En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins. Le même délai vaut pour un dessin ou un son que plus aucun projet n’utilise.',
     default: 30, min: 7, max: 365,
   },
   {

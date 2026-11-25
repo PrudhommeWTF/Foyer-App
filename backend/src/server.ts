@@ -31,7 +31,7 @@ import { gesteToShopping } from './entretien/courses';
 import { revisionsRouter } from './revisions/routes';
 import { atelierRouter } from './atelier/routes';
 import { loadFamilyLibrary } from './atelier/library';
-import { moduleCounts as atlCounts, purgeArchived as atlPurge, resetModule as atlReset } from './atelier/repo';
+import { moduleCounts as atlCounts, purgeArchived as atlPurge, purgeOrphanMedia as atlOrphans, resetModule as atlReset } from './atelier/repo';
 import { epopeeRouter } from './epopee/routes';
 import { loadGabarit } from './epopee/gabarit';
 import { activeProfile as epoActive, moduleCounts as epoCounts, resetModule as epoReset, weekData as epoWeekData } from './epopee/repo';
@@ -493,6 +493,9 @@ const purgerAtelier = (): void => {
   try {
     const r = atlPurge(Number(effectiveSetting('atelierCorbeilleJours')));
     if (r.projects) log.info(`Atelier : ${r.projects} projet(s) supprimé(s) depuis longtemps effacé(s) pour de bon, avec ${r.media} fichier(s).`);
+    // Même délai pour les fichiers que plus aucun projet ne cite (costume retiré, son réenregistré).
+    const orphans = atlOrphans(Number(effectiveSetting('atelierCorbeilleJours')));
+    if (orphans) log.info(`Atelier : ${orphans} fichier(s) que plus aucun projet n’utilise effacé(s).`);
   } catch (e) { log.erreur('Atelier : purge de la corbeille en échec', e); }
 };
 purgerAtelier();

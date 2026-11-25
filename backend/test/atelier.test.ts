@@ -4,6 +4,7 @@
 // corbeille que seul un adulte rouvre, et le module éteint puis rallumé sans
 // rien perdre.
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -222,5 +223,80 @@ describe('limites, corbeille, module', () => {
     assert.equal((db.prepare("SELECT COUNT(*) AS n FROM hh_attachments WHERE owner_kind = 'atelier'").get() as { n: number }).n, 0);
     db.close();
     assert.ok(fs.existsSync(path.join(ctx.dir, 'foyer.db')));
+  });
+});
+
+describe('niveau « Grands codeurs »', () => {
+  const grand = (extra: Record<string, unknown> = {}) => JSON.stringify({ targets: [{ isStage: true, name: 'Stage', costumes: [], sounds: [] }], monitors: [], extensions: [], meta: { semver: '3.0.0' }, ...extra });
+  const md5 = (b: Buffer) => crypto.createHash('md5').update(b).digest('hex');
+  const wav = () => { const b = Buffer.alloc(60); b.write('RIFF', 0, 'latin1'); b.writeUInt32LE(52, 4); b.write('WAVEfmt ', 8, 'latin1'); return b; };
+  let id = '', rev = 0;
+  before(async () => {
+    const r = await appel(ctx.base, 'POST', '/atelier/projets', { name: 'Jeu de Lena', level: 'grands' }, ctx.jetons.enfant);
+    assert.equal(r.status, 201); assert.equal(r.json.projet.level, 'grands');
+    id = r.json.projet.id; rev = r.json.projet.rev;
+  });
+
+  it('chaque niveau n’accepte que la forme de son éditeur', async () => {
+    assert.equal((await appel(ctx.base, 'PUT', `/atelier/projets/${id}`, { rev, name: 'Jeu de Lena', json: projet() }, ctx.jetons.enfant)).status, 400);
+    assert.equal((await appel(ctx.base, 'PUT', `/atelier/projets/${id}`, { rev, name: 'Jeu de Lena', json: JSON.stringify({ targets: [], meta: {} }) }, ctx.jetons.enfant)).status, 400);
+    const petit = await creer(ctx.jetons.enfant, 'Petit');
+    assert.equal((await appel(ctx.base, 'PUT', `/atelier/projets/${petit.id}`, { rev: petit.rev, name: 'Petit', json: grand() }, ctx.jetons.enfant)).status, 400);
+    const ok = await appel(ctx.base, 'PUT', `/atelier/projets/${id}`, { rev, name: 'Jeu de Lena', json: grand() }, ctx.jetons.enfant);
+    assert.equal(ok.status, 200); rev = ok.json.projet.rev;
+    await appel(ctx.base, 'DELETE', `/atelier/projets/${petit.id}`, undefined, ctx.jetons.enfant);
+  });
+
+  it('avec ?nom=recu, le nom est l’empreinte de l’envoi et le contenu gardé reste nettoyé', async () => {
+    const sale = Buffer.from(`<svg ${NS}><script>alert(1)</script><path d="M5 5 L9 9" onclick="x()"/></svg>`);
+    const r = await brut(ctx.base, '/atelier/medias?nom=recu', sale, ctx.jetons.enfant);
+    assert.equal(r.status, 201); assert.equal(r.json.name, md5(sale) + '.svg');
+    const lu = await lire(`/atelier/medias/${r.json.name}`, ctx.jetons.enfant);
+    assert.equal(lu.status, 200); assert.doesNotMatch(lu.corps.toString(), /script|onclick/); assert.match(lu.corps.toString(), /M5 5 L9 9/);
+  });
+
+  it('accepte un son WAV ou MP3, pas un fichier quelconque', async () => {
+    const son = await brut(ctx.base, '/atelier/medias?nom=recu', wav(), ctx.jetons.enfant);
+    assert.equal(son.status, 201); assert.equal(son.json.name, md5(wav()) + '.wav');
+    assert.equal((await lire(`/atelier/medias/${son.json.name}`, ctx.jetons.enfant)).type, 'audio/wav');
+    const mp3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(40)]);
+    assert.match((await brut(ctx.base, '/atelier/medias', mp3, ctx.jetons.enfant)).json.name, /\.mp3$/);
+    assert.equal((await brut(ctx.base, '/atelier/medias', Buffer.from('MZ\x90\x00 un programme'), ctx.jetons.enfant)).status, 415);
+  });
+
+  it('une image de plus de 2 Mo est refusée, un son de cette taille passe', async () => {
+    const gros = Buffer.concat([wav(), Buffer.alloc(3 * 1024 * 1024)]);
+    assert.equal((await brut(ctx.base, '/atelier/medias', gros, ctx.jetons.enfant)).status, 201);
+    const image = Buffer.concat([png(192, 144), Buffer.alloc(3 * 1024 * 1024)]);
+    assert.equal((await brut(ctx.base, '/atelier/medias', image, ctx.jetons.enfant)).status, 413);
+  });
+
+  it('la vignette se pose seule, sans toucher à la version', async () => {
+    const v = await brut(ctx.base, '/atelier/medias', png(96, 72), ctx.jetons.enfant);
+    const r = await appel(ctx.base, 'PATCH', `/atelier/projets/${id}`, { thumbnail: JSON.stringify({ pagecount: 1, md5: v.json.name }) }, ctx.jetons.enfant);
+    assert.equal(r.status, 200); assert.equal(r.json.projet.thumbnail.md5, v.json.name); assert.equal(r.json.projet.rev, rev); assert.equal(r.json.projet.name, 'Jeu de Lena');
+    assert.equal((await appel(ctx.base, 'PATCH', `/atelier/projets/${id}`, { thumbnail: JSON.stringify({ md5: '0'.repeat(32) + '.png' }) }, ctx.jetons.enfant)).status, 400);
+    assert.equal((await appel(ctx.base, 'PATCH', `/atelier/projets/${id}`, {}, ctx.jetons.enfant)).status, 400);
+    assert.equal((await appel(ctx.base, 'PATCH', `/atelier/projets/${id}`, { thumbnail: 'x' }, ctx.jetons.membre)).status, 403);
+  });
+
+  it('le ménage retire un fichier ancien que plus rien ne cite, et garde les autres', async () => {
+    const { purgeOrphanMedia } = await import('../src/atelier/repo');
+    const cite = (await brut(ctx.base, '/atelier/medias?nom=recu', dessin('M1 2'), ctx.jetons.enfant)).json.name as string;
+    const libre = (await brut(ctx.base, '/atelier/medias?nom=recu', dessin('M3 4'), ctx.jetons.enfant)).json.name as string;
+    const enr = await appel(ctx.base, 'PUT', `/atelier/projets/${id}`, { rev, name: 'Jeu de Lena',
+      json: grand({ targets: [{ isStage: true, name: 'Stage', costumes: [{ md5ext: cite }], sounds: [] }] }) }, ctx.jetons.enfant);
+    assert.equal(enr.status, 200); rev = enr.json.projet.rev;
+    const vignette = enr.json.projet.thumbnail.md5 as string;
+    assert.equal(purgeOrphanMedia(30), 0, 'envoyé à l’instant : rien ne part, même sans projet qui le cite');
+    // Délai négatif : tout fichier est « plus ancien », seule la citation protège.
+    assert.ok(purgeOrphanMedia(-1) >= 1);
+    assert.equal((await lire(`/atelier/medias/${libre}`, ctx.jetons.enfant)).status, 404);
+    assert.equal((await lire(`/atelier/medias/${cite}`, ctx.jetons.enfant)).status, 200, 'cité par un projet');
+    assert.equal((await lire(`/atelier/medias/${vignette}`, ctx.jetons.enfant)).status, 200, 'cité comme vignette');
+    // Dans la corbeille, un projet protège encore ses fichiers : un adulte peut le restaurer.
+    await appel(ctx.base, 'DELETE', `/atelier/projets/${id}`, undefined, ctx.jetons.enfant);
+    purgeOrphanMedia(-1);
+    assert.equal((await lire(`/atelier/medias/${cite}`, ctx.jetons.enfant)).status, 200);
   });
 });
