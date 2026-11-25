@@ -619,6 +619,13 @@ export const REGISTRY = [
     default: 60, min: 5, max: 120,
   },
   {
+    key: 'atelierPartageFratrie',
+    type: 'bool', scope: 'foyer', section: 'atelier', module: 'Atelier',
+    label: 'Partage entre frères et sœurs',
+    desc: 'Un enfant peut marquer un projet « partagé » : les autres membres du foyer le voient dans « Projets de la famille », le regardent et peuvent en faire une copie à eux. L’original n’est jamais modifié par un autre. Désactivé, plus rien de partagé ne se voit ; rien n’est supprimé.',
+    default: true,
+  },
+  {
     key: 'epopeeBilanHeure',
     type: 'time', scope: 'foyer', section: 'epopee', module: 'Épopée',
     label: 'Heure du bilan du dimanche',

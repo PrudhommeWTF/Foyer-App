@@ -18,7 +18,7 @@ export type AssetKind = typeof ASSET_KINDS[number];
 
 export interface ProjectRow {
   id: string; member_id: string; level: Level; name: string; json: string | null; thumbnail_json: string | null; editor_version: string | null;
-  version: number; is_sample: number; copied_from: string | null; created_at: string; updated_at: string; archived_at: string | null;
+  version: number; is_sample: number; copied_from: string | null; created_at: string; updated_at: string; archived_at: string | null; shared_at: string | null;
 }
 export interface MediaRow { id: number; member_id: string; name: string; mime: string; size: number; file_id: number; created_at: string; }
 export interface AssetRow {
@@ -28,10 +28,13 @@ export interface AssetRow {
 
 const now = (): string => new Date().toISOString();
 
+/** Le nom d'un média, tel qu'un projet le cite : il suffit à le retrouver dans un JSON sans le comprendre. */
+const CITED = /[0-9a-f]{32}\.(?:svg|png|jpg|wav|mp3)/g;
+
 // ---- Projets ----------------------------------------------------------------
 
 /** Sans le JSON : une liste de cent projets n'a pas à peser dix mégaoctets. */
-const LIST_COLUMNS = 'id, member_id, level, name, thumbnail_json, editor_version, version, is_sample, copied_from, created_at, updated_at, archived_at';
+const LIST_COLUMNS = 'id, member_id, level, name, thumbnail_json, editor_version, version, is_sample, copied_from, created_at, updated_at, archived_at, shared_at';
 
 export function projectsOf(memberId: string, archived = false): ProjectRow[] {
   return database.prepare(`SELECT ${LIST_COLUMNS}, NULL AS json FROM atl_projects WHERE member_id = ? AND archived_at IS ${archived ? 'NOT NULL' : 'NULL'} ORDER BY updated_at DESC`)
@@ -67,6 +70,29 @@ export function renameProject(id: string, name: string): void {
 export function setThumbnail(id: string, thumbnailJson: string | null): void {
   database.prepare('UPDATE atl_projects SET thumbnail_json = ? WHERE id = ?').run(thumbnailJson, id);
 }
+/** Partage, ou cesse de partager, un projet avec les autres membres du foyer. */
+export function shareProject(id: string, shared: boolean): void {
+  database.prepare('UPDATE atl_projects SET shared_at = ? WHERE id = ?').run(shared ? now() : null, id);
+}
+/** Les projets que les autres membres partagent, sans leur JSON, du plus récent au plus ancien. */
+export function sharedByOthers(memberId: string): ProjectRow[] {
+  return database.prepare(`SELECT ${LIST_COLUMNS}, NULL AS json FROM atl_projects WHERE member_id <> ? AND shared_at IS NOT NULL AND archived_at IS NULL ORDER BY updated_at DESC`)
+    .all(memberId) as ProjectRow[];
+}
+/** Un projet partagé (non supprimé) de ce membre cite-t-il ce média ? C'est ce qui ouvre le média à un frère ou une sœur. */
+export function sharedCites(memberId: string, name: string): boolean {
+  const like = `%${name}%`;
+  return !!database.prepare('SELECT 1 FROM atl_projects WHERE member_id = ? AND shared_at IS NOT NULL AND archived_at IS NULL AND (json LIKE ? OR thumbnail_json LIKE ?) LIMIT 1').get(memberId, like, like);
+}
+/** Ce que chaque membre a fait dans l'Atelier : projets gardés, dans la corbeille, modifiés depuis `since`. */
+export function activityOf(memberId: string, since: string): { projets: number; corbeille: number; recents: number } {
+  const n = (sql: string, ...args: unknown[]): number => (database.prepare(sql).get(memberId, ...args) as { n: number }).n;
+  return {
+    projets: n('SELECT COUNT(*) AS n FROM atl_projects WHERE member_id = ? AND archived_at IS NULL'),
+    corbeille: n('SELECT COUNT(*) AS n FROM atl_projects WHERE member_id = ? AND archived_at IS NOT NULL'),
+    recents: n('SELECT COUNT(*) AS n FROM atl_projects WHERE member_id = ? AND archived_at IS NULL AND json IS NOT NULL AND updated_at >= ?', since),
+  };
+}
 export function archiveProject(id: string): void {
   database.prepare('UPDATE atl_projects SET archived_at = ? WHERE id = ? AND archived_at IS NULL').run(now(), id);
 }
@@ -97,6 +123,21 @@ export function putMedia(memberId: string, buf: Buffer, type: DetectedType, rece
   const { file } = files.storeOnce('atelier', 'atl', name, buf, type);
   database.prepare('INSERT INTO atl_media (member_id, name, mime, size, file_id, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(memberId, name, type.mime, buf.length, file.id, now());
   return { media: getMedia(memberId, name)!, existed: false };
+}
+/**
+ * Donne à `to` les médias de `from` qu'un projet cite, pour que la copie d'un
+ * projet partagé tienne debout chez celui qui la fait : mêmes noms, mêmes
+ * fichiers sur le disque (aucun octet recopié), comptés dans sa place à lui.
+ * Rend le nombre d'octets ajoutés à sa place.
+ */
+export function mediaToCopy(from: string, to: string, p: Pick<ProjectRow, 'json' | 'thumbnail_json'>): MediaRow[] {
+  const names = new Set<string>();
+  for (const m of `${p.json ?? ''} ${p.thumbnail_json ?? ''}`.matchAll(CITED)) names.add(m[0]);
+  return [...names].filter((n) => !getMedia(to, n)).map((n) => getMedia(from, n)).filter((m): m is MediaRow => !!m);
+}
+export function copyMedia(to: string, list: MediaRow[]): void {
+  const insert = database.prepare('INSERT OR IGNORE INTO atl_media (member_id, name, mime, size, file_id, created_at) VALUES (?, ?, ?, ?, ?, ?)');
+  database.transaction(() => { for (const m of list) insert.run(to, m.name, m.mime, m.size, m.file_id, now()); })();
 }
 /** Un projet, une vignette ou un élément de « mes personnages » du membre cite-t-il encore ce média ? */
 export function mediaReferenced(memberId: string, name: string): boolean {
@@ -156,8 +197,6 @@ export function purgeArchived(days: number): { projects: number; media: number }
   return { projects: old.length, media };
 }
 
-/** Le nom d'un média, tel qu'un projet le cite : il suffit à le retrouver dans un JSON sans le comprendre. */
-const CITED = /[0-9a-f]{32}\.(?:svg|png|jpg|wav|mp3)/g;
 
 /**
  * Retire les médias de plus de `days` jours que plus rien ne cite : ni projet
