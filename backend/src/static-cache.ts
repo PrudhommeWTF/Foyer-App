@@ -41,3 +41,21 @@ export function cacheControlFor(fileName: string): string {
   if (EMPREINTE.test(base)) return `public, max-age=${AN}, immutable`;
   return 'public, max-age=0, must-revalidate';
 }
+
+/**
+ * Les scripts que l'éditeur des « Grands codeurs » (Atelier code) charge dans un
+ * cadre isolé : pour lire un dessin SVG sans risque, il le confie à un `iframe`
+ * bac à sable, sans origine. Ce cadre n'est donc pas « de la même origine » que
+ * Foyer, et l'en-tête `Cross-Origin-Resource-Policy: same-origin` posé partout
+ * lui refusait ses trois scripts : la zone de dessin restait vide.
+ *
+ * Ces fichiers-là, et eux seuls, sont servis en `cross-origin`. Ce sont des
+ * bibliothèques publiques, identiques pour tout le monde, sans rien du foyer :
+ * les laisser lire ne révèle rien. La CSP, elle, ne change pas.
+ */
+const CADRE_ISOLE = /[\\/]atelier[\\/]grands[\\/]static[\\/]assets[\\/][^\\/]+\.js$/;
+
+/** Vrai si ce fichier doit pouvoir être chargé par un cadre sans origine. */
+export function servedToSandbox(fileName: string): boolean {
+  return CADRE_ISOLE.test(fileName);
+}

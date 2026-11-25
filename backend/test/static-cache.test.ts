@@ -8,7 +8,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
-import { cacheControlFor } from '../src/static-cache';
+import { cacheControlFor, servedToSandbox } from '../src/static-cache';
 
 describe('ce que le navigateur a le droit de garder', () => {
   it('garde un an les fichiers dont le nom porte une empreinte', () => {
@@ -99,5 +99,15 @@ describe('les polices servies par le foyer', () => {
 
   it('une police sans empreinte reste revalidée : son contenu peut changer', () => {
     assert.equal(cacheControlFor('nunito.woff2'), 'public, max-age=0, must-revalidate');
+  });
+});
+
+describe('scripts du cadre isolé de l’Atelier', () => {
+  it('seuls les scripts de atelier/grands/static/assets sortent de la règle same-origin', () => {
+    assert.equal(servedToSandbox('/app/public/atelier/grands/static/assets/runner.e0ba7d73faa96c15441d.js'), true);
+    for (const f of ['/app/public/atelier/grands/atelier.js', '/app/public/atelier/grands/static/assets/pen.a7fa.png',
+      '/app/public/atelier/petits/static/assets/x.js', '/app/public/main-NDQ3IISW.js', '/app/public/atelier/grands/static/assets/sous/x.js']) {
+      assert.equal(servedToSandbox(f), false, f);
+    }
   });
 });

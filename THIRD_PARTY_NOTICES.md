@@ -32,6 +32,14 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 Ce code n'embarque plus aucune bibliothèque tierce : Snap.svg (Apache 2.0), `intl` et `intl-messageformat`, dont l'original dépendait, ont été remplacés par des fonctions du navigateur.
 
+## Éditeur de Scratch (Atelier code, niveau « Grands codeurs »)
+
+Le niveau « Grands codeurs » est **construit à partir du code source de l'éditeur de Scratch**, publié par la Scratch Foundation sous licence GNU Affero General Public License, version 3 seulement (la licence de Foyer, voir `LICENSE`). Il est **sans lien avec la Scratch Foundation ni approbation de sa part**, ne s'appelle pas Scratch et n'en reprend ni le nom, ni le logo, ni les personnages.
+
+- Source : <https://github.com/scratchfoundation/scratch-editor>, au commit et à la version indiqués dans `frontend/vendor/atelier/grands/amont.json`.
+- Nos modifications, et le moyen de reconstruire : `frontend/vendor/atelier/grands/` (`MODIFICATIONS.md`, `construire.sh`). Le code source correspondant au résultat servi est le dépôt d'origine à ce commit, plus ce dossier.
+- Dans l'application servie : `atelier/grands/LICENSE.txt`, et `atelier/grands/atelier.js.LICENSE.txt` pour les notices des bibliothèques que l'éditeur embarque (React, Blockly, Paper.js, JSZip et d'autres, sous licences MIT, Apache 2.0 ou BSD).
+
 ## Bibliothèque de Scratch (personnages et décors de l'Atelier code)
 
 `frontend/vendor/atelier/bibliotheque/fichiers/` contient 212 personnages et 17 décors issus de la bibliothèque de Scratch (les « support materials » de <https://scratch.mit.edu>), sous licence **Creative Commons Attribution-ShareAlike 2.0** (<https://creativecommons.org/licenses/by-sa/2.0/>). Ces fichiers ne sont pas sous la licence de Foyer.

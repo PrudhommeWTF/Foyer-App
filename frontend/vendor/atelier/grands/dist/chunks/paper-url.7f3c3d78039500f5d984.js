@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkAtelier||=[]).push([[279],{5486(e,s,c){e.exports=c.p+"static/assets/paper-core.min.8852eb425c10cd1c3828.js?resource"}}]);
