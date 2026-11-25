@@ -102,6 +102,9 @@ export function atelierRouter(members: () => Member[]): Router {
   /** Le partage dans la fratrie, tant que le réglage le permet : éteint, plus rien de partagé ne se lit. */
   const sharing = (): boolean => effectiveSetting('atelierPartageFratrie') !== false;
   const shared = (p: repo.ProjectRow): boolean => sharing() && !!p.shared_at && !p.archived_at;
+  /** Les niveaux où ce membre crée : ceux qu'un parent lui a ouverts pour un enfant, tous pour un adulte. */
+  const levels = (m: Member): repo.Level[] => (m.enfant ? repo.levelsOf(m.id) : [...repo.LEVELS]);
+  const closed = (res: Response): void => { res.status(403).json({ error: 'Ce niveau n’est pas ouvert pour toi. Demande à un parent.', code: 'niveau_ferme' }); };
 
   /**
    * Le membre dont on lit les données : soi par défaut, un autre (`?membre=`) pour
@@ -140,6 +143,7 @@ export function atelierRouter(members: () => Member[]): Router {
     const l = limits(), m = me(req);
     res.json({
       membre: { id: m.id, name: m.name, enfant: !!m.enfant }, limites: l, utilise: { projets: repo.countProjects(m.id), octets: repo.usedBytes(m.id) },
+      niveaux: levels(m),
       // Ce que les éditeurs ont le droit de proposer : sans le réglage, le bouton n'existe pas.
       micro: effectiveSetting('atelierMicro') !== false, camera: effectiveSetting('atelierCamera') !== false,
       sonMaxSecondes: Number(effectiveSetting('atelierSonMaxSecondes')),
@@ -168,10 +172,24 @@ export function atelierRouter(members: () => Member[]): Router {
     if (me(req).enfant) { res.status(403).json({ error: 'Réservé aux adultes.' }); return; }
     const since = new Date(Date.now() - 7 * 86400000).toISOString();
     res.json({
-      membres: members().filter((m) => m.id !== me(req).id).map((m) => ({ id: m.id, name: m.name, enfant: !!m.enfant, octets: repo.usedBytes(m.id), ...repo.activityOf(m.id, since) }))
+      membres: members().filter((m) => m.id !== me(req).id).map((m) => ({ id: m.id, name: m.name, enfant: !!m.enfant, octets: repo.usedBytes(m.id), niveaux: levels(m), ...repo.activityOf(m.id, since) }))
         .filter((m) => m.enfant || m.projets || m.corbeille),
       quotaMo: limits().quotaMo,
     });
+  }));
+
+  // Un parent ouvre à un enfant un niveau, l'autre, ou les deux. Cela règle ce
+  // qu'il peut créer ; ses projets déjà faits dans l'autre niveau restent à lui.
+  r.put('/membres/:id/niveaux', json, handler((req, res) => {
+    if (me(req).enfant) { res.status(403).json({ error: 'Réservé aux adultes.' }); return; }
+    const target = members().find((m) => m.id === String(req.params['id']));
+    if (!target) { res.status(404).json({ error: 'Membre inconnu.' }); return; }
+    if (!target.enfant) throw new Invalid('Le niveau ne se règle que pour un enfant : un adulte a les deux.');
+    const asked = req.body?.niveaux;
+    if (!Array.isArray(asked) || !asked.length || asked.some((l) => !repo.LEVELS.includes(l))) throw new Invalid('niveaux : petits, grands, ou les deux.');
+    repo.setLevels(target.id, asked as repo.Level[], me(req).id);
+    log.info(`Atelier : niveaux de ${target.name} réglés sur ${repo.levelsOf(target.id).join(' et ')} par ${me(req).name}.`);
+    res.json({ niveaux: repo.levelsOf(target.id) });
   }));
 
   r.post('/projets', json, handler((req, res) => {
@@ -182,6 +200,7 @@ export function atelierRouter(members: () => Member[]): Router {
     }
     const level = req.body?.level ?? 'petits';
     if (!repo.LEVELS.includes(level)) throw new Invalid('level : niveau inconnu.');
+    if (!levels(m).includes(level)) { closed(res); return; }
     const p = repo.createProject(m.id, level, text(req.body?.name, 'name', 80));
     log.info(`Atelier : projet « ${p.name} » créé par ${m.name}.`);
     res.status(201).json({ projet: projectView(p, true) });
@@ -230,6 +249,8 @@ export function atelierRouter(members: () => Member[]): Router {
     const m = me(req), l = limits();
     if (p.member_id !== m.id && !shared(p)) { res.status(403).json({ error: 'On ne copie que ses projets, ou ceux qui sont partagés.' }); return; }
     if (p.archived_at) { res.status(410).json({ error: 'Ce projet a été supprimé.' }); return; }
+    // Dupliquer un de ses propres projets reste permis ; copier celui d'un autre crée dans un niveau, qui doit être ouvert.
+    if (p.member_id !== m.id && !levels(m).includes(p.level)) { closed(res); return; }
     if (repo.countProjects(m.id) >= l.projets) {
       res.status(409).json({ error: `Tu as déjà ${l.projets} projets : c’est le maximum. Supprime un vieux projet pour en créer un nouveau.`, code: 'projets_max' });
       return;

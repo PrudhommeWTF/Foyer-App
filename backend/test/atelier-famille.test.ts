@@ -184,3 +184,47 @@ describe('outil d’assistant atelier_projets', () => {
     await regler({ modAtelier: true });
   });
 });
+
+describe('le niveau proposé à chaque enfant', () => {
+  const niveaux = async (jeton: string) => (await appel(ctx.base, 'GET', '/atelier/contexte', undefined, jeton)).json.niveaux as string[];
+  const ouvrir = (id: string, liste: unknown, jeton = ctx.jetons.membre) => appel(ctx.base, 'PUT', `/atelier/membres/${id}/niveaux`, { niveaux: liste }, jeton);
+  after(async () => { await ouvrir(noe, ['petits', 'grands']); });
+
+  it('sans réglage, tout est ouvert ; seul un adulte règle, et pour un enfant', async () => {
+    assert.deepEqual(await niveaux(tNoe), ['petits', 'grands']);
+    assert.equal((await ouvrir(noe, ['petits'], tNoe)).status, 403, 'un enfant ne règle pas son niveau');
+    assert.equal((await ouvrir(lena, ['grands'], tNoe)).status, 403);
+    assert.equal((await ouvrir(noe, [])).status, 400, 'au moins un niveau');
+    assert.equal((await ouvrir(noe, ['moyens'])).status, 400);
+    assert.equal((await ouvrir('inconnu', ['petits'])).status, 404);
+    const camille = (await appel(ctx.base, 'GET', '/atelier/contexte', undefined, ctx.jetons.membre)).json.membre.id as string;
+    assert.equal((await ouvrir(camille, ['petits'], ctx.jetons.admin)).status, 400, 'un adulte garde les deux');
+  });
+
+  it('un niveau fermé ne se crée plus, ni par copie ; ce qui existe reste ouvert', async () => {
+    const ancien = (await appel(ctx.base, 'POST', '/atelier/projets', { name: 'Jeu de Noé', level: 'grands' }, tNoe)).json.projet;
+    const r = await ouvrir(noe, ['petits']);
+    assert.equal(r.status, 200); assert.deepEqual(r.json.niveaux, ['petits']);
+    assert.deepEqual(await niveaux(tNoe), ['petits']);
+    const refus = await appel(ctx.base, 'POST', '/atelier/projets', { name: 'Autre jeu', level: 'grands' }, tNoe);
+    assert.equal(refus.status, 403); assert.equal(refus.json.code, 'niveau_ferme'); assert.match(refus.json.error, /parent/);
+    assert.equal(await statut('POST', '/atelier/projets', tNoe, { name: 'Histoire', level: 'petits' }), 201);
+    // Son projet des grands reste à lui : il l'ouvre, l'enregistre, le duplique.
+    assert.equal(await statut('GET', `/atelier/projets/${ancien.id}`, tNoe), 200);
+    assert.equal(await statut('PUT', `/atelier/projets/${ancien.id}`, tNoe, { rev: ancien.rev, name: ancien.name, json: JSON.stringify({ targets: [{ isStage: true }], meta: {} }) }), 200);
+    assert.equal(await statut('POST', `/atelier/projets/${ancien.id}/copie`, tNoe, { name: 'Jeu de Noé (copie)' }), 201);
+    // Le projet partagé de Lena est des petits : il le copie ; un projet des grands partagé, non.
+    const grand = (await appel(ctx.base, 'POST', '/atelier/projets', { name: 'Jeu de Lena', level: 'grands' }, ctx.jetons.enfant)).json.projet.id;
+    assert.equal(await statut('PATCH', `/atelier/projets/${grand}`, ctx.jetons.enfant, { shared: true }), 200);
+    assert.equal(await statut('GET', `/atelier/projets/${grand}`, tNoe), 200, 'il peut le regarder');
+    assert.equal(await statut('POST', `/atelier/projets/${grand}/copie`, tNoe, { name: 'Copie' }), 403);
+  });
+
+  it('un adulte lit le niveau de chacun, et garde les deux pour lui', async () => {
+    const r = (await appel(ctx.base, 'GET', '/atelier/membres', undefined, ctx.jetons.membre)).json.membres as { id: string; niveaux: string[] }[];
+    assert.deepEqual(r.find((m) => m.id === noe)!.niveaux, ['petits']);
+    assert.deepEqual(r.find((m) => m.id === lena)!.niveaux, ['petits', 'grands']);
+    assert.deepEqual(await niveaux(ctx.jetons.membre), ['petits', 'grands']);
+    assert.equal(await statut('POST', '/atelier/projets', ctx.jetons.membre, { name: 'Essai', level: 'grands' }), 201);
+  });
+});

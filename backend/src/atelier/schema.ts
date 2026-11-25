@@ -91,6 +91,21 @@ const MIGRATIONS: Migration[] = [
       db.exec('ALTER TABLE atl_projects ADD COLUMN shared_at TEXT');
     },
   },
+  {
+    version: 3,
+    label: 'niveau proposé à chaque membre',
+    up: (db) => {
+      // Les niveaux qu'un parent ouvre à un enfant ('petits', 'grands', ou les
+      // deux séparés par une virgule). Pas de ligne : les deux. Cela règle ce qui
+      // se crée, pas ce qui se lit : les projets déjà faits restent ouverts.
+      db.exec(`CREATE TABLE atl_access (
+        member_id TEXT PRIMARY KEY,
+        levels TEXT NOT NULL,
+        set_by TEXT,
+        set_at TEXT NOT NULL
+      )`);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

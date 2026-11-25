@@ -100,6 +100,19 @@ export function restoreProject(id: string): void {
   database.prepare('UPDATE atl_projects SET archived_at = NULL WHERE id = ?').run(id);
 }
 
+// ---- Niveaux ouverts à un membre ---------------------------------------------
+
+/** Les niveaux dans lesquels ce membre peut créer un projet : tous, tant qu'un parent n'a rien réglé. */
+export function levelsOf(memberId: string): Level[] {
+  const row = database.prepare('SELECT levels FROM atl_access WHERE member_id = ?').get(memberId) as { levels: string } | undefined;
+  const kept = (row?.levels ?? '').split(',').filter((l): l is Level => (LEVELS as readonly string[]).includes(l));
+  return kept.length ? kept : [...LEVELS];
+}
+export function setLevels(memberId: string, levels: Level[], by: string): void {
+  database.prepare(`INSERT INTO atl_access (member_id, levels, set_by, set_at) VALUES (?, ?, ?, ?)
+    ON CONFLICT(member_id) DO UPDATE SET levels = excluded.levels, set_by = excluded.set_by, set_at = excluded.set_at`).run(memberId, LEVELS.filter((l) => levels.includes(l)).join(','), by, now());
+}
+
 // ---- Médias -----------------------------------------------------------------
 
 export function getMedia(memberId: string, name: string): MediaRow | null {
@@ -242,6 +255,6 @@ export function moduleCounts(): { projets: number; medias: number } {
 /** Remise à zéro du module : tout part, fichiers compris. */
 export function resetModule(): void {
   const ids = referencedFileIds();
-  database.transaction(() => { for (const t of ['atl_projects', 'atl_media', 'atl_assets']) database.exec(`DELETE FROM ${t}`); })();
+  database.transaction(() => { for (const t of ['atl_projects', 'atl_media', 'atl_assets', 'atl_access']) database.exec(`DELETE FROM ${t}`); })();
   for (const id of ids) files.remove(id);
 }
