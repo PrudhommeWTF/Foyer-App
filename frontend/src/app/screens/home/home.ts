@@ -18,6 +18,8 @@ import { lastDoneDay } from '../../core/task-ops';
 import { EquipementsStore } from '../../core/equipements.store';
 import { homeLine } from '../../core/equipements';
 import { RevisionsStore } from '../../core/revisions/store';
+import { AtelierStore } from '../../core/atelier/store';
+import { resumeLine, weekLine } from '../../core/atelier/atelier';
 import { dayLine, kidsLine } from '../../core/revisions/revisions';
 
 /** Une entrée « à venir » du bandeau : un évènement de l'agenda, ou une tâche datée. */
@@ -306,10 +308,15 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
           <div class="kid-mods">
             @for (m of modules(); track m.id) {
               <button class="kid-mod" (click)="store.go(m.id)">
-                <span class="km-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="34" [color]="m.color" [width]="2.1" /></span>
+                <!-- L'Atelier montre le projet à reprendre : sa vignette vaut mieux qu'une icône pour qui ne lit pas encore. -->
+                @if (m.id === 'atelier' && atelierThumb(); as t) {
+                  <span class="km-ic km-th"><img [src]="t" alt="" /></span>
+                } @else {
+                  <span class="km-ic" [style.background]="store.tint(m.color)"><f-icon [name]="m.icon" [size]="34" [color]="m.color" [width]="2.1" /></span>
+                }
                 <span class="km-l">{{ kidLabel(m) }}</span>
                 <!-- L'objectif de l'entraînement du jour, sans jamais reprocher un zéro. -->
-                @if (m.id === 'revisions' && m.sub) { <span class="km-s">{{ m.sub }}</span> }
+                @if ((m.id === 'revisions' || m.id === 'atelier') && m.sub) { <span class="km-s">{{ m.sub }}</span> }
               </button>
             }
           </div>
@@ -420,6 +427,8 @@ const SLIDES: { key: 'activity' | 'agenda' | 'tasks' | 'meals' | 'entretien'; la
     .kid-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
     .kid-mod { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; min-height: 132px; padding: 18px 12px; border: none; border-radius: 22px; background: var(--surface); box-shadow: var(--sh-float); cursor: pointer; font-family: inherit; }
     .km-ic { width: 64px; height: 64px; border-radius: 20px; display: flex; align-items: center; justify-content: center; }
+    .km-th { background: #F5F2F7; overflow: hidden; }
+    .km-th img { width: 100%; height: 100%; object-fit: contain; }
     .km-l { font-size: 17px; font-weight: 800; color: var(--ink); text-align: center; line-height: 1.2; }
     .kid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
     .kid-row { min-height: 44px; font-size: 15px; }
@@ -608,6 +617,9 @@ export class HomeScreen extends HomeBase {
   private fins = inject(FinancesStore);
   ecole = inject(EcoleStore);
   readonly revisions = inject(RevisionsStore);
+  readonly atelier = inject(AtelierStore);
+  /** The thumbnail of the project a child would pick up, served by the Atelier API. */
+  readonly atelierThumb = computed(() => { const t = this.atelier.last()?.thumbnail; return t ? new URL(`api/atelier/medias/${encodeURIComponent(t.md5)}`, document.baseURI).href : ''; });
   private eqp = inject(EquipementsStore);
   readonly subject = subjectLabel;
 
@@ -934,6 +946,9 @@ export class HomeScreen extends HomeBase {
         const today = this.revisions.kidsToday();
         return kidsLine(this.store.children().map((k) => ({ name: k.name, sessions: today[k.id] }))) || 'Des exercices pour réviser';
       }
+      case 'atelier':
+        // Un enfant : le projet à reprendre ; un adulte : qui a travaillé cette semaine. Rien à dire, rien d'affiché de plus.
+        return this.store.isChild() ? resumeLine(this.atelier.last()) || 'Des blocs à emboîter' : weekLine(this.atelier.members()) || 'Apprendre à programmer';
       default: return '';
     }
   }

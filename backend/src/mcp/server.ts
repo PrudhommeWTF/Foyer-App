@@ -26,6 +26,7 @@ import * as ed from './ecole-tools';
 import * as en from './entretien-tools';
 import * as eq from './equipements-tools';
 import * as rv from './revisions-tools';
+import { atelierProjets } from './atelier-tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
 type Args = Record<string, unknown>;
@@ -618,6 +619,12 @@ const TOOLS: ToolDef[] = [
     run: () => rv.revisionsExercices(),
   },
   {
+    name: 'atelier_projets',
+    description: 'Les projets d’un enfant (ou de chaque enfant, sans `enfant`) dans l’Atelier code, où il apprend à programmer avec des blocs : nom, niveau (Petits ou Grands codeurs), date de dernière modification, nombre de pages et de personnages, et s’il est partagé avec la famille. Rien de leur contenu. Un compte enfant ne voit que les siens.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80) } },
+    run: (ctx, a) => atelierProjets(ctx, { enfant: str(a.enfant) }),
+  },
+  {
     name: 'revisions_progression',
     description: 'Où en est un enfant (ou chaque enfant, sans `enfant`) dans ses révisions : programme, temps par réponse, items acquis, en cours ou pas encore vus, ce qui reste fragile (« 7 × 8 »), réussite par groupe sur 4 semaines. `exercice` : identifiant (voir revisions_exercices). Un compte enfant ne lit que lui.',
     inputSchema: { type: 'object', properties: { enfant: S.string(80), exercice: S.string(40) } },
@@ -679,7 +686,7 @@ function buildServer(ctx: t.McpCtx): Server {
   // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
   // menage_* de « Employé à domicile », ecole_* de « École » (éteint par
   // défaut), entretien_* d'« Entretien de la maison », equipement* d'« Équipements »,
-  // revisions_* de « Révisions ».
+  // revisions_* de « Révisions », atelier_* d'« Atelier code ».
   // Les autres domaines n'ont pas d'outils.
   const toolModuleOff = (name: string): boolean =>
     (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
@@ -687,7 +694,8 @@ function buildServer(ctx: t.McpCtx): Server {
     || (effectiveSetting('modEcole') !== true && name.startsWith('ecole'))
     || (effectiveSetting('modEntretien') === false && name.startsWith('entretien'))
     || (effectiveSetting('modEquipements') === false && name.startsWith('equipement'))
-    || (effectiveSetting('modRevisions') === false && name.startsWith('revisions'));
+    || (effectiveSetting('modRevisions') === false && name.startsWith('revisions'))
+    || (effectiveSetting('modAtelier') === false && name.startsWith('atelier'));
   const visible = (): ToolDef[] => TOOLS.filter((tool) =>
     (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 

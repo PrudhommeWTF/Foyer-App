@@ -11,12 +11,14 @@
 //  The server is the only one to name a media file (the fingerprint
 //  of the content it has cleaned): the name sent back is the one the editor uses.
 //
-//  Recording and camera come later; until then getsettings() declares them
-//  unavailable, so the editor does not show their buttons, and the functions
-//  below throw if something calls them.
+//  Recording a sound is in Micro.js, taking a picture in Photo.js. Each is
+//  offered when the setting of the household allows it and the browser can do
+//  it: getsettings() says so, and the editor shows no button otherwise.
 //////////////////////////////////////////////////
 
 import Offline from './Offline';
+import Micro from './Micro';
+import Photo from './Photo';
 
 // The page is served at <foyer>/atelier/petits/, the API at <foyer>/api/atelier
 const API = '../../api/atelier';
@@ -29,7 +31,7 @@ let unsavedBadge = null;
 const conflicts = {}; // project id -> revision the server holds, when it differs from the one this device started from
 let owner = null; // id of the member whose project is open: someone else's when an adult looks at a child's work
 let member = null; // id of the member of this session, or of the last one seen on this device
-const TEMP = /^horsligne-[0-9a-f]+\.(svg|png)$/; // a media file drawn without network
+const TEMP = /^horsligne-[0-9a-f]+\.(svg|png|wav)$/; // a media file drawn or recorded without network
 const HINT = 'foyer.atelier.dernier'; // read by the Foyer screen, to offer the last project when offline
 
 // Sounds
@@ -37,6 +39,22 @@ let audio = null;
 const buffers = {}; // name -> Promise of AudioBuffer
 const playing = {}; // name -> AudioBufferSourceNode
 let onSoundDone = function () {};
+// What the household allows and where it stands, as GET /contexte says; asked once
+let context = null;
+function getContext () {
+    if (!context) {
+        context = api('GET', '/contexte').then(function (r) {
+            Offline.put('meta', {k: 'contexte', v: r.body});
+            return r.body;
+        }, function () {
+            // No network: what this device knew last time
+            return Offline.get('meta', 'contexte').then(function (kept) {
+                return kept ? kept.v : {};
+            });
+        });
+    }
+    return context;
+}
 
 // Callbacks are always asynchronous, as they were with the native bridges.
 function later (fcn, value) {
@@ -118,6 +136,17 @@ function notice (text, buttons) {
     shade.appendChild(box);
     document.body.appendChild(shade);
     box.querySelector('button').focus();
+}
+
+// Says, for as long as the page is open, that this project belongs to someone else
+function watching () {
+    var band = document.createElement('div');
+    band.textContent = 'Ce projet n’est pas à toi : tu peux regarder et essayer, rien ne sera enregistré.';
+    var bs = band.style;
+    bs.position = 'fixed'; bs.left = '50%'; bs.bottom = '10px'; bs.transform = 'translateX(-50%)'; bs.zIndex = '9000';
+    bs.padding = '8px 16px'; bs.borderRadius = '12px'; bs.background = 'rgba(40, 40, 40, 0.82)'; bs.color = '#FFFFFF';
+    bs.font = '600 15px sans-serif'; bs.pointerEvents = 'none';
+    document.body.appendChild(band);
 }
 
 // The 'not saved' state, visible as long as the last save has not reached the server.
@@ -316,10 +345,6 @@ function unlockAudio () {
     });
 }
 
-function notYet (what) {
-    throw new Error('Atelier: ' + what + ' is not available in this version');
-}
-
 export default class Web {
     static set onSoundDone (fcn) {
         onSoundDone = fcn;
@@ -328,13 +353,9 @@ export default class Web {
     // Who is working, then anything left from a session without network. Called
     // once, before the editor opens a project.
     static start (fcn) {
-        api('GET', '/contexte').then(function (r) {
-            member = r.body.membre ? r.body.membre.id : null;
-            return Offline.put('meta', {k: 'membre', v: member}).then(flush);
-        }, function () {
-            return Offline.get('meta', 'membre').then(function (m) {
-                member = m ? m.v : null;
-            });
+        getContext().then(function (c) {
+            member = c.membre ? c.membre.id : null;
+            return member ? flush() : null;
         }).then(function () {
             fcn();
         });
@@ -360,7 +381,9 @@ export default class Web {
         var open = function (p) {
             revisions[p.id] = p.rev;
             try {
-                window.localStorage.setItem(HINT, JSON.stringify({membre: member, id: p.id, name: p.name}));
+                if (!owner || owner == member) {
+                    window.localStorage.setItem(HINT, JSON.stringify({membre: member, id: p.id, name: p.name}));
+                }
             } catch (e) {
                 // no storage: the Foyer screen will simply not offer it offline
             }
@@ -383,7 +406,10 @@ export default class Web {
             var p = Object.assign(row, {rev: r.body.projet.rev, membre: r.body.projet.memberId, dirty: false});
             owner = r.body.projet.memberId;
             if (p.membre != member) {
-                open(p); // watched, not kept: the offline copy is for one's own projects
+                // Someone else's project (a parent looking, or a brother's shared project):
+                // watched and tried, never kept nor saved
+                watching();
+                open(p);
                 return;
             }
             Offline.put('projets', p).then(function () {
@@ -419,6 +445,11 @@ export default class Web {
     // chooses: nothing is ever overwritten silently. Without network the project
     // stays on the device, marked as not saved, and leaves when the network is back.
     static projectSave (obj, fcn) {
+        // Someone else's project is never saved: what is tried here stays here
+        if (owner && owner != member) {
+            later(fcn, 'ok');
+            return;
+        }
         var row = {
             id: obj.id, name: obj.name, version: obj.version, json: obj.json, thumbnail: obj.thumbnail,
             mtime: String(Date.now()), rev: revisions[obj.id], membre: member, dirty: true
@@ -504,9 +535,13 @@ export default class Web {
         later(fcn);
     }
 
-    // "<documents path>,<0 when files are reachable by URL>,<recording>,<camera>"
+    // "<documents path>,<0 when files are reachable by URL>,<recording>,<camera>,<longest recording in seconds>"
     static getsettings (fcn) {
-        later(fcn, ',1,NO,NO');
+        getContext().then(function (c) {
+            var recording = c.micro && Micro.supported;
+            var camera = c.camera && Photo.supported;
+            fcn(',1,' + (recording ? 'YES' : 'NO') + ',' + (camera ? 'YES' : 'NO') + ',' + (c.sonMaxSecondes || 60));
+        });
     }
 
     static getmedia (file, fcn) {
@@ -579,13 +614,23 @@ export default class Web {
             audio = new AudioContextClass();
             unlockAudio();
         }
-        // 'Documents' was the folder of recorded sounds: none exists before the recording step
+        // 'Documents' was the folder of recorded sounds: they are media files of the
+        // owner of the project, read like the drawings (server, or this device without network)
         var source = (dir == 'Documents') ?
-            Promise.reject(new Error('missing')) :
+            new Promise(function (resolve, reject) {
+                Web.getmedia(name, function (b64) {
+                    if (b64) {
+                        resolve(bytesOf(b64, false).buffer);
+                    } else {
+                        reject(new Error('missing'));
+                    }
+                });
+            }) :
             fetch(soundUrl(dir, name)).then(function (response) {
                 return response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)));
             });
-        buffers[name] = source.then(function (data) {
+        // A sound just recorded is already there, as recorded
+        buffers[name] = buffers[name] || source.then(function (data) {
             return new Promise(function (resolve, reject) {
                 audio.decodeAudioData(data, resolve, reject);
             });
@@ -634,54 +679,102 @@ export default class Web {
         later(fcn, name);
     }
 
-    // Recording and camera: not in this version (see the header)
+    // Recording (see Micro.js). The editor asks for a file name when the recording
+    // starts; the real one is only known once the sound is kept and sent, and is
+    // given then, to the callback of recorddisappear.
 
-    static sndrecord () {
-        notYet('recording');
+    static sndrecord (fcn) {
+        if (!audio) {
+            var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audio = new AudioContextClass();
+            unlockAudio();
+        }
+        if (audio.state == 'suspended') {
+            audio.resume();
+        }
+        Micro.start(audio).then(function () {
+            fcn('enregistrement.wav');
+        }, function (err) {
+            fcn('-1');
+            // Refused once, a browser does not ask again: only its settings bring the microphone back
+            notice(err && err.name == 'NotAllowedError' ?
+                'L’Atelier n’a pas le droit d’utiliser le micro. Demande à un parent de l’autoriser.' :
+                'Le micro ne répond pas sur cet appareil.', [['D’accord', function () {}]]);
+        });
     }
 
-    static recordstop () {
-        notYet('recording');
-    }
-
-    static volume () {
-        notYet('recording');
-    }
-
-    static startplay () {
-        notYet('recording');
-    }
-
-    static stopplay () {
-        notYet('recording');
-    }
-
-    static recorddisappear () {
-        notYet('recording');
-    }
-
-    static askpermission () {
-        notYet('recording');
-    }
-
-    static hascamera () {
-        return '0';
-    }
-
-    static startfeed () {
-        notYet('the camera');
-    }
-
-    // Called each time the paint editor closes, feed or not: nothing to stop yet.
-    static stopfeed (fcn) {
+    static recordstop (fcn) {
+        Micro.stop();
         later(fcn);
     }
 
-    static choosecamera () {
-        notYet('the camera');
+    static volume (fcn) {
+        fcn(Micro.level);
     }
 
+    // Answers with the duration in seconds: the editor stops its own display after it
+    static startplay (fcn) {
+        later(fcn, audio ? Micro.play(audio) : -1);
+    }
+
+    static stopplay (fcn) {
+        Micro.stopPlaying();
+        later(fcn);
+    }
+
+    // The recording window closes: 'YES' keeps the sound, anything else forgets it.
+    // Kept, it is sent like a drawing (or waits on the device without network) and
+    // the callback gets the name the project will use.
+    static recorddisappear (keep, fcn) {
+        if (keep != 'YES' || !audio || !Micro.seconds) {
+            Micro.discard();
+            later(fcn);
+            return;
+        }
+        var buffer = Micro.buffer(audio);
+        var b64 = base64Of(Micro.wav().buffer, false);
+        Micro.discard();
+        upload(b64, 'wav', function (name) {
+            buffers[name] = Promise.resolve(buffer);
+            fcn(name);
+        });
+    }
+
+    // The browser asks by itself, at the first recording
+    static askpermission () {}
+
+    // The camera (see Photo.js). Whether it is offered is decided by getsettings().
+
+    static hascamera () {
+        return Photo.supported ? '1' : '0';
+    }
+
+    static startfeed (data) {
+        Photo.start(data, document.getElementById('backdrop')).catch(function (err) {
+            // Leaves the camera mode of the paint editor, as a failed picture did
+            window.Camera.processimage('error getting a still');
+            // Refused once, a browser does not ask again: only its settings bring the camera back
+            notice(err && err.name == 'NotAllowedError' ?
+                'L’Atelier n’a pas le droit d’utiliser la caméra. Demande à un parent de l’autoriser.' :
+                'La caméra ne répond pas sur cet appareil.', [['D’accord', function () {}]]);
+        });
+    }
+
+    // Called each time the paint editor closes, feed or not
+    static stopfeed (fcn) {
+        Photo.stop();
+        later(fcn);
+    }
+
+    static choosecamera (view) {
+        // An appliance with one camera only keeps showing the one it has
+        Photo.choose(view).catch(function () {
+            Photo.choose(view == 'back' ? 'front' : 'back').catch(function () {});
+        });
+    }
+
+    // The editor names its own callback ('Camera.processimage'), as it did for the native bridges
     static captureimage () {
-        notYet('the camera');
+        window.Camera.processimage(Photo.capture() || 'error getting a still');
     }
 }

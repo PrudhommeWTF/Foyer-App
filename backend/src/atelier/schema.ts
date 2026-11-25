@@ -82,6 +82,15 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    label: 'partage d’un projet dans la fratrie',
+    up: (db) => {
+      // shared_at : posé par son propriétaire, un projet se lit par les autres
+      // membres du foyer, qui peuvent en faire une copie. Jamais le modifier.
+      db.exec('ALTER TABLE atl_projects ADD COLUMN shared_at TEXT');
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

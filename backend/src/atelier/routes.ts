@@ -91,7 +91,7 @@ function thumbnailJson(raw: unknown, memberId: string): string | null {
 export const projectView = (p: repo.ProjectRow, withJson = false) => ({
   id: p.id, memberId: p.member_id, level: p.level, name: p.name, thumbnail: p.thumbnail_json ? JSON.parse(p.thumbnail_json) as { pagecount: number; md5: string } : null,
   editorVersion: p.editor_version, rev: p.version, isSample: !!p.is_sample, copiedFrom: p.copied_from, createdAt: p.created_at, updatedAt: p.updated_at,
-  archivedAt: p.archived_at, ...(withJson ? { json: p.json } : {}),
+  archivedAt: p.archived_at, shared: !!p.shared_at, ...(withJson ? { json: p.json } : {}),
 });
 const assetView = (a: repo.AssetRow) => ({ id: a.id, md5: a.md5, altmd5: a.altmd5, name: a.name, scale: a.scale, width: a.width, height: a.height, ext: a.ext, version: a.editor_version });
 
@@ -99,6 +99,9 @@ export function atelierRouter(members: () => Member[]): Router {
   const r = Router();
   const json = express.json({ limit: MAX_PROJECT_BYTES.grands + 256 * 1024 });
   const limits = () => ({ projets: Number(effectiveSetting('atelierProjetsMax')), quotaMo: Number(effectiveSetting('atelierQuotaMo')) });
+  /** Le partage dans la fratrie, tant que le réglage le permet : éteint, plus rien de partagé ne se lit. */
+  const sharing = (): boolean => effectiveSetting('atelierPartageFratrie') !== false;
+  const shared = (p: repo.ProjectRow): boolean => sharing() && !!p.shared_at && !p.archived_at;
 
   /**
    * Le membre dont on lit les données : soi par défaut, un autre (`?membre=`) pour
@@ -107,16 +110,20 @@ export function atelierRouter(members: () => Member[]): Router {
   const reader = (req: Request, res: Response): string | null => {
     const asked = req.query['membre'];
     if (asked === undefined || asked === me(req).id) return me(req).id;
-    if (me(req).enfant) { res.status(403).json({ error: 'Tu ne peux voir que tes projets.' }); return null; }
     if (typeof asked !== 'string' || !members().some((m) => m.id === asked)) { res.status(404).json({ error: 'Membre inconnu.' }); return null; }
-    return asked;
+    if (!me(req).enfant) return asked;
+    // Un enfant ne lit chez un autre que le fichier d'un projet partagé : la route
+    // des médias le vérifie fichier par fichier, toute autre lecture est refusée ici.
+    const name = req.params['name'];
+    if (typeof name === 'string' && sharing() && repo.sharedCites(asked, name)) return asked;
+    res.status(403).json({ error: 'Tu ne peux voir que tes projets.' }); return null;
   };
   /** Un projet que la session a le droit de lire (le sien, ou n'importe lequel pour un adulte), ou null après réponse. */
   const readable = (req: Request, res: Response): repo.ProjectRow | null => {
     const id = String(req.params['id']);
     const p = UUID.test(id) ? repo.getProject(id) : null;
     if (!p) { res.status(404).json({ error: 'Projet introuvable.' }); return null; }
-    if (p.member_id !== me(req).id && me(req).enfant) { res.status(403).json({ error: 'Ce projet n’est pas à toi.' }); return null; }
+    if (p.member_id !== me(req).id && me(req).enfant && !shared(p)) { res.status(403).json({ error: 'Ce projet n’est pas à toi.' }); return null; }
     return p;
   };
   /** Un projet que la session a le droit de modifier : le sien, non archivé. */
@@ -131,7 +138,12 @@ export function atelierRouter(members: () => Member[]): Router {
   // ---- contexte ----
   r.get('/contexte', handler((req, res) => {
     const l = limits(), m = me(req);
-    res.json({ membre: { id: m.id, name: m.name, enfant: !!m.enfant }, limites: l, utilise: { projets: repo.countProjects(m.id), octets: repo.usedBytes(m.id) } });
+    res.json({
+      membre: { id: m.id, name: m.name, enfant: !!m.enfant }, limites: l, utilise: { projets: repo.countProjects(m.id), octets: repo.usedBytes(m.id) },
+      // Ce que les éditeurs ont le droit de proposer : sans le réglage, le bouton n'existe pas.
+      micro: effectiveSetting('atelierMicro') !== false, camera: effectiveSetting('atelierCamera') !== false,
+      sonMaxSecondes: Number(effectiveSetting('atelierSonMaxSecondes')),
+    });
   }));
 
   // ---- projets ----
@@ -141,6 +153,25 @@ export function atelierRouter(members: () => Member[]): Router {
     const archived = req.query['corbeille'] === '1';
     if (archived && me(req).enfant) { res.status(403).json({ error: 'Seul un adulte voit les projets supprimés.' }); return; }
     res.json({ projets: repo.projectsOf(memberId, archived).map((p) => projectView(p)) });
+  }));
+
+  // Ce que les autres membres partagent : chacun le regarde et peut en faire une copie.
+  r.get('/projets/famille', handler((req, res) => {
+    if (!sharing()) { res.json({ projets: [] }); return; }
+    const names = new Map(members().map((m) => [m.id, m.name]));
+    res.json({ projets: repo.sharedByOthers(me(req).id).filter((p) => names.has(p.member_id)).map((p) => ({ ...projectView(p), memberName: names.get(p.member_id) })) });
+  }));
+
+  // Pour la vue parent et la tuile d'accueil d'un adulte : ce que chaque autre
+  // membre a dans l'Atelier, et ce qu'il y a fait depuis sept jours.
+  r.get('/membres', handler((req, res) => {
+    if (me(req).enfant) { res.status(403).json({ error: 'Réservé aux adultes.' }); return; }
+    const since = new Date(Date.now() - 7 * 86400000).toISOString();
+    res.json({
+      membres: members().filter((m) => m.id !== me(req).id).map((m) => ({ id: m.id, name: m.name, enfant: !!m.enfant, octets: repo.usedBytes(m.id), ...repo.activityOf(m.id, since) }))
+        .filter((m) => m.enfant || m.projets || m.corbeille),
+      quotaMo: limits().quotaMo,
+    });
   }));
 
   r.post('/projets', json, handler((req, res) => {
@@ -180,19 +211,36 @@ export function atelierRouter(members: () => Member[]): Router {
   r.patch('/projets/:id', json, handler((req, res) => {
     const p = writable(req, res); if (!p) return;
     const b = req.body ?? {};
-    if (b.name === undefined && b.thumbnail === undefined) throw new Invalid('name ou thumbnail : rien à modifier.');
+    if (b.name === undefined && b.thumbnail === undefined && b.shared === undefined) throw new Invalid('name, thumbnail ou shared : rien à modifier.');
+    if (b.shared !== undefined) {
+      if (typeof b.shared !== 'boolean') throw new Invalid('shared : vrai ou faux attendu.');
+      if (b.shared && !sharing()) { res.status(403).json({ error: 'Le partage entre frères et sœurs est désactivé.' }); return; }
+      repo.shareProject(p.id, b.shared);
+      log.info(`Atelier : projet « ${p.name} » ${b.shared ? 'partagé' : 'retiré du partage'} par ${me(req).name}.`);
+    }
     if (b.name !== undefined) repo.renameProject(p.id, text(b.name, 'name', 80));
     if (b.thumbnail !== undefined) repo.setThumbnail(p.id, thumbnailJson(b.thumbnail, p.member_id));
     res.json({ projet: projectView(repo.getProject(p.id)!) });
   }));
 
+  // Sa propre copie d'un projet : le sien, ou celui qu'un autre partage. La copie
+  // n'est jamais partagée d'office, et l'original n'est pas touché.
   r.post('/projets/:id/copie', json, handler((req, res) => {
-    const p = writable(req, res); if (!p) return;
+    const p = readable(req, res); if (!p) return;
     const m = me(req), l = limits();
+    if (p.member_id !== m.id && !shared(p)) { res.status(403).json({ error: 'On ne copie que ses projets, ou ceux qui sont partagés.' }); return; }
+    if (p.archived_at) { res.status(410).json({ error: 'Ce projet a été supprimé.' }); return; }
     if (repo.countProjects(m.id) >= l.projets) {
       res.status(409).json({ error: `Tu as déjà ${l.projets} projets : c’est le maximum. Supprime un vieux projet pour en créer un nouveau.`, code: 'projets_max' });
       return;
     }
+    // Chez un autre, la copie emporte ses dessins et ses sons : ils comptent dans la place de celui qui copie.
+    const media = p.member_id === m.id ? [] : repo.mediaToCopy(p.member_id, m.id, p);
+    if (media.length && repo.usedBytes(m.id) + media.reduce((n, x) => n + x.size, 0) > l.quotaMo * 1024 * 1024) {
+      res.status(413).json({ error: 'Il n’y a plus de place pour copier ce projet. Demande à un parent de faire du rangement dans tes projets.' });
+      return;
+    }
+    repo.copyMedia(m.id, media);
     const copy = repo.createProject(m.id, p.level, text(req.body?.name, 'name', 80), p);
     log.info(`Atelier : projet « ${p.name} » dupliqué en « ${copy.name} » par ${m.name}.`);
     res.status(201).json({ projet: projectView(copy) });

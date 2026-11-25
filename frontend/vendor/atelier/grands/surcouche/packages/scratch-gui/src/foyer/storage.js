@@ -176,6 +176,8 @@ export class FoyerStorage {
             // The thumbnail the next one will replace
             this.thumbnail = p.thumbnail && p.thumbnail.md5;
             this.canSave = p.memberId === contexte.membre.id && !p.archivedAt;
+            // Whether the household lets the Atelier record sounds (read by containers/sound-tab.jsx)
+            this.micro = contexte.micro !== false;
             if (this.canSave && kept && kept.attente) {
                 // Work done here without network. If another device saved meanwhile, one of the two has to go.
                 const mine = kept.rev === p.rev || window.confirm(

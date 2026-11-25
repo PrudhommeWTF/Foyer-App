@@ -18,6 +18,10 @@ export function editorMain () {
         if (list.length > 3) {
             Camera.available = list[3] == 'YES' ? true : false;
         }
+        // Atelier: the longest recording is a setting of the household, not a constant
+        if (list.length > 4 && Number(list[4]) > 0) {
+            Record.maxSeconds = Number(list[4]);
+        }
         Web.start(openProject);
     }
 

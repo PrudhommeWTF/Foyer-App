@@ -54,6 +54,10 @@ Tout est dans `surcouche/…/foyer/` (`index.jsx`, `storage.js`, `local.js`), sa
 - **Regarder** (`&vue=plein`) : la scène seule, en plein écran, sans rien enregistrer. C'est ce qu'ouvre un téléphone.
 - **Import et export d'un fichier** : le menu Fichier de l'éditeur, tel quel. Un fichier importé remplace le contenu du projet ouvert et s'enregistre comme lui.
 
+## Micro
+
+L'enregistrement d'un son est celui de l'éditeur d'origine, inchangé. Son entrée dans le menu des sons disparaît quand le foyer a éteint le micro pour l'Atelier (`containers/sound-tab.jsx`, qui lit `micro` sur le stockage de Foyer) : la page n'a alors même plus le droit de le demander. La caméra n'est pas utilisée par ce niveau (la détection vidéo est retirée) : la page ne la reçoit pas.
+
 ## Réglages de la page (`surcouche/…/foyer/index.jsx`)
 
 Français imposé, sans menu de langue ; pas de compte, de partage, de remix, de communauté, de sac à dos ni de variables en ligne.

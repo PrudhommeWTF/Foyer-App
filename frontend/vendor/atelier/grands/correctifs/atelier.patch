@@ -283,6 +283,35 @@ index 417430d8f2..1e510fe3c1 100644
                                      >
                                          {previewFaqLink}
                                      </a>
+diff --git a/packages/scratch-gui/src/containers/sound-tab.jsx b/packages/scratch-gui/src/containers/sound-tab.jsx
+index 63b5386baf..d9ffc5fa2b 100644
+--- a/packages/scratch-gui/src/containers/sound-tab.jsx
++++ b/packages/scratch-gui/src/containers/sound-tab.jsx
+@@ -9,6 +9,7 @@ import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+ import soundIcon from '../components/asset-panel/icon--sound.svg';
+ import soundIconRtl from '../components/asset-panel/icon--sound-rtl.svg';
+ import addSoundFromLibraryIcon from '../components/asset-panel/icon--add-sound-lib.svg';
++import {legacyConfig} from '../legacy-config';
+ import addSoundFromRecordingIcon from '../components/asset-panel/icon--add-sound-record.svg';
+ import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
+ import surpriseIcon from '../components/action-menu/icon--surprise.svg';
+@@ -269,11 +270,14 @@ class SoundTab extends React.Component {
+                     title: intl.formatMessage(messages.surpriseSound),
+                     img: surpriseIcon,
+                     onClick: this.handleSurpriseSound
+-                }, {
++                },
++                // Atelier (Foyer): no 'Record' when the household turned the microphone off for
++                // the Atelier: the page is then not even allowed to ask for it
++                ...(legacyConfig.storage.micro === false ? [] : [{
+                     title: intl.formatMessage(messages.recordSound),
+                     img: addSoundFromRecordingIcon,
+                     onClick: onNewSoundFromRecordingClick
+-                }, {
++                }]), {
+                     title: intl.formatMessage(messages.addSound),
+                     img: searchIcon,
+                     onClick: this.handleNewSoundFromLibraryClick
 diff --git a/packages/scratch-gui/src/lib/alerts/index.jsx b/packages/scratch-gui/src/lib/alerts/index.jsx
 index 15d2a7bd9e..2344c24bd5 100644
 --- a/packages/scratch-gui/src/lib/alerts/index.jsx
