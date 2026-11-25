@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { shiftWeek } from './epopee';
 import { LOIS, Pending, Quest, Routine, SEAL_LATCH_MS, SERMENT, bothSealed, breath, currentQuest, dailyEcus, daysToReach, longDay, missing, reachLine, doneCount, draftsError, earned, hourLabel, mmss, moved, newDraft, nextStep, pendingEcus, remaining, toDraft, withPending } from './epopee';
 
 const step = (id: string, status: 'fait' | 'saute' | null = null, ecus = 1) => ({ id, title: id, hint: '', icon: 'dent', seconds: 120, ecus, status });
@@ -99,4 +100,9 @@ test('le serment se scelle quand les deux sceaux sont posés en même temps', ()
 
 test('le serment est réciproque : trois lois, autant de promesses de chaque côté', () => {
   assert.equal(LOIS.length, 3); assert.equal(SERMENT.child.length, SERMENT.parent.length);
+});
+
+test('une semaine se décale d’un lundi au lundi voisin, même à cheval sur un mois ou un changement d’heure', () => {
+  assert.equal(shiftWeek('2026-10-26', -1), '2026-10-19'); assert.equal(shiftWeek('2026-10-19', 1), '2026-10-26');
+  assert.equal(shiftWeek('2026-12-28', 1), '2027-01-04'); assert.equal(shiftWeek('2026-03-30', -1), '2026-03-23');
 });

@@ -213,6 +213,21 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    label: 'les notes du conseil de famille',
+    up: (db) => {
+      db.exec(`
+        -- Ce que la famille a décidé au conseil d'une semaine. week : le lundi.
+        CREATE TABLE epo_councils (
+          week TEXT PRIMARY KEY,
+          notes TEXT NOT NULL,
+          by_member TEXT,
+          at TEXT NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

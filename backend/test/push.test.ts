@@ -195,6 +195,7 @@ describe('planificateur', () => {
     entretienOn: () => true,
     garanties: () => ({ items: [], alertDays: 60 }),
     revisionsWeekly: () => [],
+    epopeeWeekly: () => [],
     // Par défaut : rien de suspendu, pas d'heures de silence, tout le monde veut
     // ses rappels. Les tests qui éprouvent ces règles les posent eux-mêmes.
     rules: () => ({ paused: false, quiet: { from: '', to: '' } }),

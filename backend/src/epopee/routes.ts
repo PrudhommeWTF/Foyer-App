@@ -12,11 +12,14 @@
 //     tant qu'elle n'est pas scellée, et échange ses écus quand il en a assez ;
 //     un adulte tient le catalogue, scelle le pacte, abandonne une quête, et
 //     note le moment vécu ;
+//   - le bilan de la semaine et les notes du conseil de famille sont aux adultes ;
 //   - seul un membre marqué enfant s'enrôle.
 import express, { Request, Response, Router } from 'express';
 import { Member } from '../models';
 import { log } from '../log';
 import { AuthedRequest, currentMember } from '../auth/session';
+import { addDays, mondayOf, periodLabel } from '../revisions/bilan';
+import { RITUEL, computeBilan, councilPdf, lines } from './bilan';
 import type { Gabarit } from './gabarit';
 import { DISPLAYS, NOTE_MAX, STEP_STATUS, bravoEcus, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput } from './rules';
 import * as repo from './repo';
@@ -430,6 +433,49 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     if (!out) { res.status(409).json({ error: 'Ce trésor n’attend pas d’être vécu.' }); return; }
     log.info(`Épopée : « ${q.title} » vécu avec ${nameOf(q.member_id) ?? 'un enfant'}, noté par ${me(req).name}.`);
     res.json({ quete: questView(out) });
+  }));
+
+  // ---- Le conseil de famille : le bilan de la semaine, pour les adultes ----
+  /** Le lundi demandé (`semaine`, la semaine en cours par défaut), ou null après un 400. */
+  const weekOf = (req: Request, res: Response): string | null => {
+    const v = (req.query['semaine'] ?? (req.body as { semaine?: unknown } | undefined)?.semaine) as unknown;
+    if (v === undefined) return mondayOf(today());
+    const day = dateInput(v);
+    if (day && mondayOf(day) === day && day <= today()) return day;
+    res.status(400).json({ error: 'semaine : un lundi AAAA-MM-JJ, passé ou de cette semaine.' });
+    return null;
+  };
+  const bilans = (from: string) => members().filter((m) => m.enfant && repo.activeProfile(m.id))
+    .map((m) => computeBilan(repo.weekData({ id: m.id, name: m.name }, from, addDays(from, 6), today())));
+
+  r.get('/conseil', handler((req, res) => {
+    if (!adult(req, res)) return;
+    const from = weekOf(req, res); if (!from) return;
+    const c = repo.council(from);
+    res.json({
+      from, to: addDays(from, 6), label: periodLabel(from, addDays(from, 6)), current: from === mondayOf(today()),
+      enfants: bilans(from).map((b) => ({ memberId: b.member.id, earned: b.earned, lines: lines(b), words: b.words })),
+      rituel: RITUEL, notes: c?.notes ?? '', notesBy: nameOf(c?.by_member ?? null),
+    });
+  }));
+
+  r.put('/conseil', json, handler((req, res) => {
+    if (!adult(req, res)) return;
+    const from = weekOf(req, res); if (!from) return;
+    const notes = optionalText((req.body as { notes?: unknown }).notes, 2000);
+    if (notes === null) { res.status(400).json({ error: 'notes : 2000 caractères au plus.' }); return; }
+    repo.setCouncil(from, notes, me(req).id);
+    log.info(`Épopée : notes du conseil de famille (semaine du ${from}) enregistrées par ${me(req).name}.`);
+    res.json({ notes, notesBy: me(req).name });
+  }));
+
+  r.get('/conseil.pdf', handler((req, res) => {
+    if (!adult(req, res)) return;
+    const from = weekOf(req, res); if (!from) return;
+    log.info(`Épopée : ${me(req).name} a téléchargé le bilan de la semaine du ${from}.`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="epopee-bilan-${from}.pdf"`);
+    res.send(councilPdf(bilans(from), from, repo.council(from)?.notes ?? '', today()));
   }));
 
   r.post('/journal/:id/annulation', handler((req, res) => {

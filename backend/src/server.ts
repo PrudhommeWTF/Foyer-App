@@ -34,7 +34,8 @@ import { loadFamilyLibrary } from './atelier/library';
 import { moduleCounts as atlCounts, purgeArchived as atlPurge, resetModule as atlReset } from './atelier/repo';
 import { epopeeRouter } from './epopee/routes';
 import { loadGabarit } from './epopee/gabarit';
-import { moduleCounts as epoCounts, resetModule as epoReset } from './epopee/repo';
+import { activeProfile as epoActive, moduleCounts as epoCounts, resetModule as epoReset, weekData as epoWeekData } from './epopee/repo';
+import { computeBilan as epoBilan, weeklyHits as epoWeeklyHits } from './epopee/bilan';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
@@ -739,13 +740,14 @@ export function start(): void {
    * La préférence est personnelle : chacun coupe les siennes sans rien imposer
    * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
    */
-  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions'): boolean => {
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions' | 'epopee'): boolean => {
     const state = getHousehold().state as HouseholdState;
     // Les clés sont écrites en toutes lettres : une clé calculée ne dit rien
     // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
     if (kind === 'entretien') return setting('entretienRappel', state, memberId);
     if (kind === 'garantie') return setting('eqpGarantieRappel', state, memberId);
     if (kind === 'revisions') return setting('revisionsBilanHebdo', state, memberId);
+    if (kind === 'epopee') return setting('epopeeBilanHebdo', state, memberId);
     return kind === 'reminder'
       ? setting('pushReminders', state, memberId)
       : setting('pushAssigned', state, memberId);
@@ -795,6 +797,11 @@ export function start(): void {
       (() => { const accts = new Set(listMemberAccounts().map((a) => a.memberId)); return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id); })(),
       wall, String(effectiveSetting('revisionsBilanHeure') || '18:30'),
       (kid, from, to) => bilanFor(kid, from, to, matieres(DATA_DIR), (ex) => bareme(DATA_DIR, ex).maitrise, (ex) => contextFor(DATA_DIR, ex)))),
+    epopeeWeekly: (wall) => (effectiveSetting('modEpopee') === false ? [] : epoWeeklyHits(
+      (getHousehold().state as HouseholdState).members.filter((m) => m.enfant && epoActive(m.id)).map((m) => ({ id: m.id, name: m.name })),
+      (() => { const accts = new Set(listMemberAccounts().map((a) => a.memberId)); return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id); })(),
+      wall, String(effectiveSetting('epopeeBilanHeure') || '18:00'),
+      (kid, from, to) => epoBilan(epoWeekData(kid, from, to, wall.slice(0, 10))))),
     garanties: () => (effectiveSetting('modEquipements') === false
       ? { items: [], alertDays: 0 }
       : { items: watchedWarranties(), alertDays: eqpRules().alertDays }),

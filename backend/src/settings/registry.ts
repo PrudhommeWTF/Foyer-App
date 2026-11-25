@@ -149,6 +149,7 @@ export const SECTIONS: readonly SettingSection[] = [
   { id: 'entretien', group: 'modules', label: 'Entretien', desc: 'Jusqu’où l’écran Entretien regarde devant lui, et si un consommable passé sous son seuil part seul aux courses. Les gestes eux-mêmes, leur cadence et leur stock se règlent dans l’écran du module.' },
   { id: 'equipements', group: 'modules', label: 'Équipements', desc: 'Les règles de garantie des appareils de la maison. Les pièces de la maison se gèrent dans l’écran du module.' },
   { id: 'revisions', group: 'modules', label: 'Révisions', desc: 'L’heure du bilan du dimanche, et la lecture à voix haute des exercices sur cet appareil.' },
+  { id: 'epopee', group: 'modules', label: 'Épopée', desc: 'L’heure du bilan du dimanche, avant le conseil de famille. Les routines, les exploits et les récompenses se règlent dans l’écran du module.' },
   { id: 'atelier', group: 'modules', label: 'Atelier code', desc: 'Combien de projets un enfant peut garder, la place qu’ils peuvent prendre sur le disque, et le temps pendant lequel un projet supprimé reste récupérable.' },
   { id: 'ecole', group: 'modules', label: 'École', desc: 'Les comptes ÉcoleDirecte, la question de sécurité, l’association des élèves aux membres, et le rythme des synchronisations.' },
   { id: 'acces', group: 'machine', label: 'Accès et comptes', desc: 'Qui peut ouvrir un compte, ce que dure une session, et ce que l’application a le droit d’aller chercher dehors.' },
@@ -384,6 +385,13 @@ export const REGISTRY = [
     default: true,
   },
   {
+    key: 'epopeeBilanHebdo',
+    type: 'bool', scope: 'personnel', section: 'notifications', module: 'Épopée',
+    label: 'Sur le téléphone : bilan de l’Épopée du dimanche',
+    desc: 'Le dimanche soir, la semaine de chaque enfant enrôlé (« Raphaël cette semaine : 23 écus gagnés, 9 routines menées au bout sur 14 »), une seule notification par enfant et par semaine. Toucher la notification ouvre le conseil de famille. Réservé aux adultes : un compte enfant n’en reçoit jamais.',
+    default: true,
+  },
+  {
     key: 'notifEvents',
     type: 'bool', scope: 'personnel', section: 'notifications', module: 'Agenda',
     label: 'Dans la cloche : agenda du jour et de demain',
@@ -588,6 +596,13 @@ export const REGISTRY = [
     label: 'Garder un projet supprimé pendant',
     desc: 'En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins.',
     default: 30, min: 7, max: 365,
+  },
+  {
+    key: 'epopeeBilanHeure',
+    type: 'time', scope: 'foyer', section: 'epopee', module: 'Épopée',
+    label: 'Heure du bilan du dimanche',
+    desc: 'Le dimanche, à partir de cette heure, chaque adulte qui l’a demandé reçoit la semaine de chaque enfant enrôlé (lundi à dimanche). À régler un peu avant votre conseil de famille.',
+    default: '18:00',
   },
   {
     key: 'revisionsBilanHeure',

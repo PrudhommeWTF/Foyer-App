@@ -9,6 +9,7 @@ import { AvatarComponent } from '../../shared/avatar';
 import { ToggleComponent } from '../../shared/toggle';
 import { Alliance } from './alliance';
 import { ArmoryAdmin } from './armory-admin';
+import { Council } from './council';
 import { Parchment } from './parchment';
 import { QuestPanel } from './quest-panel';
 import { RoutineEditor } from './routine-editor';
@@ -26,23 +27,28 @@ const COINS_MAX = 30;
  * et signale un exploit. L'Armurerie (quest-panel.ts, armory-admin.ts) porte
  * les récompenses, la quête en cours et les souvenirs. Tout commence par
  * l'alliance (alliance.ts), que parent et enfant parcourent ensemble, et dont
- * le serment se relit et s'imprime (parchment.ts). Le solde et chaque montant
+ * le serment se relit et s'imprime (parchment.ts). Le dimanche, le conseil de
+ * famille relit la semaine (council.ts). Le solde et chaque montant
  * viennent du serveur (grand livre en ajout seul), l'écran ne calcule rien.
  */
 @Component({
   selector: 'screen-epopee',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent, ToggleComponent, EpopeeRunner, RoutineEditor, QuestPanel, ArmoryAdmin, Alliance, Parchment],
+  imports: [IconComponent, AvatarComponent, ToggleComponent, EpopeeRunner, RoutineEditor, QuestPanel, ArmoryAdmin, Alliance, Parchment, Council],
   template: `
     <div class="screen-enter">
       @if (running(); as run) { <epopee-runner [routine]="run.routine" [day]="run.day" [timer]="run.timer" (closed)="fermer()" /> }
       @if (allied(); as al) { <epopee-alliance [kid]="al" [rewards]="recompenses()" (changed)="charger()" (sealed)="scelle(al)" (closed)="alliance.set(null)" /> }
       @if (parchment(); as pk) { <epopee-parchment [kid]="pk" (closed)="parchemin.set(null)" /> }
+      @if (!store.isChild() && conseil() && kids(); as all) { <epopee-council [kids]="all" (closed)="conseil.set(false)" /> }
       @if (editing(); as ed) { <epopee-routine-editor [routine]="ed.routine" [name]="ed.name" (closed)="finEdition($event)" /> }
       @if (erreur(); as e) {
         <div class="card empty"><div class="empty-title">L’Épopée ne répond pas</div><div class="empty-text">{{ e }}</div><button class="btn btn-primary" (click)="charger()">Réessayer</button></div>
       } @else if (kids(); as liste) {
+        @if (!store.isChild() && anyEnrolled()) {
+          <div class="council-row"><button class="btn btn-soft" (click)="conseil.set(true)"><f-icon name="users" [size]="18" [width]="2.2" /> Le conseil de famille</button></div>
+        }
         @if (!liste.length) {
           <div class="card empty">
             <div class="empty-ico"><f-icon name="bouclier" [size]="30" color="var(--ink3)" [width]="1.8" /></div>
@@ -209,6 +215,8 @@ const COINS_MAX = 30;
   `,
   styles: [`
     .kid { margin-bottom: 18px; max-width: 720px; }
+    .council-row { display: flex; justify-content: flex-end; max-width: 720px; margin-bottom: 14px; }
+    .council-row .btn { min-height: 46px; }
     .kid-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
     .kid-head h2 { margin: 0; font-family: var(--font-display); font-size: 20px; font-weight: 800; color: var(--ink); }
     .lead { font-size: 14.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; margin: 0 0 16px; max-width: 520px; }
@@ -290,6 +298,7 @@ export class EpopeeScreen {
   readonly jourMax = computed(() => Math.max(0, ...(this.kids() || []).filter((k) => k.enrolled).map((k) => dailyEcus(k.routines || []))));
   readonly nouveau = signal('');
   /** The child whose alliance is being walked through, and the one whose parchment is open. */
+  readonly conseil = this.epopee.conseil;
   readonly alliance = signal<string | null>(null);
   readonly parchemin = signal<string | null>(null);
 

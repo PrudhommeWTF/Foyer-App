@@ -32,7 +32,7 @@ export interface SchedulerDeps {
    */
   rules: () => { paused: boolean; quiet: QuietHours };
   /** Ce membre veut-il ce genre de rappel sur son téléphone ? `entretien` : les gestes de la liste Entretien ; `garantie` : les fins de garantie. */
-  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions') => boolean;
+  wants: (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions' | 'epopee') => boolean;
   /**
    * Les garanties d'équipement en cours, calculées à la date du jour, et le seuil
    * d'alerte (eqpGarantieAlerteJours). Vide quand le module Équipements est éteint.
@@ -43,6 +43,8 @@ export interface SchedulerDeps {
    * revisions/bilan.ts, weeklyHits). Vide quand le module est éteint.
    */
   revisionsWeekly: (nowWall: string) => ReminderHit[];
+  /** Les bilans du dimanche du module Épopée dus à cet instant mural (voir epopee/bilan.ts, weeklyHits). Vide quand le module est éteint. */
+  epopeeWeekly: (nowWall: string) => ReminderHit[];
   /** Le module Entretien est-il actif ? Éteint, ses gestes ne rappellent plus (ils restent dans la base). */
   entretienOn: () => boolean;
   log: (line: string) => void;
@@ -59,6 +61,10 @@ const warrantyPayloadOf = (h: ReminderHit, url: string): PushPayload =>
 /** Le tap sur un bilan ouvre le suivi de l'enfant (« rev-<membre> », voir sw.js). */
 const revisionsPayloadOf = (h: ReminderHit, url: string): PushPayload =>
   ({ kind: 'reminder', title: h.title, body: h.body, url, tag: 'rev-' + h.taskId });
+
+/** Le tap sur un bilan de l'Épopée ouvre le conseil de famille (« epo-<membre> », voir sw.js). */
+const epopeePayloadOf = (h: ReminderHit, url: string): PushPayload =>
+  ({ kind: 'reminder', title: h.title, body: h.body, url, tag: 'epo-' + h.taskId });
 
 /** Ce qu'un envoi a atteint, par membre, pour le journal (vide quand tout a été ignoré). */
 const reached = (r: SendReport): string => r.members.filter((m) => m.status !== 'skipped')
@@ -122,6 +128,13 @@ export async function tick(deps: SchedulerDeps, nowWall = parisWall()): Promise<
     if (!pour.length) continue;
     const parts = reached(await notify(h.key, pour, revisionsPayloadOf(h, deps.url())));
     if (parts) deps.log(`Notifications : bilan des révisions « ${h.body} » → ${parts}`);
+  }
+  // Bilan de l'Épopée du dimanche, une fois par enfant enrôlé et par semaine.
+  for (const h of deps.epopeeWeekly(nowWall)) {
+    const pour = h.memberIds.filter((m) => deps.wants(m, 'epopee'));
+    if (!pour.length) continue;
+    const parts = reached(await notify(h.key, pour, epopeePayloadOf(h, deps.url())));
+    if (parts) deps.log(`Notifications : bilan de l’Épopée « ${h.body} » → ${parts}`);
   }
 }
 
