@@ -131,7 +131,12 @@ export function atelierRouter(members: () => Member[]): Router {
   // ---- contexte ----
   r.get('/contexte', handler((req, res) => {
     const l = limits(), m = me(req);
-    res.json({ membre: { id: m.id, name: m.name, enfant: !!m.enfant }, limites: l, utilise: { projets: repo.countProjects(m.id), octets: repo.usedBytes(m.id) } });
+    res.json({
+      membre: { id: m.id, name: m.name, enfant: !!m.enfant }, limites: l, utilise: { projets: repo.countProjects(m.id), octets: repo.usedBytes(m.id) },
+      // Ce que les éditeurs ont le droit de proposer : sans le réglage, le bouton n'existe pas.
+      micro: effectiveSetting('atelierMicro') !== false, camera: effectiveSetting('atelierCamera') !== false,
+      sonMaxSecondes: Number(effectiveSetting('atelierSonMaxSecondes')),
+    });
   }));
 
   // ---- projets ----

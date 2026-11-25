@@ -300,3 +300,40 @@ describe('niveau « Grands codeurs »', () => {
     assert.equal((await lire(`/atelier/medias/${cite}`, ctx.jetons.enfant)).status, 200);
   });
 });
+
+describe('micro et caméra : les seules pages de l’Atelier, et selon les réglages', () => {
+  const politique = async (chemin: string) => (await fetch(ctx.base.replace(/\/api$/, '') + chemin)).headers.get('permissions-policy') ?? '';
+  const regler = async (changes: Record<string, unknown>) => assert.equal((await appel(ctx.base, 'PATCH', '/settings', { changes }, ctx.jetons.admin)).status, 200);
+
+  it('les deux éditeurs peuvent demander le micro et la caméra, rien d’autre dans Foyer', async () => {
+    for (const page of ['/atelier/petits/editor.html', '/atelier/grands/editor.html']) {
+      const p = await politique(page);
+      assert.match(p, /camera=\(self\)/, page); assert.match(p, /microphone=\(self\)/, page); assert.match(p, /geolocation=\(\)/, page);
+    }
+    for (const page of ['/', '/api/health', '/atelier/petits/app.bundle.js', '/atelier/autre/editor.html', '/atelier/petits/sous/editor.html']) {
+      const p = await politique(page);
+      assert.match(p, /camera=\(\)/, page); assert.match(p, /microphone=\(\)/, page);
+    }
+  });
+
+  it('un réglage éteint retire le droit à la page et le dit à l’éditeur', async () => {
+    await regler({ atelierMicro: false });
+    let p = await politique('/atelier/petits/editor.html');
+    assert.match(p, /microphone=\(\)/); assert.match(p, /camera=\(self\)/);
+    let c = (await appel(ctx.base, 'GET', '/atelier/contexte', undefined, ctx.jetons.enfant)).json;
+    assert.equal(c.micro, false); assert.equal(c.camera, true); assert.equal(c.sonMaxSecondes, 60);
+    await regler({ atelierMicro: true, atelierCamera: false, atelierSonMaxSecondes: 20 });
+    p = await politique('/atelier/grands/editor.html');
+    assert.match(p, /microphone=\(self\)/); assert.match(p, /camera=\(\)/);
+    c = (await appel(ctx.base, 'GET', '/atelier/contexte', undefined, ctx.jetons.enfant)).json;
+    assert.equal(c.camera, false); assert.equal(c.sonMaxSecondes, 20);
+    await regler({ atelierCamera: true, atelierSonMaxSecondes: 60 });
+  });
+
+  it('module éteint : plus aucune page n’a le micro ni la caméra', async () => {
+    await regler({ modAtelier: false });
+    const p = await politique('/atelier/petits/editor.html');
+    assert.match(p, /camera=\(\)/); assert.match(p, /microphone=\(\)/);
+    await regler({ modAtelier: true });
+  });
+});

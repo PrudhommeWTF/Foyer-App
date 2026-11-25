@@ -598,6 +598,27 @@ export const REGISTRY = [
     default: 30, min: 7, max: 365,
   },
   {
+    key: 'atelierMicro',
+    type: 'bool', scope: 'foyer', section: 'atelier', module: 'Atelier',
+    label: 'Autoriser le micro dans l’Atelier',
+    desc: 'Pour enregistrer une voix ou un bruit et le faire jouer par un personnage. Les sons restent sur votre serveur. Désactivé, le bouton d’enregistrement disparaît et les pages de l’Atelier n’ont plus le droit de demander le micro ; les sons déjà enregistrés continuent de jouer.',
+    default: true,
+  },
+  {
+    key: 'atelierCamera',
+    type: 'bool', scope: 'foyer', section: 'atelier', module: 'Atelier',
+    label: 'Autoriser la caméra dans l’Atelier',
+    desc: 'Pour remplir une forme ou un costume avec une photo prise sur le moment. Les photos restent sur votre serveur. Désactivé, le bouton de l’appareil photo disparaît et les pages de l’Atelier n’ont plus le droit de demander la caméra ; les photos déjà prises restent dans les projets.',
+    default: true,
+  },
+  {
+    key: 'atelierSonMaxSecondes',
+    type: 'int', scope: 'foyer', section: 'atelier', module: 'Atelier',
+    label: 'Durée maximale d’un son enregistré',
+    desc: 'En secondes, pour le niveau « Petits codeurs ». L’enregistrement s’arrête tout seul à cette durée. Une minute de son pèse environ 2,6 Mo dans la place du membre. Le niveau « Grands codeurs » garde la limite de son éditeur, 30 secondes.',
+    default: 60, min: 5, max: 120,
+  },
+  {
     key: 'epopeeBilanHeure',
     type: 'time', scope: 'foyer', section: 'epopee', module: 'Épopée',
     label: 'Heure du bilan du dimanche',

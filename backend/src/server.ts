@@ -162,7 +162,25 @@ const PERMISSIONS = [
   'midi=()', 'payment=()', 'picture-in-picture=()', 'publickey-credentials-get=()',
   'screen-wake-lock=()', 'usb=()', 'xr-spatial-tracking=()',
 ].join(', ');
-app.use((_req, res, next) => { res.setHeader('Permissions-Policy', PERMISSIONS); next(); });
+/**
+ * Deux exceptions, pour les seules pages de l'Atelier code (des pages à part, pas
+ * l'application) : enregistrer une voix et prendre une photo. Chacune suit son
+ * réglage et le module ; éteinte, la page n'a même pas le droit de demander.
+ * C'est la raison pour laquelle l'Atelier n'est pas un cadre dans l'application :
+ * un cadre n'obtient jamais ce que la page qui le contient s'interdit.
+ */
+const ATELIER_PAGE = /^\/atelier\/(petits|grands)\/[^/]*\.html$/;
+export function permissionsFor(pathname: string, allowed: { micro: boolean; camera: boolean }): string {
+  if (!ATELIER_PAGE.test(pathname)) return PERMISSIONS;
+  return PERMISSIONS.replace('camera=()', allowed.camera ? 'camera=(self)' : 'camera=()').replace('microphone=()', allowed.micro ? 'microphone=(self)' : 'microphone=()');
+}
+app.use((req, res, next) => {
+  const atelier = ATELIER_PAGE.test(req.path) && effectiveSetting('modAtelier') !== false;
+  res.setHeader('Permissions-Policy', atelier
+    ? permissionsFor(req.path, { micro: effectiveSetting('atelierMicro') !== false, camera: effectiveSetting('atelierCamera') !== false })
+    : PERMISSIONS);
+  next();
+});
 
 // CORS: same-origin by default (the API serves its own SPA). Extra origins can be
 // allow-listed via FOYER_CORS_ORIGINS (comma-separated) for split deployments.

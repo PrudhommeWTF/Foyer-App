@@ -258,10 +258,16 @@ Combien de projets un enfant peut garder, la place qu’ils peuvent prendre sur 
 | `atelierProjetsMax` | Nombre maximal de projets par enfant | Foyer | entier | `100` | de 10 à 500 | Atelier | — |
 | `atelierQuotaMo` | Espace disque maximal par membre | Foyer | entier | `500` | de 50 à 5000 | Atelier | — |
 | `atelierCorbeilleJours` | Garder un projet supprimé pendant | Foyer | entier | `30` | de 7 à 365 | Atelier | — |
+| `atelierMicro` | Autoriser le micro dans l’Atelier | Foyer | oui / non | activé | — | Atelier | — |
+| `atelierCamera` | Autoriser la caméra dans l’Atelier | Foyer | oui / non | activé | — | Atelier | — |
+| `atelierSonMaxSecondes` | Durée maximale d’un son enregistré | Foyer | entier | `60` | de 5 à 120 | Atelier | — |
 
 - **Nombre maximal de projets par enfant** (`atelierProjetsMax`) : Au-delà, l’Atelier demande à l’enfant de supprimer un vieux projet avant d’en créer un nouveau. Les projets supprimés ne comptent pas.
 - **Espace disque maximal par membre** (`atelierQuotaMo`) : En mégaoctets, pour les dessins, les photos, les sons et les vignettes d’un même membre. Une fois atteint, l’Atelier refuse un nouveau fichier et dit à l’enfant de demander à un parent.
 - **Garder un projet supprimé pendant** (`atelierCorbeilleJours`) : En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins. Le même délai vaut pour un dessin ou un son que plus aucun projet n’utilise.
+- **Autoriser le micro dans l’Atelier** (`atelierMicro`) : Pour enregistrer une voix ou un bruit et le faire jouer par un personnage. Les sons restent sur votre serveur. Désactivé, le bouton d’enregistrement disparaît et les pages de l’Atelier n’ont plus le droit de demander le micro ; les sons déjà enregistrés continuent de jouer.
+- **Autoriser la caméra dans l’Atelier** (`atelierCamera`) : Pour remplir une forme ou un costume avec une photo prise sur le moment. Les photos restent sur votre serveur. Désactivé, le bouton de l’appareil photo disparaît et les pages de l’Atelier n’ont plus le droit de demander la caméra ; les photos déjà prises restent dans les projets.
+- **Durée maximale d’un son enregistré** (`atelierSonMaxSecondes`) : En secondes, pour le niveau « Petits codeurs ». L’enregistrement s’arrête tout seul à cette durée. Une minute de son pèse environ 2,6 Mo dans la place du membre. Le niveau « Grands codeurs » garde la limite de son éditeur, 30 secondes.
 
 ### École
 
