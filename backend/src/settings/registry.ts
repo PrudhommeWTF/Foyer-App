@@ -299,6 +299,14 @@ export const REGISTRY = [
     default: true,
   },
   {
+    key: 'modEpopee',
+    type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
+    custom: true,
+    label: 'Épopée',
+    desc: 'Les écus que les enfants gagnent par leurs efforts : une besace par enfant, les bravos des parents, et le journal de ce qui a été donné. Rien ne se passe tant qu’aucun enfant n’est enrôlé. Désactivé, l’écran et l’accès API disparaissent ; les besaces et leur journal sont conservés.',
+    default: true,
+  },
+  {
     key: 'modRevisions',
     type: 'bool', scope: 'foyer', section: 'modules', module: 'Foyer',
     custom: true,

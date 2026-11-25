@@ -17,7 +17,7 @@ Docker) :
 
 | Chemin | Contenu |
 |---|---|
-| `foyer.db` | La base : comptes, document du foyer, finances, employé, équipements, projets de l’Atelier code, journaux d'opérations |
+| `foyer.db` | La base : comptes, document du foyer, finances, employé, équipements, projets de l’Atelier code, besaces de l’Épopée, journaux d'opérations |
 | `pieces/` | Les octets des pièces jointes (Finances, photos de recettes, factures et plaques des équipements, dessins et vignettes de l’Atelier code), nommés par empreinte |
 | `sauvegardes/` | Les instantanés faits depuis l'application |
 | `backups/` | Les copies d'avant migration du document d'état |

@@ -10,6 +10,8 @@ import { migrateEcole } from './ecole/schema';
 import { migrateRevisions } from './revisions/schema';
 import { migrateAtelier } from './atelier/schema';
 import { initAtelierRepo, referencedFileIds as atlFileIds } from './atelier/repo';
+import { migrateEpopee } from './epopee/schema';
+import { initEpopeeRepo } from './epopee/repo';
 import { initRevisionsRepo } from './revisions/repo';
 import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
@@ -205,6 +207,9 @@ initRealisations(db);
 // ci-dessous doit savoir détenues avant de balayer.
 migrateAtelier(db);
 initAtelierRepo(db);
+// L'Épopée : profils des enfants et grand livre des écus.
+migrateEpopee(db);
+initEpopeeRepo(db);
 migrateHouseholdDocument();
 // Après le document : les pièces d'Équipements rejoignent le socle Maison.
 adoptSharedRooms(db);

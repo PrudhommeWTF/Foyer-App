@@ -138,6 +138,7 @@ export class SettingsModulesComponent {
     }
     if (id === 'equipements') { const n = c.equipements.fiches, p = c.equipements.pieces; return n ? `${n} fiche${n > 1 ? 's' : ''}, ${p} pièce${p > 1 ? 's' : ''} jointe${p > 1 ? 's' : ''}` : ''; }
     if (id === 'atelier') { const n = c.atelier.projets; return n ? `${n} projet${n > 1 ? 's' : ''}` : ''; }
+    if (id === 'epopee') { const n = c.epopee.enfants; return n ? `${n} besace${n > 1 ? 's' : ''}, ${c.epopee.ecritures} écriture${c.epopee.ecritures > 1 ? 's' : ''}` : ''; }
     if (id === 'employe') { const n = c.employe.employes, p = c.employe.presences; return n || p ? `${n} employé${n > 1 ? 's' : ''}, ${p} présence${p > 1 ? 's' : ''}` : ''; }
     return '';
   }

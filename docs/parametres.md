@@ -101,6 +101,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 | `modEntretien` | Entretien de la maison | Foyer | oui / non | activé | — | Foyer | — |
 | `modEquipements` | Équipements | Foyer | oui / non | activé | — | Foyer | — |
 | `modAtelier` | Atelier code | Foyer | oui / non | activé | — | Foyer | — |
+| `modEpopee` | Épopée | Foyer | oui / non | activé | — | Foyer | — |
 | `modRevisions` | Révisions | Foyer | oui / non | activé | — | Foyer | — |
 
 - **Repas et cuisine** (`modRepas`) : Le planning des repas et le carnet de recettes. Désactivé, ces écrans, leurs tuiles, la recherche et les outils d’assistant correspondants disparaissent, et les accès sont fermés ; les recettes et repas enregistrés sont conservés.
@@ -111,6 +112,7 @@ Activer ou désactiver des pans entiers de l’application. Un module éteint di
 - **Entretien de la maison** (`modEntretien`) : Les gestes d’entretien qui reviennent (cartouche de la carafe, détecteurs de fumée, chaudière), avec leur stock. Désactivé, l’écran Entretien disparaît, sa liste se cache dans Tâches, ses rappels se taisent et le catalogue des gestes se ferme ; les gestes et leur historique sont conservés.
 - **Équipements** (`modEquipements`) : Une fiche par appareil de la maison : facture, plaque signalétique, numéro de série, état de la garantie. Désactivé, l’écran, la recherche, l’accès API et les outils d’assistant disparaissent ; les fiches et leurs fichiers sont conservés.
 - **Atelier code** (`modAtelier`) : Un atelier pour apprendre à programmer en assemblant des blocs : des personnages, un décor, des scripts. Désactivé, l’écran et l’accès API disparaissent ; les projets et leurs dessins sont conservés.
+- **Épopée** (`modEpopee`) : Les écus que les enfants gagnent par leurs efforts : une besace par enfant, les bravos des parents, et le journal de ce qui a été donné. Rien ne se passe tant qu’aucun enfant n’est enrôlé. Désactivé, l’écran et l’accès API disparaissent ; les besaces et leur journal sont conservés.
 - **Révisions** (`modRevisions`) : Des exercices courts pour réviser à la maison (les tables de multiplication et d’addition, les soustractions, les compléments, les doubles et moitiés, la comparaison des nombres, les nombres en lettres, la monnaie, la lecture de l’heure, la dictée de mots, la conjugaison, l’orthographe, le féminin et le pluriel, la lecture d’un petit texte), avec le programme et le suivi de chaque enfant. Désactivé, l’écran, la tuile d’accueil, la tâche du jour dans « Devoirs de … », l’accès API et les outils d’assistant disparaissent ; les sessions et la progression sont conservées, et la réactivation les retrouve telles quelles.
 
 ## Les modules
