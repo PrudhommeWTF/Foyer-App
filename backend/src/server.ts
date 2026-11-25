@@ -170,15 +170,13 @@ const PERMISSIONS = [
  * un cadre n'obtient jamais ce que la page qui le contient s'interdit.
  */
 const ATELIER_PAGE = /^\/atelier\/(petits|grands)\/[^/]*\.html$/;
-export function permissionsFor(pathname: string, allowed: { micro: boolean; camera: boolean }): string {
-  if (!ATELIER_PAGE.test(pathname)) return PERMISSIONS;
-  return PERMISSIONS.replace('camera=()', allowed.camera ? 'camera=(self)' : 'camera=()').replace('microphone=()', allowed.micro ? 'microphone=(self)' : 'microphone=()');
-}
 app.use((req, res, next) => {
-  const atelier = ATELIER_PAGE.test(req.path) && effectiveSetting('modAtelier') !== false;
-  res.setHeader('Permissions-Policy', atelier
-    ? permissionsFor(req.path, { micro: effectiveSetting('atelierMicro') !== false, camera: effectiveSetting('atelierCamera') !== false })
-    : PERMISSIONS);
+  const level = ATELIER_PAGE.exec(req.path)?.[1];
+  if (!level || effectiveSetting('modAtelier') === false) { res.setHeader('Permissions-Policy', PERMISSIONS); next(); return; }
+  // La caméra ne sert qu'à l'éditeur de dessin des petits : celui des grands ne la reçoit pas.
+  const camera = level === 'petits' && effectiveSetting('atelierCamera') !== false;
+  const micro = effectiveSetting('atelierMicro') !== false;
+  res.setHeader('Permissions-Policy', PERMISSIONS.replace('camera=()', camera ? 'camera=(self)' : 'camera=()').replace('microphone=()', micro ? 'microphone=(self)' : 'microphone=()'));
   next();
 });
 

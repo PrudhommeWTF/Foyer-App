@@ -11,14 +11,14 @@
 //  The server is the only one to name a media file (the fingerprint
 //  of the content it has cleaned): the name sent back is the one the editor uses.
 //
-//  Recording a sound is in Micro.js. It is offered when the setting of the
-//  household allows it and the browser can do it: getsettings() says so, and the
-//  editor shows no button otherwise. The camera comes later; until then it is
-//  declared unavailable and its functions throw if something calls them.
+//  Recording a sound is in Micro.js, taking a picture in Photo.js. Each is
+//  offered when the setting of the household allows it and the browser can do
+//  it: getsettings() says so, and the editor shows no button otherwise.
 //////////////////////////////////////////////////
 
 import Offline from './Offline';
 import Micro from './Micro';
+import Photo from './Photo';
 
 // The page is served at <foyer>/atelier/petits/, the API at <foyer>/api/atelier
 const API = '../../api/atelier';
@@ -334,10 +334,6 @@ function unlockAudio () {
     });
 }
 
-function notYet (what) {
-    throw new Error('Atelier: ' + what + ' is not available in this version');
-}
-
 export default class Web {
     static set onSoundDone (fcn) {
         onSoundDone = fcn;
@@ -522,7 +518,8 @@ export default class Web {
     static getsettings (fcn) {
         getContext().then(function (c) {
             var recording = c.micro && Micro.supported;
-            fcn(',1,' + (recording ? 'YES' : 'NO') + ',NO,' + (c.sonMaxSecondes || 60));
+            var camera = c.camera && Photo.supported;
+            fcn(',1,' + (recording ? 'YES' : 'NO') + ',' + (camera ? 'YES' : 'NO') + ',' + (c.sonMaxSecondes || 60));
         });
     }
 
@@ -725,24 +722,38 @@ export default class Web {
     // The browser asks by itself, at the first recording
     static askpermission () {}
 
+    // The camera (see Photo.js). Whether it is offered is decided by getsettings().
+
     static hascamera () {
-        return '0';
+        return Photo.supported ? '1' : '0';
     }
 
-    static startfeed () {
-        notYet('the camera');
+    static startfeed (data) {
+        Photo.start(data, document.getElementById('backdrop')).catch(function (err) {
+            // Leaves the camera mode of the paint editor, as a failed picture did
+            window.Camera.processimage('error getting a still');
+            // Refused once, a browser does not ask again: only its settings bring the camera back
+            notice(err && err.name == 'NotAllowedError' ?
+                'L’Atelier n’a pas le droit d’utiliser la caméra. Demande à un parent de l’autoriser.' :
+                'La caméra ne répond pas sur cet appareil.', [['D’accord', function () {}]]);
+        });
     }
 
-    // Called each time the paint editor closes, feed or not: nothing to stop yet.
+    // Called each time the paint editor closes, feed or not
     static stopfeed (fcn) {
+        Photo.stop();
         later(fcn);
     }
 
-    static choosecamera () {
-        notYet('the camera');
+    static choosecamera (view) {
+        // An appliance with one camera only keeps showing the one it has
+        Photo.choose(view).catch(function () {
+            Photo.choose(view == 'back' ? 'front' : 'back').catch(function () {});
+        });
     }
 
+    // The editor names its own callback ('Camera.processimage'), as it did for the native bridges
     static captureimage () {
-        notYet('the camera');
+        window.Camera.processimage(Photo.capture() || 'error getting a still');
     }
 }

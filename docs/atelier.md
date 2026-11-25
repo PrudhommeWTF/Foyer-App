@@ -6,7 +6,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 6 sur 9, complétée : le niveau « Grands codeurs » a sa bibliothèque de personnages, de décors et de sons.**
+**Étape 7 sur 9 : la voix et la photo.**
 
 | Fait | Pas encore |
 |---|---|
@@ -16,7 +16,8 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Hors ligne : l'Atelier s'ouvre, le projet déjà ouvert sur l'appareil se continue, tout part au retour du réseau | |
 | Enregistrement automatique, avec refus d'écraser le travail d'un autre appareil | |
 | Téléphone : les projets se regardent en plein écran ; écran debout : « Tourne l'iPad » | |
-| Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | Son enregistré, photo |
+| Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | |
+| Son enregistré au micro (les deux niveaux), photo dans l'éditeur de dessin (petits) | |
 | Corbeille : un projet supprimé reste récupérable, puis est purgé | Vue parent (lire les projets d'un enfant, restaurer depuis l'écran), partage |
 | Limites réglables : nombre de projets, espace disque | |
 | Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | Le niveau choisi par enfant |
@@ -222,6 +223,31 @@ curl -sI https://<ton foyer>/atelier/grands/static/assets/$(curl -s https://<ton
 La réponse attendue est `cross-origin`. Sinon la zone de dessin des costumes reste vide.
 
 **Contrôle à chaque build de Foyer** : le résultat ne doit citer aucun hôte hors d'une liste explicite d'adresses inertes (espaces de noms XML, renvois à de la documentation dans des messages d'erreur). Les serveurs de Scratch n'y figurent pas : s'il en réapparaît un, le build échoue.
+
+## Micro et caméra
+
+**Ce qu'ils permettent.** Petits codeurs : enregistrer un son (bouton micro de la palette verte), qui devient un bloc « jouer mon son », et remplir une forme d'un dessin avec une photo (outil appareil photo de l'éditeur de dessin, caméra avant ou arrière). Grands codeurs : enregistrer un son dans l'onglet Sons. Sons et photos restent sur le serveur de Foyer, dans la place du membre.
+
+**Trois réglages** (Réglages, section Atelier code) : autoriser le micro, autoriser la caméra, durée maximale d'un son chez les petits (60 secondes par défaut, environ 2,6 Mo la minute). Éteints, les boutons disparaissent, et les pages de l'Atelier n'ont plus le droit de demander : ce qui a déjà été enregistré continue de jouer.
+
+**Pourquoi seulement ces pages.** Foyer interdit le micro et la caméra à toutes ses pages (`Permissions-Policy`). Les deux éditeurs sont des pages à part, et reçoivent seuls une exception : le micro pour les deux, la caméra pour celui des petits. Vérifier :
+
+```bash
+curl -sI https://<ton foyer>/atelier/petits/editor.html | grep -i permissions-policy
+```
+
+La réponse doit contenir `camera=(self)` et `microphone=(self)` ; pour toute autre adresse de Foyer, `camera=()` et `microphone=()`. Derrière un reverse-proxy qui réécrit cet en-tête, micro et caméra ne marcheront pas.
+
+**HTTPS obligatoire.** Un navigateur ne donne le micro ou la caméra qu'à une page servie en HTTPS (ou sur `localhost`). Sur un Foyer servi en HTTP simple, les boutons n'apparaissent pas.
+
+**Le navigateur demande la première fois.** Si l'enfant refuse par erreur, l'Atelier lui dit de demander à un parent, et le navigateur ne redemandera pas tout seul :
+
+- **iPad, iPhone (Safari)** : Réglages d'iOS, Apps, Safari, puis « Micro » et « Appareil photo » : choisir « Demander » ou « Autoriser ». Pour un seul site : dans Safari, le bouton à gauche de la barre d'adresse, « Réglages du site web ».
+- **Foyer installé sur l'écran d'accueil (PWA)** : Réglages d'iOS, descendre jusqu'au nom de l'application, puis autoriser « Micro » et « Appareil photo ».
+- **Mac (Safari)** : Safari, Réglages, Sites web, « Microphone » et « Caméra » : passer le site sur « Autoriser ».
+- **Chrome** : le cadenas à gauche de l'adresse, « Paramètres du site ».
+
+**Ce qui n'a pas été essayé** : un vrai micro et une vraie caméra. Les essais ont été faits dans Chromium avec des périphériques simulés. Safari sur iPad est le premier point à vérifier.
 
 ## Sécurité
 

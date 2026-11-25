@@ -15,6 +15,12 @@ import SVG2Canvas from '../utils/SVG2Canvas';
 import PaintAction from './PaintAction';
 import {getIdFor, gn, getIdForCamera, setCanvasSize, DEGTOR} from '../utils/lib';
 
+// Atelier: the pictures of the camera were PNG. They are JPEG now, ten times lighter
+// for a photograph; a base64 JPEG always starts with '/9j/', anything else is a PNG as before.
+function pictureUrl (str) {
+    return 'data:image/' + (str.indexOf('/9j/') == 0 ? 'jpeg' : 'png') + ';base64,' + str;
+}
+
 export default class SVGImage {
     static addCameraFill (mt, str) {
         //  prepare to insert image by getting the objects above
@@ -30,7 +36,7 @@ export default class SVGImage {
     }
 
     static replaceImage (img, str) {
-        img.setAttributeNS(Paint.xmlnslink, 'xlink:href', 'data:image/png;base64,' + str);
+        img.setAttributeNS(Paint.xmlnslink, 'xlink:href', pictureUrl(str));
     }
 
     static createImageFromFeed (mt, str) {
@@ -73,7 +79,7 @@ export default class SVGImage {
         for (var vl1 in attr) {
             img.setAttribute(vl1, attr[vl1]);
         }
-        img.setAttributeNS(Paint.xmlnslink, 'xlink:href', 'data:image/png;base64,' + str);
+        img.setAttributeNS(Paint.xmlnslink, 'xlink:href', pictureUrl(str));
         img.setAttribute('clip-path', 'url(#clip_' + imageid + ')');
         g.appendChild(img);
         // redefine the orginal shape

@@ -608,7 +608,7 @@ export const REGISTRY = [
     key: 'atelierCamera',
     type: 'bool', scope: 'foyer', section: 'atelier', module: 'Atelier',
     label: 'Autoriser la caméra dans l’Atelier',
-    desc: 'Pour remplir une forme ou un costume avec une photo prise sur le moment. Les photos restent sur votre serveur. Désactivé, le bouton de l’appareil photo disparaît et les pages de l’Atelier n’ont plus le droit de demander la caméra ; les photos déjà prises restent dans les projets.',
+    desc: 'Pour remplir une forme d’un dessin avec une photo prise sur le moment, dans le niveau « Petits codeurs ». Les photos restent sur votre serveur. Désactivé, le bouton de l’appareil photo disparaît et les pages de l’Atelier n’ont plus le droit de demander la caméra ; les photos déjà prises restent dans les projets.',
     default: true,
   },
   {
