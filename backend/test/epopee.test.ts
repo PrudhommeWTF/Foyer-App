@@ -9,6 +9,7 @@ import { after, before, describe, it } from 'node:test';
 import { Contexte, appel, arreter, demarrer } from './securite-helpers';
 import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
 import { parseExploits, parseGabarit, parseRewards } from '../src/epopee/gabarit';
+import { BilanInput, computeBilan, councilPdf, eventful, lines, weekLine, weeklyHits } from '../src/epopee/bilan';
 
 describe('règles', () => {
   const amorce: Entry = { id: 'a', kind: 'amorce', delta: AMORCE, ref: null };
@@ -103,6 +104,57 @@ describe('Armurerie : règles', () => {
     assert.equal(optionalText(undefined, 10), ''); assert.equal(optionalText('  ', 10), ''); assert.equal(optionalText(' ok ', 10), 'ok');
     assert.equal(optionalText('x'.repeat(11), 10), null); assert.equal(optionalText(12, 10), null);
     assert.equal(dateInput('2026-12-05'), '2026-12-05'); assert.equal(dateInput('05/12/2026'), null); assert.equal(dateInput('2026-13-45'), null);
+  });
+});
+
+describe('le bilan de la semaine : calcul', () => {
+  const base: BilanInput = {
+    member: { id: 'k', name: 'Raphaël' }, from: '2026-10-12', to: '2026-10-18',
+    entries: [
+      { kind: 'etape', delta: 1, note: 'Dents', cancelled: false }, { kind: 'etape', delta: 1, note: 'Dents', cancelled: false }, { kind: 'etape', delta: 1, note: 'Cartable', cancelled: true },
+      { kind: 'exploit', delta: 2, note: 'Mettre la table', cancelled: false }, { kind: 'exploit', delta: 2, note: 'Mettre la table', cancelled: false }, { kind: 'exploit', delta: 3, note: 'Aider', cancelled: false },
+      { kind: 'bravo', delta: 2, note: 'Calme pendant les devoirs', cancelled: false }, { kind: 'bravo', delta: 1, note: null, cancelled: false },
+      { kind: 'amorce', delta: 5, note: null, cancelled: false }, { kind: 'echange', delta: -20, note: 'Cinéma', cancelled: false }, { kind: 'annulation', delta: -1, note: null, cancelled: false },
+    ],
+    routinesDone: 9, routinesPossible: 14, stepsSkipped: 1, pauses: 2, won: ['Cinéma'], lived: [], quest: { title: 'Nuit sous la tente', cost: 50 }, balance: 12,
+  };
+  const vide: BilanInput = { ...base, entries: [], routinesDone: 0, stepsSkipped: 0, pauses: 0, won: [], quest: null, balance: 5 };
+
+  it('ne compte que ce qui a été gagné : ni l’amorce, ni l’échange, ni ce qui a été annulé', () => {
+    const b = computeBilan(base);
+    assert.deepEqual([b.earned, b.etapes, b.exploits, b.bravos], [12, 2, 7, 3]);
+    assert.deepEqual(b.feats, [{ title: 'Mettre la table', times: 2 }, { title: 'Aider', times: 1 }]);
+    assert.deepEqual(b.words, ['Calme pendant les devoirs']);
+    assert.deepEqual(b.quest, { title: 'Nuit sous la tente', cost: 50, missing: 38 });
+    assert.equal(b.label, 'Semaine du lundi 12 au dimanche 18 octobre 2026');
+  });
+  it('la phrase du dimanche raconte la semaine, et une semaine calme se dit sans reproche', () => {
+    assert.equal(weekLine(computeBilan(base)), 'Raphaël cette semaine : 12 écus gagnés, 9 routines menées au bout sur 14, 2 pauses grain de sable, trésor gagné : Cinéma.');
+    assert.equal(weekLine(computeBilan({ ...base, won: [] })), 'Raphaël cette semaine : 12 écus gagnés, 9 routines menées au bout sur 14, 2 pauses grain de sable, encore 38 écus pour « Nuit sous la tente ».');
+    const calme = computeBilan(vide);
+    assert.equal(eventful(calme), false);
+    assert.equal(weekLine(calme), 'Raphaël cette semaine : une semaine calme, sans écu gagné. Demain est une nouvelle quête.');
+    assert.equal(lines(calme).length, 1); assert.match(lines(calme)[0], /pas un reproche/);
+  });
+  it('les lignes du bilan et son PDF', () => {
+    const l = lines(computeBilan(base));
+    assert.equal(l[0], '12 écus gagnés : 2 par les routines, 7 par les exploits, 3 par les bravos.');
+    assert.ok(l.includes('2 pauses grain de sable, 1 étape passée : autant de fois où ça coinçait et où l’on a su s’arrêter.'));
+    assert.ok(lines(computeBilan({ ...base, stepsSkipped: 0 })).includes('2 pauses grain de sable : autant de fois où ça coinçait et où l’on a su s’arrêter.'), 'un zéro ne se dit pas');
+    assert.ok(l.includes('Exploits : Mettre la table (2 fois), Aider.')); assert.ok(l.includes('Besace en fin de semaine : 12 écus.'));
+    const pdf = councilPdf([computeBilan(base), computeBilan({ ...vide, member: { id: 'g', name: 'Gaëtan' } })], '2026-10-12', 'On avance le coucher d’un quart d’heure.', '2026-10-18');
+    assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-'); assert.ok(pdf.length > 1500);
+    assert.equal(councilPdf([], '2026-10-12', '', '2026-10-18').subarray(0, 5).toString('latin1'), '%PDF-');
+  });
+  it('une notification par enfant enrôlé, le dimanche à partir de l’heure, pour les adultes', () => {
+    const kids = [{ id: 'k', name: 'Raphaël' }, { id: 'g', name: 'Gaëtan' }];
+    const de = (k: { id: string; name: string }) => computeBilan(k.id === 'k' ? base : { ...vide, member: k });
+    assert.deepEqual(weeklyHits(kids, ['a'], '2026-10-18T17:59', '18:00', de), [], 'pas avant l’heure');
+    assert.deepEqual(weeklyHits(kids, ['a'], '2026-10-17T19:00', '18:00', de), [], 'pas le samedi');
+    assert.deepEqual(weeklyHits(kids, [], '2026-10-18T18:00', '18:00', de), [], 'personne à prévenir');
+    const hits = weeklyHits(kids, ['a', 'b'], '2026-10-18T18:00', '18:00', de);
+    assert.deepEqual(hits.map((h) => [h.key, h.title, h.memberIds.length]), [['epopee-hebdo|k|2026-10-12', 'L’Épopée de Raphaël', 2], ['epopee-hebdo|g|2026-10-12', 'L’Épopée de Gaëtan', 2]]);
+    assert.match(hits[1].body, /une semaine calme/);
   });
 });
 
@@ -500,5 +552,41 @@ describe('le serment de l’alliance', () => {
     assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${camille}/serment`, undefined, ctx.jetons.membre)).status, 400);
     await appel(ctx.base, 'DELETE', `/epopee/membres/${noe}/enrolement`, undefined, ctx.jetons.membre);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${noe}/serment`, undefined, ctx.jetons.membre)).status, 409);
+  });
+});
+
+describe('le conseil de famille', () => {
+  type Conseil = { from: string; to: string; label: string; current: boolean; notes: string; notesBy: string | null; rituel: unknown[]; enfants: { memberId: string; earned: number; lines: string[]; words: string[] }[] };
+  const conseil = async (jeton: string, q = '') => appel(ctx.base, 'GET', '/epopee/conseil' + q, undefined, jeton);
+
+  it('le bilan de la semaine en cours compte ce que l’enfant a gagné, et seulement les enfants enrôlés', async () => {
+    await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 2, note: 'A consolé son frère' }, ctx.jetons.membre);
+    const c = (await conseil(ctx.jetons.membre)).json as Conseil;
+    assert.equal(c.current, true); assert.match(c.label, /^Semaine du lundi/); assert.equal(c.rituel.length, 3);
+    assert.deepEqual(c.enfants.map((e) => e.memberId), [lena], 'Noé, retiré, n’a pas de bilan');
+    assert.ok(c.enfants[0].earned >= 2); assert.ok(c.enfants[0].words.includes('A consolé son frère'));
+    assert.match(c.enfants[0].lines[0], /écus? gagnés? :/);
+  });
+  it('une semaine passée se relit ; une semaine à venir ou un jour qui n’est pas un lundi sont refusés', async () => {
+    const lundi = (await conseil(ctx.jetons.membre)).json.from as string;
+    const avant = dayBefore(dayBefore(dayBefore(dayBefore(dayBefore(dayBefore(dayBefore(lundi)))))));
+    const passe = await conseil(ctx.jetons.membre, `?semaine=${avant}`);
+    assert.equal(passe.status, 200); assert.equal(passe.json.current, false); assert.equal(passe.json.enfants[0].earned, 0);
+    assert.equal((await conseil(ctx.jetons.membre, `?semaine=${dayBefore(lundi)}`)).status, 400);
+    assert.equal((await conseil(ctx.jetons.membre, '?semaine=2999-01-04')).status, 400);
+    assert.equal((await conseil(ctx.jetons.membre, '?semaine=hier')).status, 400);
+  });
+  it('les notes du conseil se gardent par semaine, et le PDF se télécharge ; rien de cela pour un enfant', async () => {
+    const lundi = (await conseil(ctx.jetons.membre)).json.from as string;
+    const ecrit = await appel(ctx.base, 'PUT', '/epopee/conseil', { semaine: lundi, notes: ' On avance le coucher. ' }, ctx.jetons.membre);
+    assert.deepEqual([ecrit.status, ecrit.json.notes, ecrit.json.notesBy], [200, 'On avance le coucher.', 'Camille']);
+    assert.equal((await conseil(ctx.jetons.admin)).json.notes, 'On avance le coucher.');
+    assert.equal((await appel(ctx.base, 'PUT', '/epopee/conseil', { notes: 'x'.repeat(2001) }, ctx.jetons.membre)).status, 400);
+    const pdf = await fetch(ctx.base + '/epopee/conseil.pdf', { headers: { authorization: 'Bearer ' + ctx.jetons.membre } });
+    assert.equal(pdf.status, 200); assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+    assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString('latin1'), '%PDF-');
+    assert.equal((await conseil(ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'PUT', '/epopee/conseil', { notes: 'Plus de dessert' }, ctx.jetons.enfant)).status, 403);
+    assert.equal((await fetch(ctx.base + '/epopee/conseil.pdf', { headers: { authorization: 'Bearer ' + ctx.jetons.enfant } })).status, 403);
   });
 });

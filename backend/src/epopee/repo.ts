@@ -2,6 +2,8 @@
 // concerné : ce sont les routes qui décident qui a le droit de le nommer.
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
+import { parisDay } from '../revisions/bilan';
+import type { BilanInput } from './bilan';
 import type { ExploitTpl, RoutineTpl } from './gabarit';
 import { AMORCE, Display, Entry, Kind, QuestStatus, RewardCategory, RewardInput, RoutineKind, StepInput, StepStatus, canExchange, cancelRefusal, exchangeEntryId, pactTopUp, stepEntryId } from './rules';
 
@@ -368,6 +370,46 @@ export function honorQuest(q: QuestRow, day: string, child: string, parent: stri
   return info.changes ? getQuest(q.id) : null;
 }
 
+// ---- Le bilan de la semaine ---------------------------------------------------
+
+const count = (sql: string, ...args: unknown[]): number => (database.prepare(sql).get(...args) as { n: number | null }).n ?? 0;
+const daysBetween = (from: string, to: string): number => Math.round((Date.parse(to + 'T12:00:00Z') - Date.parse(from + 'T12:00:00Z')) / 86_400_000) + 1;
+
+/**
+ * Ce que le bilan d'une semaine a besoin de savoir d'un enfant, du jour `from`
+ * au jour `to` (heure de Paris), `today` bornant ce qui pouvait déjà être fait.
+ */
+export function weekData(member: { id: string; name: string }, from: string, to: string, today: string): BilanInput {
+  const all = entriesOf(member.id);
+  const cancelled = new Set(all.map((e) => e.ref).filter((x): x is string => !!x));
+  const inWeek = (iso: string | null): boolean => { const d = iso ? parisDay(iso) : ''; return d >= from && d <= to; };
+  // What could be done: the active routines, each day since the enrolment, up to today.
+  const p = profileOf(member.id);
+  const first = p && parisDay(p.enrolled_at) > from ? parisDay(p.enrolled_at) : from, last = today < to ? today : to;
+  const quests = database.prepare('SELECT * FROM epo_quests WHERE member_id = ?').all(member.id) as QuestRow[];
+  const current = quests.find((q) => q.status === 'active');
+  return {
+    member, from, to,
+    entries: all.filter((e) => inWeek(e.at)).map((e) => ({ kind: e.kind, delta: e.delta, note: e.note, cancelled: cancelled.has(e.id) })),
+    routinesDone: count('SELECT COUNT(*) AS n FROM epo_routine_days WHERE member_id = ? AND day BETWEEN ? AND ? AND ended_at IS NOT NULL', member.id, from, to),
+    routinesPossible: first > last ? 0 : routinesOf(member.id).length * daysBetween(first, last),
+    stepsSkipped: count("SELECT COUNT(*) AS n FROM epo_step_marks WHERE member_id = ? AND day BETWEEN ? AND ? AND status = 'saute'", member.id, from, to),
+    pauses: count('SELECT SUM(pauses) AS n FROM epo_routine_days WHERE member_id = ? AND day BETWEEN ? AND ?', member.id, from, to),
+    won: quests.filter((q) => inWeek(q.reached_at)).map((q) => q.title),
+    lived: quests.filter((q) => q.status === 'honoree' && !!q.honored_at && q.honored_at >= from && q.honored_at <= to).map((q) => q.title),
+    quest: current ? { title: current.title, cost: current.cost } : null,
+    balance: balanceOf(member.id),
+  };
+}
+
+export interface CouncilRow { week: string; notes: string; by_member: string | null; at: string; }
+export function council(week: string): CouncilRow | null {
+  return (database.prepare('SELECT * FROM epo_councils WHERE week = ?').get(week) as CouncilRow | undefined) ?? null;
+}
+export function setCouncil(week: string, notes: string, by: string | null): void {
+  database.prepare('INSERT INTO epo_councils (week, notes, by_member, at) VALUES (?, ?, ?, ?) ON CONFLICT (week) DO UPDATE SET notes = excluded.notes, by_member = excluded.by_member, at = excluded.at').run(week, notes, by, now());
+}
+
 // ---- Module -----------------------------------------------------------------
 
 export function moduleCounts(): { enfants: number; ecritures: number } {
@@ -376,5 +418,5 @@ export function moduleCounts(): { enfants: number; ecritures: number } {
 }
 /** Remise à zéro du module : quêtes, récompenses, exploits, demandes, routines, profils et grand livre. */
 export function resetModule(): void {
-  database.transaction(() => { for (const t of ['epo_quests', 'epo_rewards', 'epo_requests', 'epo_exploits', 'epo_step_marks', 'epo_routine_days', 'epo_steps', 'epo_routines', 'epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
+  database.transaction(() => { for (const t of ['epo_councils', 'epo_quests', 'epo_rewards', 'epo_requests', 'epo_exploits', 'epo_step_marks', 'epo_routine_days', 'epo_steps', 'epo_routines', 'epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
 }

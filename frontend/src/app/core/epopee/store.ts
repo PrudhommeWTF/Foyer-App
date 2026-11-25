@@ -26,6 +26,8 @@ export class EpopeeStore {
   readonly recompenses = signal<Reward[]>([]);
   readonly erreur = signal('');
   readonly pending = signal<Pending[]>([]);
+  /** Le conseil de famille est-il ouvert ? Posé aussi par la notification du dimanche. */
+  readonly conseil = signal(false);
   private owner: string | null = null;
   private flushing = false;
   private readonly me = computed(() => this.foyer.me()?.id ?? null);
@@ -40,7 +42,13 @@ export class EpopeeStore {
       });
     });
     window.addEventListener('online', () => void this.flush());
+    // Le bilan du dimanche touché : « #conseil » quand l'app était fermée, un
+    // message du service worker quand elle était ouverte (voir sw.js).
+    if (location.hash === '#conseil') { history.replaceState(history.state, '', location.pathname + location.search); this.ouvrirConseil(); }
+    navigator.serviceWorker?.addEventListener('message', (e: MessageEvent) => { if ((e.data as { type?: string } | null)?.type === 'foyer-epopee-conseil') this.ouvrirConseil(); });
   }
+
+  ouvrirConseil(): void { this.conseil.set(true); this.foyer.go('epopee'); }
 
   async charger(): Promise<void> {
     this.erreur.set('');

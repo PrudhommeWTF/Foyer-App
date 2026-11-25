@@ -4,15 +4,15 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 ## Où en est le module
 
-**Étape 5 sur 6 : l'alliance.** Tout commence par quelques minutes côte à côte, et un serment qui s'imprime.
+**Étape 6 sur 6 : le conseil de famille.** Le plan de départ est livré en entier.
 
 | Fait | Pas encore |
 |---|---|
-| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Le bilan de la semaine pour le conseil de famille |
-| Le parchemin du serment, à relire et à imprimer | Une notification au parent (exploit signalé, trésor choisi, trésor gagné) |
+| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Une notification au parent sur le moment (exploit signalé, trésor choisi, trésor gagné) |
 | Routines du matin et du soir, pas à pas, réglables | Une photo du moment dans le souvenir |
 | Exploits convenus, exploits signalés, bravos, journal | Créer une routine de plus que le matin et le soir |
-| L'Armurerie : récompenses, quête, pacte, échange, souvenirs | |
+| L'Armurerie : récompenses, quête, pacte, échange, souvenirs | Ouvrir l'écran sans réseau |
+| Le conseil de famille : bilan de la semaine, notes, PDF, notification du dimanche | |
 
 Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
 
@@ -30,6 +30,20 @@ Le serment scellé, le **parchemin** s'affiche : les lois, les promesses des deu
 On peut s'arrêter en route : ce qui est fait reste fait. Un enfant enrôlé sans serment (avant ce lot, ou parcours interrompu) voit ses parents invités à « Faire l'alliance » ; le parcours saute alors ce qui est déjà fait. Le serment ne se scelle qu'une fois, et garde sa date.
 
 Les promesses du parent ne sont pas décoratives. « Je ne me sers jamais des écus pour te punir » correspond à ce que l'application permet : elle n'a aucun retrait d'écus.
+
+## Le conseil de famille, à l'usage
+
+Le dimanche, à l'heure réglée (18 h par défaut, Paramètres, Épopée), chaque adulte qui l'a demandé reçoit une notification par enfant enrôlé : « Raphaël cette semaine : 23 écus gagnés, 9 routines menées au bout sur 14, trésor gagné : Soirée cinéma. » La toucher ouvre le conseil de famille ; le bouton « Le conseil de famille » de l'écran fait de même, n'importe quel jour.
+
+- **Le bilan de chaque enfant** (lundi à dimanche) : les écus gagnés et d'où ils viennent (routines, exploits, bravos), les routines menées au bout sur celles qui pouvaient l'être, les pauses et les étapes passées, les exploits de la semaine, les trésors gagnés et les moments vécus, la quête en cours, la besace. Les mots des bravos sont repris tels quels.
+- **Il compte ce qui a été fait, jamais ce qui a manqué.** Les écus d'amorce et ce qui a été annulé n'y figurent pas. Une semaine sans écu est « une semaine calme », dite sans reproche. Les enfants ne sont pas classés entre eux.
+- **Les trois temps du conseil**, rappelés à l'écran : le tour des mercis, ce qui a été gagné, ce qu'on ajuste.
+- **Ce qu'on a décidé** : des notes libres, gardées par semaine. Les flèches remontent aux semaines passées.
+- **Le bilan en PDF** : les mêmes lignes, les mots de la semaine et les notes du conseil, sur une page à imprimer ou à garder.
+
+Le conseil est réservé aux adultes (écran, API et PDF). « Routines possibles » compte les routines réglées de l'enfant, chaque jour depuis son enrôlement, jusqu'à aujourd'hui : en début de semaine le dénominateur est petit, c'est voulu. Les routines retirées en cours de semaine ne sont pas recomptées.
+
+Chacun coupe cette notification pour lui (Paramètres, Notifications, « bilan de l'Épopée du dimanche »). Elle suit les règles communes : rien pendant une suspension, une seule fois par enfant et par semaine.
 
 ## Une routine, à l'usage
 
@@ -99,6 +113,7 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | `epo_requests` | un exploit signalé par un enfant : en attente, validé, ou « pas tout à fait », et par qui |
 | `epo_rewards` | le catalogue de l'Armurerie : titre, phrase, prix, genre |
 | `epo_quests` | une quête : enfant, récompense, titre et prix au moment du choix, état (proposée, active, atteinte, honorée, abandonnée), pacte, souvenir |
+| `epo_councils` | les notes du conseil de famille d'une semaine (clé : le lundi), et qui les a écrites |
 | `epo_routine_days` | le déroulé d'une routine un jour donné : début, fin, nombre de pauses |
 
 ## Qui a le droit de quoi
@@ -111,6 +126,7 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | signaler un exploit convenu | oui, pour lui seul | non : un adulte crédite directement |
 | choisir un trésor, y renoncer avant le pacte, échanger ses écus | oui, pour lui seul | oui, pour n'importe quel enfant |
 | tenir le catalogue, sceller un pacte, abandonner une quête scellée, noter le moment vécu | refusé (403) | oui |
+| le bilan de la semaine, les notes du conseil, le PDF | refusé (403) | oui |
 | enrôler, retirer, régler (routines, exploits, affichage), créditer, répondre à une demande, annuler | refusé (403) | oui |
 
 Un jeton d'accès (assistant, script) n'entre pas dans l'API du module. L'écran figure au menu d'un enfant (`ECRANS_ENFANT`), sous « Mon épopée » à l'accueil.
@@ -144,13 +160,16 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | `POST /quetes/:id/abandon` | renoncer : l'enfant avant le pacte, un adulte tant que la quête est en cours |
 | `POST /quetes/:id/echange` | échanger les écus contre le trésor. 409 avec ce qui manque si la besace n'y est pas |
 | `POST /quetes/:id/vecu` | le moment a été vécu (adultes) : `{ date (aujourd'hui par défaut), child, parent }` |
+| `GET /conseil[?semaine=AAAA-MM-JJ]` | le bilan d'une semaine (un lundi, passé ou en cours ; la semaine en cours par défaut) : une entrée par enfant enrôlé (`earned`, `lines`, `words`), les trois temps du conseil, les notes (adultes) |
+| `PUT /conseil` | `{ semaine, notes }` : garder les notes du conseil, 2000 caractères au plus (adultes) |
+| `GET /conseil.pdf[?semaine=…]` | le même bilan en PDF, journalisé (adultes) |
 | `POST /journal/:id/annulation` | annuler une écriture (adultes). 409 avec la raison quand la règle le refuse |
 
 Chaque geste est journalisé (« Épopée : bravo de Nolwenn à Raphaël, +2 écus (« Table mise sans rappel »). »).
 
 ## Module éteint, remise à zéro
 
-Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface quêtes, récompenses, exploits, demandes, routines, profils et grand livre.
+Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface notes des conseils, quêtes, récompenses, exploits, demandes, routines, profils et grand livre.
 
 ## Vérifier depuis le serveur
 

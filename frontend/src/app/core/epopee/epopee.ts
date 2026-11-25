@@ -149,3 +149,12 @@ export interface SealPress { down: boolean; tappedAt: number; }
 export const sealSet = (s: SealPress, now: number): boolean => s.down || (s.tappedAt > 0 && now - s.tappedAt < SEAL_LATCH_MS);
 /** The oath is sealed when both seals are set at the same moment: two thumbs together, or one after the other in time. */
 export const bothSealed = (a: SealPress, b: SealPress, now: number): boolean => sealSet(a, now) && sealSet(b, now);
+
+/** The week's review for the family council, as the server tells it. */
+export interface Conseil {
+  from: string; to: string; label: string; current: boolean; notes: string; notesBy: string | null;
+  rituel: { title: string; text: string }[];
+  enfants: { memberId: string; earned: number; lines: string[]; words: string[] }[];
+}
+/** The Monday a week before (-1) or after (+1) a Monday 'AAAA-MM-JJ'. */
+export const shiftWeek = (monday: string, dir: -1 | 1): string => new Date(Date.parse(monday + 'T12:00:00Z') + dir * 7 * 86_400_000).toISOString().slice(0, 10);
