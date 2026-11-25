@@ -14,6 +14,8 @@ export interface Besace {
   memberId: string; enrolled: boolean; floor: number | null; balance: number | null; enrolledAt: string | null;
   /** How the pouch shows to the child: the number and the coins, or the coins alone. */
   display: 'nombre' | 'pieces' | null; timer: boolean | null;
+  /** The oath of the alliance: when it was sealed, and with which adult. */
+  swornAt: string | null; swornBy: string | null;
   day?: string; routines?: Routine[]; demandes?: Demande[]; quetes?: Quest[]; souvenirs?: Quest[]; journal?: Entry[];
 }
 /** A pouch joined to its member (name, colour), as the screen shows it. */
@@ -126,3 +128,24 @@ export function reachLine(cost: number, bal: number, perDay: number, child: bool
 export const longDay = (day: string): string => new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(day + 'T12:00:00Z'));
 /** The quest a child is on (chosen or sealed), if any. */
 export const currentQuest = (quests: Quest[]): Quest | null => quests.find((q) => q.status === 'proposee' || q.status === 'active') ?? null;
+
+// ---- The alliance: what parent and child agree on before the first écu ----
+
+/** The three laws of the household's Épopée, read together at the start. */
+export const LOIS: { icon: string; title: string; text: string }[] = [
+  { icon: 'users', title: 'On décide ensemble', text: 'Les routines, les exploits et les trésors se choisissent à deux. Personne ne les change tout seul dans son coin.' },
+  { icon: 'bouclier', title: 'Ce qui est gagné est gagné', text: 'Les écus d’amorce sont à toi pour toujours. Un effort récompensé ne se reprend pas parce qu’une journée a mal tourné.' },
+  { icon: 'clock', title: 'Quand ça coince, on s’aide', text: 'Un grain de sable, ça arrive à tout le monde. On fait une pause, on respire, et on repart ensemble.' },
+];
+/** What each side promises: the oath is reciprocal. */
+export const SERMENT: { child: string[]; parent: string[] } = {
+  child: ['Je fais mes routines du mieux que je peux.', 'Je dis quand ça coince, plutôt que de me fâcher tout seul.', 'Je choisis mes trésors avec mes parents.'],
+  parent: ['Je remarque tes efforts, et je te le dis tout de suite.', 'Je tiens les pactes que je scelle.', 'Je ne me sers jamais des écus pour te punir.'],
+};
+/** How long a tapped seal stays set: time to reach the other one with a mouse, or with one hand. */
+export const SEAL_LATCH_MS = 4000;
+/** One seal: held down right now, or tapped recently enough to still count. */
+export interface SealPress { down: boolean; tappedAt: number; }
+export const sealSet = (s: SealPress, now: number): boolean => s.down || (s.tappedAt > 0 && now - s.tappedAt < SEAL_LATCH_MS);
+/** The oath is sealed when both seals are set at the same moment: two thumbs together, or one after the other in time. */
+export const bothSealed = (a: SealPress, b: SealPress, now: number): boolean => sealSet(a, now) && sealSet(b, now);

@@ -122,7 +122,7 @@ after(async () => { await arreter(ctx); });
 describe('enrôlement', () => {
   it('avant : l’enfant figure, sans besace ; un bravo est refusé', async () => {
     const l = await appel(ctx.base, 'GET', '/epopee/membres', undefined, ctx.jetons.membre);
-    assert.deepEqual(l.json.enfants, [{ memberId: lena, enrolled: false, floor: null, balance: null, enrolledAt: null, display: null, timer: null }]);
+    assert.deepEqual(l.json.enfants, [{ memberId: lena, enrolled: false, floor: null, balance: null, enrolledAt: null, display: null, timer: null, swornAt: null, swornBy: null }]);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: uuid(), ecus: 1 }, ctx.jetons.membre)).status, 409);
   });
   it('un enfant ne s’enrôle pas lui-même, un adulte ne s’enrôle pas', async () => {
@@ -483,5 +483,22 @@ describe('Armurerie : récompenses, quêtes, pacte, souvenir', () => {
     assert.ok(!e.quetes.some((q) => q.id === quete));
     const souvenir = e.souvenirs.find((q) => q.id === quete)!;
     assert.deepEqual([souvenir.title, souvenir.memory!.child, souvenir.pact!.note], [petite.title, 'Quand le dragon a éternué.', 'Je suis fière de toi.']);
+  });
+});
+
+describe('le serment de l’alliance', () => {
+  it('un adulte le scelle avec l’enfant, une seule fois ; la date du premier serment reste', async () => {
+    assert.equal((await besace(ctx.jetons.enfant)).json.swornAt, null);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/serment`, undefined, ctx.jetons.enfant)).status, 403, 'un enfant ne scelle pas seul');
+    const un = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/serment`, undefined, ctx.jetons.membre);
+    assert.equal(un.status, 201); assert.ok(un.json.swornAt); assert.equal(un.json.swornBy, 'Camille');
+    const deux = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/serment`, undefined, ctx.jetons.admin);
+    assert.equal(deux.status, 200); assert.deepEqual([deux.json.swornAt, deux.json.swornBy], [un.json.swornAt, 'Camille']);
+    assert.equal((await besace(ctx.jetons.enfant)).json.swornBy, 'Camille', 'l’enfant relit son serment');
+  });
+  it('pas de serment sans enrôlement', async () => {
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${camille}/serment`, undefined, ctx.jetons.membre)).status, 400);
+    await appel(ctx.base, 'DELETE', `/epopee/membres/${noe}/enrolement`, undefined, ctx.jetons.membre);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${noe}/serment`, undefined, ctx.jetons.membre)).status, 409);
   });
 });

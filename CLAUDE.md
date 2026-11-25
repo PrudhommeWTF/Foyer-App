@@ -22,7 +22,7 @@ Conventions durables pour travailler sur **Foyer** (application de gestion famil
 
 ```
 frontend/src/app/
-  core/       # store (foyer.store.ts), api.service.ts, models.ts, ui-state.ts, helpers.ts, constants.ts, icon.ts ; revisions/ (exercises/ copie identique du registre serveur, revisions.ts et form.ts purs, store.ts : file foyer.revisionsQueue.<membre>) ; epopee/ (epopee.ts pur : sablier calculé sur l'horloge, respiration ; sound.ts : sons synthétisés, aucun fichier ; store.ts : file foyer.epopeeQueue.<membre>)
+  core/       # store (foyer.store.ts), api.service.ts, models.ts, ui-state.ts, helpers.ts, constants.ts, icon.ts ; revisions/ (exercises/ copie identique du registre serveur, revisions.ts et form.ts purs, store.ts : file foyer.revisionsQueue.<membre>) ; epopee/ (epopee.ts pur : sablier calculé sur l'horloge, respiration ; sound.ts : sons synthétisés, aucun fichier ; store.ts : file foyer.epopeeQueue.<membre>) ; l'enrôlement passe par le parcours d'alliance (screens/epopee/alliance.ts), jamais par un simple bouton
   screens/    # un fichier par écran fonctionnel (calendar, courses, budget, …) ; un dossier quand l'écran a des composants (home/, taches/, revisions/ : runner plein écran, pavé, grille, formulaire de paramètres engendré)
   shell/      # chrome : login, onboarding, sidebar, topbar, tabbar, modales (family, profile, search, notifications), toast
   shared/     # composants réutilisables (avatar, modal)

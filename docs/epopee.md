@@ -4,18 +4,32 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 ## Où en est le module
 
-**Étape 4 sur 6 : l'Armurerie.** Les écus mènent quelque part : un trésor choisi, un pacte, un moment vécu.
+**Étape 5 sur 6 : l'alliance.** Tout commence par quelques minutes côte à côte, et un serment qui s'imprime.
 
 | Fait | Pas encore |
 |---|---|
-| Enrôler un enfant : sa besace commence avec 5 écus d'amorce | Le parcours d'alliance et le parchemin à imprimer |
-| Routines du matin et du soir, pas à pas, réglables | Le bilan de la semaine pour le conseil de famille |
-| Exploits convenus, exploits signalés, bravos, journal | Une notification au parent (exploit signalé, trésor choisi, trésor gagné) |
-| L'Armurerie : un catalogue de récompenses réelles, à prix fixe | Une photo du moment dans le souvenir |
-| Une quête à la fois : trésor choisi, pacte scellé par un parent, jauge | Créer une routine de plus que le matin et le soir |
-| L'échange des écus contre le trésor, puis le souvenir du moment vécu | |
+| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Le bilan de la semaine pour le conseil de famille |
+| Le parchemin du serment, à relire et à imprimer | Une notification au parent (exploit signalé, trésor choisi, trésor gagné) |
+| Routines du matin et du soir, pas à pas, réglables | Une photo du moment dans le souvenir |
+| Exploits convenus, exploits signalés, bravos, journal | Créer une routine de plus que le matin et le soir |
+| L'Armurerie : récompenses, quête, pacte, échange, souvenirs | |
 
 Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
+
+## L'alliance, à l'usage
+
+Un parent ne « crée pas un compte de points » à son enfant : il s'assoit à côté de lui et ils commencent ensemble. « Commencer l'alliance avec … » ouvre, sur l'appareil du parent, un parcours en quatre temps :
+
+1. **Les trois lois**, à lire à voix haute : on décide ensemble ; ce qui est gagné est gagné ; quand ça coince, on s'aide.
+2. **La besace.** L'enfant l'ouvre lui-même : c'est à ce moment qu'il est enrôlé et que ses écus d'amorce arrivent, un par un.
+3. **Le premier trésor**, choisi ensemble dans l'Armurerie. Le pacte est scellé aussitôt (le parent est là), ses détails se précisent ensuite. « Choisir plus tard » est permis.
+4. **Le serment.** Chacun lit ses promesses, puis l'enfant et le parent posent un pouce sur leur sceau, en même temps. Avec une souris ou au clavier : l'un, puis l'autre, dans les quatre secondes. Un seul sceau ne suffit pas.
+
+Le serment scellé, le **parchemin** s'affiche : les lois, les promesses des deux côtés, le premier trésor, deux lignes de signature. « Imprimer le parchemin » ne sort que lui. Il se retrouve ensuite dans les réglages de l'enfant, et l'enfant le relit depuis sa besace.
+
+On peut s'arrêter en route : ce qui est fait reste fait. Un enfant enrôlé sans serment (avant ce lot, ou parcours interrompu) voit ses parents invités à « Faire l'alliance » ; le parcours saute alors ce qui est déjà fait. Le serment ne se scelle qu'une fois, et garde sa date.
+
+Les promesses du parent ne sont pas décoratives. « Je ne me sers jamais des écus pour te punir » correspond à ce que l'application permet : elle n'a aucun retrait d'écus.
 
 ## Une routine, à l'usage
 
@@ -77,7 +91,7 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 
 | Table | Contenu |
 |---|---|
-| `epo_profiles` | un enfant enrôlé : son plancher, la date, l'adulte qui l'a enrôlé, la date de retrait s'il a été retiré, ses réglages (affichage de la besace, sablier) |
+| `epo_profiles` | un enfant enrôlé : son plancher, la date, l'adulte qui l'a enrôlé, la date de retrait s'il a été retiré, ses réglages (affichage de la besace, sablier), la date du serment et l'adulte qui l'a scellé |
 | `epo_ledger` | le grand livre : identifiant, enfant, genre (`amorce`, `bravo`, `etape`, `exploit`, `echange`, `annulation`), montant, quelques mots, écriture annulée (`ref`), auteur, instant |
 | `epo_routines`, `epo_steps` | les routines d'un enfant (matin, soir, heure prévue) et leurs étapes (titre, phrase, pictogramme, durée du sablier, écus) |
 | `epo_step_marks` | une étape un jour donné : faite ou passée, par qui |
@@ -108,10 +122,11 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | Route | Effet |
 |---|---|
 | `GET /membres` | les enfants du foyer et leur besace (`enrolled`, `floor`, `balance`) : tous pour un adulte, soi pour un enfant |
-| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, ses demandes (en attente, ou tranchées ce jour), ses réglages (`display`, `timer`), ses quêtes vivantes (`quetes`) et ses souvenirs (`souvenirs`, 30 au plus), et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
+| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, ses demandes (en attente, ou tranchées ce jour), ses réglages (`display`, `timer`), son serment (`swornAt`, `swornBy`), ses quêtes vivantes (`quetes`) et ses souvenirs (`souvenirs`, 30 au plus), et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
 | `POST /membres/:id/enrolement` | enrôler (adultes). 201 quand l'amorce est versée, 200 ensuite. 400 si le membre n'est pas un enfant |
 | `DELETE /membres/:id/enrolement` | retirer de l'Épopée (adultes) ; rien n'est supprimé |
 | `POST /membres/:id/bravos` | `{ id (uuid), ecus (1 à 3), note (120 caractères au plus) }` (adultes). 201 à la première réception, 200 et `duplicate: true` ensuite. 409 si l'enfant n'est pas enrôlé |
+| `POST /membres/:id/serment` | sceller le serment de l'alliance (adultes, enfant enrôlé). 201 la première fois, 200 ensuite : la date du premier serment reste |
 | `PATCH /membres/:id/reglages` | `{ display: "nombre" ou "pieces", timer }` (adultes) ; un réglage absent ne bouge pas |
 | `POST /membres/:id/routines/gabarit` | poser les routines du gabarit à un enfant qui n'en a aucune ; avec `{ replace: true }`, remplacer les siennes (adultes) |
 | `PUT /routines/:id` | régler une routine (adultes) : `title`, `time` (HH:MM), `steps` dans l'ordre (`id` pour une étape existante, `title`, `hint`, `icon`, `seconds`, `ecus`). Une étape absente est archivée. La première faute est nommée |
