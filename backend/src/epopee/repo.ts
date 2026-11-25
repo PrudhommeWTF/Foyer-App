@@ -2,6 +2,8 @@
 // concerné : ce sont les routes qui décident qui a le droit de le nommer.
 import crypto from 'node:crypto';
 import type { Database } from 'better-sqlite3';
+import * as files from '../storage/files';
+import type { DetectedType } from '../storage/blobs';
 import { parisDay } from '../revisions/bilan';
 import type { BilanInput } from './bilan';
 import type { ExploitTpl, RoutineTpl } from './gabarit';
@@ -283,7 +285,7 @@ export interface RewardRow { id: string; title: string; description: string; cos
 export interface QuestRow {
   id: string; member_id: string; reward_id: string; title: string; cost: number; status: QuestStatus; proposed_by: string | null; created_at: string;
   pact_date: string | null; pact_items: string; pact_rule: string; pact_note: string; sealed_by: string | null; sealed_at: string | null;
-  reached_at: string | null; honored_at: string | null; honored_by: string | null; memory_child: string; memory_parent: string; closed_at: string | null;
+  reached_at: string | null; honored_at: string | null; honored_by: string | null; memory_child: string; memory_parent: string; closed_at: string | null; photo_file_id: number | null;
 }
 export interface Pact { date: string | null; items: string; rule: string; note: string; }
 
@@ -376,6 +378,28 @@ export function honorQuest(q: QuestRow, day: string, child: string, parent: stri
   return info.changes ? getQuest(q.id) : null;
 }
 
+// ---- La photo d'un souvenir -----------------------------------------------------
+
+/** Les fichiers que le module détient : le ménage du démarrage ne doit pas les prendre pour des orphelins. */
+export function referencedFileIds(): number[] {
+  return (database.prepare('SELECT DISTINCT photo_file_id AS id FROM epo_quests WHERE photo_file_id IS NOT NULL').all() as { id: number }[]).map((r) => r.id);
+}
+/** Retire un fichier du disque quand plus aucun souvenir ne le montre (deux souvenirs peuvent partager la même photo). */
+const release = (fileId: number | null): void => {
+  if (fileId !== null && !database.prepare('SELECT 1 FROM epo_quests WHERE photo_file_id = ? LIMIT 1').get(fileId)) files.remove(fileId);
+};
+/** Pose la photo d'un souvenir, à la place de la précédente s'il y en avait une. */
+export function setPhoto(q: QuestRow, name: string, buf: Buffer, type: DetectedType): QuestRow {
+  const { file } = files.storeOnce('epopee', 'epo', name, buf, type);
+  database.prepare('UPDATE epo_quests SET photo_file_id = ? WHERE id = ?').run(file.id, q.id);
+  if (q.photo_file_id !== file.id) release(q.photo_file_id);
+  return getQuest(q.id)!;
+}
+export function removePhoto(q: QuestRow): void {
+  database.prepare('UPDATE epo_quests SET photo_file_id = NULL WHERE id = ?').run(q.id);
+  release(q.photo_file_id);
+}
+
 // ---- Le bilan de la semaine ---------------------------------------------------
 
 const count = (sql: string, ...args: unknown[]): number => (database.prepare(sql).get(...args) as { n: number | null }).n ?? 0;
@@ -422,7 +446,9 @@ export function moduleCounts(): { enfants: number; ecritures: number } {
   const n = (sql: string): number => (database.prepare(sql).get() as { n: number }).n;
   return { enfants: n('SELECT COUNT(*) AS n FROM epo_profiles'), ecritures: n('SELECT COUNT(*) AS n FROM epo_ledger') };
 }
-/** Remise à zéro du module : quêtes, récompenses, exploits, demandes, routines, profils et grand livre. */
+/** Remise à zéro du module : conseils, quêtes et leurs photos, récompenses, exploits, demandes, routines, profils et grand livre. */
 export function resetModule(): void {
+  const photos = referencedFileIds();
   database.transaction(() => { for (const t of ['epo_councils', 'epo_quests', 'epo_rewards', 'epo_requests', 'epo_exploits', 'epo_step_marks', 'epo_routine_days', 'epo_steps', 'epo_routines', 'epo_profiles', 'epo_ledger']) database.exec(`DELETE FROM ${t}`); })();
+  for (const id of photos) files.remove(id);
 }

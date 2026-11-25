@@ -6,7 +6,8 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
-import { Contexte, appel, arreter, demarrer } from './securite-helpers';
+import { Contexte, appel, arreter, brut, demarrer } from './securite-helpers';
+import { jpeg, png } from './equipements-fixtures';
 import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
 import { parseExploits, parseGabarit, parseRewards } from '../src/epopee/gabarit';
 import { EpopeeEvent, emit, eventMessage, onEpopeeEvent, recipients } from '../src/epopee/events';
@@ -653,5 +654,55 @@ describe('notifications sur le moment : ce que les routes émettent', () => {
     assert.deepEqual(vus.map((e) => e.kind), ['quete', 'tresor']);
     const tresor = vus[1] as Extract<EpopeeEvent, { kind: 'tresor' }>;
     assert.deepEqual([tresor.id, tresor.date, tresor.actorId === camille || tresor.actorId === lena], [q.id, '2030-01-05', true]);
+  });
+});
+
+describe('la photo d’un souvenir', () => {
+  let souvenir = '', enCours = '';
+  const voir = async (id: string, jeton: string) => {
+    const res = await fetch(`${ctx.base}/epopee/quetes/${id}/photo`, { headers: { authorization: 'Bearer ' + jeton } });
+    return { status: res.status, type: res.headers.get('content-type'), nosniff: res.headers.get('x-content-type-options'), corps: Buffer.from(await res.arrayBuffer()) };
+  };
+  const photoDe = async (id: string) => ((await besace(ctx.jetons.membre)).json.souvenirs as { id: string; photo: number | null }[]).find((q) => q.id === id)?.photo ?? null;
+
+  before(async () => {
+    souvenir = ((await besace(ctx.jetons.membre)).json.souvenirs as { id: string }[])[0].id;
+    enCours = ((await besace(ctx.jetons.membre)).json.quetes as { id: string }[])[0].id;
+  });
+
+  it('un adulte pose une photo sur un souvenir ; l’enfant la voit', async () => {
+    assert.equal(await photoDe(souvenir), null);
+    assert.equal((await voir(souvenir, ctx.jetons.membre)).status, 404);
+    const image = jpeg(800, 600, 1);
+    const pose = await brut(ctx.base, `/epopee/quetes/${souvenir}/photo`, image, ctx.jetons.membre);
+    assert.equal(pose.status, 201); assert.equal(typeof pose.json.quete.photo, 'number');
+    const vue = await voir(souvenir, ctx.jetons.enfant);
+    assert.deepEqual([vue.status, vue.type, vue.nosniff], [200, 'image/jpeg', 'nosniff']); assert.ok(vue.corps.equals(image));
+  });
+
+  it('seul un adulte la pose ou la retire, et seulement sur un moment vécu', async () => {
+    assert.equal((await brut(ctx.base, `/epopee/quetes/${souvenir}/photo`, jpeg(100, 100, 2), ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/quetes/${souvenir}/photo`, undefined, ctx.jetons.enfant)).status, 403);
+    assert.equal((await brut(ctx.base, `/epopee/quetes/${enCours}/photo`, jpeg(100, 100, 2), ctx.jetons.membre)).status, 409);
+    assert.equal((await brut(ctx.base, '/epopee/quetes/inconnue/photo', jpeg(100, 100, 2), ctx.jetons.membre)).status, 404);
+  });
+
+  it('refuse ce qui n’est pas une photo, ou une photo non réduite', async () => {
+    assert.equal((await brut(ctx.base, `/epopee/quetes/${souvenir}/photo`, Buffer.from('%PDF-1.4 pas une photo'), ctx.jetons.membre)).status, 415);
+    assert.equal((await brut(ctx.base, `/epopee/quetes/${souvenir}/photo`, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'), ctx.jetons.membre)).status, 415);
+    assert.equal((await brut(ctx.base, `/epopee/quetes/${souvenir}/photo`, jpeg(9000, 9000, 3), ctx.jetons.membre)).status, 422);
+    assert.equal((await voir(souvenir, ctx.jetons.membre)).type, 'image/jpeg', 'la photo en place n’a pas bougé');
+  });
+
+  it('une nouvelle photo remplace l’ancienne, et la retirer rend le souvenir sans photo', async () => {
+    const avant = await photoDe(souvenir);
+    const autre = png(640, 480);
+    assert.equal((await brut(ctx.base, `/epopee/quetes/${souvenir}/photo`, autre, ctx.jetons.admin)).status, 201);
+    assert.notEqual(await photoDe(souvenir), avant);
+    assert.ok((await voir(souvenir, ctx.jetons.membre)).corps.equals(autre));
+    assert.equal((await appel(ctx.base, 'GET', `/files/${avant}`, undefined, ctx.jetons.membre)).status, 404, 'genre gardé : la route commune des fichiers ne la sert pas');
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/quetes/${souvenir}/photo`, undefined, ctx.jetons.membre)).status, 200);
+    assert.equal(await photoDe(souvenir), null); assert.equal((await voir(souvenir, ctx.jetons.enfant)).status, 404);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/quetes/${souvenir}/photo`, undefined, ctx.jetons.membre)).status, 404);
   });
 });
