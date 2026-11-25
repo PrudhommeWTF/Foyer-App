@@ -32,6 +32,10 @@ import { revisionsRouter } from './revisions/routes';
 import { atelierRouter } from './atelier/routes';
 import { loadFamilyLibrary } from './atelier/library';
 import { moduleCounts as atlCounts, purgeArchived as atlPurge, resetModule as atlReset } from './atelier/repo';
+import { epopeeRouter } from './epopee/routes';
+import { loadGabarit } from './epopee/gabarit';
+import { activeProfile as epoActive, moduleCounts as epoCounts, resetModule as epoReset, weekData as epoWeekData } from './epopee/repo';
+import { computeBilan as epoBilan, weeklyHits as epoWeeklyHits } from './epopee/bilan';
 import { bareme } from './revisions/bareme';
 import { matieres } from './revisions/matieres';
 import { bilanFor, weeklyHits } from './revisions/bilan';
@@ -414,7 +418,7 @@ api.get('/live', auth, ...tokenGate, requireMember, (req: Request, res: Response
 // Un module désactivé ferme ses accès : ses endpoints répondent 403, comme un
 // enfant sur un module adulte. Le masquage dans l'interface n'est pas la barrière,
 // c'en est le reflet ; la barrière est ici, côté serveur.
-const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions' | 'modAtelier') => (_req: Request, res: Response, next: NextFunction): void => {
+const requireModule = (flag: 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions' | 'modAtelier' | 'modEpopee') => (_req: Request, res: Response, next: NextFunction): void => {
   if (effectiveSetting(flag) === false) { res.status(403).json({ error: 'Ce module est désactivé.' }); return; }
   next();
 };
@@ -472,6 +476,12 @@ api.use('/revisions', auth, apiTokenLimiter, denyToken, requireMember, requireMo
 // session. Pas de jeton d'accès : rien ici n'est fait pour un script.
 api.use('/atelier', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modAtelier'),
   atelierRouter(() => (getHousehold().state as HouseholdState).members));
+
+// ---- Épopée (écus, routines et récompenses des enfants) ----
+// Hors du document : le solde est la somme d'un grand livre en ajout seul. Un
+// enfant n'y lit que sa besace, un adulte y écrit.
+api.use('/epopee', auth, apiTokenLimiter, denyToken, requireMember, requireModule('modEpopee'),
+  epopeeRouter(() => (getHousehold().state as HouseholdState).members, () => loadGabarit(DATA_DIR)));
 // La corbeille de l'Atelier : au démarrage puis une fois par jour, les projets
 // supprimés depuis plus longtemps que le réglage partent pour de bon. Module
 // éteint, rien ne bouge : désactiver ne supprime jamais.
@@ -506,6 +516,7 @@ api.get('/modules', auth, ...tokenGate, requireMember, (_req: Request, res: Resp
       entretien: entCounts(),
       equipements: { fiches: qc['eqp_items'] || 0, pieces: qc['eqp_attachments'] || 0 },
       atelier: atlCounts(),
+      epopee: epoCounts(),
     },
   });
 });
@@ -534,6 +545,8 @@ api.post('/modules/:mod/reset', auth, ...tokenGate, requireMember, requireAdmin,
     eqpReset();
   } else if (mod === 'atelier') {
     atlReset();
+  } else if (mod === 'epopee') {
+    epoReset();
   } else {
     res.status(404).json({ error: 'Module inconnu.' });
     return;
@@ -730,13 +743,14 @@ export function start(): void {
    * La préférence est personnelle : chacun coupe les siennes sans rien imposer
    * aux autres. Le foyer, lui, peut tout suspendre d'un geste (`pushPaused`).
    */
-  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions'): boolean => {
+  const memberWants = (memberId: string, kind: 'reminder' | 'assigned' | 'entretien' | 'garantie' | 'revisions' | 'epopee'): boolean => {
     const state = getHousehold().state as HouseholdState;
     // Les clés sont écrites en toutes lettres : une clé calculée ne dit rien
     // au garde-fou de la CI, qui ne saurait plus si ces réglages servent.
     if (kind === 'entretien') return setting('entretienRappel', state, memberId);
     if (kind === 'garantie') return setting('eqpGarantieRappel', state, memberId);
     if (kind === 'revisions') return setting('revisionsBilanHebdo', state, memberId);
+    if (kind === 'epopee') return setting('epopeeBilanHebdo', state, memberId);
     return kind === 'reminder'
       ? setting('pushReminders', state, memberId)
       : setting('pushAssigned', state, memberId);
@@ -786,6 +800,11 @@ export function start(): void {
       (() => { const accts = new Set(listMemberAccounts().map((a) => a.memberId)); return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id); })(),
       wall, String(effectiveSetting('revisionsBilanHeure') || '18:30'),
       (kid, from, to) => bilanFor(kid, from, to, matieres(DATA_DIR), (ex) => bareme(DATA_DIR, ex).maitrise, (ex) => contextFor(DATA_DIR, ex)))),
+    epopeeWeekly: (wall) => (effectiveSetting('modEpopee') === false ? [] : epoWeeklyHits(
+      (getHousehold().state as HouseholdState).members.filter((m) => m.enfant && epoActive(m.id)).map((m) => ({ id: m.id, name: m.name })),
+      (() => { const accts = new Set(listMemberAccounts().map((a) => a.memberId)); return (getHousehold().state as HouseholdState).members.filter((m) => !m.enfant && accts.has(m.id)).map((m) => m.id); })(),
+      wall, String(effectiveSetting('epopeeBilanHeure') || '18:00'),
+      (kid, from, to) => epoBilan(epoWeekData(kid, from, to, wall.slice(0, 10))))),
     garanties: () => (effectiveSetting('modEquipements') === false
       ? { items: [], alertDays: 0 }
       : { items: watchedWarranties(), alertDays: eqpRules().alertDays }),

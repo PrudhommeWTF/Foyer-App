@@ -11,6 +11,7 @@ export interface ModuleCounts {
   entretien: { gestes: number; realisations: number; justificatifs: number };
   equipements: { fiches: number; pieces: number };
   atelier: { projets: number; medias: number };
+  epopee: { enfants: number; ecritures: number };
 }
 
 @Injectable({ providedIn: 'root' })
