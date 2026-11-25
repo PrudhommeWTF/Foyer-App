@@ -138,6 +138,17 @@ function notice (text, buttons) {
     box.querySelector('button').focus();
 }
 
+// Says, for as long as the page is open, that this project belongs to someone else
+function watching () {
+    var band = document.createElement('div');
+    band.textContent = 'Ce projet n’est pas à toi : tu peux regarder et essayer, rien ne sera enregistré.';
+    var bs = band.style;
+    bs.position = 'fixed'; bs.left = '50%'; bs.bottom = '10px'; bs.transform = 'translateX(-50%)'; bs.zIndex = '9000';
+    bs.padding = '8px 16px'; bs.borderRadius = '12px'; bs.background = 'rgba(40, 40, 40, 0.82)'; bs.color = '#FFFFFF';
+    bs.font = '600 15px sans-serif'; bs.pointerEvents = 'none';
+    document.body.appendChild(band);
+}
+
 // The 'not saved' state, visible as long as the last save has not reached the server.
 // While it lasts, sending is tried again regularly: the browser's 'online' event
 // alone is not reliable enough (it says a network is there, not that Foyer answers).
@@ -370,7 +381,9 @@ export default class Web {
         var open = function (p) {
             revisions[p.id] = p.rev;
             try {
-                window.localStorage.setItem(HINT, JSON.stringify({membre: member, id: p.id, name: p.name}));
+                if (!owner || owner == member) {
+                    window.localStorage.setItem(HINT, JSON.stringify({membre: member, id: p.id, name: p.name}));
+                }
             } catch (e) {
                 // no storage: the Foyer screen will simply not offer it offline
             }
@@ -393,7 +406,10 @@ export default class Web {
             var p = Object.assign(row, {rev: r.body.projet.rev, membre: r.body.projet.memberId, dirty: false});
             owner = r.body.projet.memberId;
             if (p.membre != member) {
-                open(p); // watched, not kept: the offline copy is for one's own projects
+                // Someone else's project (a parent looking, or a brother's shared project):
+                // watched and tried, never kept nor saved
+                watching();
+                open(p);
                 return;
             }
             Offline.put('projets', p).then(function () {
@@ -429,6 +445,11 @@ export default class Web {
     // chooses: nothing is ever overwritten silently. Without network the project
     // stays on the device, marked as not saved, and leaves when the network is back.
     static projectSave (obj, fcn) {
+        // Someone else's project is never saved: what is tried here stays here
+        if (owner && owner != member) {
+            later(fcn, 'ok');
+            return;
+        }
         var row = {
             id: obj.id, name: obj.name, version: obj.version, json: obj.json, thumbnail: obj.thumbnail,
             mtime: String(Date.now()), rev: revisions[obj.id], membre: member, dirty: true

@@ -6,7 +6,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 7 sur 9 : la voix et la photo.**
+**Étape 8 sur 9 : la voix, la photo, et l'Atelier en famille.**
 
 | Fait | Pas encore |
 |---|---|
@@ -18,7 +18,8 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Téléphone : les projets se regardent en plein écran ; écran debout : « Tourne l'iPad » | |
 | Dessins gardés sur le disque, « mes personnages » retrouvés d'un projet à l'autre | |
 | Son enregistré au micro (les deux niveaux), photo dans l'éditeur de dessin (petits) | |
-| Corbeille : un projet supprimé reste récupérable, puis est purgé | Vue parent (lire les projets d'un enfant, restaurer depuis l'écran), partage |
+| Corbeille : un projet supprimé reste récupérable, puis est purgé | |
+| Vue parent (un onglet par enfant, restaurer), partage entre frères et sœurs, tuile d'accueil, aide, outil pour les assistants | |
 | Limites réglables : nombre de projets, espace disque | |
 | Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | Le niveau choisi par enfant |
 
@@ -49,14 +50,14 @@ Tables `atl_*` dans `foyer.db`, hors du document du foyer (`backend/src/atelier/
 
 | Table | Contenu |
 |---|---|
-| `atl_projects` | Un projet : membre, niveau, nom, le JSON **au format de l'éditeur, non modifié**, la vignette, `version` (compteur de concurrence), `archived_at` |
+| `atl_projects` | Un projet : membre, niveau, nom, le JSON **au format de l'éditeur, non modifié**, la vignette, `version` (compteur de concurrence), `archived_at`, `shared_at` (partagé avec la famille) |
 | `atl_media` | Les fichiers d'un membre (dessins SVG, vignettes PNG), par nom. Les octets sont dans `pieces/`, comme toutes les pièces jointes |
 | `atl_assets` | « Mes personnages » et « mes décors » |
 
 - **Le serveur nomme les fichiers** : l'empreinte MD5 du contenu qu'il a lui-même nettoyé, plus l'extension. Le nom proposé par l'appareil est ignoré.
 - **Enregistrement avec version** : l'éditeur présente la version qu'il a lue. Si un autre appareil a enregistré entre-temps, le serveur répond 409 et l'enfant choisit (« Garder celui-ci » ou « Garder l'autre »).
 - **Rien n'est supprimé par un enfant** : supprimer archive. Passé `atelierCorbeilleJours` (30 par défaut), la purge quotidienne efface le projet et les fichiers que plus rien ne cite. Module éteint, la purge ne tourne pas.
-- **Qui voit quoi** : un enfant ne lit et n'écrit que ses projets et ses fichiers. Un adulte lit ceux de tous, n'écrit que les siens, et lui seul restaure. Pas d'accès par jeton d'API.
+- **Qui voit quoi** : un enfant ne lit et n'écrit que ses projets et ses fichiers, plus, en lecture, les projets qu'un autre membre partage et les fichiers que ces projets citent. Un adulte lit ceux de tous, n'écrit que les siens, et lui seul restaure. Personne ne modifie le projet d'un autre. Pas d'accès par jeton d'API, sauf l'outil d'assistant décrit plus bas.
 
 ### Exploitation
 
@@ -72,7 +73,7 @@ Projets dans la corbeille :
 sqlite3 /var/lib/foyer/foyer.db "SELECT id, member_id, name, archived_at FROM atl_projects WHERE archived_at IS NOT NULL ORDER BY archived_at;"
 ```
 
-Restaurer un projet supprimé, en attendant le bouton de la vue parent (remplacer l'identifiant) :
+Restaurer un projet supprimé sans passer par l'écran (le bouton « Restaurer » de la vue parent fait la même chose ; remplacer l'identifiant) :
 
 ```bash
 sqlite3 /var/lib/foyer/foyer.db "UPDATE atl_projects SET archived_at = NULL WHERE id = 'IDENTIFIANT';"
@@ -80,7 +81,7 @@ sqlite3 /var/lib/foyer/foyer.db "UPDATE atl_projects SET archived_at = NULL WHER
 
 ### Sauvegarde et retour en arrière
 
-Les tables sont nouvelles : la mise à jour ne touche à aucune donnée existante. Avant de l'installer, service arrêté :
+Les tables sont propres au module : la mise à jour ne touche à aucune autre donnée. La version qui apporte le partage ajoute une colonne (`atl_projects.shared_at`), sans rien réécrire. Avant de l'installer, service arrêté :
 
 ```bash
 systemctl stop foyer
@@ -223,6 +224,18 @@ curl -sI https://<ton foyer>/atelier/grands/static/assets/$(curl -s https://<ton
 La réponse attendue est `cross-origin`. Sinon la zone de dessin des costumes reste vide.
 
 **Contrôle à chaque build de Foyer** : le résultat ne doit citer aucun hôte hors d'une liste explicite d'adresses inertes (espaces de noms XML, renvois à de la documentation dans des messages d'erreur). Les serveurs de Scratch n'y figurent pas : s'il en réapparaît un, le build échoue.
+
+## En famille
+
+**Vue parent.** Dans l'écran Atelier d'un adulte, un onglet par autre membre : ses projets, qu'on regarde (toucher la vignette) ou dont on voit les blocs (l'œil), sans jamais rien y modifier ; ceux qu'il a supprimés, avec un bouton « Restaurer » tant que le délai de la corbeille court ; et la place qu'il occupe sur la limite du foyer. Ouvert par quelqu'un d'autre que son auteur, un éditeur n'enregistre rien.
+
+**Partage entre frères et sœurs** (réglage « Partage entre frères et sœurs », activé par défaut). L'auteur d'un projet le marque « partagé » (le bouton aux deux silhouettes). Les autres le voient dans « Projets de la famille », le regardent, et peuvent en faire **une copie à eux** : la copie emporte les dessins et les sons du projet, qui comptent alors dans la place de celui qui copie, et ne dépend plus de l'original. L'original n'est jamais modifié par un autre. Réglage éteint, plus rien de partagé ne se voit ; rien n'est supprimé, et le partage revient tel quel si on le rallume.
+
+**Accueil.** Pour un enfant, la tuile de l'Atelier montre la vignette de son dernier projet et « Reprendre : son nom ». Pour un adulte (sur téléphone, où l'accueil est fait de tuiles), « Raphaël a travaillé sur 2 projets cette semaine » : seuls ceux qui ont travaillé sont nommés. Module éteint, la tuile disparaît.
+
+**Aide.** « Comment ça marche ? », en bas de l'écran Atelier : les premiers gestes des deux niveaux, et ce que fait chaque bloc des Petits codeurs, avec son image.
+
+**Assistants.** Un outil en lecture, `atelier_projets` (voir [`assistants.md`](assistants.md)) : les projets d'un enfant, sans leur contenu.
 
 ## Micro et caméra
 

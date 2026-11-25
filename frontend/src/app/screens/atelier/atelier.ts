@@ -1,10 +1,10 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
-
-type Niveau = 'petits' | 'grands';
-interface Projet { id: string; level: Niveau; name: string; rev: number; thumbnail: { pagecount: number; md5: string } | null; updatedAt: string; }
+import { AtelierStore } from '../../core/atelier/store';
+import { NIVEAU, Niveau, Projet, roomLine } from '../../core/atelier/atelier';
+import { AtelierAide } from './aide';
 /** An example shipped with the editor: a ready-made project the child gets a copy of. */
 interface Exemple { id: string; name: string; desc: string; image: string; json: unknown; }
 
@@ -15,14 +15,63 @@ const NARROW = '(max-width: 760px)';
  * Atelier code : la bibliothèque de projets de celui qui est connecté. Les deux
  * éditeurs (petits et grands codeurs) sont des pages à part (atelier/<niveau>/editor.html,
  * code tiers adapté) : cet écran crée, range et ouvre, il ne dessine aucun bloc.
+ *
+ * Un adulte y trouve aussi un onglet par autre membre : ses projets en lecture
+ * seule, ceux qu'il a supprimés (à restaurer) et la place qu'il occupe. Chacun
+ * y voit les projets que les autres partagent, et peut en faire une copie.
  */
 @Component({
   selector: 'screen-atelier',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, AtelierAide],
   template: `
     <div class="screen-enter">
+      @if (!store.isChild() && atelier.members().length) {
+        <div class="tabs" role="tablist">
+          <button role="tab" [class.on]="!who()" [attr.aria-selected]="!who()" (click)="voir(null)">Mes projets</button>
+          @for (m of atelier.members(); track m.id) {
+            <button role="tab" [class.on]="who() === m.id" [attr.aria-selected]="who() === m.id" (click)="voir(m.id)">{{ m.name }}</button>
+          }
+        </div>
+      }
+
+      @if (membre(); as m) {
+        <!-- Un autre membre, vu par un adulte : tout se regarde, rien ne se modifie. -->
+        <div class="head-row">
+          <div class="count">{{ m.projets ? m.projets + ' projet' + (m.projets > 1 ? 's' : '') : 'Pas encore de projet' }}</div>
+          <div class="room">{{ room(m.octets) }}</div>
+        </div>
+        @if (autres(); as liste) {
+          <div class="tiles">
+            @for (p of liste; track p.id) {
+              <div class="tile">
+                <button class="thumb" (click)="regarder(p)" [attr.aria-label]="'Regarder ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5, p.memberId)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
+                <div class="tname">{{ p.name }}</div>
+                <div class="tlevel">{{ niveau(p) }}@if (p.shared) { · partagé }</div>
+                @if (!narrow()) {
+                  <div class="acts"><button (click)="ouvrir(p)" aria-label="Voir les blocs" title="Voir les blocs, sans rien modifier"><f-icon name="eye" [size]="17" color="var(--ink2)" [width]="2" /></button></div>
+                }
+              </div>
+            }
+          </div>
+          @if (corbeille().length) {
+            <div class="sep">Supprimés, à restaurer pendant {{ store.setting('atelierCorbeilleJours') }} jours</div>
+            <div class="tiles">
+              @for (p of corbeille(); track p.id) {
+                <div class="tile">
+                  <div class="thumb">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5, p.memberId)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</div>
+                  <div class="tname">{{ p.name }}</div>
+                  <div class="tlevel">{{ niveau(p) }}</div>
+                  <button class="btn btn-ghost restore" [disabled]="busy()" (click)="restaurer(p)"><f-icon name="refresh" [size]="16" color="var(--ink2)" [width]="2" /> Restaurer</button>
+                </div>
+              }
+            </div>
+          }
+        } @else if (erreur(); as e) {
+          <div class="card empty"><div class="empty-title">L’Atelier ne répond pas</div><div class="empty-text">{{ e }}</div><button class="btn btn-primary" (click)="voir(m.id)">Réessayer</button></div>
+        }
+      } @else {
       @if (narrow()) {
         <div class="note">Ici, tu peux regarder tes projets. Pour créer, ouvre l’Atelier sur l’iPad ou l’ordinateur.</div>
       } @else {
@@ -73,9 +122,12 @@ const NARROW = '(max-width: 760px)';
                   <button class="thumb" (click)="ouvrir(p)" [attr.aria-label]="'Ouvrir ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
                 }
                 <div class="tname">{{ p.name }}</div>
-                <div class="tlevel">{{ p.level === 'grands' ? 'Grands codeurs' : 'Petits codeurs' }}</div>
+                <div class="tlevel">{{ niveau(p) }}@if (p.shared && partage()) { · partagé avec la famille }</div>
                 @if (!narrow()) {
                   <div class="acts">
+                    @if (partage()) {
+                      <button [class.on]="p.shared" (click)="partager(p)" [attr.aria-label]="p.shared ? 'Ne plus partager' : 'Partager avec la famille'" [attr.aria-pressed]="p.shared" [title]="p.shared ? 'Ne plus partager' : 'Partager avec la famille'"><f-icon name="users" [size]="17" [color]="p.shared ? 'var(--accent, #E56B4E)' : 'var(--ink2)'" [width]="2" /></button>
+                    }
                     <button (click)="renommer(p)" aria-label="Renommer" title="Renommer"><f-icon name="edit" [size]="17" color="var(--ink2)" [width]="2" /></button>
                     <button (click)="dupliquer(p)" aria-label="Dupliquer" title="Dupliquer"><f-icon name="copy" [size]="17" color="var(--ink2)" [width]="2" /></button>
                     <button (click)="supprimer(p)" aria-label="Supprimer" title="Supprimer"><f-icon name="trash" [size]="17" color="var(--ink2)" [width]="2" /></button>
@@ -85,6 +137,22 @@ const NARROW = '(max-width: 760px)';
             }
           </div>
         }
+      }
+
+      @if (famille().length) {
+        <div class="sep">Projets de la famille</div>
+        <div class="tiles">
+          @for (p of famille(); track p.id) {
+            <div class="tile">
+              <button class="thumb" (click)="regarder(p)" [attr.aria-label]="'Regarder ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5, p.memberId)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
+              <div class="tname">{{ p.name }}</div>
+              <div class="tlevel">de {{ p.memberName }} · {{ niveau(p) }}</div>
+              @if (!narrow()) {
+                <div class="acts"><button [disabled]="busy()" (click)="copier(p)" aria-label="En faire une copie à moi" title="En faire une copie à moi"><f-icon name="copy" [size]="17" color="var(--ink2)" [width]="2" /></button></div>
+              }
+            </div>
+          }
+        </div>
       }
 
       @if (!narrow() && exemples().length) {
@@ -99,6 +167,11 @@ const NARROW = '(max-width: 760px)';
           }
         </div>
       }
+
+      }
+
+      <button class="btn btn-ghost aide" (click)="aide.set(true)">Comment ça marche ?</button>
+      @if (aide()) { <atelier-aide (close)="aide.set(false)" /> }
 
       <details class="apropos">
         <summary>À propos de l’Atelier code</summary>
@@ -129,6 +202,13 @@ const NARROW = '(max-width: 760px)';
     .niveau:hover { border-color: var(--ink3); }
     .ntitle { font-family: var(--font-display); font-size: 17px; font-weight: 800; color: var(--ink); }
     .ndesc { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .tabs button { min-height: 44px; padding: 0 16px; border: none; border-radius: 22px; background: var(--surface); font: inherit; font-weight: 800; font-size: 14px; color: var(--ink2); cursor: pointer; }
+    .tabs button.on { background: var(--ink); color: var(--bg, #fff); }
+    .room { font-size: 13px; font-weight: 700; color: var(--ink3); }
+    .restore { width: 100%; justify-content: center; margin-top: 4px; min-height: 44px; }
+    .aide { margin-top: 28px; min-height: 44px; }
+    .acts button.on { background: var(--line2); }
     .tdesc { margin: 0 4px 6px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.4; }
     .sep { display: flex; align-items: center; gap: 12px; margin: 28px 0 16px; font-size: 13px; font-weight: 800; color: var(--ink3); }
     .sep::before, .sep::after { content: ''; flex: 1; height: 1px; background: var(--line2); }
@@ -147,7 +227,8 @@ const NARROW = '(max-width: 760px)';
 })
 export class AtelierScreen {
   private readonly api = inject(ApiService);
-  private readonly store = inject(FoyerStore);
+  readonly store = inject(FoyerStore);
+  readonly atelier = inject(AtelierStore);
 
   readonly projets = signal<Projet[] | null>(null);
   readonly erreur = signal('');
@@ -158,6 +239,16 @@ export class AtelierScreen {
   /** Whether the two levels are offered, after « Nouveau projet ». */
   readonly choix = signal(false);
   readonly exemples = signal<Exemple[]>([]);
+  /** What the other members share: to watch, or to copy. */
+  readonly famille = signal<Projet[]>([]);
+  /** For an adult: the member whose workshop is shown, null for one's own. */
+  readonly who = signal<string | null>(null);
+  readonly membre = computed(() => this.atelier.members().find((m) => m.id === this.who()) ?? null);
+  readonly autres = signal<Projet[] | null>(null);
+  readonly corbeille = signal<Projet[]>([]);
+  readonly aide = signal(false);
+  /** Sharing between brothers and sisters, as long as the household allows it. */
+  readonly partage = computed(() => this.store.setting('atelierPartageFratrie') !== false);
 
   constructor() {
     try {
@@ -172,8 +263,11 @@ export class AtelierScreen {
 
   async charger(): Promise<void> {
     this.erreur.set('');
-    try { this.projets.set((await this.api.request<{ projets: Projet[] }>('atelier/projets')).projets); }
-    catch (e) {
+    try {
+      this.projets.set((await this.api.request<{ projets: Projet[] }>('atelier/projets')).projets);
+      // Without sharing, or without network, the section simply does not show
+      this.api.request<{ projets: Projet[] }>('atelier/projets/famille').then((r) => this.famille.set(r.projets), () => this.famille.set([]));
+    } catch (e) {
       this.erreur.set((e as Error).message);
       try {
         const d = JSON.parse(localStorage.getItem('foyer.atelier.dernier') || 'null') as { membre: string; id: string; name: string; level?: Niveau } | null;
@@ -181,6 +275,22 @@ export class AtelierScreen {
       } catch { this.dernier.set(null); }
     }
   }
+
+  /** An adult opens the workshop of another member: its projects, and what was deleted. */
+  async voir(id: string | null): Promise<void> {
+    this.who.set(id); this.autres.set(null); this.corbeille.set([]); this.erreur.set(''); this.choix.set(false);
+    if (!id) { void this.charger(); return; }
+    try {
+      const m = encodeURIComponent(id);
+      const [live, gone] = await Promise.all([
+        this.api.request<{ projets: Projet[] }>(`atelier/projets?membre=${m}`), this.api.request<{ projets: Projet[] }>(`atelier/projets?membre=${m}&corbeille=1`),
+      ]);
+      if (this.who() !== id) return;
+      this.autres.set(live.projets); this.corbeille.set(gone.projets);
+    } catch (e) { this.erreur.set((e as Error).message); }
+  }
+  niveau(p: { level: Niveau }): string { return NIVEAU[p.level]; }
+  room(octets: number): string { return roomLine(octets, this.atelier.quotaMo()); }
 
   /** Each editor is a page of its own, served next to the application, with its own way of naming the project. */
   private page(p: { id: string; level: Niveau }, watch: boolean): string {
@@ -193,7 +303,11 @@ export class AtelierScreen {
   exempleUrl(file: string): string { return new URL(`atelier/petits/samples/${file}`, document.baseURI).href; }
   /** On a phone the editor cannot be used: the project opens to be watched, full screen. */
   regarder(p: { id: string; level: Niveau }): void { location.href = this.page(p, true); }
-  vignette(name: string): string { return new URL(`api/atelier/medias/${encodeURIComponent(name)}`, document.baseURI).href; }
+  /** A thumbnail is a file of the owner of the project: said so when it is someone else's. */
+  vignette(name: string, owner?: string): string {
+    const whose = owner && owner !== this.store.me()?.id ? `?membre=${encodeURIComponent(owner)}` : '';
+    return new URL(`api/atelier/medias/${encodeURIComponent(name)}${whose}`, document.baseURI).href;
+  }
 
   private async agir(fn: () => Promise<void>): Promise<void> {
     if (this.busy()) return;
@@ -227,6 +341,28 @@ export class AtelierScreen {
   }
   dupliquer(p: Projet): Promise<void> {
     return this.agir(async () => { await this.api.post(`atelier/projets/${p.id}/copie`, { name: `${p.name} (copie)`.slice(0, 80) }); await this.charger(); });
+  }
+  partager(p: Projet): Promise<void> {
+    return this.agir(async () => {
+      await this.api.request(`atelier/projets/${p.id}`, { method: 'PATCH', body: JSON.stringify({ shared: !p.shared }) });
+      this.store.toast(p.shared ? `« ${p.name} » n’est plus partagé.` : `« ${p.name} » est partagé avec la famille.`);
+      await this.charger();
+    });
+  }
+  /** One's own copy of a project someone else shares: the original is never touched. */
+  copier(p: Projet): Promise<void> {
+    return this.agir(async () => {
+      await this.api.post(`atelier/projets/${p.id}/copie`, { name: `${p.name} (copie)`.slice(0, 80) });
+      this.store.toast(`« ${p.name} » est copié dans tes projets.`);
+      await this.charger();
+    });
+  }
+  restaurer(p: Projet): Promise<void> {
+    return this.agir(async () => {
+      await this.api.post(`atelier/projets/${p.id}/restaurer`, {});
+      this.store.toast(`« ${p.name} » est de retour dans les projets de ${this.membre()?.name ?? 'son auteur'}.`);
+      await Promise.all([this.voir(this.who()), this.atelier.load()]);
+    });
   }
   supprimer(p: Projet): Promise<void> {
     if (!confirm(`Supprimer « ${p.name} » ? Un parent pourra le retrouver pendant quelque temps.`)) return Promise.resolve();

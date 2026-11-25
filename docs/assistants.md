@@ -145,6 +145,13 @@ l'application. Module éteint : les six outils disparaissent.
 
 ### Révisions
 
+Quand le module **Atelier code** est actif (il l'est par défaut), un outil en
+lecture dit ce que les enfants y ont fait, sans rien montrer de leurs projets :
+
+| Outil | Ce qu'il fait |
+|---|---|
+| `atelier_projets` | Les projets d'un enfant (ou de chaque enfant, sans `enfant`) : nom, niveau (Petits ou Grands codeurs), date de dernière modification, nombre de pages et de personnages, partagé ou non avec la famille. Ni scripts, ni dessins, ni sons. Un compte enfant ne voit que les siens |
+
 Quand le module **Révisions** est actif (il l'est par défaut), huit outils
 lisent le suivi des enfants, règlent leur programme et gèrent les listes de la
 dictée. Ils ne connaissent
