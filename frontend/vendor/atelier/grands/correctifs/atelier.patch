@@ -139,6 +139,50 @@ index 1126241466..7e854a0c29 100644
  
  class UpdatePeripheralStep extends React.Component {
      constructor (props) {
+diff --git a/packages/scratch-gui/src/components/menu-bar/file-menu.jsx b/packages/scratch-gui/src/components/menu-bar/file-menu.jsx
+index 5618d79867..1fcf3d9e42 100644
+--- a/packages/scratch-gui/src/components/menu-bar/file-menu.jsx
++++ b/packages/scratch-gui/src/components/menu-bar/file-menu.jsx
+@@ -27,7 +27,6 @@ const FileMenu = ({
+     canSave,
+     canCreateCopy,
+     canRemix,
+-    onClickNew,
+     onClickSave,
+     onClickSaveAsCopy,
+     onClickRemix,
+@@ -64,13 +63,6 @@ const FileMenu = ({
+             id="gui.menuBar.saveAsCopy"
+         />
+     );
+-    const newProjectMessage = (
+-        <FormattedMessage
+-            defaultMessage="New"
+-            description="Menu bar item for creating a new project"
+-            id="gui.menuBar.new"
+-        />
+-    );
+ 
+     return (
+         <button
+@@ -98,15 +90,8 @@ const FileMenu = ({
+                 place={isRtl ? 'left' : 'right'}
+                 onRequestClose={handleOnClose}
+             >
+-                <MenuSection>
+-                    <MenuItem
+-                        onClick={onClickNew}
+-                        isDataMenuItem
+-                        onParentKeyDown={handleKeyDownOpenMenu}
+-                    >
+-                        {newProjectMessage}
+-                    </MenuItem>
+-                </MenuSection>
++                {/* Atelier (Foyer): no 'New' here. It opened a project that belongs to nobody and is
++                    never saved: a project is created from the Atelier screen of Foyer. */}
+                 {(canSave || canCreateCopy || canRemix) && (
+                     <MenuSection>
+                         {canSave && (
 diff --git a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx b/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx
 index 630fd4915f..42fb2f8e47 100644
 --- a/packages/scratch-gui/src/components/menu-bar/menu-bar.jsx

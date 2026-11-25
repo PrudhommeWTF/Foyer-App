@@ -3,7 +3,8 @@ import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 
-interface Projet { id: string; name: string; rev: number; thumbnail: { pagecount: number; md5: string } | null; updatedAt: string; }
+type Niveau = 'petits' | 'grands';
+interface Projet { id: string; level: Niveau; name: string; rev: number; thumbnail: { pagecount: number; md5: string } | null; updatedAt: string; }
 /** An example shipped with the editor: a ready-made project the child gets a copy of. */
 interface Exemple { id: string; name: string; desc: string; image: string; json: unknown; }
 
@@ -11,9 +12,9 @@ interface Exemple { id: string; name: string; desc: string; image: string; json:
 const NARROW = '(max-width: 760px)';
 
 /**
- * Atelier code : la bibliothèque de projets de celui qui est connecté. L'éditeur
- * lui-même est une page à part (atelier/petits/editor.html, code tiers adapté) :
- * cet écran crée, range et ouvre, il ne dessine aucun bloc.
+ * Atelier code : la bibliothèque de projets de celui qui est connecté. Les deux
+ * éditeurs (petits et grands codeurs) sont des pages à part (atelier/<niveau>/editor.html,
+ * code tiers adapté) : cet écran crée, range et ouvre, il ne dessine aucun bloc.
  */
 @Component({
   selector: 'screen-atelier',
@@ -27,8 +28,20 @@ const NARROW = '(max-width: 760px)';
       } @else {
         <div class="head-row">
           <div class="count">@if (projets()?.length; as n) { {{ n }} projet{{ n > 1 ? 's' : '' }} }</div>
-          <button class="btn btn-primary" [disabled]="busy()" (click)="creer()"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau projet</button>
+          <button class="btn btn-primary" [disabled]="busy()" (click)="choix.set(!choix())" [attr.aria-expanded]="choix()"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau projet</button>
         </div>
+        @if (choix()) {
+          <div class="niveaux">
+            <button class="niveau" [disabled]="busy()" (click)="creer('petits')">
+              <span class="ntitle">Petits codeurs</span>
+              <span class="ndesc">Des blocs en images à emboîter, pour raconter une histoire. Pas besoin de savoir lire.</span>
+            </button>
+            <button class="niveau" [disabled]="busy()" (click)="creer('grands')">
+              <span class="ntitle">Grands codeurs</span>
+              <span class="ndesc">Des blocs écrits, des variables et des conditions, pour fabriquer un jeu ou une animation.</span>
+            </button>
+          </div>
+        }
       }
 
       @if (erreur(); as e) {
@@ -36,7 +49,7 @@ const NARROW = '(max-width: 760px)';
           @if (dernier(); as d) {
             <div class="empty-title">Pas de réseau</div>
             <div class="empty-text">La liste de tes projets n’est pas disponible, mais tu peux continuer « {{ d.name }} » : il s’enregistrera au retour du réseau.</div>
-            <button class="btn btn-primary" (click)="narrow() ? regarder(d.id) : ouvrir(d.id)">Continuer « {{ d.name }} »</button>
+            <button class="btn btn-primary" (click)="narrow() ? regarder(d) : ouvrir(d)">Continuer « {{ d.name }} »</button>
           } @else {
             <div class="empty-title">L’Atelier ne répond pas</div><div class="empty-text">{{ e }}</div>
             <button class="btn btn-primary" (click)="charger()">Réessayer</button>
@@ -48,18 +61,19 @@ const NARROW = '(max-width: 760px)';
             <div class="empty-ico"><f-icon name="blocs" [size]="30" color="var(--ink3)" [width]="1.8" /></div>
             <div class="empty-title">Pas encore de projet</div>
             <div class="empty-text">Un projet, c’est une petite histoire : des personnages, un décor, et des blocs à emboîter pour les faire bouger.</div>
-            @if (!narrow()) { <button class="btn btn-primary" [disabled]="busy()" (click)="creer()"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Créer mon premier projet</button> }
+            @if (!narrow()) { <button class="btn btn-primary" [disabled]="busy()" (click)="choix.set(true)"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Créer mon premier projet</button> }
           </div>
         } @else {
           <div class="tiles">
             @for (p of liste; track p.id) {
               <div class="tile">
                 @if (narrow()) {
-                  <button class="thumb" (click)="regarder(p.id)" [attr.aria-label]="'Regarder ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
+                  <button class="thumb" (click)="regarder(p)" [attr.aria-label]="'Regarder ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
                 } @else {
-                  <button class="thumb" (click)="ouvrir(p.id)" [attr.aria-label]="'Ouvrir ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
+                  <button class="thumb" (click)="ouvrir(p)" [attr.aria-label]="'Ouvrir ' + p.name">@if (p.thumbnail; as t) { <img [src]="vignette(t.md5)" alt="" /> } @else { <f-icon name="blocs" [size]="34" color="var(--ink3)" [width]="1.6" /> }</button>
                 }
                 <div class="tname">{{ p.name }}</div>
+                <div class="tlevel">{{ p.level === 'grands' ? 'Grands codeurs' : 'Petits codeurs' }}</div>
                 @if (!narrow()) {
                   <div class="acts">
                     <button (click)="renommer(p)" aria-label="Renommer" title="Renommer"><f-icon name="edit" [size]="17" color="var(--ink2)" [width]="2" /></button>
@@ -74,7 +88,7 @@ const NARROW = '(max-width: 760px)';
       }
 
       @if (!narrow() && exemples().length) {
-        <div class="sep">Partir d’un exemple</div>
+        <div class="sep">Partir d’un exemple (petits codeurs)</div>
         <div class="tiles">
           @for (e of exemples(); track e.id) {
             <div class="tile">
@@ -88,8 +102,10 @@ const NARROW = '(max-width: 760px)';
 
       <details class="apropos">
         <summary>À propos de l’Atelier code</summary>
-        <p>L’Atelier code est construit à partir du code source ouvert de ScratchJr, publié par le Massachusetts Institute of Technology sous licence BSD 3 clauses. Il est sans lien avec la Scratch Foundation ni approbation de sa part.
+        <p>L’Atelier code est sans lien avec la Scratch Foundation ni approbation de sa part. Le niveau « Petits codeurs » est construit à partir du code source ouvert de ScratchJr, publié par le Massachusetts Institute of Technology sous licence BSD 3 clauses.
           <a [href]="exempleUrl('../LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
+        <p>Le niveau « Grands codeurs » est construit à partir du code source de l’éditeur de Scratch, publié par la Scratch Foundation sous licence GNU Affero General Public License, version 3. Sa source et les modifications de Foyer sont dans le dépôt de Foyer (frontend/vendor/atelier/grands).
+          <a [href]="grandsUrl('LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
         <p>Les personnages et les décors de la bibliothèque viennent de Scratch, sous licence Creative Commons Attribution-ShareAlike 2.0 : « Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu. »
           <a [href]="exempleUrl('../svglibrary/LICENCE.md')" target="_blank" rel="noopener">Détail et licence</a></p>
         <p>Boulon, le robot de l’Atelier, a été dessiné pour Foyer.</p>
@@ -107,6 +123,12 @@ const NARROW = '(max-width: 760px)';
     button.thumb:active { transform: scale(.98); }
     .thumb img { width: 100%; height: 100%; object-fit: contain; }
     .tname { margin: 10px 4px 4px; font-weight: 800; font-size: 15px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .tlevel { margin: 0 4px 4px; font-size: 12px; font-weight: 700; color: var(--ink3); }
+    .niveaux { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 22px; }
+    .niveau { display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 18px; border: 2px solid var(--line2); border-radius: 18px; background: var(--surface); cursor: pointer; min-height: 44px; }
+    .niveau:hover { border-color: var(--ink3); }
+    .ntitle { font-family: var(--font-display); font-size: 17px; font-weight: 800; color: var(--ink); }
+    .ndesc { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
     .tdesc { margin: 0 4px 6px; font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.4; }
     .sep { display: flex; align-items: center; gap: 12px; margin: 28px 0 16px; font-size: 13px; font-weight: 800; color: var(--ink3); }
     .sep::before, .sep::after { content: ''; flex: 1; height: 1px; background: var(--line2); }
@@ -132,7 +154,9 @@ export class AtelierScreen {
   readonly busy = signal(false);
   readonly narrow = signal(false);
   /** The project last opened on this device by this member, left by the editor for when the list cannot load. */
-  readonly dernier = signal<{ id: string; name: string } | null>(null);
+  readonly dernier = signal<{ id: string; name: string; level: Niveau } | null>(null);
+  /** Whether the two levels are offered, after « Nouveau projet ». */
+  readonly choix = signal(false);
   readonly exemples = signal<Exemple[]>([]);
 
   constructor() {
@@ -152,17 +176,23 @@ export class AtelierScreen {
     catch (e) {
       this.erreur.set((e as Error).message);
       try {
-        const d = JSON.parse(localStorage.getItem('foyer.atelier.dernier') || 'null') as { membre: string; id: string; name: string } | null;
-        this.dernier.set(d && d.membre === this.store.me()?.id ? { id: d.id, name: d.name } : null);
+        const d = JSON.parse(localStorage.getItem('foyer.atelier.dernier') || 'null') as { membre: string; id: string; name: string; level?: Niveau } | null;
+        this.dernier.set(d && d.membre === this.store.me()?.id ? { id: d.id, name: d.name, level: d.level ?? 'petits' } : null);
       } catch { this.dernier.set(null); }
     }
   }
 
-  /** The editor is a page of its own, served next to the application. */
-  ouvrir(id: string): void { location.href = new URL(`atelier/petits/editor.html?pmd5=${encodeURIComponent(id)}&mode=edit`, document.baseURI).href; }
+  /** Each editor is a page of its own, served next to the application, with its own way of naming the project. */
+  private page(p: { id: string; level: Niveau }, watch: boolean): string {
+    const id = encodeURIComponent(p.id);
+    const query = p.level === 'grands' ? `projet=${id}${watch ? '&vue=plein' : ''}` : `pmd5=${id}&mode=${watch ? 'look&vue=plein' : 'edit'}`;
+    return new URL(`atelier/${p.level}/editor.html?${query}`, document.baseURI).href;
+  }
+  ouvrir(p: { id: string; level: Niveau }): void { location.href = this.page(p, false); }
+  grandsUrl(file: string): string { return new URL(`atelier/grands/${file}`, document.baseURI).href; }
   exempleUrl(file: string): string { return new URL(`atelier/petits/samples/${file}`, document.baseURI).href; }
   /** On a phone the editor cannot be used: the project opens to be watched, full screen. */
-  regarder(id: string): void { location.href = new URL(`atelier/petits/editor.html?pmd5=${encodeURIComponent(id)}&mode=look&vue=plein`, document.baseURI).href; }
+  regarder(p: { id: string; level: Niveau }): void { location.href = this.page(p, true); }
   vignette(name: string): string { return new URL(`api/atelier/medias/${encodeURIComponent(name)}`, document.baseURI).href; }
 
   private async agir(fn: () => Promise<void>): Promise<void> {
@@ -171,11 +201,11 @@ export class AtelierScreen {
     try { await fn(); } catch (e) { this.store.toast((e as Error).message); } finally { this.busy.set(false); }
   }
 
-  creer(): Promise<void> {
+  creer(level: Niveau): Promise<void> {
     return this.agir(async () => {
       const n = (this.projets()?.length ?? 0) + 1;
-      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: `Projet ${n}`, level: 'petits' });
-      this.ouvrir(projet.id);
+      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: `Projet ${n}`, level });
+      this.ouvrir(projet);
     });
   }
   /** The child never edits the example itself: a project of their own is created from it. */
@@ -187,7 +217,7 @@ export class AtelierScreen {
       const { name } = await this.api.upload<{ name: string }>('atelier/medias', new File([image], e.image));
       const pages = (e.json as { pages: unknown[] }).pages.length;
       await this.api.put(`atelier/projets/${projet.id}`, { rev: projet.rev, name: e.name, json: JSON.stringify(e.json), thumbnail: JSON.stringify({ pagecount: pages, md5: name }) });
-      this.ouvrir(projet.id);
+      this.ouvrir(projet);
     });
   }
   renommer(p: Projet): Promise<void> {
