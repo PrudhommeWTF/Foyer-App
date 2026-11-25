@@ -16,7 +16,7 @@ export const ECRANS_ADULTES: ReadonlySet<string> = new Set(['finances', 'employe
  * c'est un menu d'enfant de primaire, quatre portes plutôt que douze, où
  * Contacts, Cartes de fidélité ou Équipements n'ont rien à faire.
  */
-export const ECRANS_ENFANT: ReadonlySet<string> = new Set(['home', 'calendar', 'taches', 'planning', 'ecole', 'revisions', 'atelier']);
+export const ECRANS_ENFANT: ReadonlySet<string> = new Set(['home', 'calendar', 'taches', 'planning', 'ecole', 'revisions', 'atelier', 'epopee']);
 
 /** Les entrées du menu « + » d'un enfant : ce qui mène à ses écrans. */
 export const AJOUTS_ENFANT: ReadonlySet<string> = new Set(['task', 'slot']);
@@ -51,6 +51,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'planning', label: 'Emploi du temps', icon: 'planning' },
       { id: 'revisions', label: 'Révisions', icon: 'grille' },
       { id: 'atelier', label: 'Atelier code', icon: 'blocs' },
+      { id: 'epopee', label: 'Épopée', icon: 'bouclier' },
     ],
   },
   {

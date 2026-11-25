@@ -6,7 +6,7 @@
 // Un module éteint est un drapeau de réglage foyer à `false`. Activés par défaut,
 // sauf École : il contacte un service extérieur, on ne l'allume qu'exprès.
 
-export type ModuleFlag = 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions' | 'modAtelier';
+export type ModuleFlag = 'modRepas' | 'modFidelite' | 'modFinances' | 'modEmploye' | 'modEcole' | 'modEntretien' | 'modEquipements' | 'modRevisions' | 'modAtelier' | 'modEpopee';
 
 export interface ModuleDef {
   flag: ModuleFlag;
@@ -28,10 +28,11 @@ export const MODULES: ModuleDef[] = [
   { flag: 'modEquipements', id: 'equipements', label: 'Équipements', desc: 'Les fiches des appareils de la maison : facture, plaque, numéro de série et garantie.', screens: ['equipements'] },
   { flag: 'modRevisions', id: 'revisions', label: 'Révisions', desc: 'Des exercices courts pour réviser (les tables, la dictée de mots), et le suivi de chaque enfant. Réactivé, il retrouve l’historique tel quel.', screens: ['revisions'] },
   { flag: 'modAtelier', id: 'atelier', label: 'Atelier code', desc: 'Un atelier pour apprendre à programmer en assemblant des blocs. Désactivé, l’écran disparaît ; les projets des enfants et leurs dessins sont conservés.', screens: ['atelier'] },
+  { flag: 'modEpopee', id: 'epopee', label: 'Épopée', desc: 'Les écus que les enfants gagnent par leurs efforts : une besace par enfant et les bravos des parents. Désactivé, l’écran disparaît ; les besaces et leur journal sont conservés.', screens: ['epopee'] },
   { flag: 'modEcole', id: 'ecole', label: 'École (ÉcoleDirecte)', desc: 'Les devoirs et l’emploi du temps des enfants, rapatriés d’ÉcoleDirecte. Désactivé, Foyer ne contacte jamais ÉcoleDirecte.', screens: ['ecole'] },
 ];
 
 /** L'écran à son drapeau de module, ou undefined pour un écran toujours présent. */
 export const SCREEN_MODULE: Record<string, ModuleFlag | undefined> = {
-  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', entretien: 'modEntretien', equipements: 'modEquipements', revisions: 'modRevisions', atelier: 'modAtelier',
+  repas: 'modRepas', recettes: 'modRepas', fidelite: 'modFidelite', finances: 'modFinances', employe: 'modEmploye', ecole: 'modEcole', entretien: 'modEntretien', equipements: 'modEquipements', revisions: 'modRevisions', atelier: 'modAtelier', epopee: 'modEpopee',
 };
