@@ -7,7 +7,7 @@ export const AMORCE = 5;
 export const BRAVO_MAX = 3;
 export const NOTE_MAX = 120;
 
-export const KINDS = ['amorce', 'bravo', 'annulation'] as const;
+export const KINDS = ['amorce', 'bravo', 'etape', 'annulation'] as const;
 export type Kind = typeof KINDS[number];
 export interface Entry { id: string; kind: Kind; delta: number; ref: string | null; }
 
@@ -28,3 +28,21 @@ export function cancelRefusal(entry: Entry, entries: Entry[], floor: number): st
   if (balance(entries) - entry.delta < floor) return 'Ces écus ont déjà servi : les reprendre ferait passer la besace sous son plancher.';
   return null;
 }
+
+export const ROUTINE_KINDS = ['matin', 'soir'] as const;
+export type RoutineKind = typeof ROUTINE_KINDS[number];
+/** Une étape est faite, ou passée (un jour sans : ni écu, ni reproche). */
+export const STEP_STATUS = ['fait', 'saute'] as const;
+export type StepStatus = typeof STEP_STATUS[number];
+
+/** La veille d'un jour 'AAAA-MM-JJ'. */
+export const dayBefore = (day: string): string => new Date(Date.parse(day + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10);
+/**
+ * Le jour qu'un appareil annonce pour une étape : aujourd'hui, ou hier (une
+ * tablette restée sans réseau la nuit envoie le lendemain). Jamais plus loin,
+ * jamais demain : une étape ne se rattrape pas, et ne se prend pas d'avance.
+ */
+export const dayAccepted = (day: unknown, today: string): day is string => day === today || day === dayBefore(today);
+
+/** L'identifiant de l'écriture d'une étape : un par étape et par jour, d'où un seul crédit quoi qu'il arrive. */
+export const stepEntryId = (stepId: string, day: string): string => `etape:${stepId}:${day}`;

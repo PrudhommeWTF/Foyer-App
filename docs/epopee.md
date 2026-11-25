@@ -4,17 +4,32 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 ## Où en est le module
 
-**Étape 1 sur 6 : le socle.** Une besace par enfant, les bravos des parents, le journal.
+**Étape 2 sur 6 : les routines de l'enfant.** Une besace par enfant, les bravos des parents, les routines du matin et du soir pas à pas.
 
 | Fait | Pas encore |
 |---|---|
-| Enrôler un enfant : sa besace commence avec 5 écus d'amorce | Les routines du matin et du soir, pas à pas, avec sablier et pause « grain de sable » |
+| Enrôler un enfant : sa besace commence avec 5 écus d'amorce | Modifier les routines (étapes, durées, écus, horaires) : aujourd'hui, ce sont celles du gabarit |
 | Bravo spontané d'un parent : 1 à 3 écus, avec quelques mots | Le crédit express d'exploits convenus, les demandes de l'enfant |
-| Journal de chaque besace, annulation d'un bravo | L'Armurerie : récompenses, quêtes, pacte, souvenirs |
-| L'enfant voit sa besace et ce qu'il a gagné | Le parcours d'alliance et le parchemin à imprimer |
-| | Le bilan de la semaine pour le conseil de famille |
+| Journal de chaque besace, annulation d'un bravo ou de l'écu d'une étape | Les réglages par enfant (ceinturon d'écus sans chiffres, intensité des célébrations) |
+| Routines du matin et du soir, une consigne à la fois, avec sablier | L'Armurerie : récompenses, quêtes, pacte, souvenirs |
+| Pause « grain de sable » : le sablier s'arrête, on respire, rien ne se perd | Le parcours d'alliance et le parchemin à imprimer |
+| L'écu au moment où l'étape est faite, même sans réseau | Le bilan de la semaine pour le conseil de famille |
 
 Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
+
+## Une routine, à l'usage
+
+L'enfant ouvre « Mon épopée », touche « Commencer » sur la routine du matin ou du soir, et elle se déroule en plein écran :
+
+- **Une seule consigne à la fois** : un pictogramme, un titre, une phrase. Les points en haut montrent le chemin.
+- **Le sablier est un repère, pas une échéance.** Il se vide en tons ambrés, jamais en rouge. Arrivé au bout, il dit « Prends ton temps » : l'écu de l'étape reste acquis, quelle que soit la durée. Il se calcule sur l'horloge, une tablette qui s'endort ne le fausse pas.
+- **« C'est fait ! »** verse l'écu tout de suite : une pièce, un son court (synthétisé, aucun fichier), une vibration là où l'appareil le permet (pas sur iPad ni iPhone, Safari ne le propose pas). Le son se coupe par appareil, avec la cloche en haut à droite. Les animations respectent le réglage « réduire les animations » du système.
+- **« Un grain de sable ? »** arrête le sablier et propose de respirer (inspirer 4 s, garder 2 s, souffler 4 s). On reprend quand on veut, ou on passe l'étape pour aujourd'hui : ni écu, ni reproche. Les pauses sont comptées pour les parents, jamais pénalisées.
+- **Sans réseau**, l'étape est fêtée de la même façon et attend sur l'appareil (file `foyer.epopeeQueue.<membre>`) ; elle part au retour du réseau, et jusqu'au lendemain. Limite : il faut du réseau pour **ouvrir** l'écran (la besace et les routines du jour ne sont pas gardées sur l'appareil) ; c'est une routine déjà commencée qui survit à une coupure.
+
+Les routines viennent d'un **gabarit** (`backend/config/epopee/routines.json` : matin et soir, cinq étapes d'un écu chacune), posé à l'enrôlement. Un foyer le remplace par un fichier au même chemin dans `FOYER_DATA_DIR` (`epopee/routines.json`) ; il ne vaut que pour les enfants enrôlés ensuite. Avec dix écus possibles par jour, le prix des récompenses (à venir) devra en tenir compte.
+
+Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombre de pauses. Il ne déroule pas la routine à sa place depuis l'écran (l'API le permet, pour plus tard).
 
 ## Les règles
 
@@ -24,6 +39,8 @@ Elles sont dans `backend/src/epopee/rules.ts`, pures et testées. Le serveur les
 - **Rien ne s'efface.** Le solde est la somme d'un grand livre en ajout seul. Annuler un bravo, c'est écrire sa contre-écriture ; les deux lignes restent.
 - **Une écriture ne s'annule qu'une fois**, une annulation ne s'annule pas, et reprendre des écus ne fait jamais passer la besace sous son plancher (quand l'Armurerie existera : un bravo déjà dépensé ne se reprend plus).
 - **Un bravo vaut 1, 2 ou 3 écus.** Le geste porte un identifiant donné par l'appareil : reçu deux fois, il ne compte qu'une fois.
+- **Une étape ne se note qu'une fois par jour** (faite ou passée), et son écu n'est versé qu'une fois : l'identifiant de l'écriture se déduit de l'étape et du jour. L'appareil annonce aujourd'hui ou hier (heure de Paris), rien d'autre.
+- **Reprendre l'écu d'une étape** (un adulte, depuis le journal) ne rouvre pas l'étape : elle reste notée pour ce jour.
 - **Retirer un enfant** de l'Épopée ne supprime rien : réenrôlé, il retrouve sa besace telle quelle, sans seconde amorce.
 
 Décision à venir avec l'Armurerie, déjà arrêtée : le plancher ne protège que des retraits. Échanger un trésor dépense son coût entier, et chaque nouvelle quête repart avec une amorce.
@@ -35,13 +52,17 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | Table | Contenu |
 |---|---|
 | `epo_profiles` | un enfant enrôlé : son plancher, la date, l'adulte qui l'a enrôlé, la date de retrait s'il a été retiré |
-| `epo_ledger` | le grand livre : identifiant (uuid), enfant, genre (`amorce`, `bravo`, `annulation`), montant, quelques mots, écriture annulée (`ref`), adulte auteur, instant |
+| `epo_ledger` | le grand livre : identifiant, enfant, genre (`amorce`, `bravo`, `etape`, `annulation`), montant, quelques mots, écriture annulée (`ref`), auteur, instant |
+| `epo_routines`, `epo_steps` | les routines d'un enfant (matin, soir, heure prévue) et leurs étapes (titre, phrase, pictogramme, durée du sablier, écus) |
+| `epo_step_marks` | une étape un jour donné : faite ou passée, par qui |
+| `epo_routine_days` | le déroulé d'une routine un jour donné : début, fin, nombre de pauses |
 
 ## Qui a le droit de quoi
 
 | | Enfant | Adulte |
 |---|---|---|
-| sa besace et son journal | lire (sans les bravos annulés à l'écran) | sans objet : seul un membre marqué enfant a une besace |
+| sa besace, son journal, ses routines | lire (sans les écritures annulées à l'écran) | sans objet : seul un membre marqué enfant a une besace |
+| noter une étape de ses routines, faire une pause | oui, pour lui seul | oui, pour n'importe quel enfant |
 | ceux d'un autre enfant | refusé (403) | lire |
 | enrôler, retirer, donner un bravo, annuler | refusé (403) | oui |
 
@@ -54,17 +75,20 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | Route | Effet |
 |---|---|
 | `GET /membres` | les enfants du foyer et leur besace (`enrolled`, `floor`, `balance`) : tous pour un adulte, soi pour un enfant |
-| `GET /membres/:id` | la besace d'un enfant et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
+| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
 | `POST /membres/:id/enrolement` | enrôler (adultes). 201 quand l'amorce est versée, 200 ensuite. 400 si le membre n'est pas un enfant |
 | `DELETE /membres/:id/enrolement` | retirer de l'Épopée (adultes) ; rien n'est supprimé |
 | `POST /membres/:id/bravos` | `{ id (uuid), ecus (1 à 3), note (120 caractères au plus) }` (adultes). 201 à la première réception, 200 et `duplicate: true` ensuite. 409 si l'enfant n'est pas enrôlé |
+| `POST /membres/:id/routines/gabarit` | poser les routines du gabarit à un enfant qui n'en a aucune (adultes) |
+| `POST /etapes/:id` | `{ status: "fait" ou "saute", day (aujourd'hui par défaut, ou hier) }`. 201 à la première réception, 200 et `duplicate: true` ensuite. Rend `ecus`, `balance`, `routineDone` |
+| `POST /routines/:id/pauses` | une pause « grain de sable » de plus dans la routine du jour |
 | `POST /journal/:id/annulation` | annuler une écriture (adultes). 409 avec la raison quand la règle le refuse |
 
 Chaque geste est journalisé (« Épopée : bravo de Nolwenn à Raphaël, +2 écus (« Table mise sans rappel »). »).
 
 ## Module éteint, remise à zéro
 
-Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface profils et grand livre.
+Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface routines, profils et grand livre.
 
 ## Vérifier depuis le serveur
 

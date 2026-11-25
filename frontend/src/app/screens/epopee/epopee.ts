@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
+import { Besace, Entry, Routine, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
+import { EpopeeStore } from '../../core/epopee/store';
 import { IconComponent } from '../../core/icon';
 import { sessionUuid } from '../../core/revisions/revisions';
 import { AvatarComponent } from '../../shared/avatar';
+import { EpopeeRunner } from './runner';
 
-interface Entry { id: string; kind: 'amorce' | 'bravo' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
-interface Besace { memberId: string; enrolled: boolean; floor: number | null; balance: number | null; enrolledAt: string | null; journal?: Entry[]; }
 /** A child of the household with their pouch, as the screen shows them. */
 interface Kid extends Besace { name: string; ini: string; color: string; }
 
@@ -15,17 +16,19 @@ const WHEN = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: '
 const COINS_MAX = 30;
 
 /**
- * Épopée : la besace d'écus de chaque enfant. Un adulte enrôle, donne un bravo
- * et relit le journal ; un enfant voit sa besace. Le solde et chaque montant
+ * Épopée : la besace d'écus de chaque enfant et ses routines du jour. Un adulte
+ * enrôle, donne un bravo, suit les routines et relit le journal ; un enfant voit
+ * sa besace et déroule ses routines pas à pas (runner.ts). Le solde et chaque montant
  * viennent du serveur (grand livre en ajout seul), l'écran ne calcule rien.
  */
 @Component({
   selector: 'screen-epopee',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, AvatarComponent],
+  imports: [IconComponent, AvatarComponent, EpopeeRunner],
   template: `
     <div class="screen-enter">
+      @if (running(); as run) { <epopee-runner [routine]="run.routine" [day]="run.day" (closed)="fermer()" /> }
       @if (erreur(); as e) {
         <div class="card empty"><div class="empty-title">L’Épopée ne répond pas</div><div class="empty-text">{{ e }}</div><button class="btn btn-primary" (click)="charger()">Réessayer</button></div>
       } @else if (kids(); as liste) {
@@ -58,6 +61,27 @@ const COINS_MAX = 30;
                 <div class="coins" aria-hidden="true">@for (c of coins(k); track $index) { <span class="coin" [class.kept]="c"></span> }</div>
               }
 
+              @if (k.routines?.length) {
+                <div class="routines">
+                  @for (r of k.routines; track r.id) {
+                    <div class="routine" [class.done]="isDone(r)">
+                      <div class="r-ico"><f-icon [name]="r.kind === 'matin' ? 'sun' : 'moon'" [size]="22" [color]="r.kind === 'matin' ? '#D99427' : '#4E5AA8'" [width]="2" /></div>
+                      <div class="r-what">
+                        <div class="t">{{ r.title }}</div>
+                        <div class="s">{{ routineLine(r) }}</div>
+                        <div class="r-dots" aria-hidden="true">@for (st of r.steps; track st.id) { <span [class.fait]="st.status === 'fait'" [class.saute]="st.status === 'saute'"></span> }</div>
+                      </div>
+                      @if (store.isChild() && !isDone(r)) { <button class="btn btn-primary" (click)="lancer(k, r)">{{ started(r) ? 'Continuer' : 'Commencer' }}</button> }
+                    </div>
+                  }
+                </div>
+              } @else if (!store.isChild()) {
+                <div class="routines none">
+                  <p class="lead">{{ k.name }} n’a pas encore de routine. Les routines proposées (matin et soir, cinq étapes chacune) se posent d’un geste.</p>
+                  <button class="btn btn-soft" [disabled]="busy()" (click)="poserRoutines(k)">Poser les routines proposées</button>
+                </div>
+              }
+
               @if (!store.isChild()) {
                 <div class="bravo">
                   <label class="field-label" [attr.for]="'bravo-' + k.memberId">Bravo spontané</label>
@@ -82,7 +106,7 @@ const COINS_MAX = 30;
                           <div class="s">{{ sub(e) }}</div>
                         </div>
                         <div class="d" [class.neg]="e.delta < 0">{{ e.delta > 0 ? '+' : '' }}{{ e.delta }}</div>
-                        @if (!store.isChild() && e.kind === 'bravo' && !e.cancelled) { <button class="undo" [disabled]="busy()" (click)="annuler(k, e)">Annuler</button> }
+                        @if (!store.isChild() && (e.kind === 'bravo' || e.kind === 'etape') && !e.cancelled) { <button class="undo" [disabled]="busy()" (click)="annuler(k, e)">Annuler</button> }
                       </div>
                     }
                   </details>
@@ -107,6 +131,17 @@ const COINS_MAX = 30;
     .coins { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
     .coin { width: 22px; height: 22px; border-radius: 50%; background: #F0B24B; box-shadow: 0 2px 0 #D99427; }
     .coin.kept { outline: 2px solid #9D6B00; outline-offset: 1px; }
+    .routines { margin-top: 20px; display: grid; gap: 10px; }
+    .routines.none { padding-top: 18px; border-top: 1px solid var(--line2); }
+    .routine { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 18px; background: var(--soft2); }
+    .routine.done { background: #EDF2EB; }
+    .r-ico { width: 44px; height: 44px; border-radius: 13px; background: var(--surface); display: flex; align-items: center; justify-content: center; flex: none; }
+    .r-what { flex: 1; min-width: 0; }
+    .r-dots { display: flex; gap: 5px; margin-top: 7px; }
+    .r-dots span { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+    .r-dots span.fait { background: #F0B24B; }
+    .r-dots span.saute { background: none; border: 2px solid var(--line); }
+    .routine .btn { min-height: 48px; flex: none; }
     .bravo { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line2); }
     .bravo-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
     .bravo-row .input { flex: 1 1 220px; width: auto; }
@@ -134,37 +169,56 @@ const COINS_MAX = 30;
 export class EpopeeScreen {
   private readonly api = inject(ApiService);
   readonly store = inject(FoyerStore);
+  private readonly epopee = inject(EpopeeStore);
 
   /** The amorce a child receives on enrolment; the server decides, this is only the sentence that announces it. */
   readonly amorce = 5;
   readonly coinsMax = COINS_MAX;
-  private readonly besaces = signal<Besace[] | null>(null);
-  readonly erreur = signal('');
+  readonly erreur = this.epopee.erreur;
   readonly busy = signal(false);
   readonly note = signal<Record<string, string>>({});
   private readonly ecus = signal<Record<string, number>>({});
+  /** The routine being run, full screen: by its ids, so it follows what the store learns. */
+  private readonly run = signal<{ memberId: string; routineId: string } | null>(null);
 
-  /** The pouches joined to the members of the document (name, colour), in the household's order. */
+  /**
+   * The pouches joined to the members of the document (name, colour), in the
+   * household's order, with what this device marked and has not sent yet.
+   */
   readonly kids = computed<Kid[] | null>(() => {
-    const b = this.besaces(); if (!b) return null;
-    return (this.store.d()?.members || []).flatMap((m) => { const x = b.find((y) => y.memberId === m.id); return x ? [{ ...x, name: m.name, ini: m.ini, color: m.color }] : []; });
+    const b = this.epopee.besaces(); if (!b) return null;
+    const pending = this.epopee.pending();
+    return (this.store.d()?.members || []).flatMap((m) => {
+      const x = b.find((y) => y.memberId === m.id); if (!x) return [];
+      const day = x.day ?? '', routines = x.routines || [];
+      return [{ ...x, name: m.name, ini: m.ini, color: m.color, routines: withPending(routines, pending, day), balance: x.balance === null ? null : x.balance + pendingEcus(routines, pending, day) }];
+    });
+  });
+  readonly running = computed(() => {
+    const r = this.run(); if (!r) return null;
+    const k = this.kids()?.find((x) => x.memberId === r.memberId), routine = k?.routines?.find((x) => x.id === r.routineId);
+    return k && routine ? { routine, day: k.day ?? '' } : null;
   });
 
   constructor() { void this.charger(); }
 
-  async charger(): Promise<void> {
-    this.erreur.set('');
-    try {
-      const { enfants } = await this.api.request<{ enfants: Besace[] }>('epopee/membres');
-      this.besaces.set(await Promise.all(enfants.map((e) => (e.enrolled ? this.api.request<Besace>(`epopee/membres/${e.memberId}`) : e))));
-    } catch (e) { this.erreur.set((e as Error).message); }
+  charger(): Promise<void> { return this.epopee.charger(); }
+
+  isDone(r: Routine): boolean { return nextStep(r) < 0; }
+  started(r: Routine): boolean { return doneCount(r) > 0; }
+  routineLine(r: Routine): string {
+    const n = doneCount(r), g = earned(r), pauses = !this.store.isChild() && r.pauses ? `, ${r.pauses} pause${r.pauses > 1 ? 's' : ''}` : '';
+    if (this.isDone(r)) return `Fait${g ? `, +${g} écu${g > 1 ? 's' : ''}` : ''}${pauses}`;
+    return n ? `${n} étape${n > 1 ? 's' : ''} sur ${r.steps.length}${pauses}` : `${hourLabel(r.time)}, ${r.steps.length} étapes${pauses}`;
   }
+  lancer(k: Kid, r: Routine): void { this.run.set({ memberId: k.memberId, routineId: r.id }); }
+  fermer(): void { this.run.set(null); void this.charger(); }
 
   /** One flag per coin: true for those of the protected floor. */
   coins(k: Kid): boolean[] { return Array.from({ length: Math.max(0, k.balance ?? 0) }, (_, i) => i < (k.floor ?? 0)); }
   /** A child reads what they earned: what was cancelled, and its cancellation, stay out of their sight. */
   lines(k: Kid): Entry[] { return (k.journal || []).filter((e) => !this.store.isChild() || (!e.cancelled && e.kind !== 'annulation')); }
-  label(e: Entry): string { return e.kind === 'amorce' ? 'Écus d’amorce' : e.kind === 'annulation' ? 'Annulation' : e.note || 'Bravo'; }
+  label(e: Entry): string { return e.kind === 'amorce' ? 'Écus d’amorce' : e.kind === 'annulation' ? 'Annulation' : e.note || (e.kind === 'etape' ? 'Étape de routine' : 'Bravo'); }
   sub(e: Entry): string { return [WHEN.format(new Date(e.at)), e.by, e.cancelled ? 'annulé' : ''].filter(Boolean).join(', '); }
   ecusFor(id: string): number { return this.ecus()[id] || 1; }
   setEcus(id: string, n: number): void { this.ecus.update((x) => ({ ...x, [id]: n })); }
@@ -188,8 +242,11 @@ export class EpopeeScreen {
     });
   }
   annuler(k: Kid, e: Entry): Promise<void> {
-    if (!confirm(`Annuler ce bravo de ${e.delta} écu${e.delta > 1 ? 's' : ''} à ${k.name} ?`)) return Promise.resolve();
-    return this.agir(async () => { await this.api.post(`epopee/journal/${e.id}/annulation`); });
+    if (!confirm(`Reprendre ${e.delta > 1 ? `ces ${e.delta} écus` : 'cet écu'} à ${k.name} ?`)) return Promise.resolve();
+    return this.agir(async () => { await this.api.post(`epopee/journal/${encodeURIComponent(e.id)}/annulation`); });
+  }
+  poserRoutines(k: Kid): Promise<void> {
+    return this.agir(async () => { await this.api.post(`epopee/membres/${k.memberId}/routines/gabarit`); });
   }
   retirer(k: Kid): Promise<void> {
     if (!confirm(`Retirer ${k.name} de l’Épopée ? Sa besace et son journal sont conservés, et reviennent si vous l’enrôlez à nouveau.`)) return Promise.resolve();
