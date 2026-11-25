@@ -7,9 +7,17 @@ export interface Projet {
   updatedAt: string; archivedAt: string | null; shared: boolean; memberName?: string;
 }
 /** What an adult reads about another member's workshop. */
-export interface Resume { id: string; name: string; enfant: boolean; projets: number; corbeille: number; recents: number; octets: number; }
+export interface Resume { id: string; name: string; enfant: boolean; projets: number; corbeille: number; recents: number; octets: number; niveaux: Niveau[]; }
+/** A guided challenge of the 'Grands codeurs' level, as shipped with its editor. */
+export interface Defi { id: string; name: string; desc: string; }
 
 export const NIVEAU: Record<Niveau, string> = { petits: 'Petits codeurs', grands: 'Grands codeurs' };
+export const NIVEAUX: readonly Niveau[] = ['petits', 'grands'];
+
+/** « Petits codeurs », « Grands codeurs », or « Les deux niveaux » : what a parent opened to a child. */
+export function levelsLine(levels: readonly Niveau[]): string {
+  return levels.length === 1 ? NIVEAU[levels[0]] : 'Les deux niveaux';
+}
 
 /** The tile of a child: the project to pick up, or nothing to say. */
 export function resumeLine(last: Pick<Projet, 'name'> | null): string {

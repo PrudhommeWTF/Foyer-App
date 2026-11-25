@@ -1,7 +1,7 @@
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
 import { ApiService } from '../api.service';
 import { FoyerStore } from '../foyer.store';
-import { Projet, Resume } from './atelier';
+import { NIVEAUX, Niveau, Projet, Resume } from './atelier';
 
 /**
  * Atelier code : ce que l'accueil a besoin de savoir, lu une fois par session et
@@ -18,6 +18,8 @@ export class AtelierStore {
   /** For an adult: what the other members did. */
   readonly members = signal<Resume[]>([]);
   readonly quotaMo = signal(0);
+  /** The levels in which the member of the session may start a project: both, until a parent says otherwise. */
+  readonly levels = signal<readonly Niveau[]>(NIVEAUX);
   private owner: string | null = null;
 
   constructor() {
@@ -25,7 +27,7 @@ export class AtelierStore {
       const on = this.foyer.authed() && this.foyer.modAtelier() && !!this.foyer.data();
       const me = this.foyer.me()?.id ?? null, child = this.foyer.isChild();
       untracked(() => {
-        if (!on || !me) { this.owner = null; this.last.set(null); this.members.set([]); return; }
+        if (!on || !me) { this.owner = null; this.last.set(null); this.members.set([]); this.levels.set(NIVEAUX); return; }
         if (me === this.owner) return;
         this.owner = me;
         void this.load(child);
@@ -35,6 +37,7 @@ export class AtelierStore {
 
   async load(child = this.foyer.isChild()): Promise<void> {
     try { this.last.set((await this.api.request<{ projets: Projet[] }>('atelier/projets')).projets[0] ?? null); } catch { /* offline: nothing to offer */ }
+    try { const c = await this.api.request<{ niveaux?: Niveau[] }>('atelier/contexte'); if (c.niveaux?.length) this.levels.set(c.niveaux); } catch { /* offline: the server still decides at creation */ }
     if (child) return;
     try {
       const r = await this.api.request<{ membres: Resume[]; quotaMo: number }>('atelier/membres');

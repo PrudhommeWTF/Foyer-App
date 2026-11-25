@@ -36,7 +36,7 @@ index 67f25b4025..5cceff6374 100644
                                          {previewFaqLink}
                                      </a>
 diff --git a/packages/scratch-gui/src/components/cards/cards.jsx b/packages/scratch-gui/src/components/cards/cards.jsx
-index 25f515022b..d5700d7c60 100644
+index 25f515022b..209ae50da3 100644
 --- a/packages/scratch-gui/src/components/cards/cards.jsx
 +++ b/packages/scratch-gui/src/components/cards/cards.jsx
 @@ -137,82 +137,10 @@ const CardHeader = ({onCloseCards, onShrinkExpandCards, onShowAll, totalSteps, s
@@ -126,6 +126,38 @@ index 25f515022b..d5700d7c60 100644
  
  VideoStep.propTypes = {
      expanded: PropTypes.bool.isRequired,
+@@ -223,19 +151,22 @@ const ImageStep = ({title, image}) => (<Fragment>
+     <div className={styles.stepTitle}>
+         {title}
+     </div>
+-    <div className={styles.stepImageContainer}>
+-        <img
+-            className={styles.stepImage}
+-            draggable={false}
+-            key={image} /* Use src as key to prevent hanging around on slow connections */
+-            src={image}
+-        />
+-    </div>
++    {/* Atelier (Foyer): a step of a challenge may be text alone */}
++    {image ? (
++        <div className={styles.stepImageContainer}>
++            <img
++                className={styles.stepImage}
++                draggable={false}
++                key={image} /* Use src as key to prevent hanging around on slow connections */
++                src={image}
++            />
++        </div>
++    ) : null}
+ </Fragment>
+ );
+ 
+ ImageStep.propTypes = {
+-    image: PropTypes.string.isRequired,
++    image: PropTypes.string,
+     title: PropTypes.node.isRequired
+ };
+ 
 diff --git a/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx b/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
 index 1126241466..7e854a0c29 100644
 --- a/packages/scratch-gui/src/components/connection-modal/update-peripheral-step.jsx
