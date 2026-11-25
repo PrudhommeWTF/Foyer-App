@@ -22,12 +22,21 @@ import * as repo from './repo';
 import { familyFile, familyLibrary } from './library';
 
 /** Garde-fous techniques, pas des réglages : au-delà, ce n'est plus un projet ni un dessin d'enfant. */
-const MAX_PROJECT_BYTES = 1024 * 1024;
+const MAX_PROJECT_BYTES: Record<repo.Level, number> = { petits: 1024 * 1024, grands: 5 * 1024 * 1024 };
+/** Une image, un dessin. Un son pèse plus : trente secondes enregistrées font déjà 2,6 Mo. */
 const MAX_MEDIA_BYTES = 2 * 1024 * 1024;
+const MAX_SOUND_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGE_SIDE = 1024;
-const MEDIA_NAME = /^[0-9a-f]{32}\.(svg|png)$/;
+const MEDIA_NAME = /^[0-9a-f]{32}\.(svg|png|jpg|wav|mp3)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SVG_TYPE = { mime: 'image/svg+xml', ext: '.svg' };
+const ascii = (b: Buffer, at: number, n: number): string => b.subarray(at, at + n).toString('latin1');
+/** Un son, reconnu à ses premiers octets : WAV, ou MP3 (étiquette ID3 ou début de trame). */
+function soundType(b: Buffer): { mime: string; ext: string } | null {
+  if (ascii(b, 0, 4) === 'RIFF' && ascii(b, 8, 4) === 'WAVE') return { mime: 'audio/wav', ext: '.wav' };
+  if (ascii(b, 0, 3) === 'ID3' || (b[0] === 0xff && (b[1]! & 0xe6) === 0xe2)) return { mime: 'audio/mpeg', ext: '.mp3' };
+  return null;
+}
 
 class Invalid extends Error {}
 const text = (v: unknown, what: string, max: number, required = true): string => {
@@ -53,15 +62,19 @@ const handler = (fn: (req: Request, res: Response) => void) => (req: Request, re
 };
 
 /** Le JSON d'un projet, vérifié en taille et en forme générale. Le sens appartient à l'éditeur. */
-function projectJson(raw: unknown): string {
+function projectJson(raw: unknown, level: repo.Level): string {
   if (typeof raw !== 'string' || !raw.length) throw new Invalid('json : le projet est attendu en texte JSON.');
-  if (Buffer.byteLength(raw) > MAX_PROJECT_BYTES) throw new Invalid('Ce projet est trop gros pour être enregistré. Enlève des personnages ou des pages.');
+  if (Buffer.byteLength(raw) > MAX_PROJECT_BYTES[level]) throw new Invalid('Ce projet est trop gros pour être enregistré. Enlève des personnages ou des pages.');
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Invalid('json : JSON illisible.'); }
-  const p = parsed as { pages?: unknown };
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(p.pages) || p.pages.length > 4 || p.pages.some((x) => typeof x !== 'string')) {
-    throw new Invalid('json : ce n’est pas un projet de l’Atelier.');
-  }
+  const p = parsed as { pages?: unknown; targets?: unknown; meta?: unknown };
+  const object = !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+  // Chaque éditeur a sa forme : des pages pour les petits, des cibles (la scène
+  // et les personnages) pour les grands. Un projet de l'un n'entre pas chez l'autre.
+  const ok = object && (level === 'petits'
+    ? Array.isArray(p.pages) && p.pages.length <= 4 && p.pages.every((x) => typeof x === 'string')
+    : Array.isArray(p.targets) && p.targets.length >= 1 && p.targets.every((t) => !!t && typeof t === 'object' && !Array.isArray(t)) && !!p.meta && typeof p.meta === 'object');
+  if (!ok) throw new Invalid('json : ce n’est pas un projet de l’Atelier.');
   return raw;
 }
 /** La vignette telle que l'éditeur la décrit : {pagecount, md5}, md5 étant un média du membre. */
@@ -84,7 +97,7 @@ const assetView = (a: repo.AssetRow) => ({ id: a.id, md5: a.md5, altmd5: a.altmd
 
 export function atelierRouter(members: () => Member[]): Router {
   const r = Router();
-  const json = express.json({ limit: MAX_PROJECT_BYTES + 256 * 1024 });
+  const json = express.json({ limit: MAX_PROJECT_BYTES.grands + 256 * 1024 });
   const limits = () => ({ projets: Number(effectiveSetting('atelierProjetsMax')), quotaMo: Number(effectiveSetting('atelierQuotaMo')) });
 
   /**
@@ -153,7 +166,7 @@ export function atelierRouter(members: () => Member[]): Router {
     const rev = req.body?.rev;
     if (typeof rev !== 'number' || !Number.isInteger(rev)) throw new Invalid('rev : la version lue est attendue.');
     const saved = repo.saveProject(p.id, rev, {
-      name: text(req.body?.name, 'name', 80), json: projectJson(req.body?.json),
+      name: text(req.body?.name, 'name', 80), json: projectJson(req.body?.json, p.level),
       thumbnailJson: thumbnailJson(req.body?.thumbnail, p.member_id), editorVersion: optional(req.body?.editorVersion, 'editorVersion', 40),
     });
     // Un autre appareil a enregistré entre-temps : on rend ce que le serveur
@@ -164,7 +177,10 @@ export function atelierRouter(members: () => Member[]): Router {
 
   r.patch('/projets/:id', json, handler((req, res) => {
     const p = writable(req, res); if (!p) return;
-    repo.renameProject(p.id, text(req.body?.name, 'name', 80));
+    const b = req.body ?? {};
+    if (b.name === undefined && b.thumbnail === undefined) throw new Invalid('name ou thumbnail : rien à modifier.');
+    if (b.name !== undefined) repo.renameProject(p.id, text(b.name, 'name', 80));
+    if (b.thumbnail !== undefined) repo.setThumbnail(p.id, thumbnailJson(b.thumbnail, p.member_id));
     res.json({ projet: projectView(repo.getProject(p.id)!) });
   }));
 
@@ -201,11 +217,14 @@ export function atelierRouter(members: () => Member[]): Router {
     res.status(status).json({ error });
   };
 
-  r.post('/medias', express.raw({ type: '*/*', limit: MAX_MEDIA_BYTES }), handler((req, res) => {
+  r.post('/medias', express.raw({ type: '*/*', limit: MAX_SOUND_BYTES }), handler((req, res) => {
     const m = me(req), body = req.body as unknown;
     if (!Buffer.isBuffer(body) || !body.length) { refuse(req, res, 400, 'Aucun fichier reçu.', 'corps vide'); return; }
     let buf = body, type = detectType(body);
-    if (type?.mime === 'image/png') {
+    const sound = soundType(body);
+    if (!sound && body.length > MAX_MEDIA_BYTES) { refuse(req, res, 413, 'Cette image est trop lourde.', `image de plus de ${MAX_MEDIA_BYTES / 1048576} Mo`); return; }
+    if (sound) type = sound;
+    else if (type?.mime === 'image/png' || type?.mime === 'image/jpeg') {
       const size = imageSize(buf, type.mime);
       if (!size || Math.max(size.width, size.height) > MAX_IMAGE_SIDE) { refuse(req, res, 422, 'Cette image est trop grande.', `image de plus de ${MAX_IMAGE_SIDE} px ou illisible`); return; }
     } else if (!type && buf.subarray(0, 512).toString('utf8').trimStart().startsWith('<')) {
@@ -219,7 +238,8 @@ export function atelierRouter(members: () => Member[]): Router {
       refuse(req, res, 413, 'Il n’y a plus de place pour tes dessins. Demande à un parent de faire du rangement dans tes projets.', `quota de ${limits().quotaMo} Mo atteint`);
       return;
     }
-    const { media, existed } = repo.putMedia(m.id, buf, type);
+    // `?nom=recu` : le nom est l'empreinte de ce qui a été reçu (voir repo.putMedia).
+    const { media, existed } = repo.putMedia(m.id, buf, type, req.query['nom'] === 'recu' ? body : undefined);
     res.status(existed ? 200 : 201).json({ name: media.name });
   }));
 

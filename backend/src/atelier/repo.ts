@@ -11,7 +11,7 @@ import { DetectedType } from '../storage/blobs';
 let database: Database;
 export function initAtelierRepo(db: Database): void { database = db; }
 
-export const LEVELS = ['petits'] as const;
+export const LEVELS = ['petits', 'grands'] as const;
 export type Level = typeof LEVELS[number];
 export const ASSET_KINDS = ['personnage', 'decor'] as const;
 export type AssetKind = typeof ASSET_KINDS[number];
@@ -63,6 +63,10 @@ export function saveProject(id: string, version: number, s: ProjectSave): Projec
 export function renameProject(id: string, name: string): void {
   database.prepare('UPDATE atl_projects SET name = ?, updated_at = ? WHERE id = ?').run(name, now(), id);
 }
+/** La vignette seule : l'éditeur des grands l'envoie après le projet, sans toucher à la version. */
+export function setThumbnail(id: string, thumbnailJson: string | null): void {
+  database.prepare('UPDATE atl_projects SET thumbnail_json = ? WHERE id = ?').run(thumbnailJson, id);
+}
 export function archiveProject(id: string): void {
   database.prepare('UPDATE atl_projects SET archived_at = ? WHERE id = ? AND archived_at IS NULL').run(now(), id);
 }
@@ -79,12 +83,15 @@ export function usedBytes(memberId: string): number {
   return (database.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM atl_media WHERE member_id = ?').get(memberId) as { n: number }).n;
 }
 /**
- * Range un média et rend son nom : l'empreinte md5 **du contenu gardé**, suivie
- * de l'extension. Le nom vient donc toujours du serveur, jamais de l'appareil.
+ * Range un média et rend son nom : l'empreinte md5 **du contenu gardé** (ou du
+ * contenu reçu, voir plus bas), suivie de l'extension. Le nom vient donc toujours du serveur, jamais de l'appareil.
  * Deux envois du même contenu rendent le même nom, sans second fichier.
  */
-export function putMedia(memberId: string, buf: Buffer, type: DetectedType): { media: MediaRow; existed: boolean } {
-  const name = crypto.createHash('md5').update(buf).digest('hex') + type.ext;
+export function putMedia(memberId: string, buf: Buffer, type: DetectedType, received?: Buffer): { media: MediaRow; existed: boolean } {
+  // `received` : l'éditeur des grands cite ses fichiers par l'empreinte de ce
+  // qu'il a envoyé. Le nom est alors celle des octets reçus, toujours calculée
+  // ici, et le contenu gardé reste le contenu nettoyé.
+  const name = crypto.createHash('md5').update(received ?? buf).digest('hex') + type.ext;
   const known = getMedia(memberId, name);
   if (known) return { media: known, existed: true };
   const { file } = files.storeOnce('atelier', 'atl', name, buf, type);
