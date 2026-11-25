@@ -11,12 +11,14 @@
 //  The server is the only one to name a media file (the fingerprint
 //  of the content it has cleaned): the name sent back is the one the editor uses.
 //
-//  Recording and camera come later; until then getsettings() declares them
-//  unavailable, so the editor does not show their buttons, and the functions
-//  below throw if something calls them.
+//  Recording a sound is in Micro.js. It is offered when the setting of the
+//  household allows it and the browser can do it: getsettings() says so, and the
+//  editor shows no button otherwise. The camera comes later; until then it is
+//  declared unavailable and its functions throw if something calls them.
 //////////////////////////////////////////////////
 
 import Offline from './Offline';
+import Micro from './Micro';
 
 // The page is served at <foyer>/atelier/petits/, the API at <foyer>/api/atelier
 const API = '../../api/atelier';
@@ -29,7 +31,7 @@ let unsavedBadge = null;
 const conflicts = {}; // project id -> revision the server holds, when it differs from the one this device started from
 let owner = null; // id of the member whose project is open: someone else's when an adult looks at a child's work
 let member = null; // id of the member of this session, or of the last one seen on this device
-const TEMP = /^horsligne-[0-9a-f]+\.(svg|png)$/; // a media file drawn without network
+const TEMP = /^horsligne-[0-9a-f]+\.(svg|png|wav)$/; // a media file drawn or recorded without network
 const HINT = 'foyer.atelier.dernier'; // read by the Foyer screen, to offer the last project when offline
 
 // Sounds
@@ -37,6 +39,22 @@ let audio = null;
 const buffers = {}; // name -> Promise of AudioBuffer
 const playing = {}; // name -> AudioBufferSourceNode
 let onSoundDone = function () {};
+// What the household allows and where it stands, as GET /contexte says; asked once
+let context = null;
+function getContext () {
+    if (!context) {
+        context = api('GET', '/contexte').then(function (r) {
+            Offline.put('meta', {k: 'contexte', v: r.body});
+            return r.body;
+        }, function () {
+            // No network: what this device knew last time
+            return Offline.get('meta', 'contexte').then(function (kept) {
+                return kept ? kept.v : {};
+            });
+        });
+    }
+    return context;
+}
 
 // Callbacks are always asynchronous, as they were with the native bridges.
 function later (fcn, value) {
@@ -328,13 +346,9 @@ export default class Web {
     // Who is working, then anything left from a session without network. Called
     // once, before the editor opens a project.
     static start (fcn) {
-        api('GET', '/contexte').then(function (r) {
-            member = r.body.membre ? r.body.membre.id : null;
-            return Offline.put('meta', {k: 'membre', v: member}).then(flush);
-        }, function () {
-            return Offline.get('meta', 'membre').then(function (m) {
-                member = m ? m.v : null;
-            });
+        getContext().then(function (c) {
+            member = c.membre ? c.membre.id : null;
+            return member ? flush() : null;
         }).then(function () {
             fcn();
         });
@@ -504,9 +518,12 @@ export default class Web {
         later(fcn);
     }
 
-    // "<documents path>,<0 when files are reachable by URL>,<recording>,<camera>"
+    // "<documents path>,<0 when files are reachable by URL>,<recording>,<camera>,<longest recording in seconds>"
     static getsettings (fcn) {
-        later(fcn, ',1,NO,NO');
+        getContext().then(function (c) {
+            var recording = c.micro && Micro.supported;
+            fcn(',1,' + (recording ? 'YES' : 'NO') + ',NO,' + (c.sonMaxSecondes || 60));
+        });
     }
 
     static getmedia (file, fcn) {
@@ -579,13 +596,23 @@ export default class Web {
             audio = new AudioContextClass();
             unlockAudio();
         }
-        // 'Documents' was the folder of recorded sounds: none exists before the recording step
+        // 'Documents' was the folder of recorded sounds: they are media files of the
+        // owner of the project, read like the drawings (server, or this device without network)
         var source = (dir == 'Documents') ?
-            Promise.reject(new Error('missing')) :
+            new Promise(function (resolve, reject) {
+                Web.getmedia(name, function (b64) {
+                    if (b64) {
+                        resolve(bytesOf(b64, false).buffer);
+                    } else {
+                        reject(new Error('missing'));
+                    }
+                });
+            }) :
             fetch(soundUrl(dir, name)).then(function (response) {
                 return response.ok ? response.arrayBuffer() : Promise.reject(new Error(String(response.status)));
             });
-        buffers[name] = source.then(function (data) {
+        // A sound just recorded is already there, as recorded
+        buffers[name] = buffers[name] || source.then(function (data) {
             return new Promise(function (resolve, reject) {
                 audio.decodeAudioData(data, resolve, reject);
             });
@@ -634,35 +661,69 @@ export default class Web {
         later(fcn, name);
     }
 
-    // Recording and camera: not in this version (see the header)
+    // Recording (see Micro.js). The editor asks for a file name when the recording
+    // starts; the real one is only known once the sound is kept and sent, and is
+    // given then, to the callback of recorddisappear.
 
-    static sndrecord () {
-        notYet('recording');
+    static sndrecord (fcn) {
+        if (!audio) {
+            var AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audio = new AudioContextClass();
+            unlockAudio();
+        }
+        if (audio.state == 'suspended') {
+            audio.resume();
+        }
+        Micro.start(audio).then(function () {
+            fcn('enregistrement.wav');
+        }, function (err) {
+            fcn('-1');
+            // Refused once, a browser does not ask again: only its settings bring the microphone back
+            notice(err && err.name == 'NotAllowedError' ?
+                'L’Atelier n’a pas le droit d’utiliser le micro. Demande à un parent de l’autoriser.' :
+                'Le micro ne répond pas sur cet appareil.', [['D’accord', function () {}]]);
+        });
     }
 
-    static recordstop () {
-        notYet('recording');
+    static recordstop (fcn) {
+        Micro.stop();
+        later(fcn);
     }
 
-    static volume () {
-        notYet('recording');
+    static volume (fcn) {
+        fcn(Micro.level);
     }
 
-    static startplay () {
-        notYet('recording');
+    // Answers with the duration in seconds: the editor stops its own display after it
+    static startplay (fcn) {
+        later(fcn, audio ? Micro.play(audio) : -1);
     }
 
-    static stopplay () {
-        notYet('recording');
+    static stopplay (fcn) {
+        Micro.stopPlaying();
+        later(fcn);
     }
 
-    static recorddisappear () {
-        notYet('recording');
+    // The recording window closes: 'YES' keeps the sound, anything else forgets it.
+    // Kept, it is sent like a drawing (or waits on the device without network) and
+    // the callback gets the name the project will use.
+    static recorddisappear (keep, fcn) {
+        if (keep != 'YES' || !audio || !Micro.seconds) {
+            Micro.discard();
+            later(fcn);
+            return;
+        }
+        var buffer = Micro.buffer(audio);
+        var b64 = base64Of(Micro.wav().buffer, false);
+        Micro.discard();
+        upload(b64, 'wav', function (name) {
+            buffers[name] = Promise.resolve(buffer);
+            fcn(name);
+        });
     }
 
-    static askpermission () {
-        notYet('recording');
-    }
+    // The browser asks by itself, at the first recording
+    static askpermission () {}
 
     static hascamera () {
         return '0';

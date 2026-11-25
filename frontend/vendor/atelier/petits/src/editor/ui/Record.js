@@ -14,6 +14,8 @@ let error = false;
 let dialogOpen = false;
 let timeLimit = null;
 let playTimeLimit = null;
+// Atelier: was a constant of 30 seconds; set from the settings of the household (entry/editor.js)
+let maxSeconds = 30;
 
 let volumeIndex = 0;
 let volumes = [];
@@ -29,6 +31,10 @@ export default class Record {
 
     static get dialogOpen () {
         return dialogOpen;
+    }
+
+    static set maxSeconds (seconds) {
+        maxSeconds = seconds;
     }
 
     // Create the recording window, including buttons and volume indicators
@@ -170,7 +176,7 @@ export default class Record {
                 if (isRecording) {
                     Record.stopRecording();
                 }
-            }, 30000);
+            }, maxSeconds * 1000);
         }
     }
 
@@ -300,7 +306,14 @@ export default class Record {
     }
 
     static closeContinueSave () {
-        OS.recorddisappear('YES', Record.registerProjectSound);
+        // Atelier: the name of the sound is only known once it is sent (the server
+        // names media files): it comes with this callback, not when the recording starts
+        OS.recorddisappear('YES', function (name) {
+            if (name) {
+                recordedSound = name;
+            }
+            Record.registerProjectSound();
+        });
     }
 
     static closeContinueRemove () {
