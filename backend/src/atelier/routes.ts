@@ -167,7 +167,9 @@ export function atelierRouter(members: () => Member[]): Router {
     if (typeof rev !== 'number' || !Number.isInteger(rev)) throw new Invalid('rev : la version lue est attendue.');
     const saved = repo.saveProject(p.id, rev, {
       name: text(req.body?.name, 'name', 80), json: projectJson(req.body?.json, p.level),
-      thumbnailJson: thumbnailJson(req.body?.thumbnail, p.member_id), editorVersion: optional(req.body?.editorVersion, 'editorVersion', 40),
+      // Sans vignette dans l'envoi, celle du serveur reste : l'éditeur des grands l'envoie à part, après le projet.
+      thumbnailJson: req.body?.thumbnail === undefined ? p.thumbnail_json : thumbnailJson(req.body.thumbnail, p.member_id),
+      editorVersion: optional(req.body?.editorVersion, 'editorVersion', 40),
     });
     // Un autre appareil a enregistré entre-temps : on rend ce que le serveur
     // détient, à l'éditeur de proposer le choix. Jamais d'écrasement silencieux.

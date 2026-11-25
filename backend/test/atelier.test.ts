@@ -280,5 +280,23 @@ describe('niveau « Grands codeurs »', () => {
     assert.equal((await appel(ctx.base, 'PATCH', `/atelier/projets/${id}`, { thumbnail: 'x' }, ctx.jetons.membre)).status, 403);
   });
 
-  after(async () => { await appel(ctx.base, 'DELETE', `/atelier/projets/${id}`, undefined, ctx.jetons.enfant); });
+  it('le ménage retire un fichier ancien que plus rien ne cite, et garde les autres', async () => {
+    const { purgeOrphanMedia } = await import('../src/atelier/repo');
+    const cite = (await brut(ctx.base, '/atelier/medias?nom=recu', dessin('M1 2'), ctx.jetons.enfant)).json.name as string;
+    const libre = (await brut(ctx.base, '/atelier/medias?nom=recu', dessin('M3 4'), ctx.jetons.enfant)).json.name as string;
+    const enr = await appel(ctx.base, 'PUT', `/atelier/projets/${id}`, { rev, name: 'Jeu de Lena',
+      json: grand({ targets: [{ isStage: true, name: 'Stage', costumes: [{ md5ext: cite }], sounds: [] }] }) }, ctx.jetons.enfant);
+    assert.equal(enr.status, 200); rev = enr.json.projet.rev;
+    const vignette = enr.json.projet.thumbnail.md5 as string;
+    assert.equal(purgeOrphanMedia(30), 0, 'envoyé à l’instant : rien ne part, même sans projet qui le cite');
+    // Délai négatif : tout fichier est « plus ancien », seule la citation protège.
+    assert.ok(purgeOrphanMedia(-1) >= 1);
+    assert.equal((await lire(`/atelier/medias/${libre}`, ctx.jetons.enfant)).status, 404);
+    assert.equal((await lire(`/atelier/medias/${cite}`, ctx.jetons.enfant)).status, 200, 'cité par un projet');
+    assert.equal((await lire(`/atelier/medias/${vignette}`, ctx.jetons.enfant)).status, 200, 'cité comme vignette');
+    // Dans la corbeille, un projet protège encore ses fichiers : un adulte peut le restaurer.
+    await appel(ctx.base, 'DELETE', `/atelier/projets/${id}`, undefined, ctx.jetons.enfant);
+    purgeOrphanMedia(-1);
+    assert.equal((await lire(`/atelier/medias/${cite}`, ctx.jetons.enfant)).status, 200);
+  });
 });

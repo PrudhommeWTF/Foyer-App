@@ -29,13 +29,15 @@ const start = (storage, projet) => {
     document.body.appendChild(target);
     setAppElement(target);
 
-    const state = new EditorState({locale: 'fr'}, () => ({storage}));
+    // Watching: the stage alone, full screen, with its green flag
+    const state = new EditorState({locale: 'fr', isFullScreen: watching, isPlayerOnly: watching}, () => ({storage}));
     const gui = () => state.store.getState().scratchGui;
     const canSave = storage.canSave && !watching;
 
-    // Saves through the editor, so that what it shows (saving, saved, could not save) stays true
+    // Saves through the editor, so that what it shows (saving, saved, could not save) stays true.
+    // After a failed save the editor forgets that the project changed: the storage remembers (unsent).
     const save = () => {
-        if (canSave && gui().projectChanged && getIsShowingWithId(gui().projectState.loadingState)) {
+        if (canSave && (gui().projectChanged || storage.unsent) && getIsShowingWithId(gui().projectState.loadingState)) {
             state.store.dispatch(autoUpdateProject());
             return true;
         }
@@ -64,8 +66,6 @@ const start = (storage, projet) => {
         onUpdateProjectTitle: name => storage.rename(name),
         onUpdateProjectThumbnail: (id, blob) => storage.saveThumbnail(blob),
         autoSaveIntervalSecs: 30,
-        isPlayerOnly: watching,
-        isFullScreen: watching,
         canSave,
         canEditTitle: canSave,
         // Load from and save to a file on the device

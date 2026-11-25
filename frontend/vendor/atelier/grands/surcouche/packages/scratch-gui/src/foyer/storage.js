@@ -12,10 +12,12 @@ import {ScratchStorage} from '@scratch/scratch-storage';
 import defaultProject from '../lib/default-project';
 import local from './local';
 
-// The page is served at <foyer>/atelier/grands/
-const FOYER = '../../';
+// The page is served at <foyer>/atelier/grands/. The addresses are made absolute
+// here: the editor fetches files from a worker, which would resolve a relative
+// address against its own script, not against the page.
+const FOYER = new URL('../../', document.baseURI).href;
 const API = `${FOYER}api/atelier`;
-const LIBRARY = 'bibliotheque/';
+const LIBRARY = new URL('bibliotheque/', document.baseURI).href;
 const RETRY_MS = 15000;
 
 /** A request that reached the server and was refused, with what it said. */
@@ -94,6 +96,8 @@ export class FoyerStorage {
         // Whether whoever is logged in may change this project
         this.canSave = false;
         this.pending = Promise.resolve();
+        // Whether a save of the editor failed for lack of network and was not made up for yet
+        this.unsent = false;
         this.told = new Set();
         this.cacheDefaultProject();
         const {AssetType} = this.scratchStorage;
@@ -156,6 +160,8 @@ export class FoyerStorage {
             const [{projet: p}, contexte] = answer;
             if (p.level !== 'grands') throw new Error('Ce projet s’ouvre avec l’autre atelier.');
             this.projet = {id, rev: p.rev, name: p.name, json: p.json, owner: p.memberId};
+            // The thumbnail the next one will replace
+            this.thumbnail = p.thumbnail && p.thumbnail.md5;
             this.canSave = p.memberId === contexte.membre.id && !p.archivedAt;
             if (this.canSave && kept && kept.attente) {
                 // Work done here without network. If another device saved meanwhile, one of the two has to go.
@@ -222,6 +228,7 @@ export class FoyerStorage {
             this.projet.rev = err.body.projet.rev;
             return call('PUT', `/projets/${id}`, {rev: this.projet.rev, name, json});
         }).then(answer => {
+            this.unsent = false;
             this.projet.rev = answer.projet.rev;
             this.projet.json = json;
             return local.put('projets', {...this.projet, name, attente: false});
@@ -239,6 +246,7 @@ export class FoyerStorage {
                     throw err;
                 }
                 // No network: the work stays on the device until it can go
+                this.unsent = true;
                 this.retryLater();
                 return local.put('projets', {...this.projet, name, json, attente: true}).then(() => {
                     throw err;

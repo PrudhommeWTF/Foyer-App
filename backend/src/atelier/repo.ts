@@ -156,6 +156,44 @@ export function purgeArchived(days: number): { projects: number; media: number }
   return { projects: old.length, media };
 }
 
+/** Le nom d'un média, tel qu'un projet le cite : il suffit à le retrouver dans un JSON sans le comprendre. */
+const CITED = /[0-9a-f]{32}\.(?:svg|png|jpg|wav|mp3)/g;
+
+/**
+ * Retire les médias de plus de `days` jours que plus rien ne cite : ni projet
+ * (corbeille comprise), ni vignette, ni « mes personnages ». L'éditeur des
+ * grands ne dit pas quand un costume ou un son n'est plus utilisé ; sans ce
+ * ménage, chaque son réenregistré resterait compté dans la place de l'enfant.
+ *
+ * Le délai protège ce qui vient d'être envoyé et que son projet ne cite pas
+ * encore (le fichier part avant le projet, et un appareil sans réseau peut
+ * garder le projet plusieurs jours).
+ */
+export function purgeOrphanMedia(days: number): number {
+  const limit = new Date(Date.now() - days * 86400000).toISOString();
+  const old = database.prepare('SELECT * FROM atl_media WHERE created_at < ?').all(limit) as MediaRow[];
+  const cited = new Map<string, Set<string>>();
+  const citedBy = (memberId: string): Set<string> => {
+    let names = cited.get(memberId);
+    if (names) return names;
+    names = new Set<string>();
+    // Un projet après l'autre : jamais tous les JSON d'un membre en mémoire à la fois
+    for (const p of database.prepare('SELECT json, thumbnail_json FROM atl_projects WHERE member_id = ?').iterate(memberId) as IterableIterator<{ json: string | null; thumbnail_json: string | null }>) {
+      for (const m of `${p.json ?? ''} ${p.thumbnail_json ?? ''}`.matchAll(CITED)) names.add(m[0]);
+    }
+    for (const a of database.prepare('SELECT md5, altmd5 FROM atl_assets WHERE member_id = ?').all(memberId) as { md5: string; altmd5: string | null }[]) {
+      names.add(a.md5); if (a.altmd5) names.add(a.altmd5);
+    }
+    cited.set(memberId, names);
+    return names;
+  };
+  let removed = 0;
+  database.transaction(() => {
+    for (const m of old) if (!citedBy(m.member_id).has(m.name)) { removeMedia(m); removed++; }
+  })();
+  return removed;
+}
+
 // ---- Module -----------------------------------------------------------------
 
 export function moduleCounts(): { projets: number; medias: number } {
