@@ -260,8 +260,8 @@ Combien de projets un enfant peut garder, la place qu’ils peuvent prendre sur 
 | `atelierCorbeilleJours` | Garder un projet supprimé pendant | Foyer | entier | `30` | de 7 à 365 | Atelier | — |
 
 - **Nombre maximal de projets par enfant** (`atelierProjetsMax`) : Au-delà, l’Atelier demande à l’enfant de supprimer un vieux projet avant d’en créer un nouveau. Les projets supprimés ne comptent pas.
-- **Espace disque maximal par membre** (`atelierQuotaMo`) : En mégaoctets, pour les dessins et les vignettes d’un même membre. Une fois atteint, l’Atelier refuse un nouveau dessin et dit à l’enfant de demander à un parent.
-- **Garder un projet supprimé pendant** (`atelierCorbeilleJours`) : En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins.
+- **Espace disque maximal par membre** (`atelierQuotaMo`) : En mégaoctets, pour les dessins, les photos, les sons et les vignettes d’un même membre. Une fois atteint, l’Atelier refuse un nouveau fichier et dit à l’enfant de demander à un parent.
+- **Garder un projet supprimé pendant** (`atelierCorbeilleJours`) : En jours. Un projet supprimé par un enfant n’est pas effacé : un parent peut le restaurer pendant ce délai, depuis l’écran Atelier. Passé ce délai, il est effacé pour de bon, avec ses dessins. Le même délai vaut pour un dessin ou un son que plus aucun projet n’utilise.
 
 ### École
 
