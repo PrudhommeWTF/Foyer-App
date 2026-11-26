@@ -49,10 +49,14 @@ export function withPending(routines: Routine[], pending: Pending[], day: string
   if (!mine.size) return routines;
   return routines.map((r) => ({ ...r, steps: r.steps.map((s) => (s.status ? s : { ...s, status: mine.get(s.id) ?? null })) }));
 }
-/** The écus of the steps marked done on this device that the server's balance does not count yet. */
+/**
+ * The écus of the steps marked done on this device that the server's balance
+ * does not count yet: those of the day shown that the server does not know, and
+ * those of an earlier day still waiting for the network.
+ */
 export function pendingEcus(routines: Routine[], pending: Pending[], day: string): number {
   const steps = new Map(routines.flatMap((r) => r.steps).map((s) => [s.id, s]));
-  return pending.reduce((n, p) => { const s = steps.get(p.stepId); return n + (p.day === day && p.status === 'fait' && s && !s.status ? s.ecus : 0); }, 0);
+  return pending.reduce((n, p) => { const s = steps.get(p.stepId); return n + (p.status === 'fait' && s && !(p.day === day && s.status) ? s.ecus : 0); }, 0);
 }
 
 /**
@@ -167,3 +171,40 @@ export const ROUTINES_MAX = 6;
 export const KIND_ICON: Record<Routine['kind'], { name: string; color: string }> = {
   matin: { name: 'sun', color: '#D99427' }, journee: { name: 'clock', color: '#4E93B8' }, soir: { name: 'moon', color: '#4E5AA8' },
 };
+
+// ---- Without network: what the device keeps, and how it reads it another day ----
+
+/** What a device keeps of the Épopée to open the screen without network, and when it was read from the server. */
+export interface Kept { at: string; besaces: Besace[]; exploits: Exploit[]; recompenses: Reward[]; }
+/** Today in the household's time zone, 'AAAA-MM-JJ'. */
+export const parisToday = (now: Date = new Date()): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(now);
+/**
+ * A kept pouch, read on the day `today`. The same day, it is shown as kept. On
+ * a later day the routines start afresh (no step done, no pause, not started):
+ * yesterday's ticks are not today's. Requests already answered leave, those
+ * still waiting stay. The balance is the one last known; the server corrects it
+ * when the network is back.
+ */
+export function forDay(b: Besace, today: string): Besace {
+  if (!b.enrolled || b.day === today) return b;
+  return {
+    ...b, day: today,
+    routines: (b.routines || []).map((r) => ({ ...r, startedAt: null, endedAt: null, pauses: 0, steps: r.steps.map((s) => ({ ...s, status: null })) })),
+    demandes: (b.demandes || []).filter((q) => q.status === 'attente'),
+  };
+}
+/** A kept copy read back from storage, or null when it is missing or damaged. */
+export function readKept(raw: string | null): Kept | null {
+  try {
+    const k = JSON.parse(raw || 'null') as Kept | null;
+    return k && typeof k.at === 'string' && Array.isArray(k.besaces) && Array.isArray(k.exploits) && Array.isArray(k.recompenses) ? k : null;
+  } catch { return null; }
+}
+/** 'aujourd’hui à 7 h 12', 'hier à 19 h 40', 'le 24 novembre à 8 h 05' : when the kept copy was read from the server. */
+export function keptLabel(at: string, now: Date = new Date()): string {
+  const d = new Date(at); if (Number.isNaN(d.getTime())) return '';
+  const day = parisToday(d), today = parisToday(now), yesterday = parisToday(new Date(now.getTime() - 86_400_000));
+  const [h, m] = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', hour: 'numeric', minute: '2-digit', hour12: false }).format(d).split(':');
+  const hour = `${Number(h)} h ${m}`;
+  return day === today ? `aujourd’hui à ${hour}` : day === yesterday ? `hier à ${hour}` : `le ${new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: 'numeric', month: 'long' }).format(d)} à ${hour}`;
+}

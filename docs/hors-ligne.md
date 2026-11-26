@@ -26,11 +26,15 @@ pourquoi le cache ne fige pas la version installée.
   compris : il a son propre cache et sa propre file, rangée elle aussi sous le
   membre (un projet en attente ne part que sous la session de son auteur). Voir
   [`atelier.md`](atelier.md), « Hors ligne ».
-- **L'Épopée** : une routine commencée se termine sans réseau, chaque étape
-  est fêtée et attend dans une file rangée sous le membre, envoyée au retour du
-  réseau (jusqu'au lendemain). En revanche l'écran ne s'ouvre pas sans réseau :
-  la besace et les routines du jour ne sont pas gardées sur l'appareil. Voir
-  [`epopee.md`](epopee.md).
+- **L'Épopée** s'ouvre sans réseau sur la dernière besace lue, et les routines
+  s'y déroulent : chaque étape est fêtée et attend dans une file rangée sous le
+  membre, envoyée au retour du réseau (jusqu'au lendemain). Un autre jour, les
+  routines repartent à faire. Le reste du module (créditer, trésors, réglages,
+  conseil) attend le réseau. Voir [`epopee.md`](epopee.md), « Sans réseau ».
+- **Qui est connecté**, sans réseau : l'application ne peut pas le demander au
+  serveur, elle reprend le membre de la dernière session de l'appareil. La
+  tablette d'un enfant démarrée sans réseau reste celle de l'enfant, avec son
+  menu et ses propres files.
 - Les autres écrans (agenda, repas, contacts, documents) se lisent et
   **s'éditent** : leurs modifications partent par l'enregistrement du document,
   qui réessaie tout seul jusqu'à passer.

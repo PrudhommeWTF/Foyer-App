@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
-import { Demande, Entry, Exploit, KIND_ICON, Kid, ROUTINES_MAX, Routine, dailyEcus, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
+import { Demande, Entry, Exploit, KIND_ICON, Kid, ROUTINES_MAX, Routine, dailyEcus, keptLabel, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
 import { EpopeeStore } from '../../core/epopee/store';
 import { IconComponent } from '../../core/icon';
 import { sessionUuid } from '../../core/revisions/revisions';
@@ -46,6 +46,13 @@ const COINS_MAX = 30;
       @if (erreur(); as e) {
         <div class="card empty"><div class="empty-title">L’Épopée ne répond pas</div><div class="empty-text">{{ e }}</div><button class="btn btn-primary" (click)="charger()">Réessayer</button></div>
       } @else if (kids(); as liste) {
+        @if (offline()) {
+          <div class="offline" role="status">
+            <f-icon name="refresh" [size]="18" color="#7D5400" [width]="2.2" />
+            <div><b>Pas de réseau.</b> {{ store.isChild() ? 'Tu peux faire tes routines : tes écus seront comptés au retour du réseau.' : 'Les routines se déroulent quand même, leurs écus partiront au retour du réseau. Le reste (créditer, régler, répondre) attend la connexion.' }} Ce que {{ store.isChild() ? 'tu vois' : 'vous voyez' }} a été lu {{ depuis() }}.</div>
+            <button class="btn btn-soft" (click)="charger()">Réessayer</button>
+          </div>
+        }
         @if (!store.isChild() && anyEnrolled()) {
           <div class="council-row"><button class="btn btn-soft" (click)="conseil.set(true)"><f-icon name="users" [size]="18" [width]="2.2" /> Le conseil de famille</button></div>
         }
@@ -217,6 +224,9 @@ const COINS_MAX = 30;
   `,
   styles: [`
     .kid { margin-bottom: 18px; max-width: 720px; }
+    .offline { display: flex; align-items: center; gap: 12px; max-width: 720px; margin-bottom: 14px; padding: 12px 16px; border-radius: 16px; background: #FDF0DA; font-size: 14px; font-weight: 600; color: #3A302A; line-height: 1.45; }
+    .offline > div { flex: 1; }
+    .offline .btn { min-height: 44px; flex: none; }
     .council-row { display: flex; justify-content: flex-end; max-width: 720px; margin-bottom: 14px; }
     .council-row .btn { min-height: 46px; }
     .kid-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
@@ -290,6 +300,9 @@ export class EpopeeScreen {
   readonly amorce = 5;
   readonly coinsMax = COINS_MAX;
   readonly erreur = this.epopee.erreur;
+  readonly offline = this.epopee.offline;
+  /** When the copy shown was read from the server, in plain words. */
+  readonly depuis = computed(() => keptLabel(this.epopee.keptAt()));
   readonly busy = signal(false);
   readonly note = signal<Record<string, string>>({});
   private readonly ecus = signal<Record<string, number>>({});

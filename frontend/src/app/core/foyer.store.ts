@@ -518,6 +518,12 @@ export class FoyerStore {
     if (!garde) return false;
     this._data.set(this.normalise(garde.state));
     this.docVersion = garde.version;
+    // Who the session is cannot be asked without network. It is the member the
+    // queues were last filed under: that is written at every successful load, and
+    // the kept document does not survive a logout or a switch of session. Without
+    // this, a child's tablet started offline showed the first adult's interface.
+    const who = this.queueOwner ? garde.state.members.find((m) => m.id === this.queueOwner) : undefined;
+    if (who) { this.currentMemberId.set(who.id); this.isChild.set(!!who.enfant); }
     this.replayQueues();
     this.pending = [];
     this.docStaleAt.set(garde.at);

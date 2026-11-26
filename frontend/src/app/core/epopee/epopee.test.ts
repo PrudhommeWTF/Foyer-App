@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { KIND_ICON, shiftWeek } from './epopee';
+import { Besace, KIND_ICON, forDay, keptLabel, parisToday, readKept, shiftWeek } from './epopee';
 import { LOIS, Pending, Quest, Routine, SEAL_LATCH_MS, SERMENT, bothSealed, breath, currentQuest, dailyEcus, daysToReach, longDay, missing, reachLine, doneCount, draftsError, earned, hourLabel, mmss, moved, newDraft, nextStep, pendingEcus, remaining, toDraft, withPending } from './epopee';
 
 const step = (id: string, status: 'fait' | 'saute' | null = null, ecus = 1) => ({ id, title: id, hint: '', icon: 'dent', seconds: 120, ecus, status });
@@ -25,7 +25,7 @@ test('ce que l’appareil a noté s’ajoute à ce que le serveur sait, pour le 
 
 test('les écus en attente ne comptent ni une étape passée, ni une étape déjà connue du serveur', () => {
   const r = [routine(step('a', 'fait', 2), step('b', null, 2), step('c', null, 3))];
-  assert.equal(pendingEcus(r, [{ stepId: 'a', status: 'fait', day: 'j' }, { stepId: 'b', status: 'fait', day: 'j' }, { stepId: 'c', status: 'saute', day: 'j' }, { stepId: 'c', status: 'fait', day: 'hier' }], 'j'), 2);
+  assert.equal(pendingEcus(r, [{ stepId: 'a', status: 'fait', day: 'j' }, { stepId: 'b', status: 'fait', day: 'j' }, { stepId: 'c', status: 'saute', day: 'j' }], 'j'), 2);
 });
 
 test('le sablier se calcule sur l’horloge, sans compter les pauses, et ne passe jamais sous zéro', () => {
@@ -110,4 +110,43 @@ test('une semaine se décale d’un lundi au lundi voisin, même à cheval sur u
 test('chaque moment de la journée a son pictogramme', () => {
   assert.deepEqual(Object.keys(KIND_ICON).sort(), ['journee', 'matin', 'soir']);
   assert.equal(new Set(Object.values(KIND_ICON).map((k) => k.name)).size, 3);
+});
+
+test('une étape faite la veille sans réseau compte encore dans la besace affichée', () => {
+  const r = [routine(step('a', null, 2), step('b', 'fait', 1))];
+  assert.equal(pendingEcus(r, [{ stepId: 'a', status: 'fait', day: 'hier' }], 'aujourdhui'), 2);
+  assert.equal(pendingEcus(r, [{ stepId: 'b', status: 'fait', day: 'hier' }], 'aujourdhui'), 1, 'b est fait aujourd’hui côté serveur, mais celui d’hier attend toujours');
+  assert.equal(pendingEcus(r, [{ stepId: 'b', status: 'fait', day: 'aujourdhui' }], 'aujourdhui'), 0);
+});
+
+test('une besace gardée, relue un autre jour : les routines repartent, le reste tient', () => {
+  const kept: Besace = {
+    memberId: 'k', enrolled: true, floor: 5, balance: 12, enrolledAt: '', display: 'nombre', timer: true, swornAt: null, swornBy: null, day: '2026-11-25',
+    routines: [{ ...routine(step('a', 'fait'), step('b', 'saute'), step('c')), startedAt: 'x', endedAt: null, pauses: 2 }],
+    demandes: [{ id: 'd1', exploitId: 'e', title: 'Table', ecus: 2, status: 'attente', createdAt: '', decidedBy: null }, { id: 'd2', exploitId: 'f', title: 'Lit', ecus: 1, status: 'validee', createdAt: '', decidedBy: 'Papa' }],
+  };
+  assert.equal(forDay(kept, '2026-11-25'), kept, 'le même jour, telle que gardée');
+  const next = forDay(kept, '2026-11-26');
+  assert.equal(next.day, '2026-11-26'); assert.equal(next.balance, 12);
+  assert.deepEqual(next.routines![0].steps.map((s) => s.status), [null, null, null]);
+  assert.deepEqual([next.routines![0].startedAt, next.routines![0].pauses], [null, 0]);
+  assert.deepEqual(next.demandes!.map((d) => d.id), ['d1'], 'la réponse d’hier ne se redit pas, la demande en attente reste');
+  assert.equal(kept.routines![0].steps[0].status, 'fait', 'la copie gardée n’est pas modifiée');
+  const absent: Besace = { ...kept, enrolled: false };
+  assert.equal(forDay(absent, '2026-11-26'), absent);
+});
+
+test('une copie abîmée ou absente ne se lit pas', () => {
+  assert.equal(readKept(null), null); assert.equal(readKept('{'), null); assert.equal(readKept('{"at":"x"}'), null);
+  assert.deepEqual(readKept('{"at":"2026-11-25T06:12:00Z","besaces":[],"exploits":[],"recompenses":[]}')?.besaces, []);
+});
+
+test('la date de la copie se dit comme on la dirait', () => {
+  const now = new Date('2026-11-26T08:00:00Z');
+  assert.equal(parisToday(now), '2026-11-26');
+  assert.equal(parisToday(new Date('2026-11-25T23:30:00Z')), '2026-11-26', 'minuit et demi à Paris est déjà demain');
+  assert.equal(keptLabel('2026-11-26T06:12:00Z', now), 'aujourd’hui à 7 h 12');
+  assert.equal(keptLabel('2026-11-25T18:40:00Z', now), 'hier à 19 h 40');
+  assert.equal(keptLabel('2026-11-24T07:05:00Z', now), 'le 24 novembre à 8 h 05');
+  assert.equal(keptLabel('pas une date', now), '');
 });
