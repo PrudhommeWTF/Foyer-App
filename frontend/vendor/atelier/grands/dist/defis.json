@@ -9,6 +9,13 @@
    "Dans les blocs orange, ajoute [controle:répéter 10 fois] et écris 40 à la place de 10.",
    "Glisse [mouvement:avancer de 10 pas] à l’intérieur de la boucle.",
    "Touche le drapeau vert, au-dessus de la scène. Boulon traverse ! Essaie d’autres nombres : plus de pas, moins de répétitions."
+  ],
+  "images": [
+   "traverser-1.png",
+   "traverser-2.png",
+   "traverser-3.png",
+   "traverser-4.png",
+   "traverser-4.png"
   ]
  },
  {
@@ -21,6 +28,13 @@
    "Dans les blocs roses, ajoute [son:jouer le son pop jusqu’au bout].",
    "Touche Boulon sur la scène : il te répond.",
    "Pour aller plus loin : l’onglet Sons, en haut, permet de choisir un autre son dans la bibliothèque, ou d’enregistrer ta voix."
+  ],
+  "images": [
+   "bonjour-1.png",
+   "bonjour-2.png",
+   "bonjour-3.png",
+   "bonjour-3.png",
+   "bonjour-3.png"
   ]
  },
  {
@@ -33,6 +47,13 @@
    "À l’intérieur, glisse [apparence:costume suivant] puis [controle:attendre 1 secondes]. Écris 0.3 à la place de 1.",
    "Touche le drapeau vert : Boulon danse. Le rond rouge l’arrête.",
    "Pour aller plus loin : l’onglet Costumes montre ses trois costumes. Dessines-en un quatrième, il entrera dans la danse."
+  ],
+  "images": [
+   "traverser-1.png",
+   "danser-2.png",
+   "danser-3.png",
+   "danser-3.png",
+   "danser-3.png"
   ]
  },
  {
@@ -45,6 +66,13 @@
    "Refais un script pour « flèche gauche », avec [mouvement:ajouter 10 à x] où tu écris -10.",
    "Fais de même pour « flèche haut » et « flèche bas », avec [mouvement:ajouter 10 à y] : 10 pour monter, -10 pour descendre.",
    "Appuie sur les flèches : tu pilotes Boulon. Change de décor, en bas à droite, pour lui donner un monde à explorer."
+  ],
+  "images": [
+   "clavier-1.png",
+   "clavier-2.png",
+   "clavier-3.png",
+   "clavier-4.png",
+   "clavier-4.png"
   ]
  },
  {
@@ -57,6 +85,13 @@
    "Deuxième script : [evenements:quand le drapeau vert est cliqué], [controle:répéter indéfiniment], et dedans [mouvement:aller à position aléatoire] puis [controle:attendre 1 secondes].",
    "Troisième script : [evenements:quand ce sprite est cliqué], puis [variables:ajouter 1 à score].",
    "Touche le drapeau vert et attrape Boulon : le score monte sur la scène. Trop facile ? Fais-le attendre moins longtemps."
+  ],
+  "images": [
+   "score-1.png",
+   "score-2.png",
+   "score-3.png",
+   "score-4.png",
+   "score-4.png"
   ]
  }
 ]
