@@ -1,0 +1,62 @@
+[
+ {
+  "id": "traverser",
+  "name": "Boulon traverse la scène",
+  "desc": "Ton premier script : au drapeau vert, Boulon marche d’un bord à l’autre.",
+  "steps": [
+   "Dans les blocs jaunes, prends [evenements:quand le drapeau vert est cliqué] et pose-le au milieu.",
+   "Dans les blocs bleus, accroche dessous [mouvement:aller à x: -200 y: 0] : Boulon part du bord gauche. Change les nombres en touchant les cases blanches.",
+   "Dans les blocs orange, ajoute [controle:répéter 10 fois] et écris 40 à la place de 10.",
+   "Glisse [mouvement:avancer de 10 pas] à l’intérieur de la boucle.",
+   "Touche le drapeau vert, au-dessus de la scène. Boulon traverse ! Essaie d’autres nombres : plus de pas, moins de répétitions."
+  ]
+ },
+ {
+  "id": "bonjour",
+  "name": "Boulon dit bonjour",
+  "desc": "Quand on le touche, Boulon parle et fait du bruit.",
+  "steps": [
+   "Dans les blocs jaunes, prends [evenements:quand ce sprite est cliqué].",
+   "Dans les blocs violets, accroche [apparence:dire Bonjour ! pendant 2 secondes]. Touche le mot Bonjour pour écrire ce que tu veux.",
+   "Dans les blocs roses, ajoute [son:jouer le son pop jusqu’au bout].",
+   "Touche Boulon sur la scène : il te répond.",
+   "Pour aller plus loin : l’onglet Sons, en haut, permet de choisir un autre son dans la bibliothèque, ou d’enregistrer ta voix."
+  ]
+ },
+ {
+  "id": "danser",
+  "name": "Boulon danse",
+  "desc": "Une animation : Boulon change de costume sans s’arrêter.",
+  "steps": [
+   "Commence par [evenements:quand le drapeau vert est cliqué].",
+   "Accroche [controle:répéter indéfiniment] : ce qu’on met dedans recommence sans fin.",
+   "À l’intérieur, glisse [apparence:costume suivant] puis [controle:attendre 1 secondes]. Écris 0.3 à la place de 1.",
+   "Touche le drapeau vert : Boulon danse. Le rond rouge l’arrête.",
+   "Pour aller plus loin : l’onglet Costumes montre ses trois costumes. Dessines-en un quatrième, il entrera dans la danse."
+  ]
+ },
+ {
+  "id": "clavier",
+  "name": "Pilote Boulon au clavier",
+  "desc": "Les flèches du clavier déplacent Boulon. À faire sur un ordinateur.",
+  "steps": [
+   "Prends [evenements:quand la touche espace est pressée]. Touche le mot espace et choisis « flèche droite ».",
+   "Accroche [mouvement:ajouter 10 à x] : Boulon avance vers la droite.",
+   "Refais un script pour « flèche gauche », avec [mouvement:ajouter 10 à x] où tu écris -10.",
+   "Fais de même pour « flèche haut » et « flèche bas », avec [mouvement:ajouter 10 à y] : 10 pour monter, -10 pour descendre.",
+   "Appuie sur les flèches : tu pilotes Boulon. Change de décor, en bas à droite, pour lui donner un monde à explorer."
+  ]
+ },
+ {
+  "id": "score",
+  "name": "Attrape Boulon",
+  "desc": "Ton premier jeu, avec un score : touche Boulon avant qu’il ne s’échappe.",
+  "steps": [
+   "Dans les blocs Variables, touche « Créer une variable » et appelle-la score.",
+   "Premier script : [evenements:quand le drapeau vert est cliqué], puis [variables:mettre score à 0].",
+   "Deuxième script : [evenements:quand le drapeau vert est cliqué], [controle:répéter indéfiniment], et dedans [mouvement:aller à position aléatoire] puis [controle:attendre 1 secondes].",
+   "Troisième script : [evenements:quand ce sprite est cliqué], puis [variables:ajouter 1 à score].",
+   "Touche le drapeau vert et attrape Boulon : le score monte sur la scène. Trop facile ? Fais-le attendre moins longtemps."
+  ]
+ }
+]

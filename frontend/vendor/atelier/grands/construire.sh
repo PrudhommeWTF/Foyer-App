@@ -78,4 +78,6 @@ cp -r "$RESULTAT/static/blocks-media" "$ICI/dist/static/"
 mkdir -p "$ICI/dist/chunks" && find "$RESULTAT/chunks" -maxdepth 1 -type f -name '*.js' -exec cp {} "$ICI/dist/chunks/" \;
 cp packages/scratch-gui/src/lib/default-project/*.svg packages/scratch-gui/src/lib/default-project/*.wav "$ICI/dist/bibliotheque/"
 cp LICENSE "$ICI/dist/LICENSE.txt"
+# Les défis guidés, pour que l'écran Atelier de Foyer les propose, et d'où vient l'éditeur
+cp packages/scratch-gui/src/foyer/defis.json "$ICI/amont.json" "$ICI/dist/"
 echo "[atelier] terminé : $(find "$ICI/dist" -type f | wc -l) fichiers, $(du -sh "$ICI/dist" | cut -f1)"

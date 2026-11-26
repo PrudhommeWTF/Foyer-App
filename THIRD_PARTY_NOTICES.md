@@ -38,6 +38,7 @@ Le niveau « Grands codeurs » est **construit à partir du code source de l'éd
 
 - Source : <https://github.com/scratchfoundation/scratch-editor>, au commit et à la version indiqués dans `frontend/vendor/atelier/grands/amont.json`.
 - Nos modifications, et le moyen de reconstruire : `frontend/vendor/atelier/grands/` (`MODIFICATIONS.md`, `construire.sh`). Le code source correspondant au résultat servi est le dépôt d'origine à ce commit, plus ce dossier.
+- Dans l'application : l'écran Atelier, « À propos de l'Atelier code », donne à chaque utilisateur le lien vers le code d'origine au commit employé et vers les modifications de Foyer, comme la licence le demande pour un logiciel utilisé par le réseau.
 - Dans l'application servie : `atelier/grands/LICENSE.txt`, et `atelier/grands/atelier.js.LICENSE.txt` pour les notices des bibliothèques que l'éditeur embarque (React, Blockly, Paper.js, JSZip et d'autres, sous licences MIT, Apache 2.0 ou BSD).
 
 ## Bibliothèque de Scratch (personnages, décors et sons de l'Atelier code)

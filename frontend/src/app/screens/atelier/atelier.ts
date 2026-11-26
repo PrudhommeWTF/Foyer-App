@@ -3,7 +3,7 @@ import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
 import { IconComponent } from '../../core/icon';
 import { AtelierStore } from '../../core/atelier/store';
-import { NIVEAU, Niveau, Projet, roomLine } from '../../core/atelier/atelier';
+import { Defi, NIVEAU, NIVEAUX, Niveau, Projet, levelsLine, roomLine } from '../../core/atelier/atelier';
 import { AtelierAide } from './aide';
 /** An example shipped with the editor: a ready-made project the child gets a copy of. */
 interface Exemple { id: string; name: string; desc: string; image: string; json: unknown; }
@@ -42,6 +42,14 @@ const NARROW = '(max-width: 760px)';
           <div class="count">{{ m.projets ? m.projets + ' projet' + (m.projets > 1 ? 's' : '') : 'Pas encore de projet' }}</div>
           <div class="room">{{ room(m.octets) }}</div>
         </div>
+        @if (m.enfant) {
+          <div class="lv">
+            <span class="lv-l">{{ m.name }} peut créer dans :</span>
+            @for (c of choixNiveaux; track c.label) {
+              <button [class.on]="memes(m.niveaux, c.levels)" [attr.aria-pressed]="memes(m.niveaux, c.levels)" [disabled]="busy()" (click)="regler(m.id, c.levels)">{{ c.label }}</button>
+            }
+          </div>
+        }
         @if (autres(); as liste) {
           <div class="tiles">
             @for (p of liste; track p.id) {
@@ -77,9 +85,9 @@ const NARROW = '(max-width: 760px)';
       } @else {
         <div class="head-row">
           <div class="count">@if (projets()?.length; as n) { {{ n }} projet{{ n > 1 ? 's' : '' }} }</div>
-          <button class="btn btn-primary" [disabled]="busy()" (click)="choix.set(!choix())" [attr.aria-expanded]="choix()"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau projet</button>
+          <button class="btn btn-primary" [disabled]="busy()" (click)="nouveau()" [attr.aria-expanded]="deux() ? choix() : null"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Nouveau projet</button>
         </div>
-        @if (choix()) {
+        @if (choix() && deux()) {
           <div class="niveaux">
             <button class="niveau" [disabled]="busy()" (click)="creer('petits')">
               <span class="ntitle">Petits codeurs</span>
@@ -110,7 +118,7 @@ const NARROW = '(max-width: 760px)';
             <div class="empty-ico"><f-icon name="blocs" [size]="30" color="var(--ink3)" [width]="1.8" /></div>
             <div class="empty-title">Pas encore de projet</div>
             <div class="empty-text">Un projet, c’est une petite histoire : des personnages, un décor, et des blocs à emboîter pour les faire bouger.</div>
-            @if (!narrow()) { <button class="btn btn-primary" [disabled]="busy()" (click)="choix.set(true)"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Créer mon premier projet</button> }
+            @if (!narrow()) { <button class="btn btn-primary" [disabled]="busy()" (click)="nouveau()"><f-icon name="plus" [size]="18" color="#fff" [width]="2.4" /> Créer mon premier projet</button> }
           </div>
         } @else {
           <div class="tiles">
@@ -155,7 +163,20 @@ const NARROW = '(max-width: 760px)';
         </div>
       }
 
-      @if (!narrow() && exemples().length) {
+      @if (!narrow() && defis().length && ouvert('grands')) {
+        <div class="sep">Relever un défi (grands codeurs)</div>
+        <div class="tiles">
+          @for (d of defis(); track d.id) {
+            <div class="tile defi">
+              <div class="tname">{{ d.name }}</div>
+              <div class="tdesc">{{ d.desc }}</div>
+              <button class="btn btn-ghost restore" [disabled]="busy()" (click)="relever(d)">Commencer</button>
+            </div>
+          }
+        </div>
+      }
+
+      @if (!narrow() && exemples().length && ouvert('petits')) {
         <div class="sep">Partir d’un exemple (petits codeurs)</div>
         <div class="tiles">
           @for (e of exemples(); track e.id) {
@@ -177,7 +198,9 @@ const NARROW = '(max-width: 760px)';
         <summary>À propos de l’Atelier code</summary>
         <p>L’Atelier code est sans lien avec la Scratch Foundation ni approbation de sa part. Le niveau « Petits codeurs » est construit à partir du code source ouvert de ScratchJr, publié par le Massachusetts Institute of Technology sous licence BSD 3 clauses.
           <a [href]="exempleUrl('../LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
-        <p>Le niveau « Grands codeurs » est construit à partir du code source de l’éditeur de Scratch, publié par la Scratch Foundation sous licence GNU Affero General Public License, version 3. Sa source et les modifications de Foyer sont dans le dépôt de Foyer (frontend/vendor/atelier/grands).
+        <p>Le niveau « Grands codeurs » est construit à partir du code source de l’éditeur de Scratch, publié par la Scratch Foundation sous licence GNU Affero General Public License, version 3. Cette licence vous donne le droit d’en recevoir le code source : il est fait du code d’origine@if (amont(); as a) {, version {{ a.version }}, à ce
+          <a [href]="a.depot + '/tree/' + a.commit" target="_blank" rel="noopener">point précis de son histoire</a>}, et des modifications de Foyer, publiées avec
+          <a href="https://github.com/PrudhommeWTF/Foyer-App/tree/main/frontend/vendor/atelier/grands" target="_blank" rel="noopener">le code de Foyer</a>.
           <a [href]="grandsUrl('LICENSE.txt')" target="_blank" rel="noopener">Texte de la licence</a></p>
         <p>Les personnages, les décors et les sons de la bibliothèque viennent de Scratch, sous licence Creative Commons Attribution-ShareAlike 2.0 : « Scratch is developed by the Lifelong Kindergarten Group at the MIT Media Lab. See http://scratch.mit.edu. »
           <a [href]="exempleUrl('../svglibrary/LICENCE.md')" target="_blank" rel="noopener">Détail et licence</a></p>
@@ -202,6 +225,13 @@ const NARROW = '(max-width: 760px)';
     .niveau:hover { border-color: var(--ink3); }
     .ntitle { font-family: var(--font-display); font-size: 17px; font-weight: 800; color: var(--ink); }
     .ndesc { font-size: 13px; font-weight: 600; color: var(--ink2); line-height: 1.45; }
+    .lv { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -6px 0 20px; }
+    .lv-l { font-size: 14px; font-weight: 700; color: var(--ink2); }
+    .lv button { min-height: 44px; padding: 0 14px; border: 2px solid var(--line2); border-radius: 14px; background: var(--surface); font: inherit; font-weight: 800; font-size: 13px; color: var(--ink2); cursor: pointer; }
+    .lv button.on { border-color: var(--ink); color: var(--ink); }
+    .tile.defi { display: flex; flex-direction: column; padding: 14px; }
+    .tile.defi .tname { margin-top: 0; white-space: normal; }
+    .tile.defi .tdesc { flex: 1; }
     .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
     .tabs button { min-height: 44px; padding: 0 16px; border: none; border-radius: 22px; background: var(--surface); font: inherit; font-weight: 800; font-size: 14px; color: var(--ink2); cursor: pointer; }
     .tabs button.on { background: var(--ink); color: var(--bg, #fff); }
@@ -247,6 +277,15 @@ export class AtelierScreen {
   readonly autres = signal<Projet[] | null>(null);
   readonly corbeille = signal<Projet[]>([]);
   readonly aide = signal(false);
+  /** The guided challenges shipped with the 'Grands codeurs' editor. */
+  readonly defis = signal<Defi[]>([]);
+  /** Where the 'Grands codeurs' editor comes from: the upstream repository and the pinned commit. */
+  readonly amont = signal<{ depot: string; commit: string; version: string } | null>(null);
+  /** Both levels are open to whoever is logged in: « Nouveau projet » then asks which one. */
+  readonly deux = computed(() => this.atelier.levels().length > 1);
+  readonly choixNiveaux: readonly { label: string; levels: Niveau[] }[] = [
+    { label: levelsLine(['petits']), levels: ['petits'] }, { label: levelsLine(['grands']), levels: ['grands'] }, { label: levelsLine(NIVEAUX), levels: [...NIVEAUX] },
+  ];
   /** Sharing between brothers and sisters, as long as the household allows it. */
   readonly partage = computed(() => this.store.setting('atelierPartageFratrie') !== false);
 
@@ -259,6 +298,8 @@ export class AtelierScreen {
     void this.charger();
     // Shipped with the editor, as a static file: no example, no section.
     fetch(this.exempleUrl('exemples.json')).then((r) => (r.ok ? r.json() : [])).then((l: Exemple[]) => this.exemples.set(l)).catch(() => { /* offline: the section stays hidden */ });
+    fetch(this.grandsUrl('defis.json')).then((r) => (r.ok ? r.json() : [])).then((l: Defi[]) => this.defis.set(l)).catch(() => { /* offline: the section stays hidden */ });
+    fetch(this.grandsUrl('amont.json')).then((r) => (r.ok ? r.json() : null)).then((a) => this.amont.set(a)).catch(() => { /* offline: the sentence does without the link */ });
   }
 
   async charger(): Promise<void> {
@@ -290,12 +331,20 @@ export class AtelierScreen {
     } catch (e) { this.erreur.set((e as Error).message); }
   }
   niveau(p: { level: Niveau }): string { return NIVEAU[p.level]; }
+  ouvert(level: Niveau): boolean { return this.atelier.levels().includes(level); }
+  memes(a: readonly Niveau[], b: readonly Niveau[]): boolean { return a.length === b.length && a.every((l) => b.includes(l)); }
+  /** One level open: the project is created at once; two: the child chooses. */
+  nouveau(): void { if (this.deux()) this.choix.set(!this.choix()); else void this.creer(this.atelier.levels()[0]); }
+  /** A parent opens one level, the other, or both to a child. */
+  regler(id: string, levels: Niveau[]): Promise<void> {
+    return this.agir(async () => { await this.api.put(`atelier/membres/${encodeURIComponent(id)}/niveaux`, { niveaux: levels }); await this.atelier.load(); });
+  }
   room(octets: number): string { return roomLine(octets, this.atelier.quotaMo()); }
 
   /** Each editor is a page of its own, served next to the application, with its own way of naming the project. */
-  private page(p: { id: string; level: Niveau }, watch: boolean): string {
+  private page(p: { id: string; level: Niveau }, watch: boolean, defi = ''): string {
     const id = encodeURIComponent(p.id);
-    const query = p.level === 'grands' ? `projet=${id}${watch ? '&vue=plein' : ''}` : `pmd5=${id}&mode=${watch ? 'look&vue=plein' : 'edit'}`;
+    const query = p.level === 'grands' ? `projet=${id}${watch ? '&vue=plein' : ''}${defi ? `&defi=${encodeURIComponent(defi)}` : ''}` : `pmd5=${id}&mode=${watch ? 'look&vue=plein' : 'edit'}`;
     return new URL(`atelier/${p.level}/editor.html?${query}`, document.baseURI).href;
   }
   ouvrir(p: { id: string; level: Niveau }): void { location.href = this.page(p, false); }
@@ -320,6 +369,13 @@ export class AtelierScreen {
       const n = (this.projets()?.length ?? 0) + 1;
       const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: `Projet ${n}`, level });
       this.ouvrir(projet);
+    });
+  }
+  /** A guided challenge: a new project of one's own, opened with the steps of the challenge. */
+  relever(d: Defi): Promise<void> {
+    return this.agir(async () => {
+      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: d.name.slice(0, 80), level: 'grands' });
+      location.href = this.page(projet, false, d.id);
     });
   }
   /** The child never edits the example itself: a project of their own is created from it. */

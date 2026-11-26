@@ -15,6 +15,10 @@ const KEPT = ['en', 'fr'];
 // Messages of features that are still there
 const REWRITTEN = {
     'gui.gui.defaultProjectTitle': 'Mon projet',
+    // The cards of the editor carry the guided challenges of the Atelier, not tutorials
+    'gui.cards.all-tutorials': 'Défis',
+    'gui.cards.tutorialsIcon': 'Icône Défis',
+    'gui.tipsLibrary.tutorials': 'Choisis un défi',
     'gui.crashMessage.description': 'Nous sommes désolés, l’Atelier a rencontré un problème. Recharge la page pour continuer.',
     'gui.unsupportedBrowser.description': 'Nous sommes désolés, ce navigateur ne permet pas d’utiliser l’Atelier. Essaie avec une version récente de Safari, Chrome, Firefox ou Edge.',
     'gui.unsupportedBrowser.notRecommended': 'Nous sommes désolés, cette version du navigateur est trop ancienne pour l’Atelier. Mets-le à jour pour continuer.',
