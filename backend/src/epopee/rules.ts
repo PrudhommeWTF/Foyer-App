@@ -30,7 +30,8 @@ export function cancelRefusal(entry: Entry, entries: Entry[], floor: number): st
   return null;
 }
 
-export const ROUTINE_KINDS = ['matin', 'soir'] as const;
+/** Le moment d'une routine : il décide de son pictogramme et de l'ambiance de son déroulé (le soir est sombre). */
+export const ROUTINE_KINDS = ['matin', 'journee', 'soir'] as const;
 export type RoutineKind = typeof ROUTINE_KINDS[number];
 /** Une étape est faite, ou passée (un jour sans : ni écu, ni reproche). */
 export const STEP_STATUS = ['fait', 'saute'] as const;
@@ -131,3 +132,14 @@ export const pactTopUp = (bal: number, floor: number): number => Math.max(0, flo
 /** Les écus manquent-ils encore pour ce trésor ? Un échange dépense le coût entier ; le plancher ne protège que des retraits. */
 export const canExchange = (bal: number, cost: number): boolean => bal >= cost;
 export const exchangeEntryId = (questId: string): string => `echange:${questId}`;
+
+/** Un enfant garde ses routines lisibles d'un coup d'œil : pas plus que cela. */
+export const ROUTINES_MAX = 6;
+/**
+ * Le moment d'une routine, d'après son heure : le matin avant midi, le soir à
+ * partir de 18 h, la journée entre les deux (le retour de l'école, les devoirs).
+ * Il se déduit, il ne se choisit pas : déplacer une routine change son ambiance.
+ */
+export const kindOf = (time: string): RoutineKind => (time < '12:00' ? 'matin' : time < '18:00' ? 'journee' : 'soir');
+/** Le titre d'une routine, ou null s'il manque ou dépasse 60 caractères. */
+export const titleInput = (v: unknown): string | null => text(v, 60);

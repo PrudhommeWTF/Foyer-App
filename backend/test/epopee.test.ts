@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { Contexte, appel, arreter, brut, demarrer } from './securite-helpers';
 import { jpeg, png } from './equipements-fixtures';
-import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
+import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, kindOf, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
 import { parseExploits, parseGabarit, parseRewards } from '../src/epopee/gabarit';
 import { EpopeeEvent, emit, eventMessage, onEpopeeEvent, recipients } from '../src/epopee/events';
 import { BilanInput, computeBilan, councilPdf, eventful, lines, weekLine, weeklyHits } from '../src/epopee/bilan';
@@ -704,5 +704,63 @@ describe('la photo d’un souvenir', () => {
     assert.equal((await appel(ctx.base, 'DELETE', `/epopee/quetes/${souvenir}/photo`, undefined, ctx.jetons.membre)).status, 200);
     assert.equal(await photoDe(souvenir), null); assert.equal((await voir(souvenir, ctx.jetons.enfant)).status, 404);
     assert.equal((await appel(ctx.base, 'DELETE', `/epopee/quetes/${souvenir}/photo`, undefined, ctx.jetons.membre)).status, 404);
+  });
+});
+
+describe('une routine de plus que le matin et le soir', () => {
+  type R = { id: string; kind: string; title: string; time: string; steps: { id: string; title: string; ecus: number }[] };
+  const etape = { title: 'Goûter', icon: 'repas', seconds: 600, ecus: 1 };
+  const routines = async () => (await besace(ctx.jetons.membre)).json.routines as R[];
+  let creee = '';
+
+  it('le moment d’une routine se déduit de son heure', () => {
+    assert.deepEqual(['06:30', '11:59', '12:00', '16:45', '17:59', '18:00', '21:00'].map(kindOf), ['matin', 'matin', 'journee', 'journee', 'journee', 'soir', 'soir']);
+  });
+
+  it('un adulte crée une routine avec ses étapes ; elle se range à son heure', async () => {
+    const avant = await routines();
+    const fait = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: ' Le retour de l’école ', time: '16:45', steps: [etape, { ...etape, title: 'Devoirs', icon: 'ecole', seconds: 1200, ecus: 2 }] }, ctx.jetons.membre);
+    assert.equal(fait.status, 201, JSON.stringify(fait.json));
+    creee = fait.json.id;
+    const apres = fait.json.routines as R[];
+    assert.equal(apres.length, avant.length + 1);
+    const r = apres.find((x) => x.id === creee)!;
+    assert.deepEqual([r.title, r.time, r.kind, r.steps.map((s) => s.title)], ['Le retour de l’école', '16:45', 'journee', ['Goûter', 'Devoirs']]);
+    assert.deepEqual(apres.map((x) => x.time), [...apres.map((x) => x.time)].sort(), 'dans l’ordre de la journée');
+  });
+
+  it('elle se déroule comme les autres : une étape faite verse son écu', async () => {
+    const r = (await routines()).find((x) => x.id === creee)!;
+    const avant = (await besace(ctx.jetons.enfant)).json.balance as number;
+    const fait = await appel(ctx.base, 'POST', `/epopee/etapes/${r.steps[1].id}`, { status: 'fait' }, ctx.jetons.enfant);
+    assert.deepEqual([fait.status, fait.json.ecus, fait.json.balance], [201, 2, avant + 2]);
+  });
+
+  it('déplacer une routine change son moment', async () => {
+    const r = (await routines()).find((x) => x.id === creee)!;
+    const corps = { title: r.title, time: '18:30', steps: r.steps.map((s) => ({ id: s.id, title: s.title, icon: 'repas', seconds: 600, ecus: s.ecus })) };
+    const regle = await appel(ctx.base, 'PUT', `/epopee/routines/${creee}`, corps, ctx.jetons.membre);
+    assert.equal((regle.json.routines as R[]).find((x) => x.id === creee)!.kind, 'soir');
+  });
+
+  it('refuse une saisie incomplète, un enfant, un enfant non enrôlé, et une septième routine', async () => {
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: 'Sans étape', time: '16:00', steps: [] }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: '', time: '16:00', steps: [etape] }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: 'x', time: '16h', steps: [etape] }, ctx.jetons.membre)).status, 400);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: 'Jeux', time: '16:00', steps: [etape] }, ctx.jetons.enfant)).status, 403);
+    assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${noe}/routines`, { title: 'Jeux', time: '16:00', steps: [etape] }, ctx.jetons.membre)).status, 409);
+    while ((await routines()).length < 6) assert.equal((await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: 'Une de plus', time: '14:00', steps: [etape] }, ctx.jetons.membre)).status, 201);
+    const trop = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/routines`, { title: 'La septième', time: '15:00', steps: [etape] }, ctx.jetons.membre);
+    assert.equal(trop.status, 409); assert.match(trop.json.error, /déjà 6 routines/);
+  });
+
+  it('retirer une routine ne reprend rien de ce qu’elle a fait gagner', async () => {
+    const avant = (await besace(ctx.jetons.membre)).json.balance as number;
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/routines/${creee}`, undefined, ctx.jetons.enfant)).status, 403);
+    const retire = await appel(ctx.base, 'DELETE', `/epopee/routines/${creee}`, undefined, ctx.jetons.membre);
+    assert.equal(retire.status, 200); assert.ok(!(retire.json.routines as R[]).some((x) => x.id === creee));
+    assert.equal((await besace(ctx.jetons.membre)).json.balance, avant);
+    assert.equal((await appel(ctx.base, 'DELETE', `/epopee/routines/${creee}`, undefined, ctx.jetons.membre)).status, 404);
+    assert.equal((await appel(ctx.base, 'PUT', `/epopee/routines/${creee}`, { title: 'x', time: '10:00', steps: [etape] }, ctx.jetons.membre)).status, 404);
   });
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { shiftWeek } from './epopee';
+import { KIND_ICON, shiftWeek } from './epopee';
 import { LOIS, Pending, Quest, Routine, SEAL_LATCH_MS, SERMENT, bothSealed, breath, currentQuest, dailyEcus, daysToReach, longDay, missing, reachLine, doneCount, draftsError, earned, hourLabel, mmss, moved, newDraft, nextStep, pendingEcus, remaining, toDraft, withPending } from './epopee';
 
 const step = (id: string, status: 'fait' | 'saute' | null = null, ecus = 1) => ({ id, title: id, hint: '', icon: 'dent', seconds: 120, ecus, status });
@@ -105,4 +105,9 @@ test('le serment est réciproque : trois lois, autant de promesses de chaque cô
 test('une semaine se décale d’un lundi au lundi voisin, même à cheval sur un mois ou un changement d’heure', () => {
   assert.equal(shiftWeek('2026-10-26', -1), '2026-10-19'); assert.equal(shiftWeek('2026-10-19', 1), '2026-10-26');
   assert.equal(shiftWeek('2026-12-28', 1), '2027-01-04'); assert.equal(shiftWeek('2026-03-30', -1), '2026-03-23');
+});
+
+test('chaque moment de la journée a son pictogramme', () => {
+  assert.deepEqual(Object.keys(KIND_ICON).sort(), ['journee', 'matin', 'soir']);
+  assert.equal(new Set(Object.values(KIND_ICON).map((k) => k.name)).size, 3);
 });
