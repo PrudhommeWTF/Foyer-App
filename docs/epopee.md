@@ -8,8 +8,8 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 | Fait | Pas encore |
 |---|---|
-| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Créer une routine de plus que le matin et le soir |
-| Routines du matin et du soir, pas à pas, réglables | Ouvrir l'écran sans réseau |
+| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Ouvrir l'écran sans réseau |
+| Routines du matin, de la journée et du soir, pas à pas, à créer, régler et retirer | |
 | Exploits convenus, exploits signalés, bravos, journal | |
 | L'Armurerie : récompenses, quête, pacte, échange, souvenirs avec leur photo | |
 | Le conseil de famille : bilan de la semaine, notes, PDF, notification du dimanche | |
@@ -42,7 +42,7 @@ Le dimanche, à l'heure réglée (18 h par défaut, Paramètres, Épopée), chaq
 - **Ce qu'on a décidé** : des notes libres, gardées par semaine. Les flèches remontent aux semaines passées.
 - **Le bilan en PDF** : les mêmes lignes, les mots de la semaine et les notes du conseil, sur une page à imprimer ou à garder.
 
-Le conseil est réservé aux adultes (écran, API et PDF). « Routines possibles » compte les routines réglées de l'enfant, chaque jour depuis son enrôlement, jusqu'à aujourd'hui : en début de semaine le dénominateur est petit, c'est voulu. Les routines retirées en cours de semaine ne sont pas recomptées.
+Le conseil est réservé aux adultes (écran, API et PDF). « Routines possibles » compte les routines réglées de l'enfant, chaque jour depuis son enrôlement, jusqu'à aujourd'hui : en début de semaine le dénominateur est petit, c'est voulu. Les routines retirées en cours de semaine ne sont pas recomptées, et une routine ajoutée en cours de semaine compte pour toute la semaine : la semaine du changement, ce chiffre est approximatif.
 
 Chacun coupe cette notification pour lui (Paramètres, Notifications, « bilan de l'Épopée du dimanche »). Elle suit les règles communes : rien pendant une suspension, une seule fois par enfant et par semaine.
 
@@ -83,6 +83,7 @@ Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombr
 
 - **Répondre à un exploit signalé.** L'enfant touche « C'est fait ! » sur un exploit convenu : rien n'est versé, la demande attend en tête de sa carte chez le parent. « Valider » verse l'écu ; « Pas tout à fait » ne retire rien, et l'enfant peut réessayer. Un même exploit ne se signale pas deux fois tant qu'il attend. Les parents sont prévenus sur le moment (voir « Les parents prévenus sur le moment »).
 - **Créditer un exploit.** Un tap sur un exploit convenu le verse aussitôt, au montant convenu. Pas de confirmation avant : le message propose « Annuler » pendant cinq secondes (c'est une contre-écriture, les deux lignes restent au journal). Le bravo spontané suit la même règle.
+- **Ajouter une routine.** Le gabarit pose un matin et un soir ; « Ajouter une routine » en crée d'autres (le retour de l'école, les devoirs, le mercredi), six au plus par enfant. Elle se règle comme les autres et se range à son heure. Son moment se déduit de son heure, il ne se choisit pas : avant midi c'est le matin (soleil), à partir de 18 h le soir (lune, déroulé sombre), entre les deux la journée (horloge). Déplacer une routine change donc son ambiance. « Retirer cette routine », dans son réglage, la fait disparaître ; les écus qu'elle a fait gagner et ses coches passées restent.
 - **Régler une routine.** « Régler » ouvre son nom, son heure et ses étapes : consigne, phrase, pictogramme, durée du sablier en minutes, écus (0 à 3), ordre, ajout et retrait (12 étapes au plus). Rien ne part avant « Enregistrer ». Une étape retirée garde ses coches passées ; régler une routine ne touche jamais à la besace. « Revenir aux routines proposées » remplace les routines de l'enfant par celles du gabarit.
 - **Réglages de l'enfant.** « Montrer les pièces sans le nombre » : la besace n'affiche que des pièces, plus grosses, pour un enfant qui ne lit pas encore les nombres. « Sablier dans les routines » : coupé, les étapes s'enchaînent sans décompte. La carte rappelle le nombre d'écus possibles par jour avec les routines telles qu'elles sont réglées.
 - **Exploits convenus** (communs au foyer) : les ajouter, changer leur valeur (1 à 3 écus), les retirer. Des exploits proposés viennent du gabarit (clé `exploits` du même fichier) au premier enrôlement. Retirer un exploit referme les demandes qui l'attendaient ; les écus déjà gagnés restent.
@@ -167,6 +168,8 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | `POST /membres/:id/serment` | sceller le serment de l'alliance (adultes, enfant enrôlé). 201 la première fois, 200 ensuite : la date du premier serment reste |
 | `PATCH /membres/:id/reglages` | `{ display: "nombre" ou "pieces", timer }` (adultes) ; un réglage absent ne bouge pas |
 | `POST /membres/:id/routines/gabarit` | poser les routines du gabarit à un enfant qui n'en a aucune ; avec `{ replace: true }`, remplacer les siennes (adultes) |
+| `POST /membres/:id/routines` | créer une routine (adultes) : `title`, `time`, `steps`, comme pour la régler. 409 au-delà de six routines |
+| `DELETE /routines/:id` | retirer une routine (adultes) ; écus et coches passées restent |
 | `PUT /routines/:id` | régler une routine (adultes) : `title`, `time` (HH:MM), `steps` dans l'ordre (`id` pour une étape existante, `title`, `hint`, `icon`, `seconds`, `ecus`). Une étape absente est archivée. La première faute est nommée |
 | `GET /exploits` | les exploits convenus (tout membre) |
 | `POST /exploits`, `PUT /exploits/:id`, `DELETE /exploits/:id` | ajouter, régler (`title`, `ecus` de 1 à 3), retirer un exploit (adultes) |

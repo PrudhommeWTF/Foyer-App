@@ -4,7 +4,7 @@
 
 export type StepStatus = 'fait' | 'saute';
 export interface Step { id: string; title: string; hint: string; icon: string; seconds: number; ecus: number; status: StepStatus | null; }
-export interface Routine { id: string; kind: 'matin' | 'soir'; title: string; time: string; startedAt: string | null; endedAt: string | null; pauses: number; steps: Step[]; }
+export interface Routine { id: string; kind: 'matin' | 'journee' | 'soir'; title: string; time: string; startedAt: string | null; endedAt: string | null; pauses: number; steps: Step[]; }
 export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'exploit' | 'echange' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
 /** An agreed feat of the household: what a parent credits in one tap, what a child may report. */
 export interface Exploit { id: string; title: string; ecus: number; }
@@ -160,3 +160,10 @@ export interface Conseil {
 }
 /** The Monday a week before (-1) or after (+1) a Monday 'AAAA-MM-JJ'. */
 export const shiftWeek = (monday: string, dir: -1 | 1): string => new Date(Date.parse(monday + 'T12:00:00Z') + dir * 7 * 86_400_000).toISOString().slice(0, 10);
+
+/** A child keeps routines readable at a glance: the server refuses more than this. */
+export const ROUTINES_MAX = 6;
+/** The pictogram and its colour for a routine's moment of the day (the server derives the moment from the hour). */
+export const KIND_ICON: Record<Routine['kind'], { name: string; color: string }> = {
+  matin: { name: 'sun', color: '#D99427' }, journee: { name: 'clock', color: '#4E93B8' }, soir: { name: 'moon', color: '#4E5AA8' },
+};

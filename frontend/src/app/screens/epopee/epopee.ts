@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { FoyerStore } from '../../core/foyer.store';
-import { Demande, Entry, Exploit, Kid, Routine, dailyEcus, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
+import { Demande, Entry, Exploit, KIND_ICON, Kid, ROUTINES_MAX, Routine, dailyEcus, doneCount, earned, hourLabel, nextStep, pendingEcus, withPending } from '../../core/epopee/epopee';
 import { EpopeeStore } from '../../core/epopee/store';
 import { IconComponent } from '../../core/icon';
 import { sessionUuid } from '../../core/revisions/revisions';
@@ -42,7 +42,7 @@ const COINS_MAX = 30;
       @if (allied(); as al) { <epopee-alliance [kid]="al" [rewards]="recompenses()" (changed)="charger()" (sealed)="scelle(al)" (closed)="alliance.set(null)" /> }
       @if (parchment(); as pk) { <epopee-parchment [kid]="pk" (closed)="parchemin.set(null)" /> }
       @if (!store.isChild() && conseil() && kids(); as all) { <epopee-council [kids]="all" (closed)="conseil.set(false)" /> }
-      @if (editing(); as ed) { <epopee-routine-editor [routine]="ed.routine" [name]="ed.name" (closed)="finEdition($event)" /> }
+      @if (editing(); as ed) { <epopee-routine-editor [routine]="ed.routine" [memberId]="ed.memberId" [name]="ed.name" (closed)="finEdition($event)" /> }
       @if (erreur(); as e) {
         <div class="card empty"><div class="empty-title">L’Épopée ne répond pas</div><div class="empty-text">{{ e }}</div><button class="btn btn-primary" (click)="charger()">Réessayer</button></div>
       } @else if (kids(); as liste) {
@@ -99,7 +99,7 @@ const COINS_MAX = 30;
                 <div class="routines">
                   @for (r of k.routines; track r.id) {
                     <div class="routine" [class.done]="isDone(r)">
-                      <div class="r-ico"><f-icon [name]="r.kind === 'matin' ? 'sun' : 'moon'" [size]="22" [color]="r.kind === 'matin' ? '#D99427' : '#4E5AA8'" [width]="2" /></div>
+                      <div class="r-ico"><f-icon [name]="kinds[r.kind].name" [size]="22" [color]="kinds[r.kind].color" [width]="2" /></div>
                       <div class="r-what">
                         <div class="t">{{ r.title }}</div>
                         <div class="s">{{ routineLine(r) }}</div>
@@ -109,11 +109,13 @@ const COINS_MAX = 30;
                       @if (!store.isChild()) { <button class="btn btn-soft" (click)="regler(k, r)">Régler</button> }
                     </div>
                   }
+                  @if (!store.isChild() && k.routines!.length < routinesMax) { <button class="btn btn-soft add-routine" (click)="creerRoutine(k)"><f-icon name="plus" [size]="16" [width]="2.4" /> Ajouter une routine</button> }
                 </div>
               } @else if (!store.isChild()) {
                 <div class="routines none">
                   <p class="lead">{{ k.name }} n’a pas encore de routine. Les routines proposées (matin et soir, cinq étapes chacune) se posent d’un geste.</p>
-                  <button class="btn btn-soft" [disabled]="busy()" (click)="poserRoutines(k)">Poser les routines proposées</button>
+                  <div class="row"><button class="btn btn-soft" [disabled]="busy()" (click)="poserRoutines(k)">Poser les routines proposées</button>
+                    <button class="btn btn-ghost" (click)="creerRoutine(k)">Créer la mienne</button></div>
                 </div>
               }
 
@@ -253,6 +255,8 @@ const COINS_MAX = 30;
     .r-dots span.fait { background: #F0B24B; }
     .r-dots span.saute { background: none; border: 2px solid var(--line); }
     .routine .btn { min-height: 48px; flex: none; }
+    .add-routine { min-height: 46px; justify-self: start; }
+    .routines .row { display: flex; flex-wrap: wrap; gap: 10px; }
     .bravo { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line2); }
     .bravo-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
     .bravo-row .input { flex: 1 1 220px; width: auto; }
@@ -291,7 +295,10 @@ export class EpopeeScreen {
   private readonly ecus = signal<Record<string, number>>({});
   /** The routine being run, full screen: by its ids, so it follows what the store learns. */
   private readonly run = signal<{ memberId: string; routineId: string } | null>(null);
-  private readonly edit = signal<{ memberId: string; routineId: string } | null>(null);
+  /** The routine being set, or (`routineId` null) the child a new one is being created for. */
+  private readonly edit = signal<{ memberId: string; routineId: string | null } | null>(null);
+  readonly kinds = KIND_ICON;
+  readonly routinesMax = ROUTINES_MAX;
   readonly exploits = this.epopee.exploits;
   readonly recompenses = this.epopee.recompenses;
   /** The most écus an enrolled child can earn in a day: what the armoury weighs its prices against. */
@@ -322,8 +329,8 @@ export class EpopeeScreen {
   });
   readonly editing = computed(() => {
     const e = this.edit(); if (!e) return null;
-    const k = this.kids()?.find((x) => x.memberId === e.memberId), routine = k?.routines?.find((x) => x.id === e.routineId);
-    return k && routine ? { routine, name: k.name } : null;
+    const k = this.kids()?.find((x) => x.memberId === e.memberId), routine = k?.routines?.find((x) => x.id === e.routineId) ?? null;
+    return k && (routine || !e.routineId) ? { routine, name: k.name, memberId: k.memberId } : null;
   });
   readonly allied = computed(() => this.kids()?.find((k) => k.memberId === this.alliance()) ?? null);
   readonly parchment = computed(() => this.kids()?.find((k) => k.memberId === this.parchemin()) ?? null);
@@ -341,6 +348,7 @@ export class EpopeeScreen {
     return n ? `${n} étape${n > 1 ? 's' : ''} sur ${r.steps.length}${pauses}` : `${hourLabel(r.time)}, ${r.steps.length} étapes${pauses}`;
   }
   regler(k: Kid, r: Routine): void { this.edit.set({ memberId: k.memberId, routineId: r.id }); }
+  creerRoutine(k: Kid): void { this.edit.set({ memberId: k.memberId, routineId: null }); }
   finEdition(saved: boolean): void { this.edit.set(null); if (saved) void this.charger(); }
   jour(k: Kid): number { return dailyEcus(k.routines || []); }
   attente(k: Kid): Demande[] { return (k.demandes || []).filter((q) => q.status === 'attente'); }
