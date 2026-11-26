@@ -98,5 +98,8 @@ Le bundle n'a donc **aucune dépendance** à l'exécution.
 
 - `www/samples/` : cinq projets d'exemple écrits pour Foyer, avec leur image. L'original en livrait un seul dans le dépôt (`Star`), non repris. C'est l'écran Foyer qui les propose : l'enfant en reçoit une copie à lui.
 
+- `www/defis/` : les défis en image, écrits pour Foyer. `defis.json` liste chaque défi (`id`, `name`, `desc` : une phrase pour l'adulte, `image`). L'image est une photo des vrais blocs, prise dans l'éditeur par `outils/images-defis.cjs` (qui porte le script de chaque défi), jamais dessinée à la main. Pour ajouter un défi : une entrée dans `defis.json`, son script dans l'outil, puis relancer l'outil contre un Foyer de développement (`FOYER_URL`, `FOYER_EMAIL`, `FOYER_PASSWORD`) et reconstruire le frontend. Un test refuse un défi sans image ou sans script.
+- `Web.js` (`challenge`) : ouvert avec `&defi=<id>`, l'éditeur accroche à la zone des scripts une carte qui montre le défi (nom, phrase, image) et se range en une étoile. Elle vit dans la zone des scripts, donc le mode présentation, la bibliothèque et l'éditeur de dessin la recouvrent. Rien de l'éditeur d'origine n'est modifié pour cela.
+
 - `www/svglibrary/Boulon.svg`, `BoulonMarche.svg`, `BoulonSaute.svg` : la mascotte de l'Atelier, dessinée pour Foyer (ce n'est pas du code tiers). En tracés seuls (`M`, `L`, `C`, `Z`), sans groupe ni transformation : l'éditeur de dessin d'origine ne relit fidèlement que cela.
 - `www/editor.html` : la page de l'Atelier.

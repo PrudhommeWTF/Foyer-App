@@ -170,7 +170,20 @@ const NARROW = '(max-width: 760px)';
             <div class="tile defi">
               <div class="tname">{{ d.name }}</div>
               <div class="tdesc">{{ d.desc }}</div>
-              <button class="btn btn-ghost restore" [disabled]="busy()" (click)="relever(d)">Commencer</button>
+              <button class="btn btn-ghost restore" [disabled]="busy()" (click)="relever(d, 'grands')">Commencer</button>
+            </div>
+          }
+        </div>
+      }
+
+      @if (!narrow() && petitsDefis().length && ouvert('petits')) {
+        <div class="sep">Relever un défi (petits codeurs)</div>
+        <div class="tiles">
+          @for (d of petitsDefis(); track d.id) {
+            <div class="tile">
+              <button class="thumb blocs" [disabled]="busy()" (click)="relever(d, 'petits')" [attr.aria-label]="'Relever le défi ' + d.name"><img [src]="petitsUrl('defis/' + d.image)" alt="" /></button>
+              <div class="tname">{{ d.name }}</div>
+              <div class="tdesc">{{ d.desc }}</div>
             </div>
           }
         </div>
@@ -215,6 +228,7 @@ const NARROW = '(max-width: 760px)';
     .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
     .tile { background: var(--surface); border-radius: 18px; padding: 10px; box-shadow: 0 8px 20px -18px rgba(90,60,40,.7); }
     .thumb { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 4 / 3; border: none; border-radius: 12px; background: #F5F2F7; overflow: hidden; padding: 0; }
+    .thumb.blocs { background: #fff; border: 1px solid var(--line); padding: 10px; }
     button.thumb { cursor: pointer; }
     button.thumb:active { transform: scale(.98); }
     .thumb img { width: 100%; height: 100%; object-fit: contain; }
@@ -279,6 +293,8 @@ export class AtelierScreen {
   readonly aide = signal(false);
   /** The guided challenges shipped with the 'Grands codeurs' editor. */
   readonly defis = signal<Defi[]>([]);
+  /** Those of the 'Petits codeurs' editor: one picture each, the script to rebuild. */
+  readonly petitsDefis = signal<(Defi & { image: string })[]>([]);
   /** Where the 'Grands codeurs' editor comes from: the upstream repository and the pinned commit. */
   readonly amont = signal<{ depot: string; commit: string; version: string } | null>(null);
   /** Both levels are open to whoever is logged in: « Nouveau projet » then asks which one. */
@@ -298,6 +314,7 @@ export class AtelierScreen {
     void this.charger();
     // Shipped with the editor, as a static file: no example, no section.
     fetch(this.exempleUrl('exemples.json')).then((r) => (r.ok ? r.json() : [])).then((l: Exemple[]) => this.exemples.set(l)).catch(() => { /* offline: the section stays hidden */ });
+    fetch(this.petitsUrl('defis/defis.json')).then((r) => (r.ok ? r.json() : [])).then((l: (Defi & { image: string })[]) => this.petitsDefis.set(l)).catch(() => { /* offline: the section stays hidden */ });
     fetch(this.grandsUrl('defis.json')).then((r) => (r.ok ? r.json() : [])).then((l: Defi[]) => this.defis.set(l)).catch(() => { /* offline: the section stays hidden */ });
     fetch(this.grandsUrl('amont.json')).then((r) => (r.ok ? r.json() : null)).then((a) => this.amont.set(a)).catch(() => { /* offline: the sentence does without the link */ });
   }
@@ -344,11 +361,12 @@ export class AtelierScreen {
   /** Each editor is a page of its own, served next to the application, with its own way of naming the project. */
   private page(p: { id: string; level: Niveau }, watch: boolean, defi = ''): string {
     const id = encodeURIComponent(p.id);
-    const query = p.level === 'grands' ? `projet=${id}${watch ? '&vue=plein' : ''}${defi ? `&defi=${encodeURIComponent(defi)}` : ''}` : `pmd5=${id}&mode=${watch ? 'look&vue=plein' : 'edit'}`;
+    const query = p.level === 'grands' ? `projet=${id}${watch ? '&vue=plein' : ''}${defi ? `&defi=${encodeURIComponent(defi)}` : ''}` : `pmd5=${id}&mode=${watch ? 'look&vue=plein' : 'edit'}${defi ? `&defi=${encodeURIComponent(defi)}` : ''}`;
     return new URL(`atelier/${p.level}/editor.html?${query}`, document.baseURI).href;
   }
   ouvrir(p: { id: string; level: Niveau }): void { location.href = this.page(p, false); }
   grandsUrl(file: string): string { return new URL(`atelier/grands/${file}`, document.baseURI).href; }
+  petitsUrl(file: string): string { return new URL(`atelier/petits/${file}`, document.baseURI).href; }
   exempleUrl(file: string): string { return new URL(`atelier/petits/samples/${file}`, document.baseURI).href; }
   /** On a phone the editor cannot be used: the project opens to be watched, full screen. */
   regarder(p: { id: string; level: Niveau }): void { location.href = this.page(p, true); }
@@ -371,10 +389,10 @@ export class AtelierScreen {
       this.ouvrir(projet);
     });
   }
-  /** A guided challenge: a new project of one's own, opened with the steps of the challenge. */
-  relever(d: Defi): Promise<void> {
+  /** A guided challenge: a new project of one's own, opened with the challenge shown by its editor. */
+  relever(d: Defi, level: Niveau): Promise<void> {
     return this.agir(async () => {
-      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: d.name.slice(0, 80), level: 'grands' });
+      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: d.name.slice(0, 80), level });
       location.href = this.page(projet, false, d.id);
     });
   }

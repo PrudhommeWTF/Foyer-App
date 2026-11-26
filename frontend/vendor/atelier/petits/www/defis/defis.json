@@ -1,0 +1,32 @@
+[
+ {
+  "id": "avance",
+  "name": "Boulon avance",
+  "desc": "Appuie sur le drapeau vert : Boulon avance de quatre pas.",
+  "image": "avance.png"
+ },
+ {
+  "id": "saute",
+  "name": "Boulon saute",
+  "desc": "Touche Boulon du doigt : il saute.",
+  "image": "saute.png"
+ },
+ {
+  "id": "danse",
+  "name": "Boulon danse",
+  "desc": "Boulon saute et tourne, quatre fois de suite.",
+  "image": "danse.png"
+ },
+ {
+  "id": "grandit",
+  "name": "Boulon grandit",
+  "desc": "Touche Boulon : il grandit, fait « pop », puis redevient petit.",
+  "image": "grandit.png"
+ },
+ {
+  "id": "sans-fin",
+  "name": "Sans jamais s’arrêter",
+  "desc": "Boulon avance et recule, encore et encore.",
+  "image": "sans-fin.png"
+ }
+]
