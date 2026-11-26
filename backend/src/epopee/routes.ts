@@ -18,8 +18,12 @@ import express, { Request, Response, Router } from 'express';
 import { Member } from '../models';
 import { log } from '../log';
 import { AuthedRequest, currentMember } from '../auth/session';
+import { contentDisposition } from '../headers';
+import * as files from '../storage/files';
+import { checkUpload } from '../storage/upload-check';
 import { addDays, mondayOf, periodLabel } from '../revisions/bilan';
 import { RITUEL, computeBilan, councilPdf, lines } from './bilan';
+import { emit } from './events';
 import type { Gabarit } from './gabarit';
 import { DISPLAYS, NOTE_MAX, STEP_STATUS, bravoEcus, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput } from './rules';
 import * as repo from './repo';
@@ -28,6 +32,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Le journal rendu à l'écran : les dernières écritures suffisent, le solde vient de toutes. */
 const JOURNAL_MAX = 50;
 const MEMORIES_MAX = 30;
+/** Une photo réduite par l'application pèse quelques centaines de kilo-octets ; au-delà, ce n'en est pas une. */
+const MAX_PHOTO = '8mb';
 /** Aujourd'hui, à l'heure du foyer. */
 const today = (): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
 
@@ -55,7 +61,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
 
   const exploitView = (e: repo.ExploitRow) => ({ id: e.id, title: e.title, ecus: e.ecus });
   /** Les demandes d'un enfant : celles qui attendent, et celles tranchées aujourd'hui. */
-  const requestsView = (memberId: string, day: string) => repo.requestsOf(memberId, day + 'T00:00:00.000Z').map((q) => {
+  const requestsView = (memberId: string, day: string) => repo.requestsOf(memberId, day).map((q) => {
     const e = repo.getExploit(q.exploit_id);
     return { id: q.id, exploitId: q.exploit_id, title: e?.title ?? '', ecus: e?.ecus ?? 0, status: q.status, createdAt: q.created_at, decidedBy: nameOf(q.decided_by) };
   });
@@ -64,6 +70,8 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     id: q.id, rewardId: q.reward_id, title: q.title, cost: q.cost, status: q.status, proposedBy: nameOf(q.proposed_by), createdAt: q.created_at,
     pact: q.sealed_at ? { date: q.pact_date, items: q.pact_items, rule: q.pact_rule, note: q.pact_note, by: nameOf(q.sealed_by) } : null,
     reachedAt: q.reached_at, honoredAt: q.honored_at, memory: q.status === 'honoree' ? { child: q.memory_child, parent: q.memory_parent, by: nameOf(q.honored_by) } : null,
+    // The photo of the memory: its file id only tells the screen when the picture changed.
+    photo: q.photo_file_id,
   });
   /**
    * La quête nommée par la route, que la session a le droit de lire : celle de
@@ -298,7 +306,10 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const e = exploitOf(req, res); if (!e) return;
     const out = repo.addRequest(id, m.id, e.id);
     if (!out) { res.status(409).json({ error: 'Cet identifiant a déjà servi à autre chose.' }); return; }
-    if (!out.duplicate) log.info(`Épopée : ${m.name} signale « ${e.title} ».`);
+    if (!out.duplicate) {
+      log.info(`Épopée : ${m.name} signale « ${e.title} ».`);
+      emit({ kind: 'exploit', id: out.request.id, childId: m.id, child: m.name, actorId: me(req).id, title: e.title, ecus: e.ecus });
+    }
     res.status(out.duplicate ? 200 : 201).json({ duplicate: out.duplicate, demandes: requestsView(m.id, today()) });
   }));
 
@@ -381,7 +392,10 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     if (!reward || reward.archived_at) { res.status(404).json({ error: 'Récompense introuvable.' }); return; }
     const out = repo.proposeQuest(id, m.id, reward, me(req).id);
     if (!out) { res.status(409).json({ error: 'Une quête est déjà en cours. Une seule à la fois.' }); return; }
-    if (!out.duplicate) log.info(`Épopée : ${m.name} vise « ${reward.title} » (${reward.cost} écus)${me(req).id !== m.id ? `, proposé par ${me(req).name}` : ''}.`);
+    if (!out.duplicate) {
+      log.info(`Épopée : ${m.name} vise « ${reward.title} » (${reward.cost} écus)${me(req).id !== m.id ? `, proposé par ${me(req).name}` : ''}.`);
+      emit({ kind: 'quete', id: out.quest.id, childId: m.id, child: m.name, actorId: me(req).id, title: reward.title, cost: reward.cost });
+    }
     res.status(out.duplicate ? 200 : 201).json({ quete: questView(out.quest) });
   }));
 
@@ -417,6 +431,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const out = repo.exchangeQuest(q, me(req).id);
     if ('refusal' in out) { res.status(409).json({ error: out.refusal }); return; }
     log.info(`Épopée : ${nameOf(q.member_id) ?? 'un enfant'} échange ${q.cost} écus contre « ${q.title} ».`);
+    emit({ kind: 'tresor', id: q.id, childId: q.member_id, child: nameOf(q.member_id) ?? 'Votre enfant', actorId: me(req).id, title: q.title, date: out.quest.pact_date });
     res.status(201).json({ quete: questView(out.quest), balance: repo.balanceOf(q.member_id) });
   }));
 
@@ -433,6 +448,40 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     if (!out) { res.status(409).json({ error: 'Ce trésor n’attend pas d’être vécu.' }); return; }
     log.info(`Épopée : « ${q.title} » vécu avec ${nameOf(q.member_id) ?? 'un enfant'}, noté par ${me(req).name}.`);
     res.json({ quete: questView(out) });
+  }));
+
+  // ---- La photo d'un souvenir : posée par un adulte, vue par l'enfant et les adultes ----
+  r.post('/quetes/:id/photo', express.raw({ type: '*/*', limit: MAX_PHOTO }), handler((req, res) => {
+    if (!adult(req, res)) return;
+    const q = quest(req, res); if (!q) return;
+    if (q.status !== 'honoree') { res.status(409).json({ error: 'La photo se pose sur un souvenir : notez d’abord le moment comme vécu.' }); return; }
+    const check = checkUpload(req.body, false);
+    if (!check.ok) { res.status(check.status).json({ error: check.error }); return; }
+    const out = repo.setPhoto(q, `souvenir-${q.id}${check.type.ext}`, req.body as Buffer, check.type);
+    log.info(`Épopée : photo du souvenir « ${q.title} » de ${nameOf(q.member_id) ?? 'un enfant'} posée par ${me(req).name}.`);
+    res.status(201).json({ quete: questView(out) });
+  }));
+
+  r.delete('/quetes/:id/photo', handler((req, res) => {
+    if (!adult(req, res)) return;
+    const q = quest(req, res); if (!q) return;
+    if (q.photo_file_id === null) { res.status(404).json({ error: 'Ce souvenir n’a pas de photo.' }); return; }
+    repo.removePhoto(q);
+    log.info(`Épopée : photo du souvenir « ${q.title} » retirée par ${me(req).name}.`);
+    res.json({ quete: questView(repo.getQuest(q.id)!) });
+  }));
+
+  r.get('/quetes/:id/photo', handler((req, res) => {
+    const q = quest(req, res); if (!q) return;
+    const f = q.photo_file_id === null ? null : files.fileOf(q.photo_file_id);
+    if (!f) { res.status(404).json({ error: 'Ce souvenir n’a pas de photo.' }); return; }
+    res.setHeader('Content-Type', f.mime);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    // The address carries the file id (?v=) and changes with the picture: the same address is the same picture.
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
+    res.setHeader('Content-Disposition', contentDisposition('inline', f.name, 'souvenir'));
+    res.sendFile(f.path);
   }));
 
   // ---- Le conseil de famille : le bilan de la semaine, pour les adultes ----

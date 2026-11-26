@@ -27,6 +27,8 @@ export interface Quest {
   id: string; rewardId: string; title: string; cost: number; status: 'proposee' | 'active' | 'atteinte' | 'honoree' | 'abandonnee'; proposedBy: string | null; createdAt: string;
   pact: { date: string | null; items: string; rule: string; note: string; by: string | null } | null;
   reachedAt: string | null; honoredAt: string | null; memory: { child: string; parent: string; by: string | null } | null;
+  /** The photo of the memory: the id of its file (it changes with the picture), or null. */
+  photo: number | null;
 }
 export const CATEGORY_LABEL: Record<Reward['category'], string> = { duo: 'À deux', privilege: 'Privilège', petit: 'Petit plaisir' };
 /** A step marked on this device and not yet acknowledged by the server. */

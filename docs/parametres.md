@@ -49,6 +49,7 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 | `eqpGarantieRappel` | Sur le téléphone : fins de garantie | Personnel | oui / non | activé | — | Équipements | — |
 | `revisionsBilanHebdo` | Sur le téléphone : bilan des révisions du dimanche | Personnel | oui / non | activé | — | Révisions | — |
 | `epopeeBilanHebdo` | Sur le téléphone : bilan de l’Épopée du dimanche | Personnel | oui / non | activé | — | Épopée | — |
+| `epopeeSurLeMoment` | Sur le téléphone : quand un enfant attend ma réponse dans l’Épopée | Personnel | oui / non | activé | — | Épopée | — |
 | `notifEvents` | Dans la cloche : agenda du jour et de demain | Personnel | oui / non | activé | — | Agenda | — |
 | `notifTasks` | Dans la cloche : tâches du jour et en retard | Personnel | oui / non | activé | — | Tâches | — |
 | `notifBirthdays` | Dans la cloche : anniversaires | Personnel | oui / non | activé | — | Contacts | — |
@@ -65,6 +66,7 @@ Ce qui vous interpelle, dans l’application et sur le téléphone.
 - **Sur le téléphone : fins de garantie** (`eqpGarantieRappel`) : Vous prévient quand la garantie d’un équipement arrive à échéance, une seule fois par appareil, au seuil réglé dans la section Équipements (60 jours par défaut). Réservé aux adultes : un compte enfant n’en reçoit jamais.
 - **Sur le téléphone : bilan des révisions du dimanche** (`revisionsBilanHebdo`) : Le dimanche soir, le bilan de la semaine de chaque enfant (« Raphaël cette semaine : 5 sessions, les tables de 6 à 9, 92 % de réussite, 7 × 8 encore fragile »), une seule notification par enfant et par semaine. Toucher la notification ouvre son suivi. Réservé aux adultes : un compte enfant n’en reçoit jamais.
 - **Sur le téléphone : bilan de l’Épopée du dimanche** (`epopeeBilanHebdo`) : Le dimanche soir, la semaine de chaque enfant enrôlé (« Raphaël cette semaine : 23 écus gagnés, 9 routines menées au bout sur 14 »), une seule notification par enfant et par semaine. Toucher la notification ouvre le conseil de famille. Réservé aux adultes : un compte enfant n’en reçoit jamais.
+- **Sur le téléphone : quand un enfant attend ma réponse dans l’Épopée** (`epopeeSurLeMoment`) : Un enfant signale un exploit, vise un trésor ou vient de le gagner : vous êtes prévenu tout de suite, pour répondre pendant que c’est encore frais. Toucher la notification ouvre l’Épopée. Rien pour une étape faite ou un bravo donné. Réservé aux adultes : un compte enfant n’en reçoit jamais.
 - **Dans la cloche : agenda du jour et de demain** (`notifEvents`) : Les événements d’aujourd’hui et de demain apparaissent dans la cloche en haut de l’écran.
 - **Dans la cloche : tâches du jour et en retard** (`notifTasks`) : Les tâches datées à faire aujourd’hui et celles qui ont dépassé leur échéance apparaissent dans la cloche.
 - **Dans la cloche : anniversaires** (`notifBirthdays`) : Les anniversaires des membres et des contacts, dans les sept jours qui viennent.

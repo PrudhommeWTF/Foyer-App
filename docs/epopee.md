@@ -8,11 +8,12 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 | Fait | Pas encore |
 |---|---|
-| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Une notification au parent sur le moment (exploit signalé, trésor choisi, trésor gagné) |
-| Routines du matin et du soir, pas à pas, réglables | Une photo du moment dans le souvenir |
-| Exploits convenus, exploits signalés, bravos, journal | Créer une routine de plus que le matin et le soir |
-| L'Armurerie : récompenses, quête, pacte, échange, souvenirs | Ouvrir l'écran sans réseau |
+| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Créer une routine de plus que le matin et le soir |
+| Routines du matin et du soir, pas à pas, réglables | Ouvrir l'écran sans réseau |
+| Exploits convenus, exploits signalés, bravos, journal | |
+| L'Armurerie : récompenses, quête, pacte, échange, souvenirs avec leur photo | |
 | Le conseil de famille : bilan de la semaine, notes, PDF, notification du dimanche | |
+| Les parents prévenus sur le moment quand un enfant attend leur réponse | |
 
 Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
 
@@ -45,6 +46,25 @@ Le conseil est réservé aux adultes (écran, API et PDF). « Routines possibles
 
 Chacun coupe cette notification pour lui (Paramètres, Notifications, « bilan de l'Épopée du dimanche »). Elle suit les règles communes : rien pendant une suspension, une seule fois par enfant et par semaine.
 
+## Les parents prévenus sur le moment
+
+Trois moments attendent la réponse d'un adulte, et le préviennent tout de suite sur son téléphone :
+
+| Ce que fait l'enfant | La notification | Ce qui est attendu |
+|---|---|---|
+| Il signale un exploit | « Raphaël signale un exploit : « Mettre la table », +2 écus si vous validez. » | « Valider » ou « Pas tout à fait » |
+| Il vise un trésor | « Raphaël vise un trésor : « Soirée cinéma à deux », 40 écus. Il reste à sceller le pacte ensemble. » | sceller le pacte |
+| Il échange ses écus | « Raphaël a gagné son trésor : « Soirée cinéma à deux » : à vous de tenir le pacte, prévu samedi 5 décembre. » | vivre le moment |
+
+Toucher la notification ouvre l'Épopée, rechargée. Rien d'autre ne notifie : une étape faite, un bravo ou un crédit n'appellent personne.
+
+- **Qui est prévenu** : les adultes qui ont un compte, sauf celui qui vient de faire le geste (un parent qui choisit ou échange pour son enfant le sait déjà). Chacun coupe ces notifications pour lui (Paramètres, Notifications, « quand un enfant attend ma réponse dans l'Épopée »).
+- **Une fois par objet** : la même demande ou la même quête ne prévient qu'une fois. Un exploit signalé de nouveau alors qu'il attend déjà n'envoie rien.
+- **Elles partent tout de suite**, sans attendre la fin des heures calmes, comme une tâche qu'on vous affecte : un enfant ne signale pas un exploit la nuit. La suspension des rappels du foyer, elle, les arrête.
+- **L'envoi ne conditionne rien** : si la notification échoue (pas d'appareil abonné, service push en panne), le geste de l'enfant est enregistré quand même et la demande attend dans l'écran.
+
+Il faut qu'un appareil du parent soit abonné aux rappels (Paramètres, Notifications). Une session d'enfant ouverte par un parent sur son téléphone ne s'abonne pas : voir [`portail-enfant.md`](portail-enfant.md).
+
 ## Une routine, à l'usage
 
 L'enfant ouvre « Mon épopée », touche « Commencer » sur la routine du matin ou du soir, et elle se déroule en plein écran :
@@ -61,7 +81,7 @@ Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombr
 
 ## L'espace des parents
 
-- **Répondre à un exploit signalé.** L'enfant touche « C'est fait ! » sur un exploit convenu : rien n'est versé, la demande attend en tête de sa carte chez le parent. « Valider » verse l'écu ; « Pas tout à fait » ne retire rien, et l'enfant peut réessayer. Un même exploit ne se signale pas deux fois tant qu'il attend. Il n'y a pas encore de notification : la demande se voit en ouvrant l'écran.
+- **Répondre à un exploit signalé.** L'enfant touche « C'est fait ! » sur un exploit convenu : rien n'est versé, la demande attend en tête de sa carte chez le parent. « Valider » verse l'écu ; « Pas tout à fait » ne retire rien, et l'enfant peut réessayer. Un même exploit ne se signale pas deux fois tant qu'il attend. Les parents sont prévenus sur le moment (voir « Les parents prévenus sur le moment »).
 - **Créditer un exploit.** Un tap sur un exploit convenu le verse aussitôt, au montant convenu. Pas de confirmation avant : le message propose « Annuler » pendant cinq secondes (c'est une contre-écriture, les deux lignes restent au journal). Le bravo spontané suit la même règle.
 - **Régler une routine.** « Régler » ouvre son nom, son heure et ses étapes : consigne, phrase, pictogramme, durée du sablier en minutes, écus (0 à 3), ordre, ajout et retrait (12 étapes au plus). Rien ne part avant « Enregistrer ». Une étape retirée garde ses coches passées ; régler une routine ne touche jamais à la besace. « Revenir aux routines proposées » remplace les routines de l'enfant par celles du gabarit.
 - **Réglages de l'enfant.** « Montrer les pièces sans le nombre » : la besace n'affiche que des pièces, plus grosses, pour un enfant qui ne lit pas encore les nombres. « Sablier dans les routines » : coupé, les étapes s'enchaînent sans décompte. La carte rappelle le nombre d'écus possibles par jour avec les routines telles qu'elles sont réglées.
@@ -73,7 +93,9 @@ Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombr
 2. **Sceller le pacte.** Le parent s'engage sur le moment : quand (s'il le sait), ce qu'il faut préparer, la règle convenue, et un mot d'encouragement. C'est un engagement des deux côtés : l'enfant sur ses efforts, le parent sur la réalité du trésor. « Pas celui-ci » referme la proposition sans rien retirer.
 3. **Avancer.** La quête s'affiche en tête de la besace : une jauge, avec le repère des écus d'amorce (ou des emplacements de pièces, pour un enfant réglé sur « pièces sans le nombre » et un trésor de 40 écus au plus), les écus qui manquent, et le pacte avec le mot du parent.
 4. **Échanger.** Dès que la besace atteint le prix, l'enfant échange lui-même ses écus contre son trésor. Le trésor est gagné tout de suite ; il reste à le vivre.
-5. **Vivre, puis se souvenir.** Une fois le moment vécu, le parent note le moment préféré de l'enfant et son propre mot : la quête rejoint les souvenirs, que l'enfant relit.
+5. **Vivre, puis se souvenir.** Une fois le moment vécu, le parent note le moment préféré de l'enfant et son propre mot, et peut y joindre une photo : la quête rejoint les souvenirs, que l'enfant relit.
+
+**La photo d'un souvenir** se choisit au moment de « Marquer comme vécu », ou plus tard depuis les souvenirs (« Ajouter une photo », « Changer la photo », « Retirer la photo »). Seul un adulte la pose ou la retire ; l'enfant la voit. Elle est réduite sur l'appareil avant de partir (2000 px de côté au plus, en JPEG : une photo de téléphone de plusieurs mégaoctets en pèse quelques centaines de kilo-octets), puis gardée sur le serveur du foyer, dans le répertoire `pieces` des sauvegardes. Elle ne sort jamais de chez vous. Formats acceptés : JPEG, PNG, WEBP ; une photo HEIC se convertit sur l'iPhone, pas ailleurs. Si la photo n'est pas partie (réseau, image illisible), le souvenir est gardé quand même et la photo s'ajoute ensuite. Une photo remplacée ou retirée est effacée du disque.
 
 Une seule quête à la fois. Un trésor gagné qui attend d'être vécu n'empêche pas d'en viser un autre.
 
@@ -112,7 +134,7 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | `epo_exploits` | les exploits convenus du foyer : titre, écus, ordre |
 | `epo_requests` | un exploit signalé par un enfant : en attente, validé, ou « pas tout à fait », et par qui |
 | `epo_rewards` | le catalogue de l'Armurerie : titre, phrase, prix, genre |
-| `epo_quests` | une quête : enfant, récompense, titre et prix au moment du choix, état (proposée, active, atteinte, honorée, abandonnée), pacte, souvenir |
+| `epo_quests` | une quête : enfant, récompense, titre et prix au moment du choix, état (proposée, active, atteinte, honorée, abandonnée), pacte, souvenir, et la photo du souvenir (une ligne de `hh_attachments`, genre gardé `epopee` : servie par le module seul, jamais par `/api/files`) |
 | `epo_councils` | les notes du conseil de famille d'une semaine (clé : le lundi), et qui les a écrites |
 | `epo_routine_days` | le déroulé d'une routine un jour donné : début, fin, nombre de pauses |
 
@@ -159,6 +181,9 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | `POST /quetes/:id/pacte` | sceller (adultes) : `{ date, items, rule, note }`, tous facultatifs. Rend la quête et le solde |
 | `POST /quetes/:id/abandon` | renoncer : l'enfant avant le pacte, un adulte tant que la quête est en cours |
 | `POST /quetes/:id/echange` | échanger les écus contre le trésor. 409 avec ce qui manque si la besace n'y est pas |
+| `POST /quetes/:id/photo` | poser la photo d'un souvenir (adultes) : le fichier en corps brut, JPEG, PNG ou WEBP, déjà réduit. 409 si le moment n'est pas noté comme vécu. Remplace la précédente |
+| `DELETE /quetes/:id/photo` | retirer la photo (adultes) ; le fichier quitte le disque |
+| `GET /quetes/:id/photo` | la photo : l'enfant pour ses souvenirs, un adulte pour tous |
 | `POST /quetes/:id/vecu` | le moment a été vécu (adultes) : `{ date (aujourd'hui par défaut), child, parent }` |
 | `GET /conseil[?semaine=AAAA-MM-JJ]` | le bilan d'une semaine (un lundi, passé ou en cours ; la semaine en cours par défaut) : une entrée par enfant enrôlé (`earned`, `lines`, `words`), les trois temps du conseil, les notes (adultes) |
 | `PUT /conseil` | `{ semaine, notes }` : garder les notes du conseil, 2000 caractères au plus (adultes) |
@@ -169,7 +194,7 @@ Chaque geste est journalisé (« Épopée : bravo de Nolwenn à Raphaël, +2 éc
 
 ## Module éteint, remise à zéro
 
-Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface notes des conseils, quêtes, récompenses, exploits, demandes, routines, profils et grand livre.
+Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface notes des conseils, quêtes et photos des souvenirs, récompenses, exploits, demandes, routines, profils et grand livre.
 
 ## Vérifier depuis le serveur
 

@@ -42,9 +42,9 @@ export function initFiles(db: Database): void {
  * Le propriétaire est toujours `atl` : c'est `atl_media` qui dit à qui est quoi,
  * un même fichier pouvant appartenir à deux enfants (voir atelier/repo.ts).
  */
-export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment' | 'maintenance' | 'atelier';
+export type OwnerKind = 'recipe' | 'shop' | 'document' | 'equipment' | 'maintenance' | 'atelier' | 'epopee';
 export const OWNER_KINDS: OwnerKind[] = ['recipe', 'shop'];
-export const GUARDED_KINDS: OwnerKind[] = ['equipment', 'maintenance', 'atelier'];
+export const GUARDED_KINDS: OwnerKind[] = ['equipment', 'maintenance', 'atelier', 'epopee'];
 
 export interface StoredFile {
   id: number;
