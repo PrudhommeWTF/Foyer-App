@@ -7,7 +7,7 @@ import type { DetectedType } from '../storage/blobs';
 import { parisDay } from '../revisions/bilan';
 import type { BilanInput } from './bilan';
 import type { ExploitTpl, RoutineTpl } from './gabarit';
-import { AMORCE, Display, Entry, Kind, QuestStatus, RewardCategory, RewardInput, RoutineKind, StepInput, StepStatus, canExchange, cancelRefusal, exchangeEntryId, pactTopUp, stepEntryId } from './rules';
+import { AMORCE, Display, Entry, Kind, QuestStatus, RewardCategory, RewardInput, RoutineKind, StepInput, StepStatus, canExchange, cancelRefusal, exchangeEntryId, kindOf, pactTopUp, stepEntryId } from './rules';
 
 let database: Database;
 export function initEpopeeRepo(db: Database): void { database = db; }
@@ -164,9 +164,22 @@ export function addPause(routine: RoutineRow, day: string): number {
   })();
 }
 
-/** Règle le titre et l'heure d'une routine. */
+/** Règle le titre et l'heure d'une routine ; son moment suit son heure. */
 export function updateRoutine(id: string, title: string, time: string): void {
-  database.prepare('UPDATE epo_routines SET title = ?, time = ? WHERE id = ?').run(title, time, id);
+  database.prepare('UPDATE epo_routines SET title = ?, time = ?, kind = ? WHERE id = ?').run(title, time, kindOf(time), id);
+}
+/** Crée une routine et ses étapes, d'un seul geste. */
+export function createRoutine(memberId: string, title: string, time: string, steps: StepInput[]): RoutineRow {
+  return database.transaction(() => {
+    const id = crypto.randomUUID();
+    database.prepare('INSERT INTO epo_routines (id, member_id, kind, title, time, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, memberId, kindOf(time), title, time, now());
+    replaceSteps(id, steps.map((s) => ({ ...s, id: null })));
+    return getRoutine(id)!;
+  })();
+}
+/** Retire une routine : elle disparaît de l'écran, ses coches passées et les écus gagnés restent. */
+export function archiveRoutine(id: string): void {
+  database.prepare('UPDATE epo_routines SET archived_at = ? WHERE id = ? AND archived_at IS NULL').run(now(), id);
 }
 /**
  * Remplace les étapes d'une routine par la liste donnée, dans son ordre : une

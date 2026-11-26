@@ -25,7 +25,7 @@ import { addDays, mondayOf, periodLabel } from '../revisions/bilan';
 import { RITUEL, computeBilan, councilPdf, lines } from './bilan';
 import { emit } from './events';
 import type { Gabarit } from './gabarit';
-import { DISPLAYS, NOTE_MAX, STEP_STATUS, bravoEcus, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput } from './rules';
+import { DISPLAYS, NOTE_MAX, ROUTINES_MAX, STEP_STATUS, bravoEcus, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput, titleInput } from './rules';
 import * as repo from './repo';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -240,18 +240,41 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     res.status(n ? 201 : 200).json({ routines: routinesView(m.id, today()) });
   }));
 
+  /** Le titre, l'heure et les étapes d'une routine tels qu'un parent les envoie, ou null après un 400. */
+  const routineBody = (req: Request, res: Response): { title: string; time: string; steps: Exclude<ReturnType<typeof stepsInput>, string> } | null => {
+    const b = (req.body ?? {}) as { title?: unknown; time?: unknown; steps?: unknown };
+    const title = titleInput(b.title), time = timeInput(b.time), steps = stepsInput(b.steps);
+    if (!title) { res.status(400).json({ error: 'title : un titre d’au plus 60 caractères.' }); return null; }
+    if (!time) { res.status(400).json({ error: 'time : une heure HH:MM.' }); return null; }
+    if (typeof steps === 'string') { res.status(400).json({ error: steps }); return null; }
+    return { title, time, steps };
+  };
+
+  // Créer une routine de plus (le retour de l'école, les devoirs) : son moment se déduit de son heure.
+  r.post('/membres/:id/routines', json, handler((req, res) => {
+    const m = enrolled(req, res); if (!m) return;
+    const b = routineBody(req, res); if (!b) return;
+    if (repo.routinesOf(m.id).length >= ROUTINES_MAX) { res.status(409).json({ error: `${m.name} a déjà ${ROUTINES_MAX} routines : retirez-en une avant d’en ajouter.` }); return; }
+    const row = repo.createRoutine(m.id, b.title, b.time, b.steps);
+    log.info(`Épopée : routine « ${row.title} » (${row.time}) créée pour ${m.name} par ${me(req).name} (${b.steps.length} étape${b.steps.length > 1 ? 's' : ''}).`);
+    res.status(201).json({ id: row.id, routines: routinesView(m.id, today()) });
+  }));
+
   // Régler une routine : son titre, son heure, et ses étapes dans l'ordre donné.
   r.put('/routines/:id', json, handler((req, res) => {
     const routine = editable(req, res); if (!routine) return;
-    const b = (req.body ?? {}) as { title?: unknown; time?: unknown; steps?: unknown };
-    const title = typeof b.title === 'string' && b.title.trim() && b.title.trim().length <= 60 ? b.title.trim() : null;
-    const time = timeInput(b.time), steps = stepsInput(b.steps);
-    if (!title) { res.status(400).json({ error: 'title : un titre d’au plus 60 caractères.' }); return; }
-    if (!time) { res.status(400).json({ error: 'time : une heure HH:MM.' }); return; }
-    if (typeof steps === 'string') { res.status(400).json({ error: steps }); return; }
-    if (!repo.replaceSteps(routine.id, steps)) { res.status(400).json({ error: 'Une étape citée n’appartient pas à cette routine.' }); return; }
-    repo.updateRoutine(routine.id, title, time);
-    log.info(`Épopée : routine « ${title} » de ${nameOf(routine.member_id) ?? 'un enfant'} réglée par ${me(req).name} (${steps.length} étape${steps.length > 1 ? 's' : ''}).`);
+    const b = routineBody(req, res); if (!b) return;
+    if (!repo.replaceSteps(routine.id, b.steps)) { res.status(400).json({ error: 'Une étape citée n’appartient pas à cette routine.' }); return; }
+    repo.updateRoutine(routine.id, b.title, b.time);
+    log.info(`Épopée : routine « ${b.title} » de ${nameOf(routine.member_id) ?? 'un enfant'} réglée par ${me(req).name} (${b.steps.length} étape${b.steps.length > 1 ? 's' : ''}).`);
+    res.json({ routines: routinesView(routine.member_id, today()) });
+  }));
+
+  // Retirer une routine : ce qui a été gagné avec reste.
+  r.delete('/routines/:id', handler((req, res) => {
+    const routine = editable(req, res); if (!routine) return;
+    repo.archiveRoutine(routine.id);
+    log.info(`Épopée : routine « ${routine.title} » de ${nameOf(routine.member_id) ?? 'un enfant'} retirée par ${me(req).name} (écus et coches conservés).`);
     res.json({ routines: routinesView(routine.member_id, today()) });
   }));
 

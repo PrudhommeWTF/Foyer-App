@@ -6,9 +6,10 @@ import { IconComponent } from '../../core/icon';
 import { ModalComponent } from '../../shared/modal';
 
 /**
- * Régler une routine : son nom, son heure, et ses étapes (une consigne chacune,
- * un pictogramme, une durée de sablier, des écus). Rien ne part avant
- * « Enregistrer », qui envoie la liste entière dans son ordre.
+ * Régler une routine, ou en créer une : son nom, son heure, et ses étapes (une
+ * consigne chacune, un pictogramme, une durée de sablier, des écus). Rien ne
+ * part avant « Enregistrer », qui envoie la liste entière dans son ordre. Sans
+ * `routine`, c'est une création pour l'enfant `memberId`.
  */
 @Component({
   selector: 'epopee-routine-editor',
@@ -16,9 +17,9 @@ import { ModalComponent } from '../../shared/modal';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [IconComponent, ModalComponent],
   template: `
-    <f-modal [title]="'Régler la routine de ' + name()" [maxWidth]="640" [tall]="true" (close)="closed.emit(false)">
+    <f-modal [title]="(routine() ? 'Régler la routine de ' : 'Une nouvelle routine pour ') + name()" [maxWidth]="640" [tall]="true" (close)="closed.emit(false)">
       <div class="top">
-        <label class="grow"><span class="field-label">Nom</span><input class="input" maxlength="60" [value]="title()" (input)="title.set($any($event.target).value)" /></label>
+        <label class="grow"><span class="field-label">Nom</span><input class="input" maxlength="60" placeholder="Le retour de l’école" [value]="title()" (input)="title.set($any($event.target).value)" /></label>
         <label><span class="field-label">Heure</span><input class="input" type="time" [value]="time()" (input)="time.set($any($event.target).value)" /></label>
       </div>
 
@@ -49,6 +50,7 @@ import { ModalComponent } from '../../shared/modal';
       <p class="sum">{{ total() }} écu{{ total() > 1 ? 's' : '' }} possible{{ total() > 1 ? 's' : '' }} avec cette routine. Le sablier est un repère : passé le temps, l’écu reste acquis.</p>
       @if (erreur(); as e) { <p class="err" role="alert">{{ e }}</p> }
       <div class="foot">
+        @if (routine()) { <button class="btn btn-ghost del" [disabled]="busy()" (click)="supprimer()">Retirer cette routine</button> }
         <button class="btn btn-ghost" (click)="closed.emit(false)">Annuler</button>
         <button class="btn btn-primary" [disabled]="busy()" (click)="save()">Enregistrer</button>
       </div>
@@ -72,14 +74,17 @@ import { ModalComponent } from '../../shared/modal';
     .icon-btn:disabled { opacity: .35; cursor: default; }
     .sum { margin: 16px 0 0; font-size: 13.5px; font-weight: 600; color: var(--ink2); line-height: 1.5; }
     .err { margin: 10px 0 0; font-size: 14px; font-weight: 700; color: var(--primary); }
-    .foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .del { margin-right: auto; padding-left: 0; }
   `],
 })
 export class RoutineEditor {
   private readonly api = inject(ApiService);
   private readonly store = inject(FoyerStore);
 
-  readonly routine = input.required<Routine>();
+  /** The routine to edit, or null to create one. */
+  readonly routine = input<Routine | null>(null);
+  readonly memberId = input.required<string>();
   readonly name = input.required<string>();
   /** True when the routine was saved: the screen reloads. */
   readonly closed = output<boolean>();
@@ -92,7 +97,12 @@ export class RoutineEditor {
   readonly busy = signal(false);
   readonly total = computed(() => this.steps().reduce((n, s) => n + s.ecus, 0));
 
-  ngOnInit(): void { const r = this.routine(); this.title.set(r.title); this.time.set(r.time); this.steps.set(r.steps.map(toDraft)); }
+  ngOnInit(): void {
+    const r = this.routine();
+    if (r) { this.title.set(r.title); this.time.set(r.time); this.steps.set(r.steps.map(toDraft)); }
+    // A new routine starts in the afternoon, where the proposed ones leave a gap, with one step to fill in.
+    else { this.time.set('16:45'); this.steps.set([newDraft()]); }
+  }
 
   set(i: number, patch: Partial<StepDraft>): void { this.steps.update((l) => l.map((s, k) => (k === i ? { ...s, ...patch } : s))); }
   move(i: number, dir: -1 | 1): void { this.steps.update((l) => moved(l, i, dir)); }
@@ -104,12 +114,21 @@ export class RoutineEditor {
     this.erreur.set(e); if (e || this.busy()) return;
     this.busy.set(true);
     try {
-      await this.api.put(`epopee/routines/${this.routine().id}`, {
+      const r = this.routine(), body = {
         title: this.title().trim(), time: this.time(),
         steps: this.steps().map((s) => ({ id: s.id, title: s.title.trim(), hint: s.hint.trim(), icon: s.icon, seconds: s.minutes * 60, ecus: s.ecus })),
-      });
-      this.store.toast('Routine enregistrée.');
+      };
+      if (r) await this.api.put(`epopee/routines/${r.id}`, body); else await this.api.post(`epopee/membres/${this.memberId()}/routines`, body);
+      this.store.toast(r ? 'Routine enregistrée.' : 'Routine créée.');
       this.closed.emit(true);
     } catch (x) { this.erreur.set((x as Error).message); } finally { this.busy.set(false); }
+  }
+
+  async supprimer(): Promise<void> {
+    const r = this.routine();
+    if (!r || this.busy() || !confirm(`Retirer la routine « ${r.title} » de ${this.name()} ? Les écus qu’elle a fait gagner restent.`)) return;
+    this.busy.set(true);
+    try { await this.api.del(`epopee/routines/${r.id}`); this.store.toast('Routine retirée.'); this.closed.emit(true); }
+    catch (x) { this.erreur.set((x as Error).message); } finally { this.busy.set(false); }
   }
 }

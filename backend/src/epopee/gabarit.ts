@@ -7,7 +7,10 @@
 import fs from 'fs';
 import path from 'path';
 import { log } from '../log';
-import { ROUTINE_KINDS, RewardInput, RoutineKind, exploitInput, rewardInput } from './rules';
+import { RewardInput, RoutineKind, exploitInput, rewardInput } from './rules';
+
+/** Le gabarit ne propose qu'un matin et un soir : les routines de la journée, chaque foyer les crée à sa mesure. */
+const GABARIT_KINDS: RoutineKind[] = ['matin', 'soir'];
 
 export interface StepTpl { title: string; hint: string; icon: string; seconds: number; ecus: number; }
 export interface RoutineTpl { kind: RoutineKind; title: string; time: string; steps: StepTpl[]; }
@@ -29,7 +32,7 @@ export function parseGabarit(raw: unknown, where: string, warn: (l: string) => v
   const out: RoutineTpl[] = [];
   const list = (raw as { routines?: unknown })?.routines;
   for (const r of Array.isArray(list) ? list as Record<string, unknown>[] : []) {
-    const kind = ROUTINE_KINDS.find((k) => k === r?.['kind']), title = str(r?.['title'], 60);
+    const kind = GABARIT_KINDS.find((k) => k === r?.['kind']), title = str(r?.['title'], 60);
     const time = typeof r?.['time'] === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(r['time']) ? r['time'] : null;
     if (!kind || !title || !time || out.some((x) => x.kind === kind)) { warn(`Épopée : ${where}, routine « ${String(r?.['title'] ?? '?')} » écartée (kind matin ou soir, une par moment, title, time HH:MM).`); continue; }
     const steps: StepTpl[] = [];
