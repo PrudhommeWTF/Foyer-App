@@ -12,7 +12,7 @@ Foyer ne copie pas leur code : il **épingle un commit** (`amont.json`) et ne ga
 | `correctifs/atelier.patch` | Les retouches de leurs fichiers |
 | `outils/` | Ce qui est généré à la construction |
 | `construire.sh` | La construction, à lancer à la main, jamais sur le serveur |
-| `dist/` | Le résultat, commité, recopié par `npm run build` |
+| `dist/` | Le résultat, commité, recopié par `npm run build` (avec `amont.json` et `defis.json`, que l'écran de Foyer lit) |
 
 Règle : on **adapte**, on ne réécrit pas. Tout écart est listé ici avec sa raison, et marqué dans le code par un commentaire `Atelier (Foyer):`.
 
@@ -21,7 +21,7 @@ Règle : on **adapte**, on ne réécrit pas. Tout écart est listé ici avec sa 
 - **Extensions** : seules Musique et Stylo restent (`extension-manager.js`, `libraries/extensions/index.jsx`). Sont retirées, code compris (`retraits.txt`) : synthèse vocale et traduction (serveurs de Scratch), reconnaissance vocale, détection de visage (elle se rabattait sur un CDN), détection vidéo (caméra, à rouvrir plus tard), et le matériel (micro:bit, LEGO, Vernier, Makey Makey).
 - **Stockage** (`surcouche/…/foyer/storage.js`) : remplace celui qui parlait aux serveurs de Scratch. Les projets et leurs fichiers vivent dans Foyer (`/api/atelier`), sous la session de celui qui est connecté. Voir « Enregistrer dans Foyer » plus bas.
 - **Hôtes par défaut vidés** : `project-fetcher-hoc.jsx` (projets, ressources), `legacy-library-asset-url.ts` (vignettes), `scratch-link-websocket.js` (matériel), `runtime.js` (liste des domaines de Scratch).
-- **Tutoriels** : les 1 481 images et vidéos sont supprimées, le lecteur de vidéos en ligne (`cards.jsx`) est retiré, code compris, les boutons « Tutoriels » et « Débogage » de la barre sont retirés (`menu-bar.jsx`).
+- **Tutoriels** : les 1 481 images et vidéos sont supprimées (remplacées par nos défis, voir plus bas), le lecteur de vidéos en ligne (`cards.jsx`) est retiré, code compris, les boutons « Tutoriels » et « Débogage » de la barre sont retirés (`menu-bar.jsx`).
 - **Liens** vers le site de Scratch ou d'autres sites, dans des fenêtres de l'éditeur (navigateur non pris en charge, WebGL, télémétrie, variables en ligne, mise à jour d'une carte) : remplacés par une ancre vide.
 - **Statistiques** : `lib/analytics.js` est remplacé par un module qui ne fait rien.
 - **Page de débogage** de la détection vidéo : retirée de la construction de la machine virtuelle (`scratch-vm/webpack.config.js`), avec l'extension.
@@ -53,6 +53,18 @@ Tout est dans `surcouche/…/foyer/` (`index.jsx`, `storage.js`, `local.js`), sa
 - **Adresses absolues.** L'éditeur lit ses fichiers depuis un script d'arrière-plan, qui résoudrait une adresse relative depuis son propre dossier.
 - **Regarder** (`&vue=plein`) : la scène seule, en plein écran, sans rien enregistrer. C'est ce qu'ouvre un téléphone.
 - **Import et export d'un fichier** : le menu Fichier de l'éditeur, tel quel. Un fichier importé remplace le contenu du projet ouvert et s'enregistre comme lui.
+
+## Défis guidés
+
+Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : cinq pour commencer, écrits pour Foyer, en texte, avec Boulon.
+
+- `surcouche/…/foyer/defis.json` : les défis (nom, phrase d'accroche, étapes). Une étape nomme ses blocs entre crochets, `[mouvement:avancer de 10 pas]`, affichés dans la couleur de leur famille. C'est le seul fichier à modifier pour en écrire un nouveau ; `construire.sh` le recopie dans `dist/` pour que l'écran de Foyer les propose.
+- `surcouche/…/lib/libraries/decks/index.jsx` en fait les cartes ; `translate-image.js` rend l'image telle quelle (il n'y a qu'une langue).
+- `components/cards/cards.jsx` : une étape peut être du texte seul (l'image était obligatoire).
+- `foyer/index.jsx` : `editor.html?projet=…&defi=<identifiant>` ouvre le projet avec les étapes du défi. Un identifiant inconnu est ignoré.
+- `outils/traductions.cjs` : « Tutoriels » devient « Défis » dans l'en-tête des cartes et la fenêtre qui les liste.
+
+Ce qui n'est pas fait : des images des blocs à chaque étape. Les étapes sont en texte, avec le nom de chaque bloc en couleur.
 
 ## Micro
 

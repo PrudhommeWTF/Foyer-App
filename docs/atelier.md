@@ -6,7 +6,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 
 ## Où en est le module
 
-**Étape 8 sur 9 : la voix, la photo, et l'Atelier en famille.**
+**Les neuf étapes sont livrées.** Reste ce que seul l'usage peut confirmer (voir la fin de ce document).
 
 | Fait | Pas encore |
 |---|---|
@@ -21,7 +21,8 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Corbeille : un projet supprimé reste récupérable, puis est purgé | |
 | Vue parent (un onglet par enfant, restaurer), partage entre frères et sœurs, tuile d'accueil, aide, outil pour les assistants | |
 | Limites réglables : nombre de projets, espace disque | |
-| Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | Le niveau choisi par enfant |
+| Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | |
+| Niveau proposé à chaque enfant, réglé par un parent ; cinq défis guidés pour les grands | Images des blocs dans les défis ; détection vidéo ; défis pour les petits |
 
 Sur un écran étroit (téléphone), les projets s'ouvrent pour être regardés, en plein écran, téléphone couché : l'éditeur n'y est pas utilisable, et rien n'y est modifié.
 
@@ -53,6 +54,7 @@ Tables `atl_*` dans `foyer.db`, hors du document du foyer (`backend/src/atelier/
 | `atl_projects` | Un projet : membre, niveau, nom, le JSON **au format de l'éditeur, non modifié**, la vignette, `version` (compteur de concurrence), `archived_at`, `shared_at` (partagé avec la famille) |
 | `atl_media` | Les fichiers d'un membre (dessins SVG, vignettes PNG), par nom. Les octets sont dans `pieces/`, comme toutes les pièces jointes |
 | `atl_assets` | « Mes personnages » et « mes décors » |
+| `atl_access` | Les niveaux ouverts à un enfant, réglés par un parent. Pas de ligne : les deux |
 
 - **Le serveur nomme les fichiers** : l'empreinte MD5 du contenu qu'il a lui-même nettoyé, plus l'extension. Le nom proposé par l'appareil est ignoré.
 - **Enregistrement avec version** : l'éditeur présente la version qu'il a lue. Si un autre appareil a enregistré entre-temps, le serveur répond 409 et l'enfant choisit (« Garder celui-ci » ou « Garder l'autre »).
@@ -231,6 +233,10 @@ La réponse attendue est `cross-origin`. Sinon la zone de dessin des costumes re
 
 **Partage entre frères et sœurs** (réglage « Partage entre frères et sœurs », activé par défaut). L'auteur d'un projet le marque « partagé » (le bouton aux deux silhouettes). Les autres le voient dans « Projets de la famille », le regardent, et peuvent en faire **une copie à eux** : la copie emporte les dessins et les sons du projet, qui comptent alors dans la place de celui qui copie, et ne dépend plus de l'original. L'original n'est jamais modifié par un autre. Réglage éteint, plus rien de partagé ne se voit ; rien n'est supprimé, et le partage revient tel quel si on le rallume.
 
+**Le niveau de chaque enfant.** Dans l'onglet d'un enfant, « peut créer dans » : Petits codeurs, Grands codeurs, ou les deux (par défaut). Avec un seul niveau, « Nouveau projet » crée tout de suite, sans rien demander, et les exemples ou les défis de l'autre niveau ne lui sont pas proposés. Cela ne règle que ce qui se **crée** : les projets déjà faits dans l'autre niveau restent à lui et s'ouvrent comme avant. Le jour où Gaëtan passe aux Grands codeurs, ses histoires des Petits codeurs sont toujours là. Un projet d'un niveau ne s'ouvre pas dans l'autre éditeur : les deux formats sont différents, et rien n'est converti.
+
+**Défis guidés** (Grands codeurs). « Relever un défi » crée un projet et l'ouvre avec ses étapes dans une carte que l'enfant déplace, réduit ou ferme : Boulon traverse la scène, dit bonjour, danse, se pilote au clavier, puis un premier jeu avec un score. La carte « Défis » de l'éditeur les liste tous. Ils sont écrits pour Foyer, en texte : pour en ajouter un, voir `frontend/vendor/atelier/grands/MODIFICATIONS.md`.
+
 **Accueil.** Pour un enfant, la tuile de l'Atelier montre la vignette de son dernier projet et « Reprendre : son nom ». Pour un adulte (sur téléphone, où l'accueil est fait de tuiles), « Raphaël a travaillé sur 2 projets cette semaine » : seuls ceux qui ont travaillé sont nommés. Module éteint, la tuile disparaît.
 
 **Aide.** « Comment ça marche ? », en bas de l'écran Atelier : les premiers gestes des deux niveaux, et ce que fait chaque bloc des Petits codeurs, avec son image.
@@ -299,3 +305,11 @@ Règle : **adapter, pas réécrire**. Toute modification de `frontend/vendor/ate
 ## Ce que l'usage doit confirmer
 
 Les essais ont été faits dans Chromium seulement (bureau à la souris, et tactile simulé en 1024 × 768). **Safari sur iPad et sur Mac n'a pas été essayé** : c'est le premier point à vérifier, colonnes iPad et Mac du plan de test.
+
+Dans l'ordre où cela peut gêner :
+
+1. **Le micro et la caméra sur un vrai appareil.** Ils n'ont été essayés qu'avec des périphériques simulés. C'est ce qui diffère le plus d'un navigateur à l'autre.
+2. **Le toucher sur iPad** dans les deux éditeurs : glisser un bloc, dessiner, déplacer la carte d'un défi.
+3. **Le hors-ligne sur iPad**, Foyer installé sur l'écran d'accueil : ouvrir l'Atelier sans réseau, continuer un projet, retrouver le réseau.
+4. **L'écoute des sons** de la bibliothèque des grands, et leurs noms français, traduits sans relecture.
+5. **Un fichier de projet venu d'ailleurs** (`.sb3`) : il s'importe ; s'il utilise une extension retirée (synthèse vocale, traduction, matériel), ses blocs correspondants ne fonctionneront pas.

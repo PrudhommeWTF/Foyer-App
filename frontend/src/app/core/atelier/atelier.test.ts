@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { resumeLine, roomLine, weekLine } from './atelier';
+import { levelsLine, resumeLine, roomLine, weekLine } from './atelier';
 
 describe('Atelier code : ce que dit l’accueil', () => {
   it('un enfant reprend son dernier projet, ou la tuile se tait', () => {
@@ -13,6 +13,12 @@ describe('Atelier code : ce que dit l’accueil', () => {
     assert.equal(weekLine([{ name: 'Raphaël', recents: 1 }, { name: 'Gaëtan', recents: 3 }]), 'Raphaël a travaillé sur 1 projet cette semaine, Gaëtan a travaillé sur 3 projets cette semaine');
     assert.equal(weekLine([{ name: 'Gaëtan', recents: 0 }]), '');
     assert.equal(weekLine([]), '');
+  });
+
+  it('le niveau ouvert à un enfant se dit en clair', () => {
+    assert.equal(levelsLine(['petits']), 'Petits codeurs');
+    assert.equal(levelsLine(['grands']), 'Grands codeurs');
+    assert.equal(levelsLine(['petits', 'grands']), 'Les deux niveaux');
   });
 
   it('la place utilisée se lit en mégaoctets', () => {

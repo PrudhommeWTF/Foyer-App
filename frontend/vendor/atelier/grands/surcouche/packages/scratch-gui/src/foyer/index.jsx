@@ -4,8 +4,11 @@
 //
 //   editor.html?projet=<id>            edits the project
 //   editor.html?projet=<id>&vue=plein  only plays it, full screen (phones)
+//   editor.html?projet=<id>&defi=<id>  edits it with the steps of a guided challenge
 import {EditorState, createStandaloneRoot, setAppElement} from '../index-standalone';
 import {autoUpdateProject, getIsShowingWithId} from '../reducers/project-state';
+import {activateDeck} from '../reducers/cards';
+import decks from '../lib/libraries/decks/index.jsx';
 import {legacyConfig} from '../legacy-config';
 
 import styles from './index.css';
@@ -17,6 +20,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const query = new URLSearchParams(window.location.search);
 const projectId = query.get('projet') || '';
 const watching = query.get('vue') === 'plein';
+const challenge = query.get('defi') || '';
 
 const leave = () => {
     window.onbeforeunload = null;
@@ -89,6 +93,11 @@ const start = (storage, projet) => {
             storage.pending.catch(() => {}).then(leave);
         }
     });
+
+    // A guided challenge of the Atelier: its steps, in a card the child moves around
+    if (!watching && Object.prototype.hasOwnProperty.call(decks, challenge)) {
+        state.store.dispatch(activateDeck(challenge));
+    }
 
     // Keeps the page and its files for the next time there is no network (see public/sw.js of Foyer)
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
