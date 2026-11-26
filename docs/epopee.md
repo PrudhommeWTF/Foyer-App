@@ -8,12 +8,13 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 | Fait | Pas encore |
 |---|---|
-| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Ouvrir l'écran sans réseau |
+| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | |
 | Routines du matin, de la journée et du soir, pas à pas, à créer, régler et retirer | |
 | Exploits convenus, exploits signalés, bravos, journal | |
 | L'Armurerie : récompenses, quête, pacte, échange, souvenirs avec leur photo | |
 | Le conseil de famille : bilan de la semaine, notes, PDF, notification du dimanche | |
 | Les parents prévenus sur le moment quand un enfant attend leur réponse | |
+| L'écran s'ouvre sans réseau, et les routines s'y déroulent | |
 
 Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
 
@@ -73,7 +74,7 @@ L'enfant ouvre « Mon épopée », touche « Commencer » sur la routine du mati
 - **Le sablier est un repère, pas une échéance.** Il se vide en tons ambrés, jamais en rouge. Arrivé au bout, il dit « Prends ton temps » : l'écu de l'étape reste acquis, quelle que soit la durée. Il se calcule sur l'horloge, une tablette qui s'endort ne le fausse pas.
 - **« C'est fait ! »** verse l'écu tout de suite : une pièce, un son court (synthétisé, aucun fichier), une vibration là où l'appareil le permet (pas sur iPad ni iPhone, Safari ne le propose pas). Le son se coupe par appareil, avec la cloche en haut à droite. Les animations respectent le réglage « réduire les animations » du système.
 - **« Un grain de sable ? »** arrête le sablier et propose de respirer (inspirer 4 s, garder 2 s, souffler 4 s). On reprend quand on veut, ou on passe l'étape pour aujourd'hui : ni écu, ni reproche. Les pauses sont comptées pour les parents, jamais pénalisées.
-- **Sans réseau**, l'étape est fêtée de la même façon et attend sur l'appareil (file `foyer.epopeeQueue.<membre>`) ; elle part au retour du réseau, et jusqu'au lendemain. Limite : il faut du réseau pour **ouvrir** l'écran (la besace et les routines du jour ne sont pas gardées sur l'appareil) ; c'est une routine déjà commencée qui survit à une coupure.
+- **Sans réseau**, l'étape est fêtée de la même façon et attend sur l'appareil (file `foyer.epopeeQueue.<membre>`) ; elle part au retour du réseau, et jusqu'au lendemain. Voir « Sans réseau » plus bas.
 
 Les routines viennent d'un **gabarit** (`backend/config/epopee/routines.json` : matin et soir, cinq étapes d'un écu chacune), posé à l'enrôlement. Un foyer le remplace par un fichier au même chemin dans `FOYER_DATA_DIR` (`epopee/routines.json`) ; il ne vaut que pour les enfants enrôlés ensuite. Avec dix écus possibles par jour, le prix des récompenses (à venir) devra en tenir compte.
 
@@ -101,6 +102,20 @@ Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombr
 Une seule quête à la fois. Un trésor gagné qui attend d'être vécu n'empêche pas d'en viser un autre.
 
 **Le catalogue** se tient dans la carte « L'Armurerie » : titre, phrase, genre (à deux, privilège, petit plaisir), prix de 10 à 300 écus. Cinq récompenses proposées viennent du gabarit (clé `recompenses` du même fichier) au premier enrôlement. La carte rappelle combien d'écus sont possibles par jour, pour fixer un prix qui se laisse atteindre en quelques jours plutôt qu'en plusieurs semaines. Pas de tirage au sort, pas de coffre surprise : le prix est fixe et connu d'avance.
+
+## Sans réseau
+
+La tablette du matin n'a pas toujours du réseau. L'écran s'ouvre quand même, et l'enfant fait ses routines.
+
+- **Ce qui est gardé** : à chaque lecture réussie, l'appareil garde les besaces, les routines, les exploits et les récompenses (`foyer.epopee.<membre>`, dans le navigateur, rangé sous le membre de la session). Sans réseau, l'écran s'ouvre sur cette copie et le dit : « Pas de réseau. […] Ce que tu vois a été lu aujourd'hui à 7 h 12. »
+- **Un autre jour, les routines repartent.** Une copie gardée hier s'affiche avec ses routines à faire, pas avec les coches d'hier. Les demandes déjà tranchées n'y figurent plus.
+- **Ce qui marche** : dérouler une routine. Chaque étape est fêtée, comptée dans la besace affichée, et attend dans la file. Au retour du réseau elle part, et l'écran se remet sur ce que dit le serveur.
+- **Ce qui attend le réseau** : tout le reste. Créditer, donner un bravo, signaler un exploit, viser ou échanger un trésor, régler une routine, le conseil de famille, les photos des souvenirs. Ces gestes répondent « pas de réseau » et rien n'est mis en file.
+- **Le solde affiché est le dernier connu**, plus les étapes faites depuis. Si un parent a crédité entre-temps depuis un autre appareil, la besace se corrige au retour du réseau.
+- **Une étape faite sans réseau se rattrape jusqu'au lendemain.** Une tablette restée trois jours sans réseau perd les étapes des premiers jours : le serveur n'accepte qu'aujourd'hui et hier. Elles sont alors retirées de la file, et l'écran le dit.
+- **Il faut avoir ouvert l'écran au moins une fois avec du réseau** sur cet appareil, sous ce membre. Une copie n'est jamais lue sous un autre membre.
+
+Sans réseau, l'application ne peut pas demander au serveur qui est connecté. Elle reprend le membre de la dernière session de l'appareil : la tablette d'un enfant reste donc celle de l'enfant, avec son menu. Le document gardé ne survit ni à une déconnexion ni à un changement de session, il n'y a donc pas d'autre session à confondre.
 
 ## Les règles
 
