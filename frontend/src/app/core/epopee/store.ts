@@ -2,9 +2,11 @@ import { Injectable, computed, effect, inject, signal, untracked } from '@angula
 import { ApiError, ApiService, isOffline } from '../api.service';
 import { FoyerStore } from '../foyer.store';
 import { KeyStore, readQueue, writeQueue } from '../op-queues';
-import { Besace, Exploit, Pending, Reward, Routine, Step, StepStatus } from './epopee';
+import { Besace, Exploit, Kept, Pending, Reward, Routine, Step, StepStatus, forDay, parisToday, readKept } from './epopee';
 
 const QUEUE_KEY = 'foyer.epopeeQueue';
+/** La copie gardée pour ouvrir l'écran sans réseau, rangée sous le membre de la session comme la file. */
+const CACHE_PREFIX = 'foyer.epopee.';
 const keyStore = (): KeyStore | null => { try { return localStorage; } catch { return null; } };
 
 /**
@@ -13,6 +15,10 @@ const keyStore = (): KeyStore | null => { try { return localStorage; } catch { r
  * puis part au serveur ; sans réseau elle attend, rangée sous le membre de la
  * session (`foyer.epopeeQueue.<membre>`), et repart au retour du réseau. Le
  * serveur ne compte une étape qu'une fois par jour, un renvoi ne coûte rien.
+ *
+ * Chaque lecture réussie est gardée sur l'appareil (`foyer.epopee.<membre>`) :
+ * sans réseau, l'écran s'ouvre sur cette copie, relue pour le jour (`forDay`),
+ * et l'enfant déroule ses routines comme d'habitude.
  */
 @Injectable({ providedIn: 'root' })
 export class EpopeeStore {
@@ -25,6 +31,9 @@ export class EpopeeStore {
   /** L'Armurerie : les récompenses du foyer, de la moins chère à la plus chère. */
   readonly recompenses = signal<Reward[]>([]);
   readonly erreur = signal('');
+  /** Vrai quand ce qu'on montre vient de la copie gardée, faute de réseau ; `keptAt` dit de quand elle date. */
+  readonly offline = signal(false);
+  readonly keptAt = signal('');
   readonly pending = signal<Pending[]>([]);
   /** Le conseil de famille est-il ouvert ? Posé aussi par la notification du dimanche. */
   readonly conseil = signal(false);
@@ -37,11 +46,12 @@ export class EpopeeStore {
       const on = this.foyer.authed() && this.foyer.modEpopee() && !!this.foyer.data();
       const me = this.me();
       untracked(() => {
-        if (!on || !me) { this.owner = null; this.pending.set([]); this.besaces.set(null); return; }
+        if (!on || !me) { this.owner = null; this.pending.set([]); this.besaces.set(null); this.offline.set(false); return; }
         if (me !== this.owner) { this.owner = me; this.pending.set(readQueue<Pending>(keyStore(), QUEUE_KEY, me)); void this.flush(); }
       });
     });
-    window.addEventListener('online', () => void this.flush());
+    // Le réseau revient : les étapes en attente partent, puis la copie laisse la place au serveur.
+    window.addEventListener('online', () => void this.flush().then(() => { if (this.offline()) void this.charger(); }));
     // Le bilan du dimanche touché : « #conseil » quand l'app était fermée, un
     // message du service worker quand elle était ouverte (voir sw.js).
     if (location.hash === '#conseil') { history.replaceState(history.state, '', location.pathname + location.search); this.ouvrirConseil(); }
@@ -61,13 +71,26 @@ export class EpopeeStore {
 
   async charger(): Promise<void> {
     this.erreur.set('');
+    // The member of the session, read now: the screen may ask before the effect above has filed the queue.
+    const me = this.me();
     try {
       const [{ enfants }, { exploits }, { recompenses }] = await Promise.all([
         this.api.request<{ enfants: Besace[] }>('epopee/membres'), this.api.request<{ exploits: Exploit[] }>('epopee/exploits'), this.api.request<{ recompenses: Reward[] }>('epopee/recompenses'),
       ]);
-      this.exploits.set(exploits); this.recompenses.set(recompenses);
-      this.besaces.set(await Promise.all(enfants.map((e) => (e.enrolled ? this.api.request<Besace>(`epopee/membres/${e.memberId}`) : e))));
-    } catch (e) { if (!this.besaces()) this.erreur.set((e as Error).message); }
+      const besaces = await Promise.all(enfants.map((e) => (e.enrolled ? this.api.request<Besace>(`epopee/membres/${e.memberId}`) : e)));
+      if (me !== this.me()) return;
+      this.exploits.set(exploits); this.recompenses.set(recompenses); this.besaces.set(besaces);
+      this.offline.set(false);
+      try { if (me) keyStore()?.setItem(CACHE_PREFIX + me, JSON.stringify({ at: new Date().toISOString(), besaces, exploits, recompenses } satisfies Kept)); } catch { /* quota: the copy will wait */ }
+    } catch (e) {
+      // A refusal from the server (module off, session ended) is not a lack of network: no copy then.
+      const kept = isOffline(e) && me ? readKept(keyStore()?.getItem(CACHE_PREFIX + me) ?? null) : null;
+      if (kept) {
+        const today = parisToday();
+        this.exploits.set(kept.exploits); this.recompenses.set(kept.recompenses); this.besaces.set(kept.besaces.map((b) => forDay(b, today)));
+        this.keptAt.set(kept.at); this.offline.set(true);
+      } else if (!this.besaces()) this.erreur.set((e as Error).message);
+    }
   }
 
   private save(q: Pending[]): void { this.pending.set(q); writeQueue(keyStore(), QUEUE_KEY, this.owner, q); }
