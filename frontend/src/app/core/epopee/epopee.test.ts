@@ -85,7 +85,7 @@ test('une date de pacte se lit en toutes lettres', () => {
 });
 
 test('la quête en cours est la proposée ou l’active, jamais un trésor déjà atteint', () => {
-  const q = (status: Quest['status']): Quest => ({ id: status, rewardId: 'r', title: 't', cost: 10, status, proposedBy: null, createdAt: '', pact: null, reachedAt: null, honoredAt: null, memory: null });
+  const q = (status: Quest['status']): Quest => ({ id: status, rewardId: 'r', title: 't', cost: 10, status, proposedBy: null, createdAt: '', pact: null, reachedAt: null, honoredAt: null, memory: null, photo: null });
   assert.equal(currentQuest([q('atteinte'), q('active')])?.id, 'active');
   assert.equal(currentQuest([q('atteinte'), q('honoree')]), null);
 });

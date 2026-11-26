@@ -3,6 +3,7 @@ import { ApiService } from '../../core/api.service';
 import { CATEGORY_LABEL, Kid, Quest, Reward, currentQuest, dailyEcus, longDay, missing, reachLine } from '../../core/epopee/epopee';
 import { fanfare } from '../../core/epopee/sound';
 import { FoyerStore } from '../../core/foyer.store';
+import { resizePhoto } from '../../core/image-resize';
 import { IconComponent } from '../../core/icon';
 import { sessionUuid } from '../../core/revisions/revisions';
 
@@ -12,7 +13,8 @@ const BELT_MAX = 40;
 /**
  * L'Armurerie d'un enfant : choisir un trésor, sceller le pacte (un parent),
  * voir la quête avancer, échanger ses écus, puis garder le souvenir du moment
- * vécu. Une seule quête à la fois. Les prix et les soldes viennent du serveur.
+ * vécu, avec sa photo (réduite sur l'appareil avant l'envoi, gardée sur le
+ * serveur du foyer). Une seule quête à la fois. Les prix et les soldes viennent du serveur.
  */
 @Component({
   selector: 'epopee-quest-panel',
@@ -100,6 +102,10 @@ const BELT_MAX = 40;
               <label><span class="field-label">Son moment préféré</span><input class="input" maxlength="300" placeholder="Ce que {{ k.name }} en a dit" [value]="memChild()[t.id] || ''" (input)="setMem(memChild, t.id, $any($event.target).value)" /></label>
               <label><span class="field-label">Votre mot</span><textarea class="input" maxlength="600" placeholder="Ce que vous voulez qu’il relise plus tard" [value]="memParent()[t.id] || ''" (input)="setMem(memParent, t.id, $any($event.target).value)"></textarea></label>
             </div>
+            <label class="photo-pick">
+              <input type="file" accept="image/*" (change)="choisirPhoto(t.id, $event)" />
+              <f-icon name="upload" [size]="16" [width]="2.2" /> {{ pending()[t.id]?.name || 'Ajouter une photo du moment (facultatif)' }}
+            </label>
             <button class="btn btn-sage" [disabled]="busy()" (click)="vecu(t)">Marquer comme vécu</button>
           }
         </div>
@@ -112,8 +118,15 @@ const BELT_MAX = 40;
             <div class="memory">
               <div class="t">{{ m.title }}</div>
               @if (m.honoredAt) { <div class="s">{{ day(m.honoredAt) }}</div> }
+              @if (m.photo) { <img class="shot" [src]="photoUrl(m)" [alt]="'Photo du souvenir : ' + m.title" loading="lazy" /> }
               @if (m.memory?.child) { <p class="said">« {{ m.memory!.child }} »</p> }
               @if (m.memory?.parent) { <p class="word">{{ m.memory!.parent }}@if (m.memory!.by) { <span>{{ m.memory!.by }}</span> }</p> }
+              @if (!child()) {
+                <div class="photo-acts">
+                  <label class="link"><input type="file" accept="image/*" [disabled]="busy()" (change)="poserPhoto(m, $event)" />{{ m.photo ? 'Changer la photo' : 'Ajouter une photo' }}</label>
+                  @if (m.photo) { <button class="link" [disabled]="busy()" (click)="retirerPhoto(m)">Retirer la photo</button> }
+                </div>
+              }
             </div>
           }
         </details>
@@ -158,6 +171,12 @@ const BELT_MAX = 40;
     .reward .btn { min-height: 46px; flex: none; }
     .reward.near .btn { background: #FDF0DA; color: #7D5400; }
     .cat { margin-left: 6px; padding: 2px 8px; border-radius: 99px; background: var(--soft2); font-size: 11.5px; font-weight: 800; color: var(--ink2); white-space: nowrap; }
+    .shot { display: block; width: 100%; max-height: 420px; object-fit: cover; border-radius: 16px; margin-top: 10px; background: var(--soft2); }
+    .photo-pick { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 14px; margin-bottom: 12px; border-radius: 14px; border: 2px dashed var(--line); background: var(--surface); cursor: pointer; font: 700 14px var(--font-body); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .photo-pick input, .photo-acts input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .photo-pick:focus-within, .photo-acts label:focus-within { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .photo-acts { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+    .photo-acts .link { display: inline-flex; align-items: center; margin-top: 4px; cursor: pointer; }
     .memories summary { cursor: pointer; font-size: 13px; font-weight: 800; color: var(--ink3); padding: 8px 0; }
     .memory { padding: 12px 0; border-top: 1px solid var(--line2); }
     .memory .t { font-size: 15px; font-weight: 800; color: var(--ink); }
@@ -183,6 +202,8 @@ export class QuestPanel {
   readonly pactNote = signal('');
   readonly memChild = signal<Record<string, string>>({});
   readonly memParent = signal<Record<string, string>>({});
+  /** The photo chosen for a moment about to be marked as lived: sent once the memory exists. */
+  readonly pending = signal<Record<string, File>>({});
 
   readonly quest = computed(() => currentQuest(this.kid().quetes || []));
   readonly tickets = computed(() => (this.kid().quetes || []).filter((q) => q.status === 'atteinte'));
@@ -231,7 +252,26 @@ export class QuestPanel {
   vecu(q: Quest): Promise<void> {
     return this.agir(async () => {
       await this.api.post(`epopee/quetes/${q.id}/vecu`, { child: (this.memChild()[q.id] || '').trim(), parent: (this.memParent()[q.id] || '').trim() });
+      const photo = this.pending()[q.id];
+      // The memory is kept whatever happens to the picture: it can be added again from the memories.
+      if (photo) { try { await this.envoyer(q.id, photo); } catch (e) { this.store.toast('Souvenir gardé, sans sa photo. ' + (e as Error).message); return; } }
       this.store.toast('Souvenir gardé.');
     });
+  }
+
+  photoUrl(q: Quest): string { return new URL(`api/epopee/quetes/${q.id}/photo?v=${q.photo}`, document.baseURI).href; }
+  private file(ev: Event): File | null { const i = ev.target as HTMLInputElement, f = i.files?.[0] ?? null; i.value = ''; return f; }
+  /** Reduced on the device first: a phone photo weighs several megabytes, a memory needs a fraction of that. */
+  private async envoyer(id: string, f: File): Promise<void> {
+    await this.api.upload(`epopee/quetes/${id}/photo`, await resizePhoto(f));
+  }
+  choisirPhoto(id: string, ev: Event): void { const f = this.file(ev); if (f) this.pending.update((x) => ({ ...x, [id]: f })); }
+  poserPhoto(q: Quest, ev: Event): Promise<void> {
+    const f = this.file(ev); if (!f) return Promise.resolve();
+    return this.agir(async () => { await this.envoyer(q.id, f); this.store.toast('Photo ajoutée au souvenir.'); });
+  }
+  retirerPhoto(q: Quest): Promise<void> {
+    if (!confirm(`Retirer la photo du souvenir « ${q.title} » ? Elle sera effacée du serveur.`)) return Promise.resolve();
+    return this.agir(async () => { await this.api.del(`epopee/quetes/${q.id}/photo`); });
   }
 }

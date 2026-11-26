@@ -11,7 +11,7 @@ import { migrateRevisions } from './revisions/schema';
 import { migrateAtelier } from './atelier/schema';
 import { initAtelierRepo, referencedFileIds as atlFileIds } from './atelier/repo';
 import { migrateEpopee } from './epopee/schema';
-import { initEpopeeRepo } from './epopee/repo';
+import { initEpopeeRepo, referencedFileIds as epoFileIds } from './epopee/repo';
 import { initRevisionsRepo } from './revisions/repo';
 import { initEcoleRepo } from './ecole/repo';
 import { migrateEquipements } from './equipements/schema';
@@ -315,6 +315,8 @@ export function pruneUnreferencedFiles(): void {
     for (const id of entFileIds(new Set((doc.tasks || []).map((t) => String(t.id))))) referenced.add(id);
     // Les dessins et vignettes de l'Atelier code, tenus par atl_media.
     for (const id of atlFileIds()) referenced.add(id);
+    // Les photos des souvenirs de l'Épopée, tenues par epo_quests.
+    for (const id of epoFileIds()) referenced.add(id);
     const removed = files.pruneUnreferenced(referenced);
     if (removed) {
       log.info(`Fichiers : ${removed} fichier(s) sans propriétaire retiré(s).`);

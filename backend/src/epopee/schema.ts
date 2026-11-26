@@ -228,6 +228,17 @@ const MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    label: 'la photo d’un souvenir',
+    up: (db) => {
+      db.exec(`
+        -- La photo du moment vécu : une ligne de hh_attachments (genre gardé
+        -- « epopee »), donc un fichier sur le disque, servi par le module seul.
+        ALTER TABLE epo_quests ADD COLUMN photo_file_id INTEGER;
+      `);
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */

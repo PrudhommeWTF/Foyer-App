@@ -8,10 +8,10 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 
 | Fait | Pas encore |
 |---|---|
-| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Une photo du moment dans le souvenir |
-| Routines du matin et du soir, pas à pas, réglables | Créer une routine de plus que le matin et le soir |
-| Exploits convenus, exploits signalés, bravos, journal | Ouvrir l'écran sans réseau |
-| L'Armurerie : récompenses, quête, pacte, échange, souvenirs | |
+| L'alliance : les trois lois, la besace d'amorce, le premier trésor, le serment | Créer une routine de plus que le matin et le soir |
+| Routines du matin et du soir, pas à pas, réglables | Ouvrir l'écran sans réseau |
+| Exploits convenus, exploits signalés, bravos, journal | |
+| L'Armurerie : récompenses, quête, pacte, échange, souvenirs avec leur photo | |
 | Le conseil de famille : bilan de la semaine, notes, PDF, notification du dimanche | |
 | Les parents prévenus sur le moment quand un enfant attend leur réponse | |
 
@@ -93,7 +93,9 @@ Un adulte voit, pour chaque enfant, où en sont les routines du jour et le nombr
 2. **Sceller le pacte.** Le parent s'engage sur le moment : quand (s'il le sait), ce qu'il faut préparer, la règle convenue, et un mot d'encouragement. C'est un engagement des deux côtés : l'enfant sur ses efforts, le parent sur la réalité du trésor. « Pas celui-ci » referme la proposition sans rien retirer.
 3. **Avancer.** La quête s'affiche en tête de la besace : une jauge, avec le repère des écus d'amorce (ou des emplacements de pièces, pour un enfant réglé sur « pièces sans le nombre » et un trésor de 40 écus au plus), les écus qui manquent, et le pacte avec le mot du parent.
 4. **Échanger.** Dès que la besace atteint le prix, l'enfant échange lui-même ses écus contre son trésor. Le trésor est gagné tout de suite ; il reste à le vivre.
-5. **Vivre, puis se souvenir.** Une fois le moment vécu, le parent note le moment préféré de l'enfant et son propre mot : la quête rejoint les souvenirs, que l'enfant relit.
+5. **Vivre, puis se souvenir.** Une fois le moment vécu, le parent note le moment préféré de l'enfant et son propre mot, et peut y joindre une photo : la quête rejoint les souvenirs, que l'enfant relit.
+
+**La photo d'un souvenir** se choisit au moment de « Marquer comme vécu », ou plus tard depuis les souvenirs (« Ajouter une photo », « Changer la photo », « Retirer la photo »). Seul un adulte la pose ou la retire ; l'enfant la voit. Elle est réduite sur l'appareil avant de partir (2000 px de côté au plus, en JPEG : une photo de téléphone de plusieurs mégaoctets en pèse quelques centaines de kilo-octets), puis gardée sur le serveur du foyer, dans le répertoire `pieces` des sauvegardes. Elle ne sort jamais de chez vous. Formats acceptés : JPEG, PNG, WEBP ; une photo HEIC se convertit sur l'iPhone, pas ailleurs. Si la photo n'est pas partie (réseau, image illisible), le souvenir est gardé quand même et la photo s'ajoute ensuite. Une photo remplacée ou retirée est effacée du disque.
 
 Une seule quête à la fois. Un trésor gagné qui attend d'être vécu n'empêche pas d'en viser un autre.
 
@@ -132,7 +134,7 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | `epo_exploits` | les exploits convenus du foyer : titre, écus, ordre |
 | `epo_requests` | un exploit signalé par un enfant : en attente, validé, ou « pas tout à fait », et par qui |
 | `epo_rewards` | le catalogue de l'Armurerie : titre, phrase, prix, genre |
-| `epo_quests` | une quête : enfant, récompense, titre et prix au moment du choix, état (proposée, active, atteinte, honorée, abandonnée), pacte, souvenir |
+| `epo_quests` | une quête : enfant, récompense, titre et prix au moment du choix, état (proposée, active, atteinte, honorée, abandonnée), pacte, souvenir, et la photo du souvenir (une ligne de `hh_attachments`, genre gardé `epopee` : servie par le module seul, jamais par `/api/files`) |
 | `epo_councils` | les notes du conseil de famille d'une semaine (clé : le lundi), et qui les a écrites |
 | `epo_routine_days` | le déroulé d'une routine un jour donné : début, fin, nombre de pauses |
 
@@ -179,6 +181,9 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | `POST /quetes/:id/pacte` | sceller (adultes) : `{ date, items, rule, note }`, tous facultatifs. Rend la quête et le solde |
 | `POST /quetes/:id/abandon` | renoncer : l'enfant avant le pacte, un adulte tant que la quête est en cours |
 | `POST /quetes/:id/echange` | échanger les écus contre le trésor. 409 avec ce qui manque si la besace n'y est pas |
+| `POST /quetes/:id/photo` | poser la photo d'un souvenir (adultes) : le fichier en corps brut, JPEG, PNG ou WEBP, déjà réduit. 409 si le moment n'est pas noté comme vécu. Remplace la précédente |
+| `DELETE /quetes/:id/photo` | retirer la photo (adultes) ; le fichier quitte le disque |
+| `GET /quetes/:id/photo` | la photo : l'enfant pour ses souvenirs, un adulte pour tous |
 | `POST /quetes/:id/vecu` | le moment a été vécu (adultes) : `{ date (aujourd'hui par défaut), child, parent }` |
 | `GET /conseil[?semaine=AAAA-MM-JJ]` | le bilan d'une semaine (un lundi, passé ou en cours ; la semaine en cours par défaut) : une entrée par enfant enrôlé (`earned`, `lines`, `words`), les trois temps du conseil, les notes (adultes) |
 | `PUT /conseil` | `{ semaine, notes }` : garder les notes du conseil, 2000 caractères au plus (adultes) |
@@ -189,7 +194,7 @@ Chaque geste est journalisé (« Épopée : bravo de Nolwenn à Raphaël, +2 éc
 
 ## Module éteint, remise à zéro
 
-Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface notes des conseils, quêtes, récompenses, exploits, demandes, routines, profils et grand livre.
+Désactivé (`modEpopee`), l'écran disparaît et l'API répond 403 ; les besaces et leur journal sont conservés et reviennent à la réactivation. « Repartir à zéro » (`POST /api/modules/epopee/reset`, administrateur, confirmation par saisie) efface notes des conseils, quêtes et photos des souvenirs, récompenses, exploits, demandes, routines, profils et grand livre.
 
 ## Vérifier depuis le serveur
 
