@@ -3,11 +3,17 @@
 // with tracking pixels; none is kept.
 //
 // In their place: the guided challenges of the Atelier, written for Foyer
-// (foyer/defis.json), in text, with Boulon. A step names its blocks between
-// brackets, '[mouvement:avancer de 10 pas]', shown in the colour of their family.
+// (foyer/defis.json). A step names its blocks between brackets,
+// '[mouvement:avancer de 10 pas]', shown in the colour of their family, and
+// shows the script as it stands at that step: pictures of the real blocks, taken
+// in the editor itself by outils/images-defis.cjs (foyer/defis/*.png).
 import React from 'react';
 import defis from '../../../foyer/defis.json';
 import boulon from '../../../foyer/boulon.svg';
+
+// The pictures of the steps, by file name
+const pictures = require.context('../../../foyer/defis', false, /\.png$/);
+const picture = name => (name && pictures.keys().includes(`./${name}`) ? pictures(`./${name}`) : null);
 
 // The library component still reads these category names to lay out any library
 // with categories: they stay.
@@ -60,8 +66,7 @@ defis.forEach(defi => {
         tags: [],
         category: CATEGORIES.gettingStarted,
         img: boulon,
-        // Boulon shows the way on the first step; the others are text alone
-        steps: defi.steps.map((text, i) => ({title: stepTitle(text), image: i === 0 ? boulon : null}))
+        steps: defi.steps.map((text, i) => ({title: stepTitle(text), image: picture((defi.images || [])[i])}))
     };
 });
 

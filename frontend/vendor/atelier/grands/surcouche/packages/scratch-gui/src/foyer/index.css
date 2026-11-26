@@ -8,3 +8,13 @@ body,
 }
 
 * { box-sizing: border-box; }
+
+/* The pictures of the guided challenges are taken at twice their size, to stay
+   sharp on an iPad: shown at half, within the room a tutorial picture had
+   (the longest scripts are drawn in two columns to fit, see outils/images-defis.cjs). */
+.app img[class*='card_step-image'] {
+    zoom: 0.5;
+    max-width: 900px;
+    max-height: 400px;
+    background: #F9F9F9;
+}

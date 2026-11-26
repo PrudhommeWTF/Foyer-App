@@ -56,15 +56,22 @@ Tout est dans `surcouche/…/foyer/` (`index.jsx`, `storage.js`, `local.js`), sa
 
 ## Défis guidés
 
-Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : cinq pour commencer, écrits pour Foyer, en texte, avec Boulon.
+Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : cinq pour commencer, écrits pour Foyer. Chaque étape a son texte et l'image du script tel qu'il doit être à ce moment-là.
 
-- `surcouche/…/foyer/defis.json` : les défis (nom, phrase d'accroche, étapes). Une étape nomme ses blocs entre crochets, `[mouvement:avancer de 10 pas]`, affichés dans la couleur de leur famille. C'est le seul fichier à modifier pour en écrire un nouveau ; `construire.sh` le recopie dans `dist/` pour que l'écran de Foyer les propose.
+- `surcouche/…/foyer/defis.json` : les défis (nom, phrase d'accroche, étapes, et l'image de chaque étape). Une étape nomme ses blocs entre crochets, `[mouvement:avancer de 10 pas]`, affichés dans la couleur de leur famille. `construire.sh` le recopie dans `dist/` pour que l'écran de Foyer les propose.
+- `surcouche/…/foyer/defis/*.png` : les images, **jamais dessinées à la main**. `outils/images-defis.cjs` écrit le script de chaque étape dans un projet, l'ouvre dans l'éditeur lui-même et photographie ses blocs : ce sont donc toujours les vrais blocs, en français, tels que l'enfant les verra. Deux étapes au même script partagent leur image ; les scripts longs sont rangés sur deux colonnes pour tenir dans la carte. `foyer/index.css` les montre à la moitié de leur taille (elles sont prises au double, pour rester nettes sur un iPad).
 - `surcouche/…/lib/libraries/decks/index.jsx` en fait les cartes ; `translate-image.js` rend l'image telle quelle (il n'y a qu'une langue).
 - `components/cards/cards.jsx` : une étape peut être du texte seul (l'image était obligatoire).
 - `foyer/index.jsx` : `editor.html?projet=…&defi=<identifiant>` ouvre le projet avec les étapes du défi. Un identifiant inconnu est ignoré.
 - `outils/traductions.cjs` : « Tutoriels » devient « Défis » dans l'en-tête des cartes et la fenêtre qui les liste.
 
-Ce qui n'est pas fait : des images des blocs à chaque étape. Les étapes sont en texte, avec le nom de chaque bloc en couleur.
+Écrire ou changer un défi : son texte dans `defis.json`, ses scripts étape par étape dans `outils/images-defis.cjs` (une notation courte, en tête du fichier), puis, contre un Foyer de développement qui sert l'éditeur :
+
+```bash
+FOYER_URL=http://localhost:3000 FOYER_EMAIL=… FOYER_PASSWORD=… node outils/images-defis.cjs
+```
+
+et `./construire.sh`. L'outil demande Playwright et un Chromium ; il crée un projet sur ce Foyer, le temps de prendre les images, puis le supprime.
 
 ## Micro
 
