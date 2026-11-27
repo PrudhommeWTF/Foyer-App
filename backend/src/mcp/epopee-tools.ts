@@ -7,7 +7,8 @@
 //
 // Ce que l'assistant ne fait pas, exprès : enrôler un enfant (c'est l'alliance,
 // qui se fait côte à côte), sceller un pacte, échanger un trésor, régler une
-// routine, annuler une écriture. Ce sont des décisions à prendre avec l'enfant,
+// routine, annuler une écriture (cela ne se fait que dans les minutes qui
+// suivent, depuis le journal). Ce sont des décisions à prendre avec l'enfant,
 // devant l'écran. Les montants sont ceux du serveur, jamais ceux de la phrase.
 import crypto from 'node:crypto';
 import { getHousehold } from '../db';
@@ -16,7 +17,7 @@ import { log } from '../log';
 import { addDays, mondayOf, parisDay, periodLabel } from '../revisions/bilan';
 import { computeBilan, lines } from '../epopee/bilan';
 import * as repo from '../epopee/repo';
-import { BRAVO_MAX, NOTE_MAX, bravoEcus } from '../epopee/rules';
+import { BRAVO_MAX, CANCEL_WINDOW_MIN, NOTE_MAX, bravoEcus } from '../epopee/rules';
 import type { McpCtx } from './tools';
 
 const members = (): Member[] => (getHousehold().state as HouseholdState).members;
@@ -138,7 +139,7 @@ export function epopeeBravo(ctx: McpCtx, a: { enfant?: string; ecus?: number; mo
   const done = repo.bravo(crypto.randomUUID(), m.id, n, mot || null, ctx.memberId);
   if (!done) return 'Le bravo n’a pas pu être enregistré.';
   log.info(`Épopée : bravo de ${who(ctx)} à ${m.name}, +${ecus(n)}${mot ? ` (« ${mot} »)` : ''}, par l’assistant (${ctx.via}).`);
-  return `Bravo donné à ${m.name} : +${ecus(n)}${mot ? `, « ${mot} »` : ''}. Sa besace : ${ecus(repo.balanceOf(m.id))}. Il se reprend depuis le journal de l’application si c’était une erreur.`;
+  return `Bravo donné à ${m.name} : +${ecus(n)}${mot ? `, « ${mot} »` : ''}. Sa besace : ${ecus(repo.balanceOf(m.id))}. Si c’était une erreur, il s’annule depuis le journal de l’application, dans les ${CANCEL_WINDOW_MIN} minutes.`;
 }
 
 /** L'exploit convenu que nomme `exploit` (nom exact, début, ou fragment s'il n'y en a qu'un). */

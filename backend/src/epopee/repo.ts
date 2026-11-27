@@ -81,7 +81,7 @@ export function bravo(id: string, memberId: string, ecus: number, note: string |
 /** Annule une écriture par sa contre-écriture, ou rend la raison du refus. */
 export function cancel(entry: LedgerRow, by: string | null): { entry: LedgerRow } | { refusal: string } {
   return database.transaction(() => {
-    const refusal = cancelRefusal(entry, entriesOf(entry.member_id), profileOf(entry.member_id)?.floor ?? AMORCE);
+    const refusal = cancelRefusal(entry, entriesOf(entry.member_id), profileOf(entry.member_id)?.floor ?? AMORCE, Date.now());
     if (refusal) return { refusal };
     const id = crypto.randomUUID();
     write(id, entry.member_id, 'annulation', -entry.delta, null, entry.id, by);
