@@ -125,10 +125,11 @@ Elles sont dans `backend/src/epopee/rules.ts`, pures et testées. Le serveur les
 
 - **La besace ne commence jamais vide.** L'enrôlement verse 5 écus d'amorce, une seule fois. Ils forment le **plancher** de la besace : ils ne se reprennent pas.
 - **Rien ne s'efface.** Le solde est la somme d'un grand livre en ajout seul. Annuler un bravo, c'est écrire sa contre-écriture ; les deux lignes restent.
+- **Une écriture ne s'annule que dans les dix minutes qui la suivent.** Annuler sert à corriger une erreur sur le moment : le mauvais enfant, un tap de trop. Passé ce délai, ce qui est gagné est gagné, et le serveur refuse en le disant.
 - **Une écriture ne s'annule qu'une fois**, une annulation ne s'annule pas, et annuler une écriture ne fait jamais passer la besace sous son plancher : un bravo dont les écus ont déjà été dépensés dans un trésor ne s'annule plus.
 - **Un bravo vaut 1, 2 ou 3 écus.** Le geste porte un identifiant donné par l'appareil : reçu deux fois, il ne compte qu'une fois.
 - **Une étape ne se note qu'une fois par jour** (faite ou passée), et son écu n'est versé qu'une fois : l'identifiant de l'écriture se déduit de l'étape et du jour. L'appareil annonce aujourd'hui ou hier (heure de Paris), rien d'autre.
-- **Reprendre l'écu d'une étape** (un adulte, depuis le journal) ne rouvre pas l'étape : elle reste notée pour ce jour.
+- **Annuler l'écu d'une étape** (un adulte, depuis le journal, dans les dix minutes) ne rouvre pas l'étape : elle reste notée pour ce jour.
 - **Un exploit convenu se verse à son montant**, jamais à celui qu'annonce l'appareil. La demande d'un enfant validée est versée sous l'identifiant de la demande : une seule fois, quoi que fassent deux parents.
 - **Un échange dépense le prix entier**, écus d'amorce compris : le plancher protège de ce qu'un parent annule, pas de ce que l'enfant choisit de dépenser. Un trésor échangé ne se reprend pas.
 - **Une quête ne commence jamais sous l'amorce** : quand un pacte est scellé alors que la besace est passée sous son plancher (après un échange), elle y est ramenée. C'est le seul cas où l'amorce est versée à nouveau, et c'est un parent qui le déclenche.
@@ -146,14 +147,18 @@ Trois choses font baisser une besace, et aucune n'est une sanction :
 | Ce qui fait baisser la besace | Qui le décide | Ce que c'est |
 |---|---|---|
 | L'échange d'un trésor | l'enfant | il dépense ses écus pour ce qu'il a visé |
-| L'annulation d'une écriture | un adulte, depuis le journal | la correction d'une erreur : un bravo donné au mauvais enfant, un crédit tapé deux fois |
+| L'annulation d'une écriture | un adulte, depuis le journal, dans les dix minutes | la correction d'une erreur sur le moment : un bravo donné au mauvais enfant, un crédit tapé deux fois |
 | La remise à zéro du module | un administrateur | tout le module repart de rien, sur confirmation par saisie |
 
-**L'annulation n'est pas un retrait déguisé, mais l'application ne peut pas l'empêcher de le devenir.** Elle ne demande pas de motif : un parent pourrait annuler un bravo de la veille parce que la soirée a mal tourné. Ce serait rompre le serment. Ce qui le rend visible plutôt qu'impossible :
+**L'annulation ne peut pas servir de retrait déguisé.** Elle ne demande pas de motif, mais elle n'existe que dans les dix minutes qui suivent l'écriture : le temps de voir qu'on s'est trompé d'enfant ou qu'on a tapé deux fois. Un parent ne peut donc pas reprendre le bravo de la veille parce que la soirée a mal tourné, ni l'écu d'une étape faite le matin. Le serveur applique la règle (`CANCEL_WINDOW_MIN` dans `rules.ts`) et dit à l'écran, écriture par écriture, si elle s'annule encore : le bouton « Annuler » disparaît de lui-même.
+
+Ce qui tient en plus :
 
 - rien ne s'efface : l'écriture annulée et sa contre-écriture restent toutes deux au journal, avec leur auteur ;
 - l'annulation ne fait jamais passer la besace sous son plancher : les écus d'amorce sont hors d'atteinte, et un trésor échangé ne se reprend pas ;
 - l'assistant ne sait pas annuler : il faut ouvrir le journal de l'enfant.
+
+**Ce que ce délai coûte.** Une erreur remarquée plus tard ne se corrige plus : un bravo donné au mauvais enfant et vu le lendemain reste à cet enfant. C'est voulu, la règle ne fait pas d'exception pour les bonnes raisons. Si l'autre enfant le méritait, donnez-lui le sien. La seule remise en cause possible reste la remise à zéro du module, qui efface tout.
 
 Si un comportement pose problème, le module propose autre chose que de reprendre : simplifier une étape, déplacer une routine, en parler au conseil de famille (« Ce qu'on ajuste »).
 
@@ -198,7 +203,7 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | Route | Effet |
 |---|---|
 | `GET /membres` | les enfants du foyer et leur besace (`enrolled`, `floor`, `balance`) : tous pour un adulte, soi pour un enfant |
-| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, ses demandes (en attente, ou tranchées ce jour), ses réglages (`display`, `timer`), son serment (`swornAt`, `swornBy`), ses quêtes vivantes (`quetes`) et ses souvenirs (`souvenirs`, 30 au plus), et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée) |
+| `GET /membres/:id` | la besace d'un enfant, le jour (`day`, heure de Paris), ses routines avec l'état de chaque étape ce jour-là, ses demandes (en attente, ou tranchées ce jour), ses réglages (`display`, `timer`), son serment (`swornAt`, `swornBy`), ses quêtes vivantes (`quetes`) et ses souvenirs (`souvenirs`, 30 au plus), et les 50 dernières écritures de son journal (`cancelled` marque une écriture annulée, `cancellable` dit si elle s'annule encore) |
 | `POST /membres/:id/enrolement` | enrôler (adultes). 201 quand l'amorce est versée, 200 ensuite. 400 si le membre n'est pas un enfant |
 | `DELETE /membres/:id/enrolement` | retirer de l'Épopée (adultes) ; rien n'est supprimé |
 | `POST /membres/:id/bravos` | `{ id (uuid), ecus (1 à 3), note (120 caractères au plus) }` (adultes). 201 à la première réception, 200 et `duplicate: true` ensuite. 409 si l'enfant n'est pas enrôlé |
@@ -228,7 +233,7 @@ Sous `/api/epopee`, session de navigateur, membre du foyer, module activé (`mod
 | `GET /conseil[?semaine=AAAA-MM-JJ]` | le bilan d'une semaine (un lundi, passé ou en cours ; la semaine en cours par défaut) : une entrée par enfant enrôlé (`earned`, `lines`, `words`), les trois temps du conseil, les notes (adultes) |
 | `PUT /conseil` | `{ semaine, notes }` : garder les notes du conseil, 2000 caractères au plus (adultes) |
 | `GET /conseil.pdf[?semaine=…]` | le même bilan en PDF, journalisé (adultes) |
-| `POST /journal/:id/annulation` | annuler une écriture (adultes). 409 avec la raison quand la règle le refuse |
+| `POST /journal/:id/annulation` | annuler une écriture (adultes), dans les dix minutes qui la suivent. 409 avec la raison quand la règle le refuse |
 
 Chaque geste est journalisé (« Épopée : bravo de Nolwenn à Raphaël, +2 écus (« Table mise sans rappel »). »).
 

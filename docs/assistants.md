@@ -197,7 +197,7 @@ bilan ni écriture. Demander la besace de son frère est refusé.
 l'alliance, qui se fait côte à côte dans l'application), sceller un pacte,
 échanger un trésor, régler une routine, annuler une écriture. Ce sont des
 décisions à prendre avec l'enfant, devant l'écran. Un bravo ou un crédit donné
-par erreur se reprend depuis le journal de l'application. Chaque écriture est
+par erreur s'annule depuis le journal de l'application, dans les dix minutes. Chaque écriture est
 journalisée avec le nom du jeton. Module éteint : les huit outils disparaissent.
 
 ## Brancher chaque client

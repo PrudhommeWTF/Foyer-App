@@ -25,7 +25,7 @@ import { addDays, mondayOf, periodLabel } from '../revisions/bilan';
 import { RITUEL, computeBilan, councilPdf, lines } from './bilan';
 import { emit } from './events';
 import type { Gabarit } from './gabarit';
-import { DISPLAYS, NOTE_MAX, ROUTINES_MAX, STEP_STATUS, bravoEcus, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput, titleInput } from './rules';
+import { AMORCE, DISPLAYS, NOTE_MAX, ROUTINES_MAX, STEP_STATUS, bravoEcus, cancelRefusal, dateInput, dayAccepted, exploitInput, optionalText, rewardInput, stepsInput, timeInput, titleInput } from './rules';
 import * as repo from './repo';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,8 +55,11 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const p = repo.activeProfile(m.id);
     return { memberId: m.id, enrolled: !!p, floor: p?.floor ?? null, balance: p ? repo.balanceOf(m.id) : null, enrolledAt: p?.enrolled_at ?? null, display: p?.display ?? null, timer: p ? !!p.timer : null, swornAt: p?.sworn_at ?? null, swornBy: nameOf(p?.sworn_by ?? null) };
   };
-  const entryView = (e: repo.LedgerRow, cancelled: Set<string>) => ({
-    id: e.id, kind: e.kind, delta: e.delta, note: e.note, ref: e.ref, by: nameOf(e.by_member), at: e.at, cancelled: cancelled.has(e.id),
+  /** Cette écriture peut-elle encore s'annuler, à l'instant ? */
+  const canCancel = (e: repo.LedgerRow): boolean => cancelRefusal(e, repo.entriesOf(e.member_id), repo.activeProfile(e.member_id)?.floor ?? AMORCE, Date.now()) === null;
+  /** `cancellable` : l'écriture peut-elle encore s'annuler ? Le serveur le dit, l'écran n'a pas à connaître la règle ni l'heure. */
+  const entryView = (e: repo.LedgerRow, cancelled: Set<string>, cancellable: boolean) => ({
+    id: e.id, kind: e.kind, delta: e.delta, note: e.note, ref: e.ref, by: nameOf(e.by_member), at: e.at, cancelled: cancelled.has(e.id), cancellable,
   });
 
   const exploitView = (e: repo.ExploitRow) => ({ id: e.id, title: e.title, ecus: e.ecus });
@@ -168,9 +171,9 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const m = child(req, res); if (!m) return;
     const all = repo.activeProfile(m.id) ? repo.entriesOf(m.id) : [];
     const cancelled = new Set(all.map((e) => e.ref).filter((x): x is string => !!x));
-    const day = today();
+    const day = today(), now = Date.now(), floor = repo.activeProfile(m.id)?.floor ?? AMORCE;
     res.json({ ...summary(m), day, routines: all.length ? routinesView(m.id, day) : [], demandes: all.length ? requestsView(m.id, day) : [],
-      quetes: all.length ? repo.openQuests(m.id).map(questView) : [], souvenirs: all.length ? repo.memories(m.id, MEMORIES_MAX).map(questView) : [], journal: all.slice(0, JOURNAL_MAX).map((e) => entryView(e, cancelled)) });
+      quetes: all.length ? repo.openQuests(m.id).map(questView) : [], souvenirs: all.length ? repo.memories(m.id, MEMORIES_MAX).map(questView) : [], journal: all.slice(0, JOURNAL_MAX).map((e) => entryView(e, cancelled, cancelRefusal(e, all, floor, now) === null)) });
   }));
 
   r.post('/membres/:id/enrolement', handler((req, res) => {
@@ -201,7 +204,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const done = repo.bravo(id.toLowerCase(), m.id, n, (note as string | null | undefined)?.trim() || null, me(req).id);
     if (!done) { res.status(409).json({ error: 'Cet identifiant a déjà servi à autre chose.' }); return; }
     if (!done.duplicate) log.info(`Épopée : bravo de ${me(req).name} à ${m.name}, +${n} écu${n > 1 ? 's' : ''}${done.entry.note ? ` (« ${done.entry.note} »)` : ''}.`);
-    res.status(done.duplicate ? 200 : 201).json({ duplicate: done.duplicate, entry: entryView(done.entry, new Set()), balance: repo.balanceOf(m.id) });
+    res.status(done.duplicate ? 200 : 201).json({ duplicate: done.duplicate, entry: entryView(done.entry, new Set(), canCancel(done.entry)), balance: repo.balanceOf(m.id) });
   }));
 
   // Le serment de l'alliance : scellé une fois, par un adulte, avec l'enfant à côté de lui.
@@ -317,7 +320,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const done = repo.creditExploit(id, m.id, e, me(req).id);
     if (!done) { res.status(409).json({ error: 'Cet identifiant a déjà servi à autre chose.' }); return; }
     if (!done.duplicate) log.info(`Épopée : ${me(req).name} crédite « ${e.title} » à ${m.name}, +${e.ecus} écu${e.ecus > 1 ? 's' : ''}.`);
-    res.status(done.duplicate ? 200 : 201).json({ duplicate: done.duplicate, entry: entryView(done.entry, new Set()), balance: repo.balanceOf(m.id) });
+    res.status(done.duplicate ? 200 : 201).json({ duplicate: done.duplicate, entry: entryView(done.entry, new Set(), canCancel(done.entry)), balance: repo.balanceOf(m.id) });
   }));
 
   // Un enfant signale un exploit : rien n'est versé tant qu'un parent n'a pas répondu.
@@ -557,7 +560,7 @@ export function epopeeRouter(members: () => Member[], gabarit: () => Gabarit): R
     const out = repo.cancel(e, me(req).id);
     if ('refusal' in out) { res.status(409).json({ error: out.refusal }); return; }
     log.info(`Épopée : ${me(req).name} annule une écriture de ${nameOf(e.member_id) ?? 'un membre parti'} (${out.entry.delta} écu${Math.abs(out.entry.delta) > 1 ? 's' : ''}).`);
-    res.status(201).json({ entry: entryView(out.entry, new Set()), balance: repo.balanceOf(e.member_id) });
+    res.status(201).json({ entry: entryView(out.entry, new Set(), false), balance: repo.balanceOf(e.member_id) });
   }));
 
   return r;
