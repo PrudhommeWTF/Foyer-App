@@ -8,15 +8,17 @@ import crypto from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { Contexte, appel, arreter, brut, demarrer } from './securite-helpers';
 import { jpeg, png } from './equipements-fixtures';
-import { AMORCE, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, kindOf, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
+import { AMORCE, CANCEL_WINDOW_MIN, Entry, REWARD_COST_MIN, balance, bravoEcus, canExchange, cancelRefusal, dateInput, dayAccepted, dayBefore, exploitInput, kindOf, optionalText, pactTopUp, rewardInput, stepsInput } from '../src/epopee/rules';
 import { parseExploits, parseGabarit, parseRewards } from '../src/epopee/gabarit';
 import { EpopeeEvent, emit, eventMessage, onEpopeeEvent, recipients } from '../src/epopee/events';
 import { BilanInput, computeBilan, councilPdf, eventful, lines, weekLine, weeklyHits } from '../src/epopee/bilan';
 
 describe('règles', () => {
-  const amorce: Entry = { id: 'a', kind: 'amorce', delta: AMORCE, ref: null };
-  const bravo: Entry = { id: 'b', kind: 'bravo', delta: 2, ref: null };
-  const annul: Entry = { id: 'c', kind: 'annulation', delta: -2, ref: 'b' };
+  // `T` is the moment of every entry below; `now` a minute later, well inside the window.
+  const T = '2026-11-27T18:00:00.000Z', now = Date.parse(T) + 60_000;
+  const amorce: Entry = { id: 'a', kind: 'amorce', delta: AMORCE, ref: null, at: T };
+  const bravo: Entry = { id: 'b', kind: 'bravo', delta: 2, ref: null, at: T };
+  const annul: Entry = { id: 'c', kind: 'annulation', delta: -2, ref: 'b', at: T };
 
   it('le solde est la somme des écritures', () => {
     assert.equal(balance([]), 0);
@@ -28,15 +30,25 @@ describe('règles', () => {
     for (const v of [0, 4, -1, 1.5, '2', null, undefined, NaN]) assert.equal(bravoEcus(v), null, String(v));
   });
   it('l’amorce ne se reprend pas, une annulation ne s’annule pas, une écriture ne s’annule qu’une fois', () => {
-    assert.match(cancelRefusal(amorce, [amorce, bravo], AMORCE)!, /acquis/);
-    assert.match(cancelRefusal(annul, [amorce, bravo, annul], AMORCE)!, /ne s’annule pas/);
-    assert.match(cancelRefusal(bravo, [amorce, bravo, annul], AMORCE)!, /déjà annulée/);
-    assert.equal(cancelRefusal(bravo, [amorce, bravo], AMORCE), null);
+    assert.match(cancelRefusal(amorce, [amorce, bravo], AMORCE, now)!, /acquis/);
+    assert.match(cancelRefusal(annul, [amorce, bravo, annul], AMORCE, now)!, /ne s’annule pas/);
+    assert.match(cancelRefusal(bravo, [amorce, bravo, annul], AMORCE, now)!, /déjà annulée/);
+    assert.equal(cancelRefusal(bravo, [amorce, bravo], AMORCE, now), null);
   });
   it('reprendre des écus ne fait jamais passer la besace sous son plancher', () => {
     // Des écus déjà dépensés (une écriture négative à venir avec l'Armurerie) : le bravo ne se reprend plus.
-    const depense = { id: 'd', kind: 'annulation', delta: -2, ref: 'x' } as Entry;
-    assert.match(cancelRefusal(bravo, [amorce, bravo, depense], AMORCE)!, /plancher/);
+    const depense = { id: 'd', kind: 'annulation', delta: -2, ref: 'x', at: T } as Entry;
+    assert.match(cancelRefusal(bravo, [amorce, bravo, depense], AMORCE, now)!, /plancher/);
+  });
+  it('annuler corrige une erreur sur le moment : passé le délai, ce qui est gagné est gagné', () => {
+    const t0 = Date.parse(T), fin = CANCEL_WINDOW_MIN * 60_000;
+    assert.equal(cancelRefusal(bravo, [amorce, bravo], AMORCE, t0), null, 'tout de suite');
+    assert.equal(cancelRefusal(bravo, [amorce, bravo], AMORCE, t0 + fin - 1), null, 'à la dernière milliseconde du délai');
+    assert.match(cancelRefusal(bravo, [amorce, bravo], AMORCE, t0 + fin)!, /plus de 10 minutes.+ce qui est gagné est gagné/);
+    assert.match(cancelRefusal(bravo, [amorce, bravo], AMORCE, t0 + 24 * 3600_000)!, /ne s’annule plus/, 'le bravo de la veille ne se reprend pas');
+    for (const kind of ['etape', 'exploit'] as const) assert.match(cancelRefusal({ ...bravo, kind }, [amorce, bravo], AMORCE, t0 + fin)!, /ne s’annule plus/, kind);
+    assert.match(cancelRefusal({ ...bravo, at: 'pas une date' }, [amorce, bravo], AMORCE, t0)!, /ne s’annule plus/, 'une date illisible compte comme ancienne');
+    assert.match(cancelRefusal({ ...bravo, at: T }, [amorce, bravo, annul], AMORCE, t0 + fin)!, /déjà annulée/, 'la raison la plus précise d’abord');
   });
 });
 
@@ -99,8 +111,8 @@ describe('Armurerie : règles', () => {
     assert.equal(pactTopUp(0, AMORCE), AMORCE); assert.equal(pactTopUp(3, AMORCE), 2); assert.equal(pactTopUp(12, AMORCE), 0);
   });
   it('un trésor échangé ne se reprend pas', () => {
-    const e: Entry = { id: 'echange:q', kind: 'echange', delta: -20, ref: null };
-    assert.match(cancelRefusal(e, [e], AMORCE)!, /pacte est scellé/);
+    const e: Entry = { id: 'echange:q', kind: 'echange', delta: -20, ref: null, at: '2026-11-27T18:00:00.000Z' };
+    assert.match(cancelRefusal(e, [e], AMORCE, Date.parse(e.at))!, /pacte est scellé/);
   });
   it('textes facultatifs et dates', () => {
     assert.equal(optionalText(undefined, 10), ''); assert.equal(optionalText('  ', 10), ''); assert.equal(optionalText(' ok ', 10), 'ok');
@@ -225,6 +237,7 @@ describe('bravos et annulation', () => {
     bravo = uuid();
     const un = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: bravo, ecus: 2, note: '  Table mise sans rappel ' }, ctx.jetons.membre);
     assert.equal(un.status, 201); assert.equal(un.json.balance, AMORCE + 2); assert.equal(un.json.entry.note, 'Table mise sans rappel');
+    assert.equal(un.json.entry.cancellable, true, 'un bravo tout juste donné s’annule encore');
     const deux = await appel(ctx.base, 'POST', `/epopee/membres/${lena}/bravos`, { id: bravo, ecus: 2 }, ctx.jetons.membre);
     assert.equal(deux.status, 200); assert.equal(deux.json.duplicate, true); assert.equal(deux.json.balance, AMORCE + 2);
   });
@@ -248,8 +261,9 @@ describe('bravos et annulation', () => {
     assert.equal(un.status, 201); assert.equal(un.json.entry.delta, -2); assert.equal(un.json.balance, AMORCE);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/journal/${bravo}/annulation`, undefined, ctx.jetons.admin)).status, 409);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/journal/${un.json.entry.id}/annulation`, undefined, ctx.jetons.admin)).status, 409);
-    const j = (await besace(ctx.jetons.membre)).json.journal as { id: string; kind: string; cancelled: boolean }[];
+    const j = (await besace(ctx.jetons.membre)).json.journal as { id: string; kind: string; cancelled: boolean; cancellable: boolean }[];
     assert.equal(j.length, 3, 'rien n’est effacé');
+    assert.deepEqual(j.map((e) => [e.kind, e.cancellable]), [['annulation', false], ['bravo', false], ['amorce', false]], 'le journal dit ce qui s’annule encore : ici plus rien');
     assert.equal(j.find((e) => e.id === bravo)!.cancelled, true);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/journal/${j.find((e) => e.kind === 'amorce')!.id}/annulation`, undefined, ctx.jetons.admin)).status, 409);
     assert.equal((await appel(ctx.base, 'POST', `/epopee/journal/${uuid()}/annulation`, undefined, ctx.jetons.admin)).status, 404);

@@ -14,7 +14,16 @@ export const NOTE_MAX = 120;
 
 export const KINDS = ['amorce', 'bravo', 'etape', 'exploit', 'echange', 'annulation'] as const;
 export type Kind = typeof KINDS[number];
-export interface Entry { id: string; kind: Kind; delta: number; ref: string | null; }
+export interface Entry { id: string; kind: Kind; delta: number; ref: string | null; at: string; }
+
+/**
+ * Une écriture s'annule pendant ce délai, pas après. Annuler sert à corriger une
+ * erreur sur le moment (le mauvais enfant, un tap de trop) ; passé ce délai, ce
+ * qui est gagné est gagné, et un bravo de la veille ne se reprend pas parce que
+ * la soirée a mal tourné. C'est ce qui empêche l'annulation de devenir le
+ * retrait d'écus que le serment exclut.
+ */
+export const CANCEL_WINDOW_MIN = 10;
 
 export const balance = (entries: Entry[]): number => entries.reduce((s, e) => s + e.delta, 0);
 
@@ -22,15 +31,19 @@ export const balance = (entries: Entry[]): number => entries.reduce((s, e) => s 
 export const bravoEcus = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= BRAVO_MAX ? v : null);
 
 /**
- * Pourquoi cette écriture ne s'annule pas, ou null si elle s'annule. L'amorce
- * est acquise, une annulation ne s'annule pas, une écriture ne s'annule qu'une
- * fois, et reprendre des écus ne fait jamais passer la besace sous son plancher.
+ * Pourquoi cette écriture ne s'annule pas à l'instant `now`, ou null si elle
+ * s'annule. L'amorce est acquise, une annulation ne s'annule pas, un trésor
+ * échangé non plus, une écriture ne s'annule qu'une fois et seulement dans les
+ * minutes qui suivent, et reprendre des écus ne fait jamais passer la besace
+ * sous son plancher.
  */
-export function cancelRefusal(entry: Entry, entries: Entry[], floor: number): string | null {
+export function cancelRefusal(entry: Entry, entries: Entry[], floor: number, now: number): string | null {
   if (entry.kind === 'amorce') return 'Les écus d’amorce sont acquis : ils ne se reprennent pas.';
   if (entry.kind === 'annulation') return 'Une annulation ne s’annule pas.';
   if (entry.kind === 'echange') return 'Un trésor échangé ne se reprend pas : le pacte est scellé.';
   if (entries.some((e) => e.ref === entry.id)) return 'Cette écriture est déjà annulée.';
+  // An unreadable date counts as old: when in doubt, what was earned stays earned.
+  if (!(now - Date.parse(entry.at) < CANCEL_WINDOW_MIN * 60_000)) return `Cette écriture a plus de ${CANCEL_WINDOW_MIN} minutes : elle ne s’annule plus. Annuler sert à corriger une erreur sur le moment ; ce qui est gagné est gagné.`;
   if (balance(entries) - entry.delta < floor) return 'Ces écus ont déjà servi : les reprendre ferait passer la besace sous son plancher.';
   return null;
 }

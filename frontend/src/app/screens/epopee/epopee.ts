@@ -163,6 +163,7 @@ const COINS_MAX = 30;
                 @if (j.length) {
                   <details class="journal" [open]="store.isChild()">
                     <summary>{{ store.isChild() ? 'Ce que tu as gagné' : 'Journal' }}</summary>
+                    @if (!store.isChild()) { <p class="j-note">Une écriture s’annule dans les minutes qui suivent, pour corriger une erreur. Ensuite, ce qui est gagné est gagné.</p> }
                     @for (e of j; track e.id) {
                       <div class="line" [class.off]="e.cancelled || e.kind === 'annulation'">
                         <div class="what">
@@ -170,7 +171,7 @@ const COINS_MAX = 30;
                           <div class="s">{{ sub(e) }}</div>
                         </div>
                         <div class="d" [class.neg]="e.delta < 0">{{ e.delta > 0 ? '+' : '' }}{{ e.delta }}</div>
-                        @if (!store.isChild() && e.kind !== 'amorce' && e.kind !== 'annulation' && e.kind !== 'echange' && !e.cancelled) { <button class="undo" [disabled]="busy()" (click)="annuler(k, e)">Annuler</button> }
+                        @if (!store.isChild() && e.cancellable) { <button class="undo" [disabled]="busy()" (click)="annuler(k, e)">Annuler</button> }
                       </div>
                     }
                   </details>
@@ -275,6 +276,7 @@ const COINS_MAX = 30;
     .ecus button.on { border-color: #D99427; background: #FDF0DA; color: #7D5400; }
     .journal { margin-top: 20px; }
     .journal summary { cursor: pointer; font-size: 13px; font-weight: 800; color: var(--ink3); padding: 8px 0; }
+    .j-note { margin: 2px 0 10px; font-size: 12.5px; font-weight: 600; color: var(--ink3); line-height: 1.45; }
     .line { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line2); }
     .what { flex: 1; min-width: 0; }
     .t { font-size: 14.5px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }

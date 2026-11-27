@@ -5,7 +5,9 @@
 export type StepStatus = 'fait' | 'saute';
 export interface Step { id: string; title: string; hint: string; icon: string; seconds: number; ecus: number; status: StepStatus | null; }
 export interface Routine { id: string; kind: 'matin' | 'journee' | 'soir'; title: string; time: string; startedAt: string | null; endedAt: string | null; pauses: number; steps: Step[]; }
-export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'exploit' | 'echange' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean; }
+export interface Entry { id: string; kind: 'amorce' | 'bravo' | 'etape' | 'exploit' | 'echange' | 'annulation'; delta: number; note: string | null; ref: string | null; by: string | null; at: string; cancelled: boolean;
+  /** Can it still be cancelled? The server says so: only for a few minutes after the gesture, to fix a mistake. */
+  cancellable: boolean; }
 /** An agreed feat of the household: what a parent credits in one tap, what a child may report. */
 export interface Exploit { id: string; title: string; ecus: number; }
 /** A feat reported by a child: waiting for a parent, granted, or "not quite" (nothing is taken away). */
