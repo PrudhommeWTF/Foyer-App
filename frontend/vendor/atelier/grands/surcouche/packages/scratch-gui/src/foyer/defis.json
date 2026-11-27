@@ -93,5 +93,23 @@
    "score-4.png",
    "score-4.png"
   ]
+ },
+ {
+  "id": "video",
+  "name": "Attrape Boulon avec la main",
+  "desc": "Avec la caméra : passe la main sur Boulon, il fait pop et s’enfuit.",
+  "camera": true,
+  "steps": [
+   "En bas à gauche, touche le bouton bleu et choisis « Détection vidéo ». Le navigateur demande la caméra : accepte. Tu te vois derrière Boulon !",
+   "Dans les nouveaux blocs verts, prends [video:quand le mouvement de la vidéo > 10] : ce script démarre dès que quelque chose bouge sur Boulon.",
+   "Accroche dessous [son:jouer le son pop jusqu’au bout], puis [mouvement:aller à position aléatoire].",
+   "Passe la main sur Boulon : pop, il file ailleurs ! Rattrape-le. Il part tout seul ? Remplace 10 par 30."
+  ],
+  "images": [
+   null,
+   "video-2.png",
+   "video-3.png",
+   "video-3.png"
+  ]
  }
 ]

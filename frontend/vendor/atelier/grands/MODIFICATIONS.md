@@ -56,9 +56,10 @@ Tout est dans `surcouche/…/foyer/` (`index.jsx`, `storage.js`, `local.js`), sa
 
 ## Défis guidés
 
-Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : cinq pour commencer, écrits pour Foyer. Chaque étape a son texte et l'image du script tel qu'il doit être à ce moment-là.
+Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : six, écrits pour Foyer. Chaque étape a son texte et l'image du script tel qu'il doit être à ce moment-là.
 
 - `surcouche/…/foyer/defis.json` : les défis (nom, phrase d'accroche, étapes, et l'image de chaque étape). Une étape nomme ses blocs entre crochets, `[mouvement:avancer de 10 pas]`, affichés dans la couleur de leur famille. `construire.sh` le recopie dans `dist/` pour que l'écran de Foyer les propose.
+- Un défi marqué `"camera": true` a besoin de la caméra (détection vidéo) : il n'est proposé ni par l'écran de Foyer ni par la liste « Défis » de l'éditeur (`containers/tips-library.jsx`, qui lit `camera` sur le stockage de Foyer) quand le foyer a éteint la caméra pour l'Atelier. Une étape sans script (ajouter l'extension) n'a pas d'image. Le texte d'une étape est borné en largeur (`foyer/index.css`) : sans image, une longue phrase étirait la carte hors de la fenêtre.
 - `surcouche/…/foyer/defis/*.png` : les images, **jamais dessinées à la main**. `outils/images-defis.cjs` écrit le script de chaque étape dans un projet, l'ouvre dans l'éditeur lui-même et photographie ses blocs : ce sont donc toujours les vrais blocs, en français, tels que l'enfant les verra. Deux étapes au même script partagent leur image ; les scripts longs sont rangés sur deux colonnes pour tenir dans la carte. `foyer/index.css` les montre à la moitié de leur taille (elles sont prises au double, pour rester nettes sur un iPad).
 - `surcouche/…/lib/libraries/decks/index.jsx` en fait les cartes ; `translate-image.js` rend l'image telle quelle (il n'y a qu'une langue).
 - `components/cards/cards.jsx` : une étape peut être du texte seul (l'image était obligatoire).
