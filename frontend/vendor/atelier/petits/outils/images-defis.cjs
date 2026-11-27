@@ -29,7 +29,11 @@ const SCRIPTS = {
     'saute': [['onclick'], ['hop', 2], ['endstack']],
     'danse': [['onflag'], ['repeat', 4, [['hop', 2], ['right', 3]]], ['endstack']],
     'grandit': [['onclick'], ['grow', 4], ['playsnd', 'pop.mp3'], ['shrink', 4], ['endstack']],
-    'sans-fin': [['onflag'], ['forward', 2], ['back', 2], ['forever']]
+    'sans-fin': [['onflag'], ['forward', 2], ['back', 2], ['forever']],
+    'cache-cache': [['onclick'], ['hide'], ['wait', 10], ['show'], ['endstack']],
+    'pirouette': [['onflag'], ['right', 12], ['endstack']],
+    'escalier': [['onflag'], ['repeat', 3, [['forward', 2], ['up', 2]]], ['endstack']],
+    'course': [['onflag'], ['setspeed', 2], ['forward', 10], ['home'], ['endstack']]
 };
 
 // The editor's own format: [name, value, x, y], the blocks of a loop as a fifth entry

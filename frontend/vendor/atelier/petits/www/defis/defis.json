@@ -28,5 +28,29 @@
   "name": "Sans jamais s’arrêter",
   "desc": "Boulon avance et recule, encore et encore.",
   "image": "sans-fin.png"
+ },
+ {
+  "id": "cache-cache",
+  "name": "Cache-cache",
+  "desc": "Touche Boulon : il disparaît, attend un peu, puis revient.",
+  "image": "cache-cache.png"
+ },
+ {
+  "id": "pirouette",
+  "name": "La pirouette",
+  "desc": "Boulon fait un tour complet sur lui-même.",
+  "image": "pirouette.png"
+ },
+ {
+  "id": "escalier",
+  "name": "L’escalier",
+  "desc": "Boulon monte trois marches : un pas en avant, un pas vers le haut, et on recommence.",
+  "image": "escalier.png"
+ },
+ {
+  "id": "course",
+  "name": "Boulon court",
+  "desc": "Boulon traverse la page à toute vitesse, puis rentre à sa place.",
+  "image": "course.png"
  }
 ]

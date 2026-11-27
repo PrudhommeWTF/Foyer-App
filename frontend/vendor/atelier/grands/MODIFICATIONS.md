@@ -56,7 +56,7 @@ Tout est dans `surcouche/…/foyer/` (`index.jsx`, `storage.js`, `local.js`), sa
 
 ## Défis guidés
 
-Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : six, écrits pour Foyer. Chaque étape a son texte et l'image du script tel qu'il doit être à ce moment-là.
+Les cartes de l'éditeur, qui portaient ses tutoriels, portent les défis de l'Atelier : dix, écrits pour Foyer. Chaque étape a son texte et l'image du script tel qu'il doit être à ce moment-là.
 
 - `surcouche/…/foyer/defis.json` : les défis (nom, phrase d'accroche, étapes, et l'image de chaque étape). Une étape nomme ses blocs entre crochets, `[mouvement:avancer de 10 pas]`, affichés dans la couleur de leur famille. `construire.sh` le recopie dans `dist/` pour que l'écran de Foyer les propose.
 - Un défi marqué `"camera": true` a besoin de la caméra (détection vidéo) : il n'est proposé ni par l'écran de Foyer ni par la liste « Défis » de l'éditeur (`containers/tips-library.jsx`, qui lit `camera` sur le stockage de Foyer) quand le foyer a éteint la caméra pour l'Atelier. Une étape sans script (ajouter l'extension) n'a pas d'image. Le texte d'une étape est borné en largeur (`foyer/index.css`) : sans image, une longue phrase étirait la carte hors de la fenêtre.

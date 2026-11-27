@@ -34,7 +34,8 @@ const FAMILIES = {
     capteurs: ['#5CB1D6', '#FFFFFF'],
     operateurs: ['#59C059', '#FFFFFF'],
     variables: ['#FF8C1A', '#FFFFFF'],
-    video: ['#0FBD8C', '#FFFFFF']
+    video: ['#0FBD8C', '#FFFFFF'],
+    stylo: ['#0FBD8C', '#FFFFFF']
 };
 
 const blockStyle = family => ({
