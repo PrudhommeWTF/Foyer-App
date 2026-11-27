@@ -16,7 +16,7 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 | Les parents prévenus sur le moment quand un enfant attend leur réponse | |
 | L'écran s'ouvre sans réseau, et les routines s'y déroulent | |
 
-Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse »), les outils d'assistant, le gain d'écus par une tâche cochée.
+Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse ») et le gain d'écus par une tâche cochée.
 
 ## L'alliance, à l'usage
 
@@ -167,7 +167,7 @@ Tables relationnelles `epo_*` dans `foyer.db` (donc dans les sauvegardes), hors 
 | le bilan de la semaine, les notes du conseil, le PDF | refusé (403) | oui |
 | enrôler, retirer, régler (routines, exploits, affichage), créditer, répondre à une demande, annuler | refusé (403) | oui |
 
-Un jeton d'accès (assistant, script) n'entre pas dans l'API du module. L'écran figure au menu d'un enfant (`ECRANS_ENFANT`), sous « Mon épopée » à l'accueil.
+Un jeton d'accès (assistant, script) n'entre pas dans l'API du module : l'assistant passe par ses outils `epopee_*` (`docs/assistants.md`), avec les mêmes règles. Un enfant n'y lit que sa besace ; le bilan et les écritures (bravo, crédit d'un exploit convenu, réponse à un exploit signalé, note du conseil) sont réservés aux adultes et à un jeton d'écriture. L'assistant n'enrôle pas, ne scelle pas de pacte, n'échange pas de trésor, ne règle pas de routine et n'annule rien. L'écran figure au menu d'un enfant (`ECRANS_ENFANT`), sous « Mon épopée » à l'accueil.
 
 ## API
 

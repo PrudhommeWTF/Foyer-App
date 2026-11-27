@@ -174,6 +174,32 @@ réglage ; demander ceux de son frère est refusé. Le PDF « Pour la maîtresse
 ne sort pas par l'assistant : il se télécharge depuis l'écran. Module éteint :
 les huit outils disparaissent.
 
+### Épopée
+
+Quand le module **Épopée** est actif (il l'est par défaut), huit outils lisent
+les besaces des enfants et font ce qu'un parent fait d'un geste.
+
+| Outil | Ce qu'il fait |
+|---|---|
+| `epopee_besace` | La besace d'un enfant (ou de chacun, sans `enfant`) : solde, écus d'amorce, quête en cours et ce qui manque, trésor gagné à vivre, exploits signalés qui attendent une réponse, routines du jour, dernières écritures |
+| `epopee_routines` | Les routines d'un enfant, étape par étape : durée, écus, et ce qui est fait, passé ou à faire aujourd'hui |
+| `epopee_catalogue` | Les exploits convenus et leur valeur, les récompenses de l'Armurerie et leur prix |
+| `epopee_bilan` (adultes) | Le bilan de la semaine (`cette-semaine`, `semaine-derniere`) pour le conseil de famille : les phrases de l'écran, les mots des bravos, et ce que le conseil a noté |
+| `epopee_bravo` (écriture, adultes) | Donne un bravo : `ecus` de 1 à 3, `mot` (ce que vous avez vu, que l'enfant relit) |
+| `epopee_exploit_crediter` (écriture, adultes) | Crédite un exploit convenu, par son nom ou un fragment, **à son montant convenu** : le montant ne se choisit pas |
+| `epopee_demande_repondre` (écriture, adultes) | Répond à un exploit signalé par un enfant : `valider` true verse l'écu, false répond « pas tout à fait » sans rien retirer |
+| `epopee_conseil_noter` (écriture, adultes) | Ajoute une décision aux notes du conseil de famille de la semaine (ou les remplace avec `remplacer`) |
+
+**Un enfant ne lit que sa besace** et ses routines, plus le catalogue ; ni
+bilan ni écriture. Demander la besace de son frère est refusé.
+
+**Ce que l'assistant ne fait pas, exprès** : enrôler un enfant (c'est
+l'alliance, qui se fait côte à côte dans l'application), sceller un pacte,
+échanger un trésor, régler une routine, annuler une écriture. Ce sont des
+décisions à prendre avec l'enfant, devant l'écran. Un bravo ou un crédit donné
+par erreur se reprend depuis le journal de l'application. Chaque écriture est
+journalisée avec le nom du jeton. Module éteint : les huit outils disparaissent.
+
 ## Brancher chaque client
 
 Remplacez `foyer.exemple.fr` par l'adresse de votre instance et `foyer_…` par
@@ -260,6 +286,11 @@ un assistant ».
 - « Mets un rendez-vous mercredi à 9h30 : contrôle technique. »
 - « Décale le contrôle technique à 10h et mets le lieu : garage du centre. »
 - « Cherche une recette de gratin et donne-moi les ingrédients. »
+- « Où en est la besace de Raphaël ? »
+- « Donne un bravo de 2 écus à Raphaël : il a consolé son frère. »
+- « Raphaël a mis la table. » (l'exploit convenu est crédité à son montant)
+- « Valide l'exploit que Gaëtan a signalé. »
+- « Fais-moi le bilan de la semaine pour le conseil de famille. »
 - « Note le gratin dauphinois pour le dîner de samedi, on sera 6. »
 - « Ajoute au carnet ma recette de cookies (voici les ingrédients et les étapes). »
 - « Ajoute la piscine de Léa le mardi de 17h à 18h, et publie-la à l'agenda. »
