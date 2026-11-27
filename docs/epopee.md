@@ -16,7 +16,9 @@ Les écus que les enfants gagnent par leurs efforts : une besace par enfant, des
 | Les parents prévenus sur le moment quand un enfant attend leur réponse | |
 | L'écran s'ouvre sans réseau, et les routines s'y déroulent | |
 
-Hors du plan pour l'instant : le retrait d'écus (« coût de la réponse ») et le gain d'écus par une tâche cochée.
+Reste hors du module pour l'instant : le gain d'écus par une tâche cochée.
+
+**L'Épopée n'a pas de retrait d'écus, et n'en aura pas.** Les maquettes d'origine prévoyaient un « coût de la réponse » (retirer un écu pour un comportement convenu). Il a été écarté par choix, pas reporté : le serment fait promettre au parent « Je ne me sers jamais des écus pour te punir », et cette promesse est sur le parchemin que l'enfant a scellé. Voir « Pas de retrait d'écus » plus bas.
 
 ## L'alliance, à l'usage
 
@@ -31,7 +33,7 @@ Le serment scellé, le **parchemin** s'affiche : les lois, les promesses des deu
 
 On peut s'arrêter en route : ce qui est fait reste fait. Un enfant enrôlé sans serment (avant ce lot, ou parcours interrompu) voit ses parents invités à « Faire l'alliance » ; le parcours saute alors ce qui est déjà fait. Le serment ne se scelle qu'une fois, et garde sa date.
 
-Les promesses du parent ne sont pas décoratives. « Je ne me sers jamais des écus pour te punir » correspond à ce que l'application permet : elle n'a aucun retrait d'écus.
+Les promesses du parent ne sont pas décoratives. « Je ne me sers jamais des écus pour te punir » correspond à ce que l'application permet : elle n'a aucun retrait d'écus, et c'est un choix arrêté (voir « Pas de retrait d'écus »).
 
 ## Le conseil de famille, à l'usage
 
@@ -123,19 +125,39 @@ Elles sont dans `backend/src/epopee/rules.ts`, pures et testées. Le serveur les
 
 - **La besace ne commence jamais vide.** L'enrôlement verse 5 écus d'amorce, une seule fois. Ils forment le **plancher** de la besace : ils ne se reprennent pas.
 - **Rien ne s'efface.** Le solde est la somme d'un grand livre en ajout seul. Annuler un bravo, c'est écrire sa contre-écriture ; les deux lignes restent.
-- **Une écriture ne s'annule qu'une fois**, une annulation ne s'annule pas, et reprendre des écus ne fait jamais passer la besace sous son plancher (quand l'Armurerie existera : un bravo déjà dépensé ne se reprend plus).
+- **Une écriture ne s'annule qu'une fois**, une annulation ne s'annule pas, et annuler une écriture ne fait jamais passer la besace sous son plancher : un bravo dont les écus ont déjà été dépensés dans un trésor ne s'annule plus.
 - **Un bravo vaut 1, 2 ou 3 écus.** Le geste porte un identifiant donné par l'appareil : reçu deux fois, il ne compte qu'une fois.
 - **Une étape ne se note qu'une fois par jour** (faite ou passée), et son écu n'est versé qu'une fois : l'identifiant de l'écriture se déduit de l'étape et du jour. L'appareil annonce aujourd'hui ou hier (heure de Paris), rien d'autre.
 - **Reprendre l'écu d'une étape** (un adulte, depuis le journal) ne rouvre pas l'étape : elle reste notée pour ce jour.
 - **Un exploit convenu se verse à son montant**, jamais à celui qu'annonce l'appareil. La demande d'un enfant validée est versée sous l'identifiant de la demande : une seule fois, quoi que fassent deux parents.
-- **Un échange dépense le prix entier**, écus d'amorce compris : le plancher ne protège que des retraits, pas de ce que l'enfant choisit de dépenser. Un trésor échangé ne se reprend pas.
+- **Un échange dépense le prix entier**, écus d'amorce compris : le plancher protège de ce qu'un parent annule, pas de ce que l'enfant choisit de dépenser. Un trésor échangé ne se reprend pas.
 - **Une quête ne commence jamais sous l'amorce** : quand un pacte est scellé alors que la besace est passée sous son plancher (après un échange), elle y est ramenée. C'est le seul cas où l'amorce est versée à nouveau, et c'est un parent qui le déclenche.
 - **Un trésor coûte au moins deux fois l'amorce** (10 écus) : la besace d'amorce seule n'achète rien.
 - **Une quête garde son prix** : changer ou retirer une récompense ne touche pas une quête déjà choisie.
 - **Abandonner une quête ne retire rien** de la besace.
 - **Retirer un enfant** de l'Épopée ne supprime rien : réenrôlé, il retrouve sa besace telle quelle, sans seconde amorce.
 
-Décision à venir avec l'Armurerie, déjà arrêtée : le plancher ne protège que des retraits. Échanger un trésor dépense son coût entier, et chaque nouvelle quête repart avec une amorce.
+## Pas de retrait d'écus
+
+Aucun geste de l'application ne retire un écu à un enfant pour un comportement. C'est une décision de conception, tenue par le serment : la deuxième loi dit « Ce qui est gagné est gagné », et le parent promet « Je ne me sers jamais des écus pour te punir ».
+
+Trois choses font baisser une besace, et aucune n'est une sanction :
+
+| Ce qui fait baisser la besace | Qui le décide | Ce que c'est |
+|---|---|---|
+| L'échange d'un trésor | l'enfant | il dépense ses écus pour ce qu'il a visé |
+| L'annulation d'une écriture | un adulte, depuis le journal | la correction d'une erreur : un bravo donné au mauvais enfant, un crédit tapé deux fois |
+| La remise à zéro du module | un administrateur | tout le module repart de rien, sur confirmation par saisie |
+
+**L'annulation n'est pas un retrait déguisé, mais l'application ne peut pas l'empêcher de le devenir.** Elle ne demande pas de motif : un parent pourrait annuler un bravo de la veille parce que la soirée a mal tourné. Ce serait rompre le serment. Ce qui le rend visible plutôt qu'impossible :
+
+- rien ne s'efface : l'écriture annulée et sa contre-écriture restent toutes deux au journal, avec leur auteur ;
+- l'annulation ne fait jamais passer la besace sous son plancher : les écus d'amorce sont hors d'atteinte, et un trésor échangé ne se reprend pas ;
+- l'assistant ne sait pas annuler : il faut ouvrir le journal de l'enfant.
+
+Si un comportement pose problème, le module propose autre chose que de reprendre : simplifier une étape, déplacer une routine, en parler au conseil de famille (« Ce qu'on ajuste »).
+
+**Pour qui reprendrait ce code** : n'ajoutez ni écriture négative décidée par un adulte, ni réglage qui l'autorise, ni outil d'assistant qui le fasse, sans réécrire d'abord le serment avec l'enfant. Le parchemin a pu être imprimé et accroché : ce que l'application fait doit rester ce qu'il dit.
 
 ## Ce que Foyer retient
 
