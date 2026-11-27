@@ -615,7 +615,7 @@ export const REGISTRY = [
     key: 'atelierCamera',
     type: 'bool', scope: 'foyer', section: 'atelier', module: 'Atelier',
     label: 'Autoriser la caméra dans l’Atelier',
-    desc: 'Pour remplir une forme d’un dessin avec une photo prise sur le moment, dans le niveau « Petits codeurs ». Les photos restent sur votre serveur. Désactivé, le bouton de l’appareil photo disparaît et les pages de l’Atelier n’ont plus le droit de demander la caméra ; les photos déjà prises restent dans les projets.',
+    desc: 'Chez les « Petits codeurs », pour remplir une forme d’un dessin avec une photo prise sur le moment : la photo reste sur votre serveur. Chez les « Grands codeurs », pour la détection vidéo (un personnage réagit quand on bouge devant l’écran) : l’image de la caméra reste sur l’appareil, elle n’est ni envoyée ni enregistrée. Désactivé, le bouton de l’appareil photo et la détection vidéo disparaissent, et les pages de l’Atelier n’ont plus le droit de demander la caméra ; les photos déjà prises restent dans les projets.',
     default: true,
   },
   {

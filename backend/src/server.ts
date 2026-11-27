@@ -174,8 +174,8 @@ const ATELIER_PAGE = /^\/atelier\/(petits|grands)\/[^/]*\.html$/;
 app.use((req, res, next) => {
   const level = ATELIER_PAGE.exec(req.path)?.[1];
   if (!level || effectiveSetting('modAtelier') === false) { res.setHeader('Permissions-Policy', PERMISSIONS); next(); return; }
-  // La caméra ne sert qu'à l'éditeur de dessin des petits : celui des grands ne la reçoit pas.
-  const camera = level === 'petits' && effectiveSetting('atelierCamera') !== false;
+  // La caméra sert à l'éditeur de dessin des petits et à la détection vidéo des grands.
+  const camera = effectiveSetting('atelierCamera') !== false;
   const micro = effectiveSetting('atelierMicro') !== false;
   res.setHeader('Permissions-Policy', PERMISSIONS.replace('camera=()', camera ? 'camera=(self)' : 'camera=()').replace('microphone=()', micro ? 'microphone=(self)' : 'microphone=()'));
   next();

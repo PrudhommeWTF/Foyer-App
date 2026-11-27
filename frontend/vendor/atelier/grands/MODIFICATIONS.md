@@ -18,13 +18,13 @@ Règle : on **adapte**, on ne réécrit pas. Tout écart est listé ici avec sa 
 
 ## Aucun serveur extérieur
 
-- **Extensions** : seules Musique et Stylo restent (`extension-manager.js`, `libraries/extensions/index.jsx`). Sont retirées, code compris (`retraits.txt`) : synthèse vocale et traduction (serveurs de Scratch), reconnaissance vocale, détection de visage (elle se rabattait sur un CDN), détection vidéo (caméra, à rouvrir plus tard), et le matériel (micro:bit, LEGO, Vernier, Makey Makey).
+- **Extensions** : seules Musique, Stylo et Détection vidéo restent (`extension-manager.js`, `libraries/extensions/index.jsx`). Sont retirées, code compris (`retraits.txt`) : synthèse vocale et traduction (serveurs de Scratch), reconnaissance vocale, détection de visage (elle se rabattait sur un CDN), et le matériel (micro:bit, LEGO, Vernier, Makey Makey). La détection vidéo est le code d'origine, inchangé : elle analyse l'image de la caméra dans la page et n'appelle aucun serveur.
 - **Stockage** (`surcouche/…/foyer/storage.js`) : remplace celui qui parlait aux serveurs de Scratch. Les projets et leurs fichiers vivent dans Foyer (`/api/atelier`), sous la session de celui qui est connecté. Voir « Enregistrer dans Foyer » plus bas.
 - **Hôtes par défaut vidés** : `project-fetcher-hoc.jsx` (projets, ressources), `legacy-library-asset-url.ts` (vignettes), `scratch-link-websocket.js` (matériel), `runtime.js` (liste des domaines de Scratch).
 - **Tutoriels** : les 1 481 images et vidéos sont supprimées (remplacées par nos défis, voir plus bas), le lecteur de vidéos en ligne (`cards.jsx`) est retiré, code compris, les boutons « Tutoriels » et « Débogage » de la barre sont retirés (`menu-bar.jsx`).
 - **Liens** vers le site de Scratch ou d'autres sites, dans des fenêtres de l'éditeur (navigateur non pris en charge, WebGL, télémétrie, variables en ligne, mise à jour d'une carte) : remplacés par une ancre vide.
 - **Statistiques** : `lib/analytics.js` est remplacé par un module qui ne fait rien.
-- **Page de débogage** de la détection vidéo : retirée de la construction de la machine virtuelle (`scratch-vm/webpack.config.js`), avec l'extension.
+- **Page de débogage** de la détection vidéo : retirée de la construction de la machine virtuelle (`scratch-vm/webpack.config.js`) et supprimée (`retraits.txt`) ; l'extension, elle, est gardée.
 - **Installation** : le script `prepare`, qui téléchargeait un micrologiciel chez Scratch, est retiré (`package.json`) ; le module qui l'attendait est un fichier vide (`generated/microbit-hex-url.cjs`).
 
 ## Pas d'`eval`
@@ -75,7 +75,11 @@ et `./construire.sh`. L'outil demande Playwright et un Chromium ; il crée un pr
 
 ## Micro
 
-L'enregistrement d'un son est celui de l'éditeur d'origine, inchangé. Son entrée dans le menu des sons disparaît quand le foyer a éteint le micro pour l'Atelier (`containers/sound-tab.jsx`, qui lit `micro` sur le stockage de Foyer) : la page n'a alors même plus le droit de le demander. La caméra n'est pas utilisée par ce niveau (la détection vidéo est retirée) : la page ne la reçoit pas.
+L'enregistrement d'un son est celui de l'éditeur d'origine, inchangé. Son entrée dans le menu des sons disparaît quand le foyer a éteint le micro pour l'Atelier (`containers/sound-tab.jsx`, qui lit `micro` sur le stockage de Foyer) : la page n'a alors même plus le droit de le demander. 
+
+## Caméra
+
+La caméra ne sert qu'à l'extension Détection vidéo, dont le code est celui d'origine. Elle disparaît de la liste des extensions quand le foyer a éteint la caméra pour l'Atelier (`containers/extension-library.jsx`, qui lit `camera` sur le stockage de Foyer) : la page n'a alors plus le droit de la demander, et un projet qui s'en sert tourne sans image.
 
 ## Réglages de la page (`surcouche/…/foyer/index.jsx`)
 

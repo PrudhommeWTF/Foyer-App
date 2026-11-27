@@ -22,7 +22,8 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Vue parent (un onglet par enfant, restaurer), partage entre frères et sœurs, tuile d'accueil, aide, outil pour les assistants | |
 | Limites réglables : nombre de projets, espace disque | |
 | Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | |
-| Niveau proposé à chaque enfant, réglé par un parent ; cinq défis guidés pour les grands, avec l'image des blocs à chaque étape ; cinq défis en image pour les petits | Détection vidéo |
+| Niveau proposé à chaque enfant, réglé par un parent ; cinq défis guidés pour les grands, avec l'image des blocs à chaque étape ; cinq défis en image pour les petits | |
+| Détection vidéo chez les grands : un personnage réagit quand on bouge devant la caméra | |
 
 Sur un écran étroit (téléphone), les projets s'ouvrent pour être regardés, en plein écran, téléphone couché : l'éditeur n'y est pas utilisable, et rien n'y est modifié.
 
@@ -247,11 +248,13 @@ La réponse attendue est `cross-origin`. Sinon la zone de dessin des costumes re
 
 ## Micro et caméra
 
-**Ce qu'ils permettent.** Petits codeurs : enregistrer un son (bouton micro de la palette verte), qui devient un bloc « jouer mon son », et remplir une forme d'un dessin avec une photo (outil appareil photo de l'éditeur de dessin, caméra avant ou arrière). Grands codeurs : enregistrer un son dans l'onglet Sons. Sons et photos restent sur le serveur de Foyer, dans la place du membre.
+**Ce qu'ils permettent.** Petits codeurs : enregistrer un son (bouton micro de la palette verte), qui devient un bloc « jouer mon son », et remplir une forme d'un dessin avec une photo (outil appareil photo de l'éditeur de dessin, caméra avant ou arrière). Grands codeurs : enregistrer un son dans l'onglet Sons, et la **détection vidéo** (voir plus bas). Sons et photos restent sur le serveur de Foyer, dans la place du membre.
+
+**Détection vidéo** (Grands codeurs). C'est une extension de l'éditeur : bouton bleu en bas à gauche, « Détection vidéo ». Elle affiche l'image de la caméra derrière la scène et ajoute quatre blocs : « quand le mouvement de la vidéo > 10 », « mouvement de la vidéo de ce sprite », « activer la vidéo », « mettre la transparence de la vidéo à ». Un personnage peut ainsi éclater quand on le « touche » de la main. L'image de la caméra est analysée **dans la page** : elle n'est envoyée nulle part, ni à Foyer ni ailleurs, et rien n'en est enregistré (le projet ne garde que ses blocs). Le navigateur demande la permission la première fois ; la caméra s'allume à l'ajout de l'extension ou à l'ouverture d'un projet qui s'en sert, et s'éteint en quittant la page ou avec le bloc « désactiver la vidéo ». Réglage « caméra » éteint : l'extension n'est plus proposée, et un projet qui s'en servait s'ouvre et tourne, mais sans image (ses blocs de mouvement valent zéro).
 
 **Trois réglages** (Réglages, section Atelier code) : autoriser le micro, autoriser la caméra, durée maximale d'un son chez les petits (60 secondes par défaut, environ 2,6 Mo la minute). Éteints, les boutons disparaissent, et les pages de l'Atelier n'ont plus le droit de demander : ce qui a déjà été enregistré continue de jouer.
 
-**Pourquoi seulement ces pages.** Foyer interdit le micro et la caméra à toutes ses pages (`Permissions-Policy`). Les deux éditeurs sont des pages à part, et reçoivent seuls une exception : le micro pour les deux, la caméra pour celui des petits. Vérifier :
+**Pourquoi seulement ces pages.** Foyer interdit le micro et la caméra à toutes ses pages (`Permissions-Policy`). Les deux éditeurs sont des pages à part, et reçoivent seuls une exception : le micro et la caméra pour les deux, chacun selon son réglage. Vérifier :
 
 ```bash
 curl -sI https://<ton foyer>/atelier/petits/editor.html | grep -i permissions-policy
