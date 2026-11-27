@@ -1,7 +1,9 @@
 // Atelier (Foyer): replaces the extension library of the editor. Only the
-// extensions that work without any server are offered: Music and Pen. The
-// others called services of the Scratch servers (text to speech, translation),
-// a CDN (face sensing), the camera, or hardware through Scratch Link.
+// extensions that work without any server are offered: Music, Pen and Video
+// Sensing (the picture of the camera never leaves the page; offered only when
+// the household lets the Atelier use the camera, see containers/extension-library.jsx).
+// The others called services of the Scratch servers (text to speech, translation),
+// a CDN (face sensing), or hardware through Scratch Link.
 import React from 'react';
 import {FormattedMessage} from 'react-intl';
 
@@ -10,6 +12,9 @@ import musicInsetIconURL from './music/music-small.svg';
 
 import penIconURL from './pen/pen.png';
 import penInsetIconURL from './pen/pen-small.svg';
+
+import videoSensingIconURL from './videoSensing/video-sensing.png';
+import videoSensingInsetIconURL from './videoSensing/video-sensing-small.svg';
 
 export default [
     {
@@ -48,6 +53,26 @@ export default [
                 defaultMessage="Draw with your sprites."
                 description="Description for the 'Pen' extension"
                 id="gui.extension.pen.description"
+            />
+        ),
+        featured: true
+    },
+    {
+        name: (
+            <FormattedMessage
+                defaultMessage="Video Sensing"
+                description="Name for the 'Video Sensing' extension"
+                id="gui.extension.videosensing.name"
+            />
+        ),
+        extensionId: 'videoSensing',
+        iconURL: videoSensingIconURL,
+        insetIconURL: videoSensingInsetIconURL,
+        description: (
+            <FormattedMessage
+                defaultMessage="Sense motion with the camera."
+                description="Description for the 'Video Sensing' extension"
+                id="gui.extension.videosensing.description"
             />
         ),
         featured: true

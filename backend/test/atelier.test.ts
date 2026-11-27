@@ -305,11 +305,11 @@ describe('micro et caméra : les seules pages de l’Atelier, et selon les régl
   const politique = async (chemin: string) => (await fetch(ctx.base.replace(/\/api$/, '') + chemin)).headers.get('permissions-policy') ?? '';
   const regler = async (changes: Record<string, unknown>) => assert.equal((await appel(ctx.base, 'PATCH', '/settings', { changes }, ctx.jetons.admin)).status, 200);
 
-  it('les éditeurs peuvent demander le micro, celui des petits la caméra, rien d’autre dans Foyer', async () => {
+  it('les deux éditeurs peuvent demander le micro et la caméra, rien d’autre dans Foyer', async () => {
     const petits = await politique('/atelier/petits/editor.html'), grands = await politique('/atelier/grands/editor.html');
     assert.match(petits, /camera=\(self\)/); assert.match(petits, /microphone=\(self\)/); assert.match(petits, /geolocation=\(\)/);
-    assert.match(grands, /microphone=\(self\)/);
-    assert.match(grands, /camera=\(\)/, 'l’éditeur des grands ne se sert pas de la caméra : il ne la reçoit pas');
+    assert.match(grands, /microphone=\(self\)/); assert.match(grands, /geolocation=\(\)/);
+    assert.match(grands, /camera=\(self\)/, 'la détection vidéo des grands a besoin de la caméra');
     for (const page of ['/', '/api/health', '/atelier/petits/app.bundle.js', '/atelier/autre/editor.html', '/atelier/petits/sous/editor.html']) {
       const p = await politique(page);
       assert.match(p, /camera=\(\)/, page); assert.match(p, /microphone=\(\)/, page);
@@ -327,6 +327,10 @@ describe('micro et caméra : les seules pages de l’Atelier, et selon les régl
     assert.match(p, /microphone=\(self\)/); assert.match(p, /camera=\(\)/);
     c = (await appel(ctx.base, 'GET', '/atelier/contexte', undefined, ctx.jetons.enfant)).json;
     assert.equal(c.camera, false); assert.equal(c.sonMaxSecondes, 20);
+    // the camera follows the same setting for both editors: photo (petits), video sensing (grands)
+    assert.match(await politique('/atelier/grands/editor.html'), /camera=\(\)/);
+    await regler({ atelierCamera: true });
+    assert.match(await politique('/atelier/grands/editor.html'), /camera=\(self\)/);
     await regler({ atelierCamera: true, atelierSonMaxSecondes: 60 });
   });
 

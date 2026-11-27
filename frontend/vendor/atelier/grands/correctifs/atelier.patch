@@ -315,6 +315,31 @@ index 417430d8f2..1e510fe3c1 100644
                                      >
                                          {previewFaqLink}
                                      </a>
+diff --git a/packages/scratch-gui/src/containers/extension-library.jsx b/packages/scratch-gui/src/containers/extension-library.jsx
+index e7534b5cbb..3ee7968932 100644
+--- a/packages/scratch-gui/src/containers/extension-library.jsx
++++ b/packages/scratch-gui/src/containers/extension-library.jsx
+@@ -6,6 +6,7 @@ import {defineMessages, injectIntl} from 'react-intl';
+ import intlShape from '../lib/intlShape.js';
+ 
+ import extensionLibraryContent from '../lib/libraries/extensions/index.jsx';
++import {legacyConfig} from '../legacy-config';
+ 
+ import LibraryComponent from '../components/library/library.jsx';
+ import extensionIcon from '../components/action-menu/icon--sprite.svg';
+@@ -48,7 +49,11 @@ class ExtensionLibrary extends React.PureComponent {
+         }
+     }
+     render () {
+-        const extensionLibraryThumbnailData = extensionLibraryContent.map(extension => ({
++        // Atelier (Foyer): no 'Video Sensing' when the household turned the camera off for
++        // the Atelier: the page is then not even allowed to ask for it
++        const extensionLibraryThumbnailData = extensionLibraryContent.filter(extension => (
++            extension.extensionId !== 'videoSensing' || legacyConfig.storage.camera !== false
++        )).map(extension => ({
+             rawURL: extension.iconURL || extensionIcon,
+             ...extension
+         }));
 diff --git a/packages/scratch-gui/src/containers/sound-tab.jsx b/packages/scratch-gui/src/containers/sound-tab.jsx
 index 63b5386baf..d9ffc5fa2b 100644
 --- a/packages/scratch-gui/src/containers/sound-tab.jsx
@@ -611,18 +636,18 @@ index 822fd8de26..0d029b67d0 100644
                  storage.scratchFetch.createQueue(`${service}.${scratchDomain}`, extensionServiceQueueOptions);
              });
 diff --git a/packages/scratch-vm/src/extension-support/extension-manager.js b/packages/scratch-vm/src/extension-support/extension-manager.js
-index 6922cdafd4..bc2c220fd4 100644
+index 6922cdafd4..7e85b5367b 100644
 --- a/packages/scratch-vm/src/extension-support/extension-manager.js
 +++ b/packages/scratch-vm/src/extension-support/extension-manager.js
-@@ -13,18 +13,10 @@ const builtinExtensions = {
+@@ -13,18 +13,11 @@ const builtinExtensions = {
      // but serves as a reference for loading core blocks as extensions.
      coreExample: () => require('../blocks/scratch3_core_example'),
      // These are the non-core built-in extensions.
-+    // Atelier (Foyer): only the extensions that need no server, no camera and no
-+    // hardware are kept. A project that asks for another one cannot load it.
++    // Atelier (Foyer): only the extensions that need no server and no hardware are
++    // kept. A project that asks for another one cannot load it.
      pen: () => require('../extensions/scratch3_pen'),
 -    wedo2: () => require('../extensions/scratch3_wedo2'),
--    music: () => require('../extensions/scratch3_music'),
+     music: () => require('../extensions/scratch3_music'),
 -    microbit: () => require('../extensions/scratch3_microbit'),
 -    text2speech: () => require('../extensions/scratch3_text2speech'),
 -    translate: () => require('../extensions/scratch3_translate'),
@@ -632,7 +657,7 @@ index 6922cdafd4..bc2c220fd4 100644
 -    boost: () => require('../extensions/scratch3_boost'),
 -    gdxfor: () => require('../extensions/scratch3_gdx_for'),
 -    faceSensing: () => require('../extensions/scratch3_face_sensing')
-+    music: () => require('../extensions/scratch3_music')
++    videoSensing: () => require('../extensions/scratch3_video_sensing')
  };
  
  /**
