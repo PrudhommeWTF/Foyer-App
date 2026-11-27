@@ -107,3 +107,23 @@ describe('bibliothèque des Grands codeurs', () => {
     for (const nom of [...Object.keys(exclusions.personnages), ...Object.keys(exclusions.photographies).filter((k) => k !== '_')]) assert.equal(noms[nom], undefined, nom);
   });
 });
+
+describe('défis des petits codeurs', () => {
+  const dossier = join(fileURLToPath(new URL('..', import.meta.url)), 'vendor', 'atelier', 'petits');
+  const defis = JSON.parse(readFileSync(join(dossier, 'www', 'defis', 'defis.json'), 'utf8'));
+  const outil = readFileSync(join(dossier, 'outils', 'images-defis.cjs'), 'utf8');
+
+  it('chaque défi a un identifiant unique, un nom, une phrase et son image', () => {
+    assert.ok(defis.length > 0);
+    assert.equal(new Set(defis.map((d) => d.id)).size, defis.length);
+    for (const d of defis) {
+      assert.match(d.id, /^[a-z0-9-]+$/);
+      assert.ok(d.name && d.desc, d.id);
+      assert.ok(existsSync(join(dossier, 'www', 'defis', d.image)), `image absente : ${d.image}`);
+    }
+  });
+
+  it('l’outil qui prend les images connaît le script de chaque défi', () => {
+    for (const d of defis) assert.ok(outil.includes(`'${d.id}': [`), `pas de script pour ${d.id}`);
+  });
+});
