@@ -5,6 +5,8 @@ export type Niveau = 'petits' | 'grands';
 export interface Projet {
   id: string; memberId: string; level: Niveau; name: string; rev: number; thumbnail: { pagecount: number; md5: string } | null;
   updatedAt: string; archivedAt: string | null; shared: boolean; memberName?: string;
+  /** The guided challenge this project was created for: its editor shows the card again at each opening. */
+  defi?: string | null;
 }
 /** What an adult reads about another member's workshop. */
 export interface Resume { id: string; name: string; enfant: boolean; projets: number; corbeille: number; recents: number; octets: number; niveaux: Niveau[]; }

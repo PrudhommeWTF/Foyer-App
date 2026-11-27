@@ -18,7 +18,7 @@ export type AssetKind = typeof ASSET_KINDS[number];
 
 export interface ProjectRow {
   id: string; member_id: string; level: Level; name: string; json: string | null; thumbnail_json: string | null; editor_version: string | null;
-  version: number; is_sample: number; copied_from: string | null; created_at: string; updated_at: string; archived_at: string | null; shared_at: string | null;
+  version: number; is_sample: number; copied_from: string | null; created_at: string; updated_at: string; archived_at: string | null; shared_at: string | null; challenge: string | null;
 }
 export interface MediaRow { id: number; member_id: string; name: string; mime: string; size: number; file_id: number; created_at: string; }
 export interface AssetRow {
@@ -34,7 +34,7 @@ const CITED = /[0-9a-f]{32}\.(?:svg|png|jpg|wav|mp3)/g;
 // ---- Projets ----------------------------------------------------------------
 
 /** Sans le JSON : une liste de cent projets n'a pas à peser dix mégaoctets. */
-const LIST_COLUMNS = 'id, member_id, level, name, thumbnail_json, editor_version, version, is_sample, copied_from, created_at, updated_at, archived_at, shared_at';
+const LIST_COLUMNS = 'id, member_id, level, name, thumbnail_json, editor_version, version, is_sample, copied_from, created_at, updated_at, archived_at, shared_at, challenge';
 
 export function projectsOf(memberId: string, archived = false): ProjectRow[] {
   return database.prepare(`SELECT ${LIST_COLUMNS}, NULL AS json FROM atl_projects WHERE member_id = ? AND archived_at IS ${archived ? 'NOT NULL' : 'NULL'} ORDER BY updated_at DESC`)
@@ -46,10 +46,11 @@ export function countProjects(memberId: string): number {
 export function getProject(id: string): ProjectRow | null {
   return (database.prepare('SELECT * FROM atl_projects WHERE id = ?').get(id) as ProjectRow | undefined) ?? null;
 }
-export function createProject(memberId: string, level: Level, name: string, from?: ProjectRow): ProjectRow {
+/** `challenge` : le défi guidé que ce projet relève ; une copie garde celui de son modèle. */
+export function createProject(memberId: string, level: Level, name: string, from?: ProjectRow, challenge: string | null = from?.challenge ?? null): ProjectRow {
   const id = crypto.randomUUID(), at = now();
-  database.prepare(`INSERT INTO atl_projects (id, member_id, level, name, json, thumbnail_json, editor_version, copied_from, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, memberId, level, name, from?.json ?? null, from?.thumbnail_json ?? null, from?.editor_version ?? null, from?.id ?? null, at, at);
+  database.prepare(`INSERT INTO atl_projects (id, member_id, level, name, json, thumbnail_json, editor_version, copied_from, challenge, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, memberId, level, name, from?.json ?? null, from?.thumbnail_json ?? null, from?.editor_version ?? null, from?.id ?? null, challenge, at, at);
   return getProject(id)!;
 }
 export interface ProjectSave { name: string; json: string; thumbnailJson: string | null; editorVersion: string | null; }

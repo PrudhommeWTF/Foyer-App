@@ -91,7 +91,7 @@ function thumbnailJson(raw: unknown, memberId: string): string | null {
 export const projectView = (p: repo.ProjectRow, withJson = false) => ({
   id: p.id, memberId: p.member_id, level: p.level, name: p.name, thumbnail: p.thumbnail_json ? JSON.parse(p.thumbnail_json) as { pagecount: number; md5: string } : null,
   editorVersion: p.editor_version, rev: p.version, isSample: !!p.is_sample, copiedFrom: p.copied_from, createdAt: p.created_at, updatedAt: p.updated_at,
-  archivedAt: p.archived_at, shared: !!p.shared_at, ...(withJson ? { json: p.json } : {}),
+  archivedAt: p.archived_at, shared: !!p.shared_at, defi: p.challenge, ...(withJson ? { json: p.json } : {}),
 });
 const assetView = (a: repo.AssetRow) => ({ id: a.id, md5: a.md5, altmd5: a.altmd5, name: a.name, scale: a.scale, width: a.width, height: a.height, ext: a.ext, version: a.editor_version });
 
@@ -201,7 +201,10 @@ export function atelierRouter(members: () => Member[]): Router {
     const level = req.body?.level ?? 'petits';
     if (!repo.LEVELS.includes(level)) throw new Invalid('level : niveau inconnu.');
     if (!levels(m).includes(level)) { closed(res); return; }
-    const p = repo.createProject(m.id, level, text(req.body?.name, 'name', 80));
+    // Le défi guidé que le projet relève : un identifiant des listes livrées avec les éditeurs, rien de plus.
+    const defi = text(req.body?.defi, 'defi', 40, false);
+    if (defi && !/^[a-z0-9-]+$/.test(defi)) throw new Invalid('defi : identifiant de défi attendu.');
+    const p = repo.createProject(m.id, level, text(req.body?.name, 'name', 80), undefined, defi || null);
     log.info(`Atelier : projet « ${p.name} » créé par ${m.name}.`);
     res.status(201).json({ projet: projectView(p, true) });
   }));
