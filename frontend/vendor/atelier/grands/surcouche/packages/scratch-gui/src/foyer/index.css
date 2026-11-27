@@ -18,3 +18,9 @@ body,
     max-height: 400px;
     background: #F9F9F9;
 }
+
+/* A step is as wide as its sentence: one without a picture would stretch past the
+   window. The text wraps like a tutorial card did. */
+.app [class*='card_step-title'] {
+    max-width: 600px;
+}

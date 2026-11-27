@@ -33,7 +33,8 @@ const FAMILIES = {
     controle: ['#FFAB19', '#3A2A00'],
     capteurs: ['#5CB1D6', '#FFFFFF'],
     operateurs: ['#59C059', '#FFFFFF'],
-    variables: ['#FF8C1A', '#FFFFFF']
+    variables: ['#FF8C1A', '#FFFFFF'],
+    video: ['#0FBD8C', '#FFFFFF']
 };
 
 const blockStyle = family => ({
@@ -66,6 +67,8 @@ defis.forEach(defi => {
         tags: [],
         category: CATEGORIES.gettingStarted,
         img: boulon,
+        // Needs the camera: not listed when the household turned it off (containers/tips-library.jsx)
+        camera: Boolean(defi.camera),
         steps: defi.steps.map((text, i) => ({title: stepTitle(text), image: picture((defi.images || [])[i])}))
     };
 });

@@ -9,7 +9,8 @@ export interface Projet {
 /** What an adult reads about another member's workshop. */
 export interface Resume { id: string; name: string; enfant: boolean; projets: number; corbeille: number; recents: number; octets: number; niveaux: Niveau[]; }
 /** A guided challenge of the 'Grands codeurs' level, as shipped with its editor. */
-export interface Defi { id: string; name: string; desc: string; }
+/** `camera`: the challenge needs the camera, so it is not offered when the household turned it off. */
+export interface Defi { id: string; name: string; desc: string; camera?: boolean; }
 
 export const NIVEAU: Record<Niveau, string> = { petits: 'Petits codeurs', grands: 'Grands codeurs' };
 export const NIVEAUX: readonly Niveau[] = ['petits', 'grands'];

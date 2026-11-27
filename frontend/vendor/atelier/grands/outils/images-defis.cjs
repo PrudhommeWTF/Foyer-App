@@ -60,6 +60,13 @@ const STEPS = {
         [key('right arrow', ['changex', 10]), key('left arrow', ['changex', -10]),
             key('up arrow', ['changey', 10]), key('down arrow', ['changey', -10])]
     ],
+    // The first step adds the extension: no script to show yet
+    video: [
+        [],
+        [[['motion', 10]]],
+        [[['motion', 10], ['play', 'pop'], ['gotorandom']]],
+        [[['motion', 10], ['play', 'pop'], ['gotorandom']]]
+    ],
     score: [
         [[['setvar', 0]]],
         [[flag, ['setvar', 0]]],
@@ -90,6 +97,7 @@ const build = scripts => {
             switch (name) {
             case 'flag': b.opcode = 'event_whenflagclicked'; break;
             case 'clicked': b.opcode = 'event_whenthisspriteclicked'; break;
+            case 'motion': b.opcode = 'videoSensing_whenMotionGreaterThan'; b.inputs.REFERENCE = num(4, v[0]); break;
             case 'key': b.opcode = 'event_whenkeypressed'; b.fields.KEY_OPTION = [v[0], null]; break;
             case 'gotoxy': b.opcode = 'motion_gotoxy'; b.inputs.X = num(4, v[0]); b.inputs.Y = num(4, v[1]); break;
             case 'move': b.opcode = 'motion_movesteps'; b.inputs.STEPS = num(4, v[0]); break;
@@ -155,7 +163,7 @@ const project = scripts => JSON.stringify({
             ),
             sounds: [POP], volume: 100, layerOrder: 1, visible: true, x: 0, y: 0, size: 100, direction: 90, draggable: false, rotationStyle: 'all around'}
     ],
-    monitors: [], extensions: [], meta: {semver: '3.0.0', vm: '0.2.0', agent: 'Foyer'}
+    monitors: [], extensions: JSON.stringify(scripts).includes('"motion"') ? ['videoSensing'] : [], meta: {semver: '3.0.0', vm: '0.2.0', agent: 'Foyer'}
 });
 
 (async () => {
@@ -176,6 +184,11 @@ const project = scripts => JSON.stringify({
     for (const [id, steps] of Object.entries(STEPS)) {
         images[id] = [];
         for (let i = 0; i < steps.length; i++) {
+            // A step without any script has no picture
+            if (!steps[i].length) {
+                images[id].push(null);
+                continue;
+            }
             const json = project(steps[i]);
             // A step that changes nothing shows the picture of the one before
             if (seen[json]) {

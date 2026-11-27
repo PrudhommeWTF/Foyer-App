@@ -369,6 +369,28 @@ index 63b5386baf..d9ffc5fa2b 100644
                      title: intl.formatMessage(messages.addSound),
                      img: searchIcon,
                      onClick: this.handleNewSoundFromLibraryClick
+diff --git a/packages/scratch-gui/src/containers/tips-library.jsx b/packages/scratch-gui/src/containers/tips-library.jsx
+index ab238b649b..8470b4f50a 100644
+--- a/packages/scratch-gui/src/containers/tips-library.jsx
++++ b/packages/scratch-gui/src/containers/tips-library.jsx
+@@ -5,6 +5,7 @@ import {injectIntl, defineMessages} from 'react-intl';
+ import intlShape from '../lib/intlShape.js';
+ 
+ import decksLibraryContent from '../lib/libraries/decks/index.jsx';
++import {legacyConfig} from '../legacy-config';
+ import tutorialTags from '../lib/libraries/tutorial-tags';
+ 
+ import analytics from '../lib/analytics';
+@@ -66,6 +67,9 @@ class TipsLibrary extends React.PureComponent {
+     }
+     render () {
+         const decksLibraryThumbnailData = Object.keys(decksLibraryContent)
++            // Atelier (Foyer): a challenge that needs the camera is not offered when the
++            // household turned the camera off for the Atelier
++            .filter(id => !decksLibraryContent[id].camera || legacyConfig.storage.camera !== false)
+             .filter(id => {
+                 /**
+                  * Scratch desktop can't support project and video-only tutorials.
 diff --git a/packages/scratch-gui/src/lib/alerts/index.jsx b/packages/scratch-gui/src/lib/alerts/index.jsx
 index 15d2a7bd9e..2344c24bd5 100644
 --- a/packages/scratch-gui/src/lib/alerts/index.jsx

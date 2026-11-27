@@ -292,7 +292,8 @@ export class AtelierScreen {
   readonly corbeille = signal<Projet[]>([]);
   readonly aide = signal(false);
   /** The guided challenges shipped with the 'Grands codeurs' editor. */
-  readonly defis = signal<Defi[]>([]);
+  private readonly tousDefis = signal<Defi[]>([]);
+  readonly defis = computed(() => this.tousDefis().filter((d) => !d.camera || this.store.setting('atelierCamera') !== false));
   /** Those of the 'Petits codeurs' editor: one picture each, the script to rebuild. */
   readonly petitsDefis = signal<(Defi & { image: string })[]>([]);
   /** Where the 'Grands codeurs' editor comes from: the upstream repository and the pinned commit. */
@@ -315,7 +316,7 @@ export class AtelierScreen {
     // Shipped with the editor, as a static file: no example, no section.
     fetch(this.exempleUrl('exemples.json')).then((r) => (r.ok ? r.json() : [])).then((l: Exemple[]) => this.exemples.set(l)).catch(() => { /* offline: the section stays hidden */ });
     fetch(this.petitsUrl('defis/defis.json')).then((r) => (r.ok ? r.json() : [])).then((l: (Defi & { image: string })[]) => this.petitsDefis.set(l)).catch(() => { /* offline: the section stays hidden */ });
-    fetch(this.grandsUrl('defis.json')).then((r) => (r.ok ? r.json() : [])).then((l: Defi[]) => this.defis.set(l)).catch(() => { /* offline: the section stays hidden */ });
+    fetch(this.grandsUrl('defis.json')).then((r) => (r.ok ? r.json() : [])).then((l: Defi[]) => this.tousDefis.set(l)).catch(() => { /* offline: the section stays hidden */ });
     fetch(this.grandsUrl('amont.json')).then((r) => (r.ok ? r.json() : null)).then((a) => this.amont.set(a)).catch(() => { /* offline: the sentence does without the link */ });
   }
 
