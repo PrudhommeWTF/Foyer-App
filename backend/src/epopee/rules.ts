@@ -1,5 +1,10 @@
 // Les règles de l'Épopée, pures : ni base, ni horloge. Le serveur les applique
 // avant chaque écriture, l'appareil ne décide d'aucun montant.
+//
+// Il n'y a pas de retrait d'écus, et ce n'est pas un oubli : le serment fait
+// promettre au parent de ne jamais se servir des écus pour punir (voir
+// docs/epopee.md, « Pas de retrait d'écus »). Une besace ne baisse que par un
+// échange choisi par l'enfant ou par l'annulation d'une erreur.
 
 /** Les écus d'amorce : la besace ne commence jamais vide, et ce plancher ne se retire pas. */
 export const AMORCE = 5;
@@ -129,7 +134,7 @@ export const dateInput = (v: unknown): string | null => (typeof v === 'string' &
  * échange qui a vidé la besace.
  */
 export const pactTopUp = (bal: number, floor: number): number => Math.max(0, floor - bal);
-/** Les écus manquent-ils encore pour ce trésor ? Un échange dépense le coût entier ; le plancher ne protège que des retraits. */
+/** Les écus manquent-ils encore pour ce trésor ? Un échange dépense le coût entier ; le plancher protège de ce qu'un parent annule, pas de ce que l'enfant dépense. */
 export const canExchange = (bal: number, cost: number): boolean => bal >= cost;
 export const exchangeEntryId = (questId: string): string => `echange:${questId}`;
 
