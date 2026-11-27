@@ -345,6 +345,83 @@ function unlockAudio () {
     });
 }
 
+// Atelier: a guided challenge ('&defi=<id>' in the address). A child of this age does
+// not read: the challenge is the picture of the script to rebuild, with a sentence for
+// whoever sits beside. The card stays at the empty end of the scripts area and folds
+// into a star, so that it never keeps a block out of reach.
+function challenge () {
+    var params = new URLSearchParams(window.location.search);
+    var id = params.get('defi');
+    if (!id || params.get('mode') === 'look') {
+        return;
+    }
+    fetch('defis/defis.json').then(function (response) {
+        return response.ok ? response.json() : [];
+    }).then(function (list) {
+        var defi = list.filter(function (d) {
+            return d.id === id;
+        })[0];
+        if (!defi) {
+            return;
+        }
+        var card = document.createElement('div');
+        var s = card.style;
+        s.position = 'absolute'; s.right = '1.2vw'; s.bottom = '1.6vh'; s.zIndex = '900';
+        s.background = '#FFFFFF'; s.borderRadius = '18px'; s.boxShadow = '0 4px 18px rgba(0, 0, 0, 0.3)';
+        s.font = '2.2vh Roboto, sans-serif'; s.color = '#1F3B4D'; s.maxWidth = '46vw';
+        var open = document.createElement('div');
+        open.style.padding = '1.4vh 1.2vw';
+        var title = document.createElement('div');
+        title.textContent = defi.name;
+        title.style.fontWeight = 'bold';
+        title.style.marginRight = '8vh';
+        var text = document.createElement('div');
+        text.textContent = defi.desc;
+        text.style.margin = '0.4vh 8vh 0.8vh 0';
+        var picture = document.createElement('img');
+        picture.src = 'defis/' + encodeURIComponent(defi.image);
+        picture.alt = '';
+        picture.style.display = 'block'; picture.style.maxWidth = '100%'; picture.style.maxHeight = '15vh';
+        open.appendChild(title);
+        open.appendChild(text);
+        open.appendChild(picture);
+        var fold = document.createElement('button');
+        s = fold.style;
+        s.position = 'absolute'; s.top = '0.8vh'; s.right = '0.8vh'; s.width = '6.4vh'; s.height = '6.4vh';
+        s.minWidth = '48px'; s.minHeight = '48px'; s.border = '0'; s.borderRadius = '50%';
+        s.background = '#FFC83D'; s.color = '#1F3B4D'; s.font = 'bold 3.4vh Roboto, sans-serif';
+        var folded = false;
+        var show = function () {
+            open.style.display = folded ? 'none' : 'block';
+            fold.style.position = folded ? 'static' : 'absolute';
+            fold.textContent = folded ? '★' : '×';
+            fold.setAttribute('aria-label', folded ? 'Montrer le défi' : 'Ranger le défi');
+            card.style.background = folded ? 'transparent' : '#FFFFFF';
+            card.style.boxShadow = folded ? 'none' : '0 4px 18px rgba(0, 0, 0, 0.3)';
+        };
+        fold.onclick = function () {
+            folded = !folded;
+            show();
+        };
+        show();
+        card.appendChild(open);
+        card.appendChild(fold);
+        // In the scripts area itself, not over the page: the presentation mode, the
+        // library and the paint editor cover it as they cover the scripts
+        var hang = function () {
+            var area = document.getElementById('scriptscontainer');
+            if (area) {
+                area.appendChild(card);
+            } else {
+                setTimeout(hang, 300);
+            }
+        };
+        hang();
+    }).catch(function () {
+        // No list (an old copy kept by the device): the editor opens as usual
+    });
+}
+
 export default class Web {
     static set onSoundDone (fcn) {
         onSoundDone = fcn;
@@ -358,6 +435,7 @@ export default class Web {
             return member ? flush() : null;
         }).then(function () {
             fcn();
+            challenge();
         });
         // Ask Foyer's service worker to keep the whole Atelier on the device, so that
         // it opens without network next time (see public/sw.js)

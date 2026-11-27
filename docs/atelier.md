@@ -22,7 +22,7 @@ Les choix d'architecture et les décisions prises sont dans [`atelier-etat-des-l
 | Vue parent (un onglet par enfant, restaurer), partage entre frères et sœurs, tuile d'accueil, aide, outil pour les assistants | |
 | Limites réglables : nombre de projets, espace disque | |
 | Niveau « Grands codeurs » : créer, enregistrer, tenir sans réseau, importer et exporter un fichier ; 315 personnages, 82 décors, 352 sons | |
-| Niveau proposé à chaque enfant, réglé par un parent ; cinq défis guidés pour les grands, avec l'image des blocs à chaque étape | Détection vidéo ; défis pour les petits |
+| Niveau proposé à chaque enfant, réglé par un parent ; cinq défis guidés pour les grands, avec l'image des blocs à chaque étape ; cinq défis en image pour les petits | Détection vidéo |
 
 Sur un écran étroit (téléphone), les projets s'ouvrent pour être regardés, en plein écran, téléphone couché : l'éditeur n'y est pas utilisable, et rien n'y est modifié.
 
@@ -236,6 +236,8 @@ La réponse attendue est `cross-origin`. Sinon la zone de dessin des costumes re
 **Le niveau de chaque enfant.** Dans l'onglet d'un enfant, « peut créer dans » : Petits codeurs, Grands codeurs, ou les deux (par défaut). Avec un seul niveau, « Nouveau projet » crée tout de suite, sans rien demander, et les exemples ou les défis de l'autre niveau ne lui sont pas proposés. Cela ne règle que ce qui se **crée** : les projets déjà faits dans l'autre niveau restent à lui et s'ouvrent comme avant. Le jour où Gaëtan passe aux Grands codeurs, ses histoires des Petits codeurs sont toujours là. Un projet d'un niveau ne s'ouvre pas dans l'autre éditeur : les deux formats sont différents, et rien n'est converti.
 
 **Défis guidés** (Grands codeurs). « Relever un défi » crée un projet et l'ouvre avec ses étapes dans une carte que l'enfant déplace, réduit ou ferme : Boulon traverse la scène, dit bonjour, danse, se pilote au clavier, puis un premier jeu avec un score. La carte « Défis » de l'éditeur les liste tous. Chaque étape montre, sous son texte, l'image du script tel qu'il doit être à ce moment-là : des photos des vrais blocs, prises dans l'éditeur par un outil, jamais dessinées à la main. Pour en écrire un, voir `frontend/vendor/atelier/grands/MODIFICATIONS.md`.
+
+**Défis en image** (Petits codeurs). À cinq ans on ne lit pas : un défi est **une image**, celle du script à refaire. « Relever un défi » crée un projet et ouvre l'éditeur avec une carte en bas à droite de la zone des scripts : le nom du défi, une phrase pour l'adulte assis à côté, et l'image des blocs à assembler. Le bouton rond la range en une étoile (pour libérer la place) et la ressort. Cinq défis, du plus simple au moins simple : Boulon avance, saute, danse (une boucle), grandit (avec un son), et ne s'arrête jamais. Rien n'est vérifié ni noté : l'enfant compare son script à l'image, et appuie sur le drapeau pour voir. La carte n'existe que le temps de cette ouverture ; rouvert depuis la liste, le projet est un projet comme un autre. Pour en écrire un, voir `frontend/vendor/atelier/petits/MODIFICATIONS.md`.
 
 **Accueil.** Pour un enfant, la tuile de l'Atelier montre la vignette de son dernier projet et « Reprendre : son nom ». Pour un adulte (sur téléphone, où l'accueil est fait de tuiles), « Raphaël a travaillé sur 2 projets cette semaine » : seuls ceux qui ont travaillé sont nommés. Module éteint, la tuile disparaît.
 
