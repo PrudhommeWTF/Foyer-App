@@ -341,3 +341,22 @@ describe('micro et caméra : les seules pages de l’Atelier, et selon les régl
     await regler({ modAtelier: true });
   });
 });
+
+// Last: it leaves archived projects behind, which the purge tests above count.
+describe('défi relevé par un projet', () => {
+  it('un projet créé pour un défi garde ce défi, à chaque lecture et après un enregistrement', async () => {
+    const cree = await appel(ctx.base, 'POST', '/atelier/projets', { name: 'Boulon danse', defi: 'danse' }, ctx.jetons.admin);
+    assert.equal(cree.status, 201); assert.equal(cree.json.projet.defi, 'danse');
+    const id = cree.json.projet.id as string;
+    await appel(ctx.base, 'PUT', `/atelier/projets/${id}`, { rev: cree.json.projet.rev, name: 'Boulon danse', json: projet() }, ctx.jetons.admin);
+    assert.equal((await appel(ctx.base, 'GET', `/atelier/projets/${id}`, undefined, ctx.jetons.admin)).json.projet.defi, 'danse');
+    const liste = (await appel(ctx.base, 'GET', '/atelier/projets', undefined, ctx.jetons.admin)).json.projets as { id: string; defi: string | null }[];
+    assert.equal(liste.find((p) => p.id === id)?.defi, 'danse');
+    const copie = await appel(ctx.base, 'POST', `/atelier/projets/${id}/copie`, { name: 'Boulon danse (copie)' }, ctx.jetons.admin);
+    assert.equal(copie.json.projet.defi, 'danse', 'une copie reprend le défi de son modèle');
+    const libre = await appel(ctx.base, 'POST', '/atelier/projets', { name: 'Libre' }, ctx.jetons.admin);
+    assert.equal(libre.json.projet.defi, null, 'un projet libre n’a pas de défi');
+    assert.equal((await appel(ctx.base, 'POST', '/atelier/projets', { name: 'x', defi: '../autre' }, ctx.jetons.admin)).status, 400);
+    for (const p of [id, copie.json.projet.id, libre.json.projet.id]) await appel(ctx.base, 'DELETE', `/atelier/projets/${p}`, undefined, ctx.jetons.admin);
+  });
+});

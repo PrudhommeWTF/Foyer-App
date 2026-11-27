@@ -20,6 +20,9 @@ const NARROW = '(max-width: 760px)';
  * seule, ceux qu'il a supprimés (à restaurer) et la place qu'il occupe. Chacun
  * y voit les projets que les autres partagent, et peut en faire une copie.
  */
+/** What it takes to open a project in its editor. */
+type Ouvrable = { id: string; level: Niveau; defi?: string | null };
+
 @Component({
   selector: 'screen-atelier',
   standalone: true,
@@ -360,17 +363,18 @@ export class AtelierScreen {
   room(octets: number): string { return roomLine(octets, this.atelier.quotaMo()); }
 
   /** Each editor is a page of its own, served next to the application, with its own way of naming the project. */
-  private page(p: { id: string; level: Niveau }, watch: boolean, defi = ''): string {
-    const id = encodeURIComponent(p.id);
+  private page(p: Ouvrable, watch: boolean): string {
+    // A project created for a guided challenge opens with its card, every time it is edited
+    const id = encodeURIComponent(p.id), defi = watch ? '' : p.defi ?? '';
     const query = p.level === 'grands' ? `projet=${id}${watch ? '&vue=plein' : ''}${defi ? `&defi=${encodeURIComponent(defi)}` : ''}` : `pmd5=${id}&mode=${watch ? 'look&vue=plein' : 'edit'}${defi ? `&defi=${encodeURIComponent(defi)}` : ''}`;
     return new URL(`atelier/${p.level}/editor.html?${query}`, document.baseURI).href;
   }
-  ouvrir(p: { id: string; level: Niveau }): void { location.href = this.page(p, false); }
+  ouvrir(p: Ouvrable): void { location.href = this.page(p, false); }
   grandsUrl(file: string): string { return new URL(`atelier/grands/${file}`, document.baseURI).href; }
   petitsUrl(file: string): string { return new URL(`atelier/petits/${file}`, document.baseURI).href; }
   exempleUrl(file: string): string { return new URL(`atelier/petits/samples/${file}`, document.baseURI).href; }
   /** On a phone the editor cannot be used: the project opens to be watched, full screen. */
-  regarder(p: { id: string; level: Niveau }): void { location.href = this.page(p, true); }
+  regarder(p: Ouvrable): void { location.href = this.page(p, true); }
   /** A thumbnail is a file of the owner of the project: said so when it is someone else's. */
   vignette(name: string, owner?: string): string {
     const whose = owner && owner !== this.store.me()?.id ? `?membre=${encodeURIComponent(owner)}` : '';
@@ -390,11 +394,11 @@ export class AtelierScreen {
       this.ouvrir(projet);
     });
   }
-  /** A guided challenge: a new project of one's own, opened with the challenge shown by its editor. */
+  /** A guided challenge: a new project of one's own, which remembers its challenge and opens with it. */
   relever(d: Defi, level: Niveau): Promise<void> {
     return this.agir(async () => {
-      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: d.name.slice(0, 80), level });
-      location.href = this.page(projet, false, d.id);
+      const { projet } = await this.api.post<{ projet: Projet }>('atelier/projets', { name: d.name.slice(0, 80), level, defi: d.id });
+      this.ouvrir(projet);
     });
   }
   /** The child never edits the example itself: a project of their own is created from it. */

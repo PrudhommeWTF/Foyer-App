@@ -106,6 +106,16 @@ const MIGRATIONS: Migration[] = [
       )`);
     },
   },
+  {
+    version: 4,
+    label: 'défi relevé par un projet',
+    up: (db) => {
+      // challenge : l'identifiant du défi guidé pour lequel le projet a été créé.
+      // L'écran le redonne à l'éditeur à chaque ouverture, pour qu'un défi commencé
+      // un jour se reprenne le lendemain avec sa carte. NULL : un projet libre.
+      db.exec('ALTER TABLE atl_projects ADD COLUMN challenge TEXT');
+    },
+  },
 ];
 
 /** Met le schéma du module à jour. Idempotent, chaque migration dans sa propre transaction. */
