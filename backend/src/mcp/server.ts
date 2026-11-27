@@ -27,6 +27,7 @@ import * as en from './entretien-tools';
 import * as eq from './equipements-tools';
 import * as rv from './revisions-tools';
 import { atelierProjets } from './atelier-tools';
+import * as ep from './epopee-tools';
 
 /** Un objet d'arguments reçu d'un client MCP, lu défensivement. */
 type Args = Record<string, unknown>;
@@ -674,6 +675,60 @@ const TOOLS: ToolDef[] = [
       secondes: a.secondes === null ? null : num(a.secondes),
     }),
   },
+  // ---- Épopée : lecture filtrée par enfant, écritures d'un geste réservées aux adultes ----
+  {
+    name: 'epopee_besace',
+    description: 'La besace d’écus d’un enfant (ou de chaque enfant, sans `enfant`) dans l’Épopée, où il gagne des écus par ses routines et ses efforts : solde, écus d’amorce, quête en cours et ce qui manque, trésor gagné à vivre, exploits signalés qui attendent une réponse, routines du jour, dernières écritures. Un compte enfant ne lit que la sienne.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80) } },
+    run: (ctx, a) => ep.epopeeBesace(ctx, { enfant: str(a.enfant) }),
+  },
+  {
+    name: 'epopee_routines',
+    description: 'Les routines d’un enfant (matin, journée, soir), étape par étape : durée du sablier, écus, et ce qui est fait, passé ou à faire aujourd’hui. Un compte enfant ne lit que les siennes. Les routines se règlent dans l’application.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80) } },
+    run: (ctx, a) => ep.epopeeRoutines(ctx, { enfant: str(a.enfant) }),
+  },
+  {
+    name: 'epopee_catalogue',
+    description: 'Ce que le foyer a convenu dans l’Épopée : les exploits et leur valeur en écus (ce qu’un parent crédite, ce qu’un enfant signale), et les récompenses de l’Armurerie avec leur prix.',
+    inputSchema: { type: 'object', properties: {} },
+    run: () => ep.epopeeCatalogue(),
+  },
+  {
+    name: 'epopee_bilan',
+    adultes: true,
+    description: 'Le bilan de la semaine d’un enfant (ou de chaque enfant enrôlé) pour le conseil de famille : écus gagnés et d’où ils viennent, routines menées au bout, pauses, exploits, trésors, quête, mots des bravos, et ce que le conseil a noté. `semaine` : cette-semaine (défaut) ou semaine-derniere. Il compte ce qui a été fait, jamais ce qui a manqué. Réservé aux adultes.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), semaine: { type: 'string', enum: ['cette-semaine', 'semaine-derniere'] } } },
+    run: (ctx, a) => ep.epopeeBilan(ctx, { enfant: str(a.enfant), semaine: str(a.semaine) }),
+  },
+  {
+    name: 'epopee_bravo',
+    adultes: true, write: true,
+    description: 'Donne un bravo spontané à un enfant : `ecus` de 1 à 3 (défaut 1), et `mot`, ce que vous avez vu, en quelques mots (120 caractères au plus ; l’enfant le relit). Pour un exploit convenu, préférez epopee_exploit_crediter. Réservé aux adultes.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), ecus: { type: 'number' }, mot: S.string(120) }, required: ['enfant'] },
+    run: (ctx, a) => ep.epopeeBravo(ctx, { enfant: str(a.enfant), ecus: num(a.ecus), mot: str(a.mot) }),
+  },
+  {
+    name: 'epopee_exploit_crediter',
+    adultes: true, write: true,
+    description: 'Crédite à un enfant un exploit convenu (« mettre la table »), à son montant convenu : `exploit` par son nom ou un fragment (voir epopee_catalogue). Le montant ne se choisit pas ici. Réservé aux adultes.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), exploit: S.string(60) }, required: ['enfant', 'exploit'] },
+    run: (ctx, a) => ep.epopeeExploitCrediter(ctx, { enfant: str(a.enfant), exploit: str(a.exploit) }),
+  },
+  {
+    name: 'epopee_demande_repondre',
+    adultes: true, write: true,
+    description: 'Répond à un exploit qu’un enfant a signalé (voir epopee_besace) : `valider` true verse l’écu, false répond « pas tout à fait » (rien n’est retiré, il peut réessayer). `exploit` : à préciser s’il en attend plusieurs. Réservé aux adultes.',
+    inputSchema: { type: 'object', properties: { enfant: S.string(80), exploit: S.string(60), valider: { type: 'boolean' } }, required: ['enfant', 'valider'] },
+    run: (ctx, a) => ep.epopeeDemandeRepondre(ctx, { enfant: str(a.enfant), exploit: str(a.exploit), valider: bool(a.valider) }),
+  },
+  {
+    name: 'epopee_conseil_noter',
+    adultes: true, write: true,
+    description: 'Note une décision du conseil de famille pour la semaine en cours (« on avance le coucher d’un quart d’heure ») : `note` s’ajoute à ce qui est déjà noté, ou le remplace avec `remplacer` true. 2000 caractères en tout. Réservé aux adultes.',
+    inputSchema: { type: 'object', properties: { note: S.string(2000), remplacer: { type: 'boolean' } }, required: ['note'] },
+    run: (ctx, a) => ep.epopeeConseilNoter(ctx, { note: str(a.note), remplacer: bool(a.remplacer) }),
+  },
 ];
 
 /** Construit un serveur MCP lié à un membre et à une portée. Reconstruit à chaque requête (transport sans état). */
@@ -686,7 +741,7 @@ function buildServer(ctx: t.McpCtx): Server {
   // outils adultes : recette_*/repas_* relèvent de « Repas et cuisine »,
   // menage_* de « Employé à domicile », ecole_* de « École » (éteint par
   // défaut), entretien_* d'« Entretien de la maison », equipement* d'« Équipements »,
-  // revisions_* de « Révisions », atelier_* d'« Atelier code ».
+  // revisions_* de « Révisions », atelier_* d'« Atelier code », epopee_* d'« Épopée ».
   // Les autres domaines n'ont pas d'outils.
   const toolModuleOff = (name: string): boolean =>
     (effectiveSetting('modRepas') === false && (name.startsWith('recette') || name.startsWith('repas')))
@@ -695,7 +750,8 @@ function buildServer(ctx: t.McpCtx): Server {
     || (effectiveSetting('modEntretien') === false && name.startsWith('entretien'))
     || (effectiveSetting('modEquipements') === false && name.startsWith('equipement'))
     || (effectiveSetting('modRevisions') === false && name.startsWith('revisions'))
-    || (effectiveSetting('modAtelier') === false && name.startsWith('atelier'));
+    || (effectiveSetting('modAtelier') === false && name.startsWith('atelier'))
+    || (effectiveSetting('modEpopee') === false && name.startsWith('epopee'));
   const visible = (): ToolDef[] => TOOLS.filter((tool) =>
     (ctx.scope === 'write' || !tool.write) && (!tool.adultes || !ctx.enfant) && !toolModuleOff(tool.name));
 
