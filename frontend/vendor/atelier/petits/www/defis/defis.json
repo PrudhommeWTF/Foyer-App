@@ -50,7 +50,7 @@
  {
   "id": "course",
   "name": "Boulon court",
-  "desc": "Boulon traverse la page à toute vitesse, puis rentre à sa place.",
+  "desc": "Boulon file à toute vitesse, sort par la droite, revient par la gauche, puis rentre à sa place.",
   "image": "course.png"
  }
 ]

@@ -62,10 +62,10 @@
   "desc": "Boulon se promène tout seul et rebondit sur les bords de la scène.",
   "steps": [
    "Prends [evenements:quand le drapeau vert est cliqué], et accroche dessous [controle:répéter indéfiniment].",
-   "Dans la boucle, glisse [mouvement:avancer de 10 pas]. Touche le drapeau vert : Boulon file… et reste collé au bord.",
+   "Dans la boucle, glisse [mouvement:avancer de 10 pas]. Touche le drapeau vert : Boulon file… et disparaît presque derrière le bord.",
    "Ajoute dans la boucle [mouvement:rebondir si le bord est atteint]. Maintenant il repart, mais la tête en bas !",
    "Juste sous le drapeau, avant la boucle, place [mouvement:fixer le sens de rotation gauche-droite].",
-   "Touche le drapeau vert : Boulon fait des allers-retours sans jamais s’arrêter. Change 10 pour le faire courir, ou tourne-le un peu avant de lancer pour qu’il rebondisse partout."
+   "Touche le drapeau vert : Boulon fait des allers-retours sans jamais s’arrêter. Change 10 pour le faire courir, ou change sa Direction (sous la scène) avant de lancer pour qu’il rebondisse partout."
   ],
   "images": [
    "danser-2.png",
@@ -82,9 +82,9 @@
   "steps": [
    "Prends [evenements:quand ce sprite est cliqué].",
    "Accroche dessous [controle:répéter 10 fois], et remplace 10 par 20.",
-   "Dans la boucle, glisse [apparence:ajouter 25 à l’effet couleur] et remplace 25 par 10, puis [controle:attendre 1 secondes] avec 0.1 à la place de 1.",
-   "Sous la boucle, ajoute [apparence:annuler les effets graphiques] : Boulon retrouve ses couleurs à la fin.",
-   "Touche Boulon sur la scène : il passe par toutes les couleurs. Dans le menu du bloc violet, essaie un autre effet que couleur."
+   "Dans la boucle, glisse [apparence:ajouter 25 à l’effet couleur], puis [controle:attendre 1 secondes] avec 0.1 à la place de 1.",
+   "Touche Boulon sur la scène : il change de couleur… et reste d’une drôle de couleur. Sous la boucle, ajoute [apparence:annuler les effets graphiques].",
+   "Touche encore Boulon : il passe par toutes les couleurs, puis retrouve les siennes. Dans le menu du bloc violet, essaie un autre effet que couleur."
   ],
   "images": [
    "bonjour-1.png",
@@ -119,15 +119,17 @@
   "desc": "Boulon court après ton doigt ou ta souris.",
   "steps": [
    "Prends [evenements:quand le drapeau vert est cliqué], et accroche dessous [controle:répéter indéfiniment].",
-   "Dans la boucle, glisse [mouvement:s’orienter vers pointeur de souris] : Boulon regarde ton doigt ou ta souris.",
-   "Ajoute dessous, toujours dans la boucle, [mouvement:avancer de 10 pas], et remplace 10 par 5.",
+   "Dans la boucle, glisse [mouvement:s’orienter vers pointeur de souris]. Touche le drapeau vert : Boulon penche pour regarder ton doigt ou ta souris.",
+   "Ajoute dessous, toujours dans la boucle, [mouvement:avancer de 10 pas], et remplace 10 par 5. Il te suit, mais il se retrouve souvent la tête en bas !",
+   "Juste sous le drapeau, avant la boucle, place [mouvement:fixer le sens de rotation gauche-droite] : Boulon reste debout.",
    "Touche le drapeau vert, puis promène ton doigt ou ta souris sur la scène : Boulon te suit. Mets 2 pour un Boulon paresseux, 10 pour un Boulon pressé."
   ],
   "images": [
    "danser-2.png",
    "suivre-2.png",
    "suivre-3.png",
-   "suivre-3.png"
+   "suivre-4.png",
+   "suivre-4.png"
   ]
  },
  {
