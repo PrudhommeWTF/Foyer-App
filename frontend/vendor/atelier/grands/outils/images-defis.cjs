@@ -70,15 +70,16 @@ const STEPS = {
     couleur: [
         [[clicked]],
         [[clicked, ['repeat', 20, []]]],
-        [[clicked, ['repeat', 20, [['changeeffect', 10], ['wait', 0.1]]]]],
-        [[clicked, ['repeat', 20, [['changeeffect', 10], ['wait', 0.1]]], ['cleareffects']]],
-        [[clicked, ['repeat', 20, [['changeeffect', 10], ['wait', 0.1]]], ['cleareffects']]]
+        [[clicked, ['repeat', 20, [['changeeffect', 25], ['wait', 0.1]]]]],
+        [[clicked, ['repeat', 20, [['changeeffect', 25], ['wait', 0.1]]], ['cleareffects']]],
+        [[clicked, ['repeat', 20, [['changeeffect', 25], ['wait', 0.1]]], ['cleareffects']]]
     ],
     suivre: [
         [[flag, ['forever', []]]],
         [[flag, ['forever', [['pointmouse']]]]],
         [[flag, ['forever', [['pointmouse'], ['move', 5]]]]],
-        [[flag, ['forever', [['pointmouse'], ['move', 5]]]]]
+        [[flag, ['rotstyle', 'left-right'], ['forever', [['pointmouse'], ['move', 5]]]]],
+        [[flag, ['rotstyle', 'left-right'], ['forever', [['pointmouse'], ['move', 5]]]]]
     ],
     // The first step adds the extension: no script to show yet
     dessiner: [
