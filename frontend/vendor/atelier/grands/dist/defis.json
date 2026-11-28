@@ -57,6 +57,44 @@
   ]
  },
  {
+  "id": "rebondir",
+  "name": "Boulon rebondit",
+  "desc": "Boulon se promène tout seul et rebondit sur les bords de la scène.",
+  "steps": [
+   "Prends [evenements:quand le drapeau vert est cliqué], et accroche dessous [controle:répéter indéfiniment].",
+   "Dans la boucle, glisse [mouvement:avancer de 10 pas]. Touche le drapeau vert : Boulon file… et reste collé au bord.",
+   "Ajoute dans la boucle [mouvement:rebondir si le bord est atteint]. Maintenant il repart, mais la tête en bas !",
+   "Juste sous le drapeau, avant la boucle, place [mouvement:fixer le sens de rotation gauche-droite].",
+   "Touche le drapeau vert : Boulon fait des allers-retours sans jamais s’arrêter. Change 10 pour le faire courir, ou tourne-le un peu avant de lancer pour qu’il rebondisse partout."
+  ],
+  "images": [
+   "danser-2.png",
+   "rebondir-2.png",
+   "rebondir-3.png",
+   "rebondir-4.png",
+   "rebondir-4.png"
+  ]
+ },
+ {
+  "id": "couleur",
+  "name": "Boulon arc-en-ciel",
+  "desc": "Touche Boulon : il passe par toutes les couleurs.",
+  "steps": [
+   "Prends [evenements:quand ce sprite est cliqué].",
+   "Accroche dessous [controle:répéter 10 fois], et remplace 10 par 20.",
+   "Dans la boucle, glisse [apparence:ajouter 25 à l’effet couleur] et remplace 25 par 10, puis [controle:attendre 1 secondes] avec 0.1 à la place de 1.",
+   "Sous la boucle, ajoute [apparence:annuler les effets graphiques] : Boulon retrouve ses couleurs à la fin.",
+   "Touche Boulon sur la scène : il passe par toutes les couleurs. Dans le menu du bloc violet, essaie un autre effet que couleur."
+  ],
+  "images": [
+   "bonjour-1.png",
+   "couleur-2.png",
+   "couleur-3.png",
+   "couleur-4.png",
+   "couleur-4.png"
+  ]
+ },
+ {
   "id": "clavier",
   "name": "Pilote Boulon au clavier",
   "desc": "Les flèches du clavier déplacent Boulon. À faire sur un ordinateur.",
@@ -73,6 +111,42 @@
    "clavier-3.png",
    "clavier-4.png",
    "clavier-4.png"
+  ]
+ },
+ {
+  "id": "suivre",
+  "name": "Boulon te suit",
+  "desc": "Boulon court après ton doigt ou ta souris.",
+  "steps": [
+   "Prends [evenements:quand le drapeau vert est cliqué], et accroche dessous [controle:répéter indéfiniment].",
+   "Dans la boucle, glisse [mouvement:s’orienter vers pointeur de souris] : Boulon regarde ton doigt ou ta souris.",
+   "Ajoute dessous, toujours dans la boucle, [mouvement:avancer de 10 pas], et remplace 10 par 5.",
+   "Touche le drapeau vert, puis promène ton doigt ou ta souris sur la scène : Boulon te suit. Mets 2 pour un Boulon paresseux, 10 pour un Boulon pressé."
+  ],
+  "images": [
+   "danser-2.png",
+   "suivre-2.png",
+   "suivre-3.png",
+   "suivre-3.png"
+  ]
+ },
+ {
+  "id": "dessiner",
+  "name": "Boulon dessine un carré",
+  "desc": "Avec le stylo, Boulon trace un carré en marchant.",
+  "steps": [
+   "En bas à gauche, touche le bouton bleu et choisis « Stylo ». De nouveaux blocs verts apparaissent.",
+   "Prends [evenements:quand le drapeau vert est cliqué], puis [stylo:effacer tout] et [stylo:stylo en position d’écriture] : Boulon pose son crayon.",
+   "Accroche dessous [controle:répéter 10 fois], et remplace 10 par 4 : un carré a quatre côtés.",
+   "Dans la boucle, glisse [mouvement:avancer de 10 pas] avec 100 à la place de 10, puis [mouvement:tourner de 15 degrés] avec 90.",
+   "Touche le drapeau vert : Boulon trace un carré. Pour un triangle, répète 3 fois et tourne de 120 degrés."
+  ],
+  "images": [
+   null,
+   "dessiner-2.png",
+   "dessiner-3.png",
+   "dessiner-4.png",
+   "dessiner-4.png"
   ]
  },
  {

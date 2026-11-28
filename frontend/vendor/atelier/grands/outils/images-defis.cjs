@@ -60,7 +60,34 @@ const STEPS = {
         [key('right arrow', ['changex', 10]), key('left arrow', ['changex', -10]),
             key('up arrow', ['changey', 10]), key('down arrow', ['changey', -10])]
     ],
+    rebondir: [
+        [[flag, ['forever', []]]],
+        [[flag, ['forever', [['move', 10]]]]],
+        [[flag, ['forever', [['move', 10], ['bounce']]]]],
+        [[flag, ['rotstyle', 'left-right'], ['forever', [['move', 10], ['bounce']]]]],
+        [[flag, ['rotstyle', 'left-right'], ['forever', [['move', 10], ['bounce']]]]]
+    ],
+    couleur: [
+        [[clicked]],
+        [[clicked, ['repeat', 20, []]]],
+        [[clicked, ['repeat', 20, [['changeeffect', 10], ['wait', 0.1]]]]],
+        [[clicked, ['repeat', 20, [['changeeffect', 10], ['wait', 0.1]]], ['cleareffects']]],
+        [[clicked, ['repeat', 20, [['changeeffect', 10], ['wait', 0.1]]], ['cleareffects']]]
+    ],
+    suivre: [
+        [[flag, ['forever', []]]],
+        [[flag, ['forever', [['pointmouse']]]]],
+        [[flag, ['forever', [['pointmouse'], ['move', 5]]]]],
+        [[flag, ['forever', [['pointmouse'], ['move', 5]]]]]
+    ],
     // The first step adds the extension: no script to show yet
+    dessiner: [
+        [],
+        [[flag, ['penclear'], ['pendown']]],
+        [[flag, ['penclear'], ['pendown'], ['repeat', 4, []]]],
+        [[flag, ['penclear'], ['pendown'], ['repeat', 4, [['move', 100], ['turn', 90]]]]],
+        [[flag, ['penclear'], ['pendown'], ['repeat', 4, [['move', 100], ['turn', 90]]]]]
+    ],
     video: [
         [],
         [[['motion', 10]]],
@@ -101,6 +128,14 @@ const build = scripts => {
             case 'key': b.opcode = 'event_whenkeypressed'; b.fields.KEY_OPTION = [v[0], null]; break;
             case 'gotoxy': b.opcode = 'motion_gotoxy'; b.inputs.X = num(4, v[0]); b.inputs.Y = num(4, v[1]); break;
             case 'move': b.opcode = 'motion_movesteps'; b.inputs.STEPS = num(4, v[0]); break;
+            case 'turn': b.opcode = 'motion_turnright'; b.inputs.DEGREES = num(4, v[0]); break;
+            case 'bounce': b.opcode = 'motion_ifonedgebounce'; break;
+            case 'rotstyle': b.opcode = 'motion_setrotationstyle'; b.fields.STYLE = [v[0], null]; break;
+            case 'pointmouse': b.opcode = 'motion_pointtowards'; b.inputs.TOWARDS = menu('motion_pointtowards_menu', 'TOWARDS', '_mouse_'); break;
+            case 'changeeffect': b.opcode = 'looks_changeeffectby'; b.fields.EFFECT = ['COLOR', null]; b.inputs.CHANGE = num(4, v[0]); break;
+            case 'cleareffects': b.opcode = 'looks_cleargraphiceffects'; break;
+            case 'penclear': b.opcode = 'pen_clear'; break;
+            case 'pendown': b.opcode = 'pen_penDown'; break;
             case 'changex': b.opcode = 'motion_changexby'; b.inputs.DX = num(4, v[0]); break;
             case 'changey': b.opcode = 'motion_changeyby'; b.inputs.DY = num(4, v[0]); break;
             case 'gotorandom': b.opcode = 'motion_goto'; b.inputs.TO = menu('motion_goto_menu', 'TO', '_random_'); break;
@@ -163,7 +198,7 @@ const project = scripts => JSON.stringify({
             ),
             sounds: [POP], volume: 100, layerOrder: 1, visible: true, x: 0, y: 0, size: 100, direction: 90, draggable: false, rotationStyle: 'all around'}
     ],
-    monitors: [], extensions: JSON.stringify(scripts).includes('"motion"') ? ['videoSensing'] : [], meta: {semver: '3.0.0', vm: '0.2.0', agent: 'Foyer'}
+    monitors: [], extensions: [['"motion"', 'videoSensing'], ['"pendown"', 'pen']].filter(e => JSON.stringify(scripts).includes(e[0])).map(e => e[1]), meta: {semver: '3.0.0', vm: '0.2.0', agent: 'Foyer'}
 });
 
 (async () => {
