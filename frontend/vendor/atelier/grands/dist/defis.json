@@ -5,7 +5,7 @@
   "desc": "Ton premier script : au drapeau vert, Boulon marche d’un bord à l’autre.",
   "steps": [
    "Dans les blocs jaunes, prends [evenements:quand le drapeau vert est cliqué] et pose-le au milieu.",
-   "Dans les blocs bleus, accroche dessous [mouvement:aller à x: -200 y: 0] : Boulon part du bord gauche. Change les nombres en touchant les cases blanches.",
+   "Dans les blocs bleus, accroche dessous [mouvement:aller à x: 0 y: 0], et écris -200 dans la première case blanche : Boulon part du bord gauche.",
    "Dans les blocs orange, ajoute [controle:répéter 10 fois] et écris 40 à la place de 10.",
    "Glisse [mouvement:avancer de 10 pas] à l’intérieur de la boucle.",
    "Touche le drapeau vert, au-dessus de la scène. Boulon traverse ! Essaie d’autres nombres : plus de pas, moins de répétitions."
